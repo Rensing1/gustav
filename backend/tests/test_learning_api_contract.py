@@ -7,7 +7,9 @@ follow the Red-Green-Refactor cycle after updating the OpenAPI contract.
 """
 from __future__ import annotations
 
+import importlib
 import os
+import sys
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -92,6 +94,33 @@ async def _create_material(
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
+
+
+async def _create_file_material(
+    client: httpx.AsyncClient,
+    unit_id: str,
+    section_id: str,
+    *,
+    title: str,
+    filename: str,
+    mime_type: str,
+    size_bytes: int,
+) -> dict:
+    intent_resp = await client.post(
+        f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents",
+        json={"filename": filename, "mime_type": mime_type, "size_bytes": size_bytes},
+        headers={"Origin": "http://test"},
+    )
+    assert intent_resp.status_code == 200, intent_resp.text
+    intent = intent_resp.json()
+
+    finalize_resp = await client.post(
+        f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize",
+        json={"intent_id": intent["intent_id"], "title": title, "sha256": "f" * 64},
+        headers={"Origin": "http://test"},
+    )
+    assert finalize_resp.status_code == 201, finalize_resp.text
+    return finalize_resp.json()
 
 
 async def _create_task(
@@ -338,7 +367,58 @@ async def test_sections_includes_unit_id_in_section_core():
     assert "section" in section_entry
     sec = section_entry["section"]
     assert isinstance(sec.get("unit_id"), str)
-    assert sec["unit_id"] == fixture.unit_id
+
+
+@pytest.mark.anyio
+async def test_sections_include_short_lived_file_url_for_released_file_materials():
+    """Released file materials expose a short-lived preview URL for the student UI."""
+    import routes.teaching as teaching  # noqa: E402
+
+    fixture = await _prepare_learning_fixture()
+    original_adapter = teaching.STORAGE_ADAPTER
+    try:
+        class _Adapter:
+            def presign_upload(self, *, bucket, key, expires_in, headers):
+                return {"url": "http://storage.local/upload", "headers": {}}
+
+            def head_object(self, *, bucket, key):
+                return {"content_length": 1024, "content_type": "application/pdf"}
+
+            def delete_object(self, *, bucket, key):
+                return None
+
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "http://storage.local/material-preview.pdf"}
+
+        teaching.set_storage_adapter(_Adapter())
+
+        async with (await _client()) as teacher_client:
+          teacher_client.cookies.set("gustav_session", fixture.teacher_session_id)
+          await _create_file_material(
+              teacher_client,
+              fixture.unit_id,
+              fixture.section_id,
+              title="Arbeitsblatt PDF",
+              filename="arbeitsblatt.pdf",
+              mime_type="application/pdf",
+              size_bytes=1024,
+          )
+
+        async with (await _client()) as student_client:
+            student_client.cookies.set("gustav_session", fixture.student_session_id)
+            response = await student_client.get(
+                f"/api/learning/courses/{fixture.course_id}/sections",
+                params={"include": "materials", "limit": 50, "offset": 0},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        materials = payload[0]["materials"]
+        file_material = next(item for item in materials if item["kind"] == "file")
+        assert file_material["file_url"] == "http://storage.local/material-preview.pdf"
+        assert "storage_key" not in file_material
+    finally:
+        teaching.set_storage_adapter(original_adapter)
 
 
 @pytest.mark.anyio
@@ -385,7 +465,7 @@ async def test_create_text_submission_returns_pending_and_enqueues_job():
         os.environ["ASYNC_LEARNING_ANALYSIS"] = "true"
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Analyse pending"},
+            json={"intent": "submit", "kind": "text", "text_body": "Analyse pending"},
         )
         # restore env
         if prev is None:
@@ -396,6 +476,7 @@ async def test_create_text_submission_returns_pending_and_enqueues_job():
     assert response.status_code == 202
     body = response.json()
     assert body["analysis_status"] == "pending"
+    assert body["intent"] == "submit"
     assert body["text_body"] == "Analyse pending"
     assert body.get("analysis_json") is None
     assert body.get("error_code") is None
@@ -429,6 +510,42 @@ async def test_create_text_submission_returns_pending_and_enqueues_job():
 
 
 @pytest.mark.anyio
+async def test_create_submission_defaults_missing_intent_to_submit() -> None:
+    """Missing intent remains backwards-compatible and is treated as a final submission."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"kind": "text", "text_body": "Intent fehlt"},
+        )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["intent"] == "submit"
+    assert payload["kind"] == "text"
+
+
+@pytest.mark.anyio
+async def test_create_submission_rejects_unknown_intent() -> None:
+    """Only the documented submission intents are accepted by the runtime API."""
+
+    fixture = await _prepare_learning_fixture()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "draft", "kind": "text", "text_body": "Ungültiger Intent"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "bad_request", "detail": "invalid_input"}
+
+
+@pytest.mark.anyio
 async def test_create_submission_respects_attempt_limit_and_idempotency():
     """Creating submissions enforces attempt limit and honours Idempotency-Key."""
 
@@ -440,7 +557,7 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         resp1 = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "attempt-key"},
-            json={"kind": "text", "text_body": "Versuch 1"},
+            json={"intent": "submit", "kind": "text", "text_body": "Versuch 1"},
         )
         assert resp1.status_code == 202
         first_payload = resp1.json()
@@ -455,7 +572,7 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         resp_retry = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "attempt-key"},
-            json={"kind": "text", "text_body": "Versuch 1"},
+            json={"intent": "submit", "kind": "text", "text_body": "Versuch 1"},
         )
         assert resp_retry.status_code == 202
         retry_payload = resp_retry.json()
@@ -467,7 +584,7 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         resp2 = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "attempt-key-2"},
-            json={"kind": "text", "text_body": "Versuch 2"},
+            json={"intent": "submit", "kind": "text", "text_body": "Versuch 2"},
         )
         assert resp2.status_code == 202
         second_payload = resp2.json()
@@ -477,10 +594,456 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
         # Third attempt exceeds max_attempts → 400
         resp3 = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Versuch 3"},
+            json={"intent": "submit", "kind": "text", "text_body": "Versuch 3"},
         )
         assert resp3.status_code == 400
         assert resp3.json().get("detail") == "max_attempts_exceeded"
+
+
+@pytest.mark.anyio
+async def test_feedback_requests_do_not_consume_final_attempt_limit():
+    """Feedback runs stay async, but only final submissions count against max_attempts."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=1)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        feedback_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert feedback_response.status_code == 202
+        feedback_payload = feedback_response.json()
+        assert feedback_payload["intent"] == "feedback"
+        assert feedback_payload["attempt_nr"] == 1
+
+        final_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "submit", "kind": "text", "text_body": "Jetzt ist es final."},
+        )
+        assert final_response.status_code == 202
+        final_payload = final_response.json()
+        assert final_payload["intent"] == "submit"
+        assert final_payload["attempt_nr"] == 2
+
+        blocked_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "submit", "kind": "text", "text_body": "Noch ein finaler Versuch."},
+        )
+        assert blocked_response.status_code == 400
+        assert blocked_response.json().get("detail") == "max_attempts_exceeded"
+
+
+@pytest.mark.anyio
+async def test_feedback_request_reuses_matching_inflight_text_submission_even_with_new_idempotency_key():
+    """Identical in-flight feedback requests should not enqueue a second analysis run."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        first = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "feedback-first"},
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert first.status_code == 202
+        first_payload = first.json()
+
+        second = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "feedback-second"},
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert second.status_code == 202
+        second_payload = second.json()
+
+    assert second_payload["id"] == first_payload["id"]
+    assert second_payload["attempt_nr"] == first_payload["attempt_nr"]
+    assert second_payload["analysis_status"] == "pending"
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover
+        pytest.skip("psycopg not available")
+
+    service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
+    if not service_dsn:
+        pytest.skip("No service DSN available for queue verification.")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select count(*)
+                  from public.learning_submissions
+                 where course_id = %s::uuid
+                   and task_id = %s::uuid
+                   and student_sub = %s
+                   and intent = 'feedback'
+                """,
+                (fixture.course_id, fixture.task["id"], fixture.student_sub),
+            )
+            assert int(cur.fetchone()[0] or 0) == 1
+            cur.execute(
+                "select count(*) from public.learning_submission_jobs where submission_id = %s::uuid",
+                (first_payload["id"],),
+            )
+            assert int(cur.fetchone()[0] or 0) == 1
+
+
+@pytest.mark.anyio
+async def test_feedback_request_reuses_matching_inflight_upload_submission_even_with_new_idempotency_key():
+    """Identical upload feedback requests should reuse the existing pending submission."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    payload = {
+        "intent": "feedback",
+        "kind": "image",
+        "storage_key": "uploads/student123/solution-a.png",
+        "mime_type": "image/png",
+        "size_bytes": 1024,
+        "sha256": "1" * 64,
+    }
+    payload_retry = {
+        **payload,
+        "storage_key": "uploads/student123/solution-b.png",
+    }
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        first = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "upload-feedback-first"},
+            json=payload,
+        )
+        assert first.status_code == 202
+        first_payload = first.json()
+
+        second = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "upload-feedback-second"},
+            json=payload_retry,
+        )
+        assert second.status_code == 202
+        second_payload = second.json()
+
+    assert second_payload["id"] == first_payload["id"]
+    assert second_payload["attempt_nr"] == first_payload["attempt_nr"]
+    assert second_payload["kind"] == "image"
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover
+        pytest.skip("psycopg not available")
+
+    service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
+    if not service_dsn:
+        pytest.skip("No service DSN available for queue verification.")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select count(*)
+                  from public.learning_submissions
+                 where course_id = %s::uuid
+                   and task_id = %s::uuid
+                   and student_sub = %s
+                   and intent = 'feedback'
+                """,
+                (fixture.course_id, fixture.task["id"], fixture.student_sub),
+            )
+            assert int(cur.fetchone()[0] or 0) == 1
+            cur.execute(
+                "select count(*) from public.learning_submission_jobs where submission_id = %s::uuid",
+                (first_payload["id"],),
+            )
+            assert int(cur.fetchone()[0] or 0) == 1
+
+
+@pytest.mark.anyio
+async def test_feedback_request_creates_new_submission_again_after_previous_feedback_completed():
+    """A deliberate re-run after completed feedback must create a fresh submission."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        first = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "completed-feedback-first"},
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert first.status_code == 202
+        first_payload = first.json()
+
+    _require_db_or_skip()
+    try:
+        import psycopg  # type: ignore
+    except Exception:  # pragma: no cover
+        pytest.skip("psycopg not available")
+
+    service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
+    if not service_dsn:
+        pytest.skip("No service DSN available to rewrite submission state.")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set analysis_status = 'completed',
+                       feedback_md = '## Rückmeldung\n\nPasst.',
+                       analysis_json = '{"schema":"criteria.v2","criteria_results":[]}'::jsonb,
+                       error_code = null,
+                       completed_at = now()
+                 where id = %s::uuid
+                """,
+                (first_payload["id"],),
+            )
+        conn.commit()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        second = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            headers={"Idempotency-Key": "completed-feedback-second"},
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert second.status_code == 202
+        second_payload = second.json()
+
+    assert second_payload["id"] != first_payload["id"]
+    assert second_payload["attempt_nr"] == first_payload["attempt_nr"] + 1
+    assert second_payload["analysis_status"] == "pending"
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select count(*)
+                  from public.learning_submissions
+                 where course_id = %s::uuid
+                   and task_id = %s::uuid
+                   and student_sub = %s
+                   and intent = 'feedback'
+                """,
+                (fixture.course_id, fixture.task["id"], fixture.student_sub),
+            )
+            assert int(cur.fetchone()[0] or 0) == 2
+
+
+@pytest.mark.anyio
+async def test_finalize_latest_feedback_submission_creates_final_submission_without_worker_job():
+    """Finalizing the latest reviewed draft should not enqueue a new worker job."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        feedback_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert feedback_response.status_code == 202
+        feedback_submission_id = feedback_response.json()["id"]
+
+    _require_db_or_skip()
+    import psycopg  # type: ignore
+    from backend.learning.repo_db import _dsn  # type: ignore
+
+    service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
+    if not service_dsn:
+        pytest.skip("No service DSN available for finalize contract test.")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set analysis_status = 'completed',
+                       feedback_md = '## Rückmeldung\n\nStark.',
+                       analysis_json = '{"schema":"criteria.v2","criteria_results":[{"criterion":"Graph korrekt","score":8,"max_score":10,"explanation_md":"Treffend."}]}'::jsonb,
+                       completed_at = now()
+                 where id = %s::uuid
+                """,
+                (feedback_submission_id,),
+            )
+            conn.commit()
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+        finalize_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
+            headers={"Idempotency-Key": "finalize-key-1"},
+            json={},
+        )
+
+    assert finalize_response.status_code == 201, finalize_response.text
+    body = finalize_response.json()
+    assert body["intent"] == "submit"
+    assert body["attempt_nr"] == 2
+    assert body["analysis_status"] == "completed"
+    assert body["feedback_md"].startswith("## Rückmeldung")
+
+    with psycopg.connect(service_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select count(*) from public.learning_submission_jobs where submission_id = %s::uuid",
+                (body["id"],),
+            )
+            assert int(cur.fetchone()[0] or 0) == 0
+
+
+@pytest.mark.anyio
+async def test_finalize_latest_feedback_file_submission_returns_decorated_files():
+    """Finalizing an upload draft must return the same learner-visible file decoration as history."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+    import routes.learning as learning  # noqa: E402
+
+    original_adapter = learning.STORAGE_ADAPTER
+    try:
+        class _Adapter:
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                if disposition == "attachment":
+                    return {"url": "http://storage.local/finalized-upload.pdf?download=1"}
+                return {"url": "http://storage.local/finalized-upload.pdf"}
+
+        learning.set_storage_adapter(_Adapter())
+
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", fixture.student_session_id)
+            feedback_response = await client.post(
+                f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+                json={
+                    "intent": "feedback",
+                    "kind": "file",
+                    "storage_key": "submissions/finalize/native-upload.pdf",
+                    "mime_type": "application/pdf",
+                    "size_bytes": 2048,
+                    "sha256": "e" * 64,
+                },
+            )
+            assert feedback_response.status_code == 202, feedback_response.text
+            feedback_submission_id = feedback_response.json()["id"]
+
+        _require_db_or_skip()
+        import psycopg  # type: ignore
+
+        service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
+        if not service_dsn:
+            pytest.skip("No service DSN available for finalize contract test.")
+
+        with psycopg.connect(service_dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update public.learning_submissions
+                       set analysis_status = 'completed',
+                           feedback_md = '## Rückmeldung\n\nDatei geprüft.',
+                           analysis_json = '{"schema":"criteria.v2","criteria_results":[{"criterion":"Graph korrekt","score":8,"max_score":10,"explanation_md":"Treffend."}]}'::jsonb,
+                           completed_at = now()
+                     where id = %s::uuid
+                    """,
+                    (feedback_submission_id,),
+                )
+                conn.commit()
+
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", fixture.student_session_id)
+            finalize_response = await client.post(
+                f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
+                headers={"Idempotency-Key": "finalize-file-key-1"},
+                json={},
+            )
+
+        assert finalize_response.status_code == 201, finalize_response.text
+        body = finalize_response.json()
+        assert body["intent"] == "submit"
+        assert body["kind"] == "file"
+        assert body["files"] == [
+            {
+                "mime": "application/pdf",
+                "size": 2048,
+                "url": "http://storage.local/finalized-upload.pdf",
+                "download_url": "http://storage.local/finalized-upload.pdf?download=1",
+            }
+        ]
+    finally:
+        learning.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_set_storage_adapter_updates_existing_learning_route_globals_after_reload():
+    """A fresh `routes.learning` import must still retarget already-registered route globals."""
+
+    def _find_finalize_endpoint():
+        from fastapi.routing import APIRoute
+
+        for route in main.app.routes:
+            if isinstance(route, APIRoute) and route.path == "/api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize":
+                return route.endpoint
+        raise AssertionError("finalize route not registered")
+
+    original_learning = importlib.import_module("routes.learning")
+    original_adapter = original_learning.STORAGE_ADAPTER
+    endpoint = _find_finalize_endpoint()
+    original_globals = endpoint.__globals__
+    assert "STORAGE_ADAPTER" in original_globals
+
+    for name in ("routes.learning", "backend.web.routes.learning"):
+        sys.modules.pop(name, None)
+
+    fresh_learning = importlib.import_module("routes.learning")
+    assert fresh_learning is not original_learning
+
+    class _Adapter:
+        def presign_download(self, *, bucket, key, expires_in, disposition):
+            return {"url": "http://storage.local/reloaded.pdf"}
+
+    adapter = _Adapter()
+    try:
+        fresh_learning.set_storage_adapter(adapter)
+        assert fresh_learning.STORAGE_ADAPTER is adapter
+        assert endpoint.__globals__["STORAGE_ADAPTER"] is adapter
+    finally:
+        fresh_learning.set_storage_adapter(original_adapter)
+        assert endpoint.__globals__["STORAGE_ADAPTER"] is original_adapter
+
+
+@pytest.mark.anyio
+async def test_finalize_requires_completed_feedback_draft():
+    """Final submit must be blocked until the latest draft has completed feedback."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", fixture.student_session_id)
+
+        feedback_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "feedback", "kind": "text", "text_body": "Bitte gib mir Feedback."},
+        )
+        assert feedback_response.status_code == 202
+
+        finalize_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
+            json={},
+        )
+
+    assert finalize_response.status_code == 409
+    assert finalize_response.json().get("detail") == "draft_not_ready"
 
 
 @pytest.mark.anyio
@@ -493,7 +1056,7 @@ async def test_create_submission_uses_teacher_defined_criteria_names():
         client.cookies.set("gustav_session", fixture.student_session_id)
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Lineare Funktionen analysiert"},
+            json={"intent": "submit", "kind": "text", "text_body": "Lineare Funktionen analysiert"},
         )
 
     # Async model: immediate response is pending; analysis with scores happens later.
@@ -513,7 +1076,7 @@ async def test_create_submission_requires_membership():
         client.cookies.set("gustav_session", fixture.student_session_id)
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Hallo"},
+            json={"intent": "submit", "kind": "text", "text_body": "Hallo"},
         )
 
     assert response.status_code == 403
@@ -529,7 +1092,7 @@ async def test_create_submission_requires_released_section():
         client.cookies.set("gustav_session", fixture.student_session_id)
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Noch gesperrt"},
+            json={"intent": "submit", "kind": "text", "text_body": "Noch gesperrt"},
         )
 
     assert response.status_code == 404
@@ -546,6 +1109,7 @@ async def test_create_submission_image_requires_valid_sha256():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "image",
                 "storage_key": "materials/abc.png",
                 "mime_type": "image/png",
@@ -571,7 +1135,7 @@ async def test_create_submission_csrf_origin():
         res = await client.post(
             f"/api/learning/courses/{uuid4()}/tasks/{uuid4()}/submissions",
             headers={"Origin": "http://evil.example"},
-            json={"kind": "text", "text_body": "hi"},
+            json={"intent": "submit", "kind": "text", "text_body": "hi"},
         )
 
     assert res.status_code == 403
@@ -590,7 +1154,7 @@ async def test_create_submission_idempotency_key_length():
         res = await client.post(
             f"/api/learning/courses/{uuid4()}/tasks/{uuid4()}/submissions",
             headers={"Idempotency-Key": "a" * 65},
-            json={"kind": "text", "text_body": "hi"},
+            json={"intent": "submit", "kind": "text", "text_body": "hi"},
         )
 
     assert res.status_code == 400
@@ -637,6 +1201,7 @@ async def test_create_submission_image_mime_type_whitelist():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "image",
                 "storage_key": "materials/abc.png",
                 "mime_type": "image/gif",  # not allowed
@@ -660,6 +1225,7 @@ async def test_create_submission_file_pdf_happy_path():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "file",
                 "storage_key": "submissions/arbeit1.pdf",
                 "mime_type": "application/pdf",
@@ -688,6 +1254,7 @@ async def test_create_submission_file_mime_type_whitelist():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "file",
                 "storage_key": "submissions/abc.docx",
                 "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -711,6 +1278,7 @@ async def test_create_submission_file_size_limit_10mb():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "file",
                 "storage_key": "submissions/zu_gross.pdf",
                 "mime_type": "application/pdf",
@@ -733,7 +1301,7 @@ async def test_create_submission_text_body_blank_returns_invalid_input():
         client.cookies.set("gustav_session", fixture.student_session_id)
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "   "},
+            json={"intent": "submit", "kind": "text", "text_body": "   "},
         )
 
     assert res.status_code == 400
@@ -753,7 +1321,7 @@ async def test_create_submission_text_body_too_long_returns_invalid_input():
         long_text = "x" * 65537
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": long_text},
+            json={"intent": "submit", "kind": "text", "text_body": long_text},
         )
 
     assert res.status_code == 400
@@ -773,7 +1341,7 @@ async def test_create_submission_text_body_at_limit_accepted():
         long_text = "x" * 65536
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": long_text},
+            json={"intent": "submit", "kind": "text", "text_body": long_text},
         )
 
     assert res.status_code in (200, 201, 202)
@@ -791,7 +1359,11 @@ async def test_list_submissions_history_happy_path():
             resp = await client.post(
                 f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
                 headers={"Idempotency-Key": f"attempt-{idx}"},
-                json={"kind": "text", "text_body": f"Antwort {idx}"},
+                json={
+                    "intent": "feedback" if idx == 1 else "submit",
+                    "kind": "text",
+                    "text_body": f"Antwort {idx}"
+                },
             )
             assert resp.status_code == 202
 
@@ -809,11 +1381,13 @@ async def test_list_submissions_history_happy_path():
 
     latest, earliest = payload[0], payload[-1]
     assert latest["attempt_nr"] == 2
+    assert latest["intent"] == "submit"
     # Async: pending status until worker completes; payloads may be empty
     assert latest["analysis_status"] == "pending"
     assert latest.get("feedback_md") in (None, "", {})
     assert latest.get("analysis_json") in (None, {})
     assert earliest["attempt_nr"] == 1
+    assert earliest["intent"] == "feedback"
     assert earliest.get("analysis_json") in (None, {})
     # Telemetry is always present per contract
     telemetry_fields = (
@@ -823,6 +1397,8 @@ async def test_list_submissions_history_happy_path():
         "feedback_last_error",
     )
     for attempt in payload:
+        assert "files" in attempt, "files missing from submission payload"
+        assert isinstance(attempt["files"], list)
         for field in telemetry_fields:
             assert field in attempt, f"{field} missing from submission payload"
         assert attempt["vision_attempts"] >= 0
@@ -898,7 +1474,7 @@ async def test_submission_telemetry_is_sanitized_and_capped():
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "telemetry-check"},
-            json={"kind": "text", "text_body": "Antwort"},
+            json={"intent": "submit", "kind": "text", "text_body": "Antwort"},
         )
         assert resp.status_code == 202
         submission_id = resp.json()["id"]
@@ -994,7 +1570,7 @@ async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc(
             resp = await client.post(
                 f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
                 headers={"Idempotency-Key": f"stable-{idx}"},
-                json={"kind": "text", "text_body": f"Gleichzeit {idx}"},
+                json={"intent": "submit", "kind": "text", "text_body": f"Gleichzeit {idx}"},
             )
             assert resp.status_code == 202
 
@@ -1048,7 +1624,7 @@ async def test_create_submission_rejects_cross_site_via_referer_when_origin_miss
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Referer": "http://evil.local/some/path"},
-            json={"kind": "text", "text_body": "x"},
+            json={"intent": "submit", "kind": "text", "text_body": "x"},
         )
 
     assert resp.status_code == 403
@@ -1074,7 +1650,7 @@ async def test_create_submission_allows_same_origin_via_forwarded_when_trust_pro
                     "X-Forwarded-Proto": "https",
                     "X-Forwarded-Host": "app.example",
                 },
-                json={"kind": "text", "text_body": "x"},
+                json={"intent": "submit", "kind": "text", "text_body": "x"},
             )
     finally:
         if prev is None:
@@ -1096,7 +1672,7 @@ async def test_analysis_json_shape_has_expected_keys_only():
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "analysis-shape"},
-            json={"kind": "text", "text_body": "Antwort"},
+            json={"intent": "submit", "kind": "text", "text_body": "Antwort"},
         )
 
     assert resp.status_code == 202
@@ -1116,6 +1692,7 @@ async def test_create_submission_image_includes_text_and_scores_in_analysis_json
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "image",
                 "storage_key": "uploads/student123/solution.png",
                 "mime_type": "image/png",
@@ -1143,7 +1720,7 @@ async def test_extracted_submission_response_hides_analysis_json_payload():
         client.cookies.set("gustav_session", fixture.student_session_id)
         create = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "PDF pending"},
+            json={"intent": "submit", "kind": "text", "text_body": "PDF pending"},
         )
     assert create.status_code == 202
     submission = create.json()
@@ -1203,6 +1780,7 @@ async def test_create_submission_image_storage_key_sane_pattern():
         response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             json={
+                "intent": "submit",
                 "kind": "image",
                 "storage_key": "../secrets/evil.png",
                 "mime_type": "image/png",
@@ -1246,7 +1824,7 @@ async def test_create_submission_rejects_cross_origin_when_origin_header_present
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Origin": "http://evil.local"},
-            json={"kind": "text", "text_body": "x"},
+            json={"intent": "submit", "kind": "text", "text_body": "x"},
         )
 
     assert resp.status_code == 403
@@ -1265,7 +1843,7 @@ async def test_create_submission_rejects_mismatched_scheme():
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Origin": "https://test"},
-            json={"kind": "text", "text_body": "a"},
+            json={"intent": "submit", "kind": "text", "text_body": "a"},
         )
 
     assert res.status_code == 403
@@ -1283,7 +1861,7 @@ async def test_create_submission_rejects_mismatched_port():
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Origin": "http://test:81"},
-            json={"kind": "text", "text_body": "a"},
+            json={"intent": "submit", "kind": "text", "text_body": "a"},
         )
 
     assert res.status_code == 403
@@ -1301,7 +1879,7 @@ async def test_create_submission_allows_same_origin_header():
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Origin": "http://test"},
-            json={"kind": "text", "text_body": "ok"},
+            json={"intent": "submit", "kind": "text", "text_body": "ok"},
         )
 
     assert res.status_code == 202
@@ -1317,7 +1895,7 @@ async def test_create_submission_allows_missing_origin():
         client.cookies.set("gustav_session", fixture.student_session_id)
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "ok"},
+            json={"intent": "submit", "kind": "text", "text_body": "ok"},
         )
 
     assert res.status_code == 202
@@ -1354,7 +1932,7 @@ async def test_create_submission_idempotency_key_too_long_returns_400_invalid_in
         res = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": too_long_key},
-            json={"kind": "text", "text_body": "ok"},
+            json={"intent": "submit", "kind": "text", "text_body": "ok"},
         )
 
     assert res.status_code == 400
@@ -1409,7 +1987,7 @@ async def test_list_submissions_pagination_clamps_and_returns_expected_slice():
             resp = await client.post(
                 f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
                 headers={"Idempotency-Key": f"clamp-{idx}"},
-                json={"kind": "text", "text_body": f"Seite {idx}"},
+                json={"intent": "submit", "kind": "text", "text_body": f"Seite {idx}"},
             )
             assert resp.status_code == 202
 
@@ -1446,7 +2024,7 @@ async def test_submission_created_at_is_rfc3339_and_present():
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
             headers={"Idempotency-Key": "created-at-check"},
-            json={"kind": "text", "text_body": "Zeitstempel"},
+            json={"intent": "submit", "kind": "text", "text_body": "Zeitstempel"},
         )
         assert resp.status_code == 202
 
@@ -1475,7 +2053,7 @@ async def test_create_submission_202_has_private_no_store_cache_header():
         client.cookies.set("gustav_session", fixture.student_session_id)
         resp = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
-            json={"kind": "text", "text_body": "Header-Test"},
+            json={"intent": "submit", "kind": "text", "text_body": "Header-Test"},
         )
 
     assert resp.status_code == 202

@@ -32,6 +32,14 @@ class IDTokenVerificationError(Exception):
         self.code = code
 
 
+class BearerTokenVerificationError(Exception):
+    """Raised when a bearer JWT fails verification."""
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
 @dataclass
 class _CacheEntry:
     jwks: Dict[str, object]
@@ -84,6 +92,11 @@ JWKS_CACHE = JWKSCache()
 
 MAX_CLOCK_SKEW_SECONDS = 5  # Allow minimal skew between servers
 
+
+def _expected_issuer(cfg: OIDCConfig) -> str:
+    issuer_base = cfg.public_base_url or cfg.base_url
+    return f"{issuer_base}/realms/{cfg.realm}"
+
 def verify_id_token(
     *,
     id_token: str,
@@ -116,8 +129,7 @@ def verify_id_token(
     if not key_dict:
         raise IDTokenVerificationError("unknown_kid")
 
-    issuer_base = cfg.public_base_url or cfg.base_url
-    expected_issuer = f"{issuer_base}/realms/{cfg.realm}"
+    expected_issuer = _expected_issuer(cfg)
     try:
         # Security: enforce RS256 (as configured in Keycloak) regardless of JWKS 'alg'
         claims = jwt.decode(
@@ -141,6 +153,64 @@ def verify_id_token(
 
     _validate_temporal_claims(claims)
 
+    return claims
+
+
+def verify_bearer_token(
+    *,
+    token: str,
+    cfg: OIDCConfig,
+    cache: JWKSCache | None = None,
+) -> Dict[str, object]:
+    """Validate a bearer JWT for backend API authentication.
+
+    Why:
+        The SvelteKit BFF should be able to call FastAPI with a real JWT instead
+        of the transitional session-id transport. Keycloak may issue bearer
+        tokens where `aud` contains the client id directly or where the client
+        is represented via `azp`, so this verifier accepts both patterns.
+    """
+    cache = cache or JWKS_CACHE
+    try:
+        jwks = cache.get(cfg)
+    except IDTokenVerificationError as exc:
+        raise BearerTokenVerificationError(exc.code) from exc
+    try:
+        header = jwt.get_unverified_header(token)
+    except JOSEError as exc:
+        logger.warning("Bearer token header decode failed: %s", exc.__class__.__name__)
+        raise BearerTokenVerificationError("invalid_bearer_token") from exc
+    kid = header.get("kid")
+    if not kid:
+        raise BearerTokenVerificationError("missing_kid")
+    key_dict = _find_key(jwks, kid)
+    if not key_dict:
+        raise BearerTokenVerificationError("unknown_kid")
+
+    try:
+        claims = jwt.decode(
+            token,
+            key_dict,
+            algorithms=["RS256"],
+            issuer=_expected_issuer(cfg),
+            options={
+                "verify_signature": True,
+                "verify_aud": False,
+                "verify_exp": False,
+                "verify_iat": False,
+                "verify_nbf": False,
+                "verify_at_hash": False,
+            },
+        )
+    except JOSEError as exc:
+        logger.warning("Bearer token JOSE verification failed: %s", exc.__class__.__name__)
+        raise BearerTokenVerificationError("invalid_bearer_token") from exc
+
+    try:
+        _validate_temporal_claims(claims)
+    except IDTokenVerificationError as exc:
+        raise BearerTokenVerificationError("invalid_bearer_token") from exc
+    _validate_bearer_audience(claims, cfg.client_id)
     return claims
 
 
@@ -170,3 +240,14 @@ def _validate_temporal_claims(claims: Dict[str, object]) -> None:
     nbf = claims.get("nbf")
     if isinstance(nbf, (int, float)) and nbf - MAX_CLOCK_SKEW_SECONDS > now:
         raise IDTokenVerificationError("invalid_id_token")
+
+
+def _validate_bearer_audience(claims: Dict[str, object], client_id: str) -> None:
+    aud = claims.get("aud")
+    if isinstance(aud, str) and aud == client_id:
+        return
+    if isinstance(aud, list) and client_id in [str(item) for item in aud]:
+        return
+    if str(claims.get("azp") or "") == client_id:
+        return
+    raise BearerTokenVerificationError("invalid_bearer_token")

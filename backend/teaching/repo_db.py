@@ -3400,6 +3400,71 @@ class DBTeachingRepo:
             )
         return aggregates
 
+    def list_unit_latest_submission_aggregates_for_owner(
+        self,
+        *,
+        course_id: str,
+        unit_id: str,
+        owner_sub: str,
+        student_subs: Sequence[str],
+    ) -> List[dict]:
+        """Return latest submission aggregates for one unit and an explicit learner page.
+
+        Why:
+            The live unit summary paginates by learners. Fetching aggregates for
+            the exact learner page avoids truncating later learners when the unit
+            contains many tasks.
+        """
+        normalized_student_subs = [str(student_sub) for student_sub in student_subs if str(student_sub or "").strip()]
+        if not normalized_student_subs:
+            return []
+
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select student_sub::text,
+                           task_id::text,
+                           submission_id::text,
+                           analysis_status::text,
+                           analysis_json,
+                           score_raw,
+                           score_max,
+                           created_at_iso,
+                           completed_at_iso,
+                           h5p_completed
+                      from public.get_unit_latest_submission_aggregates_for_owner(
+                           %s, %s, %s, %s
+                      )
+                    """,
+                    (owner_sub, course_id, unit_id, normalized_student_subs),
+                )
+                rows = cur.fetchall() or []
+
+        aggregates: List[dict] = []
+        for row in rows:
+            analysis_status = str(row[3] or "")
+            analysis_json = row[4]
+            average_score = None
+            if analysis_status == "completed":
+                average_score = _compute_average_score_from_analysis(analysis_json)
+            aggregates.append(
+                {
+                    "student_sub": str(row[0] or ""),
+                    "task_id": str(row[1] or ""),
+                    "submission_id": str(row[2] or "") if row[2] else None,
+                    "has_submission": bool(row[2]),
+                    "average_score": average_score,
+                    "score_raw": int(row[5]) if row[5] is not None else None,
+                    "score_max": int(row[6]) if row[6] is not None else None,
+                    "created_at_iso": str(row[7] or "") if row[7] else None,
+                    "completed_at_iso": str(row[8] or "") if row[8] else None,
+                    "h5p_completed": bool(row[9]) if row[9] is not None else None,
+                }
+            )
+        return aggregates
+
     def create_course_module_owned(self, course_id: str, owner_sub: str, *, unit_id: str, context_notes: Optional[str]) -> dict:
         """
         Attach a unit as a module within an owned course.
@@ -4078,6 +4143,129 @@ class DBTeachingRepo:
             except Exception:
                 # Intentionally swallow errors in the test-only branch
                 pass
+
+    def student_has_course(self, course_id: str, student_sub: str) -> bool:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                cur.execute(
+                    """
+                    select exists (
+                      select 1
+                        from public.course_memberships
+                       where course_id = %s
+                         and student_id = %s
+                    )
+                    """,
+                    (course_id, student_sub),
+                )
+                row = cur.fetchone()
+        return bool((row or [False])[0])
+
+    def create_concern_box_entry(
+        self,
+        *,
+        course_id: str,
+        student_sub: str,
+        message_text: str,
+        anonymous: bool,
+    ) -> dict[str, Any] | None:
+        text = (message_text or "").strip()
+        if not text:
+            raise ValueError("invalid_message_text")
+        try:
+            with psycopg.connect(self._dsn) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                    cur.execute(
+                        """
+                        select id::text,
+                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                          from public.create_concern_box_entry(%s, %s::uuid, %s, %s)
+                        """,
+                        (student_sub, course_id, text, bool(anonymous)),
+                    )
+                    row = cur.fetchone()
+                    conn.commit()
+        except Exception:
+            return None
+        if row is None:
+            return None
+        return {"id": row[0], "created_at": row[1]}
+
+    def list_concern_box_entries_for_teacher(self, owner_sub: str, scope: str) -> list[dict[str, Any]]:
+        archived = scope == "archived"
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    select e.id::text,
+                           e.course_id::text,
+                           c.title,
+                           e.student_sub,
+                           e.message_text,
+                           e.anonymous,
+                           to_char(e.created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                           case
+                             when e.archived_at is null then null
+                             else to_char(e.archived_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                           end
+                      from public.concern_box_entries e
+                      join public.courses c on c.id = e.course_id
+                     where (e.archived_at is null) = %s
+                     order by e.created_at desc, e.id desc
+                    """,
+                    (not archived,),
+                )
+                rows = cur.fetchall() or []
+        return [
+            {
+                "id": row[0],
+                "course_id": row[1],
+                "course_title": row[2],
+                "student_sub": row[3],
+                "message_text": row[4],
+                "anonymous": bool(row[5]),
+                "created_at": row[6],
+                "archived_at": row[7],
+            }
+            for row in rows
+        ]
+
+    def archive_concern_box_entry_owned(self, entry_id: str, owner_sub: str) -> bool:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    update public.concern_box_entries
+                       set archived_at = now(),
+                           archived_by = %s
+                     where id = %s::uuid
+                    """,
+                    (owner_sub, entry_id),
+                )
+                updated = (cur.rowcount or 0) == 1
+                conn.commit()
+        return updated
+
+    def restore_concern_box_entry_owned(self, entry_id: str, owner_sub: str) -> bool:
+        with psycopg.connect(self._dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+                cur.execute(
+                    """
+                    update public.concern_box_entries
+                       set archived_at = null,
+                           archived_by = null
+                     where id = %s::uuid
+                    """,
+                    (entry_id,),
+                )
+                updated = (cur.rowcount or 0) == 1
+                conn.commit()
+        return updated
 
     def update_course(self, course_id: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Optional[dict]:
         # Build dynamic update only for provided fields

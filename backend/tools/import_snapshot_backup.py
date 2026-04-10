@@ -3,13 +3,14 @@
 Purpose
 -------
 Restore a snapshot produced by the backup cron (`supabase_db.sql.gz` +
-`storage_buckets.tar.gz`, optional `keycloak_db.sql.gz`) into a *local*
+`storage_buckets.tar.gz`, optional `h5p_storage.tar.gz`, optional
+`keycloak_db.sql.gz`) into a *local*
 development instance after tests wiped the DB.
 
-This tool restores a full Postgres dump that recreates Supabase-managed schemas
-(`auth`, `storage`, `pgbouncer`, ...). For that reason the DSN user must be able
-to drop and recreate those schemas. In Supabase local that typically means using
-the `supabase_admin` role (superuser).
+This tool imports snapshot data into a local Supabase stack while keeping
+Supabase-managed schemas (`auth`, `storage`, `pgbouncer`, ...) under local
+runtime control. The importer restores only app-relevant schemas from the dump
+and replays storage objects through the local Storage API.
 
 Security & Safety
 -----------------
@@ -26,6 +27,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -58,13 +60,51 @@ LOCAL_DSN_HOSTS = {
     "host.docker.internal",
 }
 
+# Keep local Supabase service-managed schemas intact. The local runtime owns the
+# technical bootstrap of `auth`, `storage`, `realtime`, etc. Snapshot imports
+# should only replace app-relevant schemas.
+RESTORE_TARGET_SCHEMAS = {
+    "public",
+    "legacy_raw",
+}
+
+_PG_DUMP_OBJECT_HEADER_RE = re.compile(
+    rb"^-- (?:Data for )?Name: (?P<name>.*); Type: (?P<type>.*); Schema: (?P<schema>.*); Owner: (?P<owner>.*)$"
+)
+
+LOCAL_BUCKET_ALLOWED_MIME_TYPES: dict[str, tuple[str, ...]] = {
+    "materials": (
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+    ),
+    "submissions": (
+        "application/pdf",
+        "application/x.makecode.hex",
+        "application/x.scratch.sb3",
+        "image/jpeg",
+        "image/png",
+    ),
+}
+
+LOCAL_H5P_STORAGE_ROOT = Path(__file__).resolve().parents[2] / "supabase" / "storage" / "h5p"
+
 
 @dataclass(frozen=True)
 class SnapshotFiles:
     root: Path
     supabase_db_sql_gz: Path
     storage_buckets_tar_gz: Path
+    h5p_storage_tar_gz: Optional[Path] = None
     keycloak_db_sql_gz: Optional[Path] = None
+
+
+@dataclass(frozen=True)
+class SnapshotMigration:
+    version: str
+    statements: str
+    name: str
+    copy_line: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -133,6 +173,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dry-run", action="store_true", help="Run preflight checks only (no writes)")
     parser.add_argument("--allow-remote-dsn", action="store_true", help="Allow restoring into non-local DSNs (dangerous)")
+    parser.add_argument(
+        "--allow-missing-h5p",
+        action="store_true",
+        help="Continue the import when H5P DB rows reference missing local H5P content files",
+    )
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
     return parser.parse_args()
 
@@ -293,11 +338,13 @@ def resolve_snapshot_files(snapshot: Path, extract_root: Path) -> SnapshotFiles:
 
     db_sql = _find_unique(root, "supabase_db.sql.gz")
     storage_tar = _find_unique(root, "storage_buckets.tar.gz")
+    h5p_storage_tar = _find_optional(root, "h5p_storage.tar.gz")
     keycloak_sql = _find_optional(root, "keycloak_db.sql.gz")
     return SnapshotFiles(
         root=root,
         supabase_db_sql_gz=db_sql,
         storage_buckets_tar_gz=storage_tar,
+        h5p_storage_tar_gz=h5p_storage_tar,
         keycloak_db_sql_gz=keycloak_sql,
     )
 
@@ -312,70 +359,27 @@ def _psql_check(dsn: str) -> None:
     )
 
 
-def _drop_non_plpgsql_extensions(dsn: str) -> None:
-    # You cannot drop a schema that is required by an extension (e.g. `net` for
-    # `pg_net`). Therefore we drop extensions first, then schemas.
-    sql = """
-do $$
-declare
-  e record;
-begin
-  for e in (
-    select extname
-    from pg_extension
-    where extname <> 'plpgsql'
-  ) loop
-    execute format('drop extension if exists %I cascade', e.extname);
-  end loop;
-end $$;
-"""
-    subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
-
-
-def _drop_publications(dsn: str) -> None:
-    # Full snapshots may re-create publication `supabase_realtime` (or other logical
-    # replication publications). Those must not exist before replaying the SQL dump.
-    sql = """
-do $$
-declare
-  p record;
-begin
-  for p in (
-    select pubname
-    from pg_publication
-  ) loop
-    execute format('drop publication if exists %I cascade', p.pubname);
-  end loop;
-end $$;
-"""
-    subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
-
-
 def _reset_db_for_restore(dsn: str) -> None:
-    _drop_non_plpgsql_extensions(dsn)
-    _drop_publications(dsn)
-    _drop_all_non_system_schemas(dsn)
-    # `pg_dump` typically assumes `public` exists and therefore might not emit
-    # a `CREATE SCHEMA public;`. Ensure it is present for the restore.
+    _drop_restore_target_schemas(dsn)
+    # The filtered dump replays app objects only. `public` may be omitted as a
+    # schema object in pg_dump output, so recreate it explicitly before replay.
     subprocess.run(
         ["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", "create schema if not exists public;"],
         check=True,
     )
 
 
-def _drop_all_non_system_schemas(dsn: str) -> None:
-    sql = """
-	do $$
-	declare
+def _drop_restore_target_schemas(dsn: str) -> None:
+    schema_literals = ", ".join(f"'{schema}'" for schema in sorted(RESTORE_TARGET_SCHEMAS))
+    sql = f"""
+do $$
+declare
   r record;
 begin
   for r in (
     select nspname
     from pg_namespace
-    where nspname not in ('pg_catalog', 'information_schema')
-      and nspname not like 'pg_toast%'
-      and nspname not like 'pg_temp_%'
-      and nspname not like 'pg_toast_temp_%'
+    where nspname in ({schema_literals})
   ) loop
     execute format('drop schema if exists %I cascade', r.nspname);
   end loop;
@@ -384,15 +388,202 @@ end $$;
     subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
 
 
+def expected_local_migration_owner() -> str:
+    """Return the local role expected to run `supabase migration up`."""
+    return str(os.getenv("DB_SUPERUSER", "postgres")).strip() or "postgres"
+
+
+def _normalize_restore_target_ownership(dsn: str, target_owner: str) -> None:
+    """Reassign restored app objects to the local migration runner.
+
+    Snapshot imports run with a superuser DSN (`supabase_admin`) so they can
+    reset app schemas. Without an explicit owner handoff afterwards, restored
+    tables/functions stay owned by that restore role and later
+    `supabase migration up` runs as `postgres` can fail on `ALTER TABLE`.
+    """
+
+    owner_literal = target_owner.replace("'", "''")
+    schema_literals = ", ".join(f"'{schema}'" for schema in sorted(RESTORE_TARGET_SCHEMAS))
+    sql = f"""
+do $$
+declare
+  target_owner text := '{owner_literal}';
+  r record;
+begin
+  for r in (
+    select nspname
+      from pg_namespace
+     where nspname in ({schema_literals})
+  ) loop
+    execute format('alter schema %I owner to %I', r.nspname, target_owner);
+  end loop;
+
+  for r in (
+    select n.nspname, c.relname, c.relkind
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname in ({schema_literals})
+       and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
+  ) loop
+    case r.relkind
+      when 'S' then
+        execute format('alter sequence %I.%I owner to %I', r.nspname, r.relname, target_owner);
+      when 'v' then
+        execute format('alter view %I.%I owner to %I', r.nspname, r.relname, target_owner);
+      when 'm' then
+        execute format('alter materialized view %I.%I owner to %I', r.nspname, r.relname, target_owner);
+      else
+        execute format('alter table %I.%I owner to %I', r.nspname, r.relname, target_owner);
+    end case;
+  end loop;
+
+  for r in (
+    select n.nspname, p.proname, pg_get_function_identity_arguments(p.oid) as args, p.prokind
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname in ({schema_literals})
+       and p.prokind in ('f', 'p')
+  ) loop
+    if r.prokind = 'p' then
+      execute format('alter procedure %I.%I(%s) owner to %I', r.nspname, r.proname, r.args, target_owner);
+    else
+      execute format('alter function %I.%I(%s) owner to %I', r.nspname, r.proname, r.args, target_owner);
+    end if;
+  end loop;
+
+  for r in (
+    select n.nspname, t.typname
+      from pg_type t
+      join pg_namespace n on n.oid = t.typnamespace
+     where n.nspname in ({schema_literals})
+       and t.typtype in ('d', 'e')
+  ) loop
+    execute format('alter type %I.%I owner to %I', r.nspname, r.typname, target_owner);
+  end loop;
+end $$;
+"""
+    subprocess.run(["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql], check=True)
+
+
+def _decode_dump_header_value(raw: bytes) -> str:
+    return raw.decode("utf-8", errors="replace").strip()
+
+
+def extract_snapshot_migration_history(db_sql_gz: Path) -> list[SnapshotMigration]:
+    """Read `supabase_migrations.schema_migrations` rows embedded in the dump."""
+
+    rows: list[SnapshotMigration] = []
+    inside_copy = False
+    with gzip.open(db_sql_gz, "rt", encoding="utf-8", errors="replace") as dump:
+        for line in dump:
+            if line.startswith("COPY supabase_migrations.schema_migrations "):
+                inside_copy = True
+                continue
+            if not inside_copy:
+                continue
+            if line.strip() == r"\.":
+                break
+            parts = line.rstrip("\n").split("\t", 2)
+            if len(parts) != 3:
+                raise RuntimeError(
+                    "Malformed supabase_migrations.schema_migrations row in snapshot dump."
+                )
+            rows.append(
+                SnapshotMigration(
+                    version=parts[0],
+                    statements=parts[1],
+                    name=parts[2],
+                    copy_line=line.rstrip("\n"),
+                )
+            )
+    if not rows:
+        raise RuntimeError("Snapshot dump does not contain supabase_migrations.schema_migrations rows.")
+    return rows
+
+
+def sync_snapshot_migration_history(dsn: str, rows: list[SnapshotMigration]) -> None:
+    """Replace local Supabase migration history with the snapshot's history."""
+
+    proc = subprocess.Popen(
+        ["psql", dsn, "-v", "ON_ERROR_STOP=1"],
+        stdin=subprocess.PIPE,
+        text=True,
+    )
+    assert proc.stdin is not None
+    try:
+        proc.stdin.write("truncate table supabase_migrations.schema_migrations;\n")
+        proc.stdin.write("copy supabase_migrations.schema_migrations(version, statements, name) from stdin;\n")
+        for row in rows:
+            proc.stdin.write(f"{row.copy_line}\n")
+        proc.stdin.write("\\.\n")
+    finally:
+        try:
+            proc.stdin.close()
+        except Exception:
+            pass
+    rc = proc.wait()
+    if rc != 0:
+        raise RuntimeError(f"psql migration history sync failed with exit code {rc}")
+
+
+def _should_keep_dump_object(header_line: bytes) -> bool:
+    match = _PG_DUMP_OBJECT_HEADER_RE.match(header_line.rstrip(b"\n"))
+    if match is None:
+        return True
+
+    object_type = _decode_dump_header_value(match.group("type"))
+    schema = _decode_dump_header_value(match.group("schema"))
+    name = _decode_dump_header_value(match.group("name"))
+
+    if schema in RESTORE_TARGET_SCHEMAS:
+        return True
+    if object_type == "SCHEMA" and name in RESTORE_TARGET_SCHEMAS:
+        return True
+    if schema == "-" and name.startswith("SCHEMA "):
+        return name.removeprefix("SCHEMA ").strip() in RESTORE_TARGET_SCHEMAS
+    return False
+
+
+def _iter_filtered_dump_lines(lines: Iterable[bytes]) -> Iterator[bytes]:
+    current_block: list[bytes] = []
+    keep_current_block = True
+    in_object_block = False
+
+    def flush_current_block() -> Iterator[bytes]:
+        nonlocal current_block
+        if keep_current_block:
+            yield from current_block
+        current_block = []
+
+    for line in lines:
+        if _PG_DUMP_OBJECT_HEADER_RE.match(line.rstrip(b"\n")):
+            if in_object_block:
+                yield from flush_current_block()
+            keep_current_block = _should_keep_dump_object(line)
+            current_block = [line]
+            in_object_block = True
+            continue
+
+        if in_object_block:
+            current_block.append(line)
+            continue
+
+        yield line
+
+    if in_object_block:
+        yield from flush_current_block()
+
+
 def _restore_db_sql_gz(db_sql_gz: Path, dsn: str) -> None:
     start = time.monotonic()
     LOG.info("Restoring DB from %s ...", db_sql_gz)
+    LOG.info("Filtering snapshot DB restore to app schemas: %s", ", ".join(sorted(RESTORE_TARGET_SCHEMAS)))
 
     proc = subprocess.Popen(["psql", dsn, "-v", "ON_ERROR_STOP=1"], stdin=subprocess.PIPE)
     assert proc.stdin is not None
     try:
         with gzip.open(db_sql_gz, "rb") as f:
-            for raw_line in f:
+            for raw_line in _iter_filtered_dump_lines(f):
                 if _is_graphql_public_grant_line(raw_line):
                     continue
                 if _is_unsupported_pg_setting_line(raw_line):
@@ -634,6 +825,53 @@ def _localize_keycloak_for_local_web(
     )
 
 
+def _build_keycloak_theme_localization_sql(
+    *,
+    realm: str,
+    login_theme: str,
+    account_theme: str,
+    email_theme: str,
+) -> str:
+    return f"""
+do $$
+begin
+  update realm
+     set login_theme = {_sql_literal(login_theme)},
+         account_theme = {_sql_literal(account_theme)},
+         email_theme = {_sql_literal(email_theme)}
+   where name = {_sql_literal(realm)};
+
+  if not found then
+    raise exception 'Keycloak realm not found: %', {_sql_literal(realm)};
+  end if;
+end $$;
+"""
+
+
+def _localize_keycloak_theme(
+    *,
+    keycloak_db_container: str,
+    keycloak_db_user: str,
+    keycloak_db_name: str,
+    realm: str,
+    login_theme: str,
+    account_theme: str,
+    email_theme: str,
+) -> None:
+    sql = _build_keycloak_theme_localization_sql(
+        realm=realm,
+        login_theme=login_theme,
+        account_theme=account_theme,
+        email_theme=email_theme,
+    )
+    _run_docker_psql(
+        container=keycloak_db_container,
+        db_user=keycloak_db_user,
+        db_name=keycloak_db_name,
+        sql=sql,
+    )
+
+
 def _restart_container(container_name: str) -> None:
     subprocess.run(["docker", "restart", container_name], check=True)
 
@@ -719,6 +957,100 @@ def _extract_storage_tar(storage_tar_gz: Path, dest: Path) -> Path:
     with tarfile.open(storage_tar_gz, "r:gz") as tar:
         _safe_extract_tar(tar, dest)
     return dest
+
+
+def _clear_directory_contents(dest: Path) -> Path:
+    """Remove all children from a directory while keeping the directory itself."""
+    dest.mkdir(parents=True, exist_ok=True)
+    for child in dest.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+            continue
+        child.unlink()
+    return dest
+
+
+def _restore_h5p_storage_tar(h5p_storage_tar_gz: Path, dest: Path) -> Path:
+    """Restore H5P storage in place so bind-mounted container roots stay stable."""
+    _clear_directory_contents(dest)
+    with tarfile.open(h5p_storage_tar_gz, "r:gz") as tar:
+        _safe_extract_tar(tar, dest)
+    return dest
+
+
+def _list_snapshot_h5p_task_refs(dsn: str) -> list[dict[str, object]]:
+    """Return all distinct H5P task references restored from the snapshot DB."""
+    if psycopg is None:
+        raise RuntimeError("psycopg is required to inspect restored H5P task references.")
+
+    query = """
+        select t.h5p_content_id::text as content_id,
+               t.id::text as task_id,
+               t.unit_id::text as unit_id,
+               coalesce(
+                 array_agg(distinct cm.course_id::text) filter (where cm.course_id is not null),
+                 array[]::text[]
+               ) as course_ids
+          from public.unit_tasks t
+          left join public.course_modules cm on cm.unit_id = t.unit_id
+         where t.kind = 'h5p'
+           and t.h5p_content_id is not null
+         group by t.h5p_content_id, t.id, t.unit_id
+         order by t.h5p_content_id, t.id
+    """
+    items: list[dict[str, object]] = []
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            for content_id, task_id, unit_id, course_ids in cur.fetchall() or []:
+                items.append(
+                    {
+                        "content_id": str(content_id),
+                        "task_id": str(task_id),
+                        "unit_id": str(unit_id),
+                        "course_ids": [str(course_id) for course_id in (course_ids or [])],
+                    }
+                )
+    return items
+
+
+def _assert_snapshot_h5p_storage_complete(dsn: str, h5p_root: Path) -> dict[str, list[str]]:
+    """Fail fast when restored snapshot DB rows reference missing H5P content."""
+    refs = _list_snapshot_h5p_task_refs(dsn)
+    expected_ids = sorted({str(item["content_id"]) for item in refs if str(item.get("content_id") or "").strip()})
+    if not expected_ids:
+        return {"expected_ids": [], "missing_ids": []}
+
+    missing_ids = [content_id for content_id in expected_ids if not (h5p_root / "content" / content_id).is_dir()]
+    if not missing_ids:
+        return {"expected_ids": expected_ids, "missing_ids": []}
+
+    examples: list[str] = []
+    for item in refs:
+        content_id = str(item.get("content_id") or "")
+        if content_id not in missing_ids:
+            continue
+        course_ids = ",".join(str(course_id) for course_id in (item.get("course_ids") or [])) or "-"
+        examples.append(
+            f"content_id={content_id} task_id={item.get('task_id')} unit_id={item.get('unit_id')} course_ids={course_ids}"
+        )
+        if len(examples) >= 5:
+            break
+
+    raise RuntimeError(
+        "Snapshot references H5P content that is missing from local H5P storage. "
+        f"Missing content_ids: {', '.join(missing_ids)}. "
+        "Provide h5p_storage.tar.gz or re-import the missing H5P packages. "
+        f"Examples: {'; '.join(examples)}"
+    )
+
+
+def _parse_missing_h5p_ids(error_text: str) -> list[str]:
+    """Extract missing H5P content IDs from the consistency error message."""
+    match = re.search(r"Missing content_ids:\s*([0-9,\s-]+)\.", error_text)
+    if not match:
+        return []
+    return [item.strip() for item in match.group(1).split(",") if item.strip()]
 
 
 def _build_object_url(base_url: str, bucket: str, key: str) -> str:
@@ -808,6 +1140,53 @@ def _ensure_buckets(base_url: str, key: str, buckets: Iterable[str]) -> None:
     ensure_buckets(base_url, key, buckets)
 
 
+def _sql_text_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _sync_bucket_allowlists(dsn: str, buckets: Iterable[str]) -> None:
+    target_buckets = sorted({bucket for bucket in buckets if bucket in LOCAL_BUCKET_ALLOWED_MIME_TYPES})
+    if not target_buckets:
+        return
+
+    updates_sql = []
+    for bucket in target_buckets:
+        mime_literals = ", ".join(_sql_text_literal(mime) for mime in LOCAL_BUCKET_ALLOWED_MIME_TYPES[bucket])
+        updates_sql.append(
+            f"""
+    update storage.buckets
+       set allowed_mime_types = (
+         select array_agg(distinct mime order by mime)
+         from unnest(
+           coalesce(allowed_mime_types, array[]::text[]) ||
+           array[{mime_literals}]::text[]
+         ) as mime
+       )
+     where id = {_sql_text_literal(bucket)};
+"""
+        )
+
+    sql = """
+do $$
+begin
+  if exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'storage'
+       and table_name = 'buckets'
+       and column_name = 'allowed_mime_types'
+  ) then
+""" + "".join(updates_sql) + """
+  end if;
+end$$;
+"""
+    subprocess.run(
+        ["psql", dsn, "-v", "ON_ERROR_STOP=1", "-c", sql],
+        check=True,
+    )
+    LOG.info("Synced local storage bucket MIME allowlists for: %s", ", ".join(target_buckets))
+
+
 def _upload_storage_objects(
     *,
     base_url: str,
@@ -832,6 +1211,7 @@ def _upload_storage_objects(
         LOG.warning("Skipping %s files that don't match bucket layout (see report).", len(skipped_files))
     if not dry_run:
         _ensure_buckets(base_url, service_role_key, buckets)
+        _sync_bucket_allowlists(dsn, buckets)
 
     uploaded = 0
     failed = 0
@@ -903,6 +1283,7 @@ def main() -> int:
         "skip_storage": bool(args.skip_storage),
         "skip_keycloak": bool(args.skip_keycloak),
         "no_reset": bool(args.no_reset),
+        "allow_missing_h5p": bool(args.allow_missing_h5p),
     }
 
     try:
@@ -910,7 +1291,12 @@ def main() -> int:
         report["resolved_root"] = str(files.root)
         report["supabase_db_sql_gz"] = str(files.supabase_db_sql_gz)
         report["storage_buckets_tar_gz"] = str(files.storage_buckets_tar_gz)
+        report["h5p_storage_tar_gz"] = str(files.h5p_storage_tar_gz) if files.h5p_storage_tar_gz else None
+        report["h5p_storage_archive_present"] = bool(files.h5p_storage_tar_gz)
         report["keycloak_db_sql_gz"] = str(files.keycloak_db_sql_gz) if files.keycloak_db_sql_gz else None
+        snapshot_migrations = extract_snapshot_migration_history(files.supabase_db_sql_gz)
+        report["snapshot_migration_count"] = len(snapshot_migrations)
+        report["snapshot_latest_migration"] = snapshot_migrations[-1].version if snapshot_migrations else None
 
         LOG.info("Preflight: checking DB connectivity ...")
         _psql_check(dsn)
@@ -943,6 +1329,29 @@ def main() -> int:
 
         _restore_db_sql_gz(files.supabase_db_sql_gz, dsn)
         _ensure_graphql_public_function(dsn)
+        restore_target_owner = expected_local_migration_owner()
+        _normalize_restore_target_ownership(dsn, restore_target_owner)
+        sync_snapshot_migration_history(dsn, snapshot_migrations)
+        report["restore_target_owner"] = restore_target_owner
+
+        if files.h5p_storage_tar_gz is not None:
+            restored_h5p_root = _restore_h5p_storage_tar(files.h5p_storage_tar_gz, LOCAL_H5P_STORAGE_ROOT)
+            report["h5p_storage_restored_to"] = str(restored_h5p_root)
+        try:
+            h5p_consistency = _assert_snapshot_h5p_storage_complete(dsn, LOCAL_H5P_STORAGE_ROOT)
+            report["h5p_storage_result"] = h5p_consistency
+        except RuntimeError as exc:
+            if not args.allow_missing_h5p:
+                raise
+            report["h5p_storage_result"] = {
+                "expected_ids": [],
+                "missing_ids": _parse_missing_h5p_ids(str(exc)),
+            }
+            report["h5p_storage_warning"] = str(exc)
+            LOG.warning(
+                "Continuing snapshot import despite missing H5P content because --allow-missing-h5p was set: %s",
+                exc,
+            )
 
         if files.keycloak_db_sql_gz and not args.skip_keycloak:
             _restore_keycloak_db_sql_gz(
@@ -958,6 +1367,15 @@ def main() -> int:
                 realm=args.keycloak_realm,
                 web_client_id=args.keycloak_web_client_id,
                 app_base_url=args.keycloak_web_base,
+            )
+            _localize_keycloak_theme(
+                keycloak_db_container=args.keycloak_db_container,
+                keycloak_db_user=args.keycloak_db_user,
+                keycloak_db_name=args.keycloak_db_name,
+                realm=args.keycloak_realm,
+                login_theme="gustav",
+                account_theme="gustav",
+                email_theme="gustav",
             )
             _sync_keycloak_admin_client_secret(
                 keycloak_db_container=args.keycloak_db_container,

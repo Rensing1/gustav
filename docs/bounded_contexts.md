@@ -1,6 +1,6 @@
 # Bounded Contexts
 
-Last reviewed: 2026-02-23
+Last reviewed: 2026-03-23
 
 Dieses Dokument beschreibt die fachliche Aufteilung (Bounded Contexts) in GUSTAV alpha‑2.
 Es ist bewusst konzeptionell gehalten. Terminologie bitte konsistent mit `docs/glossary.md` verwenden.
@@ -9,7 +9,7 @@ Es ist bewusst konzeptionell gehalten. Terminologie bitte konsistent mit `docs/g
 1. **`identity_access` (Benutzerverwaltung)**: Authentifizierung/Session‑Handling und Rollen/Identität als minimaler, datenschutzfreundlicher Kontext für alle nachgelagerten Bereiche.
 2. **`teaching` (Unterrichten)**: Lehrkräfte erstellen/verwalten wiederverwendbare Inhalte (`Unit`) und organisieren sie in Kursen inkl. Freigaben.
 3. **`learning` (Lernen)**: Schüler bearbeiten freigegebene Inhalte, erstellen Abgaben (`Submission`) und erhalten Auswertung/Feedback.
-4. **`analytics` (Diagnostik)**: Aggregierte Sichten für Lehrkräfte. (Noch kein eigenes Paket; erste diagnostische Sichten sind aktuell Teil von `teaching`.)
+4. **`diagnostics` (Diagnostik)**: Aggregierte und operative Sichten für Lehrkräfte. Der Kontext wird im SvelteKit-Refactor explizit von `teaching` getrennt.
 
 ## `identity_access` (Benutzerverwaltung)
 
@@ -73,16 +73,16 @@ graph TD
 
     subgraph "Downstream"
         learning[learning]
-        analytics[analytics]
+        diagnostics[diagnostics]
     end
 
     identity_access -- UserContextDTO (sub, roles, name) --> teaching
     identity_access -- UserContextDTO (sub, roles, name) --> learning
-    identity_access -- UserContextDTO (sub, roles, name) --> analytics
+    identity_access -- UserContextDTO (sub, roles, name) --> diagnostics
 
     teaching -- Released content (structure + visibility) --> learning
 
     learning -- Aggregates (e.g. latest submissions status) --> teaching
-    learning -- Aggregates --> analytics
-    teaching -- Structure --> analytics
+    learning -- Aggregates --> diagnostics
+    teaching -- Structure --> diagnostics
 ```

@@ -114,7 +114,7 @@ class Gustav {
 
   redirectToLoginWithReturnTo() {
     const path = (window.location && window.location.pathname) ? window.location.pathname : '/';
-    const target = `/auth/login?redirect=${encodeURIComponent(path)}`;
+    const target = `/?redirect=${encodeURIComponent(path)}&reason=session-expired`;
     window.location.href = target;
   }
 

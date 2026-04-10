@@ -7,12 +7,12 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 ---
 
 ## 1. Purpose & Scope
-- **OCR**: Extract handwritten or printed text from image/PDF submissions and populate `text_body`.
-- **Feedback**: Generate formative feedback (and optional rubric scoring) from `text_body` using DSPy programs.
+- **OCR**: Extract handwritten or printed text from image/PDF submissions and populate `text_body` where the submission path uses OCR.
+- **Feedback**: Generate formative feedback (and optional rubric scoring) either from `text_body` or directly from the uploaded visual artifact, depending on the submission path.
 - **Endpoint**: Inference runs against an operator-configured **OpenAI-compatible API endpoint** (`OPENAI_BASE_URL`).
   - The endpoint may be local or remote; GUSTAV does not enforce host/path rules.
   - Privacy/GDPR responsibility is therefore shared: operators must ensure the endpoint is compliant for student data.
-- **Async-first**: Submissions with `kind=image|file` return `202` with `analysis_status=pending`. A worker processes OCR + feedback and updates the submission to `completed` or `failed`.
+- **Async-first**: Submissions with `kind=image|file` return `202` with `analysis_status=pending`. A worker processes either OCR + feedback or direct visual feedback and updates the submission to `completed` or `failed`.
 - **Teacher-only context**: Tasks can include `teacher_context_md` (KI-Kontext/Wissensbasis). It is used as model context but must never be exposed in student-facing DTOs.
 
 ---
@@ -20,7 +20,7 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 ## 2. Architecture Overview
 1. **HTTP Layer** validates request & permissions, calls the use case `IngestLearningSubmission`.
 2. **Use Case** stores the submission with `analysis_status=pending` (for text/image/file) and enqueues a job via the queue port.
-3. **Worker** (`process_learning_submission_jobs`) leases jobs FIFO, runs OCR (if needed), runs feedback analysis, persists results, and emits follow-up events.
+3. **Worker** (`process_learning_submission_jobs`) leases jobs FIFO, runs OCR only when needed, otherwise routes directly into visual feedback analysis, persists results, and emits follow-up events.
 4. **Persistence** is guarded by repository functions and RLS. Worker updates go through `SECURITY DEFINER` helpers to mutate `analysis_status`, `analysis_json`, `feedback_md`.
 5. **Observability**: Structured logs + counters/gauges.
 
@@ -31,13 +31,13 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 | Port / Adapter | Signature (Python typing) | Responsibility | Security Notes |
 | --- | --- | --- | --- |
 | `SubmissionStoragePort` | ```python\nclass SubmissionStoragePort(Protocol):\n    def create_presign(self, *, course_id: UUID, task_id: UUID, student_sub: str,\n                       mime_type: str, size_bytes: int) -> PresignResult: ...\n    def verify_object(self, *, storage_key: str, sha256: str,\n                      size_bytes: int) -> StorageVerifyResult: ...\n    def stream_to_local_tmp(self, *, storage_key: str) -> Iterator[bytes]: ...\n``` | Presigned uploads, verification, optional streaming for local OCR. | Uses service credentials; enforces namespacing `submissions/{course}/{task}/{student}/...`. |
-| `LearningSubmissionQueuePort` | ```python\nclass LearningSubmissionQueuePort(Protocol):\n    def enqueue(self, job: SubmissionJobPayload) -> None: ...\n    def lease_next(self, *, now: datetime) -> Optional[QueuedJob]: ...\n    def ack(self, job_id: UUID) -> None: ...\n    def retry_later(self, job_id: UUID, *, visible_at: datetime) -> None: ...\n``` | Queue backed by `public.learning_submission_jobs`. | Only worker role can lease/ack jobs. |
+| `LearningSubmissionQueuePort` | ```python\nclass LearningSubmissionQueuePort(Protocol):\n    def enqueue(self, job: SubmissionJobPayload) -> None: ...\n    def lease_next(self, *, now: datetime) -> Optional[QueuedJob]: ...\n    def ack(self, job_id: UUID) -> None: ...\n    def retry_later(self, job_id: UUID, *, visible_at: datetime) -> None: ...\n``` | Queue backed by `public.learning_submission_jobs`. | Only the dedicated worker login (`gustav_worker`) should lease/ack jobs. |
 | `VisionAdapterProtocol` | ```python\nclass VisionAdapterProtocol(Protocol):\n    def extract(self, *, submission: dict, job_payload: dict) -> VisionResult: ...\n``` | OCR via DSPy (`VisionOcrSignature` → `VisionResult.text_md`). | Must enforce MIME whitelist, size limits, and never log extracted text. |
 | `FeedbackAdapterProtocol` | ```python\nclass FeedbackAdapterProtocol(Protocol):\n    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult: ...\n``` | DSPy-only feedback for text submissions. | Must not log student text or teacher context; validates required feedback headings. |
 
 Production adapters:
 - OCR: `backend/learning/adapters/local_vision.py` (DSPy-only, OpenAI-compatible endpoint).
-- Feedback: `backend/learning/adapters/local_feedback.py` (DSPy-only, OpenAI-compatible endpoint; visual tasks via `analyze_visual`).
+- Feedback: `backend/learning/adapters/local_feedback.py` (DSPy-only, OpenAI-compatible endpoint; visual tasks and native upload submissions via `analyze_visual`).
   - Note: Concrete adapters may accept additional optional kwargs (`instruction_md`, `teacher_context_md`). The worker passes them when supported.
 
 ---
@@ -87,6 +87,13 @@ Why this matters:
 | `WORKER_BACKOFF_SECONDS` | no | Worker | Base backoff, default `10`. |
 | `WORKER_LEASE_SECONDS` | no | Worker | Default `45` (effective lease window is multiplied internally). |
 | `WORKER_POLL_INTERVAL` | no | Worker | Default `0.5`. |
+| `LEARNING_WORKER_DB_USER` / `LEARNING_WORKER_DB_PASSWORD` | yes for local fallback | Worker | Dedicated DB login for the learning worker; local examples default to `gustav_worker`. |
+| `LEARNING_WORKER_DATABASE_URL` | recommended | Worker + health probe | Dedicated DSN for worker runtime and worker health checks. |
+
+### 5.1.1 Database login roles
+- Web/App uses `APP_DB_USER` (typically `gustav_app`) and must stay separate from the worker.
+- The learning worker uses `LEARNING_WORKER_DATABASE_URL` or the fallback pair `LEARNING_WORKER_DB_USER` / `LEARNING_WORKER_DB_PASSWORD`.
+- The worker health probe treats `current_user != gustav_worker` as degraded, even if queue visibility itself is still okay.
 
 ### 5.2 Operations: OpenAI health probe (UI footer)
 

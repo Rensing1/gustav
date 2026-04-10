@@ -36,6 +36,7 @@ def test_theme_templates_present():
         "info.ftl": (THEME_ROOT / "info.ftl").exists(),
         "error.ftl": (THEME_ROOT / "error.ftl").exists(),
         "login-page-expired.ftl": (THEME_ROOT / "login-page-expired.ftl").exists(),
+        "logout-confirm.ftl": (THEME_ROOT / "logout-confirm.ftl").exists(),
     }
     tmpl_dir = THEME_ROOT / "templates"
     dir_files = {
@@ -48,6 +49,7 @@ def test_theme_templates_present():
         "info.ftl": (tmpl_dir / "info.ftl").exists(),
         "error.ftl": (tmpl_dir / "error.ftl").exists(),
         "login-page-expired.ftl": (tmpl_dir / "login-page-expired.ftl").exists(),
+        "logout-confirm.ftl": (tmpl_dir / "logout-confirm.ftl").exists(),
     }
     for name in [
         "login.ftl",
@@ -60,6 +62,7 @@ def test_theme_templates_present():
         "info.ftl",
         "error.ftl",
         "login-page-expired.ftl",
+        "logout-confirm.ftl",
     ]:
         assert root_files[name] or dir_files[name], f"{name} missing"
 
@@ -89,8 +92,8 @@ def test_theme_messages_de_present_and_has_keys():
 
 
 def test_theme_css_contains_component_hooks():
-    css = THEME_ROOT / "resources" / "css" / "gustav.css"
-    assert css.exists(), "gustav.css missing"
+    css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
+    assert css.exists(), "auth-theme.css missing"
     text = css.read_text(encoding="utf-8")
     # Expected class hooks used by our FTL templates for compact layout
     for cls in [
@@ -102,8 +105,85 @@ def test_theme_css_contains_component_hooks():
         ".kc-submit",
         ".kc-message",
         ".kc-links",
+        ".kc-auth-shell",
+        ".kc-auth-card",
     ]:
         assert cls in text, f"Missing CSS hook: {cls}"
+
+
+def test_theme_properties_define_explicit_auth_theme_version():
+    props = THEME_ROOT / "theme.properties"
+    assert props.exists(), "theme.properties missing"
+    text = props.read_text(encoding="utf-8")
+    assert "gustavThemeVersion=" in text, "theme.properties should define an explicit cache-busting version"
+
+
+def test_theme_properties_globalize_keycloak_shell_classes():
+    """Theme properties should map upstream Keycloak layout hooks to global GUSTAV primitives."""
+    props = THEME_ROOT / "theme.properties"
+    text = props.read_text(encoding="utf-8")
+    for marker in [
+        "kcLoginClass=kc-gustav kc-auth-shell",
+        "kcFormCardClass=kc-card kc-auth-card",
+        "kcContentWrapperClass=kc-form-shell",
+        "kcFormClass=kc-form",
+        "kcInputClass=kc-input",
+        "kcButtonClass=workspace-button",
+    ]:
+        assert marker in text, f"theme.properties should include {marker}"
+
+
+def test_theme_css_uses_auth_design_tokens_instead_of_legacy_palette():
+    css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
+    text = css.read_text(encoding="utf-8")
+
+    for token in [
+        "--auth-color-bg-base",
+        "--auth-color-surface",
+        "--auth-color-accent",
+        "--auth-color-border",
+        "--auth-font-display",
+        "--auth-font-body",
+        "--auth-font-mono",
+    ]:
+        assert token in text, f"Missing new auth design token {token}"
+
+    assert "legacy login.css" not in text
+
+
+def test_theme_global_template_and_footer_exist():
+    """Latent Keycloak pages should be captured centrally via template.ftl/footer.ftl."""
+    template = THEME_ROOT / "template.ftl"
+    footer = THEME_ROOT / "footer.ftl"
+    assert template.exists(), "template.ftl missing"
+    assert footer.exists(), "footer.ftl missing"
+    template_text = template.read_text(encoding="utf-8")
+    footer_text = footer.read_text(encoding="utf-8")
+    for marker in [
+        '<#macro registrationLayout',
+        'css/auth-theme.css?v=${properties.gustavThemeVersion!"dev"}',
+        'css/gustav.css?v=${properties.gustavThemeVersion!"dev"}',
+        'class="${properties.kcLoginClass!}"',
+        '<@loginFooter.content',
+    ]:
+        assert marker in template_text, f"template.ftl should include {marker}"
+    assert 'id="kc-locale"' not in template_text, "template.ftl should not render a dominant locale dropdown"
+    assert 'class="kc-locale-links"' in footer_text, "footer.ftl should render locale links footer"
+
+
+def test_keycloak_auth_stylesheet_defines_global_primitives_for_latent_pages():
+    """The shared auth stylesheet should define primitives used by inherited Keycloak templates."""
+    css = (THEME_ROOT / "resources" / "css" / "auth-theme.css").read_text(encoding="utf-8")
+    for marker in [
+        ".kc-form-group",
+        ".kc-input-wrapper",
+        ".kc-form-buttons",
+        ".kc-user-chip",
+        ".kc-auth-selection-list",
+        ".kc-choice-list",
+        ".workspace-button--block",
+    ]:
+        assert marker in css, f"auth-theme.css should include {marker}"
 
 
 def test_login_username_input_is_email():
@@ -148,6 +228,16 @@ def test_update_password_templates_use_login_css_hooks():
             assert cls in text, f"{name} should contain CSS hook {cls}"
 
 
+def test_keycloak_primary_forms_use_workspace_primitives() -> None:
+    """Keycloak auth forms should reuse the same button and field primitives as Svelte auth pages."""
+    for name in ["login.ftl", "register.ftl", "login-reset-password.ftl", "login-update-password.ftl", "update-password.ftl"]:
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+        assert "workspace-button" in text, f"{name} should opt into the shared workspace button primitive"
+        assert "workspace-field" in text, f"{name} should opt into the shared workspace field primitive"
+        assert 'class="kc-form-shell"' in text, f"{name} should wrap fields in a shared inner form shell"
+
+
 def test_update_password_templates_use_keycloak_field_names():
     """Update-password form must use Keycloak's expected field names and autocomplete hints."""
     for name in ["update-password.ftl", "login-update-password.ftl"]:
@@ -165,8 +255,8 @@ def test_verify_email_template_uses_gustav_layout_hooks():
     for marker in [
         'class="kc-gustav"',
         'class="kc-card"',
-        "app-gustav-base.css",
         "gustav.css",
+        "auth-theme.css",
     ]:
         assert marker in text, f"login-verify-email.ftl should include {marker}"
 
@@ -178,8 +268,8 @@ def test_info_template_uses_gustav_layout_hooks():
     for marker in [
         'class="kc-gustav"',
         'class="kc-card"',
-        "app-gustav-base.css",
         "gustav.css",
+        "auth-theme.css",
     ]:
         assert marker in text, f"info.ftl should include {marker}"
 
@@ -192,14 +282,43 @@ def test_error_templates_use_gustav_layout_and_deemphasized_locale_links():
         for marker in [
             'class="kc-gustav"',
             'class="kc-card"',
-            "app-gustav-base.css",
             "gustav.css",
+            "auth-theme.css",
             '<#import "_gustav_error_components.ftl" as gustav_error>',
             "<@gustav_error.render_recovery_links",
             "<@gustav_error.render_locale_links",
         ]:
             assert marker in text, f"{name} should include {marker}"
         assert 'id="kc-locale"' not in text, f"{name} should not render a dominant locale dropdown"
+
+
+def test_logout_confirm_template_uses_gustav_layout_and_footer_links():
+    """Logout confirmation should keep the GUSTAV auth shell instead of the parent Keycloak theme."""
+    tpl = _resolve_login_template("logout-confirm.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    for marker in [
+        'class="kc-gustav"',
+        'class="kc-card"',
+        "gustav.css",
+        "auth-theme.css",
+        '<#import "_gustav_error_components.ftl" as gustav_error>',
+        "<@gustav_error.render_locale_links",
+    ]:
+        assert marker in text, f"logout-confirm.ftl should include {marker}"
+    assert 'id="kc-locale"' not in text, "logout-confirm.ftl should not render a dominant locale dropdown"
+
+
+def test_logout_confirm_template_references_logout_i18n_keys():
+    """Logout confirmation should use explicit i18n keys for title, hint and CTAs."""
+    tpl = _resolve_login_template("logout-confirm.ftl")
+    text = tpl.read_text(encoding="utf-8")
+    for key in [
+        "gustavLogoutConfirmTitle",
+        "gustavLogoutConfirmHint",
+        "gustavLogoutConfirmSubmit",
+        "gustavBackToApp",
+    ]:
+        assert key in text, f"logout-confirm.ftl should reference i18n key {key}"
 
 
 def test_error_templates_expose_context_specific_guidance_and_i18n_keys():
@@ -242,6 +361,9 @@ def test_error_page_i18n_keys_exist_in_de_and_en_bundles():
         "gustavAuthErrorGeneralHint=",
         "gustavAuthErrorCookieHint=",
         "gustavAuthErrorTokenHint=",
+        "gustavLogoutConfirmTitle=",
+        "gustavLogoutConfirmHint=",
+        "gustavLogoutConfirmSubmit=",
         "gustavBackToApp=",
         "gustavTryLoginAgain=",
         "gustavLanguageLabel=",
@@ -437,6 +559,33 @@ def test_email_templates_present_for_verification_and_reset():
 
     assert verify_tpl.exists(), "email-verification.ftl missing for email verification flow"
     assert reset_tpl.exists(), "password-reset.ftl missing for password reset flow"
+
+
+def test_keycloak_theme_copies_shared_auth_stylesheet():
+    css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
+    assert css.exists(), "Expected shared auth stylesheet for Keycloak theme"
+
+
+def test_keycloak_templates_use_versioned_theme_stylesheet_links():
+    for name in [
+        "login.ftl",
+        "register.ftl",
+        "login-reset-password.ftl",
+        "login-update-password.ftl",
+        "update-password.ftl",
+        "login-verify-email.ftl",
+        "info.ftl",
+        "error.ftl",
+        "login-page-expired.ftl",
+    ]:
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+        assert 'css/auth-theme.css?v=${properties.gustavThemeVersion!"dev"}' in text, (
+            f"{name} should version auth-theme.css for cache busting"
+        )
+        assert 'css/gustav.css?v=${properties.gustavThemeVersion!"dev"}' in text, (
+            f"{name} should version gustav.css for cache busting"
+        )
 
 
 def test_email_templates_reference_support_contact():

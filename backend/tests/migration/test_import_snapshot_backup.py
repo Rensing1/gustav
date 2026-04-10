@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import io
 import gzip
 import tarfile
@@ -50,6 +51,7 @@ def test_resolve_snapshot_files_from_directory(tmp_path: Path) -> None:
     assert files.root == snapshot
     assert files.supabase_db_sql_gz.name == "supabase_db.sql.gz"
     assert files.storage_buckets_tar_gz.name == "storage_buckets.tar.gz"
+    assert files.h5p_storage_tar_gz is None
 
 
 def test_resolve_snapshot_files_from_tarball(tmp_path: Path) -> None:
@@ -67,6 +69,20 @@ def test_resolve_snapshot_files_from_tarball(tmp_path: Path) -> None:
     assert files.root == extract_root
     assert files.supabase_db_sql_gz.exists()
     assert files.storage_buckets_tar_gz.exists()
+    assert files.h5p_storage_tar_gz is None
+
+
+def test_resolve_snapshot_files_reads_optional_h5p_storage_archive(tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "supabase_db.sql.gz").write_bytes(b"db")
+    (snapshot / "storage_buckets.tar.gz").write_bytes(b"storage")
+    (snapshot / "h5p_storage.tar.gz").write_bytes(b"h5p")
+
+    files = mod.resolve_snapshot_files(snapshot, tmp_path / "extract")
+
+    assert files.h5p_storage_tar_gz is not None
+    assert files.h5p_storage_tar_gz.name == "h5p_storage.tar.gz"
 
 
 def test_ensure_local_dsn_blocks_remote_hosts() -> None:
@@ -86,7 +102,7 @@ def test_ensure_superuser_for_reset_blocks_non_superuser(monkeypatch: pytest.Mon
     mod.ensure_superuser_for_reset("postgresql://u:p@127.0.0.1:54322/postgres")
 
 
-def test_reset_db_for_restore_drops_extensions_before_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reset_db_for_restore_only_drops_app_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
 
     class FakeCompleted:
@@ -101,12 +117,560 @@ def test_reset_db_for_restore_drops_extensions_before_schemas(monkeypatch: pytes
 
     mod._reset_db_for_restore("postgresql://u:p@127.0.0.1:54322/postgres")
 
-    assert len(calls) == 4
-    assert "drop extension" in (calls[0][-1] or "").lower()
-    assert "drop publication" in (calls[1][-1] or "").lower()
-    assert "drop schema" in (calls[2][-1] or "").lower()
-    assert "create schema" in (calls[3][-1] or "").lower()
-    assert "public" in (calls[3][-1] or "").lower()
+    assert len(calls) == 2
+    assert "where nspname in ('legacy_raw', 'public')" in (calls[0][-1] or "").lower()
+    assert "drop schema if exists %i cascade" in (calls[0][-1] or "").lower()
+    assert "auth" not in (calls[0][-1] or "").lower()
+    assert "drop extension" not in (calls[0][-1] or "").lower()
+    assert "create schema" in (calls[1][-1] or "").lower()
+    assert "public" in (calls[1][-1] or "").lower()
+
+
+def test_normalize_restore_target_ownership_updates_app_objects(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    class FakeCompleted:
+        def __init__(self) -> None:
+            self.stdout = ""
+
+    def fake_run(cmd: list[str], **_kwargs):  # type: ignore[no-untyped-def]
+        calls.append(cmd)
+        return FakeCompleted()
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    mod._normalize_restore_target_ownership("postgresql://u:p@127.0.0.1:54322/postgres", "postgres")
+
+    assert len(calls) == 1
+    sql = calls[0][-1].lower()
+    assert "alter schema %i owner to %i" in sql
+    assert "alter table %i.%i owner to %i" in sql
+    assert "alter sequence %i.%i owner to %i" in sql
+    assert "alter function %i.%i(%s) owner to %i" in sql
+    assert "'legacy_raw', 'public'" in sql
+    assert "target_owner text := 'postgres'" in sql
+
+
+def test_main_normalizes_restore_target_ownership_after_restore(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    snapshot_dir.mkdir()
+    db_dump = snapshot_dir / "supabase_db.sql.gz"
+    storage_tar = snapshot_dir / "storage_buckets.tar.gz"
+    keycloak_dump = snapshot_dir / "keycloak_db.sql.gz"
+    db_dump.write_bytes(b"dummy")
+    storage_tar.write_bytes(b"dummy")
+    keycloak_dump.write_bytes(b"dummy")
+
+    args = argparse.Namespace(
+        snapshot=str(snapshot_dir),
+        dsn="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        supabase_url=None,
+        supabase_service_role_key=None,
+        workdir=str(tmp_path / "workdir"),
+        no_reset=False,
+        skip_storage=True,
+        skip_keycloak=False,
+        keycloak_db_container="gustav-keycloak-db",
+        keycloak_db_user="keycloak",
+        keycloak_db_name="keycloak",
+        keycloak_container="gustav-keycloak",
+        keycloak_realm="gustav",
+        keycloak_web_client_id="gustav-web",
+        keycloak_web_base="https://app.localhost",
+        keycloak_admin_realm="gustav",
+        keycloak_admin_client_id="gustav-admin-cli",
+        keycloak_admin_client_secret="",
+        dry_run=False,
+        allow_remote_dsn=False,
+        allow_missing_h5p=False,
+        verbose=False,
+    )
+
+    owner_calls: list[tuple[str, str]] = []
+    sync_calls: list[tuple[str, list[mod.SnapshotMigration]]] = []
+    theme_calls: list[tuple[str, str, str, str, str, str, str]] = []
+
+    monkeypatch.setattr(mod, "parse_args", lambda: args)
+    monkeypatch.setattr(mod, "configure_logging", lambda _verbose: None)
+    monkeypatch.setattr(
+        mod,
+        "resolve_snapshot_files",
+        lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar, None, keycloak_dump),
+    )
+    monkeypatch.setattr(
+        mod,
+        "extract_snapshot_migration_history",
+        lambda _dump: [
+            mod.SnapshotMigration(
+                "20260223122000",
+                "{\"select 1\"}",
+                "storage_submissions_bucket_allow_makecode_hex",
+                "20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex",
+            )
+        ],
+    )
+    monkeypatch.setattr(mod, "_psql_check", lambda _dsn: None)
+    monkeypatch.setattr(mod, "ensure_superuser_for_reset", lambda _dsn: True)
+    monkeypatch.setattr(mod, "_reset_db_for_restore", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_restore_db_sql_gz", lambda _dump, _dsn: None)
+    monkeypatch.setattr(mod, "_ensure_graphql_public_function", lambda _dsn: None)
+    monkeypatch.setattr(
+        mod,
+        "_restore_keycloak_db_sql_gz",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        mod,
+        "_localize_keycloak_for_local_web",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        mod,
+        "_normalize_restore_target_ownership",
+        lambda dsn, owner: owner_calls.append((dsn, owner)),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_localize_keycloak_theme",
+        lambda *,
+        keycloak_db_container,
+        keycloak_db_user,
+        keycloak_db_name,
+        realm,
+        login_theme,
+        account_theme,
+        email_theme: theme_calls.append(
+            (
+                keycloak_db_container,
+                keycloak_db_user,
+                keycloak_db_name,
+                realm,
+                login_theme,
+                account_theme,
+                email_theme,
+            )
+        ),
+    )
+    monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda dsn, rows: sync_calls.append((dsn, rows)))
+    monkeypatch.setattr(
+        mod,
+        "_assert_snapshot_h5p_storage_complete",
+        lambda _dsn, _root: {"expected_ids": [], "missing_ids": []},
+    )
+    monkeypatch.setattr(mod, "_sync_keycloak_admin_client_secret", lambda **_kwargs: None)
+    monkeypatch.setattr(mod, "_restart_container", lambda _container_name: None)
+
+    assert mod.main() == 0
+    assert owner_calls == [(args.dsn, "postgres")]
+    assert sync_calls == [
+        (
+            args.dsn,
+            [
+                mod.SnapshotMigration(
+                    "20260223122000",
+                    "{\"select 1\"}",
+                    "storage_submissions_bucket_allow_makecode_hex",
+                    "20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex",
+                )
+            ],
+        )
+    ]
+    assert theme_calls == [
+        ("gustav-keycloak-db", "keycloak", "keycloak", "gustav", "gustav", "gustav", "gustav")
+    ]
+
+
+def test_main_restores_optional_h5p_storage_archive(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    snapshot_dir.mkdir()
+    db_dump = snapshot_dir / "supabase_db.sql.gz"
+    storage_tar = snapshot_dir / "storage_buckets.tar.gz"
+    h5p_tar = snapshot_dir / "h5p_storage.tar.gz"
+    db_dump.write_bytes(b"dummy")
+    storage_tar.write_bytes(b"dummy")
+    h5p_tar.write_bytes(b"dummy")
+
+    args = argparse.Namespace(
+        snapshot=str(snapshot_dir),
+        dsn="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        supabase_url=None,
+        supabase_service_role_key=None,
+        workdir=str(tmp_path / "workdir"),
+        no_reset=False,
+        skip_storage=True,
+        skip_keycloak=True,
+        keycloak_db_container="gustav-keycloak-db",
+        keycloak_db_user="keycloak",
+        keycloak_db_name="keycloak",
+        keycloak_container="gustav-keycloak",
+        keycloak_realm="gustav",
+        keycloak_web_client_id="gustav-web",
+        keycloak_web_base="https://app.localhost",
+        keycloak_admin_realm="gustav",
+        keycloak_admin_client_id="gustav-admin-cli",
+        keycloak_admin_client_secret="",
+        dry_run=False,
+        allow_remote_dsn=False,
+        allow_missing_h5p=False,
+        verbose=False,
+    )
+
+    restore_calls: list[tuple[Path, Path]] = []
+    consistency_calls: list[tuple[str, Path]] = []
+
+    monkeypatch.setattr(mod, "parse_args", lambda: args)
+    monkeypatch.setattr(mod, "configure_logging", lambda _verbose: None)
+    monkeypatch.setattr(
+        mod,
+        "resolve_snapshot_files",
+        lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar, h5p_tar, None),
+    )
+    monkeypatch.setattr(mod, "extract_snapshot_migration_history", lambda _dump: [])
+    monkeypatch.setattr(mod, "_psql_check", lambda _dsn: None)
+    monkeypatch.setattr(mod, "ensure_superuser_for_reset", lambda _dsn: True)
+    monkeypatch.setattr(mod, "_reset_db_for_restore", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_restore_db_sql_gz", lambda _dump, _dsn: None)
+    monkeypatch.setattr(mod, "_ensure_graphql_public_function", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_normalize_restore_target_ownership", lambda _dsn, _owner: None)
+    monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda _dsn, _rows: None)
+    monkeypatch.setattr(
+        mod,
+        "_restore_h5p_storage_tar",
+        lambda archive, target_root: restore_calls.append((archive, target_root)) or target_root,
+    )
+    monkeypatch.setattr(
+        mod,
+        "_assert_snapshot_h5p_storage_complete",
+        lambda dsn, h5p_root: consistency_calls.append((dsn, h5p_root)) or {"expected_ids": ["2689406715"], "missing_ids": []},
+    )
+
+    assert mod.main() == 0
+    assert restore_calls == [(h5p_tar, Path("/home/felix/gustav-alpha2/supabase/storage/h5p"))]
+    assert consistency_calls == [(args.dsn, Path("/home/felix/gustav-alpha2/supabase/storage/h5p"))]
+
+
+def test_main_fails_fast_when_snapshot_has_h5p_refs_but_no_h5p_archive(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    snapshot_dir.mkdir()
+    db_dump = snapshot_dir / "supabase_db.sql.gz"
+    storage_tar = snapshot_dir / "storage_buckets.tar.gz"
+    db_dump.write_bytes(b"dummy")
+    storage_tar.write_bytes(b"dummy")
+
+    args = argparse.Namespace(
+        snapshot=str(snapshot_dir),
+        dsn="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        supabase_url=None,
+        supabase_service_role_key=None,
+        workdir=str(tmp_path / "workdir"),
+        no_reset=False,
+        skip_storage=True,
+        skip_keycloak=True,
+        keycloak_db_container="gustav-keycloak-db",
+        keycloak_db_user="keycloak",
+        keycloak_db_name="keycloak",
+        keycloak_container="gustav-keycloak",
+        keycloak_realm="gustav",
+        keycloak_web_client_id="gustav-web",
+        keycloak_web_base="https://app.localhost",
+        keycloak_admin_realm="gustav",
+        keycloak_admin_client_id="gustav-admin-cli",
+        keycloak_admin_client_secret="",
+        dry_run=False,
+        allow_remote_dsn=False,
+        allow_missing_h5p=False,
+        verbose=False,
+    )
+
+    monkeypatch.setattr(mod, "parse_args", lambda: args)
+    monkeypatch.setattr(mod, "configure_logging", lambda _verbose: None)
+    monkeypatch.setattr(
+        mod,
+        "resolve_snapshot_files",
+        lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar, None, None),
+    )
+    monkeypatch.setattr(mod, "extract_snapshot_migration_history", lambda _dump: [])
+    monkeypatch.setattr(mod, "_psql_check", lambda _dsn: None)
+    monkeypatch.setattr(mod, "ensure_superuser_for_reset", lambda _dsn: True)
+    monkeypatch.setattr(mod, "_reset_db_for_restore", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_restore_db_sql_gz", lambda _dump, _dsn: None)
+    monkeypatch.setattr(mod, "_ensure_graphql_public_function", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_normalize_restore_target_ownership", lambda _dsn, _owner: None)
+    monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda _dsn, _rows: None)
+    monkeypatch.setattr(
+        mod,
+        "_assert_snapshot_h5p_storage_complete",
+        lambda _dsn, _root: (_ for _ in ()).throw(RuntimeError("Snapshot references missing H5P content_id 2689406715")),
+    )
+
+    assert mod.main() == 1
+
+
+def test_main_allows_missing_h5p_when_opted_in(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    snapshot_dir.mkdir()
+    db_dump = snapshot_dir / "supabase_db.sql.gz"
+    storage_tar = snapshot_dir / "storage_buckets.tar.gz"
+    db_dump.write_bytes(b"dummy")
+    storage_tar.write_bytes(b"dummy")
+    workdir = tmp_path / "workdir"
+
+    args = argparse.Namespace(
+        snapshot=str(snapshot_dir),
+        dsn="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        supabase_url=None,
+        supabase_service_role_key=None,
+        workdir=str(workdir),
+        no_reset=False,
+        skip_storage=True,
+        skip_keycloak=True,
+        keycloak_db_container="gustav-keycloak-db",
+        keycloak_db_user="keycloak",
+        keycloak_db_name="keycloak",
+        keycloak_container="gustav-keycloak",
+        keycloak_realm="gustav",
+        keycloak_web_client_id="gustav-web",
+        keycloak_web_base="https://app.localhost",
+        keycloak_admin_realm="gustav",
+        keycloak_admin_client_id="gustav-admin-cli",
+        keycloak_admin_client_secret="",
+        dry_run=False,
+        allow_remote_dsn=False,
+        allow_missing_h5p=True,
+        verbose=False,
+    )
+
+    monkeypatch.setattr(mod, "parse_args", lambda: args)
+    monkeypatch.setattr(mod, "configure_logging", lambda _verbose: None)
+    monkeypatch.setattr(
+        mod,
+        "resolve_snapshot_files",
+        lambda *_args: mod.SnapshotFiles(snapshot_dir, db_dump, storage_tar, None, None),
+    )
+    monkeypatch.setattr(mod, "extract_snapshot_migration_history", lambda _dump: [])
+    monkeypatch.setattr(mod, "_psql_check", lambda _dsn: None)
+    monkeypatch.setattr(mod, "ensure_superuser_for_reset", lambda _dsn: True)
+    monkeypatch.setattr(mod, "_reset_db_for_restore", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_restore_db_sql_gz", lambda _dump, _dsn: None)
+    monkeypatch.setattr(mod, "_ensure_graphql_public_function", lambda _dsn: None)
+    monkeypatch.setattr(mod, "_normalize_restore_target_ownership", lambda _dsn, _owner: None)
+    monkeypatch.setattr(mod, "sync_snapshot_migration_history", lambda _dsn, _rows: None)
+    monkeypatch.setattr(
+        mod,
+        "_assert_snapshot_h5p_storage_complete",
+        lambda _dsn, _root: (_ for _ in ()).throw(
+            RuntimeError(
+                "Snapshot references H5P content that is missing from local H5P storage. "
+                "Missing content_ids: 2689406715, 2689406716. "
+                "Provide h5p_storage.tar.gz or re-import the missing H5P packages."
+            )
+        ),
+    )
+
+    assert mod.main() == 0
+
+    reports = sorted(workdir.glob("run_*/report.json"))
+    assert len(reports) == 1
+    report = reports[0].read_text(encoding="utf-8")
+    assert '"allow_missing_h5p": true' in report
+    assert '"missing_ids": [' in report
+    assert '"2689406715"' in report
+    assert '"2689406716"' in report
+    assert "h5p_storage_warning" in report
+
+
+def test_extract_snapshot_migration_history_reads_supabase_copy_block(tmp_path: Path) -> None:
+    dump_path = tmp_path / "supabase_db.sql.gz"
+    with gzip.open(dump_path, "wt", encoding="utf-8") as f:
+        f.write("SET statement_timeout = 0;\n")
+        f.write("COPY supabase_migrations.schema_migrations (version, statements, name) FROM stdin;\n")
+        f.write("20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex\n")
+        f.write("20260314124500\t{\"select 2\"}\tlearning_worker_feedback_invalid_analysis\n")
+        f.write("\\.\n")
+
+    rows = mod.extract_snapshot_migration_history(dump_path)
+
+    assert [row.version for row in rows] == ["20260223122000", "20260314124500"]
+    assert rows[-1].name == "learning_worker_feedback_invalid_analysis"
+    assert rows[-1].statements == "{\"select 2\"}"
+    assert rows[-1].copy_line == (
+        "20260314124500\t{\"select 2\"}\tlearning_worker_feedback_invalid_analysis"
+    )
+
+
+def test_sync_snapshot_migration_history_replaces_local_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    stdin_payload: list[str] = []
+
+    class FakeStdin:
+        def write(self, chunk: str) -> None:
+            stdin_payload.append(chunk)
+
+        def close(self) -> None:
+            return None
+
+    class FakeProc:
+        def __init__(self) -> None:
+            self.stdin = FakeStdin()
+
+        def wait(self) -> int:
+            return 0
+
+    def fake_popen(cmd: list[str], **_kwargs):  # type: ignore[no-untyped-def]
+        calls.append(cmd)
+        return FakeProc()
+
+    monkeypatch.setattr(mod.subprocess, "Popen", fake_popen)
+
+    mod.sync_snapshot_migration_history(
+        "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        [
+            mod.SnapshotMigration(
+                version="20260223122000",
+                statements="{\"select 1\"}",
+                name="storage_submissions_bucket_allow_makecode_hex",
+                copy_line="20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex",
+            ),
+            mod.SnapshotMigration(
+                version="20260314124500",
+                statements="{\"select 2\"}",
+                name="learning_worker_feedback_invalid_analysis",
+                copy_line="20260314124500\t{\"select 2\"}\tlearning_worker_feedback_invalid_analysis",
+            ),
+        ],
+    )
+
+    assert calls == [["psql", "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres", "-v", "ON_ERROR_STOP=1"]]
+    payload = "".join(stdin_payload)
+    assert "truncate table supabase_migrations.schema_migrations;\n" in payload.lower()
+    assert "copy supabase_migrations.schema_migrations(version, statements, name) from stdin;\n" in payload.lower()
+    assert "20260223122000\t{\"select 1\"}\tstorage_submissions_bucket_allow_makecode_hex\n" in payload
+    assert "20260314124500\t{\"select 2\"}\tlearning_worker_feedback_invalid_analysis\n" in payload
+    assert payload.endswith("\\.\n")
+
+
+def test_filter_dump_lines_skips_managed_schema_objects_but_keeps_public_data() -> None:
+    dump_lines = [
+        b"SET row_security = off;\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: auth; Type: SCHEMA; Schema: -; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"CREATE SCHEMA auth;\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: users; Type: TABLE; Schema: auth; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"CREATE TABLE auth.users (\n",
+        b"    id uuid\n",
+        b");\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: users; Type: TABLE DATA; Schema: auth; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY auth.users (id) FROM stdin;\n",
+        b"00000000-0000-0000-0000-000000000001\n",
+        b"\\.\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: courses; Type: TABLE; Schema: public; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"CREATE TABLE public.courses (\n",
+        b"    id uuid\n",
+        b");\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: courses; Type: TABLE DATA; Schema: public; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY public.courses (id) FROM stdin;\n",
+        b"00000000-0000-0000-0000-000000000002\n",
+        b"\\.\n",
+    ]
+
+    filtered = b"".join(mod._iter_filtered_dump_lines(dump_lines))
+
+    assert b"SET row_security = off;" in filtered
+    assert b"CREATE SCHEMA auth;" not in filtered
+    assert b"CREATE TABLE auth.users" not in filtered
+    assert b"COPY auth.users" not in filtered
+    assert b"00000000-0000-0000-0000-000000000001" not in filtered
+    assert b"CREATE TABLE public.courses" in filtered
+    assert b"COPY public.courses" in filtered
+    assert b"00000000-0000-0000-0000-000000000002" in filtered
+
+
+def test_filter_dump_lines_skips_managed_copy_payload_and_terminator() -> None:
+    dump_lines = [
+        b"--\n",
+        b"-- Name: migrations; Type: TABLE DATA; Schema: storage; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY storage.migrations (id) FROM stdin;\n",
+        b"1\n",
+        b"2\n",
+        b"\\.\n",
+        b"\n",
+        b"--\n",
+        b"-- Name: units; Type: TABLE DATA; Schema: public; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY public.units (id) FROM stdin;\n",
+        b"3\n",
+        b"\\.\n",
+    ]
+
+    filtered = b"".join(mod._iter_filtered_dump_lines(dump_lines))
+
+    assert b"COPY storage.migrations" not in filtered
+    assert b"\n1\n" not in filtered
+    assert b"\n2\n" not in filtered
+    assert filtered.count(b"\\.\n") == 1
+    assert b"COPY public.units" in filtered
+    assert b"\n3\n" in filtered
+
+
+def test_filter_dump_lines_keeps_real_pg_dump_data_headers_for_public_tables() -> None:
+    dump_lines = [
+        b"--\n",
+        b"-- Data for Name: users; Type: TABLE DATA; Schema: auth; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY auth.users (id) FROM stdin;\n",
+        b"1\n",
+        b"\\.\n",
+        b"\n",
+        b"--\n",
+        b"-- Data for Name: courses; Type: TABLE DATA; Schema: public; Owner: -\n",
+        b"--\n",
+        b"\n",
+        b"COPY public.courses (id) FROM stdin;\n",
+        b"2\n",
+        b"\\.\n",
+    ]
+
+    filtered = b"".join(mod._iter_filtered_dump_lines(dump_lines))
+
+    assert b"COPY auth.users" not in filtered
+    assert b"\n1\n" not in filtered
+    assert b"COPY public.courses" in filtered
+    assert b"\n2\n" in filtered
 
 
 def test_is_graphql_public_grant_line() -> None:
@@ -221,6 +785,13 @@ def test_upload_storage_objects_posts_encoded_paths(monkeypatch: pytest.MonkeyPa
         ensured["buckets"] = list(buckets)
 
     monkeypatch.setattr(mod, "_ensure_buckets", fake_ensure_buckets)
+    allowlist_sync: dict[str, object] = {}
+
+    def fake_sync_bucket_allowlists(_dsn: str, buckets) -> None:
+        allowlist_sync["dsn"] = _dsn
+        allowlist_sync["buckets"] = list(buckets)
+
+    monkeypatch.setattr(mod, "_sync_bucket_allowlists", fake_sync_bucket_allowlists)
 
     class FakeResponse:
         def __init__(self, status_code: int = 200, text: str = "") -> None:
@@ -252,6 +823,10 @@ def test_upload_storage_objects_posts_encoded_paths(monkeypatch: pytest.MonkeyPa
     assert result["skipped"] == 0
     assert result["skipped_files"] == 1
     assert ensured["buckets"] == ["section_materials", "submissions"]
+    assert allowlist_sync == {
+        "dsn": "postgresql://u:p@127.0.0.1:54322/postgres",
+        "buckets": ["section_materials", "submissions"],
+    }
 
     urls = {c["url"] for c in fake_session.calls}
     assert "http://127.0.0.1:54321/storage/v1/object/section_materials/a%20b.txt" in urls
@@ -262,6 +837,31 @@ def test_upload_storage_objects_posts_encoded_paths(monkeypatch: pytest.MonkeyPa
         assert headers["apikey"] == "srk"
         assert headers["Authorization"] == "Bearer srk"
         assert headers["x-upsert"] == "true"
+
+
+def test_sync_bucket_allowlists_adds_makecode_hex_for_submissions(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    class FakeCompleted:
+        def __init__(self) -> None:
+            self.stdout = ""
+
+    def fake_run(cmd: list[str], **_kwargs):  # type: ignore[no-untyped-def]
+        calls.append(cmd)
+        return FakeCompleted()
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    mod._sync_bucket_allowlists(
+        "postgresql://u:p@127.0.0.1:54322/postgres",
+        ["materials", "submissions"],
+    )
+
+    assert len(calls) == 1
+    sql = (calls[0][-1] or "").lower()
+    assert "update storage.buckets" in sql
+    assert "where id = 'submissions'" in sql
+    assert "application/x.makecode.hex" in sql
 
 
 def test_guess_content_type_prefers_key_extension(tmp_path: Path) -> None:
@@ -317,6 +917,115 @@ def test_resolve_snapshot_files_keeps_keycloak_dump_optional(tmp_path: Path) -> 
     files = mod.resolve_snapshot_files(snapshot, tmp_path / "extract")
 
     assert files.keycloak_db_sql_gz is None
+
+
+def test_restore_h5p_storage_tar_extracts_into_target_root(tmp_path: Path) -> None:
+    archive = tmp_path / "h5p_storage.tar.gz"
+    _write_tar_gz(
+        archive,
+        members={
+            "content/2689406715/content.json": b"{}",
+            "content/2689406715/h5p.json": b"{}",
+        },
+    )
+
+    target_root = tmp_path / "restored_h5p"
+    restored = mod._restore_h5p_storage_tar(archive, target_root)
+
+    assert restored == target_root
+    assert (target_root / "content" / "2689406715" / "content.json").read_text(encoding="utf-8") == "{}"
+    assert (target_root / "content" / "2689406715" / "h5p.json").read_text(encoding="utf-8") == "{}"
+
+
+def test_restore_h5p_storage_tar_keeps_existing_root_directory(tmp_path: Path) -> None:
+    archive = tmp_path / "h5p_storage.tar.gz"
+    _write_tar_gz(
+        archive,
+        members={
+            "content/2689406715/content.json": b"{}",
+            "tmp/marker.txt": b"fresh",
+        },
+    )
+
+    target_root = tmp_path / "restored_h5p"
+    target_root.mkdir(parents=True)
+    stale_child = target_root / "stale.txt"
+    stale_child.write_text("obsolete", encoding="utf-8")
+    root_stat_before = target_root.stat()
+
+    restored = mod._restore_h5p_storage_tar(archive, target_root)
+
+    assert restored == target_root
+    assert target_root.stat().st_ino == root_stat_before.st_ino
+    assert not stale_child.exists()
+    assert (target_root / "content" / "2689406715" / "content.json").read_text(encoding="utf-8") == "{}"
+    assert (target_root / "tmp" / "marker.txt").read_text(encoding="utf-8") == "fresh"
+
+
+def test_assert_snapshot_h5p_storage_complete_skips_when_no_h5p_tasks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(mod, "_list_snapshot_h5p_task_refs", lambda _dsn: [])
+
+    result = mod._assert_snapshot_h5p_storage_complete(
+        "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        tmp_path / "h5p",
+    )
+
+    assert result == {"expected_ids": [], "missing_ids": []}
+
+
+def test_assert_snapshot_h5p_storage_complete_raises_for_missing_content(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    h5p_root = tmp_path / "h5p"
+    (h5p_root / "content" / "1001").mkdir(parents=True)
+
+    monkeypatch.setattr(
+        mod,
+        "_list_snapshot_h5p_task_refs",
+        lambda _dsn: [
+            {
+                "content_id": "1001",
+                "task_id": "task-ok",
+                "unit_id": "unit-ok",
+                "course_ids": ["course-ok"],
+            },
+            {
+                "content_id": "2689406715",
+                "task_id": "c97472fa-a12f-4588-b02e-3464d92e177c",
+                "unit_id": "a9e926df-2946-45f0-9e3f-85b5ca1359c4",
+                "course_ids": ["30e70a0e-b55c-4918-be90-82573329153c"],
+            },
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="2689406715"):
+        mod._assert_snapshot_h5p_storage_complete(
+            "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+            h5p_root,
+        )
+
+
+def test_assert_snapshot_h5p_storage_complete_accepts_present_content(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    h5p_root = tmp_path / "h5p"
+    (h5p_root / "content" / "2689406715").mkdir(parents=True)
+
+    monkeypatch.setattr(
+        mod,
+        "_list_snapshot_h5p_task_refs",
+        lambda _dsn: [
+            {
+                "content_id": "2689406715",
+                "task_id": "c97472fa-a12f-4588-b02e-3464d92e177c",
+                "unit_id": "a9e926df-2946-45f0-9e3f-85b5ca1359c4",
+                "course_ids": ["30e70a0e-b55c-4918-be90-82573329153c"],
+            },
+        ],
+    )
+
+    result = mod._assert_snapshot_h5p_storage_complete(
+        "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
+        h5p_root,
+    )
+
+    assert result == {"expected_ids": ["2689406715"], "missing_ids": []}
 
 
 def test_is_unsupported_pg_setting_line() -> None:

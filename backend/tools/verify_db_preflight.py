@@ -76,6 +76,24 @@ def fetch_learning_submissions_error_code_constraintdef(conn) -> str | None:  # 
     return str(row[0])
 
 
+def fetch_learning_submissions_owner(conn) -> str | None:  # noqa: ANN001
+    """Return the current owner of `public.learning_submissions`, if present."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select tableowner
+              from pg_tables
+             where schemaname = 'public'
+               and tablename = 'learning_submissions'
+             limit 1
+            """
+        )
+        row = cur.fetchone()
+    if not row or not row[0]:
+        return None
+    return str(row[0])
+
+
 def fetch_live_h5p_helper_result_signature(conn) -> str | None:  # noqa: ANN001
     """Return the public result signature of the latest H5P live helper, if present."""
     with conn.cursor() as cur:
@@ -95,6 +113,24 @@ def fetch_live_h5p_helper_result_signature(conn) -> str | None:  # noqa: ANN001
     if not row or not row[0]:
         return None
     return str(row[0])
+
+
+def has_live_bulk_aggregate_helper(conn) -> bool:  # noqa: ANN001
+    """Return whether the newer live bulk aggregate helper exists."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select 1
+            from pg_proc p
+            join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public'
+              and p.proname = 'get_unit_latest_submission_aggregates_for_owner'
+              and oidvectortypes(p.proargtypes) = 'text, uuid, uuid, text[]'
+            limit 1
+            """
+        )
+        row = cur.fetchone()
+    return bool(row and row[0])
 
 
 def constraint_supports_calliope(definition: str | None) -> bool:
@@ -119,6 +155,16 @@ def result_signature_supports_latest_h5p_scores(signature: str | None) -> bool:
     return "score_raw integer" in normalized and "score_max integer" in normalized
 
 
+def expected_local_migration_user() -> str:
+    """Return the local user expected to execute `supabase migration up`."""
+    return str(os.getenv("DB_SUPERUSER", "postgres")).strip() or "postgres"
+
+
+def owner_matches_expected_local_migration_user(owner: str | None, expected_user: str) -> bool:
+    """Return True when the table owner matches the local migration runner."""
+    return bool(owner) and owner == expected_user
+
+
 def _remediation_hint() -> str:
     return (
         "Run one of:\n"
@@ -135,12 +181,33 @@ def run_preflight(*, dsn: str | None = None, out: TextIO | None = None, err: Tex
 
     try:
         with _connect(target_dsn) as conn:
+            learning_submissions_owner = fetch_learning_submissions_owner(conn)
             unit_tasks_kind = fetch_unit_tasks_kind_constraintdef(conn)
             submission_error_codes = fetch_learning_submissions_error_code_constraintdef(conn)
             h5p_helper_signature = fetch_live_h5p_helper_result_signature(conn)
+            live_bulk_helper_present = has_live_bulk_aggregate_helper(conn)
     except Exception as exc:
         print(f"Database preflight failed: cannot connect/check schema ({exc}).", file=err_stream)
         print(_remediation_hint(), file=err_stream)
+        return 2
+
+    expected_migration_user = expected_local_migration_user()
+    if not learning_submissions_owner:
+        print("Database preflight failed: public.learning_submissions is missing.", file=err_stream)
+        print(_remediation_hint(), file=err_stream)
+        return 2
+
+    if not owner_matches_expected_local_migration_user(learning_submissions_owner, expected_migration_user):
+        print(
+            "Database preflight failed: owner drift detected for public.learning_submissions.",
+            file=err_stream,
+        )
+        print(
+            "Local `supabase migration up` is expected to run as "
+            f"`{expected_migration_user}`, but the table is owned by `{learning_submissions_owner}`.",
+            file=err_stream,
+        )
+        print("Official local repair path: make reset-local", file=err_stream)
         return 2
 
     if not unit_tasks_kind:
@@ -184,8 +251,16 @@ def run_preflight(*, dsn: str | None = None, out: TextIO | None = None, err: Tex
         print(_remediation_hint(), file=err_stream)
         return 2
 
+    if not live_bulk_helper_present:
+        print(
+            "Database preflight failed: get_unit_latest_submission_aggregates_for_owner is missing.",
+            file=err_stream,
+        )
+        print(_remediation_hint(), file=err_stream)
+        return 2
+
     print(
-        "DB preflight OK: calliope, feedback_invalid_analysis, and latest H5P score columns are present.",
+        "DB preflight OK: owner, calliope, feedback_invalid_analysis, live bulk aggregates, and latest H5P score columns are present.",
         file=out_stream,
     )
     return 0

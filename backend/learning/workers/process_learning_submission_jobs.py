@@ -52,6 +52,12 @@ except Exception:  # pragma: no cover
 LOG = logging.getLogger(__name__)
 
 
+def _exception_cause_class_name(exc: Exception) -> str | None:
+    """Return the direct cause class name without leaking raw upstream payloads."""
+    cause = getattr(exc, "__cause__", None)
+    return cause.__class__.__name__ if cause is not None else None
+
+
 def _require_psycopg() -> None:
     if not HAVE_PSYCOPG:
         raise RuntimeError("psycopg3 is required for the learning worker")
@@ -140,7 +146,7 @@ def run_once(
         batch size is controlled via WORKER_CONCURRENCY (default 1).
 
     Parameters:
-        dsn: Postgres connection string for the worker (service role with function EXECUTE grants).
+        dsn: Postgres connection string for the worker (`gustav_worker` login role).
         vision_adapter: Adapter that turns the queued submission into Markdown text.
         feedback_adapter: Adapter that generates criteria-based feedback for the Markdown text.
         now: Optional UTC timestamp used for deterministic tests; defaults to `datetime.now(timezone.utc)`.
@@ -153,10 +159,10 @@ def run_once(
           (transient errors) or marks the submission `failed` via `learning_worker_update_failed`.
 
     Permissions:
-        The caller must authenticate as the dedicated worker role (`gustav_worker`) which has
-        EXECUTE privileges on the `learning_worker_*` SECURITY DEFINER helpers and DML access
-        to `learning_submission_jobs`. RLS remains active, therefore `app.current_sub` must be
-        set before reading or writing submission rows.
+        The caller must authenticate as the dedicated worker login role (`gustav_worker`).
+        This role has EXECUTE privileges on the `learning_worker_*` SECURITY DEFINER helpers
+        and DML access to `learning_submission_jobs`. RLS remains active, therefore
+        `app.current_sub` must be set before reading or writing submission rows.
     """
     _require_psycopg()
     tick = now or datetime.now(tz=timezone.utc)
@@ -382,6 +388,10 @@ def _process_job(
 
     student_sub = str(submission.get("student_sub") or payload.get("student_sub") or "")
     _set_current_sub(conn, student_sub)
+    course_id = str(submission.get("course_id") or payload.get("course_id") or "")
+    if course_id:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_course_id', %s, true)", (course_id,))
 
     # Accept both freshly queued and already extracted submissions (pages persisted).
     if submission.get("analysis_status") not in ("pending", "extracted"):
@@ -396,6 +406,14 @@ def _process_job(
         return
 
     task_kind = str(payload.get("task_kind") or "").strip().lower()
+    submission_kind = str(submission.get("kind") or "").strip().lower()
+    internal_metadata = submission.get("internal_metadata") if isinstance(submission, dict) else None
+    analysis_mode = _resolve_analysis_mode(
+        payload=payload,
+        internal_metadata=internal_metadata if isinstance(internal_metadata, dict) else {},
+        task_kind=task_kind,
+        submission_kind=submission_kind,
+    )
     task_context = _fetch_task_context(
         conn=conn,
         task_id=str(submission.get("task_id") or payload.get("task_id") or ""),
@@ -409,7 +427,7 @@ def _process_job(
     # ---------------------------------------------------------------------
     # Visual tasks: evaluate directly from image/PDF (no OCR pipeline)
     # ---------------------------------------------------------------------
-    if task_kind == "visual":
+    if analysis_mode == "visual_direct":
         try:
             analyze_visual = getattr(feedback_adapter, "analyze_visual", None)
             if not callable(analyze_visual):
@@ -435,10 +453,17 @@ def _process_job(
             feedback_result = analyze_visual(**analyze_kwargs)
         except FeedbackPermanentError as exc:
             LOG.warning(
-                "Feedback permanent error for submission %s job %s: %s",
+                "Feedback permanent error for submission=%s job=%s task_id=%s task_kind=%s intent=%s criteria_count=%s has_instruction=%s has_teacher_context=%s reason=%s cause_class=%s",
                 job.submission_id,
                 job.id,
-                exc.__class__.__name__,
+                submission.get("task_id"),
+                task_kind,
+                submission.get("intent") or payload.get("intent") or "submit",
+                len(payload.get("criteria", [])),
+                bool(instruction_md),
+                bool(teacher_context_md),
+                str(exc),
+                _exception_cause_class_name(exc),
             )
             _set_current_sub(conn, student_sub)
             _handle_feedback_error(
@@ -458,10 +483,17 @@ def _process_job(
             return
         except FeedbackTransientError as exc:
             LOG.info(
-                "Feedback transient error for submission %s job %s: %s",
+                "Feedback transient error for submission=%s job=%s task_id=%s task_kind=%s intent=%s criteria_count=%s has_instruction=%s has_teacher_context=%s reason=%s cause_class=%s",
                 job.submission_id,
                 job.id,
-                exc.__class__.__name__,
+                submission.get("task_id"),
+                task_kind,
+                submission.get("intent") or payload.get("intent") or "submit",
+                len(payload.get("criteria", [])),
+                bool(instruction_md),
+                bool(teacher_context_md),
+                str(exc),
+                _exception_cause_class_name(exc),
             )
             _set_current_sub(conn, student_sub)
             _handle_feedback_error(
@@ -479,7 +511,7 @@ def _process_job(
         _update_submission_completed(
             conn=conn,
             submission_id=job.submission_id,
-            text_md="",
+            text_md=None,
             analysis_json=feedback_result.analysis_json,
             feedback_md=feedback_result.feedback_md,
         )
@@ -496,7 +528,7 @@ def _process_job(
         if cached_vision is not None:
             vision_result = cached_vision
         else:
-            if (submission.get("kind") or "").strip() == "text":
+            if submission_kind == "text":
                 vision_result = VisionResult(
                     text_md=str(submission.get("text_body") or ""),
                     raw_metadata={"adapter": "worker", "backend": "pass_through", "reason": "text_submission"},
@@ -560,11 +592,18 @@ def _process_job(
         feedback_result = feedback_adapter.analyze(**analyze_kwargs)  # type: ignore[arg-type]
     except FeedbackPermanentError as exc:
         LOG.warning(
-            "Feedback permanent error for submission %s job %s: %s",
+            "Feedback permanent error for submission=%s job=%s task_id=%s task_kind=%s intent=%s criteria_count=%s has_instruction=%s has_teacher_context=%s reason=%s cause_class=%s",
             job.submission_id,
             job.id,
-            exc.__class__.__name__,
-        )
+            submission.get("task_id"),
+            task_kind,
+            submission.get("intent") or payload.get("intent") or "submit",
+            len(payload.get("criteria", [])),
+            bool(instruction_md),
+            bool(teacher_context_md),
+            str(exc),
+            _exception_cause_class_name(exc),
+            )
         _set_current_sub(conn, student_sub)
         if cached_vision is None and (submission.get("kind") or "").strip() != "text":
             _persist_cached_vision(conn=conn, job_id=job.id, vision_result=vision_result)
@@ -585,10 +624,17 @@ def _process_job(
         return
     except FeedbackTransientError as exc:
         LOG.info(
-            "Feedback transient error for submission %s job %s: %s",
+            "Feedback transient error for submission=%s job=%s task_id=%s task_kind=%s intent=%s criteria_count=%s has_instruction=%s has_teacher_context=%s reason=%s cause_class=%s",
             job.submission_id,
             job.id,
-            exc.__class__.__name__,
+            submission.get("task_id"),
+            task_kind,
+            submission.get("intent") or payload.get("intent") or "submit",
+            len(payload.get("criteria", [])),
+            bool(instruction_md),
+            bool(teacher_context_md),
+            str(exc),
+            _exception_cause_class_name(exc),
         )
         _set_current_sub(conn, student_sub)
         if cached_vision is None and (submission.get("kind") or "").strip() != "text":
@@ -615,6 +661,31 @@ def _process_job(
     telemetry.increment_counter("ai_worker_processed_total", status="completed")
     _delete_job(conn, job_id=job.id)
     conn.commit()
+
+
+def _resolve_analysis_mode(
+    *,
+    payload: dict,
+    internal_metadata: dict,
+    task_kind: str,
+    submission_kind: str,
+) -> str:
+    """Return the processing mode for this submission attempt.
+
+    Why:
+        Task kind describes the pedagogical task family, but file uploads on
+        native tasks now use the same direct visual-analysis path as visual
+        tasks. Keeping this decision in one helper prevents drift between queue
+        payloads, persisted metadata, and legacy fallbacks.
+    """
+    explicit = str(payload.get("analysis_mode") or internal_metadata.get("analysis_mode") or "").strip().lower()
+    if explicit in {"text_direct", "visual_direct", "ocr_text"}:
+        return explicit
+    if submission_kind == "text":
+        return "text_direct"
+    if task_kind in {"native", "visual"}:
+        return "visual_direct"
+    return "ocr_text"
 
 
 def _fetch_submission(conn: Connection, *, submission_id: str) -> Optional[dict]:
@@ -691,7 +762,7 @@ def _update_submission_completed(
     *,
     conn: Connection,
     submission_id: str,
-    text_md: str,
+    text_md: str | None,
     analysis_json: dict,
     feedback_md: str,
 ) -> None:
@@ -1045,8 +1116,12 @@ def _resolve_worker_dsn() -> str:
     Resolve the Postgres DSN for the learning worker with least-privilege guards.
 
     Behavior:
-        - Favors explicit overrides (LEARNING_DATABASE_URL/LEARNING_DB_URL/DATABASE_URL).
-        - Falls back to the app login role derived from APP_DB_USER/APP_DB_PASSWORD.
+        - Favors explicit worker overrides
+          (LEARNING_WORKER_DATABASE_URL/LEARNING_WORKER_DB_URL).
+        - Falls back to legacy learning overrides
+          (LEARNING_DATABASE_URL/LEARNING_DB_URL) for backwards compatibility.
+        - Falls back to the dedicated worker login role derived from
+          LEARNING_WORKER_DB_USER/LEARNING_WORKER_DB_PASSWORD.
         - Rejects service-role/superuser accounts (postgres, service_role) unless
           ALLOW_SERVICE_DSN_FOR_TESTING=true (opt-in for local debugging).
     """
@@ -1055,9 +1130,10 @@ def _resolve_worker_dsn() -> str:
         return (os.getenv(env_name, "") or "").strip().lower() in {"1", "true", "yes", "on"}
 
     candidates = [
+        os.getenv("LEARNING_WORKER_DATABASE_URL"),
+        os.getenv("LEARNING_WORKER_DB_URL"),
         os.getenv("LEARNING_DATABASE_URL"),
         os.getenv("LEARNING_DB_URL"),
-        os.getenv("DATABASE_URL"),
     ]
     for candidate in candidates:
         if candidate:
@@ -1066,16 +1142,16 @@ def _resolve_worker_dsn() -> str:
     else:
         host = os.getenv("TEST_DB_HOST", "127.0.0.1")
         port = os.getenv("TEST_DB_PORT", "54322")
-        user = os.getenv("APP_DB_USER", "gustav_app")
-        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        user = os.getenv("LEARNING_WORKER_DB_USER", "gustav_worker")
+        password = os.getenv("LEARNING_WORKER_DB_PASSWORD", "CHANGE_ME_DEV")
         dsn = f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
     allow_service = _truthy("ALLOW_SERVICE_DSN_FOR_TESTING") or _truthy("RUN_E2E") or _truthy("RUN_SUPABASE_E2E")
     user = _dsn_username(dsn)
     if user in {"postgres", "service_role", "supabase_admin"} and not allow_service:
         raise RuntimeError(
-            "Learning worker requires the gustav_app (or gustav_worker) login role. "
-            "Override LEARNING_DATABASE_URL with a limited account or set "
+            "Learning worker requires the gustav_worker login role. "
+            "Set LEARNING_WORKER_DATABASE_URL with the dedicated worker account or set "
             "ALLOW_SERVICE_DSN_FOR_TESTING=true for temporary local debugging."
         )
     return dsn

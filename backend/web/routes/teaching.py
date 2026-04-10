@@ -29,7 +29,8 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import asyncio
 from uuid import uuid4, UUID
 
-from fastapi import APIRouter, Request
+import httpx
+from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
@@ -42,6 +43,7 @@ from backend.storage.config import get_submissions_bucket
 from .security import _is_same_origin
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
+H5P_INTERNAL_BASE = (os.getenv("H5P_INTERNAL_BASE") or "http://h5p:3000").rstrip("/")
 
 # Optional storage wiring helper (lazy rewire for local Supabase E2E)
 try:  # pragma: no cover - simple import guard
@@ -139,6 +141,18 @@ class TaskData:
     h5p_display_options: Dict[str, Any] | None = None
 
 
+@dataclass
+class ConcernBoxEntryData:
+    id: str
+    course_id: str
+    student_sub: str
+    message_text: str
+    anonymous: bool
+    created_at: str
+    archived_at: Optional[str] | None = None
+    archived_by: Optional[str] | None = None
+
+
 class _Repo:
     def __init__(self) -> None:
         self.courses: Dict[str, Course] = {}
@@ -155,6 +169,7 @@ class _Repo:
         self.task_ids_by_section: Dict[str, List[str]] = {}
         self.upload_intents: Dict[str, Dict[str, Any]] = {}
         self.module_section_releases: Dict[tuple[str, str], Dict[str, Any]] = {}
+        self.concern_box_entries: Dict[str, ConcernBoxEntryData] = {}
 
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> Course:
         normalized = (title or "").strip()
@@ -206,6 +221,83 @@ class _Repo:
         bucket = self.members.get(course_id) or {}
         bucket.pop(student_id, None)
         self.members[course_id] = bucket
+
+    def student_has_course(self, course_id: str, student_sub: str) -> bool:
+        return student_sub in (self.members.get(course_id) or {})
+
+    def create_concern_box_entry(
+        self,
+        *,
+        course_id: str,
+        student_sub: str,
+        message_text: str,
+        anonymous: bool,
+    ) -> dict[str, Any] | None:
+        text = (message_text or "").strip()
+        if not text:
+            raise ValueError("invalid_message_text")
+        if not self.student_has_course(course_id, student_sub):
+            return None
+        now = datetime.now(timezone.utc).isoformat()
+        entry_id = str(uuid4())
+        entry = ConcernBoxEntryData(
+            id=entry_id,
+            course_id=course_id,
+            student_sub=student_sub,
+            message_text=text,
+            anonymous=bool(anonymous),
+            created_at=now,
+        )
+        self.concern_box_entries[entry_id] = entry
+        return {"id": entry_id, "created_at": now}
+
+    def list_concern_box_entries_for_teacher(self, owner_sub: str, scope: str) -> list[dict[str, Any]]:
+        include_archived = scope == "archived"
+        entries: list[dict[str, Any]] = []
+        for entry in self.concern_box_entries.values():
+            course = self.courses.get(entry.course_id)
+            if not course or course.teacher_id != owner_sub:
+                continue
+            if include_archived != bool(entry.archived_at):
+                continue
+            entries.append(
+                {
+                    "id": entry.id,
+                    "course_id": entry.course_id,
+                    "course_title": course.title,
+                    "student_sub": entry.student_sub,
+                    "message_text": entry.message_text,
+                    "anonymous": entry.anonymous,
+                    "created_at": entry.created_at,
+                    "archived_at": entry.archived_at,
+                }
+            )
+        entries.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        return entries
+
+    def archive_concern_box_entry_owned(self, entry_id: str, owner_sub: str) -> bool:
+        entry = self.concern_box_entries.get(entry_id)
+        if not entry:
+            return False
+        course = self.courses.get(entry.course_id)
+        if not course or course.teacher_id != owner_sub:
+            return False
+        entry.archived_at = datetime.now(timezone.utc).isoformat()
+        entry.archived_by = owner_sub
+        self.concern_box_entries[entry_id] = entry
+        return True
+
+    def restore_concern_box_entry_owned(self, entry_id: str, owner_sub: str) -> bool:
+        entry = self.concern_box_entries.get(entry_id)
+        if not entry:
+            return False
+        course = self.courses.get(entry.course_id)
+        if not course or course.teacher_id != owner_sub:
+            return False
+        entry.archived_at = None
+        entry.archived_by = None
+        self.concern_box_entries[entry_id] = entry
+        return True
 
     def update_course(self, course_id: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Course | None:
         c = self.courses.get(course_id)
@@ -940,6 +1032,22 @@ class _Repo:
         """
         return []
 
+    def list_unit_latest_submission_aggregates_for_owner(
+        self,
+        *,
+        course_id: str,
+        unit_id: str,
+        owner_sub: str,
+        student_subs: Sequence[str],
+    ) -> List[dict]:
+        """Return latest submission aggregates for one unit and learner page.
+
+        Why:
+            The in-memory repo has no submission storage. Returning an empty list
+            preserves deterministic fallback behavior for offline tests.
+        """
+        return []
+
     def create_course_module_owned(self, course_id: str, owner_id: str, *, unit_id: str, context_notes: str | None) -> CourseModuleData:
         course = self.courses.get(course_id)
         if not course or course.teacher_id != owner_id:
@@ -1276,6 +1384,109 @@ def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False
     if vary_origin:
         headers["Vary"] = "Origin"
     return JSONResponse(content=payload, status_code=status_code, headers=headers)
+
+
+async def _request_h5p_service(
+    method: str,
+    path: str,
+    *,
+    request: Request | None = None,
+    params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
+    files: dict[str, tuple[str, bytes, str]] | None = None,
+    timeout: float = 30.0,
+) -> httpx.Response:
+    """Send a request to the internal H5P service while forwarding session cookies.
+
+    Why:
+        The teacher-facing API should stay task-centric, but the existing H5P
+        service still owns editor/player/import/export primitives. This helper
+        keeps the wrapper endpoints thin and testable.
+    """
+
+    headers: dict[str, str] = {}
+    if request is not None:
+        cookie_header = str(request.headers.get("cookie") or "").strip()
+        if cookie_header:
+            headers["cookie"] = cookie_header
+        origin = str(request.headers.get("origin") or "").strip()
+        if origin:
+            headers["origin"] = origin
+        referer = str(request.headers.get("referer") or "").strip()
+        if referer:
+            headers["referer"] = referer
+
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        return await client.request(
+            method=method,
+            url=f"{H5P_INTERNAL_BASE}{path}",
+            params=params,
+            json=json_body,
+            files=files,
+            headers=headers,
+        )
+
+
+def _get_owned_h5p_task(unit_id: str, section_id: str, task_id: str, author_sub: str) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+    """Resolve an author-owned H5P task or return a fail-closed API error."""
+
+    try:
+        tasks = _get_tasks_service().list_tasks(unit_id, section_id, author_sub)
+    except PermissionError:
+        return None, _private_error({"error": "forbidden"}, status_code=403)
+    except LookupError:
+        return None, _private_error({"error": "not_found"}, status_code=404)
+
+    task = next((item for item in tasks if str(_serialize_task(item).get("id") or "") == task_id), None)
+    if task is None:
+        return None, _private_error({"error": "not_found"}, status_code=404)
+    serialized = _serialize_task(task)
+    if str(serialized.get("kind") or "") != "h5p":
+        return None, _private_error({"error": "not_found"}, status_code=404)
+    return serialized, None
+
+
+def _proxy_h5p_error_response(upstream: httpx.Response) -> JSONResponse:
+    """Map upstream H5P failures to private JSON responses."""
+
+    payload: dict[str, Any]
+    try:
+        candidate = upstream.json()
+        payload = candidate if isinstance(candidate, dict) else {"error": "bad_gateway"}
+    except Exception:
+        payload = {"error": "bad_gateway"}
+    status_code = int(upstream.status_code or 502)
+    if status_code < 400 or status_code >= 600:
+        status_code = 502
+    return _private_error(payload, status_code=status_code)
+
+
+async def _rollback_h5p_content(content_id: str, request: Request | None) -> None:
+    """Delete a just-created H5P content item after a local persist failure.
+
+    Why:
+        The task-centric teaching API must not leave orphaned H5P content behind
+        when the upstream create/import succeeded but the local task update
+        failed afterwards.
+    """
+
+    content_id = str(content_id or "").strip()
+    if not content_id:
+        return
+    try:
+        response = await _request_h5p_service("DELETE", f"/contents/{content_id}", request=request)
+        if int(response.status_code or 500) not in (204, 404):
+            logger.warning(
+                "H5P rollback delete failed content_id=%s status=%s",
+                content_id,
+                int(response.status_code or 500),
+            )
+    except Exception as exc:
+        logger.warning(
+            "H5P rollback delete failed content_id=%s reason=%s",
+            content_id,
+            exc.__class__.__name__,
+        )
 
 
 def _clamp_limit_offset(
@@ -2171,6 +2382,11 @@ class TaskUpdatePayload(BaseModel):
 
 class TaskReorderPayload(BaseModel):
     task_ids: object | None = None
+
+
+class H5PTaskSavePayload(BaseModel):
+    library: str
+    params: dict[str, Any]
 
 
 @teaching_router.patch("/api/teaching/courses/{course_id}")
@@ -3422,6 +3638,275 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/editor-model")
+async def get_task_h5p_editor_model(request: Request, unit_id: str, section_id: str, task_id: str):
+    """Return the H5P editor model for an owned H5P task."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+
+    params: dict[str, Any] | None = None
+    content_id = str(((task or {}).get("h5p") or {}).get("content_id") or "").strip()
+    if content_id:
+        params = {"content_id": content_id}
+
+    try:
+        upstream = await _request_h5p_service("GET", "/editor/model", request=request, params=params)
+    except httpx.RequestError:
+        return _private_error({"error": "service_unavailable"}, status_code=503)
+    if not upstream.is_success:
+        return _proxy_h5p_error_response(upstream)
+    try:
+        return _json_private(upstream.json(), status_code=200)
+    except Exception:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/save")
+async def save_task_h5p_content(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    task_id: str,
+    payload: H5PTaskSavePayload,
+):
+    """Create or update task-linked H5P content and persist the content id on the task."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+
+    current_content_id = str(((task or {}).get("h5p") or {}).get("content_id") or "").strip()
+    path = f"/contents/{current_content_id}" if current_content_id else "/contents"
+    method = "PATCH" if current_content_id else "POST"
+
+    try:
+        upstream = await _request_h5p_service(
+            method,
+            path,
+            request=request,
+            json_body={"library": payload.library, "params": payload.params},
+        )
+    except httpx.RequestError:
+        return _private_error({"error": "service_unavailable"}, status_code=503)
+    if not upstream.is_success:
+        return _proxy_h5p_error_response(upstream)
+    try:
+        upstream_payload = upstream.json()
+    except Exception:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+
+    new_content_id = str((upstream_payload or {}).get("content_id") or "").strip()
+    if not new_content_id:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+    try:
+        _get_tasks_service().update_task(
+            unit_id,
+            section_id,
+            task_id,
+            sub,
+            h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
+        )
+    except ValueError as exc:
+        await _rollback_h5p_content(new_content_id, request)
+        detail = str(exc) or "invalid_input"
+        if detail not in {"invalid_h5p_config", "invalid_task_kind_config"}:
+            detail = "invalid_input"
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "internal_error"}, status_code=500)
+    return _json_private({"content_id": new_content_id, "metadata": (upstream_payload or {}).get("metadata") or {}}, status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import")
+async def import_task_h5p_content(
+    request: Request,
+    unit_id: str,
+    section_id: str,
+    task_id: str,
+    file: UploadFile = File(...),
+):
+    """Import an H5P archive and link the resulting content to the task."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+    file_bytes = await file.read()
+    if not file_bytes:
+        return _private_error({"error": "bad_request", "detail": "invalid_h5p_file"}, status_code=400)
+
+    try:
+        upstream = await _request_h5p_service(
+            "POST",
+            "/contents/import",
+            request=request,
+            files={"file": (file.filename or "content.h5p", file_bytes, file.content_type or "application/zip")},
+        )
+    except httpx.RequestError:
+        return _private_error({"error": "service_unavailable"}, status_code=503)
+    if not upstream.is_success:
+        return _proxy_h5p_error_response(upstream)
+    try:
+        upstream_payload = upstream.json()
+    except Exception:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+
+    new_content_id = str((upstream_payload or {}).get("content_id") or "").strip()
+    if not new_content_id:
+        return _private_error({"error": "bad_gateway"}, status_code=502)
+    try:
+        updated = _get_tasks_service().update_task(
+            unit_id,
+            section_id,
+            task_id,
+            sub,
+            h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
+        )
+    except ValueError as exc:
+        await _rollback_h5p_content(new_content_id, request)
+        detail = str(exc) or "invalid_input"
+        if detail not in {"invalid_h5p_config", "invalid_task_kind_config"}:
+            detail = "invalid_input"
+        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
+    except LookupError:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception:
+        await _rollback_h5p_content(new_content_id, request)
+        return _private_error({"error": "internal_error"}, status_code=500)
+    return _json_private(_serialize_task(updated), status_code=200)
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export")
+async def export_task_h5p_content(request: Request, unit_id: str, section_id: str, task_id: str):
+    """Export the currently linked H5P content for an owned task."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+    content_id = str(((task or {}).get("h5p") or {}).get("content_id") or "").strip()
+    if not content_id:
+        return _private_error({"error": "not_found"}, status_code=404)
+
+    try:
+        upstream = await _request_h5p_service("GET", f"/contents/{content_id}/export", request=request)
+    except httpx.RequestError:
+        return _private_error({"error": "service_unavailable"}, status_code=503)
+    if not upstream.is_success:
+        return _proxy_h5p_error_response(upstream)
+    headers = {"Cache-Control": "private, no-store"}
+    content_disposition = upstream.headers.get("content-disposition")
+    if content_disposition:
+        headers["Content-Disposition"] = content_disposition
+    return Response(
+        content=upstream.content,
+        media_type=upstream.headers.get("content-type") or "application/zip",
+        headers=headers,
+    )
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset")
+async def reset_task_h5p_content(request: Request, unit_id: str, section_id: str, task_id: str):
+    """Unlink the H5P content from a task without deleting upstream content."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return csrf
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(section_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
+    if not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
+    if task_error:
+        return task_error
+    updated = _get_tasks_service().update_task(
+        unit_id,
+        section_id,
+        task_id,
+        sub,
+        h5p={"content_id": None, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
+    )
+    return _json_private(_serialize_task(updated), status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder")
@@ -5007,111 +5492,174 @@ async def get_unit_live_summary(
         avg_map: dict[tuple[str, str], float | None] = {}
         h5p_map: dict[tuple[str, str], bool] = {}
         score_map: dict[tuple[str, str], tuple[int | None, int | None]] = {}
+        created_at_map: dict[tuple[str, str], str | None] = {}
         try:
             from teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
-                import psycopg  # type: ignore
-                dsn = getattr(repo, "_dsn", None)
-                if dsn:
-                    with psycopg.connect(dsn) as conn:
-                        with conn.cursor() as cur:
-                            cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
-                            try:
-                                helper_rows = _load_unit_live_helper_rows(
-                                    cur,
-                                    owner_sub=sub,
-                                    course_id=course_id,
-                                    unit_id=unit_id,
-                                    updated_since_dt=updated_since_dt,
-                                    limit=int(limit),
-                                    offset=int(offset),
-                                )
-                                has_map = {(row["student_sub"], row["task_id"]) for row in helper_rows}
-                                task_ids_by_student: dict[str, list[str]] = {}
-                                for row in helper_rows:
-                                    student_sub = str(row["student_sub"])
-                                    task_ids_by_student.setdefault(student_sub, []).append(str(row["task_id"]))
-                                latest_state_by_task = (
-                                    _load_latest_submission_state_by_task(cur, sub, course_id, task_ids_by_student)
-                                    if any(
-                                        row.get("score_raw") is None or row.get("score_max") is None
+                try:
+                    aggregate_rows = repo.list_unit_latest_submission_aggregates_for_owner(
+                        course_id=course_id,
+                        unit_id=unit_id,
+                        owner_sub=sub,
+                        student_subs=member_subs,
+                    )
+                    has_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or ""))
+                        for row in aggregate_rows
+                        if bool(row.get("has_submission"))
+                    }
+                    avg_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): row.get("average_score")
+                        for row in aggregate_rows
+                    }
+                    h5p_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): bool(row.get("h5p_completed"))
+                        for row in aggregate_rows
+                        if row.get("h5p_completed") is not None
+                    }
+                    score_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): (
+                            _safe_int(row.get("score_raw")),
+                            _safe_int(row.get("score_max")),
+                        )
+                        for row in aggregate_rows
+                    }
+                    created_at_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): str(row.get("created_at_iso") or "")
+                        for row in aggregate_rows
+                        if row.get("created_at_iso")
+                    }
+                except Exception as exc:
+                    logger.warning(
+                        "Unit summary bulk aggregate fallback: get_unit_latest_submission_aggregates_for_owner unavailable — %s",
+                        exc,
+                        extra={"course_id": course_id, "unit_id": unit_id},
+                    )
+                    import psycopg  # type: ignore
+                    dsn = getattr(repo, "_dsn", None)
+                    helper_rows: list[dict[str, Any]] = []
+                    if dsn:
+                        with psycopg.connect(dsn) as conn:
+                            with conn.cursor() as cur:
+                                cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                                try:
+                                    helper_rows = _load_unit_live_helper_rows(
+                                        cur,
+                                        owner_sub=sub,
+                                        course_id=course_id,
+                                        unit_id=unit_id,
+                                        updated_since_dt=updated_since_dt,
+                                        limit=int(limit),
+                                        offset=int(offset),
+                                    )
+                                    has_map = {(row["student_sub"], row["task_id"]) for row in helper_rows}
+                                    task_ids_by_student: dict[str, list[str]] = {}
+                                    for row in helper_rows:
+                                        student_sub = str(row["student_sub"])
+                                        task_ids_by_student.setdefault(student_sub, []).append(str(row["task_id"]))
+                                    latest_state_by_task = (
+                                        _load_latest_submission_state_by_task(cur, sub, course_id, task_ids_by_student)
+                                        if any(
+                                            row.get("score_raw") is None or row.get("score_max") is None
+                                            for row in helper_rows
+                                        )
+                                        else {}
+                                    )
+                                    submission_ids_by_student: dict[str, list[str]] = {}
+                                    for row in helper_rows:
+                                        student_sub = str(row["student_sub"])
+                                        task_id = str(row["task_id"])
+                                        latest_state = latest_state_by_task.get((student_sub, task_id), {})
+                                        submission_id = latest_state.get("submission_id") or row.get("submission_id")
+                                        if submission_id:
+                                            submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
+                                        score_raw = _safe_int(row.get("score_raw"))
+                                        score_max = _safe_int(row.get("score_max"))
+                                        if score_raw is None or score_max is None:
+                                            score_raw = latest_state.get("score_raw", score_raw)
+                                            score_max = latest_state.get("score_max", score_max)
+                                        score_map[(student_sub, task_id)] = (score_raw, score_max)
+                                    avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
+                                    avg_map = {
+                                        (
+                                            str(row["student_sub"]),
+                                            str(row["task_id"]),
+                                        ): avg_by_id.get(
+                                            latest_state_by_task.get((str(row["student_sub"]), str(row["task_id"])), {}).get("submission_id")
+                                            or row.get("submission_id")
+                                        )
                                         for row in helper_rows
+                                    }
+                                    h5p_map = {
+                                        (str(row["student_sub"]), str(row["task_id"])): bool(row["h5p_completed"])
+                                        for row in helper_rows
+                                        if row.get("h5p_completed") is not None
+                                    }
+                                    created_at_map = {
+                                        (str(row["student_sub"]), str(row["task_id"])): str(row.get("created_at_iso") or "")
+                                        for row in helper_rows
+                                        if row.get("created_at_iso")
+                                    }
+                                except Exception as legacy_exc:
+                                    logger.warning(
+                                        "Unit summary fallback: get_unit_latest_submissions_for_owner unavailable — %s",
+                                        legacy_exc,
+                                        extra={"course_id": course_id, "unit_id": unit_id},
                                     )
-                                    else {}
-                                )
-                                submission_ids_by_student: dict[str, list[str]] = {}
-                                for row in helper_rows:
-                                    student_sub = str(row["student_sub"])
-                                    task_id = str(row["task_id"])
-                                    latest_state = latest_state_by_task.get((student_sub, task_id), {})
-                                    submission_id = latest_state.get("submission_id") or row.get("submission_id")
-                                    if submission_id:
-                                        submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
-                                    score_raw = _safe_int(row.get("score_raw"))
-                                    score_max = _safe_int(row.get("score_max"))
-                                    if score_raw is None or score_max is None:
-                                        score_raw = latest_state.get("score_raw", score_raw)
-                                        score_max = latest_state.get("score_max", score_max)
-                                    score_map[(student_sub, task_id)] = (score_raw, score_max)
-                                avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
-                                avg_map = {
-                                    (
-                                        str(row["student_sub"]),
-                                        str(row["task_id"]),
-                                    ): avg_by_id.get(
-                                        latest_state_by_task.get((str(row["student_sub"]), str(row["task_id"])), {}).get("submission_id")
-                                        or row.get("submission_id")
-                                    )
-                                    for row in helper_rows
-                                }
-                                # Only present for Task.kind="h5p"; null for other tasks.
-                                h5p_map = {
-                                    (str(row["student_sub"]), str(row["task_id"])): bool(row["h5p_completed"])
-                                    for row in helper_rows
-                                    if row.get("h5p_completed") is not None
-                                }
-                            except Exception as exc:
-                                logger.warning(
-                                    "Unit summary fallback: helper get_unit_latest_submissions_for_owner unavailable — %s",
-                                    exc,
-                                    extra={"course_id": course_id, "unit_id": unit_id},
-                                )
-                                helper_rows = []
-                            if tasks and member_subs:
-                                task_ids = [t["id"] for t in tasks]
-                                if not helper_rows:
-                                    cur.execute(
-                                        """
-                                        select distinct student_sub::text, task_id::text
-                                        from public.learning_submissions
-                                        where course_id = %s
-                                          and task_id = any(%s)
-                                          and student_sub = any(%s)
-                                        """,
-                                        (course_id, task_ids, member_subs),
-                                    )
-                                    rows = cur.fetchall() or []
-                                    has_map = {(r[0], r[1]) for r in rows}
-                                if not has_map:
-                                    for sid in member_subs:
-                                        cur.execute("select set_config('app.current_sub', %s, true)", (sid,))
+                                    helper_rows = []
+                                if tasks and member_subs:
+                                    task_ids = [t["id"] for t in tasks]
+                                    if not helper_rows:
                                         cur.execute(
                                             """
-                                            select distinct task_id::text
+                                            select distinct on (student_sub, task_id)
+                                                   student_sub::text,
+                                                   task_id::text,
+                                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                                             from public.learning_submissions
                                             where course_id = %s
-                                              and student_sub = %s
                                               and task_id = any(%s)
+                                              and student_sub = any(%s)
+                                            order by student_sub, task_id, created_at desc, attempt_nr desc, id desc
                                             """,
-                                            (course_id, sid, task_ids),
+                                            (course_id, task_ids, member_subs),
                                         )
-                                        for (tid,) in cur.fetchall() or []:
-                                            has_map.add((sid, tid))
-                                    cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                                        rows = cur.fetchall() or []
+                                        has_map = {(r[0], r[1]) for r in rows}
+                                        created_at_map.update(
+                                            {
+                                                (str(student_sub), str(task_id)): str(created_at_iso or "")
+                                                for student_sub, task_id, created_at_iso in rows
+                                                if created_at_iso
+                                            }
+                                        )
+                                    if not has_map:
+                                        for sid in member_subs:
+                                            cur.execute("select set_config('app.current_sub', %s, true)", (sid,))
+                                            cur.execute(
+                                                """
+                                                select distinct on (task_id)
+                                                       task_id::text,
+                                                       to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                                                from public.learning_submissions
+                                                where course_id = %s
+                                                  and student_sub = %s
+                                                  and task_id = any(%s)
+                                                order by task_id, created_at desc, attempt_nr desc, id desc
+                                                """,
+                                                (course_id, sid, task_ids),
+                                            )
+                                            for tid, created_at_iso in cur.fetchall() or []:
+                                                has_map.add((sid, tid))
+                                                if created_at_iso:
+                                                    created_at_map[(sid, tid)] = str(created_at_iso)
+                                        cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
         except Exception:
             has_map = set()
             avg_map = {}
             h5p_map = {}
+            score_map = {}
+            created_at_map = {}
 
         for sid in member_subs:
             task_cells: list[dict] = []
@@ -5122,6 +5670,7 @@ async def get_unit_live_summary(
                     "task_id": tid,
                     "has_submission": has,
                     "average_score": (avg_map.get((sid, tid)) if has else None),
+                    "created_at": (created_at_map.get((sid, tid)) if has else None),
                 }
                 # H5P tasks are auto-scorable; for the live matrix we only need
                 # a binary "completed" flag (full score at least once).

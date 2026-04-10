@@ -1,0 +1,76 @@
+# Plan: Live-Dashboard-Redesign für `/live`
+
+Status: in Umsetzung
+Datum: 2026-04-09
+
+## Ziel
+- `/live` wird zur einseitigen Lehrkraft-Konsole für eine Kurs-Lerneinheit-Kombination.
+- Die Seite bietet oben die Auswahl von `Kurs` und `Lerneinheit`.
+- Darunter zeigt sie pro Schüler eine kompakte Übersicht mit Bearbeitungsquote, Durchschnittsbewertung und letzter Abgabe.
+- Ein Klick auf eine Schülerzeile öffnet ein Detailpanel mit Mini-Matrix und letzter Abgabe.
+
+## Produktentscheidungen
+- `/live` ist die kanonische Einstiegseite; die Auswahl erfolgt direkt dort.
+- Die Primäransicht ist eine Tabelle, keine Aufgabenmatrix.
+- Standardsortierung ist alphabetisch.
+- `Bearbeitet %` bedeutet: Anteil der Aufgaben mit mindestens einer Abgabe.
+- Das Detailpanel öffnet über die ganze Zeile und startet mit einer Mini-Matrix des Schülers.
+
+## API und Daten
+- Neuer Read-Model-Endpunkt: `GET /api/live/views/courses/{course_id}/units/{unit_id}/dashboard`
+- Neuer Contract:
+  - `LiveUnitDashboardView`
+  - `LiveUnitDashboardSummary`
+  - `LiveUnitDashboardRow`
+  - `LiveDashboardLatestSubmission`
+  - `LiveStudentPanelView`
+- V1 nutzt vorhandene Live-Zusammenfassungen weiter und ergänzt serverseitig die fehlenden Aggregationen für die Tabellenzeilen.
+
+## UI
+- Kopfbereich mit zwei Comboboxen für Kurs und Lerneinheit.
+- Kompakter Summary-Block mit Klassenkennzahlen.
+- Tabelle mit Spalten:
+  - `Schüler`
+  - `Bearbeitet`
+  - `Ø Bewertung`
+  - `Letzte Abgabe`
+- Rechtes Detailpanel mit:
+  - Mini-Matrix aller Aufgaben der gewählten Lerneinheit für einen Schüler
+  - hervorgehobener letzter Abgabe
+  - Detailkarte der letzten Abgabe
+
+## Tests
+- OpenAPI-Contract-Test für den neuen Dashboard-Endpunkt und die neuen Schemas.
+- API-Test für den Dashboard-Endpunkt inklusive Zeilenkennzahlen und optionalem Detailpanel.
+- Packaging-Test für die kanonische `/live`-Seite mit Dashboard-Loader.
+- Nach Implementierung gezielte Ausführung der neuen Live-Tests.
+
+## Nachtrag: Detailpanel-Sidecar
+- Das Detailpanel wird auf eine aktive Aufgabenwahl mit `task_id` in der kanonischen `/live`-URL erweitert.
+- Klick auf eine Schülerzeile soll automatisch die zuletzt bearbeitete Aufgabe dieses Schülers auswählen; das geschieht ohne zusätzliche Nutzeraktion.
+- Das Panel zeigt nicht mehr starr nur die letzte Abgabe, sondern die aktuell gewählte Aufgabe.
+- Die Darstellung orientiert sich an der Lernseite:
+  - horizontale Aufgabenleiste mit kompakten Status-Rechtecken
+  - Tabs `Abgabe`, `Rückmeldung`, `Auswertung`
+  - Markdown- und Artefakt-Darstellung über Shared-Utilities statt über rohe `pre`-Blöcke
+- Auf Desktop bleibt das Panel als rechte Sidecar-Fläche sticky sichtbar; auf kleineren Displays wandert es unter die Tabelle.
+
+## Nachtrag: Inhaltshierarchie im Detailpanel
+- Im Kopf des Panels bleibt nur der Schülername; Hilfstexte und Meta-Labels entfallen.
+- Oberhalb der Tabs stehen ein subtil formatierter Zeitstempel und direkt darunter die Aufgabenstellung.
+- Die Aufgabenstellung wird als Markdown gerendert und nicht mehr als nachgelagerter Referenzblock gezeigt.
+- Die Tab-Sprache wird an die Schüleransicht angeglichen: `Abgabe`, `Rückmeldung`, `Auswertung`.
+
+## Nachtrag: Breiterer Arbeitsbereich und sortierbare Tabelle
+- Der obere Auswahlbereich bleibt in seiner bisherigen Breite und Struktur.
+- Der untere Arbeitsbereich aus Tabelle und Detailpanel wird separat auf `128rem` verbreitert.
+- Tabelle und Detailpanel werden als zwei getrennte Panels nebeneinander dargestellt.
+- Die Tabelle erhält klickbare, clientseitige Sortierköpfe mit lokalem Sortzustand.
+- In der Spalte `Letzte Abgabe` stehen nur noch Datum und Bewertung nebeneinander; der Aufgabenname entfällt dort.
+
+## Nachtrag: Zentrierte Zweicontainer-Logik
+- `/live` folgt intern zwei klaren Inhaltsbreiten statt lokaler Breakout-Hacks.
+- Der Intro-Bereich mit Auswahl und KPIs bleibt als zentrierter Container bei `112rem`.
+- Der untere Arbeitsbereich mit Tabelle und Detailpanel bleibt ebenfalls zentriert und nutzt eine breitere, eigene Maximalbreite.
+- Viewport-relative Breitenrechnungen werden entfernt; die Seite bleibt auf einer gemeinsamen Mittelachse.
+- Das Tabellen-/Panel-Grid verwendet flexible Spalten statt harter Mindestbreiten, damit mittlere Viewports nicht nach rechts gedrückt werden.

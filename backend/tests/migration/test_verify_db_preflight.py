@@ -37,6 +37,34 @@ class _FakeConn:
         return False
 
 
+class _DispatchConn:
+    def __init__(self, rows: dict[str, tuple[str] | None]) -> None:
+        self._rows = rows
+
+    def cursor(self) -> _FakeCursor:
+        parent = self
+
+        class _DispatchCursor(_FakeCursor):
+            def __init__(self) -> None:
+                super().__init__(None)
+
+            def execute(self, sql: str) -> None:
+                self.executed_sql = sql
+                for marker, row in parent._rows.items():
+                    if marker in sql:
+                        self._row = row
+                        return
+                self._row = None
+
+        return _DispatchCursor()
+
+    def __enter__(self) -> _DispatchConn:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001
+        return False
+
+
 def test_build_dsn_prefers_database_url(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@db.local:5432/app")
     assert mod.build_dsn() == "postgresql://x:y@db.local:5432/app"
@@ -84,6 +112,17 @@ def test_result_signature_rejects_missing_h5p_score_columns() -> None:
     assert mod.result_signature_supports_latest_h5p_scores(signature) is False
 
 
+def test_fetch_learning_submissions_owner_reads_pg_tables() -> None:
+    conn = _FakeConn(("supabase_admin",))
+    got = mod.fetch_learning_submissions_owner(conn)
+    assert got == "supabase_admin"
+
+
+def test_owner_matches_expected_local_migration_user() -> None:
+    assert mod.owner_matches_expected_local_migration_user("postgres", "postgres") is True
+    assert mod.owner_matches_expected_local_migration_user("supabase_admin", "postgres") is False
+
+
 def test_fetch_unit_tasks_kind_constraintdef_reads_pg_constraint() -> None:
     conn = _FakeConn(("CHECK ((kind = ANY (ARRAY['native'::text, 'calliope'::text])))",))
     got = mod.fetch_unit_tasks_kind_constraintdef(conn)
@@ -122,7 +161,16 @@ def test_run_preflight_returns_error_when_db_unreachable(monkeypatch) -> None:  
 
 
 def test_run_preflight_returns_error_when_constraint_missing(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(mod, "_connect", lambda _dsn: _FakeConn(None))
+    monkeypatch.setattr(
+        mod,
+        "_connect",
+        lambda _dsn: _DispatchConn(
+            {
+                "from pg_tables": ("postgres",),
+                "from pg_constraint": None,
+            }
+        ),
+    )
     out = io.StringIO()
     err = io.StringIO()
     rc = mod.run_preflight(dsn="postgresql://x", out=out, err=err)
@@ -132,7 +180,16 @@ def test_run_preflight_returns_error_when_constraint_missing(monkeypatch) -> Non
 
 def test_run_preflight_returns_error_when_calliope_is_missing(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     row = ("CHECK ((kind = ANY (ARRAY['native'::text, 'h5p'::text])))",)
-    monkeypatch.setattr(mod, "_connect", lambda _dsn: _FakeConn(row))
+    monkeypatch.setattr(
+        mod,
+        "_connect",
+        lambda _dsn: _DispatchConn(
+            {
+                "from pg_tables": ("postgres",),
+                "t.relname = 'unit_tasks'": row,
+            }
+        ),
+    )
     monkeypatch.setattr(mod, "fetch_learning_submissions_error_code_constraintdef", lambda _conn: "feedback_invalid_analysis")
     monkeypatch.setattr(
         mod,
@@ -148,7 +205,16 @@ def test_run_preflight_returns_error_when_calliope_is_missing(monkeypatch) -> No
 
 def test_run_preflight_returns_error_when_feedback_invalid_analysis_is_missing(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     row = ("CHECK ((kind = ANY (ARRAY['native'::text, 'calliope'::text])))",)
-    monkeypatch.setattr(mod, "_connect", lambda _dsn: _FakeConn(row))
+    monkeypatch.setattr(
+        mod,
+        "_connect",
+        lambda _dsn: _DispatchConn(
+            {
+                "from pg_tables": ("postgres",),
+                "t.relname = 'unit_tasks'": row,
+            }
+        ),
+    )
     monkeypatch.setattr(
         mod,
         "fetch_learning_submissions_error_code_constraintdef",
@@ -168,7 +234,16 @@ def test_run_preflight_returns_error_when_feedback_invalid_analysis_is_missing(m
 
 def test_run_preflight_returns_error_when_h5p_helper_columns_are_missing(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     row = ("CHECK ((kind = ANY (ARRAY['native'::text, 'calliope'::text])))",)
-    monkeypatch.setattr(mod, "_connect", lambda _dsn: _FakeConn(row))
+    monkeypatch.setattr(
+        mod,
+        "_connect",
+        lambda _dsn: _DispatchConn(
+            {
+                "from pg_tables": ("postgres",),
+                "t.relname = 'unit_tasks'": row,
+            }
+        ),
+    )
     monkeypatch.setattr(
         mod,
         "fetch_learning_submissions_error_code_constraintdef",
@@ -188,7 +263,47 @@ def test_run_preflight_returns_error_when_h5p_helper_columns_are_missing(monkeyp
 
 def test_run_preflight_succeeds_when_calliope_is_allowed(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     row = ("CHECK ((kind = ANY (ARRAY['native'::text, 'calliope'::text])))",)
-    monkeypatch.setattr(mod, "_connect", lambda _dsn: _FakeConn(row))
+    monkeypatch.setattr(
+        mod,
+        "_connect",
+        lambda _dsn: _DispatchConn(
+            {
+                "from pg_tables": ("postgres",),
+                "t.relname = 'unit_tasks'": row,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "fetch_learning_submissions_error_code_constraintdef",
+        lambda _conn: "CHECK ((error_code = ANY (ARRAY['feedback_invalid_analysis'::text, 'feedback_failed'::text])))",
+    )
+    monkeypatch.setattr(
+        mod,
+        "fetch_live_h5p_helper_result_signature",
+        lambda _conn: "TABLE(student_sub text, task_id uuid, score_raw integer, score_max integer)",
+    )
+    monkeypatch.setattr(mod, "has_live_bulk_aggregate_helper", lambda _conn: True)
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = mod.run_preflight(dsn="postgresql://x", out=out, err=err)
+    assert rc == 0
+    assert "DB preflight OK" in out.getvalue()
+    assert err.getvalue() == ""
+
+
+def test_run_preflight_returns_error_when_learning_submissions_owner_has_drifted(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    row = ("CHECK ((kind = ANY (ARRAY['native'::text, 'calliope'::text])))",)
+    monkeypatch.setattr(
+        mod,
+        "_connect",
+        lambda _dsn: _DispatchConn(
+            {
+                "from pg_tables": ("supabase_admin",),
+                "t.relname = 'unit_tasks'": row,
+            }
+        ),
+    )
     monkeypatch.setattr(
         mod,
         "fetch_learning_submissions_error_code_constraintdef",
@@ -202,6 +317,6 @@ def test_run_preflight_succeeds_when_calliope_is_allowed(monkeypatch) -> None:  
     out = io.StringIO()
     err = io.StringIO()
     rc = mod.run_preflight(dsn="postgresql://x", out=out, err=err)
-    assert rc == 0
-    assert "DB preflight OK" in out.getvalue()
-    assert err.getvalue() == ""
+    assert rc == 2
+    assert "owner drift" in err.getvalue().lower()
+    assert "make reset-local" in err.getvalue()

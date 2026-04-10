@@ -15,6 +15,7 @@ from backend.learning.repo_db import DBLearningRepo
 
 def _sample_row(
     *,
+    intent: str = "submit",
     status: str = "pending",
     kind: str = "file",
     score_raw: Optional[int] = None,
@@ -37,6 +38,7 @@ def _sample_row(
     return (
         submission_id,
         1,  # attempt_nr
+        intent,
         kind,
         score_raw,
         score_max,
@@ -72,6 +74,7 @@ def test_row_to_submission_pending_hides_analysis_and_sanitizes_errors():
     submission = DBLearningRepo._row_to_submission(row)
 
     assert submission["analysis_status"] == "pending"
+    assert submission["intent"] == "submit"
     assert submission["analysis_json"] is None
     assert submission["feedback_md"] is None, "pending submissions must hide feedback markdown"
     assert submission["vision_attempts"] == 0, "missing attempts fall back to zero"
@@ -99,6 +102,7 @@ def test_row_to_submission_completed_truncates_long_errors_and_preserves_feedbac
     submission = DBLearningRepo._row_to_submission(row)
 
     assert submission["analysis_status"] == "completed"
+    assert submission["intent"] == "submit"
     assert submission["analysis_json"] == {"text": "well done"}
     assert submission["feedback_md"] == "Great job"
     assert submission["vision_attempts"] == 3
@@ -108,3 +112,12 @@ def test_row_to_submission_completed_truncates_long_errors_and_preserves_feedbac
     assert len(submission["vision_last_error"]) <= 256
     assert submission["vision_last_error"].endswith("...")
     assert len(submission["feedback_last_error"]) <= 256
+
+
+def test_row_to_submission_preserves_feedback_intent() -> None:
+    """History rows must expose whether a learner asked for feedback or submitted formally."""
+    row = _sample_row(intent="feedback", status="completed", analysis_json='{"text": "revise me"}')
+
+    submission = DBLearningRepo._row_to_submission(row)
+
+    assert submission["intent"] == "feedback"

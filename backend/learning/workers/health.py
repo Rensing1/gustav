@@ -27,13 +27,13 @@ except Exception:  # pragma: no cover
 LOG = logging.getLogger(__name__)
 
 def _default_dsn() -> str:
-    env = os.getenv("LEARNING_DATABASE_URL") or os.getenv("DATABASE_URL")
+    env = os.getenv("LEARNING_WORKER_DATABASE_URL") or os.getenv("LEARNING_WORKER_DB_URL")
     if env:
         return env
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")
-    user = os.getenv("APP_DB_USER", "gustav_app")
-    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    user = os.getenv("LEARNING_WORKER_DB_USER", "gustav_worker")
+    password = os.getenv("LEARNING_WORKER_DB_PASSWORD", "CHANGE_ME_DEV")
     return f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
 
@@ -124,6 +124,19 @@ class LearningWorkerHealthService:
                     detail=row.get("detail"),
                 )
             )
+
+        expected_role = "gustav_worker"
+        if current_role != expected_role:
+            checks.insert(
+                0,
+                HealthCheckResult(
+                    check="db_role",
+                    status="failed",
+                    detail=f"expected {expected_role}, got {current_role or 'none'}",
+                ),
+            )
+        else:
+            checks.insert(0, HealthCheckResult(check="db_role", status="ok", detail=None))
 
         overall = "healthy" if all(check.status == "ok" for check in checks) else "degraded"
         return HealthProbeResult(status=overall, current_role=current_role, checks=checks)

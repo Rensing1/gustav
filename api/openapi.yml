@@ -26,6 +26,10 @@ components:
       type: apiKey
       in: cookie
       name: gustav_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   responses:
     Unauthorized401:
       description: Authentication required
@@ -73,6 +77,1136 @@ components:
         roles: ["student"]
         name: "Max Musterschüler"
         expires_at: "2025-10-20T12:34:56+00:00"
+    SessionBootstrapUser:
+      type: object
+      required: [sub, name, role, roles]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+    SessionBootstrap:
+      type: object
+      required: [user, start_target, spaces]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        start_target:
+          type: string
+          enum: ["/learning", "/teaching"]
+          description: Initial in-app destination derived from the current role.
+        spaces:
+          type: array
+          description: Top-level product spaces the shell should expose for the current role.
+          items:
+            type: string
+      example:
+        user:
+          sub: "teacher-123"
+          name: "Ada"
+          role: "teacher"
+          roles: ["teacher"]
+        start_target: "/teaching"
+        spaces: ["teaching", "diagnostics", "live"]
+    AppProfileView:
+      type: object
+      required: [user, display_name, email, first_name, last_name, name_locked_until, name_can_edit, password_change_href]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        display_name:
+          type: string
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        name_locked_until:
+          type: string
+          format: date-time
+          nullable: true
+        name_can_edit:
+          type: boolean
+        password_change_href:
+          type: string
+    AppSessionSyncRequest:
+      type: object
+      properties:
+        id_token:
+          type: string
+          description: >-
+            Optional OIDC ID token from the Svelte BFF login flow. When
+            provided, the backend stores it with the app session so logout can
+            complete the Keycloak end-session flow without falling back to a
+            confirmation page.
+    ProfileDisplayNameUpdate:
+      type: object
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 80
+    ProfileNameUpdate:
+      type: object
+      required: [first_name, last_name]
+      properties:
+        first_name:
+          type: string
+          maxLength: 80
+        last_name:
+          type: string
+          maxLength: 80
+    LearnerHomeCourse:
+      type: object
+      required: [id, title, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+    LearnerHome:
+      type: object
+      required: [user, courses]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearnerHomeCourse'
+    ConcernBoxCourseOption:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+    LearnerConcernBoxView:
+      type: object
+      required: [user, courses]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConcernBoxCourseOption'
+    ConcernBoxEntryCreate:
+      type: object
+      required: [course_id, message_text, anonymous]
+      properties:
+        course_id:
+          type: string
+        message_text:
+          type: string
+          minLength: 1
+        anonymous:
+          type: boolean
+      example:
+        course_id: "course-1"
+        message_text: "Mehr Zeit für Rückfragen am Stundenende wäre hilfreich."
+        anonymous: true
+    ConcernBoxEntryCreated:
+      type: object
+      required: [id, created_at]
+      properties:
+        id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    TeacherHomeEntry:
+      type: object
+      required: [id, title, href, description]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+        description:
+          type: string
+    TeacherHome:
+      type: object
+      required: [user, entries]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherHomeEntry'
+    TeacherCourseListItem:
+      type: object
+      required: [id, title, href, members_count, units_count]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+        members_count:
+          type: integer
+          minimum: 0
+        units_count:
+          type: integer
+          minimum: 0
+        subject:
+          type: string
+          nullable: true
+        grade_level:
+          type: string
+          nullable: true
+        term:
+          type: string
+          nullable: true
+    TeacherCourseListView:
+      type: object
+      required: [user, courses]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherCourseListItem'
+    TeacherCourseContextCourse:
+      type: object
+      required: [id, title, href, members_href, diagnostics_href, members_count, units_count]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+        members_href:
+          type: string
+        diagnostics_href:
+          type: string
+        members_count:
+          type: integer
+        units_count:
+          type: integer
+    TeacherCourseContextUnit:
+      type: object
+      required: [id, title, position, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+    TeacherCourseContextMember:
+      type: object
+      required: [sub, name, href, joined_at]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+        joined_at:
+          type: string
+    TeacherCourseContextView:
+      type: object
+      required: [user, course, units, members]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/TeacherCourseContextCourse'
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherCourseContextUnit'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherCourseContextMember'
+    LiveCourseUnitsCourse:
+      type: object
+      required: [id, title, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+    LiveCourseUnitsUnit:
+      type: object
+      required: [id, title, position, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+    LiveCourseUnitsView:
+      type: object
+      required: [user, course, units]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/LiveCourseUnitsCourse'
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveCourseUnitsUnit'
+    TeacherConcernBoxFilterOption:
+      type: object
+      required: [id, label, active]
+      properties:
+        id:
+          type: string
+          enum: [open, archived]
+        label:
+          type: string
+        active:
+          type: boolean
+    TeacherConcernBoxEntry:
+      type: object
+      required: [id, course_id, course_title, message_text, anonymous, created_at]
+      properties:
+        id:
+          type: string
+        course_id:
+          type: string
+        course_title:
+          type: string
+        message_text:
+          type: string
+        anonymous:
+          type: boolean
+        student_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+    TeacherConcernBoxView:
+      type: object
+      required: [user, scopes, active_scope, entries]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherConcernBoxFilterOption'
+        active_scope:
+          type: string
+          enum: [open, archived]
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherConcernBoxEntry'
+    TeacherUnitsCatalogCourse:
+      type: object
+      required: [id, title, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+    TeacherUnitsCatalogItem:
+      type: object
+      required: [id, title, status_label, status_tone, courses_count, courses, updated_at, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        topic:
+          type: string
+          nullable: true
+        status_label:
+          type: string
+        status_tone:
+          type: string
+          enum: [accent, success, muted]
+        courses_count:
+          type: integer
+          minimum: 0
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitsCatalogCourse'
+        updated_at:
+          type: string
+        href:
+          type: string
+    TeacherUnitsCatalogView:
+      type: object
+      required: [user, query, sort, result_count, items, create_href]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        query:
+          type: string
+        sort:
+          type: string
+        result_count:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitsCatalogItem'
+        create_href:
+          type: string
+    TeacherUnitWorkspaceUnit:
+      type: object
+      required: [id, title, unit_type, edit_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        unit_type:
+          type: string
+          enum: [linear, modular]
+        edit_href:
+          type: string
+    TeacherUnitWorkspaceCounts:
+      type: object
+      required: [sections_count, phases_count, modules_count, courses_count]
+      properties:
+        sections_count:
+          type: integer
+          minimum: 0
+        phases_count:
+          type: integer
+          minimum: 0
+        modules_count:
+          type: integer
+          minimum: 0
+        courses_count:
+          type: integer
+          minimum: 0
+    TeacherUnitWorkspaceSectionItem:
+      type: object
+      required: [id, title, position, materials_count, tasks_count, editor_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        materials_count:
+          type: integer
+          minimum: 0
+        tasks_count:
+          type: integer
+          minimum: 0
+        editor_href:
+          type: string
+    TeacherUnitWorkspacePhaseItem:
+      type: object
+      required: [id, title, position]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+    TeacherUnitWorkspaceModuleItem:
+      type: object
+      required: [id, title, phase_id, position_in_phase, required_prereq_count, materials_count, tasks_count, editor_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        phase_id:
+          type: string
+        position_in_phase:
+          type: integer
+          minimum: 1
+        required_prereq_count:
+          type: integer
+          minimum: 0
+        materials_count:
+          type: integer
+          minimum: 0
+        tasks_count:
+          type: integer
+          minimum: 0
+        editor_href:
+          type: string
+        section_id:
+          type: string
+          nullable: true
+    TeacherUnitWorkspaceEdge:
+      type: object
+      required: [from, to]
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+    TeacherUnitNodeEditorMaterial:
+      type: object
+      required: [id, title, kind, position]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        kind:
+          type: string
+          enum: [markdown, file]
+        body_md:
+          type: string
+          nullable: true
+        position:
+          type: integer
+          minimum: 1
+        mime_type:
+          type: string
+          nullable: true
+        size_bytes:
+          type: integer
+          nullable: true
+        filename_original:
+          type: string
+          nullable: true
+        alt_text:
+          type: string
+          nullable: true
+    TeacherUnitNodeEditorTask:
+      type: object
+      required: [id, instruction_md, criteria, kind, position]
+      properties:
+        id:
+          type: string
+        instruction_md:
+          type: string
+        criteria:
+          type: array
+          items:
+            type: string
+        teacher_context_md:
+          type: string
+          nullable: true
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        max_attempts:
+          type: integer
+          minimum: 1
+          nullable: true
+        position:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum: [native, h5p, visual, scratch, calliope]
+        h5p:
+          $ref: '#/components/schemas/H5PTaskConfig'
+          nullable: true
+        visual:
+          $ref: '#/components/schemas/VisualTaskConfig'
+          nullable: true
+        scratch:
+          $ref: '#/components/schemas/ScratchTaskConfig'
+          nullable: true
+        calliope:
+          $ref: '#/components/schemas/CalliopeTaskConfig'
+          nullable: true
+    TeacherUnitWorkspaceSelectionSection:
+      type: object
+      required: [id, title, position, editor_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        editor_href:
+          type: string
+    TeacherUnitWorkspaceSelectionPhase:
+      type: object
+      required: [id, title, position]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 0
+    TeacherUnitWorkspaceSelectionModule:
+      type: object
+      required: [id, title, phase_id, position_in_phase, required_prereq_count, materials_count, tasks_count, editor_href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        phase_id:
+          type: string
+        position_in_phase:
+          type: integer
+          minimum: 1
+        required_prereq_count:
+          type: integer
+          minimum: 0
+        materials_count:
+          type: integer
+          minimum: 0
+        tasks_count:
+          type: integer
+          minimum: 0
+        editor_href:
+          type: string
+    TeacherUnitWorkspaceGraphPhase:
+      type: object
+      required: [id, title, position, modules]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitWorkspaceModuleItem'
+    TeacherUnitWorkspaceEdgeSelection:
+      type: object
+      required: [from_id, to_id, from_title, to_title, exists]
+      properties:
+        from_id:
+          type: string
+        to_id:
+          type: string
+        from_title:
+          type: string
+        to_title:
+          type: string
+        exists:
+          type: boolean
+    TeacherUnitWorkspaceSelection:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [none, section, phase, module, edge]
+        section:
+          allOf:
+            - $ref: '#/components/schemas/TeacherUnitWorkspaceSelectionSection'
+          nullable: true
+        phase:
+          allOf:
+            - $ref: '#/components/schemas/TeacherUnitWorkspaceSelectionPhase'
+          nullable: true
+        module:
+          allOf:
+            - $ref: '#/components/schemas/TeacherUnitWorkspaceSelectionModule'
+          nullable: true
+        edge:
+          allOf:
+            - $ref: '#/components/schemas/TeacherUnitWorkspaceEdgeSelection'
+          nullable: true
+    TeacherUnitWorkspaceGraph:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [linear, modular]
+        create_section_href:
+          type: string
+          nullable: true
+        create_phase_href:
+          type: string
+          nullable: true
+        create_module_href:
+          type: string
+          nullable: true
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitWorkspaceSectionItem'
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitWorkspaceGraphPhase'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitWorkspaceEdge'
+    TeacherUnitWorkspaceView:
+      type: object
+      required: [user, unit, counts, graph, selection]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        unit:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceUnit'
+        counts:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceCounts'
+        graph:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceGraph'
+        selection:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceSelection'
+    TeacherUnitNodeEditorNode:
+      type: object
+      required: [id, kind, title, editor_title]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [section, module]
+        title:
+          type: string
+        editor_title:
+          type: string
+        backing_section_id:
+          type: string
+          nullable: true
+    TeacherUnitNodeEditorSettings:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [section, module]
+        required_prereq_count:
+          type: integer
+          minimum: 0
+          nullable: true
+    TeacherUnitNodeEditorView:
+      type: object
+      required: [user, unit, node, materials, tasks, settings]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        unit:
+          $ref: '#/components/schemas/TeacherUnitWorkspaceUnit'
+        node:
+          $ref: '#/components/schemas/TeacherUnitNodeEditorNode'
+        materials:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitNodeEditorMaterial'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUnitNodeEditorTask'
+        settings:
+          $ref: '#/components/schemas/TeacherUnitNodeEditorSettings'
+    DiagnosticsCourseMatrixCourse:
+      type: object
+      required: [id, title, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+    DiagnosticsCourseMatrixUnit:
+      type: object
+      required: [id, title, position, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+    DiagnosticsCourseMatrixStudent:
+      type: object
+      required: [sub, name, href]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+    DiagnosticsCourseMatrixCell:
+      type: object
+      required: [unit_id, submitted_tasks, total_tasks, href]
+      properties:
+        unit_id:
+          type: string
+        submitted_tasks:
+          type: integer
+        total_tasks:
+          type: integer
+        href:
+          type: string
+    DiagnosticsCourseMatrixRow:
+      type: object
+      required: [student, cells]
+      properties:
+        student:
+          $ref: '#/components/schemas/DiagnosticsCourseMatrixStudent'
+        cells:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsCourseMatrixCell'
+    DiagnosticsCourseMatrixView:
+      type: object
+      required: [user, course, units, rows]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/DiagnosticsCourseMatrixCourse'
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsCourseMatrixUnit'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsCourseMatrixRow'
+    DiagnosticsLearnerProfileLearner:
+      type: object
+      required: [sub, name, href]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+    DiagnosticsLearnerProfileSummary:
+      type: object
+      required: [courses_count, submitted_tasks, total_tasks]
+      properties:
+        courses_count:
+          type: integer
+        submitted_tasks:
+          type: integer
+        total_tasks:
+          type: integer
+    DiagnosticsLearnerProfileUnit:
+      type: object
+      required: [id, title, position, href, submitted_tasks, total_tasks]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+        submitted_tasks:
+          type: integer
+        total_tasks:
+          type: integer
+    DiagnosticsLearnerProfileCourse:
+      type: object
+      required: [id, title, href, submitted_tasks, total_tasks, units]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+        submitted_tasks:
+          type: integer
+        total_tasks:
+          type: integer
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsLearnerProfileUnit'
+    DiagnosticsLearnerProfileView:
+      type: object
+      required: [user, learner, summary, courses]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        learner:
+          $ref: '#/components/schemas/DiagnosticsLearnerProfileLearner'
+        summary:
+          $ref: '#/components/schemas/DiagnosticsLearnerProfileSummary'
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticsLearnerProfileCourse'
+    LiveCourseRef:
+      type: object
+      required: [id, title, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        href:
+          type: string
+    LiveUnitRef:
+      type: object
+      required: [id, title, position, href]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+        href:
+          type: string
+    LiveTask:
+      type: object
+      required: [id, instruction_md, position, kind]
+      properties:
+        id:
+          type: string
+        instruction_md:
+          type: string
+        position:
+          type: integer
+        kind:
+          type: string
+    LiveMatrixStudent:
+      type: object
+      required: [sub, name, href]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+    LiveMatrixCell:
+      type: object
+      required: [task_id, has_submission, href]
+      properties:
+        task_id:
+          type: string
+        has_submission:
+          type: boolean
+        average_score:
+          type: number
+          nullable: true
+        score_raw:
+          type: integer
+          nullable: true
+        score_max:
+          type: integer
+          nullable: true
+        h5p_completed:
+          type: boolean
+          nullable: true
+        href:
+          type: string
+    LiveMatrixRow:
+      type: object
+      required: [student, tasks]
+      properties:
+        student:
+          $ref: '#/components/schemas/LiveMatrixStudent'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveMatrixCell'
+    LiveUnitMatrixView:
+      type: object
+      required: [user, course, unit, tasks, rows]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/LiveCourseRef'
+        unit:
+          $ref: '#/components/schemas/LiveUnitRef'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveTask'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveMatrixRow'
+    LiveDashboardLatestSubmission:
+      type: object
+      nullable: true
+      required: [task_id, task_position, task_label, created_at, average_score]
+      properties:
+        task_id:
+          type: string
+        task_position:
+          type: integer
+        task_label:
+          type: string
+        created_at:
+          type: string
+        average_score:
+          type: number
+          nullable: true
+    LiveUnitDashboardSummary:
+      type: object
+      required: [learners_count, tasks_count, completion_rate_percent, average_score]
+      properties:
+        learners_count:
+          type: integer
+        tasks_count:
+          type: integer
+        completion_rate_percent:
+          type: integer
+        average_score:
+          type: number
+          nullable: true
+    LiveUnitDashboardRow:
+      type: object
+      required: [student, progress_percent, average_score, latest_submission, href]
+      properties:
+        student:
+          $ref: '#/components/schemas/LiveMatrixStudent'
+        progress_percent:
+          type: integer
+        average_score:
+          type: number
+          nullable: true
+        latest_submission:
+          $ref: '#/components/schemas/LiveDashboardLatestSubmission'
+        href:
+          type: string
+    LiveStudentPanelTask:
+      type: object
+      required: [task_id, task_position, task_label, has_submission, average_score, is_latest_submission, href]
+      properties:
+        task_id:
+          type: string
+        task_position:
+          type: integer
+        task_label:
+          type: string
+        has_submission:
+          type: boolean
+        average_score:
+          type: number
+          nullable: true
+        is_latest_submission:
+          type: boolean
+        href:
+          type: string
+    LiveStudentPanelView:
+      type: object
+      nullable: true
+      required: [student, tasks, selected_task_id, selected_task_detail]
+      properties:
+        student:
+          $ref: '#/components/schemas/LiveDetailStudent'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveStudentPanelTask'
+        selected_task_id:
+          type: string
+          nullable: true
+        selected_task_detail:
+          allOf:
+            - nullable: true
+            - $ref: '#/components/schemas/TeachingLatestSubmission'
+    LiveUnitDashboardView:
+      type: object
+      required: [user, course, unit, summary, rows, selected_student_panel]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/LiveCourseRef'
+        unit:
+          $ref: '#/components/schemas/LiveUnitRef'
+        summary:
+          $ref: '#/components/schemas/LiveUnitDashboardSummary'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveUnitDashboardRow'
+        selected_student_panel:
+          $ref: '#/components/schemas/LiveStudentPanelView'
+    LiveDetailStudent:
+      type: object
+      required: [sub, name, href]
+      properties:
+        sub:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+    LiveDetailTask:
+      type: object
+      required: [id, href]
+      properties:
+        id:
+          type: string
+        href:
+          type: string
+    LiveDetailSheetView:
+      type: object
+      required: [user, course, unit, student, task, submission]
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionBootstrapUser'
+        course:
+          $ref: '#/components/schemas/LiveCourseRef'
+        unit:
+          $ref: '#/components/schemas/LiveUnitRef'
+        student:
+          $ref: '#/components/schemas/LiveDetailStudent'
+        task:
+          $ref: '#/components/schemas/LiveDetailTask'
+        submission:
+          allOf:
+            - $ref: '#/components/schemas/TeachingLatestSubmission'
+          nullable: true
     Error:
       type: object
       required: [error]
@@ -1170,6 +2304,11 @@ components:
           type: string
           nullable: true
           description: Original filename supplied by the author (files only)
+        file_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Short-lived inline preview/download URL for file materials visible to the student
         alt_text:
           type: string
           nullable: true
@@ -1214,6 +2353,29 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        has_submission:
+          type: boolean
+          description: True when the learner has at least one stored submission for this task.
+        latest_submission_intent:
+          type: string
+          nullable: true
+          enum: [feedback, submit]
+          description: Intent of the learner's newest submission for this task.
+        latest_submission_analysis_status:
+          type: string
+          nullable: true
+          enum: [pending, extracted, completed, failed]
+          description: Analysis status of the learner's newest submission for this task.
+        latest_submission_created_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Creation timestamp of the learner's newest submission for this task.
+        latest_final_submission_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Creation timestamp of the learner's newest final submission (`intent=submit`) for this task.
         kind:
           type: string
           enum: [native, h5p, visual, scratch, calliope]
@@ -1353,7 +2515,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/SubmissionTelemetry'
         - type: object
-          required: [id, attempt_nr, kind, analysis_status, created_at]
+          required: [id, attempt_nr, intent, kind, analysis_status, created_at]
           properties:
             id:
               type: string
@@ -1361,6 +2523,10 @@ components:
             attempt_nr:
               type: integer
               minimum: 1
+            intent:
+              type: string
+              enum: [feedback, submit]
+              description: Distinguishes informal feedback requests from formal submissions.
             kind:
               type: string
               enum: [text, image, file, h5p]
@@ -1377,7 +2543,10 @@ components:
             text_body:
               type: string
               nullable: true
-              description: Unified text representation; empty while analysis is pending or when OCR/analysis failed.
+              description: >-
+                Unified text representation for text submissions and OCR-based pipelines.
+                Empty while analysis is pending or when OCR/analysis failed; may remain
+                empty for completed visual-direct file analyses.
             mime_type:
               type: string
               nullable: true
@@ -1391,6 +2560,31 @@ components:
               type: string
               nullable: true
               pattern: '^[0-9a-f]{64}$'
+            files:
+              type: array
+              description: |-
+                Optional learner-visible artifacts for file/image submissions.
+                Uses short-lived signed URLs so earlier upload attempts can be
+                opened again in the history workspace without exposing storage
+                keys directly.
+              items:
+                type: object
+                required: [mime, size, url, download_url]
+                properties:
+                  mime:
+                    type: string
+                  size:
+                    type: integer
+                  url:
+                    type: string
+                    format: uri
+                  download_url:
+                    type: string
+                    format: uri
+                    description: |-
+                      Short-lived signed attachment URL for downloading the
+                      original uploaded file without relying on the inline
+                      preview target.
             analysis_status:
               type: string
               enum: [pending, extracted, completed, failed]
@@ -1483,10 +2677,12 @@ components:
           type: string
           maxLength: 65536
           description: |
-            Best-effort extracted text, even for file/image/pdf submissions once
-            processing has completed. The content matches the learner-facing
-            text_body representation and is only shortened to the global
-            text_body limit defined by the Learning API (currently 64k characters, i.e. 65,536).
+            Best-effort text representation when the submission path produces one.
+            Text submissions expose their original text; OCR-based file/image/pdf
+            submissions may expose extracted text. Visual-direct analyses may leave
+            this field empty even after processing has completed. The content is only
+            shortened to the global text_body limit defined by the Learning API
+            (currently 64k characters, i.e. 65,536).
           nullable: true
         files:
           type: array
@@ -1766,6 +2962,13 @@ components:
           description: >
             Optional average criteria score (0..10) for the latest submission.
             Null when no completed analysis is available.
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            UTC timestamp of the latest submission for this student/task cell.
+            Null when no submission exists yet.
     TeachingUnitLiveRow:
       type: object
       required: [student, tasks]
@@ -2868,6 +4071,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          description: Forbidden (not a teacher/admin or CSRF same-origin check failed)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [H5P]
+      summary: Delete an H5P content item (trusted teachers only)
+      description: >-
+        Deletes an existing H5P content item that is no longer needed.
+        Trusted content model: only teachers/admins may delete content. Browser clients MUST pass
+        same-origin indicators (Origin/Referer). Scope: content is global (not course-scoped) and
+        referenced by `Task.h5p.content_id`.
+      operationId: deleteH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "Trusted-content: Only teacher/admin may delete content (treated as executable code)."
+      x-permissions:
+        requiredRole: teacher
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Content deleted
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+            Vary:
+              description: Security — responses vary by Origin for CSRF-aware caches.
+              schema:
+                type: string
+                example: Origin
         '401':
           $ref: '#/components/responses/Unauthorized401'
         '403':
@@ -4119,13 +5389,19 @@ paths:
         Accepts text submissions directly or stores metadata for an already uploaded
         image or file asset. All submissions enter an asynchronous analysis pipeline; clients
         poll submission detail endpoints to observe status changes. Duplicate requests can
-        be avoided using the optional Idempotency-Key header.
+        be avoided using the optional Idempotency-Key header. Additionally, identical
+        in-flight `intent=feedback` requests are deduplicated server-side and reuse the
+        existing feedback submission instead of starting a second worker run.
         
         Task-type rules:
+        - For `Task.kind=native`, `kind=image|file` is accepted. These uploads are processed directly by the visual feedback pipeline and do not run through OCR first.
         - For `Task.kind=visual`, only `kind=image|file` is accepted (upload-only).
         - For `Task.kind=scratch`, only `kind=file` with `mime_type=application/x.scratch.sb3` is accepted (upload-only).
         - For `Task.kind=calliope`, only `kind=file` with `mime_type=application/x.makecode.hex` is accepted (upload-only).
         - For `Task.kind=h5p`, only `kind=h5p` is accepted and the score is persisted synchronously (response 201).
+        - When `intent` is omitted, the server treats the request as `intent=submit` for backwards compatibility.
+        - `intent=feedback` creates a feedback snapshot but does not consume the task's `max_attempts` budget.
+        - `intent=submit` creates a final submission attempt and does count against `max_attempts`.
         
         Security: Requests must be same-origin when sent from a browser; cross-site
         requests with a foreign `Origin` are rejected with 403. When `Origin` is
@@ -4173,6 +5449,11 @@ paths:
                 - type: object
                   required: [kind, text_body]
                   properties:
+                    intent:
+                      type: string
+                      enum: [feedback, submit]
+                      default: submit
+                      description: Optional compatibility field. Omitted requests are treated as `submit`.
                     kind:
                       type: string
                       enum: [text]
@@ -4183,6 +5464,11 @@ paths:
                 - type: object
                   required: [kind, storage_key, mime_type, size_bytes, sha256]
                   properties:
+                    intent:
+                      type: string
+                      enum: [feedback, submit]
+                      default: submit
+                      description: Optional compatibility field. Omitted requests are treated as `submit`.
                     kind:
                       type: string
                       enum: [image]
@@ -4202,6 +5488,11 @@ paths:
                 - type: object
                   required: [kind, storage_key, mime_type, size_bytes, sha256]
                   properties:
+                    intent:
+                      type: string
+                      enum: [feedback, submit]
+                      default: submit
+                      description: Optional compatibility field. Omitted requests are treated as `submit`.
                     kind:
                       type: string
                       enum: [file]
@@ -4224,6 +5515,11 @@ paths:
                 - type: object
                   required: [kind, score_raw, score_max]
                   properties:
+                    intent:
+                      type: string
+                      enum: [feedback, submit]
+                      default: submit
+                      description: Optional compatibility field. Omitted requests are treated as `submit`.
                     kind:
                       type: string
                       enum: [h5p]
@@ -4325,6 +5621,91 @@ paths:
                 $ref: '#/components/schemas/Error'
       x-gustav-notes:
         - Default response is 202 pending; 201 is best-effort and MUST NOT be relied upon by clients.
+
+  /api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize:
+    post:
+      tags: [Learning]
+      summary: Finalize the learner's latest reviewed draft for a task
+      description: >-
+        Creates a new `intent=submit` submission by copying the learner's newest
+        completed `intent=feedback` submission for the same task. This path does
+        not enqueue a new worker or trigger another feedback run.
+      operationId: finalizeLearningSubmission
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required for browser-triggered requests (Origin/Referer must match server origin)."
+        - "RLS: learner ownership, course membership and draft visibility are enforced by backend helpers."
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+            pattern: '^[A-Za-z0-9_-]{1,64}$'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '201':
+          description: Final submission created synchronously from the latest reviewed draft.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningSubmission'
+        '400':
+          description: Bad request (invalid_uuid | invalid_input | max_attempts_exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or task not visible to the learner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: No finalizable draft exists yet (`draft_missing` or `draft_not_ready`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable while persistence checks are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /auth/login:
     get:
@@ -4548,6 +5929,59 @@ paths:
               schema:
                 type: string
 
+  /auth/password:
+    get:
+      tags: [Auth]
+      summary: Redirect to IdP password update page
+      description: >-
+        Redirects to Keycloak with `kc_action=UPDATE_PASSWORD` so the current
+        user can change the account password in the Identity Provider.
+      operationId: startPasswordChange
+      security: []
+      parameters:
+        - in: query
+          name: redirect
+          schema:
+            type: string
+            maxLength: 256
+            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
+            default: "/profile"
+          description: Optional in-app target after the password flow completes.
+      responses:
+        '204':
+          description: HTMX request — instruct the browser to redirect via header
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached.
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              description: Ensure caches vary on HTMX usage
+              schema:
+                type: string
+              example: HX-Request
+            HX-Redirect:
+              description: Target authorization URL for client-side redirect
+              schema:
+                type: string
+        '302':
+          description: Redirect to Keycloak password update page
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached.
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              description: Ensure caches vary on HTMX usage
+              schema:
+                type: string
+              example: HX-Request
+            Location:
+              schema:
+                type: string
+
 
   /auth/register:
     get:
@@ -4568,6 +6002,16 @@ paths:
             type: string
             format: email
           description: Optional email to prefill in the registration form.
+        - in: query
+          name: redirect
+          schema:
+            type: string
+            maxLength: 256
+            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
+          description: >-
+            Optional in-app absolute path to navigate to after registration.
+            External URLs are rejected; invalid values are ignored. Disallows
+            double-slash and path traversal segments.
       responses:
         '204':
           description: HTMX request — instruct the browser to redirect via header
@@ -4627,6 +6071,1353 @@ paths:
                     detail: "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @school.example"
 
 
+  /api/app/session-bootstrap:
+    get:
+      tags: [App]
+      summary: Return shell bootstrap data for the current session
+      description: >-
+        Returns the authenticated user, the initial start target, and the shell
+        spaces for the new SvelteKit application shell.
+      operationId: getSessionBootstrap
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Bootstrap payload for the current authenticated session
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionBootstrap'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/app/session-sync:
+    post:
+      tags: [App]
+      summary: Create or refresh the stable app session for the current BFF login
+      description: >-
+        Mints a normal `gustav_session` cookie from the authenticated bearer
+        context of the SvelteKit BFF. This keeps legacy cookie-authenticated
+        integrations such as H5P stable across frontend restarts.
+      operationId: postSessionSync
+      security:
+        - bearerAuth: []
+      x-security-notes:
+        - "CSRF: Endpoint is intended for the authenticated same-origin BFF bridge, not cross-site browser forms."
+        - "Auth: requires a valid bearer-authenticated BFF context before minting the app cookie."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppSessionSyncRequest'
+      responses:
+        '204':
+          description: App session synchronized successfully
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+            Set-Cookie:
+              description: >-
+                Sets or replaces the httpOnly app session cookie `gustav_session`
+                as a host-only cookie.
+              schema:
+                type: string
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/app/profile:
+    get:
+      tags: [App]
+      summary: Return the current user's profile read-model
+      operationId: getAppProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile payload for the current authenticated session
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppProfileView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/app/profile/display-name:
+    patch:
+      tags: [App]
+      summary: Update the current user's display name
+      operationId: patchAppProfileDisplayName
+      security:
+        - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "Auth: updates only the current authenticated user's profile attributes."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileDisplayNameUpdate'
+      responses:
+        '204':
+          description: Display name updated successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+        '400':
+          description: Invalid display name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/app/profile/name:
+    patch:
+      tags: [App]
+      summary: Update the current user's first and last name
+      operationId: patchAppProfileName
+      security:
+        - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "Auth: updates only the current authenticated user's profile attributes."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileNameUpdate'
+      responses:
+        '204':
+          description: First and last name updated successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+        '400':
+          description: Invalid name payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Name update currently locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/views/learner-home:
+    get:
+      tags: [App]
+      summary: Return the learner home read-model
+      description: >-
+        Returns the current learner identity together with the learner-facing
+        course list for the new SvelteKit home page.
+      operationId: getLearnerHome
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Learner home payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerHome'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a learner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/views/concern-box:
+    get:
+      tags: [App]
+      summary: Return the learner concern box form read-model
+      description: >-
+        Returns the current learner identity and all learner-visible courses for
+        the concern box form.
+      operationId: getLearnerConcernBox
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Learner concern box payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerConcernBoxView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a learner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/learning/concern-box/entries:
+    post:
+      tags: [App]
+      summary: Create a learner concern box entry
+      description: >-
+        Creates one concern box entry for a course the current learner belongs
+        to. The learner may choose whether the teacher sees the name.
+      operationId: createLearnerConcernBoxEntry
+      security:
+        - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated app/BFF boundary."
+        - "Auth: only enrolled learners may create entries for their own courses."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConcernBoxEntryCreate'
+      responses:
+        '201':
+          description: Concern box entry created
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConcernBoxEntryCreated'
+        '400':
+          description: Invalid request payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a learner or not a member of the course
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/teacher-home:
+    get:
+      tags: [App]
+      summary: Return the teacher home read-model
+      description: >-
+        Returns the current teaching identity together with the first
+        top-level navigation cards for the SvelteKit teacher home page.
+      operationId: getTeacherHome
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Teacher home payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherHome'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/concern-box:
+    get:
+      tags: [App]
+      summary: Return the teacher concern box inbox read-model
+      description: >-
+        Returns all concern box entries from courses owned by the current
+        teacher, filtered by inbox scope.
+      operationId: getTeacherConcernBox
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: scope
+          schema:
+            type: string
+            enum: [open, archived]
+            default: open
+      responses:
+        '200':
+          description: Teacher concern box payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherConcernBoxView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/concern-box/entries/{entry_id}/archive:
+    post:
+      tags: [App]
+      summary: Archive one concern box entry
+      description: Archives one teacher-visible concern box entry.
+      operationId: archiveTeacherConcernBoxEntry
+      security:
+        - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated app/BFF boundary."
+        - "Auth: only the owning teacher may archive the referenced entry."
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_entry_id
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '204':
+          description: Entry archived
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+        '403':
+          description: Caller is not the owning teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Entry not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/concern-box/entries/{entry_id}/restore:
+    post:
+      tags: [App]
+      summary: Restore one archived concern box entry
+      description: Restores one archived concern box entry into the open inbox.
+      operationId: restoreTeacherConcernBoxEntry
+      security:
+        - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated app/BFF boundary."
+        - "Auth: only the owning teacher may restore the referenced entry."
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_entry_id
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '204':
+          description: Entry restored
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+        '403':
+          description: Caller is not the owning teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Entry not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/courses:
+    get:
+      tags: [App]
+      summary: Return the teacher course list read-model
+      description: >-
+        Returns the owner-scoped course overview for the SvelteKit teaching
+        workspace, including lightweight card metrics for members and attached
+        learning units.
+      operationId: getTeacherCourseList
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 25
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Teacher course list payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherCourseListView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/courses/{course_id}/context:
+    get:
+      tags: [App]
+      summary: Return the first teacher course context read-model
+      description: >-
+        Returns one owner-scoped course context with course metadata, attached
+        units, and member entries for the SvelteKit teaching room.
+      operationId: getTeacherCourseContext
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Teacher course context payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherCourseContextView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/units/catalog:
+    get:
+      tags: [App]
+      summary: Return the teacher units catalog read-model
+      description: >-
+        Returns the teacher-facing units catalog as a compact, searchable
+        bestandsliste for the SvelteKit workspace.
+      operationId: getTeacherUnitsCatalog
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: query
+          schema:
+            type: string
+        - in: query
+          name: sort
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Teacher units catalog payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherUnitsCatalogView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/units/{unit_id}/workspace:
+    get:
+      tags: [App]
+      summary: Return the teacher unit workspace read-model
+      description: >-
+        Returns the teacher-facing graph workspace for a single unit. Linear
+        units render sections as a vertical graph; modular units render
+        phases, modules and edges.
+      operationId: getTeacherUnitWorkspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: section_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: phase_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: module_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: edge_from_module_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: edge_to_module_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Teacher unit workspace payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherUnitWorkspaceView'
+        '400':
+          description: Invalid unit id
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not the authoring teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unit not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/teaching/views/units/{unit_id}/nodes/{node_id}/editor:
+    get:
+      tags: [App]
+      summary: Return the teacher node editor read-model
+      description: >-
+        Returns the shared teacher content editor payload for a unit node.
+        For linear units the node is a section. For modular units the node is
+        a module with a 1:1 backing section.
+      operationId: getTeacherUnitNodeEditor
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: node_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Teacher node editor payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherUnitNodeEditorView'
+        '400':
+          description: Invalid unit or node id
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not the authoring teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unit or node not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/diagnostics/views/courses/{course_id}/matrix:
+    get:
+      tags: [App]
+      summary: Return the first diagnostics course matrix read-model
+      description: >-
+        Returns one owner-scoped diagnostics matrix with course metadata,
+        attached units, and per-student submission counts for each unit.
+      operationId: getDiagnosticsCourseMatrix
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Diagnostics course matrix payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticsCourseMatrixView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/diagnostics/views/learners/{student_sub}/profile:
+    get:
+      tags: [App]
+      summary: Return the first diagnostics learner profile read-model
+      description: >-
+        Returns one owner-scoped learner profile with course summaries and
+        per-unit submission counts across the teacher-visible diagnostics scope.
+      operationId: getDiagnosticsLearnerProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: student_sub
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Diagnostics learner profile payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticsLearnerProfileView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Learner not visible in the owner-scoped diagnostics space
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/live/views/courses/{course_id}/units/{unit_id}/matrix:
+    get:
+      tags: [App]
+      summary: Return the live unit matrix read-model
+      description: >-
+        Returns one owner-scoped live matrix with course/unit metadata, task
+        columns and per-learner task cells for the SvelteKit live room.
+      operationId: getLiveUnitMatrix
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Live unit matrix payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveUnitMatrixView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or unit not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/live/views/courses/{course_id}/units:
+    get:
+      tags: [App]
+      summary: Return lightweight live unit choices for one course
+      description: >-
+        Returns the course title and attached units needed for the `/live`
+        selection UI without loading the heavier teacher course context view.
+      operationId: getLiveCourseUnits
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Live course units payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveCourseUnitsView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/live/views/courses/{course_id}/units/{unit_id}/dashboard:
+    get:
+      tags: [App]
+      summary: Return the live unit dashboard read-model
+      description: >-
+        Returns one owner-scoped dashboard for a selected course-unit pair with
+        compact per-learner KPIs and an optional detail panel for one learner.
+      operationId: getLiveUnitDashboard
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: student_sub
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: task_id
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Live unit dashboard payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveUnitDashboardView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course or unit not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/live/views/courses/{course_id}/units/{unit_id}/detail-sheet:
+    get:
+      tags: [App]
+      summary: Return the live detail sheet read-model
+      description: >-
+        Returns one owner-scoped detail sheet for a selected student-task cell
+        in the live room. The submission payload may be null when the learner
+        has not submitted yet.
+      operationId: getLiveDetailSheet
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: student_sub
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: task_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Live detail sheet payload
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveDetailSheetView'
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller is not a teacher or not the course owner
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Course, unit, task or learner selection not found
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/me:
     get:
       tags: [Auth]
@@ -4635,6 +7426,7 @@ paths:
       operationId: getMe
       security:
         - cookieAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: User context
@@ -6650,6 +9442,246 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/editor-model:
+    get:
+      tags: [Teaching, H5P]
+      summary: Resolve the H5P editor model for a task (author only)
+      operationId: getTaskH5PEditorModel
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: H5P editor model for the linked task content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PEditorModelResponse'
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/save:
+    post:
+      tags: [Teaching, H5P]
+      summary: Save H5P editor parameters for a task (author only)
+      operationId: saveTaskH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/H5PContentSaveRequest'
+      responses:
+        '200':
+          description: Saved and linked H5P content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H5PContentSaveResponse'
+        '400':
+          description: |
+            Invalid path or payload. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import:
+    post:
+      tags: [Teaching, H5P]
+      summary: Import an H5P package for a task (author only)
+      operationId: importTaskH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Imported and linked task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: |
+            Invalid path or upload. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+              - invalid_h5p_file
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export:
+    get:
+      tags: [Teaching, H5P]
+      summary: Export the linked H5P package of a task (author only)
+      operationId: exportTaskH5PContent
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: H5P ZIP package
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found, no linked content, or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset:
+    post:
+      tags: [Teaching, H5P]
+      summary: Unlink H5P content from a task (author only)
+      operationId: resetTaskH5PContent
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Updated task without linked H5P content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_section_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder:
     post:

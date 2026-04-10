@@ -73,7 +73,9 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
     - Bei erlaubter Domain → normaler Redirect (302/204, je nach HTMX).
     - Bei nicht erlaubter oder offensichtlich ungültiger E-Mail → `400` mit JSON  
       `{ error: "invalid_email_domain", detail: "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: <Liste aus ALLOWED_REGISTRATION_DOMAINS>" }`.
-- Die eigentliche, verbindliche Domain-Policy muss zusätzlich in Keycloak konfiguriert werden; GUSTAV ist eine vorgeschaltete, nutzerfreundliche Guardrail.
+- Dieselbe Env-Variable steuert auch den Keycloak-Realm-Import beim Image-Build (`docker compose up -d --build`); damit lesen App, Browser-BFF und IdP dieselbe Quelle der Wahrheit.
+- Wenn sich die Policy in einer bereits laufenden Installation ändert, muss der bestehende Realm anschließend gezielt neu importiert oder synchronisiert werden; der Importpfad ist weiterhin ein Bootstrap-Schritt.
+- Die eigentliche, verbindliche Domain-Policy wird in Keycloak erzwungen; GUSTAV bleibt die vorgeschaltete, nutzerfreundliche Guardrail.
 
 ## E-Mail-Verifikation
 

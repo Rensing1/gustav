@@ -44,7 +44,8 @@ from evidence_rendering import render_submission_text_html
 from identity_access.oidc import OIDCClient, OIDCConfig
 from identity_access.stores import StateStore, SessionStore
 from identity_access.domain import ALLOWED_ROLES
-from identity_access.tokens import IDTokenVerificationError, verify_id_token
+from identity_access.tokens import BearerTokenVerificationError, IDTokenVerificationError, verify_bearer_token, verify_id_token
+from identity_access.bff_sessions import BFFSessionStore
 import sys as _sys
 
 try:
@@ -234,6 +235,7 @@ static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 from routes.auth import auth_router
+from routes.app import app_router
 from routes.learning import learning_router
 from routes.teaching import teaching_router
 from routes.users import users_router
@@ -279,6 +281,16 @@ if (not _running_under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").low
 else:
     SESSION_STORE = SessionStore()
 
+if (not _running_under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").lower() == "db":
+    try:
+        from identity_access.bff_sessions_db import DBBFFSessionStore
+
+        BFF_SESSION_STORE = DBBFFSessionStore()
+    except ImportError:
+        BFF_SESSION_STORE = BFFSessionStore()
+else:
+    BFF_SESSION_STORE = BFFSessionStore()
+
 # --- Auth Helpers & Middleware --------------------------------------------------
 
 def _session_cookie_options() -> dict:
@@ -321,7 +333,122 @@ def _set_session_cookie(response: Response, value: str, *, max_age: int | None =
     )
 
 def _is_public_path(path: str) -> bool:
-    return path.startswith(("/auth/", "/static/")) or path in ("/health", "/favicon.ico")
+    return path.startswith(("/auth/", "/static/")) or path in (
+        "/health",
+        "/favicon.ico",
+        # The SvelteKit Browser-BFF reaches this internal route over the
+        # compose network without a browser session. Keep the allowlist exact
+        # so we do not accidentally open the whole `/backend-internal/*`
+        # namespace.
+        "/backend-internal/app/bff-session",
+    )
+
+
+def _bearer_token_from_authorization_header(request: Request) -> str | None:
+    """Extract a bearer token from Authorization for JWT verification."""
+    raw = request.headers.get("authorization") or ""
+    prefix = "Bearer "
+    if not raw.startswith(prefix):
+        return None
+    token = raw[len(prefix):].strip()
+    return token or None
+
+
+def _session_record_from_request(request: Request):
+    """Resolve the authenticated legacy browser session from cookie only."""
+    sid = request.cookies.get(SESSION_COOKIE_NAME)
+    if sid:
+        try:
+            rec = SESSION_STORE.get(sid)
+        except Exception as exc:
+            logger.warning("Session store get failed: %s", exc.__class__.__name__)
+            rec = None
+    else:
+        rec = None
+    return sid, rec
+
+
+def _roles_from_claims(claims: Mapping[str, object]) -> list[str]:
+    raw_roles: list[str] = []
+    realm_access = claims.get("realm_access") or {}
+    if isinstance(realm_access, dict):
+        roles = realm_access.get("roles")
+        if isinstance(roles, list):
+            raw_roles = [str(role) for role in roles]
+    filtered = [role for role in raw_roles if role in ALLOWED_ROLES]
+    return filtered or ["student"]
+
+
+def _display_name_from_claims(claims: Mapping[str, object]) -> str:
+    email = str(claims.get("email") or claims.get("preferred_username") or "")
+    return str(
+        claims.get("gustav_display_name")
+        or claims.get("name")
+        or (email.split("@")[0] if email else "Benutzer")
+    )
+
+
+def _user_context_from_claims(claims: Mapping[str, object]) -> dict[str, object]:
+    roles = _roles_from_claims(claims)
+    return {
+        "sub": str(claims.get("sub") or "unknown-sub"),
+        "name": _display_name_from_claims(claims),
+        "role": _primary_role(roles),
+        "roles": roles,
+    }
+
+
+def _bearer_auth_context_from_request(request: Request) -> tuple[bool, dict[str, object] | None]:
+    """Return (attempted, context) for JWT bearer authentication."""
+    token = _bearer_token_from_authorization_header(request)
+    if not token:
+        return False, None
+    try:
+        claims = verify_bearer_token(token=token, cfg=OIDC_CFG)
+    except BearerTokenVerificationError as exc:
+        logger.warning("Bearer token verification failed: %s", exc.code)
+        return True, None
+    exp = claims.get("exp")
+    expires_at = int(exp) if isinstance(exp, (int, float)) else None
+    return True, {"user": _user_context_from_claims(claims), "expires_at": expires_at, "id_token": None}
+
+
+def _session_auth_context_from_request(request: Request) -> dict[str, object] | None:
+    sid, rec = _session_record_from_request(request)
+    if not rec:
+        return None
+    return {
+        "session_id": sid,
+        "session_record": rec,
+        "user": {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": _primary_role(rec.roles), "roles": rec.roles},
+        "expires_at": rec.expires_at,
+        "id_token": getattr(rec, "id_token", None),
+    }
+
+
+def _requires_bff_bearer_auth(path: str) -> bool:
+    """Return whether a path belongs to the new BFF-owned read-model surface."""
+    return path in ("/api/app/session-bootstrap", "/api/app/session-sync") or path.startswith(
+        (
+            "/api/app/profile",
+            "/api/learning/concern-box/",
+            "/api/learning/views/",
+            "/api/teaching/concern-box/",
+            "/api/teaching/views/",
+            "/api/diagnostics/views/",
+            "/api/live/views/",
+        )
+    )
+
+
+def _auth_context_from_request(request: Request) -> tuple[dict[str, object] | None, str]:
+    """Resolve auth context and expose whether it came from bearer or session."""
+    bearer_attempted, bearer_context = _bearer_auth_context_from_request(request)
+    if bearer_attempted:
+        return bearer_context, "bearer"
+    if _requires_bff_bearer_auth(request.url.path):
+        return None, "missing_bearer"
+    return _session_auth_context_from_request(request), "session"
 
 @app.middleware("http")
 async def auth_enforcement(request: Request, call_next):
@@ -329,15 +456,9 @@ async def auth_enforcement(request: Request, call_next):
     if _is_public_path(path):
         return await call_next(request)
 
-    sid = request.cookies.get(SESSION_COOKIE_NAME)
-    rec = None
-    if sid:
-        try:
-            rec = SESSION_STORE.get(sid)
-        except Exception as exc:
-            logger.warning("Session store get failed: %s", exc.__class__.__name__)
+    auth_context, auth_source = _auth_context_from_request(request)
 
-    if not rec:
+    if not auth_context:
         if path.startswith("/api/") or path.startswith("/internal/"):
             headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
@@ -371,13 +492,19 @@ async def auth_enforcement(request: Request, call_next):
         return RedirectResponse(url=login_url, status_code=302, headers={"Cache-Control": "private, no-store"})
 
     # Expose minimal, read-only user context for downstream handlers.
-    request.state.user = {"sub": rec.sub, "name": getattr(rec, "name", ""), "role": _primary_role(rec.roles), "roles": rec.roles}
+    request.state.user = auth_context["user"]
+    request.state.auth_source = auth_source
+    request.state.auth_expires_at = auth_context.get("expires_at")
     # Also expose the raw id_token for logout flows to hint the IdP, but do not
     # leak it to templates or clients. This stays on the server-side request state.
     try:
-        request.state.id_token = getattr(rec, "id_token", None)
+        request.state.id_token = auth_context.get("id_token")
     except Exception:
         request.state.id_token = None
+
+    legacy_response = _retired_legacy_product_response(request, auth_context["user"])
+    if legacy_response is not None:
+        return legacy_response
     return await call_next(request)
 
 # --- Security Headers Middleware ----------------------------------------------
@@ -1923,132 +2050,118 @@ async def courses_edit_form(request: Request, course_id: str):
     layout = Layout(title="Kurs bearbeiten", content=content, user=user, current_path=request.url.path)
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
+
+def _render_retired_legacy_entry(
+    request: Request,
+    *,
+    user: dict | None,
+    legacy_path: str,
+    replacement_space: str,
+) -> HTMLResponse:
+    """Render a consistent retirement notice for legacy FastAPI product entries.
+
+    Why:
+        The SvelteKit cutover should remove product ambiguity instead of
+        leaving shadow entry points active in the legacy adapter.
+    """
+    content = (
+        '<div class="container">'
+        '<h1>Legacy route retired</h1>'
+        f'<p>Der alte FastAPI-Einstieg <code>{legacy_path}</code> wird nicht mehr als produktive Startseite betrieben.</p>'
+        f'<p>Die produktive Navigation liegt jetzt im neuen SvelteKit-Frontend für <strong>{Component.escape(replacement_space)}</strong>.</p>'
+        '</div>'
+    )
+    layout = Layout(title="Legacy route retired", content=content, user=user, current_path=request.url.path)
+    return _layout_response(request, layout, status_code=410, headers={"Cache-Control": "private, no-store"})
+
+
+def _retired_legacy_product_response(request: Request, user: dict | None) -> Response | None:
+    """Return a retirement response for legacy FastAPI product paths.
+
+    Why:
+        After the SvelteKit cutover the Python web adapter should no longer
+        carry productive `/courses*`, `/units*` or deep `/learning/courses*`
+        journeys. Centralizing the check keeps the remaining legacy surface
+        small and explicit.
+    """
+    path = request.url.path
+    teacher_legacy = path == "/courses" or path.startswith("/courses/") or path == "/units" or path.startswith("/units/")
+    student_legacy = path.startswith("/learning/courses/")
+
+    if teacher_legacy:
+        if not _user_has_role(user, "teacher"):
+            return RedirectResponse(url="/", status_code=303, headers={"Cache-Control": "private, no-store"})
+        return _render_retired_legacy_entry(
+            request,
+            user=user,
+            legacy_path=path,
+            replacement_space="die Lehrenden-Welt",
+        )
+
+    if student_legacy:
+        if not _user_has_role(user, "student"):
+            return RedirectResponse(url="/", status_code=303, headers={"Cache-Control": "private, no-store"})
+        return _render_retired_legacy_entry(
+            request,
+            user=user,
+            legacy_path=path,
+            replacement_space="den Lernendenraum",
+        )
+
+    return None
+
+
 @app.get("/learning", response_class=HTMLResponse)
 async def learning_index(request: Request):
-    """SSR page listing the student's courses via the Learning API.
+    """Retired legacy SSR entry for the student learning space.
 
     Permissions:
-        Caller must be a student; otherwise redirect to home.
+        Caller must be a student to see the retirement notice; non-students are
+        still redirected to home.
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
-    limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
-    items: list[dict] = []
-    learning_base, learning_origin = _learning_internal_base()
-    try:
-        import httpx
-        from httpx import ASGITransport
-        # Use an internal ASGI client with an explicit Origin header for
-        # consistency with strict CSRF (even though this is a GET/read).
-        async with httpx.AsyncClient(
-            transport=ASGITransport(app=app), base_url=learning_base, headers={"Origin": learning_origin}
-        ) as client:
-            sid = _get_session_id(request)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            r = await client.get("/api/learning/courses", params={"limit": limit, "offset": offset})
-            if r.status_code == 200 and isinstance(r.json(), list):
-                items = r.json()
-    except Exception:
-        items = []
-    content = (
-        '<div class="container">'
-        '<h1>Meine Kurse</h1>'
-        f'{_render_student_course_list(items, limit, offset, len(items) == limit)}'
-        '</div>'
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/learning",
+        replacement_space="den Lernendenraum",
     )
-    layout = Layout(title="Meine Kurse", content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/learning/courses/{course_id}", response_class=HTMLResponse)
 async def learning_course_detail(request: Request, course_id: str):
-    """SSR page showing the units of a course for the current student.
+    """Retired legacy SSR entry for the student course-detail landing page.
 
-    Behavior: Fetches units via Learning API. Uses a best-effort course title
-    lookup via the courses list; falls back to a generic header when not found.
+    Why:
+        The product handoff now happens in the SvelteKit learning home and
+        unit-level pages. Keeping this intermediate SSR course page alive would
+        preserve an obsolete navigation step.
     """
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
-    # Validate UUID-ish to avoid calling the API with garbage
-    if not _is_uuid_like(course_id):
-        return RedirectResponse(url="/learning", status_code=303)
-    title = "Kurs"
-    units: list[dict] = []
-    try:
-        import httpx
-        from httpx import ASGITransport
-        async with _internal_api_client() as client:
-            sid = _get_session_id(request)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            # Try lookup for title from course list (best-effort)
-            try:
-                r_courses = await client.get("/api/learning/courses", params={"limit": 50, "offset": 0})
-                if r_courses.status_code == 200 and isinstance(r_courses.json(), list):
-                    for it in r_courses.json():
-                        if isinstance(it, dict) and str(it.get("id")) == str(course_id):
-                            t = it.get("title")
-                            if isinstance(t, str) and t:
-                                title = t
-                            break
-            except Exception:
-                pass
-            r_units = await client.get(f"/api/learning/courses/{course_id}/units")
-            if r_units.status_code == 200 and isinstance(r_units.json(), list):
-                units = r_units.json()
-    except Exception:
-        units = []
-
-    # Render unit list with links to the unit detail page
-    # Intention: Students can click a unit to view released content.
-    unit_items = []
-    for row in units:
-        u = row.get("unit", {}) if isinstance(row, dict) else {}
-        uid = Component.escape(str(u.get("id", "")))
-        utitle = Component.escape(str(u.get("title", "")))
-        href = f"/learning/courses/{course_id}/units/{uid}"
-        unit_items.append(
-            f'<li><span class="badge">{row.get("position", "")}</span> '
-            f'<a href="{href}">{utitle}</a></li>'
-        )
-    units_html = '<ul class="unit-list">' + ("\n".join(unit_items) if unit_items else '<li class="text-muted">Keine Lerneinheiten.</li>') + '</ul>'
-    content = (
-        '<div class="container">'
-        f'<h1>{Component.escape(title)}</h1>'
-        f'<p><a href="/learning">Zurück zu „Meine Kurse“</a></p>'
-        f'<section class="card"><h2>Lerneinheiten</h2>{units_html}</section>'
-        '</div>'
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/learning/courses/{course_id}",
+        replacement_space="den Lernendenraum",
     )
-    layout = Layout(title=Component.escape(title), content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 @app.get("/learning/courses/{course_id}/units/{unit_id}", response_class=HTMLResponse)
 async def learning_unit_sections(request: Request, course_id: str, unit_id: str):
-    """Render released content of a unit for students without section titles.
-
-    Why:
-        Students should see only released materials/tasks grouped by sections,
-        with sections separated visually (horizontal lines), but without
-        exposing the section titles.
-
-    Behavior:
-        - Requires role "student"; non-students are redirected to home.
-        - Loads units list for course to derive the unit title for the header.
-        - Fetches released sections via unit-scoped Learning API endpoint.
-        - Renders materials and tasks; places an <hr> between section groups.
-        - Each material and each task renders as its own card component
-          (`MaterialCard`/`TaskCard`). Markdown in materials (and task
-          instructions) is rendered to a safe HTML subset using
-          `render_markdown_safe`.
-        - Uses private, no-store cache headers.
-    """
+    """Retired legacy SSR entry for student unit workspaces."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/learning/courses/{course_id}/units/{unit_id}",
+        replacement_space="den Lernendenraum",
+    )
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
-        return RedirectResponse(url=f"/learning/courses/{course_id}", status_code=303)
+        return RedirectResponse(url="/learning", status_code=303)
     unit_title = "Lerneinheit"
     unit_type = "linear"
     sections: list[dict] = []
@@ -2095,7 +2208,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                     f'<div class=\"unit-head__title\">'
                     f'<h1 class=\"unit-title\" id=\"unit-title\">{safe_title}</h1>'
                     f'<p class=\"text-muted\" id=\"unit-subtitle\"><small>'
-                    f'<a href=\"/learning/courses/{safe_course_id}\">Zurück zu „Lerneinheiten“</a>'
+                    f'<a href=\"/learning\">Zurück zum Lernraum</a>'
                     f'</small></p>'
                     f'</div>'
                     f'</header>'
@@ -2124,7 +2237,7 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                     title=Component.escape(unit_title),
                     content=content,
                     user=user,
-                    current_path=request.url.path,
+                    current_path="/learning",
                 )
                 return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
             # Silence in production; errors handled gracefully below
@@ -2199,12 +2312,12 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         content=(
                             "<div class=\"container\">"
                             f"<h1>{Component.escape(unit_title)}</h1>"
-                            f"<p><a href=\"/learning/courses/{course_id}\">Zurück zu „Lerneinheiten“</a></p>"
+                            "<p><a href=\"/learning\">Zurück zum Lernraum</a></p>"
                             "<section class=\"card\"><p class=\"text-muted\">Noch keine Inhalte freigeschaltet.</p></section>"
                             "</div>"
                         ),
                         user=user,
-                        current_path=request.url.path,
+                        current_path="/learning",
                     ).render(),
                     headers={"Cache-Control": "private, no-store"},
                 )
@@ -2459,12 +2572,12 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     content = (
         "<div class=\"container\">"
         f"<h1>{Component.escape(unit_title)}</h1>"
-        f"<p><a href=\"/learning/courses/{course_id}\">Zurück zu „Lerneinheiten“</a></p>"
+        f"<p><a href=\"/learning\">Zurück zum Lernraum</a></p>"
         f"<section class=\"card\" id=\"student-unit-sections\">{inner}</section>"
         f"{h5p_script}"
         "</div>"
     )
-    layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path=request.url.path)
+    layout = Layout(title=Component.escape(unit_title), content=content, user=user, current_path="/learning")
     return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
@@ -2473,21 +2586,15 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
     response_class=HTMLResponse,
 )
 async def learning_modular_unit_module_fragment(request: Request, course_id: str, unit_id: str, module_id: str):
-    """Render a module body (HTML fragment) for modular learning units.
-
-    Why:
-        The modular unit page loads module contents on demand (HTMX) after the
-        student unlocked the module. This keeps the initial page lightweight
-        and avoids leaking locked content.
-
-    Behavior:
-        - Requires role "student".
-        - Uses the Learning API (cookie-auth) to fetch module content.
-        - Locked / not accessible modules return 404 (fail-closed).
-    """
+    """Retired legacy HTMX fragment for modular learning units."""
     user = getattr(request.state, "user", None)
     if not _user_has_role(user, "student"):
         return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse(
+        '<p class="text-muted">Legacy route retired. Bitte oeffne das Modul im neuen Lernendenraum.</p>',
+        status_code=410,
+        headers={"Cache-Control": "private, no-store"},
+    )
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id) and _is_uuid_like(module_id)):
         return HTMLResponse("", status_code=400, headers={"Cache-Control": "private, no-store"})
 
@@ -2661,41 +2768,15 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
 
 @app.post("/learning/courses/{course_id}/tasks/{task_id}/submit", response_class=HTMLResponse)
 async def learning_submit_task(request: Request, course_id: str, task_id: str):
-    """Handle student form submission and PRG back to the unit page.
-
-    Why:
-        Students submit solutions directly from the unit page. This SSR route
-        collects minimal form fields and forwards them to the Learning API,
-        keeping the web layer thin and framework-agnostic at the domain level.
-
-    Behavior:
-        - Supports mode=text (textarea) and mode=image|file (uploaded asset
-          metadata: storage_key, mime_type, size_bytes, sha256). The SSR form
-          is progressively enhanced by JS which performs the upload first and
-          then fills hidden fields; tests may submit those fields directly.
-        - Sends a short Idempotency-Key to the API to guard against double
-          clicks.
-        - HTMX requests (presence of `HX-Request`) receive the updated
-          submission history fragment for this task (with polling enabled while
-          the latest attempt is pending) and an `HX-Trigger` header to show a
-          success message, avoiding a full page reload.
-        - Non-HTMX requests keep PRG (Post-Redirect-Get) back to the unit page
-          with a success banner and `open_attempt_id` query parameter so the
-          exact attempt opens deterministically in the history (fallback:
-          newest opens).
-
-    Permissions:
-        Caller must be a student and a course member; API enforces RLS and
-        visibility. Same-origin protection is applied at the API boundary.
-    """
-    # CSRF: enforce same-origin for browser form POSTs before touching inputs.
-    origin_present = (request.headers.get("origin") or request.headers.get("referer"))
-    if not origin_present or (not _is_same_origin(request)):
-        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
-
+    """Retired legacy submit POST for student tasks."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse(
+        '<p class="text-muted">Legacy route retired. Bitte reiche die Aufgabe im neuen Lernendenraum ein.</p>',
+        status_code=410,
+        headers={"Cache-Control": "private, no-store", "Vary": "Origin"},
+    )
     form = await request.form()
     form_idempotency_key = _normalize_task_submit_idempotency_key(form.get("idempotency_key"))
     mode = str(form.get("mode") or "text").strip()
@@ -2912,35 +2993,15 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
 
 @app.get("/learning/courses/{course_id}/tasks/{task_id}/history", response_class=HTMLResponse)
 async def learning_task_history_fragment(request: Request, course_id: str, task_id: str):
-    """Render the student's submission history (HTML fragment) for a task.
-
-    Why:
-        This fragment renders a stable history wrapper. While the newest attempt
-        is still being processed (`pending`/`extracted`), it embeds a dedicated
-        poll element that updates only the dynamic zones of the latest attempt
-        (text + feedback) via out-of-band swaps. This avoids scroll jumps caused
-        by repeatedly re-rendering signed preview URLs.
-
-    Parameters:
-        course_id: Course UUID in path.
-        task_id: Task UUID in path.
-
-    Behavior:
-        - Returns a <section class="task-panel__history"> wrapper containing
-          <details> entries.
-        - While the newest attempt is in progress (analysis_status ∈ {pending, extracted}),
-          the wrapper includes a per-task poll element that triggers every 10 seconds.
-        - Includes data-pending="true|false" (true signals auto-refresh) for
-          progressive enhancement/tests.
-
-    Permissions:
-        Caller must be authenticated and have role "student" for this view.
-        Authorization (membership/visibility) is enforced by the API endpoint
-        used internally to fetch the history.
-    """
+    """Retired legacy history fragment for student tasks."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse(
+        '<section class="task-panel__history"><p class="text-muted">Legacy route retired.</p></section>',
+        status_code=410,
+        headers={"Cache-Control": "private, no-store"},
+    )
     try:
         async with _internal_api_client() as client:
             sid = _get_session_id(request)
@@ -2968,20 +3029,15 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
 
 @app.get("/learning/courses/{course_id}/tasks/{task_id}/history/poll", response_class=HTMLResponse)
 async def learning_task_history_poll(request: Request, course_id: str, task_id: str):
-    """Return granular OOB updates for the newest submission of a task.
-
-    Returns:
-        - A replacement poll element (keeps polling while pending/extracted, stops otherwise)
-        - Out-of-band swaps for:
-            * #submission-text-{id}
-            * #submission-result-{id}
-
-    Security:
-        Student-only. Authorization/membership is delegated to the internal API.
-    """
+    """Retired legacy polling fragment for student task history."""
     user = getattr(request.state, "user", None)
     if (user or {}).get("role") != "student":
         return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse(
+        '<div class="text-muted">Legacy route retired.</div>',
+        status_code=410,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
     try:
         async with _internal_api_client() as client:
@@ -4628,14 +4684,14 @@ def _render_members_page_html(request: Request, course: dict, members: list[dict
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    # Minimal, neutral start page without science copy
+    # Minimal, neutral start page for the shrinking legacy shell.
     user = getattr(request.state, "user", None)
     content = """
     <div class=\"container\">
         <h1>Willkommen bei GUSTAV</h1>
-        <p>GUSTAV (Akronym für: Gustav unterstützt Schüler tadellos als Vertretungslehrer) ist eine Lernplattform, die sich derzeit noch in Entwicklung befindet. Dass Fehler vorkommen, ist daher nichts Ungewöhnliches. Bitte melde Fehler direkt an deinen Lehrer. Außerdem sind Ideen zur Verbesserung der Plattform gern gesehen!</p>
-        <p>Klick links in der Navigationsleiste auf „Meine Kurse“ und wähle dort die aktuelle Lerneinheit aus. Dort kannst du zu den Aufgaben deine Lösungen eintippen oder hochladen. Ein KI-Modell wird dann deine Einreichung auswerten und dir eine Rückmeldung geben.</p>
-        <p>Die Plattform ist datenschutzkonform. Deine persönlichen Daten werden zu keinem Zeitpunkt an fremde Server übertragen.</p>
+        <p>Diese FastAPI-Weboberfläche wird schrittweise abgebaut. Die neue Produktoberfläche entsteht im separaten SvelteKit-Frontend mit klaren Räumen für Lernende, Lehrkräfte und Diagnostik.</p>
+        <p>Der Backend-Webadapter bleibt vorerst für verbleibende Legacy-Flows, interne Übergänge und Betriebsschnittstellen bestehen. Neue Produktnavigation wird hier bewusst nicht mehr ausgerollt.</p>
+        <p>GUSTAV bleibt dabei datenschutzkonform. Personenbezogene Daten werden weiterhin nur innerhalb der kontrollierten Systemgrenzen verarbeitet.</p>
     </div>
     """
     layout = Layout(title="Startseite", content=content, user=user, current_path=request.url.path)
@@ -4643,16 +4699,12 @@ async def home(request: Request):
 
 @app.get("/teaching/live", response_class=HTMLResponse)
 async def teaching_live_home(request: Request):
-    """Unterricht – Live (Startseite, Lehrer-only).
+    """Retired legacy SSR entry for the old Live picker.
 
-    Intent:
-        Provide a simple entry point reachable from the sidebar. The page
-        explains how to open the per-unit Live-Ansicht and will evolve to a
-        course+unit picker. For now, we avoid DB calls to keep the page fast
-        and reliable in dev.
-
-    Permissions:
-        Caller must be a teacher. Unauthenticated users are redirected to login.
+    Why:
+        The top-level Live entry now belongs to SvelteKit under `/live`. The
+        deep live detail flows still remain temporarily in the legacy adapter,
+        but the old picker page itself should no longer be a product entry.
     """
     user = getattr(request.state, "user", None)
     if not user:
@@ -4661,139 +4713,30 @@ async def teaching_live_home(request: Request):
     roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
     if not (role == "teacher" or "teacher" in roles):
         return RedirectResponse(url="/", status_code=303)
-
-    # Build a simple course -> unit picker using internal API calls.
-    # Courses: GET /api/teaching/courses (owned by teacher)
-    courses: list[dict] = []
-    try:
-        async with _internal_api_client() as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            rc = await client.get("/api/teaching/courses", params={"limit": 100, "offset": 0})
-            if rc.status_code == 200 and isinstance(rc.json(), list):
-                courses = rc.json()
-    except Exception:
-        courses = []
-
-    # Render selects: course selector triggers HTMX load of units into container
-    def _render_course_select(options: list[dict]) -> str:
-        opts = []
-        opts.append('<option value="">— Kurs wählen —</option>')
-        for c in options:
-            cid = str(c.get("id") or "")
-            title = Component.escape(str(c.get("title") or "Unbenannter Kurs"))
-            opts.append(f'<option value="{cid}">{title}</option>')
-        options_html = "\n".join(opts)
-        return (
-            '<label class="form-label" for="course-select">Kurs</label>'
-            f'<select id="course-select" name="course_id" class="form-select" '
-            'hx-get="/teaching/live/units" hx-trigger="change" '
-            'hx-target="#unit-select-container" hx-include="#course-select">'
-            f'{options_html}'
-            '</select>'
-        )
-
-    course_select_html = _render_course_select(courses)
-    unit_placeholder_html = (
-        '<div id="unit-select-container">'
-        '<label class="form-label" for="unit-select">Lerneinheit</label>'
-        '<select id="unit-select" name="unit_id" class="form-select" disabled>'
-        '<option>— erst Kurs wählen —</option>'
-        '</select>'
-        '</div>'
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/teaching/live",
+        replacement_space="den Live-Raum",
     )
-
-    # Wrap selects in a GET form with an "Öffnen" button to continue.
-    form_open = (
-        '<form id="live-picker-form" method="get" action="/teaching/live/open" class="form-vertical">'
-        f'{course_select_html}{unit_placeholder_html}'
-        '<div class="form-actions"><button type="submit" class="btn btn-primary">Öffnen</button></div>'
-        '</form>'
-    )
-
-    content = (
-        '<div class="container">'
-        '<h1>Unterricht</h1>'
-        '<section class="card" aria-labelledby="teaching-live-intro">'
-        '<h2 id="teaching-live-intro">Live-Ansicht pro Lerneinheit</h2>'
-        '<p>Wähle einen Kurs und danach eine Lerneinheit, um die Live-Übersicht zu öffnen. '
-        'Die Übersicht zeigt pro Schüler × Aufgabe, wer bereits eingereicht hat.</p>'
-        f'{form_open}'
-        '</section>'
-        '</div>'
-    )
-    layout = Layout(title="Unterricht – Live", content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/teaching/live/units", response_class=HTMLResponse)
 async def teaching_live_units_partial(request: Request, course_id: str):
-    """Return a unit select for the chosen course (teacher-only).
-
-    Security:
-        Same role checks as the page. Uses internal API calls so DB/RLS checks
-        stay consistent with the public contract.
-    """
+    """Retired HTMX helper for the old Live picker."""
     user = getattr(request.state, "user", None)
     if not user:
-        return HTMLResponse("", status_code=401)
+        return HTMLResponse("", status_code=401, headers={"Cache-Control": "private, no-store"})
     role = str(user.get("role", "")).lower()
     roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
     if not (role == "teacher" or "teacher" in roles):
-        return HTMLResponse("", status_code=403)
-
-    # Fetch modules for course, then render unit options by fetching unit titles
-    modules: list[dict] = []
-    try:
-        async with _internal_api_client() as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            rm = await client.get(f"/api/teaching/courses/{course_id}/modules")
-            if rm.status_code == 200 and isinstance(rm.json(), list):
-                modules = rm.json()
-            # Build unit title map
-            unit_titles: dict[str, str] = {}
-            for m in modules:
-                uid = str(m.get("unit_id") or "")
-                if not uid or uid in unit_titles:
-                    continue
-                ru = await client.get(f"/api/teaching/units/{uid}")
-                if ru.status_code == 200:
-                    payload = ru.json()
-                    unit_titles[uid] = str(payload.get("title") or "Unbenannte Lerneinheit")
-            # Render select
-            opts = []
-            opts.append('<option value="">— Lerneinheit wählen —</option>')
-            for m in modules:
-                uid = str(m.get("unit_id") or "")
-                if not uid:
-                    continue
-                title = unit_titles.get(uid) or "Unbenannte Lerneinheit"
-                opts.append(f'<option value="{uid}">{Component.escape(title)}</option>')
-            options_html = "\n".join(opts)
-            select_html = (
-                '<label class="form-label" for="unit-select">Lerneinheit</label>'
-                '<select id="unit-select" name="unit_id" class="form-select">'
-                f'{options_html}'
-                '</select>'
-            )
-            return HTMLResponse(select_html, status_code=200)
-    except Exception:
-        pass
-    return HTMLResponse('<label class="form-label" for="unit-select">Lerneinheit</label><select id="unit-select" name="unit_id" class="form-select" disabled><option>— keine Einheiten —</option></select>', status_code=200)
+        return HTMLResponse("", status_code=403, headers={"Cache-Control": "private, no-store"})
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/teaching/live/open")
 async def teaching_live_open(request: Request, course_id: str | None = None, unit_id: str | None = None):
-    """Redirect to the unit Live page when both selectors are filled (teacher-only).
-
-    Behavior:
-        - Validates teacher role; requires both identifiers to be present.
-        - Verifies the unit belongs to the selected course for the owner.
-        - On success, PRG to `/teaching/courses/{course_id}/units/{unit_id}/live`.
-    """
+    """Retired redirect helper for the old Live picker."""
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
@@ -4801,23 +4744,12 @@ async def teaching_live_open(request: Request, course_id: str | None = None, uni
     roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
     if not (role == "teacher" or "teacher" in roles):
         return RedirectResponse(url="/", status_code=303)
-    if not course_id or not unit_id:
-        return RedirectResponse(url="/teaching/live", status_code=303)
-    # Verify relation via API
-    try:
-        async with _internal_api_client() as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            rm = await client.get(f"/api/teaching/courses/{course_id}/modules")
-            if rm.status_code != 200:
-                return RedirectResponse(url="/teaching/live", status_code=303)
-            module_unit_ids = {str(m.get("unit_id") or "") for m in (rm.json() or []) if isinstance(m, dict)}
-            if str(unit_id) not in module_unit_ids:
-                return RedirectResponse(url="/teaching/live", status_code=303)
-    except Exception:
-        return RedirectResponse(url="/teaching/live", status_code=303)
-    return RedirectResponse(url=f"/teaching/courses/{course_id}/units/{unit_id}/live", status_code=303)
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/teaching/live/open",
+        replacement_space="den Live-Raum",
+    )
 
 
 def _live_score_badge_variant(score: int) -> str:
@@ -4983,10 +4915,14 @@ async def teaching_unit_live_page(request: Request, course_id: str, unit_id: str
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/teaching/courses/{course_id}/units/{unit_id}/live",
+        replacement_space="den Live-Raum",
+    )
 
     # Resolve titles (best effort)
     course_title = "Kurs"
@@ -5181,10 +5117,9 @@ async def teaching_live_sections_panel_partial(request: Request, course_id: str,
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
     # Derive module_id like in the main page
     module_id = None
     try:
@@ -5223,10 +5158,9 @@ async def teaching_live_toggle_section_visibility(
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
     # Read form values
     form = await request.form()
@@ -5274,10 +5208,9 @@ async def teaching_unit_live_matrix_partial(request: Request, course_id: str, un
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
     tasks: list[dict] = []
     rows: list[dict] = []
@@ -5400,13 +5333,9 @@ async def teaching_unit_live_detail_partial(
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
-    if not student_sub or not task_id:
-        return HTMLResponse("<div class=\"card\"><p class=\"text-muted\">Bitte Zelle wählen…</p></div>", status_code=200)
-    owner_sub = str(user.get("sub") or "")
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
     try:
         import httpx
@@ -6005,6 +5934,12 @@ async def teaching_course_student_live_page(request: Request, course_id: str, st
         return RedirectResponse(url="/auth/login", status_code=302)
     if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/teaching/courses/{course_id}/students/{student_sub}/live",
+        replacement_space="den Live-Raum",
+    )
 
     owner_sub = str(user.get("sub") or "")
     raw_unit_ids = request.query_params.getlist("unit_ids") if "unit_ids" in request.query_params else None
@@ -6175,10 +6110,9 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse(url="/auth/login", status_code=302)
-    role = str(user.get("role", "")).lower()
-    roles = [str(r).lower() for r in (user.get("roles") or []) if isinstance(r, str)]
-    if not (role == "teacher" or "teacher" in roles):
+    if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse("Legacy route retired", status_code=410, headers={"Cache-Control": "private, no-store"})
 
     # Fast-path validation of timestamp; delegate canonical validation to API
     if not isinstance(updated_since, str) or not updated_since:
@@ -6271,50 +6205,21 @@ async def teaching_unit_live_matrix_delta_partial(request: Request, course_id: s
 
 @app.get("/courses", response_class=HTMLResponse)
 async def courses_index(request: Request):
-    """SSR page that renders the teacher's courses by calling the JSON API.
+    """Retired legacy SSR entry for the teacher courses landing page.
 
     Why:
-        Keep UI strictly behind the public API contract. This ensures the page
-        shows the same data as API clients and avoids bypassing DB/authorization
-        checks. The session cookie is forwarded to the internal API call.
-
-    Behavior:
-        - Redirects non-teachers to "/" (UI policy).
-        - Calls GET /api/teaching/courses with clamped pagination.
-        - Renders the list and pager; sets private, no-store cache headers.
+        The product entry moved to SvelteKit. Keeping the old SSR landing page
+        active would preserve the mixed UI architecture we are removing.
     """
     user = getattr(request.state, "user", None)
     if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
-    limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
-
-    # Call the in-process API to fetch real courses from the DB-backed repo.
-    items: list[dict] = []
-    try:
-        import httpx
-        from httpx import ASGITransport
-
-        async with _internal_api_client() as client:
-            sid = request.cookies.get(SESSION_COOKIE_NAME)
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            r = await client.get("/api/teaching/courses", params={"limit": limit, "offset": offset})
-            if r.status_code == 200:
-                data = r.json()
-                if isinstance(data, list):
-                    items = data
-            # Else: keep empty items to render an empty state gracefully
-    except Exception:
-        items = []
-
-    has_next = len(items) == limit
-    sid = _get_session_id(request) or ""
-    if not sid:
-        return RedirectResponse(url="/auth/login", status_code=302)
-    token = _get_or_create_csrf_token(sid)
-    content = _render_courses_page_html(request, items, csrf_token=token, limit=limit, offset=offset, has_next=has_next)
-    layout = Layout(title="Meine Kurse", content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/courses",
+        replacement_space="den Lehrendenraum",
+    )
 
 @app.post("/courses", response_class=HTMLResponse)
 async def courses_create(request: Request):
@@ -6425,53 +6330,16 @@ async def delete_course_htmx(request: Request, course_id: str):
 
 @app.get("/units", response_class=HTMLResponse)
 async def units_index(request: Request):
+    """Retired legacy SSR entry for the teacher units landing page."""
     user = getattr(request.state, "user", None)
     if not _user_has_role(user, "teacher"):
         return RedirectResponse(url="/", status_code=303)
-    sid = _get_session_id(request) or ""
-    if not sid:
-        return RedirectResponse(url="/auth/login", status_code=302)
-    token = _get_or_create_csrf_token(sid)
-    # Fetch units from Teaching repo for this teacher
-    limit, offset = _clamp_pagination(request.query_params.get("limit"), request.query_params.get("offset"))
-    items: list[dict] | list = []
-    try:
-        from routes import teaching as teaching_routes  # type: ignore
-        items = teaching_routes._get_repo().list_units_for_author(
-            author_id=str((user or {}).get("sub") or ""), limit=limit, offset=offset
-        )
-        vm = [
-            {
-                "id": getattr(u, "id", None) if not isinstance(u, dict) else u.get("id"),
-                "unit_type": getattr(u, "unit_type", None) if not isinstance(u, dict) else u.get("unit_type"),
-                "title": getattr(u, "title", None) if not isinstance(u, dict) else u.get("title"),
-                "summary": getattr(u, "summary", None) if not isinstance(u, dict) else u.get("summary"),
-            }
-            for u in (items or [])
-        ]
-    except Exception:
-        vm = []
-        items = []
-
-    # Build page content and append a simple pager beneath the list
-    base_content = _render_units_page_html(vm, csrf_token=token)
-    has_next = isinstance(items, list) and len(items) == limit
-    pager = ""
-    if vm:
-        prev_disabled = offset <= 0
-        prev_href = f"/units?limit={limit}&offset={max(0, offset - limit)}"
-        next_href = f"/units?limit={limit}&offset={offset + limit}"
-        disabled_attr = 'aria-disabled="true"' if prev_disabled else ''
-        links = [
-            f'<a data-testid="pager-prev" href="{prev_href}" class="pager-link" {disabled_attr}>Zurück</a>'
-        ]
-        if has_next:
-            links.append(f'<a data-testid="pager-next" href="{next_href}" class="pager-link">Weiter</a>')
-        pager = f"<nav class=\"pager\">{' '.join(links)}</nav>"
-    # Append pager after the main units content
-    content = base_content + (pager if pager else "")
-    layout = Layout(title="Lerneinheiten", content=content, user=user, current_path=request.url.path)
-    return _layout_response(request, layout, headers={"Cache-Control": "private, no-store"})
+    return _render_retired_legacy_entry(
+        request,
+        user=user,
+        legacy_path="/units",
+        replacement_space="den Lehrendenraum",
+    )
 
 @app.post("/units", response_class=HTMLResponse)
 async def units_create(request: Request):
@@ -9161,6 +9029,7 @@ async def _handle_member_change_api(course_id: str, sid: str | None, *, error: s
 # --- Other Routes & App Includes -----------------------------------------------
 
 app.include_router(auth_router)
+app.include_router(app_router)
 app.include_router(learning_router)
 app.include_router(teaching_router)
 app.include_router(users_router)
@@ -9235,18 +9104,28 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
 
 @app.get("/api/me")
 async def get_me(request: Request):
-    if SESSION_COOKIE_NAME not in request.cookies:
+    user = getattr(request.state, "user", None)
+    if not isinstance(user, dict):
+        auth_context, _bearer_attempted = _auth_context_from_request(request)
+        if not auth_context:
+            return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
+        user = auth_context["user"]
+        expires_at_raw = auth_context.get("expires_at")
+    else:
+        expires_at_raw = getattr(request.state, "auth_expires_at", None)
+
+    if not isinstance(user, dict):
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
-    sid = request.cookies.get(SESSION_COOKIE_NAME)
-    rec = SESSION_STORE.get(sid or "")
-    if not rec:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers={"Cache-Control": "private, no-store"})
-    
-    exp_iso = datetime.fromtimestamp(rec.expires_at, tz=timezone.utc).isoformat(timespec="seconds") if rec.expires_at else None
+
+    exp_iso = (
+        datetime.fromtimestamp(int(expires_at_raw), tz=timezone.utc).isoformat(timespec="seconds")
+        if isinstance(expires_at_raw, (int, float))
+        else None
+    )
     return JSONResponse({
-        "sub": rec.sub,
-        "roles": rec.roles,
-        "name": getattr(rec, "name", ""),
+        "sub": str(user.get("sub") or ""),
+        "roles": [str(role) for role in (user.get("roles") or []) if isinstance(role, str)],
+        "name": str(user.get("name") or ""),
         "expires_at": exp_iso,
     }, headers={"Cache-Control": "private, no-store"})
 def create_app_auth_only() -> FastAPI:

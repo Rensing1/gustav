@@ -59,6 +59,7 @@ def test_openapi_teaching_live_schemas_present():
     assert "h5p_completed" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose h5p_completed"
     assert "score_raw" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose score_raw"
     assert "score_max" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose score_max"
+    assert "created_at" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose created_at"
     delta_cell = schemas["TeachingUnitDeltaCell"]
     assert "h5p_completed" in delta_cell.get("properties", {}), "TeachingUnitDeltaCell must expose h5p_completed"
     assert "score_raw" in delta_cell.get("properties", {}), "TeachingUnitDeltaCell must expose score_raw"

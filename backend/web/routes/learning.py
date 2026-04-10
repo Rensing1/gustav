@@ -20,6 +20,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Request
+from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse, Response
 
 from backend.learning.repo_db import DBLearningRepo
@@ -39,6 +40,8 @@ from backend.learning.usecases.courses import (
 from backend.learning.usecases.submissions import (
     CreateSubmissionInput,
     CreateSubmissionUseCase,
+    FinalizeLatestDraftInput,
+    FinalizeLatestDraftUseCase,
     ListSubmissionsInput,
     ListSubmissionsUseCase,
 )
@@ -64,18 +67,89 @@ from backend.storage.sb3_validation import SCRATCH_SB3_MIME
 from backend.storage.makecode_hex_validation import MAKECODE_HEX_MIME
 import httpx
 from urllib.parse import urlparse as _urlparse, quote as _quote
+import psycopg
 
 
 learning_router = APIRouter(tags=["Learning"])
 logger = logging.getLogger("gustav.web.learning")
 
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
+_STORAGE_ADAPTER_OVERRIDE_ACTIVE = False
+
+
+def _current_learning_module() -> object | None:
+    """Return the currently active learning module instance when available."""
+
+    return _sys.modules.get("routes.learning") or _sys.modules.get("backend.web.routes.learning")
+
+
+def _current_storage_adapter() -> StorageAdapterProtocol:
+    """Resolve the active storage adapter from the current learning module."""
+
+    if _STORAGE_ADAPTER_OVERRIDE_ACTIVE:
+        return STORAGE_ADAPTER
+    module = _current_learning_module()
+    adapter = getattr(module, "STORAGE_ADAPTER", None) if module is not None else None
+    if adapter is None:
+        return STORAGE_ADAPTER
+    return adapter
+
+
+def _current_async_forward_upload() -> Any:
+    """Resolve the active upload forwarder from the current learning module."""
+
+    module = _current_learning_module()
+    forwarder = getattr(module, "_async_forward_upload", None) if module is not None else None
+    return forwarder or _async_forward_upload
+
+
+def _current_emit_upload_proxy_telemetry() -> Any:
+    """Resolve the active telemetry emitter from the current learning module."""
+
+    module = _current_learning_module()
+    emitter = getattr(module, "_emit_upload_proxy_telemetry", None) if module is not None else None
+    return emitter or _emit_upload_proxy_telemetry
+
+
+def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol) -> None:
+    """Keep already-registered FastAPI learning routes bound to the latest adapter.
+
+    Why:
+        Some tests deliberately reload `routes.learning` while keeping an older
+        `main.app` instance alive. FastAPI route callables keep the globals from
+        the module instance they were created in, so updating only the freshly
+        imported module would leave old route endpoints pointing at a stale
+        `STORAGE_ADAPTER`.
+    """
+
+    for module_name in ("main", "backend.web.main"):
+        main_module = _sys.modules.get(module_name)
+        app = getattr(main_module, "app", None) if main_module is not None else None
+        routes = getattr(app, "routes", None)
+        if not routes:
+            continue
+        for route in routes:
+            if not isinstance(route, APIRoute):
+                continue
+            if not str(getattr(route, "path", "")).startswith("/api/learning"):
+                continue
+            route_globals = getattr(route.endpoint, "__globals__", None)
+            if isinstance(route_globals, dict) and "STORAGE_ADAPTER" in route_globals:
+                route_globals["STORAGE_ADAPTER"] = adapter
 
 
 def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
-    """Allow tests or startup code to provide a concrete storage adapter."""
-    global STORAGE_ADAPTER
+    """Allow tests or startup code to provide a concrete storage adapter.
+
+    The update also retargets already-registered Learning route globals in
+    existing FastAPI app instances. This keeps reload-heavy tests deterministic
+    when a fresh `routes.learning` module is imported after `main.app` was
+    constructed earlier in the same Python process.
+    """
+    global STORAGE_ADAPTER, _STORAGE_ADAPTER_OVERRIDE_ACTIVE
     STORAGE_ADAPTER = adapter
+    _STORAGE_ADAPTER_OVERRIDE_ACTIVE = True
+    _sync_learning_route_globals(adapter=adapter)
 
 
 def _storage_bucket() -> str:
@@ -85,6 +159,79 @@ def _storage_bucket() -> str:
 
 def _max_upload_bytes() -> int:
     return get_learning_max_upload_bytes()
+
+
+def _attach_submission_files(submission: dict[str, Any]) -> dict[str, Any]:
+    """Attach short-lived artifact URLs for learner-visible submission history.
+
+    Why:
+        The learner history workspace should be able to preview or reopen
+        earlier upload submissions without exposing raw storage keys in the UI.
+        We therefore decorate API payloads with a tiny `files[]` view model.
+
+    Security:
+        URLs are short-lived signed download URLs from the configured storage
+        adapter. When no adapter is available, we fail closed and expose an
+        empty list.
+    """
+
+    payload = dict(submission or {})
+    payload["files"] = []
+
+    kind = str(payload.get("kind") or "").strip().lower()
+    storage_key = str(payload.get("storage_key") or "").strip()
+    mime_type = str(payload.get("mime_type") or "").strip().lower()
+    size_bytes = payload.get("size_bytes")
+    if kind not in {"image", "file"} or not storage_key or not mime_type:
+        return payload
+
+    try:
+        size_int = int(size_bytes)
+    except (TypeError, ValueError):
+        return payload
+    if size_int <= 0:
+        return payload
+
+    bucket = _storage_bucket()
+    adapter = _current_storage_adapter()
+    if not bucket or isinstance(adapter, NullStorageAdapter):
+        return payload
+
+    try:
+        presigned = adapter.presign_download(
+            bucket=bucket,
+            key=storage_key,
+            expires_in=60,
+            disposition="inline",
+        )
+    except Exception:
+        return payload
+
+    url = str((presigned or {}).get("url") or "").strip()
+    if not url:
+        return payload
+
+    try:
+        download_presigned = adapter.presign_download(
+            bucket=bucket,
+            key=storage_key,
+            expires_in=60,
+            disposition="attachment",
+        )
+    except Exception:
+        download_presigned = None
+
+    download_url = str((download_presigned or {}).get("url") or "").strip() or url
+
+    payload["files"] = [
+        {
+            "mime": mime_type,
+            "size": size_int,
+            "url": url,
+            "download_url": download_url,
+        }
+    ]
+    return payload
 
 
 def _upload_intent_ttl_seconds() -> int:
@@ -238,6 +385,304 @@ def _cache_headers_error() -> dict[str, str]:
     # Error responses: must never be stored; protects PII-bearing error pages.
     # Include Vary: Origin for consistency with success responses.
     return {"Cache-Control": "private, no-store", "Vary": "Origin"}
+
+
+def _teaching_storage_adapter() -> object | None:
+    try:
+        import routes.teaching as teaching_routes  # type: ignore
+        return getattr(teaching_routes, "STORAGE_ADAPTER", None)
+    except Exception:
+        return None
+
+
+def _resolve_student_material_file_url(
+    *,
+    student_sub: str,
+    course_id: str,
+    section_id: str,
+    material_id: str,
+) -> str | None:
+    material_urls = _load_released_section_material_urls(
+        student_sub=student_sub,
+        course_id=course_id,
+        section_material_pairs=[(section_id, material_id)],
+    )
+    return material_urls.get(str(material_id))
+
+
+def _presign_material_url(*, adapter: object, storage_key: str) -> str | None:
+    """Return a short-lived preview URL for a material storage key."""
+
+    if not storage_key or not hasattr(adapter, "presign_download"):
+        return None
+
+    try:
+        from teaching.services.materials import MaterialFileSettings  # type: ignore
+
+        settings = MaterialFileSettings()
+        presign = adapter.presign_download(
+            bucket=settings.storage_bucket,
+            key=storage_key,
+            expires_in=settings.download_url_ttl_seconds,
+            disposition="inline",
+        )
+        url = presign.get("url") if isinstance(presign, dict) else None
+        return str(url).strip() if isinstance(url, str) and url.strip() else None
+    except Exception:
+        return None
+
+
+def _load_released_section_material_urls(
+    *,
+    student_sub: str,
+    course_id: str,
+    section_material_pairs: list[tuple[str, str]],
+) -> dict[str, str | None]:
+    """Load released section-material URLs with one DB connection."""
+
+    valid_pairs = [
+        (str(section_id), str(material_id))
+        for section_id, material_id in section_material_pairs
+        if _is_uuid_like(section_id) and _is_uuid_like(material_id)
+    ]
+    if not (student_sub and _is_uuid_like(course_id) and valid_pairs):
+        return {}
+
+    repo = _get_repo()
+    dsn = str(getattr(repo, "_dsn", "") or "").strip()
+    adapter = _teaching_storage_adapter()
+    if not dsn or adapter is None or not hasattr(adapter, "presign_download"):
+        return {}
+
+    try:
+        section_ids = [section_id for section_id, _ in valid_pairs]
+        material_ids = [material_id for _, material_id in valid_pairs]
+        storage_keys: dict[str, str] = {}
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                set_current_sub = getattr(repo, "_set_current_sub", None)
+                if callable(set_current_sub):
+                    set_current_sub(cur, student_sub)
+                else:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                cur.execute(
+                    """
+                    with requested(section_id, material_id) as (
+                        select * from unnest(%s::uuid[], %s::uuid[])
+                    )
+                    select requested.material_id::text, released.storage_key
+                      from requested
+                      join lateral public.get_released_materials_for_student(%s, %s::uuid, requested.section_id) released
+                        on released.id = requested.material_id
+                    """,
+                    (section_ids, material_ids, student_sub, str(course_id)),
+                )
+                for material_id, storage_key in cur.fetchall() or []:
+                    if isinstance(material_id, str) and isinstance(storage_key, str) and storage_key.strip():
+                        storage_keys[material_id] = storage_key.strip()
+        return {
+            material_id: _presign_material_url(adapter=adapter, storage_key=storage_key)
+            for material_id, storage_key in storage_keys.items()
+        }
+    except Exception:
+        return {}
+
+
+def _load_modular_material_urls(
+    *,
+    student_sub: str,
+    course_id: str,
+    unit_id: str,
+    module_id: str,
+    material_ids: list[str],
+) -> dict[str, str | None]:
+    """Load modular material URLs with one DB connection."""
+
+    valid_material_ids = [str(material_id) for material_id in material_ids if _is_uuid_like(material_id)]
+    if not (
+        student_sub
+        and _is_uuid_like(course_id)
+        and _is_uuid_like(unit_id)
+        and _is_uuid_like(module_id)
+        and valid_material_ids
+    ):
+        return {}
+
+    repo = _get_repo()
+    dsn = str(getattr(repo, "_dsn", "") or "").strip()
+    adapter = _teaching_storage_adapter()
+    if not dsn or adapter is None or not hasattr(adapter, "presign_download"):
+        return {}
+
+    try:
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                set_current_sub = getattr(repo, "_set_current_sub", None)
+                if callable(set_current_sub):
+                    set_current_sub(cur, student_sub)
+                else:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
+                set_current_course_id = getattr(repo, "_set_current_course_id", None)
+                if callable(set_current_course_id):
+                    set_current_course_id(cur, str(course_id))
+                else:
+                    cur.execute("select set_config('app.current_course_id', %s, true)", (str(course_id),))
+
+                cur.execute(
+                    """
+                    select exists(
+                             select 1
+                               from public.course_memberships
+                              where course_id = %s::uuid
+                                and student_id = %s
+                         )
+                    """,
+                    (str(course_id), student_sub),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return {}
+
+                cur.execute(
+                    """
+                    select exists(
+                             select 1
+                               from public.course_modules
+                              where course_id = %s::uuid
+                                and unit_id = %s::uuid
+                         )
+                    """,
+                    (str(course_id), str(unit_id)),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return {}
+
+                cur.execute(
+                    """
+                    select section_id::text
+                      from public.unit_modules
+                     where id = %s::uuid
+                       and unit_id = %s::uuid
+                     limit 1
+                    """,
+                    (str(module_id), str(unit_id)),
+                )
+                section_row = cur.fetchone()
+                section_id = section_row[0] if section_row and isinstance(section_row[0], str) and section_row[0].strip() else None
+                if not section_id:
+                    return {}
+
+                cur.execute(
+                    "select public.modular_section_is_open_or_done_for_student(%s, %s::uuid, %s::uuid, %s::uuid)",
+                    (student_sub, str(course_id), str(unit_id), str(section_id)),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return {}
+
+                cur.execute(
+                    """
+                    select id::text, storage_key
+                      from public.unit_materials
+                     where id = any(%s::uuid[])
+                       and section_id = %s::uuid
+                       and kind = 'file'
+                     order by position asc
+                    """,
+                    (valid_material_ids, str(section_id)),
+                )
+                storage_keys = {
+                    str(material_id): str(storage_key).strip()
+                    for material_id, storage_key in cur.fetchall() or []
+                    if isinstance(material_id, str) and isinstance(storage_key, str) and storage_key.strip()
+                }
+        return {
+            material_id: _presign_material_url(adapter=adapter, storage_key=storage_key)
+            for material_id, storage_key in storage_keys.items()
+        }
+    except Exception:
+        return {}
+
+
+def _resolve_student_modular_material_file_url(
+    *,
+    student_sub: str,
+    course_id: str,
+    unit_id: str,
+    module_id: str,
+    material_id: str,
+) -> str | None:
+    material_urls = _load_modular_material_urls(
+        student_sub=student_sub,
+        course_id=course_id,
+        unit_id=unit_id,
+        module_id=module_id,
+        material_ids=[material_id],
+    )
+    return material_urls.get(str(material_id))
+
+
+def _attach_section_material_files(
+    *,
+    student_sub: str,
+    course_id: str,
+    sections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    section_material_pairs = [
+        (str((section.get("section") or {}).get("id") or ""), str(material.get("id") or ""))
+        for section in sections
+        for material in (section.get("materials") or [])
+        if isinstance(section, dict) and isinstance(material, dict) and material.get("kind") == "file"
+    ]
+    material_urls = _load_released_section_material_urls(
+        student_sub=student_sub,
+        course_id=course_id,
+        section_material_pairs=section_material_pairs,
+    )
+    enriched: list[dict[str, Any]] = []
+    for section in sections:
+        payload = dict(section)
+        materials = []
+        for material in payload.get("materials") or []:
+            material_payload = dict(material)
+            if material_payload.get("kind") == "file":
+                material_payload["file_url"] = material_urls.get(str(material_payload.get("id") or ""))
+            else:
+                material_payload["file_url"] = None
+            materials.append(material_payload)
+        payload["materials"] = materials
+        enriched.append(payload)
+    return enriched
+
+
+def _attach_modular_material_files(
+    *,
+    student_sub: str,
+    course_id: str,
+    unit_id: str,
+    module_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    out = dict(payload)
+    material_urls = _load_modular_material_urls(
+        student_sub=student_sub,
+        course_id=course_id,
+        unit_id=unit_id,
+        module_id=module_id,
+        material_ids=[
+            str(material.get("id") or "")
+            for material in (out.get("materials") or [])
+            if isinstance(material, dict) and material.get("kind") == "file"
+        ],
+    )
+    materials = []
+    for material in out.get("materials") or []:
+        material_payload = dict(material)
+        if material_payload.get("kind") == "file":
+            material_payload["file_url"] = material_urls.get(str(material_payload.get("id") or ""))
+        else:
+            material_payload["file_url"] = None
+        materials.append(material_payload)
+    out["materials"] = materials
+    return out
 
 
 def _require_repo_methods(repo: object, *method_names: str) -> JSONResponse | None:
@@ -464,6 +909,10 @@ def _canonical_uuid_or_none(value: object) -> str | None:
         return None
 
 
+def _is_uuid_like(value: object) -> bool:
+    return _canonical_uuid_or_none(value) is not None
+
+
 # Note: Pagination clamping is handled in the use case layer to keep this
 # adapter thin and framework-agnostic.
 
@@ -597,6 +1046,11 @@ async def list_sections(
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
+    sections = _attach_section_material_files(
+        student_sub=str(user.get("sub", "")),
+        course_id=course_id,
+        sections=sections,
+    )
     return JSONResponse(sections, headers=_cache_headers_success())
 
 
@@ -774,6 +1228,11 @@ async def list_unit_sections(
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
     # 200 with possibly empty list
+    sections = _attach_section_material_files(
+        student_sub=str(user.get("sub", "")),
+        course_id=course_id,
+        sections=sections,
+    )
     return JSONResponse(sections, headers=_cache_headers_success())
 
 
@@ -936,6 +1395,13 @@ async def get_modular_unit_module_content(
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
+    payload = _attach_modular_material_files(
+        student_sub=str(user.get("sub", "")),
+        course_id=course_id_norm,
+        unit_id=unit_id_norm,
+        module_id=module_id_norm,
+        payload=payload,
+    )
     return JSONResponse(payload, headers=_cache_headers_success())
 
 
@@ -958,6 +1424,15 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
     """
     if not isinstance(payload, dict):
         raise ValueError("invalid_input")
+    intent_raw = payload.get("intent")
+    if intent_raw is None:
+        intent = "submit"
+    elif not isinstance(intent_raw, str):
+        raise ValueError("invalid_input")
+    else:
+        intent = intent_raw.strip().lower()
+    if intent not in {"feedback", "submit"}:
+        raise ValueError("invalid_input")
     kind = payload.get("kind")
     if kind not in ("text", "image", "file", "h5p"):
         raise ValueError("invalid_input")
@@ -970,7 +1445,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         # Global limit: allow up to 64k characters for text submissions.
         if len(text_body) > 65_536:
             raise ValueError("invalid_input")
-        return kind, {"text_body": text_body.strip()}
+        return kind, {"intent": intent, "text_body": text_body.strip()}
     elif kind == "h5p":
         required = {"score_raw", "score_max"}
         if not required.issubset(payload.keys()):
@@ -982,7 +1457,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
             raise ValueError("invalid_h5p_payload") from None
         if raw_int < 0 or max_int < 0 or raw_int > max_int:
             raise ValueError("invalid_h5p_payload")
-        return kind, {"score_raw": raw_int, "score_max": max_int}
+        return kind, {"intent": intent, "score_raw": raw_int, "score_max": max_int}
     elif kind == "image":
         # Image submissions require finalized storage metadata
         required = {"storage_key", "mime_type", "size_bytes", "sha256"}
@@ -1018,6 +1493,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         if len(sha256_normalized) != 64 or any(c not in "0123456789abcdef" for c in sha256_normalized):
             raise ValueError("invalid_image_payload")
         return kind, {
+            "intent": intent,
             "storage_key": storage_key,
             "mime_type": mime_type,
             "size_bytes": size_int,
@@ -1054,6 +1530,7 @@ def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str
         if len(sha256_normalized) != 64 or any(c not in "0123456789abcdef" for c in sha256_normalized):
             raise ValueError("invalid_file_payload")
         return kind, {
+            "intent": intent,
             "storage_key": storage_key,
             "mime_type": mime_type,
             "size_bytes": size_int,
@@ -1223,6 +1700,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         course_id=course_id,
         task_id=task_id,
         student_sub=str(user.get("sub", "")),
+        intent=str(clean_payload.get("intent") or "submit"),
         kind=kind,
         text_body=clean_payload.get("text_body"),
         storage_key=clean_payload.get("storage_key"),
@@ -1307,6 +1785,59 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     # - Other kinds enter the async pipeline → 202 Accepted.
     status_code = 201 if kind == "h5p" else 202
     return JSONResponse(submission, status_code=status_code, headers=_cache_headers_success())
+
+
+@learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize")
+async def finalize_submission(request: Request, course_id: str, task_id: str, payload: dict[str, Any] | None = None):
+    """Create a final submission from the latest completed feedback draft."""
+    if not _require_strict_same_origin(request):
+        return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())
+
+    user, auth_error = _require_student(request)
+    if auth_error:
+        return auth_error
+
+    try:
+        UUID(course_id)
+        UUID(task_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if idempotency_key is not None and len(idempotency_key) > 64:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
+    if idempotency_key is not None and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", idempotency_key):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
+
+    finalize_input = FinalizeLatestDraftInput(
+        course_id=course_id,
+        task_id=task_id,
+        student_sub=str(user.get("sub", "")),
+        idempotency_key=idempotency_key,
+    )
+
+    try:
+        submission = FinalizeLatestDraftUseCase(_get_repo()).execute(finalize_input)
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+    except LookupError as exc:
+        detail = str(exc) or "not_found"
+        if detail == "draft_missing":
+            return JSONResponse({"error": "conflict", "detail": detail}, status_code=409, headers=_cache_headers_error())
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+    except RuntimeError as exc:
+        return JSONResponse({"error": "conflict", "detail": str(exc) or "draft_not_ready"}, status_code=409, headers=_cache_headers_error())
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc) or "invalid_input"}, status_code=400, headers=_cache_headers_error())
+    except Exception:
+        return JSONResponse(
+            {"error": "service_unavailable", "detail": "submission_persistence_unavailable"},
+            status_code=503,
+            headers=_cache_headers_error(),
+        )
+
+    decorated = _attach_submission_files(submission)
+    return JSONResponse(decorated, status_code=201, headers=_cache_headers_success())
 
 
 def _dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, course_id: str, task_id: str, student_sub: str) -> None:
@@ -1551,7 +2082,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
     )
 
     bucket = _storage_bucket()
-    adapter = STORAGE_ADAPTER
+    adapter = _current_storage_adapter()
     # Lazy wiring: if adapter is not ready, try wiring once now.
     if isinstance(adapter, NullStorageAdapter):
         try:
@@ -1559,7 +2090,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         except Exception:
             # Non-fatal; fall through to stub/503 handling.
             pass
-        adapter = STORAGE_ADAPTER  # refresh after potential wiring
+        adapter = _current_storage_adapter()  # refresh after potential wiring
 
     # Dev fallback when adapter remains unavailable.
     if not bucket or isinstance(adapter, NullStorageAdapter):
@@ -1679,7 +2210,7 @@ def _verify_storage_object(storage_key: str, sha256: str, size_bytes: int, mime_
 
     config = verification_config_from_env()
     return verify_storage_object_integrity(
-        adapter=STORAGE_ADAPTER,
+        adapter=_current_storage_adapter(),
         storage_key=storage_key,
         expected_sha256=sha256,
         expected_size=size_bytes,
@@ -1854,7 +2385,7 @@ async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int
         return local
 
     bucket = _storage_bucket()
-    adapter = STORAGE_ADAPTER
+    adapter = _current_storage_adapter()
     if not bucket or isinstance(adapter, NullStorageAdapter):
         return None
     try:
@@ -1948,7 +2479,7 @@ async def internal_upload_proxy(request: Request):
     content_type_for_log = request.headers.get("content-type") or "application/octet-stream"
 
     def _proxy_error(payload: dict[str, str], *, status_code: int, reason: str) -> JSONResponse:
-        _emit_upload_proxy_telemetry(
+        _current_emit_upload_proxy_telemetry()(
             outcome="error",
             status_code=status_code,
             reason=reason,
@@ -1960,7 +2491,7 @@ async def internal_upload_proxy(request: Request):
 
     user, error = _require_student(request)
     if error:
-        _emit_upload_proxy_telemetry(
+        _current_emit_upload_proxy_telemetry()(
             outcome="error",
             status_code=int(getattr(error, "status_code", 401)),
             reason="auth",
@@ -2047,7 +2578,7 @@ async def internal_upload_proxy(request: Request):
         return _proxy_error({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, reason="mime_not_allowed")
 
     try:
-        resp = await _async_forward_upload(
+        resp = await _current_async_forward_upload()(
             url=target,
             payload=body,
             content_type=content_type,
@@ -2063,7 +2594,7 @@ async def internal_upload_proxy(request: Request):
 
     import hashlib as _hashlib
     h = _hashlib.sha256(); h.update(body)
-    _emit_upload_proxy_telemetry(
+    _current_emit_upload_proxy_telemetry()(
         outcome="success",
         status_code=200,
         reason="ok",
@@ -2111,4 +2642,5 @@ async def list_submissions(
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
-    return JSONResponse(submissions, status_code=200, headers=_cache_headers_success())
+    decorated = [_attach_submission_files(submission) for submission in submissions]
+    return JSONResponse(decorated, status_code=200, headers=_cache_headers_success())

@@ -29,9 +29,13 @@ from psycopg.types.json import Json  # type: ignore  # noqa: E402
 def _reset_worker_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unset env vars that influence the worker DSN resolution."""
     for name in [
+        "LEARNING_WORKER_DATABASE_URL",
+        "LEARNING_WORKER_DB_URL",
         "LEARNING_DATABASE_URL",
         "DATABASE_URL",
         "LEARNING_DB_URL",
+        "LEARNING_WORKER_DB_USER",
+        "LEARNING_WORKER_DB_PASSWORD",
         "ALLOW_SERVICE_DSN_FOR_TESTING",
         "RUN_E2E",
         "RUN_SUPABASE_E2E",
@@ -54,17 +58,35 @@ def test_worker_dsn_rejects_service_role(monkeypatch: pytest.MonkeyPatch):
     assert "gustav" in str(excinfo.value).lower(), str(excinfo.value)
 
 
-def test_worker_dsn_prefers_app_role_fallback(monkeypatch: pytest.MonkeyPatch):
-    """When no override is provided, worker DSN should use the app login role."""
+def test_worker_dsn_prefers_dedicated_worker_role_fallback(monkeypatch: pytest.MonkeyPatch):
+    """When no override is provided, worker DSN should use the dedicated worker login role."""
     from backend.learning.workers import process_learning_submission_jobs as jobs
 
     _reset_worker_env(monkeypatch)
-    monkeypatch.setenv("APP_DB_USER", "gustav_app")
-    monkeypatch.setenv("APP_DB_PASSWORD", "pw")
+    monkeypatch.setenv("LEARNING_WORKER_DB_USER", "gustav_worker")
+    monkeypatch.setenv("LEARNING_WORKER_DB_PASSWORD", "pw")
     monkeypatch.setenv("TEST_DB_HOST", "db")
     monkeypatch.setenv("TEST_DB_PORT", "6543")
     dsn = jobs._resolve_worker_dsn()
-    assert dsn.startswith("postgresql://gustav_app:pw@db:6543"), dsn
+    assert dsn.startswith("postgresql://gustav_worker:pw@db:6543"), dsn
+
+
+def test_worker_dsn_prefers_explicit_worker_database_url(monkeypatch: pytest.MonkeyPatch):
+    """The dedicated worker DSN must win over legacy learning DSN overrides."""
+    from backend.learning.workers import process_learning_submission_jobs as jobs
+
+    _reset_worker_env(monkeypatch)
+    monkeypatch.setenv(
+        "LEARNING_WORKER_DATABASE_URL",
+        "postgresql://gustav_worker:pw@worker-db:5432/postgres",
+    )
+    monkeypatch.setenv(
+        "LEARNING_DATABASE_URL",
+        "postgresql://postgres:postgres@legacy-db:5432/postgres",
+    )
+
+    dsn = jobs._resolve_worker_dsn()
+    assert dsn == "postgresql://gustav_worker:pw@worker-db:5432/postgres"
 
 
 def _dsn() -> str:

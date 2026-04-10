@@ -2,8 +2,8 @@
  * GUSTAV H5P Service (Phase 1 – Lumi PoC)
  *
  * Why:
- *   Provide a dedicated H5P runtime under `/h5p/*` while keeping authentication
- *   based on the existing `gustav_session` cookie (no extra browser tokens).
+ *   Provide a dedicated H5P runtime under `/h5p/*` while supporting both the
+ *   legacy backend session cookie and the new SvelteKit Browser-BFF session.
  *
  * Behavior:
  *   - This service is reverse-proxied under `/h5p/*` on `app.localhost`.
@@ -42,7 +42,9 @@ import { createFinishedForwardingMetrics, forwardLearningSubmission } from "./li
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const gustavWebInternalBase = process.env.GUSTAV_WEB_INTERNAL_BASE || "http://web:8000";
+const gustavFrontendInternalBase = process.env.GUSTAV_FRONTEND_INTERNAL_BASE || "http://gustav-frontend:3000";
 const sessionCookieName = process.env.SESSION_COOKIE_NAME || "gustav_session";
+const frontendSessionCookieName = process.env.FRONTEND_SESSION_COOKIE_NAME || "gustav_bff_session";
 const authCacheTtlSeconds = Number.parseInt(process.env.AUTH_CACHE_TTL_SECONDS || "30", 10);
 const AUTH_CACHE_MAX_ENTRIES = parseMaxEntries(process.env.AUTH_CACHE_MAX_ENTRIES, 1000);
 const H5P_AUTH_CACHE_MAX_ENTRIES = parseMaxEntries(process.env.H5P_AUTH_CACHE_MAX_ENTRIES, 5000);
@@ -472,14 +474,36 @@ async function probeStorage() {
 }
 
 async function fetchGustavMe(cookieHeader) {
-  const url = `${gustavWebInternalBase.replace(/\/+$/, "")}/api/me`;
+  const backendUrl = `${gustavWebInternalBase.replace(/\/+$/, "")}/api/me`;
+  const frontendUrl = `${gustavFrontendInternalBase.replace(/\/+$/, "")}/internal/h5p/me`;
   const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
-  const headers = {
-    // Mirror "no-store" semantics of /api/me; avoid accidental caches.
+  const frontendCookieHeader = buildSessionCookieHeader(cookieHeader, frontendSessionCookieName);
+
+  const backendHeaders = {
     "cache-control": "no-store",
   };
-  if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
-  const r = await fetchWithTimeout(url, { method: "GET", headers }, { timeoutMs: upstreamFetchTimeoutMs });
+  if (sessionCookieHeader) backendHeaders.cookie = sessionCookieHeader;
+
+  if (sessionCookieHeader) {
+    const r = await fetchWithTimeout(backendUrl, { method: "GET", headers: backendHeaders }, { timeoutMs: upstreamFetchTimeoutMs });
+    if (r.status === 200) {
+      const payload = await r.json();
+      return { ok: true, payload };
+    }
+    if (!frontendCookieHeader || r.status !== 401) {
+      return { ok: false, status: r.status };
+    }
+  }
+
+  if (!frontendCookieHeader) {
+    return { ok: false, status: 401 };
+  }
+
+  const frontendHeaders = {
+    "cache-control": "no-store",
+    cookie: frontendCookieHeader,
+  };
+  const r = await fetchWithTimeout(frontendUrl, { method: "GET", headers: frontendHeaders }, { timeoutMs: upstreamFetchTimeoutMs });
   if (r.status !== 200) {
     return { ok: false, status: r.status };
   }
@@ -488,16 +512,41 @@ async function fetchGustavMe(cookieHeader) {
 }
 
 async function checkLearningH5PContentAccess(courseId, contentId, cookieHeader) {
-  const base = gustavWebInternalBase.replace(/\/+$/, "");
-  const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/h5p/contents/${encodeURIComponent(contentId)}/access`;
+  const backendBase = gustavWebInternalBase.replace(/\/+$/, "");
+  const frontendBase = gustavFrontendInternalBase.replace(/\/+$/, "");
+  const url = `${backendBase}/api/learning/courses/${encodeURIComponent(courseId)}/h5p/contents/${encodeURIComponent(contentId)}/access`;
+  const frontendUrl =
+    `${frontendBase}/internal/h5p/access?course_id=${encodeURIComponent(courseId)}&content_id=${encodeURIComponent(contentId)}`;
   const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
+  const frontendCookieHeader = buildSessionCookieHeader(cookieHeader, frontendSessionCookieName);
   const headers = {
-    // Keep "no-store" semantics for access checks (cookie-auth, student scope).
     "cache-control": "no-store",
   };
   if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
   try {
-    const r = await fetchWithTimeout(url, { method: "GET", headers }, { timeoutMs: upstreamFetchTimeoutMs });
+    if (sessionCookieHeader) {
+      const r = await fetchWithTimeout(url, { method: "GET", headers }, { timeoutMs: upstreamFetchTimeoutMs });
+      if (r.status === 204) {
+        return { ok: true, status: 204 };
+      }
+      if (!frontendCookieHeader || r.status !== 401) {
+        return { ok: false, status: r.status };
+      }
+    }
+
+    if (!frontendCookieHeader) {
+      return { ok: false, status: 401 };
+    }
+
+    const frontendHeaders = {
+      "cache-control": "no-store",
+      cookie: frontendCookieHeader,
+    };
+    const r = await fetchWithTimeout(
+      frontendUrl,
+      { method: "GET", headers: frontendHeaders },
+      { timeoutMs: upstreamFetchTimeoutMs },
+    );
     if (r.status === 204) {
       return { ok: true, status: 204 };
     }
@@ -511,18 +560,20 @@ async function checkLearningH5PContentAccess(courseId, contentId, cookieHeader) 
 async function requireAuth(req, res, next) {
   const cookieHeader = req.get("cookie") || "";
   const cookies = parseCookies(cookieHeader);
-  const sid = cookies[sessionCookieName];
-  if (!sid) {
+  const legacySessionId = cookies[sessionCookieName];
+  const frontendSessionId = cookies[frontendSessionCookieName];
+  const authCacheKey = legacySessionId || (frontendSessionId ? `bff:${frontendSessionId}` : "");
+  if (!authCacheKey) {
     sendJson(res, 401, { error: "unauthenticated" });
     return;
   }
 
   const now = Date.now();
-  const cached = authCache.get(sid);
+  const cached = authCache.get(authCacheKey);
   if (cached && cached.expiresAtMs > now) {
     // LRU touch: move to end so pruning removes older entries first.
-    authCache.delete(sid);
-    authCache.set(sid, cached);
+    authCache.delete(authCacheKey);
+    authCache.set(authCacheKey, cached);
 
     req.gustavMe = cached.payload;
     req.user = {
@@ -535,7 +586,7 @@ async function requireAuth(req, res, next) {
     next();
     return;
   }
-  if (cached) authCache.delete(sid);
+  if (cached) authCache.delete(authCacheKey);
 
   try {
     const me = await fetchGustavMe(cookieHeader);
@@ -547,8 +598,8 @@ async function requireAuth(req, res, next) {
       sendJson(res, 502, { error: "upstream_unavailable" });
       return;
     }
-    authCache.delete(sid);
-    authCache.set(sid, { expiresAtMs: now + authCacheTtlSeconds * 1000, payload: me.payload });
+    authCache.delete(authCacheKey);
+    authCache.set(authCacheKey, { expiresAtMs: now + authCacheTtlSeconds * 1000, payload: me.payload });
     pruneCacheToMaxEntries(authCache, now, AUTH_CACHE_MAX_ENTRIES);
     req.gustavMe = me.payload;
     req.user = {
@@ -773,6 +824,65 @@ async function main() {
     });
   }));
 
+  // Public browser runtime assets.
+  //
+  // These files must stay reachable without a session cookie because the
+  // browser needs them before the authenticated H5P model endpoints can render
+  // any visible editor/player UI.
+  // Overrides for Lumi webcomponents to keep browser ESM compatible without a bundler.
+  // These files remove bare imports like `deepmerge` and `await-lock`.
+  app.use(
+    "/webcomponents",
+    express.static(path.join("/app", "vendor", "webcomponents", "overrides"), {
+      cacheControl: true,
+      etag: true,
+      lastModified: true,
+      // Not versioned → always revalidate (prevents stale JS after redeploys).
+      maxAge: 0,
+      extensions: ["js"],
+    }),
+  );
+
+  // Serve Lumi web components (ES modules).
+  app.use(
+    "/webcomponents",
+    express.static(
+      path.join("/app", "node_modules", "@lumieducation", "h5p-webcomponents", "build", "es2015"),
+      // Note: Lumi's ES2015 build uses extensionless relative imports like
+      // `import ... from './h5p-editor'`. Browsers do not auto-append `.js`,
+      // so we enable a `.js` fallback to make those imports resolve.
+      // Not versioned → always revalidate (prevents stale JS after redeploys).
+      { cacheControl: true, etag: true, lastModified: true, maxAge: 0, extensions: ["js"] },
+    ),
+  );
+
+  // Global H5P theme overrides (Option B).
+  app.use(
+    "/theme",
+    express.static(path.join("/app", "vendor", "theme"), {
+      cacheControl: true,
+      etag: true,
+      lastModified: true,
+      // Not versioned → always revalidate (prevents stale CSS after redeploys).
+      maxAge: 0,
+      extensions: ["css"],
+    }),
+  );
+
+  // Vendor shims required by the webcomponents when used directly in a browser
+  // (without a bundler). The upstream build has bare imports like `deepmerge`
+  // and `await-lock`, which must be resolved via an import map.
+  app.use(
+    "/webcomponents/vendor",
+    express.static(path.join("/app", "vendor", "webcomponents"), {
+      cacheControl: true,
+      etag: true,
+      lastModified: true,
+      // Not versioned → always revalidate (prevents stale JS after redeploys).
+      maxAge: 0,
+    }),
+  );
+
   // Everything else is authenticated.
   app.use(requireAuth);
   app.use(requireStudentOrTeacher);
@@ -853,60 +963,6 @@ async function main() {
 
     next();
   });
-
-  // Overrides for Lumi webcomponents to keep browser ESM compatible without a bundler.
-  // These files remove bare imports like `deepmerge` and `await-lock`.
-  app.use(
-    "/webcomponents",
-    express.static(path.join("/app", "vendor", "webcomponents", "overrides"), {
-      cacheControl: true,
-      etag: true,
-      lastModified: true,
-      // Not versioned → always revalidate (prevents stale JS after redeploys).
-      maxAge: 0,
-      extensions: ["js"],
-    }),
-  );
-
-  // Serve Lumi web components (ES modules).
-  app.use(
-    "/webcomponents",
-    express.static(
-      path.join("/app", "node_modules", "@lumieducation", "h5p-webcomponents", "build", "es2015"),
-      // Note: Lumi's ES2015 build uses extensionless relative imports like
-      // `import ... from './h5p-editor'`. Browsers do not auto-append `.js`,
-      // so we enable a `.js` fallback to make those imports resolve.
-      // Not versioned → always revalidate (prevents stale JS after redeploys).
-      { cacheControl: true, etag: true, lastModified: true, maxAge: 0, extensions: ["js"] },
-    ),
-  );
-
-  // Global H5P theme overrides (Option B).
-  app.use(
-    "/theme",
-    express.static(path.join("/app", "vendor", "theme"), {
-      cacheControl: true,
-      etag: true,
-      lastModified: true,
-      // Not versioned → always revalidate (prevents stale CSS after redeploys).
-      maxAge: 0,
-      extensions: ["css"],
-    }),
-  );
-
-  // Vendor shims required by the webcomponents when used directly in a browser
-  // (without a bundler). The upstream build has bare imports like `deepmerge`
-  // and `await-lock`, which must be resolved via an import map.
-  app.use(
-    "/webcomponents/vendor",
-    express.static(path.join("/app", "vendor", "webcomponents"), {
-      cacheControl: true,
-      etag: true,
-      lastModified: true,
-      // Not versioned → always revalidate (prevents stale JS after redeploys).
-      maxAge: 0,
-    }),
-  );
 
   app.get("/auth/me", (req, res) => {
     sendJson(res, 200, req.gustavMe);
@@ -1162,8 +1218,9 @@ async function main() {
       }
       const cookieHeader = req.get("cookie") || "";
       const cookies = parseCookies(cookieHeader);
-      const sid = cookies[sessionCookieName] || "";
-      const cacheKey = `${sid}|${courseId}|${contentId}`;
+      const authCookie =
+        cookies[sessionCookieName] || (cookies[frontendSessionCookieName] ? `bff:${cookies[frontendSessionCookieName]}` : "");
+      const cacheKey = `${authCookie}|${courseId}|${contentId}`;
       const now = Date.now();
       let allowed = null;
       const cached = h5pContentAccessCache.get(cacheKey);
@@ -1590,6 +1647,28 @@ async function main() {
     }),
   );
 
+  app.delete("/contents/:contentId", requireTeacher, requireSameOrigin, asyncHandler(async (req, res) => {
+    const { contentId } = req.params;
+    if (!(await contentStorage.contentExists(contentId))) {
+      sendJson(res, 404, { error: "not_found" }, { Vary: "Origin" });
+      return;
+    }
+    try {
+      await h5pEditor.deleteContent(contentId, req.user);
+      res.status(204);
+      for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Vary", "Origin");
+      res.end();
+    } catch (err) {
+      if (err?.httpStatusCode) {
+        sendJson(res, err.httpStatusCode, { error: err.errorId || "h5p_error" }, { Vary: "Origin" });
+        return;
+      }
+      sendJson(res, 500, { error: "internal_error" }, { Vary: "Origin" });
+    }
+  }));
+
   app.get("/contents/:contentId/export", requireTeacher, asyncHandler(async (req, res) => {
     const { contentId } = req.params;
     if (!(await contentStorage.contentExists(contentId))) {
@@ -1749,31 +1828,52 @@ async function main() {
             const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(taskId)}/submissions`;
 
             const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
-            const headers = {
-              "content-type": "application/json",
-              "idempotency-key": idem,
-              // CSRF same-origin for internal call: mimic the reverse-proxy headers
-              // so the Learning API validates against the public origin.
-              ...(originInfo
-                ? {
-                    origin: originInfo.origin,
-                    "x-forwarded-proto": originInfo.scheme,
-                    "x-forwarded-host": originInfo.host,
-                    "x-forwarded-port": originInfo.port,
-                  }
-                : {}),
-            };
-            if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
+            const frontendCookieHeader = buildSessionCookieHeader(cookieHeader, frontendSessionCookieName);
 
-            const result = await forwardLearningSubmission({
-              url,
-              headers,
-              body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
-              timeoutMs: upstreamFetchTimeoutMs,
-              maxAttempts: 2,
-              baseBackoffMs: 100,
-              metrics: finishedForwardingMetrics,
-            });
+            let result;
+            if (sessionCookieHeader) {
+              const headers = {
+                "content-type": "application/json",
+                "idempotency-key": idem,
+                ...(originInfo
+                  ? {
+                      origin: originInfo.origin,
+                      "x-forwarded-proto": originInfo.scheme,
+                      "x-forwarded-host": originInfo.host,
+                      "x-forwarded-port": originInfo.port,
+                    }
+                  : {}),
+                cookie: sessionCookieHeader,
+              };
+
+              result = await forwardLearningSubmission({
+                url,
+                headers,
+                body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
+                timeoutMs: upstreamFetchTimeoutMs,
+                maxAttempts: 2,
+                baseBackoffMs: 100,
+                metrics: finishedForwardingMetrics,
+              });
+            } else if (frontendCookieHeader) {
+              const frontendUrl =
+                `${gustavFrontendInternalBase.replace(/\/+$/, "")}/internal/h5p/submissions?course_id=${encodeURIComponent(courseId)}&task_id=${encodeURIComponent(taskId)}`;
+              result = await forwardLearningSubmission({
+                url: frontendUrl,
+                headers: {
+                  "content-type": "application/json",
+                  "idempotency-key": idem,
+                  cookie: frontendCookieHeader,
+                },
+                body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
+                timeoutMs: upstreamFetchTimeoutMs,
+                maxAttempts: 2,
+                baseBackoffMs: 100,
+                metrics: finishedForwardingMetrics,
+              });
+            } else {
+              result = { ok: false, status: 401, attempts: 1 };
+            }
             if (!result.ok) {
               const reason = result.status ? `status=${result.status}` : `error=${result.error || "unknown"}`;
               // eslint-disable-next-line no-console

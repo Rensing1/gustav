@@ -218,6 +218,25 @@ async def test_logout_session_without_id_token_falls_back_to_client_id():
 
 
 @pytest.mark.anyio
+async def test_logout_prefers_forwarded_id_token_hint_over_session_value():
+    """Frontend bridge may forward the BFF id_token explicitly; that hint must win."""
+    store = getattr(main, "SESSION_STORE")
+    sess = store.create(sub="user-xyz", roles=["student"], name="Student", id_token="stale-session-id-token")
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", sess.session_id)
+        r = await client.get(
+            "/auth/logout",
+            follow_redirects=False,
+            headers={"x-gustav-id-token-hint": "fresh-bff-id-token"},
+        )
+    assert r.status_code in (302, 303)
+    from urllib.parse import urlparse, parse_qs
+    qs = parse_qs(urlparse(r.headers.get("location", "")).query)
+    assert qs.get("id_token_hint") == ["fresh-bff-id-token"]
+    assert "client_id" not in qs
+
+
+@pytest.mark.anyio
 async def test_logout_rejects_external_redirect_uri():
     """GET /auth/logout must not accept external post-logout redirects.
 

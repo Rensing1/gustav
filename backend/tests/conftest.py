@@ -379,6 +379,38 @@ def _reset_learning_requests_alias(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
+def _reset_route_storage_adapters_between_tests():
+    """Restore route-level storage adapters to Null adapters before each test.
+
+    Why:
+        Many API tests patch `routes.learning.STORAGE_ADAPTER` or
+        `routes.teaching.STORAGE_ADAPTER` directly. If a test reloads a route
+        module or forgets cleanup, later tests can accidentally run against a
+        stale fake adapter and produce order-dependent failures.
+    """
+    try:
+        import importlib
+        from teaching.storage import NullStorageAdapter  # type: ignore
+
+        for alias in (
+            "routes.learning",
+            "backend.web.routes.learning",
+            "routes.teaching",
+        ):
+            try:
+                mod = importlib.import_module(alias)
+                if hasattr(mod, "set_storage_adapter"):
+                    mod.set_storage_adapter(NullStorageAdapter())  # type: ignore[attr-defined]
+                elif hasattr(mod, "STORAGE_ADAPTER"):
+                    setattr(mod, "STORAGE_ADAPTER", NullStorageAdapter())
+            except Exception:
+                continue
+    except Exception:
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _prune_live_db_env_when_unreachable():
     """Ensure live-DB env vars are cleared when the DB is not reachable.
 

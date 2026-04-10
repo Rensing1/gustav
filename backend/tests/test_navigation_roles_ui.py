@@ -49,15 +49,15 @@ async def test_sidebar_for_student_contains_expected_items_in_order():
     assert r.status_code == 200
     html = r.text
 
-    # Order: Startseite -> Meine Kurse -> Über GUSTAV
+    # Order: Startseite -> Über GUSTAV
     p_home = _pos(html, "Startseite")
-    p_courses = _pos(html, "Meine Kurse")
     p_about = _pos(html, "Über GUSTAV")
-    assert p_home != -1 and p_courses != -1 and p_about != -1
-    assert p_home < p_courses < p_about
+    assert p_home != -1 and p_about != -1
+    assert p_home < p_about
 
-    # Removed items should not appear
+    # Legacy product navigation should no longer appear in the backend sidebar.
     forbidden = [
+        "Meine Kurse", "Kurse", "Lerneinheiten", "Unterricht",
         "Dashboard", "Wissenschaft", "Karteikarten", "Fortschritt",
         "Einstellungen", "Analytics", "Schüler", "Inhalte erstellen",
     ]
@@ -82,15 +82,14 @@ async def test_sidebar_for_teacher_contains_expected_items_in_order():
     assert r.status_code == 200
     html = r.text
 
-    # Order: Startseite -> Kurse -> Lerneinheiten -> Über GUSTAV
+    # Order: Startseite -> Über GUSTAV
     p_home = _pos(html, "Startseite")
-    p_courses = _pos(html, "Kurse")
-    p_units = _pos(html, "Lerneinheiten")
     p_about = _pos(html, "Über GUSTAV")
-    assert p_home != -1 and p_courses != -1 and p_units != -1 and p_about != -1
-    assert p_home < p_courses < p_units < p_about
+    assert p_home != -1 and p_about != -1
+    assert p_home < p_about
 
     forbidden = [
+        "Meine Kurse", "Kurse", "Lerneinheiten", "Unterricht",
         "Dashboard", "Wissenschaft", "Karteikarten", "Fortschritt",
         "Einstellungen", "Analytics", "Schüler", "Inhalte erstellen",
     ]
@@ -129,8 +128,8 @@ async def test_htmx_request_includes_sidebar_oob_update():
 
 
 @pytest.mark.anyio
-async def test_placeholder_pages_exist_about_and_units():
-    # These pages should be SSR pages returning HTML 200
+async def test_about_page_exists_and_units_page_is_retired():
+    # `/about` stays as a small SSR info page; `/units` is now a retired legacy entry.
     sess = main.SESSION_STORE.create(sub="t-2", name="Lehrer E", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
@@ -138,6 +137,6 @@ async def test_placeholder_pages_exist_about_and_units():
         r_units = await c.get("/units")
 
     assert r_about.status_code == 200
-    assert r_units.status_code == 200
+    assert r_units.status_code == 410
     assert "GUSTAV" in r_about.text
-    assert "GUSTAV" in r_units.text
+    assert "legacy route retired" in r_units.text.lower()

@@ -4,9 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${msg("doRegister")} - GUSTAV</title>
-  <!-- Base app CSS (shared) + small login overrides -->
-  <link rel="stylesheet" href="${url.resourcesPath}/css/app-gustav-base.css">
-  <link rel="stylesheet" href="${url.resourcesPath}/css/gustav.css">
+  <link rel="stylesheet" href="${url.resourcesPath}/css/auth-theme.css?v=${properties.gustavThemeVersion!"dev"}">
+  <link rel="stylesheet" href="${url.resourcesPath}/css/gustav.css?v=${properties.gustavThemeVersion!"dev"}">
   <script>
     (function(){
       try {
@@ -19,36 +18,45 @@
   </script>
 </head>
 <body class="login-pf">
-  <main id="kc-content" class="kc-gustav">
-    <section class="kc-card">
-      <h1 class="kc-title">${msg("doRegister")}</h1>
-      <p class="kc-hint">${msg("gustavPasswordPolicyHint", "Hinweis: Mindestens 8 Zeichen, mit Groß-/Kleinbuchstaben, Ziffer und mindestens einem Sonderzeichen.")}</p>
+  <main id="kc-content" class="kc-gustav kc-auth-shell">
+    <section class="kc-card kc-auth-card">
+      <div class="kc-form-shell">
+        <h1 class="kc-title">${msg("doRegister")}</h1>
 
-      <#if message?has_content>
-        <div class="kc-message kc-${message.type}">${message.summary}</div>
-      </#if>
+        <#if message?has_content>
+          <div class="kc-message kc-${message.type}">${message.summary}</div>
+        </#if>
 
-      <form id="kc-register-form" action="${url.registrationAction}" method="post" class="kc-form">
-        <label class="kc-label" for="display_name">${msg("gustavDisplayName", "Wie möchtest du genannt werden?")}</label>
-        <input class="kc-input" id="display_name" name="user.attributes.display_name" type="text" autocomplete="nickname" required>
-        <!-- Simplified registration: use a single display name instead of separate first/last name fields -->
+        <form id="kc-register-form" action="${url.registrationAction}" method="post" class="kc-form">
+          <label class="kc-field workspace-field" for="display_name">
+            <span class="kc-label">${msg("gustavDisplayName", "Wie möchtest du genannt werden?")}</span>
+            <input class="kc-input" id="display_name" name="user.attributes.display_name" type="text" autocomplete="nickname" required>
+          </label>
+          <!-- Simplified registration: use a single display name instead of separate first/last name fields -->
 
-        <!-- Email is used as username; no separate username field -->
+          <!-- Email is used as username; no separate username field -->
 
-        <label class="kc-label" for="email">${msg("email")}</label>
-        <input class="kc-input" id="email" name="email" type="email" autocomplete="email">
+          <label class="kc-field workspace-field" for="email">
+            <span class="kc-label">${msg("email")}</span>
+            <input class="kc-input" id="email" name="email" type="email" autocomplete="email">
+          </label>
 
-        <label class="kc-label" for="password">${msg("password")}</label>
-        <input class="kc-input" id="password" name="password" type="password" autocomplete="new-password">
+          <label class="kc-field workspace-field" for="password">
+            <span class="kc-label">${msg("password")}</span>
+            <input class="kc-input" id="password" name="password" type="password" autocomplete="new-password">
+          </label>
 
-        <label class="kc-label" for="password-confirm">${msg("passwordConfirm")}</label>
-        <input class="kc-input" id="password-confirm" name="password-confirm" type="password" autocomplete="new-password">
+          <label class="kc-field workspace-field" for="password-confirm">
+            <span class="kc-label">${msg("passwordConfirm")}</span>
+            <input class="kc-input" id="password-confirm" name="password-confirm" type="password" autocomplete="new-password">
+          </label>
 
-        <button class="btn btn-primary kc-submit" type="submit">${msg("doRegister")}</button>
-      </form>
+          <button class="btn btn-primary kc-submit workspace-button" type="submit">${msg("doRegister")}</button>
+        </form>
 
-      <div class="kc-links">
-        <a href="${url.loginUrl}">${msg("doLogIn")}</a>
+        <div class="kc-links">
+          <a href="${url.loginUrl}">${msg("doLogIn")}</a>
+        </div>
       </div>
     </section>
   </main>

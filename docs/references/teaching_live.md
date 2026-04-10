@@ -8,9 +8,10 @@ Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
 
 - GET `/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary`
   - Liefert die Aufgaben der Einheit (`tasks[]`) und optional die Schülerzeilen (`rows[]`) mit Minimalstatus je Zelle:
-    `{ task_id, has_submission, average_score }`.
+    `{ task_id, has_submission, average_score, created_at }`.
   - `average_score` ist ein optionaler Float (0..10) für den Durchschnitt der Kriterien-Scores der
     neuesten Einreichung; `null` wenn keine abgeschlossene Auswertung vorliegt.
+  - `created_at` ist der UTC-Zeitstempel der neuesten Abgabe in dieser Zelle; `null`, wenn noch keine Abgabe existiert.
   - Query:
     - `include_students` (bool, default true): Wenn `false`, werden nur `tasks[]` geliefert (Startoptimierung in der UI).
     - `limit`/`offset`: Paginierung der Schülerliste.

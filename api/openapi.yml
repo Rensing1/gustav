@@ -2962,6 +2962,13 @@ components:
           description: >
             Optional average criteria score (0..10) for the latest submission.
             Null when no completed analysis is available.
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            UTC timestamp of the latest submission for this student/task cell.
+            Null when no submission exists yet.
     TeachingUnitLiveRow:
       type: object
       required: [student, tasks]

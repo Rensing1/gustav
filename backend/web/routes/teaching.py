@@ -5492,6 +5492,7 @@ async def get_unit_live_summary(
         avg_map: dict[tuple[str, str], float | None] = {}
         h5p_map: dict[tuple[str, str], bool] = {}
         score_map: dict[tuple[str, str], tuple[int | None, int | None]] = {}
+        created_at_map: dict[tuple[str, str], str | None] = {}
         try:
             from teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
@@ -5522,6 +5523,11 @@ async def get_unit_live_summary(
                             _safe_int(row.get("score_max")),
                         )
                         for row in aggregate_rows
+                    }
+                    created_at_map = {
+                        (str(row.get("student_sub") or ""), str(row.get("task_id") or "")): str(row.get("created_at_iso") or "")
+                        for row in aggregate_rows
+                        if row.get("created_at_iso")
                     }
                 except Exception as exc:
                     logger.warning(
@@ -5589,6 +5595,11 @@ async def get_unit_live_summary(
                                         for row in helper_rows
                                         if row.get("h5p_completed") is not None
                                     }
+                                    created_at_map = {
+                                        (str(row["student_sub"]), str(row["task_id"])): str(row.get("created_at_iso") or "")
+                                        for row in helper_rows
+                                        if row.get("created_at_iso")
+                                    }
                                 except Exception as legacy_exc:
                                     logger.warning(
                                         "Unit summary fallback: get_unit_latest_submissions_for_owner unavailable — %s",
@@ -5601,37 +5612,54 @@ async def get_unit_live_summary(
                                     if not helper_rows:
                                         cur.execute(
                                             """
-                                            select distinct student_sub::text, task_id::text
+                                            select distinct on (student_sub, task_id)
+                                                   student_sub::text,
+                                                   task_id::text,
+                                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                                             from public.learning_submissions
                                             where course_id = %s
                                               and task_id = any(%s)
                                               and student_sub = any(%s)
+                                            order by student_sub, task_id, created_at desc, attempt_nr desc, id desc
                                             """,
                                             (course_id, task_ids, member_subs),
                                         )
                                         rows = cur.fetchall() or []
                                         has_map = {(r[0], r[1]) for r in rows}
+                                        created_at_map.update(
+                                            {
+                                                (str(student_sub), str(task_id)): str(created_at_iso or "")
+                                                for student_sub, task_id, created_at_iso in rows
+                                                if created_at_iso
+                                            }
+                                        )
                                     if not has_map:
                                         for sid in member_subs:
                                             cur.execute("select set_config('app.current_sub', %s, true)", (sid,))
                                             cur.execute(
                                                 """
-                                                select distinct task_id::text
+                                                select distinct on (task_id)
+                                                       task_id::text,
+                                                       to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                                                 from public.learning_submissions
                                                 where course_id = %s
                                                   and student_sub = %s
                                                   and task_id = any(%s)
+                                                order by task_id, created_at desc, attempt_nr desc, id desc
                                                 """,
                                                 (course_id, sid, task_ids),
                                             )
-                                            for (tid,) in cur.fetchall() or []:
+                                            for tid, created_at_iso in cur.fetchall() or []:
                                                 has_map.add((sid, tid))
+                                                if created_at_iso:
+                                                    created_at_map[(sid, tid)] = str(created_at_iso)
                                         cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
         except Exception:
             has_map = set()
             avg_map = {}
             h5p_map = {}
             score_map = {}
+            created_at_map = {}
 
         for sid in member_subs:
             task_cells: list[dict] = []
@@ -5642,6 +5670,7 @@ async def get_unit_live_summary(
                     "task_id": tid,
                     "has_submission": has,
                     "average_score": (avg_map.get((sid, tid)) if has else None),
+                    "created_at": (created_at_map.get((sid, tid)) if has else None),
                 }
                 # H5P tasks are auto-scorable; for the live matrix we only need
                 # a binary "completed" flag (full score at least once).

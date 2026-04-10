@@ -1116,7 +1116,10 @@ def _resolve_worker_dsn() -> str:
     Resolve the Postgres DSN for the learning worker with least-privilege guards.
 
     Behavior:
-        - Favors explicit overrides (LEARNING_DATABASE_URL/LEARNING_DB_URL).
+        - Favors explicit worker overrides
+          (LEARNING_WORKER_DATABASE_URL/LEARNING_WORKER_DB_URL).
+        - Falls back to legacy learning overrides
+          (LEARNING_DATABASE_URL/LEARNING_DB_URL) for backwards compatibility.
         - Falls back to the dedicated worker login role derived from
           LEARNING_WORKER_DB_USER/LEARNING_WORKER_DB_PASSWORD.
         - Rejects service-role/superuser accounts (postgres, service_role) unless
@@ -1127,6 +1130,8 @@ def _resolve_worker_dsn() -> str:
         return (os.getenv(env_name, "") or "").strip().lower() in {"1", "true", "yes", "on"}
 
     candidates = [
+        os.getenv("LEARNING_WORKER_DATABASE_URL"),
+        os.getenv("LEARNING_WORKER_DB_URL"),
         os.getenv("LEARNING_DATABASE_URL"),
         os.getenv("LEARNING_DB_URL"),
     ]
@@ -1146,7 +1151,7 @@ def _resolve_worker_dsn() -> str:
     if user in {"postgres", "service_role", "supabase_admin"} and not allow_service:
         raise RuntimeError(
             "Learning worker requires the gustav_worker login role. "
-            "Override LEARNING_DATABASE_URL with the dedicated worker account or set "
+            "Set LEARNING_WORKER_DATABASE_URL with the dedicated worker account or set "
             "ALLOW_SERVICE_DSN_FOR_TESTING=true for temporary local debugging."
         )
     return dsn

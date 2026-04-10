@@ -600,6 +600,10 @@ async def test_summary_includes_average_score_for_completed_analysis():
     avg = cells[t1["id"]]["average_score"]
     assert isinstance(avg, float)
     assert avg == pytest.approx(8.0)
+    assert isinstance(cells[t1["id"]]["created_at"], str)
+    assert cells[t1["id"]]["created_at"]
+    assert isinstance(cells[t2["id"]]["created_at"], str)
+    assert cells[t2["id"]]["created_at"]
     assert cells[t2["id"]]["average_score"] is None
 
 

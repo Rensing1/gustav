@@ -87,3 +87,22 @@ def test_keycloak_configures_smtp_via_env_vars():
     ]
     for key in required_keys:
         assert key in environment, f"{key} must be configured on keycloak service for SMTP"
+
+
+def test_keycloak_build_receives_registration_domain_whitelist():
+    """Keycloak build must receive the same domain whitelist as app and BFF.
+
+    Why:
+        Self-registration should be governed by one source of truth. If the
+        Keycloak image does not receive `ALLOWED_REGISTRATION_DOMAINS` during
+        build/import, the IdP can drift away from FastAPI and SvelteKit.
+    """
+    compose = load_compose()
+    services = compose.get("services", {})
+
+    keycloak = services.get("keycloak")
+    assert keycloak, "Keycloak service is missing in compose file"
+
+    build = keycloak.get("build", {})
+    args = build.get("args", {})
+    assert args.get("ALLOWED_REGISTRATION_DOMAINS") == "${ALLOWED_REGISTRATION_DOMAINS:-}"

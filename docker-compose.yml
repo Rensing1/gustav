@@ -247,6 +247,8 @@ services:
     build:
       context: .
       dockerfile: keycloak/Dockerfile
+      args:
+        ALLOWED_REGISTRATION_DOMAINS: ${ALLOWED_REGISTRATION_DOMAINS:-}
     container_name: gustav-keycloak
     command: ["start", "--optimized", "--import-realm"]
     env_file:

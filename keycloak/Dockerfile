@@ -4,6 +4,16 @@ RUN apk add --no-cache curl \
  && curl -L "https://github.com/leroyguillaume/keycloak-bcrypt/releases/download/v${KEYCLOAK_BCRYPT_VERSION}/keycloak-bcrypt-${KEYCLOAK_BCRYPT_VERSION}.jar" \
         --output /tmp/keycloak-bcrypt-${KEYCLOAK_BCRYPT_VERSION}.jar
 
+FROM python:3.12-alpine AS realm-renderer
+ARG ALLOWED_REGISTRATION_DOMAINS=
+WORKDIR /work
+COPY keycloak/realm-gustav.json /work/realm-gustav.json
+COPY keycloak/render_realm.py /work/render_realm.py
+RUN python /work/render_realm.py \
+    --input /work/realm-gustav.json \
+    --output /work/realm-gustav.rendered.json \
+    --allowed-registration-domains "${ALLOWED_REGISTRATION_DOMAINS}"
+
 FROM quay.io/keycloak/keycloak:24.0
 
 # Provider versions
@@ -21,9 +31,9 @@ COPY frontend/src/lib/styles/auth-theme.css /opt/keycloak/themes/gustav/login/re
 # Source: https://github.com/leroyguillaume/keycloak-bcrypt (Apache-2.0)
 COPY --from=bcrypt-provider /tmp/keycloak-bcrypt-${KEYCLOAK_BCRYPT_VERSION}.jar /opt/keycloak/providers/keycloak-bcrypt-${KEYCLOAK_BCRYPT_VERSION}.jar
 
-# Optionally bake the realm import for reproducible local/prod setups.
+# Bake a rendered realm import from the shared registration-domain config.
 # Keycloak will import this on first run with `--import-realm`.
-COPY keycloak/realm-gustav.json /opt/keycloak/data/import/realm-gustav.json
+COPY --from=realm-renderer /work/realm-gustav.rendered.json /opt/keycloak/data/import/realm-gustav.json
 
 # Build Keycloak in optimized mode for PostgreSQL so that
 # the production `start --optimized` command uses Postgres

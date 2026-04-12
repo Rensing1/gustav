@@ -75,4 +75,38 @@ describe("teacher node editor page", () => {
     const fields = within(tasksSection).getAllByLabelText(/Kriterium \d+/i);
     expect(fields).toHaveLength(10);
   });
+
+  it("shows a success message and the created material immediately after a successful create action", () => {
+    render(Page, {
+      props: {
+        data: sampleData,
+        form: {
+          createMaterial: {
+            ok: true,
+            message: "Material angelegt.",
+            material_id: "material-1",
+            editor: {
+              ...sampleData.editor,
+              materials: [
+                {
+                  id: "material-1",
+                  title: "Arbeitsblatt",
+                  kind: "file",
+                  position: 1,
+                  mime_type: "application/pdf",
+                  size_bytes: 1024,
+                  filename_original: "arbeitsblatt.pdf",
+                  alt_text: "PDF Arbeitsblatt"
+                }
+              ]
+            }
+          }
+        } as never
+      }
+    });
+
+    expect(screen.getByText("Material angelegt.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Arbeitsblatt" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Arbeitsblatt")).toBeInTheDocument();
+  });
 });

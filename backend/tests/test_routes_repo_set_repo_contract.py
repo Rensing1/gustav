@@ -47,3 +47,45 @@ def test_learning_set_repo_updates_public_repo_alias():
     finally:
         learning.set_repo(original)  # type: ignore[attr-defined]
 
+
+def test_teaching_set_storage_adapter_updates_existing_route_globals_after_reload():
+    """Reloaded Teaching modules must still retarget already-registered route globals."""
+
+    import importlib
+    import sys
+    from fastapi.routing import APIRoute
+    import main  # type: ignore
+    import routes.teaching as original_teaching  # type: ignore
+
+    def _find_upload_intent_endpoint():
+        for route in main.app.routes:
+            if (
+                isinstance(route, APIRoute)
+                and route.path
+                == "/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents"
+            ):
+                return route.endpoint
+        raise AssertionError("teaching upload-intent route not registered")
+
+    original_adapter = original_teaching.STORAGE_ADAPTER
+    endpoint = _find_upload_intent_endpoint()
+    original_globals = endpoint.__globals__
+    assert "STORAGE_ADAPTER" in original_globals
+
+    for name in ("routes.teaching", "backend.web.routes.teaching"):
+        sys.modules.pop(name, None)
+
+    fresh_teaching = importlib.import_module("routes.teaching")
+    assert fresh_teaching is not original_teaching
+
+    class _Adapter:
+        pass
+
+    adapter = _Adapter()
+    try:
+        fresh_teaching.set_storage_adapter(adapter)
+        assert fresh_teaching.STORAGE_ADAPTER is adapter
+        assert endpoint.__globals__["STORAGE_ADAPTER"] is adapter
+    finally:
+        fresh_teaching.set_storage_adapter(original_adapter)
+        assert endpoint.__globals__["STORAGE_ADAPTER"] is original_adapter

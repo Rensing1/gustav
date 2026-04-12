@@ -535,6 +535,7 @@ async def test_upload_intent_accepts_mime_with_uppercase(_reset_storage_adapter)
         assert resp.status_code == 200
         payload = resp.json()
         assert payload["headers"]["content-type"] == "application/pdf"
+        assert "Content-Type" not in payload["headers"]
 
 
 @pytest.mark.anyio

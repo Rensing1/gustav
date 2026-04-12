@@ -22,4 +22,23 @@ describe("teacher node editor contract", () => {
     expect(appCss).not.toContain(".workspace-field {");
     expect(appCss).not.toContain(".workspace-button {");
   });
+
+  it("sends createMaterial forms with multipart encoding for file uploads", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain('action="?/createMaterial"');
+    expect(routeSource).toContain('enctype="multipart/form-data"');
+    expect(routeSource).toContain('<input name="upload_file" type="file" onchange={handleCreateMaterialFileChange} />');
+    expect(routeSource).toContain('<input name="intent_id" type="hidden" value=');
+    expect(routeSource).toContain('<input name="sha256" type="hidden" value=');
+  });
+
+  it("renders an inline success status for editor actions", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("editorMessage");
+    expect(routeSource).toContain("workspace-note workspace-note--success");
+  });
 });

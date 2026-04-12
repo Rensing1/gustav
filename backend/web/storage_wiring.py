@@ -96,8 +96,8 @@ def wire_supabase_adapter_if_configured() -> bool:
             storage_client = SyncStorageClient(storage_url, headers)  # type: ignore[arg-type]
             adapter = SupabaseStorageAdapter(storage_client)
 
-        _teaching.set_storage_adapter(adapter)
-        _learning.set_storage_adapter(adapter)
+        _teaching.set_storage_adapter(adapter, override=False)
+        _learning.set_storage_adapter(adapter, override=False)
         logger.info("Storage adapter wired: Supabase")
         _STARTUP_ATTEMPTED = True
         return True

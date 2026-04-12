@@ -1,9 +1,9 @@
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
-import { backendRequest, buildApiUrl, requireBackendJson } from "$lib/server/api";
+import { backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
-import type { TeacherUnitNodeEditorView } from "$lib/types/home";
+import type { TeacherUnitNodeEditorMaterial, TeacherUnitNodeEditorView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
 function editorHref(unitId: string, nodeId: string): string {
@@ -16,17 +16,6 @@ type EditorActionSuccess = {
   editor: TeacherUnitNodeEditorView;
   material_id?: string;
   task_id?: string;
-};
-
-type UploadIntentResponse = {
-  intent_id: string;
-  url: string;
-  headers: Record<string, string>;
-};
-
-type UploadPutResponse = {
-  sha256?: string;
-  size_bytes?: number;
 };
 
 const INVALID_NUMBER = Symbol("invalid_number");
@@ -102,6 +91,38 @@ async function success(
   };
 }
 
+async function readCreatedMaterial(response: Response): Promise<TeacherUnitNodeEditorMaterial | null> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return null;
+  }
+
+  const payload = (await response.clone().json().catch(() => null)) as TeacherUnitNodeEditorMaterial | null;
+  if (!payload || typeof payload !== "object" || typeof payload.id !== "string") {
+    return null;
+  }
+  return payload;
+}
+
+function mergeCreatedMaterialIntoEditor(
+  editor: TeacherUnitNodeEditorView,
+  createdMaterial: TeacherUnitNodeEditorMaterial | null
+): TeacherUnitNodeEditorView {
+  if (!createdMaterial) {
+    return editor;
+  }
+
+  if (editor.materials.some((material) => material.id === createdMaterial.id)) {
+    return editor;
+  }
+
+  const mergedMaterials = [...editor.materials, createdMaterial].sort((left, right) => left.position - right.position);
+  return {
+    ...editor,
+    materials: mergedMaterials
+  };
+}
+
 function sectionIdForEditor(editor: TeacherUnitNodeEditorView): string {
   return editor.node.backing_section_id ?? editor.node.id;
 }
@@ -124,7 +145,7 @@ function reorderIds(
   return reordered;
 }
 
-async function uploadFileMaterial(
+async function finalizePreparedFileMaterial(
   fetchFn: typeof fetch,
   cookies: Parameters<PageServerLoad>[0]["cookies"],
   unitId: string,
@@ -132,45 +153,10 @@ async function uploadFileMaterial(
   options: {
     title: string;
     altText: string | null;
-    uploadFile: File;
+    intentId: string;
+    sha256: string;
   }
 ): Promise<Response> {
-  const mimeType = String(options.uploadFile.type || "").trim().toLowerCase() || "application/octet-stream";
-  const intent = await requireBackendJson<UploadIntentResponse>(
-    fetchFn,
-    cookies,
-    `/api/teaching/units/${encodeURIComponent(unitId)}/sections/${encodeURIComponent(sectionId)}/materials/upload-intents`,
-    {
-      method: "POST",
-      includeSameOrigin: true,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        filename: options.uploadFile.name || "material.bin",
-        mime_type: mimeType,
-        size_bytes: options.uploadFile.size
-      })
-    }
-  );
-
-  const uploadUrl = intent.url.startsWith("http")
-    ? intent.url
-    : new URL(intent.url, buildApiUrl("/")).toString();
-
-  const uploadResponse = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: intent.headers,
-    body: options.uploadFile
-  });
-
-  if (!uploadResponse.ok) {
-    throw new Error("upload_failed");
-  }
-
-  const uploadResult = (await uploadResponse.json().catch(() => null)) as UploadPutResponse | null;
-  if (!uploadResult?.sha256) {
-    throw new Error("upload_failed");
-  }
-
   return await backendRequest(
     fetchFn,
     cookies,
@@ -180,9 +166,9 @@ async function uploadFileMaterial(
       includeSameOrigin: true,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        intent_id: intent.intent_id,
+        intent_id: options.intentId,
         title: options.title,
-        sha256: uploadResult.sha256,
+        sha256: options.sha256,
         alt_text: options.altText
       })
     }
@@ -392,12 +378,16 @@ export const actions: Actions = {
     const altText = asBody(formData.get("alt_text")).trim() || null;
     const fileEntry = formData.get("upload_file");
     const uploadFile = fileEntry instanceof File && fileEntry.size > 0 ? fileEntry : null;
+    const intentId = asText(formData.get("intent_id"));
+    const sha256 = asText(formData.get("sha256")).toLowerCase();
 
     const values = {
       material_kind: materialKind,
       title,
       body_md: bodyMd,
-      alt_text: altText ?? ""
+      alt_text: altText ?? "",
+      intent_id: intentId,
+      sha256
     };
 
     if (!sectionId || !title) {
@@ -411,7 +401,7 @@ export const actions: Actions = {
 
     let response: Response;
     if (materialKind === "file") {
-      if (!uploadFile) {
+      if (!uploadFile && !intentId && !sha256) {
         return fail(400, {
           createMaterial: {
             error: "Bitte wähle eine Datei aus.",
@@ -420,20 +410,21 @@ export const actions: Actions = {
         });
       }
 
-      try {
-        response = await uploadFileMaterial(fetch, cookies, params.unitId, sectionId, {
-          title,
-          altText,
-          uploadFile
-        });
-      } catch {
-        return fail(502, {
+      if (!intentId || !sha256) {
+        return fail(400, {
           createMaterial: {
-            error: "Die Datei konnte nicht hochgeladen werden.",
+            error: "Datei-Uploads benötigen aktiviertes JavaScript.",
             values
           }
         });
       }
+
+      response = await finalizePreparedFileMaterial(fetch, cookies, params.unitId, sectionId, {
+        title,
+        altText,
+        intentId,
+        sha256
+      });
     } else {
       if (!bodyMd.trim()) {
         return fail(400, {
@@ -458,6 +449,46 @@ export const actions: Actions = {
     }
 
     if (!response.ok) {
+      if (materialKind === "file") {
+        const payload = (await response.json().catch(() => ({}))) as { detail?: string };
+        const detail = payload.detail || "";
+        if (detail === "intent_expired") {
+          return fail(response.status, {
+            createMaterial: {
+              error: "Die Upload-Freigabe ist abgelaufen. Bitte wähle die Datei erneut aus.",
+              values: {
+                ...values,
+                intent_id: "",
+                sha256: ""
+              }
+            }
+          });
+        }
+        if (detail === "mime_not_allowed") {
+          return fail(response.status, {
+            createMaterial: {
+              error: "Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.",
+              values: {
+                ...values,
+                intent_id: "",
+                sha256: ""
+              }
+            }
+          });
+        }
+        if (detail === "checksum_mismatch") {
+          return fail(response.status, {
+            createMaterial: {
+              error: "Die Datei konnte nicht bestätigt werden. Bitte wähle sie erneut aus.",
+              values: {
+                ...values,
+                intent_id: "",
+                sha256: ""
+              }
+            }
+          });
+        }
+      }
       return fail(response.status, {
         createMaterial: {
           error: "Das Material konnte nicht angelegt werden.",
@@ -466,8 +497,12 @@ export const actions: Actions = {
       });
     }
 
-    const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId);
-    const createdMaterial = editor.materials.at(-1);
+    const createdMaterial = await readCreatedMaterial(response);
+    const editor = mergeCreatedMaterialIntoEditor(
+      await readEditor(fetch, cookies, params.unitId, params.nodeId),
+      createdMaterial
+    );
+
     return {
       ok: true,
       message: "Material angelegt.",

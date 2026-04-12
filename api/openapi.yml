@@ -1958,7 +1958,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: HTTP headers that must be included with the upload request
+          description: HTTP headers that must be included with the upload request. Header names are normalized to lowercase (for example `content-type`).
         accepted_mime_types:
           type: array
           items:
@@ -3122,6 +3122,7 @@ components:
           type: object
           additionalProperties:
             type: string
+          description: HTTP headers for the subsequent PUT upload. Header names are normalized to lowercase (for example `content-type`).
         accepted_mime_types:
           type: array
           items:

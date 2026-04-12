@@ -135,7 +135,8 @@ async def test_upload_intent_image_png_happy_path(monkeypatch):
     UUID(body.get("intent_id", ""))
     assert body.get("storage_key") and body.get("url")
     assert body["url"].startswith(f"{TEST_STORAGE_BASE_URL}/submissions/")
-    assert body.get("headers", {}).get("Content-Type") == "image/png"
+    assert body.get("headers", {}).get("content-type") == "image/png"
+    assert "Content-Type" not in (body.get("headers") or {})
     assert body.get("accepted_mime_types") == ["image/jpeg", "image/png"]
     assert int(body.get("max_size_bytes", 0)) == 10 * 1024 * 1024
     # Security cache header + vary

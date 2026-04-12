@@ -2,6 +2,7 @@
   import { enhance } from "$app/forms";
   import { tick } from "svelte";
 
+  import { prepareBrowserStorageUpload } from "$lib/utils/browser-storage-upload";
   import TeacherH5PTaskEditor from "$lib/components/TeacherH5PTaskEditor.svelte";
   import TeacherNodeEditorProperties from "$lib/components/teacher-node-editor/TeacherNodeEditorProperties.svelte";
   import TeacherNodeEditorSection from "$lib/components/teacher-node-editor/TeacherNodeEditorSection.svelte";
@@ -28,6 +29,8 @@
     title: string;
     body_md: string;
     alt_text: string;
+    intent_id: string;
+    sha256: string;
   };
 
   type TaskFormValues = {
@@ -74,12 +77,113 @@
   let handledForm: ActionData | undefined = undefined;
   let createMaterialCard = $state<HTMLElement | null>(null);
   let createTaskCard = $state<HTMLElement | null>(null);
+  let createMaterialForm = $state<HTMLFormElement | null>(null);
+  let preparedMaterialUploadName = $state<string | null>(null);
+  let createMaterialClientError = $state<string | null>(null);
+  let createMaterialUploadPending = $state(false);
+  let editorMessage = $state<{ tone: "success"; text: string } | null>(null);
 
   const enhanceEditorForm = () => {
     return async ({ update }: { update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void> }) => {
       await update({ reset: false, invalidateAll: false });
     };
   };
+
+  function clearPreparedMaterialUpload() {
+    const intentInput = createMaterialForm?.querySelector('input[name="intent_id"]') as HTMLInputElement | null;
+    const shaInput = createMaterialForm?.querySelector('input[name="sha256"]') as HTMLInputElement | null;
+
+    if (intentInput) {
+      intentInput.value = "";
+    }
+    if (shaInput) {
+      shaInput.value = "";
+    }
+
+    preparedMaterialUploadName = null;
+    createMaterialClientError = null;
+  }
+
+  function createMaterialIntentUrl(): string {
+    return `/api/teaching/units/${editorState.unit.id}/sections/${sectionId()}/materials/upload-intents`;
+  }
+
+  function createMaterialClientUploadError(reason: string): string {
+    if (reason === "mime_not_allowed") {
+      return "Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.";
+    }
+    if (reason === "size_exceeded") {
+      return "Datei zu groß. Bitte das Größenlimit beachten.";
+    }
+    return "Die Datei konnte nicht hochgeladen werden.";
+  }
+
+  async function handleCreateMaterialSubmit(event: SubmitEvent) {
+    if (createMaterialKind !== "file") {
+      createMaterialClientError = null;
+      return;
+    }
+
+    const formElement = event.currentTarget as HTMLFormElement | null;
+    if (!formElement) {
+      return;
+    }
+
+    const intentInput = formElement.querySelector('input[name="intent_id"]') as HTMLInputElement | null;
+    const shaInput = formElement.querySelector('input[name="sha256"]') as HTMLInputElement | null;
+    if ((intentInput?.value || "").trim() && (shaInput?.value || "").trim()) {
+      return;
+    }
+
+    const fileInput = formElement.querySelector('input[name="upload_file"]') as HTMLInputElement | null;
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      preparedMaterialUploadName = null;
+      createMaterialClientError = null;
+      return;
+    }
+
+    event.preventDefault();
+    createMaterialUploadPending = true;
+    createMaterialClientError = null;
+
+    try {
+      const mimeType = String(file.type || "").trim().toLowerCase() || "application/octet-stream";
+      const prepared = await prepareBrowserStorageUpload({
+        intentUrl: createMaterialIntentUrl(),
+        intentPayload: {
+          filename: file.name || "material.bin",
+          mime_type: mimeType,
+          size_bytes: file.size
+        },
+        file,
+        fallbackMimeType: mimeType
+      });
+
+      if (intentInput) {
+        intentInput.value = prepared.intent.intent_id;
+      }
+      if (shaInput) {
+        shaInput.value = prepared.sha256;
+      }
+      if (fileInput) {
+        fileInput.value = "";
+      }
+
+      preparedMaterialUploadName = file.name || "Datei";
+      formElement.requestSubmit();
+    } catch (caught) {
+      clearPreparedMaterialUpload();
+      const reason = caught instanceof Error ? caught.message : "upload_failed";
+      createMaterialClientError = createMaterialClientUploadError(reason);
+    } finally {
+      createMaterialUploadPending = false;
+    }
+  }
+
+  function handleCreateMaterialFileChange() {
+    clearPreparedMaterialUpload();
+  }
 
   function materialValues(material: TeacherUnitNodeEditorMaterial): Partial<MaterialFormValues> {
     if (form?.saveMaterial?.material_id !== material.id) {
@@ -277,12 +381,23 @@
     createMaterialKind = "markdown";
     createTaskKind = "native";
     handledForm = undefined;
+    preparedMaterialUploadName = null;
+    createMaterialClientError = null;
+    createMaterialUploadPending = false;
+    editorMessage = null;
   });
 
   $effect(() => {
     const materialKind = createMaterialValues().material_kind;
     if (materialKind === "file" || materialKind === "markdown") {
       createMaterialKind = materialKind;
+    }
+  });
+
+  $effect(() => {
+    if (createMaterialKind !== "file") {
+      clearPreparedMaterialUpload();
+      createMaterialUploadPending = false;
     }
   });
 
@@ -325,11 +440,14 @@
 
     if (success) {
       editorState = plainEditor(success.editor);
+      editorMessage = success.message ? { text: success.message, tone: "success" } : null;
       if (saveMaterialSuccess || reorderMaterialSuccess) {
         expandedMaterialId = success.material_id ?? expandedMaterialId;
       } else if (createMaterialSuccess) {
         expandedMaterialId = success.material_id ?? success.editor.materials.at(-1)?.id ?? null;
         showCreateMaterial = false;
+        preparedMaterialUploadName = null;
+        createMaterialClientError = null;
       } else if (deleteMaterialSuccess) {
         expandedMaterialId = null;
       }
@@ -346,15 +464,22 @@
     }
 
     if (form.saveMaterial?.material_id) {
+      editorMessage = null;
       expandedMaterialId = form.saveMaterial.material_id;
     }
     if (form.saveTask?.task_id) {
+      editorMessage = null;
       expandedTaskId = form.saveTask.task_id;
     }
     if (form.createMaterial?.error) {
+      editorMessage = null;
       showCreateMaterial = true;
+      if (!createMaterialValues().intent_id || !createMaterialValues().sha256) {
+        preparedMaterialUploadName = null;
+      }
     }
     if (form.createTask?.error) {
+      editorMessage = null;
       showCreateTask = true;
     }
   });
@@ -372,6 +497,12 @@
   />
 
   <section class="workspace-node-editor workspace-node-editor--content-only">
+    {#if editorMessage}
+      <p class={`workspace-note workspace-note--success teacher-flow-status teacher-flow-status--${editorMessage.tone}`}>
+        {editorMessage.text}
+      </p>
+    {/if}
+
     <TeacherNodeEditorProperties
       node={editorState.node}
       settings={editorState.settings}
@@ -389,8 +520,18 @@
       onCreate={openCreateMaterial}
     >
       {#snippet create()}
-        <form method="POST" action="?/createMaterial" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm}>
+        <form
+          method="POST"
+          action="?/createMaterial"
+          enctype="multipart/form-data"
+          class="workspace-node-editor-card-form"
+          bind:this={createMaterialForm}
+          use:enhance={enhanceEditorForm}
+          onsubmit={handleCreateMaterialSubmit}
+        >
           <input type="hidden" name="section_id" value={sectionId()} />
+          <input name="intent_id" type="hidden" value={createMaterialValues().intent_id ?? ""} />
+          <input name="sha256" type="hidden" value={createMaterialValues().sha256 ?? ""} />
 
           <label class="workspace-field">
             <span>Materialtyp</span>
@@ -408,8 +549,13 @@
           {#if createMaterialKind === "file"}
             <label class="workspace-field">
               <span>Datei</span>
-              <input name="upload_file" type="file" />
+              <input name="upload_file" type="file" onchange={handleCreateMaterialFileChange} />
             </label>
+            {#if createMaterialUploadPending}
+              <p class="workspace-note">Datei wird hochgeladen und vorbereitet …</p>
+            {:else if preparedMaterialUploadName}
+              <p class="workspace-note">Datei vorbereitet: {preparedMaterialUploadName}</p>
+            {/if}
             <label class="workspace-field">
               <span>Alternativtext</span>
               <input name="alt_text" type="text" value={createMaterialValues().alt_text ?? ""} />
@@ -419,6 +565,10 @@
               <span>Inhalt</span>
               <textarea name="body_md" rows="7">{createMaterialValues().body_md ?? ""}</textarea>
             </label>
+          {/if}
+
+          {#if createMaterialClientError}
+            <p class="workspace-note workspace-note--error">{createMaterialClientError}</p>
           {/if}
 
           {#if form?.createMaterial?.error}

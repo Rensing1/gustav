@@ -63,6 +63,7 @@ from backend.storage.learning_policy import (
 from backend.storage.verification import verify_storage_object_integrity
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
 from backend.storage.keys import make_submission_key
+from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.storage.sb3_validation import SCRATCH_SB3_MIME
 from backend.storage.makecode_hex_validation import MAKECODE_HEX_MIME
 import httpx
@@ -111,7 +112,7 @@ def _current_emit_upload_proxy_telemetry() -> Any:
     return emitter or _emit_upload_proxy_telemetry
 
 
-def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol) -> None:
+def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol, override_active: bool) -> None:
     """Keep already-registered FastAPI learning routes bound to the latest adapter.
 
     Why:
@@ -136,9 +137,10 @@ def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol) -> None:
             route_globals = getattr(route.endpoint, "__globals__", None)
             if isinstance(route_globals, dict) and "STORAGE_ADAPTER" in route_globals:
                 route_globals["STORAGE_ADAPTER"] = adapter
+                route_globals["_STORAGE_ADAPTER_OVERRIDE_ACTIVE"] = override_active
 
 
-def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
+def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = True) -> None:
     """Allow tests or startup code to provide a concrete storage adapter.
 
     The update also retargets already-registered Learning route globals in
@@ -148,8 +150,8 @@ def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
     """
     global STORAGE_ADAPTER, _STORAGE_ADAPTER_OVERRIDE_ACTIVE
     STORAGE_ADAPTER = adapter
-    _STORAGE_ADAPTER_OVERRIDE_ACTIVE = True
-    _sync_learning_route_globals(adapter=adapter)
+    _STORAGE_ADAPTER_OVERRIDE_ACTIVE = bool(override)
+    _sync_learning_route_globals(adapter=adapter, override_active=_STORAGE_ADAPTER_OVERRIDE_ACTIVE)
 
 
 def _storage_bucket() -> str:
@@ -2101,7 +2103,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
                 "intent_id": str(_uuid4()),
                 "storage_key": storage_key,
                 "url": presign_url,
-                "headers": {"Content-Type": mime_type},
+                "headers": normalize_upload_intent_headers({}, fallback_content_type=mime_type),
                 "accepted_mime_types": accepted,
                 "max_size_bytes": _max_upload_bytes(),
                 "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=_upload_intent_ttl_seconds())).isoformat(timespec="seconds"),
@@ -2164,14 +2166,7 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
             url_out = f"/api/learning/internal/upload-proxy?url={_quote(str(presign_url))}"
             if proxy_headers_token:
                 url_out += f"&headers={_quote(proxy_headers_token)}"
-    # Normalize response headers to lower-case keys for stability across clients.
-    # Provide both canonical casings for compatibility with tests and clients.
-    headers_out = {}
-    for k, v in dict(headers_src).items():
-        lk = str(k).lower()
-        headers_out[lk] = v
-        if lk == "content-type":
-            headers_out["Content-Type"] = v
+    headers_out = normalize_upload_intent_headers(headers_src, fallback_content_type=mime_type)
     intent = {
         "intent_id": str(_uuid4()),
         "storage_key": storage_key,

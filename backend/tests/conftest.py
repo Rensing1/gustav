@@ -400,7 +400,7 @@ def _reset_route_storage_adapters_between_tests():
             try:
                 mod = importlib.import_module(alias)
                 if hasattr(mod, "set_storage_adapter"):
-                    mod.set_storage_adapter(NullStorageAdapter())  # type: ignore[attr-defined]
+                    mod.set_storage_adapter(NullStorageAdapter(), override=False)  # type: ignore[attr-defined]
                 elif hasattr(mod, "STORAGE_ADAPTER"):
                     setattr(mod, "STORAGE_ADAPTER", NullStorageAdapter())
             except Exception:

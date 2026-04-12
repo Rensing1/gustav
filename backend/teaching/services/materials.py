@@ -12,6 +12,7 @@ from uuid import uuid4
 from teaching.storage import StorageAdapterProtocol
 from backend.storage.config import get_materials_bucket, get_materials_max_upload_bytes
 from backend.storage.keys import make_materials_key
+from backend.storage.upload_intents import normalize_upload_intent_headers
 
 
 class MaterialsRepoProtocol(Protocol):
@@ -276,13 +277,11 @@ class MaterialsService:
             expires_in=self.settings.upload_intent_ttl_seconds,
             headers={"content-type": normalized_mime},
         )
-        # Normalize header keys to lowercase for clients/tests that expect
-        # canonical casing regardless of underlying provider conventions.
-        headers: Dict[str, Any] = {}
         try:
-            headers = {str(k).lower(): v for k, v in dict(presign.get("headers", {})).items()}
+            raw_headers = dict(presign.get("headers", {}))
         except Exception:
-            headers = dict(presign.get("headers", {})) if isinstance(presign, dict) else {}
+            raw_headers = dict(presign.get("headers", {})) if isinstance(presign, dict) else {}
+        headers = normalize_upload_intent_headers(raw_headers, fallback_content_type=normalized_mime)
         return {
             "intent_id": record["intent_id"],
             "material_id": record["material_id"],

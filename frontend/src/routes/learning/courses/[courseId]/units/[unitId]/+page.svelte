@@ -11,6 +11,7 @@
     buildLearningUnitFlow,
     type LearningFlowNode
   } from "$lib/graph/learning-unit-flow";
+  import { prepareBrowserStorageUpload } from "$lib/utils/browser-storage-upload";
   import {
     contentGroupsForModules,
     contentGroupsForSections,
@@ -882,55 +883,12 @@
     return taskKind === "visual" ? "image/png" : "application/pdf";
   }
 
-  async function sha256Hex(file: File): Promise<string> {
-    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-    return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
-  }
-
-  async function requestUploadIntent(taskId: string, taskKind: UploadTaskKind, file: File): Promise<UploadIntent> {
-    const mimeType = canonicalUploadMimeType(taskKind, file);
-    const response = await fetch(
-      `/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/upload-intents`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          kind: mimeType.startsWith("image/") ? "image" : "file",
-          filename: file.name || "submission.bin",
-          mime_type: mimeType,
-          size_bytes: file.size
-        })
-      }
-    );
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { detail?: string; error?: string };
-      throw new Error(payload.detail || payload.error || "upload_intent_failed");
-    }
-
-    return (await response.json()) as UploadIntent;
-  }
-
-  async function uploadFileToStorage(intent: UploadIntent, file: File): Promise<void> {
-    const response = await fetch(intent.url, {
-      method: "PUT",
-      headers: intent.headers,
-      body: file
-    });
-
-    if (!response.ok) {
-      throw new Error("upload_failed");
-    }
-  }
-
   async function createUploadSubmission(
     taskId: string,
     taskKind: UploadTaskKind,
     file: File,
-    intent: UploadIntent
+    intent: UploadIntent,
+    sha256: string
   ): Promise<{ id?: string | null }> {
     const mimeType = canonicalUploadMimeType(taskKind, file);
     const response = await fetch(
@@ -948,7 +906,7 @@
           storage_key: intent.storage_key,
           mime_type: mimeType,
           size_bytes: file.size,
-          sha256: await sha256Hex(file)
+          sha256
         })
       }
     );
@@ -1056,9 +1014,19 @@
     feedbackStatusMessage = "Rückmeldung wird erstellt ...";
 
     try {
-      const intent = await requestUploadIntent(taskId, taskKind, file);
-      await uploadFileToStorage(intent, file);
-      const submission = await createUploadSubmission(taskId, taskKind, file, intent);
+      const mimeType = canonicalUploadMimeType(taskKind, file);
+      const prepared = await prepareBrowserStorageUpload({
+        intentUrl: `/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/upload-intents`,
+        intentPayload: {
+          kind: mimeType.startsWith("image/") ? "image" : "file",
+          filename: file.name || "submission.bin",
+          mime_type: mimeType,
+          size_bytes: file.size
+        },
+        file,
+        fallbackMimeType: mimeType
+      });
+      const submission = await createUploadSubmission(taskId, taskKind, file, prepared.intent as UploadIntent, prepared.sha256);
       await pollFeedbackSubmission(taskId, submission.id ?? null, "feedback", paneId);
     } catch (caught) {
       feedbackPendingTaskId = null;

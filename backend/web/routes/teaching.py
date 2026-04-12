@@ -24,6 +24,7 @@ import time
 from dataclasses import dataclass, asdict, is_dataclass
 import os
 import re
+import sys as _sys
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import asyncio
@@ -31,6 +32,7 @@ from uuid import uuid4, UUID
 
 import httpx
 from fastapi import APIRouter, File, Request, UploadFile
+from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
@@ -1204,13 +1206,25 @@ def _build_default_repo():
 """Lazy repo accessor to avoid import-time DB checks in tests."""
 _REPO = None
 
+
+def _current_teaching_module() -> object | None:
+    """Return the currently active Teaching module instance when available."""
+
+    return _sys.modules.get("routes.teaching") or _sys.modules.get("backend.web.routes.teaching")
+
 def _get_repo():  # pragma: no cover - simple accessor
     global _REPO, REPO
-    if _REPO is None:
-        _REPO = _build_default_repo()
+    module = _current_teaching_module()
+    current_repo = getattr(module, "_REPO", None) if module is not None else _REPO
+    if current_repo is None:
+        current_repo = _build_default_repo()
+        if module is not None:
+            setattr(module, "_REPO", current_repo)
+            setattr(module, "REPO", current_repo)
     # Keep the public alias in sync for tests that do `isinstance(routes.teaching.REPO, ...)`.
-    REPO = _REPO
-    return _REPO
+    _REPO = current_repo
+    REPO = current_repo
+    return current_repo
 
 # Back-compat symbol used in tests: expose the actual instance for isinstance checks
 REPO = _get_repo()
@@ -1219,15 +1233,57 @@ REPO = _get_repo()
 _bucket = os.getenv("SUPABASE_STORAGE_BUCKET") or MaterialFileSettings().storage_bucket
 MATERIAL_FILE_SETTINGS = MaterialFileSettings(storage_bucket=_bucket)
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
+_STORAGE_ADAPTER_OVERRIDE_ACTIVE = False
+
+
+def _sync_teaching_route_globals(*, adapter: StorageAdapterProtocol, override_active: bool) -> None:
+    """Retarget already-registered Teaching route globals to the current adapter.
+
+    Why:
+        Some tests reload `routes.teaching` while keeping the original FastAPI
+        app instance alive. Route callables still reference the globals of the
+        module instance they were created from. Without this sync, changing the
+        adapter on a freshly imported module leaves old endpoints bound to a
+        stale adapter and makes the suite order-dependent.
+    """
+
+    for module_name in ("main", "backend.web.main"):
+        main_module = _sys.modules.get(module_name)
+        app = getattr(main_module, "app", None) if main_module is not None else None
+        routes = getattr(app, "routes", None)
+        if not routes:
+            continue
+        for route in routes:
+            if not isinstance(route, APIRoute):
+                continue
+            if not str(getattr(route, "path", "")).startswith("/api/teaching"):
+                continue
+            route_globals = getattr(route.endpoint, "__globals__", None)
+            if isinstance(route_globals, dict) and "STORAGE_ADAPTER" in route_globals:
+                route_globals["STORAGE_ADAPTER"] = adapter
+                route_globals["_STORAGE_ADAPTER_OVERRIDE_ACTIVE"] = override_active
 
 def _get_materials_service() -> MaterialsService:
-    return MaterialsService(_get_repo(), settings=MATERIAL_FILE_SETTINGS)
+    module = _current_teaching_module()
+    factory = getattr(module, "_get_materials_service", None) if module is not None else None
+    if callable(factory) and factory is not _get_materials_service:
+        return factory()
+    settings = getattr(module, "MATERIAL_FILE_SETTINGS", MATERIAL_FILE_SETTINGS) if module is not None else MATERIAL_FILE_SETTINGS
+    return MaterialsService(_get_repo(), settings=settings)
 
 def _get_tasks_service() -> TasksService:
+    module = _current_teaching_module()
+    factory = getattr(module, "_get_tasks_service", None) if module is not None else None
+    if callable(factory) and factory is not _get_tasks_service:
+        return factory()
     return TasksService(_get_repo())
 
 
 def _get_student_live_overview_service() -> StudentLiveOverviewService:
+    module = _current_teaching_module()
+    factory = getattr(module, "_get_student_live_overview_service", None) if module is not None else None
+    if callable(factory) and factory is not _get_student_live_overview_service:
+        return factory()
     return StudentLiveOverviewService(_get_repo())
 
 
@@ -1236,12 +1292,18 @@ def set_repo(repo) -> None:
     global _REPO, REPO
     _REPO = repo
     REPO = repo
+    module = _current_teaching_module()
+    if module is not None:
+        setattr(module, "_REPO", repo)
+        setattr(module, "REPO", repo)
 
 
-def set_storage_adapter(adapter: StorageAdapterProtocol) -> None:
+def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = True) -> None:
     """Allow tests to provide a storage adapter (e.g., fake or stub)."""
-    global STORAGE_ADAPTER
+    global STORAGE_ADAPTER, _STORAGE_ADAPTER_OVERRIDE_ACTIVE
     STORAGE_ADAPTER = adapter
+    _STORAGE_ADAPTER_OVERRIDE_ACTIVE = bool(override)
+    _sync_teaching_route_globals(adapter=adapter, override_active=_STORAGE_ADAPTER_OVERRIDE_ACTIVE)
 
 
 # --- Request/Response models -----------------------------------------------------
@@ -1427,6 +1489,31 @@ async def _request_h5p_service(
         )
 
 
+async def _call_request_h5p_service(
+    method: str,
+    path: str,
+    *,
+    request: Request | None = None,
+    params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
+    files: dict[str, tuple[str, bytes, str]] | None = None,
+) -> httpx.Response:
+    """Call the currently active H5P helper even after module reloads."""
+
+    module = _current_teaching_module()
+    handler = getattr(module, "_request_h5p_service", None) if module is not None else None
+    if not callable(handler) or handler is _call_request_h5p_service:
+        handler = _request_h5p_service
+    return await handler(
+        method,
+        path,
+        request=request,
+        params=params,
+        json_body=json_body,
+        files=files,
+    )
+
+
 def _get_owned_h5p_task(unit_id: str, section_id: str, task_id: str, author_sub: str) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """Resolve an author-owned H5P task or return a fail-closed API error."""
 
@@ -1474,7 +1561,7 @@ async def _rollback_h5p_content(content_id: str, request: Request | None) -> Non
     if not content_id:
         return
     try:
-        response = await _request_h5p_service("DELETE", f"/contents/{content_id}", request=request)
+        response = await _call_request_h5p_service("DELETE", f"/contents/{content_id}", request=request)
         if int(response.status_code or 500) not in (204, 404):
             logger.warning(
                 "H5P rollback delete failed content_id=%s status=%s",
@@ -1876,6 +1963,47 @@ def resolve_student_names(subs: list[str]) -> dict[str, str]:
         return out
     except Exception:
         return {s: "Unbekannt" for s in subs}
+
+
+def _resolve_student_names_runtime(subs: list[str]) -> dict[str, str]:
+    """Resolve student names via the currently active Teaching module."""
+
+    module = _current_teaching_module()
+    resolver = getattr(module, "resolve_student_names", None) if module is not None else None
+    if not callable(resolver) or resolver is _resolve_student_names_runtime:
+        resolver = resolve_student_names
+    return resolver(subs)
+
+
+def _resolve_student_login_labels_runtime(subs: list[str]) -> dict[str, str]:
+    """Resolve login labels via the currently active Teaching module."""
+
+    module = _current_teaching_module()
+    resolver = getattr(module, "resolve_student_login_labels_by_sub", None) if module is not None else None
+    if not callable(resolver) or resolver is _resolve_student_login_labels_runtime:
+        resolver = resolve_student_login_labels_by_sub
+    return resolver(subs)
+
+
+def _guard_course_owner_runtime(course_id: str, owner_sub: str):
+    """Resolve the current course-owner guard from the active Teaching module."""
+
+    module = _current_teaching_module()
+    guard = getattr(module, "_guard_course_owner", None) if module is not None else None
+    if not callable(guard) or guard is _guard_course_owner_runtime:
+        guard = _guard_course_owner
+    return guard(course_id, owner_sub)
+
+
+def _current_max_unit_ids() -> int:
+    """Return the active live-overview unit-id limit."""
+
+    module = _current_teaching_module()
+    value = getattr(module, "MAX_UNIT_IDS", MAX_UNIT_IDS) if module is not None else MAX_UNIT_IDS
+    try:
+        return max(1, int(value))
+    except Exception:
+        return MAX_UNIT_IDS
 
 
 def resolve_student_login_labels_by_sub(subs: list[str]) -> dict[str, str]:
@@ -3667,7 +3795,7 @@ async def get_task_h5p_editor_model(request: Request, unit_id: str, section_id: 
         params = {"content_id": content_id}
 
     try:
-        upstream = await _request_h5p_service("GET", "/editor/model", request=request, params=params)
+        upstream = await _call_request_h5p_service("GET", "/editor/model", request=request, params=params)
     except httpx.RequestError:
         return _private_error({"error": "service_unavailable"}, status_code=503)
     if not upstream.is_success:
@@ -3713,7 +3841,7 @@ async def save_task_h5p_content(
     method = "PATCH" if current_content_id else "POST"
 
     try:
-        upstream = await _request_h5p_service(
+        upstream = await _call_request_h5p_service(
             method,
             path,
             request=request,
@@ -3791,7 +3919,7 @@ async def import_task_h5p_content(
         return _private_error({"error": "bad_request", "detail": "invalid_h5p_file"}, status_code=400)
 
     try:
-        upstream = await _request_h5p_service(
+        upstream = await _call_request_h5p_service(
             "POST",
             "/contents/import",
             request=request,
@@ -3860,7 +3988,7 @@ async def export_task_h5p_content(request: Request, unit_id: str, section_id: st
         return _private_error({"error": "not_found"}, status_code=404)
 
     try:
-        upstream = await _request_h5p_service("GET", f"/contents/{content_id}/export", request=request)
+        upstream = await _call_request_h5p_service("GET", f"/contents/{content_id}/export", request=request)
     except httpx.RequestError:
         return _private_error({"error": "service_unavailable"}, status_code=503)
     if not upstream.is_success:
@@ -4269,15 +4397,18 @@ async def create_section_material_upload_intent(
     guard = _guard_unit_author(unit_id, sub)
     if guard:
         return guard
-    # Optional lazy storage (re)wire for local Supabase dev:
-    # Only when explicitly opted in via AUTO_WIRE_STORAGE_E2E=true to avoid
-    # surprising unit tests when RUN_SUPABASE_E2E is set globally.
-    import os as _os
-    _auto = (_os.getenv("AUTO_WIRE_STORAGE_E2E", "false").lower() == "true")
-    if _auto and isinstance(STORAGE_ADAPTER, NullStorageAdapter) and callable(_wire_storage):  # type: ignore[arg-type]
+    # Keep Teaching aligned with Learning: when startup wiring failed because
+    # Supabase was not reachable yet, the first real upload-intent should retry
+    # wiring before failing closed with 503.
+    if (
+        isinstance(STORAGE_ADAPTER, NullStorageAdapter)
+        and not _STORAGE_ADAPTER_OVERRIDE_ACTIVE
+        and callable(_wire_storage)
+    ):  # type: ignore[arg-type]
         try:
             _wire_storage()  # type: ignore[misc]
         except Exception:
+            # Non-fatal; the service still fails closed below if wiring did not succeed.
             pass
     try:
         intent = _get_materials_service().create_file_upload_intent(
@@ -5260,7 +5391,7 @@ async def list_members(request: Request, course_id: str, limit: int = 10, offset
         return _private_error({"error": "forbidden"}, status_code=403)
     subs = [sid for sid, _ in pairs]
     # Avoid blocking the event loop on synchronous network I/O
-    names = await asyncio.to_thread(resolve_student_names, subs)
+    names = await asyncio.to_thread(_resolve_student_names_runtime, subs)
     result = []
     for sid, joined_at in pairs:
         result.append({"sub": sid, "name": names.get(sid, sid), "joined_at": joined_at})
@@ -5486,7 +5617,7 @@ async def get_unit_live_summary(
         except Exception:
             roster = []
         member_subs = [sid for sid, _ in roster]
-        names = resolve_student_login_labels_by_sub(member_subs)
+        names = _resolve_student_login_labels_runtime(member_subs)
 
         has_map: set[tuple[str, str]] = set()
         avg_map: dict[tuple[str, str], float | None] = {}
@@ -6001,11 +6132,11 @@ async def get_student_live_overview(request: Request, course_id: str, student_su
                 continue
             seen.add(canonical)
             normalized_unit_ids.append(canonical)
-        if len(normalized_unit_ids) > MAX_UNIT_IDS:
+        if len(normalized_unit_ids) > _current_max_unit_ids():
             return _private_error({"error": "bad_request", "detail": "too_many_unit_ids"}, status_code=400, vary_origin=True)
 
     sub = _current_sub(user)
-    guard = _guard_course_owner(course_id, sub)
+    guard = _guard_course_owner_runtime(course_id, sub)
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
@@ -6025,7 +6156,7 @@ async def get_student_live_overview(request: Request, course_id: str, student_su
     except LookupError:
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
 
-    names = resolve_student_login_labels_by_sub([str(student_sub)])
+    names = _resolve_student_login_labels_runtime([str(student_sub)])
     display_name = names.get(str(student_sub), "Unbekannt")
     return _json_private(overview.to_dict(student_name=display_name), status_code=200, vary_origin=True)
 

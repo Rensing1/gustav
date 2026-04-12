@@ -211,5 +211,49 @@ async def test_upload_intent_uses_same_origin_proxy_when_enabled(monkeypatch):
         data = r.json()
         assert isinstance(data.get("url"), str)
         assert data["url"].startswith("/api/learning/internal/upload-proxy?url="), data["url"]
-        # Headers are normalized to include both lower and canonical casing
+        # Headers are normalized to a single canonical lowercase form.
         assert data["headers"].get("content-type") == "image/png"
+        assert "Content-Type" not in data["headers"]
+
+
+@pytest.mark.anyio
+async def test_teaching_upload_intent_lazy_rewire_on_first_request(monkeypatch):
+    for name in list(sys.modules.keys()):
+        if name in {"main", "routes.learning", "routes.teaching", "backend.web.routes.learning", "backend.web.routes.teaching"}:
+            del sys.modules[name]
+
+    monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+    monkeypatch.setenv("SUPABASE_STORAGE_BUCKET", "materials")
+    monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "false")
+
+    _install_flaky_supabase_module()
+
+    import main  # type: ignore  # noqa: F401
+    import routes.teaching as teaching  # type: ignore
+    from teaching.storage import NullStorageAdapter  # type: ignore
+    from identity_access.stores import SessionStore
+
+    assert isinstance(teaching.STORAGE_ADAPTER, NullStorageAdapter)
+
+    main.SESSION_STORE = SessionStore()  # type: ignore
+    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+
+    async with (await _client(main.app)) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"}, headers={"Origin": "http://test"})
+        assert r_unit.status_code == 201
+        unit_id = r_unit.json()["id"]
+        r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"}, headers={"Origin": "http://test"})
+        assert r_section.status_code == 201
+        section_id = r_section.json()["id"]
+
+        r = await c.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents",
+            json={"filename": "arbeitsblatt.pdf", "mime_type": "application/pdf", "size_bytes": 128},
+            headers={"Origin": "http://test"},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "storage_key" in data and isinstance(data["storage_key"], str)
+        assert "url" in data and isinstance(data["url"], str)

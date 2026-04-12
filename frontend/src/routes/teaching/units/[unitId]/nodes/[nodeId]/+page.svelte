@@ -67,7 +67,8 @@
     return editorState.node.backing_section_id ?? editorState.node.id;
   }
 
-  let editorState = $state<TeacherUnitNodeEditorView>(plainEditor(data.editor));
+  let editorOverride = $state<TeacherUnitNodeEditorView | null>(null);
+  const editorState = $derived(editorOverride ?? data.editor);
   let expandedMaterialId = $state<string | null>(null);
   let expandedTaskId = $state<string | null>(null);
   let showCreateMaterial = $state(false);
@@ -372,8 +373,8 @@
   }
 
   $effect(() => {
-    data.editor.node.id;
-    editorState = plainEditor(data.editor);
+    data.editor;
+    editorOverride = null;
     expandedMaterialId = null;
     expandedTaskId = null;
     showCreateMaterial = data.editor.materials.length === 0;
@@ -441,7 +442,7 @@
       ?? reorderTaskSuccess;
 
     if (success) {
-      editorState = plainEditor(success.editor);
+      editorOverride = plainEditor(success.editor);
       editorMessage = success.message ? { text: success.message, tone: "success" } : null;
       if (saveMaterialSuccess || reorderMaterialSuccess) {
         expandedMaterialId = success.material_id ?? expandedMaterialId;

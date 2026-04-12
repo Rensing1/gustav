@@ -50,7 +50,14 @@ def ensure_secure_config_on_startup() -> None:
             "Refusing to start: KC_ADMIN_CLIENT_SECRET is unset or a placeholder in production."
         )
 
-    # 1c) H5P teacher review capability token secret must be configured.
+    # 1c) Internal BFF shared secret must be configured for the frontend-backend bridge.
+    bff_secret = (os.getenv("BFF_INTERNAL_SHARED_SECRET", "") or "").strip()
+    if not bff_secret or bff_secret.upper().startswith("CHANGE_ME"):
+        raise SystemExit(
+            "Refusing to start: BFF_INTERNAL_SHARED_SECRET is unset or a placeholder in production."
+        )
+
+    # 1d) H5P teacher review capability token secret must be configured.
     # Used to sign short-lived review tokens consumed by the H5P sidecar.
     h5p_review_secret = (os.getenv("H5P_REVIEW_TOKEN_SECRET", "") or "").strip()
     if not h5p_review_secret or h5p_review_secret.upper().startswith("CHANGE_ME"):
@@ -58,7 +65,7 @@ def ensure_secure_config_on_startup() -> None:
             "Refusing to start: H5P_REVIEW_TOKEN_SECRET is unset or a placeholder in production."
         )
 
-    # 1d) SSR/browser CSRF token secret must be independent from H5P secrets.
+    # 1e) SSR/browser CSRF token secret must be independent from H5P secrets.
     # Keep secrets separated so rotation/leak blast radius stays minimal.
     csrf_secret = (os.getenv("APP_CSRF_TOKEN_SECRET", "") or "").strip()
     if (

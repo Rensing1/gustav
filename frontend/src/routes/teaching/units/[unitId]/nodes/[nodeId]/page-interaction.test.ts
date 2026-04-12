@@ -110,4 +110,57 @@ describe("teacher node editor page", () => {
     expect(screen.getByDisplayValue("Arbeitsblatt")).toBeInTheDocument();
     expect(screen.queryByText(/Datei vorbereitet:/i)).not.toBeInTheDocument();
   });
+
+  it("resynchronizes the local editor state when new page data arrives for the same route", async () => {
+    const { rerender } = render(Page, {
+      props: {
+        data: sampleData,
+        form: {} as never
+      }
+    });
+
+    expect(screen.getByRole("heading", { name: "Orientierung" })).toBeInTheDocument();
+
+    await rerender({
+      data: {
+        ...sampleData,
+        editor: {
+          ...sampleData.editor,
+          node: {
+            ...sampleData.editor.node,
+            title: "Orientierung aktualisiert",
+            editor_title: "Orientierung aktualisiert"
+          },
+          materials: [
+            {
+              id: "material-2",
+              title: "Merkblatt",
+              kind: "markdown",
+              body_md: "Neuer Inhalt",
+              position: 1
+            }
+          ],
+          tasks: [
+            {
+              id: "task-2",
+              kind: "native",
+              instruction_md: "Neue Aufgabe",
+              criteria: ["Kriterium 1"],
+              teacher_context_md: null,
+              due_at: null,
+              max_attempts: null,
+              position: 1
+            }
+          ]
+        }
+      } satisfies PageData,
+      form: {} as never
+    });
+
+    expect(screen.getByRole("heading", { name: "Orientierung aktualisiert" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Merkblatt" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: /Neue Aufgabe/i }));
+    expect(screen.getByDisplayValue("Neue Aufgabe")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Orientierung" })).not.toBeInTheDocument();
+  });
 });

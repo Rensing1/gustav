@@ -290,12 +290,12 @@ Text- und Visual-Feedback werden über `dspy.LM(...)` konfiguriert:
   - Text synthesis: `AI_TEXT_SYNTHESIS_TEMPERATURE` → fallback `AI_TEXT_TEMPERATURE` → default `0.0`
   - Visual analysis: `AI_VISUAL_ANALYSIS_TEMPERATURE` → fallback `AI_VISUAL_TEMPERATURE` → default `0.0`
   - Visual synthesis: `AI_VISUAL_SYNTHESIS_TEMPERATURE` → fallback `AI_VISUAL_TEMPERATURE` → default `0.0`
-- Mistral reasoning effort:
+- Magistral reasoning effort:
   - Text analysis: `AI_TEXT_ANALYSIS_REASONING_EFFORT` → fallback `AI_TEXT_REASONING_EFFORT` → default `none`
   - Text synthesis: `AI_TEXT_SYNTHESIS_REASONING_EFFORT` → fallback `AI_TEXT_REASONING_EFFORT` → default `none`
   - Visual analysis: `AI_VISUAL_ANALYSIS_REASONING_EFFORT` → fallback `AI_VISUAL_REASONING_EFFORT` → default `none`
   - Visual synthesis: `AI_VISUAL_SYNTHESIS_REASONING_EFFORT` → fallback `AI_VISUAL_REASONING_EFFORT` → default `none`
-  - Ignored for non-Mistral models.
+  - Ignored for non-Magistral models.
 - GPT-OSS think-level:
   - Text analysis: `AI_TEXT_ANALYSIS_THINK_LEVEL` → fallback `AI_TEXT_THINK_LEVEL`
   - Text synthesis: `AI_TEXT_SYNTHESIS_THINK_LEVEL` → fallback `AI_TEXT_THINK_LEVEL`

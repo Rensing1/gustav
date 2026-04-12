@@ -113,6 +113,54 @@ def test_visual_feedback_program_structured_pipeline(monkeypatch: pytest.MonkeyP
     assert "**Das kannst du besser:**" in result.feedback_md
 
 
+def test_visual_feedback_program_empty_criteria_uses_synthesis_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: list[dict] = []
+
+    class _FakeJsonAdapter:
+        pass
+
+    class _FakeDspy:
+        __version__ = "3.0.3"
+        JSONAdapter = _FakeJsonAdapter
+
+        @staticmethod
+        def context(**kwargs):  # type: ignore[no-untyped-def]
+            class _Ctx:
+                def __enter__(self_inner):
+                    observed.append(dict(kwargs))
+                    return None
+
+                def __exit__(self_inner, exc_type, exc, tb):
+                    return False
+
+            return _Ctx()
+
+    monkeypatch.setitem(sys.modules, "dspy", _FakeDspy())
+    programs = importlib.import_module("backend.learning.adapters.dspy.programs")
+
+    monkeypatch.setattr(
+        programs,
+        "run_visual_feedback_no_criteria",
+        lambda **_kwargs: (
+            "**Das ist dir gut gelungen:** Deine Lösung ist gut nachvollziehbar.\n\n"
+            "**Das kannst du besser:** Begründe einzelne Schritte noch etwas genauer."
+        ),
+        raising=False,
+    )
+
+    mod = importlib.import_module("backend.learning.adapters.dspy.visual_feedback_program")
+    result = mod.analyze_visual_feedback(  # type: ignore[attr-defined]
+        image_data_uri="data:image/png;base64,AA==",
+        criteria=[],
+        synthesis_lm=object(),
+    )
+
+    assert result.analysis_json == {}
+    assert result.parse_status == "skipped"
+    assert len(observed) == 1
+    assert observed[0]["lm"] is not None
+
+
 def test_visual_feedback_program_retries_analysis_once_after_invalid_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_dspy(monkeypatch)
     programs = importlib.import_module("backend.learning.adapters.dspy.programs")

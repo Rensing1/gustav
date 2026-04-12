@@ -77,14 +77,14 @@ Why this matters:
 | `AI_TEXT_TEMPERATURE` | no | Feedback | Shared fallback for text analysis + synthesis, default `0.0`. |
 | `AI_TEXT_ANALYSIS_TEMPERATURE` | no | Feedback | Overrides text analysis temperature only. Falls back to `AI_TEXT_TEMPERATURE`. |
 | `AI_TEXT_SYNTHESIS_TEMPERATURE` | no | Feedback | Overrides text synthesis temperature only. Falls back to `AI_TEXT_TEMPERATURE`. |
-| `AI_TEXT_REASONING_EFFORT` | no | Feedback | Shared Mistral fallback for text analysis + synthesis. Allowed: `none|high`. Ignored for non-Mistral models. |
+| `AI_TEXT_REASONING_EFFORT` | no | Feedback | Shared Magistral fallback for text analysis + synthesis. Allowed: `none|high`. Ignored for non-Magistral models. |
 | `AI_TEXT_ANALYSIS_REASONING_EFFORT` | no | Feedback | Overrides text analysis reasoning effort only. Falls back to `AI_TEXT_REASONING_EFFORT`. |
 | `AI_TEXT_SYNTHESIS_REASONING_EFFORT` | no | Feedback | Overrides text synthesis reasoning effort only. Falls back to `AI_TEXT_REASONING_EFFORT`. |
 | `AI_OCR_TEMPERATURE` | no | OCR | Default `0.0`. |
 | `AI_VISUAL_TEMPERATURE` | no | Visual | Shared fallback for visual analysis + synthesis, default `0.0`. |
 | `AI_VISUAL_ANALYSIS_TEMPERATURE` | no | Visual | Overrides visual analysis temperature only. Falls back to `AI_VISUAL_TEMPERATURE`. |
 | `AI_VISUAL_SYNTHESIS_TEMPERATURE` | no | Visual | Overrides visual synthesis temperature only. Falls back to `AI_VISUAL_TEMPERATURE`. |
-| `AI_VISUAL_REASONING_EFFORT` | no | Visual | Shared Mistral fallback for visual analysis + synthesis. Allowed: `none|high`. Ignored for non-Mistral models. |
+| `AI_VISUAL_REASONING_EFFORT` | no | Visual | Shared Magistral fallback for visual analysis + synthesis. Allowed: `none|high`. Ignored for non-Magistral models. |
 | `AI_VISUAL_ANALYSIS_REASONING_EFFORT` | no | Visual | Overrides visual analysis reasoning effort only. Falls back to `AI_VISUAL_REASONING_EFFORT`. |
 | `AI_VISUAL_SYNTHESIS_REASONING_EFFORT` | no | Visual | Overrides visual synthesis reasoning effort only. Falls back to `AI_VISUAL_REASONING_EFFORT`. |
 | `AI_TEXT_THINK_LEVEL` | no | Feedback | Shared GPT-OSS think-level fallback for text analysis + synthesis. Ignored for non-GPT-OSS models. |

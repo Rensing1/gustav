@@ -30,15 +30,16 @@ def test_resolve_think_level_skips_non_gpt_oss_even_when_value_provided() -> Non
     assert dspy_helpers.resolve_think_level("openai/llama3.1", "high") is None
 
 
-def test_resolve_reasoning_effort_defaults_to_none_for_mistral_leaf() -> None:
-    assert dspy_helpers.resolve_reasoning_effort("openai/mistral-small-4", None) == "none"
-    assert dspy_helpers.resolve_reasoning_effort("mistral/mistral-small-4", "") == "none"
+def test_resolve_reasoning_effort_defaults_to_none_for_magistral_leaf() -> None:
+    assert dspy_helpers.resolve_reasoning_effort("openai/magistral-small-2506", None) == "none"
+    assert dspy_helpers.resolve_reasoning_effort("mistral/magistral-small-2506", "") == "none"
 
 
-def test_resolve_reasoning_effort_normalizes_and_sanitizes_for_mistral() -> None:
-    assert dspy_helpers.resolve_reasoning_effort("openai/mistral-small-4", "HIGH") == "high"
-    assert dspy_helpers.resolve_reasoning_effort("openai/mistral-small-4", "banana") == "none"
+def test_resolve_reasoning_effort_normalizes_and_sanitizes_for_magistral() -> None:
+    assert dspy_helpers.resolve_reasoning_effort("openai/magistral-small-2506", "HIGH") == "high"
+    assert dspy_helpers.resolve_reasoning_effort("openai/magistral-small-2506", "banana") == "none"
 
 
-def test_resolve_reasoning_effort_skips_non_mistral_even_when_value_provided() -> None:
+def test_resolve_reasoning_effort_skips_non_magistral_even_when_value_provided() -> None:
+    assert dspy_helpers.resolve_reasoning_effort("openai/mistral-small-4", "high") is None
     assert dspy_helpers.resolve_reasoning_effort("openai/gpt-4o-mini", "high") is None

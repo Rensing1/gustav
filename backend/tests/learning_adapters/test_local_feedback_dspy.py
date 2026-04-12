@@ -553,7 +553,40 @@ def test_adapter_uses_analysis_and_synthesis_visual_env_overrides(monkeypatch: p
     assert synthesis_kwargs.get("extra_body", {}).get("think") == "high"
 
 
-def test_adapter_uses_mistral_reasoning_effort_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_adapter_uses_magistral_reasoning_effort_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "magistral-small-2506")
+    monkeypatch.setenv("AI_TEXT_REASONING_EFFORT", "high")
+    monkeypatch.setenv("AI_TEXT_ANALYSIS_REASONING_EFFORT", "none")
+    monkeypatch.setenv("AI_TEXT_SYNTHESIS_REASONING_EFFORT", "high")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    _ = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+
+    lm_calls = observed.get("lm_calls") or []
+    assert len(lm_calls) == 2
+    assert lm_calls[0]["kwargs"]["reasoning_effort"] == "none"
+    assert lm_calls[1]["kwargs"]["reasoning_effort"] == "high"
+
+
+def test_adapter_ignores_reasoning_effort_for_non_magistral_mistral_models(monkeypatch: pytest.MonkeyPatch) -> None:
     from backend.learning.adapters import local_feedback
 
     observed: dict = {}
@@ -582,8 +615,8 @@ def test_adapter_uses_mistral_reasoning_effort_overrides(monkeypatch: pytest.Mon
 
     lm_calls = observed.get("lm_calls") or []
     assert len(lm_calls) == 2
-    assert lm_calls[0]["kwargs"]["reasoning_effort"] == "none"
-    assert lm_calls[1]["kwargs"]["reasoning_effort"] == "high"
+    assert "reasoning_effort" not in lm_calls[0]["kwargs"]
+    assert "reasoning_effort" not in lm_calls[1]["kwargs"]
 
 
 def test_visual_feedback_program_uses_separate_lms_when_provided(monkeypatch: pytest.MonkeyPatch) -> None:

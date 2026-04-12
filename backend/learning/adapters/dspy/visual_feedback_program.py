@@ -210,11 +210,13 @@ def analyze_visual_feedback(
 
     crit = [str(c).strip() for c in (criteria or []) if str(c).strip()]
     if not crit:
-        feedback_md = dspy_programs.run_visual_feedback_no_criteria(
-            image_data_uri=image_data_uri,
-            teacher_instructions_md=teacher_instructions_md,
-            teacher_context_md=teacher_context_md,
-        )
+        with _dspy_context_for_lm(synthesis_lm, stage="visual_synthesis"):
+            feedback_md = dspy_programs.run_visual_feedback_no_criteria(
+                image_data_uri=image_data_uri,
+                teacher_instructions_md=teacher_instructions_md,
+                teacher_context_md=teacher_context_md,
+            )
+        _log_stage_metadata(stage="visual_synthesis", parse_status="skipped")
         return FeedbackResult(feedback_md=_validate_feedback_md(feedback_md), analysis_json={}, parse_status="skipped")
 
     analysis, parse_status = _run_analysis_with_repair(

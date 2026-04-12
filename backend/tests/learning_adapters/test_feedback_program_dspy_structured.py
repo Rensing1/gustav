@@ -51,7 +51,28 @@ def test_feedback_program_forwards_teacher_context(monkeypatch: pytest.MonkeyPat
 
 
 def test_feedback_program_empty_criteria_uses_no_criteria_signature(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setitem(sys.modules, "dspy", SimpleNamespace(__version__="3.0.3"))
+    observed: list[dict] = []
+
+    class _FakeJsonAdapter:
+        pass
+
+    class _FakeDspy:
+        __version__ = "3.0.3"
+        JSONAdapter = _FakeJsonAdapter
+
+        @staticmethod
+        def context(**kwargs):  # type: ignore[no-untyped-def]
+            class _Ctx:
+                def __enter__(self_inner):
+                    observed.append(dict(kwargs))
+                    return None
+
+                def __exit__(self_inner, exc_type, exc, tb):
+                    return False
+
+            return _Ctx()
+
+    monkeypatch.setitem(sys.modules, "dspy", _FakeDspy())
     programs = __import__("importlib").import_module("backend.learning.adapters.dspy.programs")
 
     def fake_no_criteria(*, teacher_context_md=None, **_kwargs):
@@ -61,9 +82,16 @@ def test_feedback_program_empty_criteria_uses_no_criteria_signature(monkeypatch:
     monkeypatch.setattr(programs, "run_feedback_no_criteria", fake_no_criteria, raising=False)
 
     mod = __import__("importlib").import_module("backend.learning.adapters.dspy.feedback_program")
-    result = mod.analyze_feedback(text_md="Antwort", criteria=[], teacher_context_md="Kontext")  # type: ignore[attr-defined]
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
+        text_md="Antwort",
+        criteria=[],
+        teacher_context_md="Kontext",
+        synthesis_lm=object(),
+    )
     assert result.analysis_json == {}
     assert result.parse_status == "skipped"
+    assert len(observed) == 1
+    assert observed[0]["lm"] is not None
 
 
 def test_feedback_program_retries_analysis_once_after_invalid_shape(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -47,15 +47,15 @@ def resolve_think_level(model_name: str, think_level: str | None) -> str | None:
 
 
 def normalize_reasoning_effort(raw: str | None) -> str:
-    """Return a safe Mistral reasoning effort defaulting to 'none'."""
+    """Return a safe Magistral reasoning effort defaulting to 'none'."""
     effort = (raw or "none").strip().lower()
     return effort if effort in _ALLOWED_REASONING_EFFORTS else "none"
 
 
 def resolve_reasoning_effort(model_name: str, reasoning_effort: str | None) -> str | None:
-    """Only return a reasoning effort for Mistral model families."""
+    """Only return a reasoning effort for Magistral reasoning models."""
     leaf = _model_leaf(model_name).lower()
-    if not leaf.startswith("mistral"):
+    if not leaf.startswith("magistral"):
         return None
     return normalize_reasoning_effort(reasoning_effort)
 

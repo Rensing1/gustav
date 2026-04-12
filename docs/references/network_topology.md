@@ -3,10 +3,12 @@
 Status: Stable
 
 ## Übersicht
-Client → Caddy (Reverse Proxy) → Web (FastAPI) → DB/Keycloak/Supabase
+Client → Caddy (Reverse Proxy) → Frontend (SvelteKit Browser-BFF) / Web (FastAPI API) → DB/Keycloak/Supabase
 
 ## Hosts & Ports
-- app.localhost → Caddy → gustav-alpha2:8000 (Web)
+- app.localhost → Caddy → gustav-frontend:3000 (default app shell)
+- app.localhost `/api/*`, `/internal/*`, `/health` → Caddy → gustav-alpha2:8000 (Web/FastAPI)
+- app.localhost `/h5p/*` → Caddy → gustav-h5p:3000
 - id.localhost → Caddy → keycloak:8080
 - DB (Compose): supabase_db_gustav-alpha2:5432
 
@@ -15,5 +17,5 @@ Client → Caddy (Reverse Proxy) → Web (FastAPI) → DB/Keycloak/Supabase
 - Cookies: Immer `HttpOnly; Secure; SameSite=lax` (host‑only, kein `Domain=`).
 
 ## Fehlerbilder
-- 502/Health down → Web nicht gestartet (DSN falsch, Session‑DSN auf 127.0.0.1 im Container).
+- 502/Health down → Frontend oder Web nicht gestartet; häufig ist ein DSN falsch oder die Session‑DSN zeigt im Container auf `127.0.0.1`.
 - 401 nach Login → Session‑Cookie nicht gesetzt (Domain/SameSite/Callback‑Host prüfen).

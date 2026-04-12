@@ -3,17 +3,18 @@
 Status: Stable
 
 ## Ziele
-- `make up` – Dienste bauen/starten (web, keycloak, caddy)
+- `make up` – Dienste bauen/starten (frontend, web, keycloak, caddy, h5p, learning-worker) inkl. lokaler `.tmp`-Vorbereitung und Caddy-CA-Helferdatei
 - `make ps` – Statusübersicht (docker compose ps)
 - `make reset-local` – Supabase DB reset + Services recreate (Hinweis: Keys rotieren; `.env` ggf. via `supabase status` aktualisieren)
 - `make db-login-user` – Login‑User erstellen/aktualisieren (IN ROLE gustav_limited)
+- `make learning-worker-db-login-user` – Worker-Login‑User erstellen/aktualisieren (dedizierte Worker-Rechte)
 - `make test` – Unit/Integration
 - `make verify-preflight-db` – Prüft vor `verify`, ob die lokale DB den erwarteten Schema-Stand hat (u. a. `unit_tasks_kind_check` inkl. `calliope`)
 - `make test-h5p` – H5P Sidecar (Node) Unit-Tests
 - `make test-supabase` – Supabase Storage Integration (`-m supabase_integration`)
 - `make test-openai` – OpenAI-kompatibler Endpoint Smoke-Tests (`-m openai_integration`)
 - `make test-e2e` – E2E (`-m e2e`, startet Dienste)
-- `make verify` – Alles (Preflight + Unit + Integrationen + E2E)
+- `make verify` – Vollsuite (Preflight + Python-Tests + H5P + Supabase + OpenAI-Smoke + E2E)
 - `make supabase-status` – Supabase Status/URLs
 - `make docker-validate` – `docker compose config` (Syntax/ENV)
 - `make import-legacy` – Legacy Dump importieren (lokal; schreibt Report nach `docs/migration/reports/`)

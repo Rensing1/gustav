@@ -118,7 +118,9 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 
 - DEV (hostbasiert, einfach & robust):
   - Caddy routet hostbasiert:
-    - `https://app.localhost` → Web (GUSTAV)
+    - `https://app.localhost` → Frontend (`frontend/`, SvelteKit Browser-BFF)
+    - `https://app.localhost/api/*`, `/internal/*`, `/health` → Web (`backend/web/`, FastAPI)
+    - `https://app.localhost/h5p/*` → H5P-Sidecar
     - `https://id.localhost` → Keycloak (IdP)
   - Persistenz (DEV): Keycloak speichert Realm und Benutzer im Compose-internen Postgres-Service `keycloak-db` (PostgreSQL 16) mit Volume `keycloak_pg_data`. Der Service ist über `depends_on.condition=service_healthy` als Startbedingung definiert, damit Keycloak erst nach erfolgreichem `pg_isready` hochfährt.
     PROD nutzt dieselbe Konfiguration, aber `KC_DB_URL` zeigt auf eine gemanagte Instanz (TLS, Backups, Secret-Store); `KC_DB_URL_PROPERTIES` sollte dort mindestens `sslmode=require` setzen.

@@ -423,13 +423,15 @@
     const createMaterialSuccess = asSuccess(form.createMaterial);
     const deleteMaterialSuccess = asSuccess(form.deleteMaterial);
     const reorderMaterialSuccess = asSuccess(form.reorderMaterial);
+    const saveNodeSuccess = asSuccess(form.saveNode);
     const saveTaskSuccess = asSuccess(form.saveTask);
     const createTaskSuccess = asSuccess(form.createTask);
     const deleteTaskSuccess = asSuccess(form.deleteTask);
     const reorderTaskSuccess = asSuccess(form.reorderTask);
 
     const success =
-      saveMaterialSuccess
+      saveNodeSuccess
+      ?? saveMaterialSuccess
       ?? createMaterialSuccess
       ?? deleteMaterialSuccess
       ?? reorderMaterialSuccess
@@ -446,8 +448,8 @@
       } else if (createMaterialSuccess) {
         expandedMaterialId = success.material_id ?? success.editor.materials.at(-1)?.id ?? null;
         showCreateMaterial = false;
-        preparedMaterialUploadName = null;
-        createMaterialClientError = null;
+        clearPreparedMaterialUpload();
+        createMaterialUploadPending = false;
       } else if (deleteMaterialSuccess) {
         expandedMaterialId = null;
       }
@@ -463,6 +465,9 @@
       return;
     }
 
+    if (form.saveNode?.error) {
+      editorMessage = null;
+    }
     if (form.saveMaterial?.material_id) {
       editorMessage = null;
       expandedMaterialId = form.saveMaterial.material_id;

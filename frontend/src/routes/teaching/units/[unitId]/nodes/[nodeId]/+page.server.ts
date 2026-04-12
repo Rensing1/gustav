@@ -18,6 +18,17 @@ type EditorActionSuccess = {
   task_id?: string;
 };
 
+type EditorActionName =
+  | "saveNode"
+  | "saveMaterial"
+  | "createMaterial"
+  | "deleteMaterial"
+  | "reorderMaterial"
+  | "saveTask"
+  | "createTask"
+  | "deleteTask"
+  | "reorderTask";
+
 const INVALID_NUMBER = Symbol("invalid_number");
 const INVALID_DATETIME = Symbol("invalid_datetime");
 
@@ -75,19 +86,22 @@ async function readEditor(
   return await requireBackendJson<TeacherUnitNodeEditorView>(fetchFn, cookies, editorHref(unitId, nodeId));
 }
 
-async function success(
+async function success<K extends EditorActionName>(
+  action: K,
   fetchFn: typeof fetch,
   cookies: Parameters<PageServerLoad>[0]["cookies"],
   unitId: string,
   nodeId: string,
   message: string,
   extra?: Partial<EditorActionSuccess>
-): Promise<EditorActionSuccess> {
+): Promise<Record<K, EditorActionSuccess>> {
   return {
-    ok: true,
-    message,
-    editor: await readEditor(fetchFn, cookies, unitId, nodeId),
-    ...extra
+    [action]: {
+      ok: true,
+      message,
+      editor: await readEditor(fetchFn, cookies, unitId, nodeId),
+      ...extra
+    }
   };
 }
 
@@ -313,7 +327,7 @@ export const actions: Actions = {
       });
     }
 
-    return await success(fetch, cookies, params.unitId, params.nodeId, "Knoten gespeichert.");
+    return await success("saveNode", fetch, cookies, params.unitId, params.nodeId, "Knoten gespeichert.");
   },
 
   saveMaterial: async ({ fetch, cookies, params, request }) => {
@@ -364,7 +378,7 @@ export const actions: Actions = {
       });
     }
 
-    return await success(fetch, cookies, params.unitId, params.nodeId, "Material gespeichert.", {
+    return await success("saveMaterial", fetch, cookies, params.unitId, params.nodeId, "Material gespeichert.", {
       material_id: materialId
     });
   },
@@ -504,10 +518,12 @@ export const actions: Actions = {
     );
 
     return {
-      ok: true,
-      message: "Material angelegt.",
-      editor,
-      material_id: createdMaterial?.id
+      createMaterial: {
+        ok: true,
+        message: "Material angelegt.",
+        editor,
+        material_id: createdMaterial?.id
+      }
     };
   },
 
@@ -536,7 +552,7 @@ export const actions: Actions = {
       });
     }
 
-    return await success(fetch, cookies, params.unitId, params.nodeId, "Material gelöscht.");
+    return await success("deleteMaterial", fetch, cookies, params.unitId, params.nodeId, "Material gelöscht.");
   },
 
   reorderMaterial: async ({ fetch, cookies, params, request }) => {
@@ -550,10 +566,12 @@ export const actions: Actions = {
 
     if (nextIds.join(",") === orderedIds.join(",")) {
       return {
-        ok: true,
-        message: "",
-        editor,
-        material_id: materialId
+        reorderMaterial: {
+          ok: true,
+          message: "",
+          editor,
+          material_id: materialId
+        }
       };
     }
 
@@ -575,7 +593,7 @@ export const actions: Actions = {
       });
     }
 
-    return await success(fetch, cookies, params.unitId, params.nodeId, "", {
+    return await success("reorderMaterial", fetch, cookies, params.unitId, params.nodeId, "", {
       material_id: materialId
     });
   },
@@ -628,7 +646,7 @@ export const actions: Actions = {
       });
     }
 
-    return await success(fetch, cookies, params.unitId, params.nodeId, "Aufgabe gespeichert.", {
+    return await success("saveTask", fetch, cookies, params.unitId, params.nodeId, "Aufgabe gespeichert.", {
       task_id: taskId
     });
   },
@@ -680,10 +698,12 @@ export const actions: Actions = {
     const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId);
     const createdTask = editor.tasks.at(-1);
     return {
-      ok: true,
-      message: "Aufgabe angelegt.",
-      editor,
-      task_id: createdTask?.id
+      createTask: {
+        ok: true,
+        message: "Aufgabe angelegt.",
+        editor,
+        task_id: createdTask?.id
+      }
     };
   },
 
@@ -712,7 +732,7 @@ export const actions: Actions = {
       });
     }
 
-    return await success(fetch, cookies, params.unitId, params.nodeId, "Aufgabe gelöscht.");
+    return await success("deleteTask", fetch, cookies, params.unitId, params.nodeId, "Aufgabe gelöscht.");
   },
 
   reorderTask: async ({ fetch, cookies, params, request }) => {
@@ -726,10 +746,12 @@ export const actions: Actions = {
 
     if (nextIds.join(",") === orderedIds.join(",")) {
       return {
-        ok: true,
-        message: "",
-        editor,
-        task_id: taskId
+        reorderTask: {
+          ok: true,
+          message: "",
+          editor,
+          task_id: taskId
+        }
       };
     }
 
@@ -751,7 +773,7 @@ export const actions: Actions = {
       });
     }
 
-    return await success(fetch, cookies, params.unitId, params.nodeId, "", {
+    return await success("reorderTask", fetch, cookies, params.unitId, params.nodeId, "", {
       task_id: taskId
     });
   }

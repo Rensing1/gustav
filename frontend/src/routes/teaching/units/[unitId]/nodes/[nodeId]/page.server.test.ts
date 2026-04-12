@@ -142,17 +142,19 @@ describe("teacher node editor server helpers", () => {
       })
     );
     expect(result).toMatchObject({
-      ok: true,
-      message: "Material angelegt.",
-      material_id: "material-file-1",
-      editor: {
-        materials: [
-          {
-            id: "material-file-1",
-            title: "Arbeitsblatt",
-            kind: "file"
-          }
-        ]
+      createMaterial: {
+        ok: true,
+        message: "Material angelegt.",
+        material_id: "material-file-1",
+        editor: {
+          materials: [
+            {
+              id: "material-file-1",
+              title: "Arbeitsblatt",
+              kind: "file"
+            }
+          ]
+        }
       }
     });
   });
@@ -188,17 +190,49 @@ describe("teacher node editor server helpers", () => {
     } as Parameters<typeof actions.createMaterial>[0]);
 
     expect(result).toMatchObject({
-      ok: true,
-      material_id: "material-md-1",
-      editor: {
-        materials: [
-          {
-            id: "material-md-1",
-            title: "Merkblatt",
-            kind: "markdown",
-            body_md: "Inhalt"
+      createMaterial: {
+        ok: true,
+        material_id: "material-md-1",
+        editor: {
+          materials: [
+            {
+              id: "material-md-1",
+              title: "Merkblatt",
+              kind: "markdown",
+              body_md: "Inhalt"
+            }
+          ]
+        }
+      }
+    });
+  });
+
+  it("returns namespaced success for saveTask so the page can react consistently", async () => {
+    backendRequestMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const form = new FormData();
+    form.set("section_id", "section-1");
+    form.set("task_id", "task-1");
+    form.set("task_kind", "native");
+    form.set("instruction_md", "Bearbeite die Aufgabe.");
+
+    const result = await actions.saveTask({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof actions.saveTask>[0]["cookies"],
+      params: { unitId: "unit-1", nodeId: "node-1" },
+      request: requestWithFormData(form)
+    } as Parameters<typeof actions.saveTask>[0]);
+
+    expect(result).toMatchObject({
+      saveTask: {
+        ok: true,
+        message: "Aufgabe gespeichert.",
+        task_id: "task-1",
+        editor: {
+          node: {
+            id: "node-1"
           }
-        ]
+        }
       }
     });
   });

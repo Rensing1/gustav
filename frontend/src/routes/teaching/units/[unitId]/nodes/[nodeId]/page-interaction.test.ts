@@ -108,5 +108,6 @@ describe("teacher node editor page", () => {
     expect(screen.getByText("Material angelegt.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Arbeitsblatt" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Arbeitsblatt")).toBeInTheDocument();
+    expect(screen.queryByText(/Datei vorbereitet:/i)).not.toBeInTheDocument();
   });
 });

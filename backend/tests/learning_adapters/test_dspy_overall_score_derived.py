@@ -1,4 +1,4 @@
-"""Derive overall score from lean criterion-indexed DSPy analysis output."""
+"""Derive overall score from positional DSPy analysis output."""
 
 from __future__ import annotations
 
@@ -39,8 +39,8 @@ def test_run_structured_analysis_derives_score_from_criteria_results(monkeypatch
     _install_fake_dspy(
         monkeypatch,
         criteria_results=[
-            {"criterion_idx": 1, "score": 10, "explanation_md": "OK B"},
-            {"criterion_idx": 0, "score": 0, "explanation_md": "OK A"},
+            {"score": 0, "explanation_md": "OK A"},
+            {"score": 10, "explanation_md": "OK B"},
         ],
     )
     programs = _reload_programs()
@@ -65,8 +65,8 @@ def test_run_structured_visual_analysis_derives_score_from_criteria_results(monk
     _install_fake_dspy(
         monkeypatch,
         criteria_results=[
-            {"criterion_idx": 0, "score": 10, "explanation_md": "OK A"},
-            {"criterion_idx": 1, "score": 8, "explanation_md": "OK B"},
+            {"score": 10, "explanation_md": "OK A"},
+            {"score": 8, "explanation_md": "OK B"},
         ],
     )
     programs = _reload_programs()
@@ -87,34 +87,18 @@ def test_run_structured_visual_analysis_derives_score_from_criteria_results(monk
     assert payload["score"] == 5
 
 
-def test_run_structured_analysis_raises_when_criterion_idx_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_structured_analysis_raises_when_criteria_results_length_is_too_short(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _install_fake_dspy(
         monkeypatch,
         criteria_results=[
-            {"score": 6, "explanation_md": "OK"},
+            {"score": 6, "explanation_md": "OK A"},
         ],
     )
     programs = _reload_programs()
 
-    with pytest.raises(RuntimeError, match="invalid_criterion_idx"):
-        _ = programs.run_structured_analysis(  # type: ignore[attr-defined]
-            text_md="Text",
-            criteria=["A"],
-            teacher_instructions_md="Instr",
-            teacher_context_md="Ctx",
-        )
-
-
-def test_run_structured_analysis_raises_when_criterion_idx_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
-    _install_fake_dspy(
-        monkeypatch,
-        criteria_results=[
-            {"criterion_idx": 3, "score": 6, "explanation_md": "OK"},
-        ],
-    )
-    programs = _reload_programs()
-
-    with pytest.raises(RuntimeError, match="invalid_criterion_idx"):
+    with pytest.raises(RuntimeError, match="invalid_analysis_json"):
         _ = programs.run_structured_analysis(  # type: ignore[attr-defined]
             text_md="Text",
             criteria=["A", "B"],
@@ -123,17 +107,41 @@ def test_run_structured_analysis_raises_when_criterion_idx_out_of_range(monkeypa
         )
 
 
-def test_run_structured_analysis_raises_when_criterion_idx_duplicated(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_structured_analysis_raises_when_criteria_results_length_is_too_long(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _install_fake_dspy(
         monkeypatch,
         criteria_results=[
-            {"criterion_idx": 0, "score": 4, "explanation_md": "OK A1"},
-            {"criterion_idx": 0, "score": 7, "explanation_md": "OK A2"},
+            {"score": 4, "explanation_md": "OK A"},
+            {"score": 6, "explanation_md": "OK B"},
+            {"score": 8, "explanation_md": "EXTRA"},
         ],
     )
     programs = _reload_programs()
 
-    with pytest.raises(RuntimeError, match="invalid_criterion_idx"):
+    with pytest.raises(RuntimeError, match="invalid_analysis_json"):
+        _ = programs.run_structured_analysis(  # type: ignore[attr-defined]
+            text_md="Text",
+            criteria=["A", "B"],
+            teacher_instructions_md="Instr",
+            teacher_context_md="Ctx",
+        )
+
+
+def test_run_structured_analysis_raises_when_result_item_is_not_an_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_dspy(
+        monkeypatch,
+        criteria_results=[
+            {"score": 4, "explanation_md": "OK A"},
+            "not-a-dict",
+        ],
+    )
+    programs = _reload_programs()
+
+    with pytest.raises(RuntimeError, match="invalid_analysis_json"):
         _ = programs.run_structured_analysis(  # type: ignore[attr-defined]
             text_md="Text",
             criteria=["A", "B"],

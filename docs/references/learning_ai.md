@@ -33,7 +33,7 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 | `SubmissionStoragePort` | ```python\nclass SubmissionStoragePort(Protocol):\n    def create_presign(self, *, course_id: UUID, task_id: UUID, student_sub: str,\n                       mime_type: str, size_bytes: int) -> PresignResult: ...\n    def verify_object(self, *, storage_key: str, sha256: str,\n                      size_bytes: int) -> StorageVerifyResult: ...\n    def stream_to_local_tmp(self, *, storage_key: str) -> Iterator[bytes]: ...\n``` | Presigned uploads, verification, optional streaming for local OCR. | Uses service credentials; enforces namespacing `submissions/{course}/{task}/{student}/...`. |
 | `LearningSubmissionQueuePort` | ```python\nclass LearningSubmissionQueuePort(Protocol):\n    def enqueue(self, job: SubmissionJobPayload) -> None: ...\n    def lease_next(self, *, now: datetime) -> Optional[QueuedJob]: ...\n    def ack(self, job_id: UUID) -> None: ...\n    def retry_later(self, job_id: UUID, *, visible_at: datetime) -> None: ...\n``` | Queue backed by `public.learning_submission_jobs`. | Only the dedicated worker login (`gustav_worker`) should lease/ack jobs. |
 | `VisionAdapterProtocol` | ```python\nclass VisionAdapterProtocol(Protocol):\n    def extract(self, *, submission: dict, job_payload: dict) -> VisionResult: ...\n``` | OCR via DSPy (`VisionOcrSignature` → `VisionResult.text_md`). | Must enforce MIME whitelist, size limits, and never log extracted text. |
-| `FeedbackAdapterProtocol` | ```python\nclass FeedbackAdapterProtocol(Protocol):\n    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult: ...\n``` | DSPy-only feedback for text submissions. | Must not log student text or teacher context; validates required feedback headings. |
+| `FeedbackAdapterProtocol` | ```python\nclass FeedbackAdapterProtocol(Protocol):\n    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult: ...\n``` | DSPy-only feedback for text submissions. | Must not log student text or teacher context; validates required feedback headings and may perform one internal analysis repair attempt before failing terminally. |
 
 Production adapters:
 - OCR: `backend/learning/adapters/local_vision.py` (DSPy-only, OpenAI-compatible endpoint).
@@ -58,6 +58,8 @@ Production adapters:
 
 Why this matters:
 - Avoids the “idle in transaction” worker stall pattern when an external LLM/VLM call hangs.
+- Keeps the optional one-shot analysis repair attempt inside the same leased job,
+  without stretching DB transaction lifetimes.
 
 ---
 
@@ -69,15 +71,29 @@ Why this matters:
 | --- | --- | --- | --- |
 | `OPENAI_BASE_URL` | yes | Worker | OpenAI-compatible base URL as-is (may include path like `/api/v1`). |
 | `OPENAI_API_KEY` | no | Worker | Optional token; defaults to a no-op value when empty. |
-| `AI_TEXT_MODEL` | yes | Feedback | One model for text analysis + synthesis. |
+| `AI_TEXT_MODEL` | yes | Feedback | One model for text analysis + synthesis. Runtime parameters can be split per stage. |
 | `AI_OCR_MODEL` | yes | OCR | Vision model used for OCR/text extraction. |
-| `AI_VISUAL_MODEL` | yes (for visual tasks) | Visual | Required for task kind `visual` (no fallback). |
-| `AI_TEXT_TEMPERATURE` | no | Feedback | Default `0.0`. |
+| `AI_VISUAL_MODEL` | yes (for visual tasks) | Visual | Required for task kind `visual` (no fallback). Runtime parameters can be split per stage. |
+| `AI_TEXT_TEMPERATURE` | no | Feedback | Shared fallback for text analysis + synthesis, default `0.0`. |
+| `AI_TEXT_ANALYSIS_TEMPERATURE` | no | Feedback | Overrides text analysis temperature only. Falls back to `AI_TEXT_TEMPERATURE`. |
+| `AI_TEXT_SYNTHESIS_TEMPERATURE` | no | Feedback | Overrides text synthesis temperature only. Falls back to `AI_TEXT_TEMPERATURE`. |
+| `AI_TEXT_REASONING_EFFORT` | no | Feedback | Shared Mistral fallback for text analysis + synthesis. Allowed: `none|high`. Ignored for non-Mistral models. |
+| `AI_TEXT_ANALYSIS_REASONING_EFFORT` | no | Feedback | Overrides text analysis reasoning effort only. Falls back to `AI_TEXT_REASONING_EFFORT`. |
+| `AI_TEXT_SYNTHESIS_REASONING_EFFORT` | no | Feedback | Overrides text synthesis reasoning effort only. Falls back to `AI_TEXT_REASONING_EFFORT`. |
 | `AI_OCR_TEMPERATURE` | no | OCR | Default `0.0`. |
-| `AI_VISUAL_TEMPERATURE` | no | Visual | Default `0.0`. |
-| `AI_TEXT_THINK_LEVEL` | no | Feedback | GPT-OSS only: `low|medium|high` (defaults to `low` when unset). Ignored for non-GPT-OSS models. |
+| `AI_VISUAL_TEMPERATURE` | no | Visual | Shared fallback for visual analysis + synthesis, default `0.0`. |
+| `AI_VISUAL_ANALYSIS_TEMPERATURE` | no | Visual | Overrides visual analysis temperature only. Falls back to `AI_VISUAL_TEMPERATURE`. |
+| `AI_VISUAL_SYNTHESIS_TEMPERATURE` | no | Visual | Overrides visual synthesis temperature only. Falls back to `AI_VISUAL_TEMPERATURE`. |
+| `AI_VISUAL_REASONING_EFFORT` | no | Visual | Shared Mistral fallback for visual analysis + synthesis. Allowed: `none|high`. Ignored for non-Mistral models. |
+| `AI_VISUAL_ANALYSIS_REASONING_EFFORT` | no | Visual | Overrides visual analysis reasoning effort only. Falls back to `AI_VISUAL_REASONING_EFFORT`. |
+| `AI_VISUAL_SYNTHESIS_REASONING_EFFORT` | no | Visual | Overrides visual synthesis reasoning effort only. Falls back to `AI_VISUAL_REASONING_EFFORT`. |
+| `AI_TEXT_THINK_LEVEL` | no | Feedback | Shared GPT-OSS think-level fallback for text analysis + synthesis. Ignored for non-GPT-OSS models. |
+| `AI_TEXT_ANALYSIS_THINK_LEVEL` | no | Feedback | Overrides text analysis think-level only. Falls back to `AI_TEXT_THINK_LEVEL`. |
+| `AI_TEXT_SYNTHESIS_THINK_LEVEL` | no | Feedback | Overrides text synthesis think-level only. Falls back to `AI_TEXT_THINK_LEVEL`. |
 | `AI_OCR_THINK_LEVEL` | no | OCR | GPT-OSS only: `low|medium|high` (defaults to `low` when unset). Ignored for non-GPT-OSS models. |
-| `AI_VISUAL_THINK_LEVEL` | no | Visual | GPT-OSS only: `low|medium|high` (defaults to `low` when unset). Ignored for non-GPT-OSS models. |
+| `AI_VISUAL_THINK_LEVEL` | no | Visual | Shared GPT-OSS think-level fallback for visual analysis + synthesis. Ignored for non-GPT-OSS models. |
+| `AI_VISUAL_ANALYSIS_THINK_LEVEL` | no | Visual | Overrides visual analysis think-level only. Falls back to `AI_VISUAL_THINK_LEVEL`. |
+| `AI_VISUAL_SYNTHESIS_THINK_LEVEL` | no | Visual | Overrides visual synthesis think-level only. Falls back to `AI_VISUAL_THINK_LEVEL`. |
 | `LEARNING_VISION_ADAPTER` | no | Worker DI | Override module path (default `backend.learning.adapters.local_vision`). |
 | `LEARNING_FEEDBACK_ADAPTER` | no | Worker DI | Override module path (default `backend.learning.adapters.local_feedback`). |
 | `DSPY_CACHEDIR` | no | Worker container | Disk cache directory (compose default: `/tmp/dspy_cache`; override via `.env`). |
@@ -89,6 +105,10 @@ Why this matters:
 | `WORKER_POLL_INTERVAL` | no | Worker | Default `0.5`. |
 | `LEARNING_WORKER_DB_USER` / `LEARNING_WORKER_DB_PASSWORD` | yes for local fallback | Worker | Dedicated DB login for the learning worker; local examples default to `gustav_worker`. |
 | `LEARNING_WORKER_DATABASE_URL` | recommended | Worker + health probe | Dedicated DSN for worker runtime and worker health checks. |
+
+Internal DSPy observability:
+- The feedback adapters log whether a stage used `json_schema`, fell back to `json_object`, or ran on a provider without `response_format` support.
+- These diagnostics stay internal to worker/adapter logs and are not persisted in public submission payloads.
 
 ### 5.1.1 Database login roles
 - Web/App uses `APP_DB_USER` (typically `gustav_app`) and must stay separate from the worker.

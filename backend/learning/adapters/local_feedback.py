@@ -64,6 +64,14 @@ def _parse_float_env(name: str, *, default: float) -> float:
         return default
 
 
+def _parse_optional_str_env(name: str, *, default: str | None = None) -> str | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    normalized = str(raw).strip()
+    return normalized or default
+
+
 def _normalize_model_name(raw: str) -> str:
     """Return a DSPy/LiteLLM model string for OpenAI-compatible chat completion."""
     model = (raw or "").strip()
@@ -84,14 +92,60 @@ class _LocalFeedbackAdapter:
 
         self._text_model = _normalize_model_name(os.getenv("AI_TEXT_MODEL") or "")
         self._visual_model = _normalize_model_name(os.getenv("AI_VISUAL_MODEL") or "")
-        self._text_think_level = (os.getenv("AI_TEXT_THINK_LEVEL") or "").strip() or None
-        self._visual_think_level = (os.getenv("AI_VISUAL_THINK_LEVEL") or "").strip() or None
+        self._text_analysis_think_level = _parse_optional_str_env(
+            "AI_TEXT_ANALYSIS_THINK_LEVEL",
+            default=_parse_optional_str_env("AI_TEXT_THINK_LEVEL"),
+        )
+        self._text_synthesis_think_level = _parse_optional_str_env(
+            "AI_TEXT_SYNTHESIS_THINK_LEVEL",
+            default=_parse_optional_str_env("AI_TEXT_THINK_LEVEL"),
+        )
+        self._visual_analysis_think_level = _parse_optional_str_env(
+            "AI_VISUAL_ANALYSIS_THINK_LEVEL",
+            default=_parse_optional_str_env("AI_VISUAL_THINK_LEVEL"),
+        )
+        self._visual_synthesis_think_level = _parse_optional_str_env(
+            "AI_VISUAL_SYNTHESIS_THINK_LEVEL",
+            default=_parse_optional_str_env("AI_VISUAL_THINK_LEVEL"),
+        )
+        self._text_analysis_reasoning_effort = _parse_optional_str_env(
+            "AI_TEXT_ANALYSIS_REASONING_EFFORT",
+            default=_parse_optional_str_env("AI_TEXT_REASONING_EFFORT"),
+        )
+        self._text_synthesis_reasoning_effort = _parse_optional_str_env(
+            "AI_TEXT_SYNTHESIS_REASONING_EFFORT",
+            default=_parse_optional_str_env("AI_TEXT_REASONING_EFFORT"),
+        )
+        self._visual_analysis_reasoning_effort = _parse_optional_str_env(
+            "AI_VISUAL_ANALYSIS_REASONING_EFFORT",
+            default=_parse_optional_str_env("AI_VISUAL_REASONING_EFFORT"),
+        )
+        self._visual_synthesis_reasoning_effort = _parse_optional_str_env(
+            "AI_VISUAL_SYNTHESIS_REASONING_EFFORT",
+            default=_parse_optional_str_env("AI_VISUAL_REASONING_EFFORT"),
+        )
 
-        self._text_temperature = _parse_float_env("AI_TEXT_TEMPERATURE", default=0.0)
-        self._visual_temperature = _parse_float_env("AI_VISUAL_TEMPERATURE", default=0.0)
+        self._text_analysis_temperature = _parse_float_env(
+            "AI_TEXT_ANALYSIS_TEMPERATURE",
+            default=_parse_float_env("AI_TEXT_TEMPERATURE", default=0.0),
+        )
+        self._text_synthesis_temperature = _parse_float_env(
+            "AI_TEXT_SYNTHESIS_TEMPERATURE",
+            default=_parse_float_env("AI_TEXT_TEMPERATURE", default=0.0),
+        )
+        self._visual_analysis_temperature = _parse_float_env(
+            "AI_VISUAL_ANALYSIS_TEMPERATURE",
+            default=_parse_float_env("AI_VISUAL_TEMPERATURE", default=0.0),
+        )
+        self._visual_synthesis_temperature = _parse_float_env(
+            "AI_VISUAL_SYNTHESIS_TEMPERATURE",
+            default=_parse_float_env("AI_VISUAL_TEMPERATURE", default=0.0),
+        )
 
-        self._text_lm = None
-        self._visual_lm = None
+        self._text_analysis_lm = None
+        self._text_synthesis_lm = None
+        self._visual_analysis_lm = None
+        self._visual_synthesis_lm = None
 
     def _require_common_config(self) -> None:
         if not self._base_url:
@@ -100,47 +154,80 @@ class _LocalFeedbackAdapter:
         if not self._text_model:
             raise FeedbackTransientError("missing_AI_TEXT_MODEL")
 
-    def _get_text_lm(self):  # type: ignore[no-untyped-def]
-        if self._text_lm is not None:
-            return self._text_lm
+    def _build_lm(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        model: str,
+        temperature: float,
+        think_level: str | None,
+        reasoning_effort: str | None,
+    ):
         self._require_common_config()
         try:
             import dspy  # type: ignore
         except Exception as exc:
             raise FeedbackTransientError("dspy_unavailable") from exc
         lm_kwargs = {
-            "temperature": self._text_temperature,
+            "temperature": temperature,
             "base_url": self._base_url,
             "api_key": self._api_key,
         }
         # GPT-OSS supports a per-request `think` level; keep other models unchanged.
-        maybe_think = dspy_helpers.resolve_think_level(self._text_model, self._text_think_level)
+        maybe_think = dspy_helpers.resolve_think_level(model, think_level)
         if maybe_think:
             lm_kwargs["extra_body"] = {"think": maybe_think}
-        self._text_lm = dspy.LM(self._text_model, **lm_kwargs)  # type: ignore[attr-defined]
-        return self._text_lm
+        maybe_reasoning_effort = dspy_helpers.resolve_reasoning_effort(model, reasoning_effort)
+        if maybe_reasoning_effort:
+            lm_kwargs["reasoning_effort"] = maybe_reasoning_effort
+        return dspy.LM(model, **lm_kwargs)  # type: ignore[attr-defined]
 
-    def _get_visual_lm(self):  # type: ignore[no-untyped-def]
-        if self._visual_lm is not None:
-            return self._visual_lm
+    def _get_text_analysis_lm(self):  # type: ignore[no-untyped-def]
+        if self._text_analysis_lm is None:
+            self._text_analysis_lm = self._build_lm(
+                model=self._text_model,
+                temperature=self._text_analysis_temperature,
+                think_level=self._text_analysis_think_level,
+                reasoning_effort=self._text_analysis_reasoning_effort,
+            )
+        return self._text_analysis_lm
+
+    def _get_text_synthesis_lm(self):  # type: ignore[no-untyped-def]
+        if self._text_synthesis_lm is None:
+            self._text_synthesis_lm = self._build_lm(
+                model=self._text_model,
+                temperature=self._text_synthesis_temperature,
+                think_level=self._text_synthesis_think_level,
+                reasoning_effort=self._text_synthesis_reasoning_effort,
+            )
+        return self._text_synthesis_lm
+
+    def _get_visual_analysis_lm(self):  # type: ignore[no-untyped-def]
+        if self._visual_analysis_lm is not None:
+            return self._visual_analysis_lm
         self._require_common_config()
         if not self._visual_model:
             raise FeedbackPermanentError("missing_AI_VISUAL_MODEL")
-        try:
-            import dspy  # type: ignore
-        except Exception as exc:
-            raise FeedbackTransientError("dspy_unavailable") from exc
-        lm_kwargs = {
-            "temperature": self._visual_temperature,
-            "base_url": self._base_url,
-            "api_key": self._api_key,
-        }
-        # GPT-OSS supports a per-request `think` level; keep other models unchanged.
-        maybe_think = dspy_helpers.resolve_think_level(self._visual_model, self._visual_think_level)
-        if maybe_think:
-            lm_kwargs["extra_body"] = {"think": maybe_think}
-        self._visual_lm = dspy.LM(self._visual_model, **lm_kwargs)  # type: ignore[attr-defined]
-        return self._visual_lm
+        self._visual_analysis_lm = self._build_lm(
+            model=self._visual_model,
+            temperature=self._visual_analysis_temperature,
+            think_level=self._visual_analysis_think_level,
+            reasoning_effort=self._visual_analysis_reasoning_effort,
+        )
+        return self._visual_analysis_lm
+
+    def _get_visual_synthesis_lm(self):  # type: ignore[no-untyped-def]
+        if self._visual_synthesis_lm is not None:
+            return self._visual_synthesis_lm
+        self._require_common_config()
+        if not self._visual_model:
+            raise FeedbackPermanentError("missing_AI_VISUAL_MODEL")
+        self._visual_synthesis_lm = self._build_lm(
+            model=self._visual_model,
+            temperature=self._visual_synthesis_temperature,
+            think_level=self._visual_synthesis_think_level,
+            reasoning_effort=self._visual_synthesis_reasoning_effort,
+        )
+        return self._visual_synthesis_lm
 
     def analyze(
         self,
@@ -151,22 +238,18 @@ class _LocalFeedbackAdapter:
         teacher_context_md: str | None = None,
     ) -> FeedbackResult:  # type: ignore[override]
         """Generate structured analysis + feedback for a text submission."""
-        lm = self._get_text_lm()
+        analysis_lm = self._get_text_analysis_lm()
+        synthesis_lm = self._get_text_synthesis_lm()
         try:
-            import dspy  # type: ignore
             from backend.learning.adapters.dspy import feedback_program
-
-            with dspy.context(  # type: ignore[attr-defined]
-                lm=lm,
-                adapter=dspy.JSONAdapter(),  # type: ignore[attr-defined]
-                disable_history=True,
-            ):
-                return feedback_program.analyze_feedback(
-                    text_md=text_md,
-                    criteria=criteria,
-                    teacher_instructions_md=instruction_md,
-                    teacher_context_md=teacher_context_md,
-                )
+            return feedback_program.analyze_feedback(
+                text_md=text_md,
+                criteria=criteria,
+                teacher_instructions_md=instruction_md,
+                teacher_context_md=teacher_context_md,
+                analysis_lm=analysis_lm,
+                synthesis_lm=synthesis_lm,
+            )
         except FeedbackPermanentError:
             raise
         except FeedbackTransientError:
@@ -189,7 +272,8 @@ class _LocalFeedbackAdapter:
     ) -> FeedbackResult:
         """Generate structured analysis + feedback for a visual submission (image/PDF)."""
         # Fail fast on missing visual-model configuration before touching storage.
-        lm = self._get_visual_lm()
+        analysis_lm = self._get_visual_analysis_lm()
+        synthesis_lm = self._get_visual_synthesis_lm()
 
         from backend.learning.adapters.local_vision import (  # type: ignore
             VisionPermanentError,
@@ -240,20 +324,15 @@ class _LocalFeedbackAdapter:
         if not image_data_uri:
             raise FeedbackTransientError("image_unavailable")
         try:
-            import dspy  # type: ignore
             from backend.learning.adapters.dspy import visual_feedback_program
-
-            with dspy.context(  # type: ignore[attr-defined]
-                lm=lm,
-                adapter=dspy.JSONAdapter(),  # type: ignore[attr-defined]
-                disable_history=True,
-            ):
-                return visual_feedback_program.analyze_visual_feedback(
-                    image_data_uri=image_data_uri,
-                    criteria=criteria,
-                    teacher_instructions_md=instruction_md,
-                    teacher_context_md=teacher_context_md,
-                )
+            return visual_feedback_program.analyze_visual_feedback(
+                image_data_uri=image_data_uri,
+                criteria=criteria,
+                teacher_instructions_md=instruction_md,
+                teacher_context_md=teacher_context_md,
+                analysis_lm=analysis_lm,
+                synthesis_lm=synthesis_lm,
+            )
         except FeedbackPermanentError:
             raise
         except FeedbackTransientError:

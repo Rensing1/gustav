@@ -36,9 +36,8 @@ class CriterionResult:
 
 @dataclass
 class LeanCriterionResult:
-    """Lean structured criterion result emitted by the model."""
+    """Positional structured criterion result emitted by the model."""
 
-    criterion_idx: int
     score: int
     explanation_md: str
 
@@ -47,21 +46,15 @@ class LeanCriterionResult:
         if isinstance(value, cls):
             return value
         if isinstance(value, dict):
-            if "criterion_idx" not in value:
-                raise ValueError("invalid_criterion_idx")
-            try:
-                criterion_idx = int(value.get("criterion_idx"))
-            except (TypeError, ValueError) as exc:
-                raise ValueError("invalid_criterion_idx") from exc
             try:
                 score = int(value.get("score", 0))
             except (TypeError, ValueError):
-                score = 0
+                raise ValueError("invalid_analysis_json")
             explanation_md = str(value.get("explanation_md", value.get("explanation", ""))) or ""
-            return cls(criterion_idx=criterion_idx, score=score, explanation_md=explanation_md)
+            return cls(score=score, explanation_md=explanation_md)
         if hasattr(value, "__dict__"):
             return cls.from_value(vars(value))
-        raise ValueError("invalid_criterion_idx")
+        raise ValueError("invalid_analysis_json")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

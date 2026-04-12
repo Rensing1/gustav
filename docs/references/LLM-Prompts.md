@@ -48,6 +48,7 @@ Output:
 - `feedback_md` als Markdown-Fließtext (siehe Output-Contract)
 Hinweis:
 - Der Gesamt-Score `analysis_json.score` (0..5) wird im Backend aus den Kriterien abgeleitet; das Modell liefert nur `criteria_results`.
+- `criteria_results` ist positionsgebunden: genau ein Ergebnisobjekt pro Kriterium, in exakt derselben Reihenfolge wie `criteria`.
 
 ## 3) Text-Feedback ohne Kriterien (nur Rückmeldung)
 
@@ -109,15 +110,18 @@ Skalen:
       0 = nicht erfüllt, 5 = teilweise erfüllt, 10 = sehr gut erfüllt.
 
 Ausgabe:
-    - `criteria_results`: Liste von Objekten mit
-      `criterion_idx` (0-basierter Index in der gegebenen `criteria`-Liste),
-      `score` (0..10) und `explanation_md`.
+    - `criteria_results`: Liste von Objekten in exakt derselben Reihenfolge
+      wie die gegebene `criteria`-Liste.
+    - Jedes Objekt enthält `score` (0..10) und `explanation_md`.
     - `explanation_md` ist eine kurze, sachliche Erklärung in Markdown
       (1–3 Sätze, auf Deutsch, mit Bezug zum Kriterium und zur Textstelle).
 
 Hinweis:
     - `max_score` wird serverseitig immer auf `10` gesetzt.
-    - Der Kriteriumsname wird serverseitig aus `criteria[criterion_idx]` befüllt.
+    - Der Kriteriumsname wird serverseitig positionsgebunden aus der
+      übergebenen `criteria`-Liste befüllt.
+    - Wenn du unsicher bist, halte die Struktur trotzdem gültig und verwende
+      lieber `score = 0` als eine unvollständige oder längenfalsche Liste.
 ```
 
 ### 6.2) FeedbackSynthesisSignature
@@ -198,11 +202,15 @@ Regeln (nur evidenzbasiert):
       nicht als „Beleg“ herangezogen oder zitiert werden.
 
 Ausgabe:
-    - `criteria_results`: Liste von {criterion_idx, score 0..10, explanation_md}.
+    - `criteria_results`: Liste von {score 0..10, explanation_md} in exakt
+      derselben Reihenfolge wie `criteria`.
 
 Hinweis:
     - `max_score` wird serverseitig immer auf `10` gesetzt.
-    - Der Kriteriumsname wird serverseitig aus `criteria[criterion_idx]` befüllt.
+    - Der Kriteriumsname wird serverseitig positionsgebunden aus der
+      übergebenen `criteria`-Liste befüllt.
+    - Wenn du unsicher bist, halte die Struktur trotzdem gültig und verwende
+      lieber `score = 0` als eine unvollständige oder längenfalsche Liste.
 ```
 
 ### 6.5) VisualFeedbackSynthesisSignature
@@ -273,11 +281,27 @@ Dieser Abschnitt beschreibt die konkreten Aufruf-Muster (ohne die vollständigen
 ### 7.1) LM-Konfiguration (OpenAI-kompatibles Endpoint)
 
 Text- und Visual-Feedback werden über `dspy.LM(...)` konfiguriert:
-- Quelle: `backend/learning/adapters/local_feedback.py` (`_LocalFeedbackAdapter._get_text_lm`, `_get_visual_lm`)
+- Quelle: `backend/learning/adapters/local_feedback.py` (`_LocalFeedbackAdapter._get_text_analysis_lm`, `_get_text_synthesis_lm`, `_get_visual_analysis_lm`, `_get_visual_synthesis_lm`)
 - Modellnamen: aus `AI_TEXT_MODEL` / `AI_VISUAL_MODEL` (normalisiert zu `openai/<name>` wenn kein Provider-Präfix gesetzt ist)
 - Endpoint: `OPENAI_BASE_URL`
 - Key: `OPENAI_API_KEY` (Default: `sk-noop`)
-- Temperature: `AI_TEXT_TEMPERATURE` / `AI_VISUAL_TEMPERATURE` (Default: `0.0`)
+- Temperature:
+  - Text analysis: `AI_TEXT_ANALYSIS_TEMPERATURE` → fallback `AI_TEXT_TEMPERATURE` → default `0.0`
+  - Text synthesis: `AI_TEXT_SYNTHESIS_TEMPERATURE` → fallback `AI_TEXT_TEMPERATURE` → default `0.0`
+  - Visual analysis: `AI_VISUAL_ANALYSIS_TEMPERATURE` → fallback `AI_VISUAL_TEMPERATURE` → default `0.0`
+  - Visual synthesis: `AI_VISUAL_SYNTHESIS_TEMPERATURE` → fallback `AI_VISUAL_TEMPERATURE` → default `0.0`
+- Mistral reasoning effort:
+  - Text analysis: `AI_TEXT_ANALYSIS_REASONING_EFFORT` → fallback `AI_TEXT_REASONING_EFFORT` → default `none`
+  - Text synthesis: `AI_TEXT_SYNTHESIS_REASONING_EFFORT` → fallback `AI_TEXT_REASONING_EFFORT` → default `none`
+  - Visual analysis: `AI_VISUAL_ANALYSIS_REASONING_EFFORT` → fallback `AI_VISUAL_REASONING_EFFORT` → default `none`
+  - Visual synthesis: `AI_VISUAL_SYNTHESIS_REASONING_EFFORT` → fallback `AI_VISUAL_REASONING_EFFORT` → default `none`
+  - Ignored for non-Mistral models.
+- GPT-OSS think-level:
+  - Text analysis: `AI_TEXT_ANALYSIS_THINK_LEVEL` → fallback `AI_TEXT_THINK_LEVEL`
+  - Text synthesis: `AI_TEXT_SYNTHESIS_THINK_LEVEL` → fallback `AI_TEXT_THINK_LEVEL`
+  - Visual analysis: `AI_VISUAL_ANALYSIS_THINK_LEVEL` → fallback `AI_VISUAL_THINK_LEVEL`
+  - Visual synthesis: `AI_VISUAL_SYNTHESIS_THINK_LEVEL` → fallback `AI_VISUAL_THINK_LEVEL`
+  - Ignored for non-GPT-OSS models.
 - Fail-fast Config: fehlendes `OPENAI_BASE_URL` → transient error; fehlendes `AI_TEXT_MODEL` → transient error; fehlendes `AI_VISUAL_MODEL` → permanent error.
 - Prod-Safety: in prod/stage wird `OPENAI_BASE_URL` gegen unsichere HTTP-Hosts validiert (fail-fast in den Adaptern).
 
@@ -292,6 +316,12 @@ OCR läuft analog:
 Alle drei Pipelines laufen unter einem expliziten DSPy-Kontext:
 - `adapter=dspy.JSONAdapter()` (wir erwarten strukturierte Outputs für Analyse/Feedback/OCR)
 - `disable_history=True` (kein Chat-History-Drift zwischen Aufrufen)
+
+Für Text- und Visual-Analyse gilt zusätzlich:
+- Bei formal ungültigem Analyseoutput gibt es genau einen internen
+  Reparaturversuch mit verschärften Strukturregeln.
+- Scheitert auch dieser zweite Versuch, bleibt der öffentliche Fehlerpfad
+  `feedback_invalid_analysis` erhalten.
 
 Beispiele (schematisch, entspricht dem Code):
 

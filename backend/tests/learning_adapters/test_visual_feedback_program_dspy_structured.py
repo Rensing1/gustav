@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import builtins
 import importlib
+import logging
 import sys
 from types import SimpleNamespace
 
@@ -110,3 +111,115 @@ def test_visual_feedback_program_structured_pipeline(monkeypatch: pytest.MonkeyP
     assert items[0]["criterion"] == "Inhalt" and items[1]["criterion"] == "Struktur"
     assert "**Das ist dir gut gelungen:**" in result.feedback_md
     assert "**Das kannst du besser:**" in result.feedback_md
+
+
+def test_visual_feedback_program_retries_analysis_once_after_invalid_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_dspy(monkeypatch)
+    programs = importlib.import_module("backend.learning.adapters.dspy.programs")
+    calls = {"analysis": 0, "repair": 0}
+
+    def fake_run_structured_visual_analysis(**_kwargs):
+        calls["analysis"] += 1
+        raise RuntimeError("invalid_analysis_json")
+
+    def fake_run_structured_visual_analysis_repair(*, repair_reason: str, **_kwargs):
+        calls["repair"] += 1
+        assert repair_reason == "invalid_analysis_json"
+        return {
+            "schema": "criteria.v2",
+            "score": 4,
+            "criteria_results": [
+                {"criterion": "Inhalt", "max_score": 10, "score": 7, "explanation_md": "ok"},
+                {"criterion": "Struktur", "max_score": 10, "score": 8, "explanation_md": "gut"},
+            ],
+        }
+
+    def fake_run_structured_visual_feedback(*, analysis_json: dict, **_kwargs):
+        assert analysis_json.get("schema") == "criteria.v2"
+        return (
+            "**Das ist dir gut gelungen:** Deine Lösung ist gut nachvollziehbar.\n\n"
+            "**Das kannst du besser:** Begründe einzelne Schritte noch etwas genauer."
+        )
+
+    monkeypatch.setattr(programs, "run_structured_visual_analysis", fake_run_structured_visual_analysis, raising=False)
+    monkeypatch.setattr(
+        programs,
+        "run_structured_visual_analysis_repair",
+        fake_run_structured_visual_analysis_repair,
+        raising=False,
+    )
+    monkeypatch.setattr(programs, "run_structured_visual_feedback", fake_run_structured_visual_feedback, raising=False)
+
+    mod = importlib.import_module("backend.learning.adapters.dspy.visual_feedback_program")
+    result = mod.analyze_visual_feedback(  # type: ignore[attr-defined]
+        image_data_uri="data:image/png;base64,AA==",
+        criteria=["Inhalt", "Struktur"],
+        teacher_instructions_md="Aufgabe",
+        teacher_context_md="Hinweis",
+    )
+
+    assert calls == {"analysis": 1, "repair": 1}
+    assert result.parse_status == "repaired_structured"
+
+
+def test_visual_feedback_program_logs_stage_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _install_fake_dspy(monkeypatch)
+    programs = importlib.import_module("backend.learning.adapters.dspy.programs")
+    observability = importlib.import_module("backend.learning.adapters.dspy.json_observability")
+
+    monkeypatch.setattr(
+        programs,
+        "run_structured_visual_analysis",
+        lambda **_kwargs: {
+            "schema": "criteria.v2",
+            "score": 4,
+            "criteria_results": [
+                {"criterion": "Inhalt", "max_score": 10, "score": 7, "explanation_md": "ok"},
+            ],
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        programs,
+        "run_structured_visual_feedback",
+        lambda **_kwargs: (
+            "**Das ist dir gut gelungen:** Deine Lösung ist gut nachvollziehbar.\n\n"
+            "**Das kannst du besser:** Begründe einzelne Schritte noch etwas genauer."
+        ),
+        raising=False,
+    )
+
+    metadata = iter(
+        [
+            {
+                "stage": "visual_analysis",
+                "model": "openai/mistral-small-4",
+                "provider": "openai",
+                "response_format_mode": "json_schema",
+                "reasoning_effort": "none",
+            },
+            {
+                "stage": "visual_synthesis",
+                "model": "openai/mistral-small-4",
+                "provider": "openai",
+                "response_format_mode": "json_object_fallback",
+                "reasoning_effort": "none",
+            },
+        ]
+    )
+    monkeypatch.setattr(observability, "pop_last_call_metadata", lambda: next(metadata, None))
+    monkeypatch.setattr(observability, "build_json_adapter", lambda **_kwargs: object())
+
+    mod = importlib.import_module("backend.learning.adapters.dspy.visual_feedback_program")
+    caplog.set_level(logging.INFO)
+    mod.analyze_visual_feedback(  # type: ignore[attr-defined]
+        image_data_uri="data:image/png;base64,AA==",
+        criteria=["Inhalt"],
+    )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("learning.feedback.dspy_stage_completed" in message for message in messages)
+    assert any("learning.feedback.dspy_response_format_fallback" in message for message in messages)

@@ -217,9 +217,43 @@ def test_adapter_builds_lm_with_base_url_as_is(monkeypatch: pytest.MonkeyPatch) 
     assert lm_kwargs["base_url"] == "http://example/api/v1"
     assert lm_kwargs["temperature"] == 0.25
 
-    contexts = observed.get("contexts") or []
-    assert contexts, "Expected dspy.context(...) usage"
-    assert contexts[0].get("disable_history") is True
+def test_adapter_uses_analysis_and_synthesis_text_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "gpt-oss:120b")
+    monkeypatch.setenv("AI_TEXT_TEMPERATURE", "0.25")
+    monkeypatch.setenv("AI_TEXT_ANALYSIS_TEMPERATURE", "0.05")
+    monkeypatch.setenv("AI_TEXT_SYNTHESIS_TEMPERATURE", "0.75")
+    monkeypatch.setenv("AI_TEXT_ANALYSIS_THINK_LEVEL", "low")
+    monkeypatch.setenv("AI_TEXT_SYNTHESIS_THINK_LEVEL", "high")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    _ = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+
+    lm_calls = observed.get("lm_calls") or []
+    assert len(lm_calls) == 2
+    analysis_kwargs = lm_calls[0]["kwargs"]
+    synthesis_kwargs = lm_calls[1]["kwargs"]
+    assert analysis_kwargs["temperature"] == 0.05
+    assert synthesis_kwargs["temperature"] == 0.75
+    assert analysis_kwargs.get("extra_body", {}).get("think") == "low"
+    assert synthesis_kwargs.get("extra_body", {}).get("think") == "high"
 
 
 def test_adapter_sanitizes_unexpected_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -469,3 +503,132 @@ def test_adapter_sets_visual_think_level_low_for_gpt_oss_by_default(monkeypatch:
     assert lm_calls, "Expected visual LM to be instantiated"
     lm_kwargs = lm_calls[0]["kwargs"]
     assert lm_kwargs.get("extra_body", {}).get("think") == "low"
+
+
+def test_adapter_uses_analysis_and_synthesis_visual_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "t-model")
+    monkeypatch.setenv("AI_VISUAL_MODEL", "gpt-oss:120b")
+    monkeypatch.setenv("AI_VISUAL_TEMPERATURE", "0.2")
+    monkeypatch.setenv("AI_VISUAL_ANALYSIS_TEMPERATURE", "0.0")
+    monkeypatch.setenv("AI_VISUAL_SYNTHESIS_TEMPERATURE", "0.6")
+    monkeypatch.setenv("AI_VISUAL_ANALYSIS_THINK_LEVEL", "low")
+    monkeypatch.setenv("AI_VISUAL_SYNTHESIS_THINK_LEVEL", "high")
+
+    from backend.learning.adapters import local_vision
+    from backend.learning.adapters.dspy import visual_feedback_program
+
+    monkeypatch.setattr(local_vision, "_resolve_submission_image_bytes", lambda **_: "AA==")
+    monkeypatch.setattr(
+        visual_feedback_program,
+        "analyze_visual_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    _ = adapter.analyze_visual(  # type: ignore[attr-defined]
+        submission={"id": "s", "kind": "image", "mime_type": "image/png"},
+        job_payload={"mime_type": "image/png"},
+        criteria=["K1"],
+        instruction_md=None,
+        teacher_context_md=None,
+    )
+
+    lm_calls = observed.get("lm_calls") or []
+    assert len(lm_calls) == 2
+    analysis_kwargs = lm_calls[0]["kwargs"]
+    synthesis_kwargs = lm_calls[1]["kwargs"]
+    assert analysis_kwargs["temperature"] == 0.0
+    assert synthesis_kwargs["temperature"] == 0.6
+    assert analysis_kwargs.get("extra_body", {}).get("think") == "low"
+    assert synthesis_kwargs.get("extra_body", {}).get("think") == "high"
+
+
+def test_adapter_uses_mistral_reasoning_effort_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "mistral-small-4")
+    monkeypatch.setenv("AI_TEXT_REASONING_EFFORT", "high")
+    monkeypatch.setenv("AI_TEXT_ANALYSIS_REASONING_EFFORT", "none")
+    monkeypatch.setenv("AI_TEXT_SYNTHESIS_REASONING_EFFORT", "high")
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(
+        feedback_program,
+        "analyze_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    _ = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
+
+    lm_calls = observed.get("lm_calls") or []
+    assert len(lm_calls) == 2
+    assert lm_calls[0]["kwargs"]["reasoning_effort"] == "none"
+    assert lm_calls[1]["kwargs"]["reasoning_effort"] == "high"
+
+
+def test_visual_feedback_program_uses_separate_lms_when_provided(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "dspy", SimpleNamespace(__version__="3.0.3"))
+    from backend.learning.adapters.dspy import visual_feedback_program
+
+    observed: list[dict] = []
+
+    @contextmanager
+    def _ctx(**kwargs):  # type: ignore[no-untyped-def]
+        observed.append(dict(kwargs))
+        yield
+
+    monkeypatch.setitem(
+        sys.modules,
+        "dspy",
+        SimpleNamespace(__version__="0.0-test", context=_ctx, JSONAdapter=object),
+    )
+
+    from backend.learning.adapters.dspy import programs
+
+    monkeypatch.setattr(
+        programs,
+        "run_structured_visual_analysis",
+        lambda **_: {"schema": "criteria.v2", "score": 3, "criteria_results": [{"criterion": "K1", "score": 5, "max_score": 10, "explanation_md": "ok"}]},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        programs,
+        "run_structured_visual_feedback",
+        lambda **_: "**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+        raising=False,
+    )
+
+    analysis_lm = object()
+    synthesis_lm = object()
+    result = visual_feedback_program.analyze_visual_feedback(  # type: ignore[attr-defined]
+        image_data_uri="data:image/png;base64,AA==",
+        criteria=["K1"],
+        teacher_instructions_md="Aufgabe",
+        teacher_context_md=None,
+        analysis_lm=analysis_lm,
+        synthesis_lm=synthesis_lm,
+    )
+
+    assert result.parse_status == "parsed_structured"
+    assert observed[0]["lm"] is analysis_lm
+    assert observed[1]["lm"] is synthesis_lm

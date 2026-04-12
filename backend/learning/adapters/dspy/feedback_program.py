@@ -18,9 +18,11 @@ Security:
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 import logging
 from typing import Any, Sequence
 
+from backend.learning.adapters.dspy import json_observability
 from backend.learning.adapters.dspy import programs as dspy_programs
 from backend.learning.adapters.dspy.types import CriteriaAnalysis
 from backend.learning.adapters.ports import FeedbackResult
@@ -31,6 +33,8 @@ _REQUIRED_FEEDBACK_HEADINGS = (
     "**Das ist dir gut gelungen:**",
     "**Das kannst du besser:**",
 )
+
+_REPAIRABLE_ANALYSIS_ERRORS = {"invalid_analysis_json", "invalid_criterion_idx"}
 
 
 def _validate_feedback_md(feedback_md: str) -> str:
@@ -118,12 +122,89 @@ def _normalize_v2(*, raw: dict[str, Any], criteria: Sequence[str]) -> dict[str, 
     return {"schema": "criteria.v2", "score": overall, "criteria_results": norm_items}
 
 
+def _log_stage_metadata(*, stage: str, parse_status: str | None = None) -> None:
+    """Write internal DSPy observability logs without leaking prompt content."""
+    metadata = json_observability.pop_last_call_metadata()
+    if not metadata:
+        return
+    LOG.info(
+        "learning.feedback.dspy_stage_completed stage=%s model=%s provider=%s response_format_mode=%s "
+        "response_format_requested=%s reasoning_effort=%s parse_status=%s",
+        stage,
+        metadata.get("model") or "",
+        metadata.get("provider") or "",
+        metadata.get("response_format_mode") or "",
+        metadata.get("response_format_requested") or "",
+        metadata.get("reasoning_effort") or "",
+        parse_status or "",
+    )
+    if metadata.get("response_format_mode") == "json_object_fallback":
+        LOG.warning(
+            "learning.feedback.dspy_response_format_fallback stage=%s model=%s provider=%s reasoning_effort=%s",
+            stage,
+            metadata.get("model") or "",
+            metadata.get("provider") or "",
+            metadata.get("reasoning_effort") or "",
+        )
+
+
+def _dspy_context_for_lm(lm, *, stage: str):  # type: ignore[no-untyped-def]
+    """Use a dedicated DSPy context only when a stage-specific LM is provided."""
+    json_observability.clear_last_call_metadata()
+    if lm is None:
+        return nullcontext()
+    import dspy  # type: ignore
+
+    return dspy.context(  # type: ignore[attr-defined]
+        lm=lm,
+        adapter=json_observability.build_json_adapter(stage=stage),
+        disable_history=True,
+    )
+
+
+def _run_analysis_with_repair(
+    *,
+    text_md: str,
+    criteria: Sequence[str],
+    teacher_instructions_md: str | None,
+    teacher_context_md: str | None,
+    analysis_lm=None,  # type: ignore[no-untyped-def]
+) -> tuple[CriteriaAnalysis | dict[str, Any], str]:
+    """Run analysis once and attempt exactly one repair on format errors."""
+    try:
+        with _dspy_context_for_lm(analysis_lm, stage="analysis"):
+            analysis = dspy_programs.run_structured_analysis(
+                    text_md=text_md,
+                    criteria=criteria,
+                    teacher_instructions_md=teacher_instructions_md,
+                    teacher_context_md=teacher_context_md,
+            )
+        _log_stage_metadata(stage="analysis", parse_status="parsed_structured")
+        return (analysis, "parsed_structured")
+    except RuntimeError as exc:
+        reason = str(exc or "").strip().lower()
+        if reason not in _REPAIRABLE_ANALYSIS_ERRORS:
+            raise
+        with _dspy_context_for_lm(analysis_lm, stage="analysis"):
+            analysis = dspy_programs.run_structured_analysis_repair(
+                text_md=text_md,
+                criteria=criteria,
+                repair_reason=reason,
+                teacher_instructions_md=teacher_instructions_md,
+                teacher_context_md=teacher_context_md,
+            )
+        _log_stage_metadata(stage="analysis", parse_status="repaired_structured")
+        return analysis, "repaired_structured"
+
+
 def analyze_feedback(
     *,
     text_md: str,
     criteria: Sequence[str],
     teacher_instructions_md: str | None = None,
     teacher_context_md: str | None = None,
+    analysis_lm=None,  # type: ignore[no-untyped-def]
+    synthesis_lm=None,  # type: ignore[no-untyped-def]
 ) -> FeedbackResult:
     """Run the DSPy feedback pipeline and return criteria.v2 analysis + feedback.
 
@@ -147,27 +228,30 @@ def analyze_feedback(
         )
         return FeedbackResult(feedback_md=_validate_feedback_md(feedback_md), analysis_json={}, parse_status="skipped")
 
-    analysis = dspy_programs.run_structured_analysis(
+    analysis, parse_status = _run_analysis_with_repair(
         text_md=text_md,
         criteria=crit,
         teacher_instructions_md=teacher_instructions_md,
         teacher_context_md=teacher_context_md,
+        analysis_lm=analysis_lm,
     )
     raw = analysis.to_dict() if isinstance(analysis, CriteriaAnalysis) else analysis
     if not isinstance(raw, dict):
         raise RuntimeError("invalid_analysis_json")
     analysis_json = _normalize_v2(raw=raw, criteria=crit)
 
-    feedback_md = dspy_programs.run_structured_feedback(
-        text_md=text_md,
-        criteria=crit,
-        analysis_json=analysis_json,
-        teacher_instructions_md=teacher_instructions_md,
-        teacher_context_md=teacher_context_md,
-    )
+    with _dspy_context_for_lm(synthesis_lm, stage="synthesis"):
+        feedback_md = dspy_programs.run_structured_feedback(
+            text_md=text_md,
+            criteria=crit,
+            analysis_json=analysis_json,
+            teacher_instructions_md=teacher_instructions_md,
+            teacher_context_md=teacher_context_md,
+        )
+    _log_stage_metadata(stage="synthesis")
 
     return FeedbackResult(
         feedback_md=_validate_feedback_md(feedback_md),
         analysis_json=analysis_json,
-        parse_status="parsed_structured",
+        parse_status=parse_status,
     )

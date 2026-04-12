@@ -23,7 +23,7 @@ def _ensure_lean_criteria_results(value: Any) -> list[LeanCriterionResult]:
             return [LeanCriterionResult.from_value(item) for item in value]
         return [LeanCriterionResult.from_value(value)]
     except ValueError as exc:
-        raise RuntimeError("invalid_criterion_idx") from exc
+        raise RuntimeError("invalid_analysis_json") from exc
 
 
 def _map_lean_results_to_criteria(
@@ -32,31 +32,96 @@ def _map_lean_results_to_criteria(
     lean_results: list[LeanCriterionResult],
     default_explanation_md: str,
 ) -> list[CriterionResult]:
-    """Map strict `criterion_idx` model output to canonical criteria.v2 items."""
+    """Map positional model output to canonical criteria.v2 items."""
     normalized_criteria = [str(name).strip() for name in criteria]
     if any(not name for name in normalized_criteria):
-        raise RuntimeError("invalid_criterion_idx")
+        raise RuntimeError("invalid_analysis_json")
+    if len(lean_results) != len(normalized_criteria):
+        raise RuntimeError("invalid_analysis_json")
 
-    mapped: dict[int, CriterionResult] = {}
-    for item in lean_results:
-        idx = item.criterion_idx
-        if idx < 0 or idx >= len(normalized_criteria):
-            raise RuntimeError("invalid_criterion_idx")
-        if idx in mapped:
-            raise RuntimeError("invalid_criterion_idx")
+    mapped: list[CriterionResult] = []
+    for idx, item in enumerate(lean_results):
         score = max(0, min(int(item.score), 10))
         explanation = str(item.explanation_md or "").strip() or default_explanation_md
-        mapped[idx] = CriterionResult(
-            criterion=normalized_criteria[idx],
-            max_score=10,
-            score=score,
-            explanation_md=explanation,
+        mapped.append(
+            CriterionResult(
+                criterion=normalized_criteria[idx],
+                max_score=10,
+                score=score,
+                explanation_md=explanation,
+            )
         )
 
-    if len(mapped) != len(normalized_criteria):
-        raise RuntimeError("invalid_criterion_idx")
+    return mapped
 
-    return [mapped[idx] for idx in range(len(normalized_criteria))]
+
+def _run_analysis_repair(
+    *,
+    runner: Callable[..., CriteriaAnalysis],
+    repair_reason: str,
+    text_md: str | None = None,
+    image_data_uri: str | None = None,
+    criteria: Sequence[str],
+    teacher_instructions_md: str | None = None,
+    teacher_context_md: str | None = None,
+) -> CriteriaAnalysis:
+    """Retry analysis once with a stricter repair prompt suffix."""
+    repair_hint = (
+        "\n\nREPAIR RULES:\n"
+        f"- The previous analysis was invalid: {repair_reason}.\n"
+        "- Return exactly one result object per criterion.\n"
+        "- Keep the same order as the input criteria.\n"
+        "- Do not add extra objects or meta commentary.\n"
+        "- If uncertain, keep the structure valid and use score 0.\n"
+    )
+    kwargs = {
+        "criteria": criteria,
+        "teacher_instructions_md": ((teacher_instructions_md or "") + repair_hint).strip(),
+        "teacher_context_md": teacher_context_md,
+    }
+    if text_md is not None:
+        kwargs["text_md"] = text_md
+    if image_data_uri is not None:
+        kwargs["image_data_uri"] = image_data_uri
+    return runner(**kwargs)
+
+
+def run_structured_analysis_repair(
+    *,
+    text_md: str,
+    criteria: Sequence[str],
+    repair_reason: str,
+    teacher_instructions_md: str | None = None,
+    teacher_context_md: str | None = None,
+) -> CriteriaAnalysis:
+    """Retry text analysis once with a stricter repair-focused prompt."""
+    return _run_analysis_repair(
+        runner=run_structured_analysis,
+        repair_reason=repair_reason,
+        text_md=text_md,
+        criteria=criteria,
+        teacher_instructions_md=teacher_instructions_md,
+        teacher_context_md=teacher_context_md,
+    )
+
+
+def run_structured_visual_analysis_repair(
+    *,
+    image_data_uri: str,
+    criteria: Sequence[str],
+    repair_reason: str,
+    teacher_instructions_md: str | None = None,
+    teacher_context_md: str | None = None,
+) -> CriteriaAnalysis:
+    """Retry visual analysis once with a stricter repair-focused prompt."""
+    return _run_analysis_repair(
+        runner=run_structured_visual_analysis,
+        repair_reason=repair_reason,
+        image_data_uri=image_data_uri,
+        criteria=criteria,
+        teacher_instructions_md=teacher_instructions_md,
+        teacher_context_md=teacher_context_md,
+    )
 
 
 def _derive_overall_score(*, criteria_results: list[CriterionResult]) -> int:

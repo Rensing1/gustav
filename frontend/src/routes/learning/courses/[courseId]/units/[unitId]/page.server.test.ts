@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { isRedirect, redirect } from "@sveltejs/kit";
 
 vi.mock("$lib/server/api", () => {
   class MockBackendRequestError extends Error {
@@ -26,9 +27,11 @@ vi.mock("$lib/server/guards", () => ({
 
 import { actions } from "./+page.server";
 import { backendRequest, requireBackendJson } from "$lib/server/api";
+import { requireSpaceBootstrap } from "$lib/server/guards";
 
 const requireBackendJsonMock = vi.mocked(requireBackendJson);
 const backendRequestMock = vi.mocked(backendRequest);
+const requireSpaceBootstrapMock = vi.mocked(requireSpaceBootstrap);
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -41,6 +44,15 @@ function requestWithFormData(form: FormData): Parameters<typeof actions.default>
   return {
     formData: async () => form
   } as Parameters<typeof actions.default>[0]["request"];
+}
+
+function redirectError(status: Parameters<typeof redirect>[0], location: string) {
+  try {
+    redirect(status, location);
+  } catch (caught) {
+    return caught;
+  }
+  throw new Error("expected redirect");
 }
 
 function mockModularLoad() {
@@ -227,5 +239,31 @@ describe("learning unit route actions", () => {
         taskId: "task-1"
       }
     });
+  });
+
+  it("rethrows auth redirects from the shared learning-space guard", async () => {
+    requireSpaceBootstrapMock.mockRejectedValueOnce(
+      redirectError(302, "/?redirect=%2Flearning%2Fcourses%2Fcourse-1%2Funits%2Funit-1")
+    );
+
+    const form = new FormData();
+    form.set("task_id", "task-1");
+
+    try {
+      await actions.default({
+        fetch: vi.fn() as unknown as typeof fetch,
+        cookies: {} as Parameters<typeof actions.default>[0]["cookies"],
+        params: { courseId: "course-1", unitId: "unit-1" },
+        request: requestWithFormData(form),
+        url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
+      } as Parameters<typeof actions.default>[0]);
+      throw new Error("expected redirect");
+    } catch (caught) {
+      expect(isRedirect(caught)).toBe(true);
+      expect(caught).toMatchObject({
+        status: 302,
+        location: "/?redirect=%2Flearning%2Fcourses%2Fcourse-1%2Funits%2Funit-1"
+      });
+    }
   });
 });

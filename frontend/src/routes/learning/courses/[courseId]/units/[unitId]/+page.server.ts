@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { error, fail } from "@sveltejs/kit";
+import { error, fail, isRedirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
@@ -47,8 +47,8 @@ async function loadPageData(
   url: URL,
   moduleIdOverride: string | null = null
 ): Promise<LearningUnitPageData> {
-  const [bootstrap, units, home] = await Promise.all([
-    requireSpaceBootstrap(fetchFn, cookies, currentPath(url), "learning"),
+  const bootstrap = await requireSpaceBootstrap(fetchFn, cookies, currentPath(url), "learning");
+  const [units, home] = await Promise.all([
     requireBackendJson<LearningCourseUnit[]>(
       fetchFn,
       cookies,
@@ -177,7 +177,10 @@ export const actions: Actions = {
     let pageData: LearningUnitPageData;
     try {
       pageData = await loadPageData(fetch, cookies, params.courseId, params.unitId, url, moduleId);
-    } catch {
+    } catch (caught) {
+      if (isRedirect(caught)) {
+        throw caught;
+      }
       return fail(400, {
         message: "Die Lerneinheit konnte fuer die Abgabe nicht geladen werden.",
         taskId

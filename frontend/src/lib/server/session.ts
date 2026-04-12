@@ -16,6 +16,7 @@ export type FrontendTokenSession = {
   refreshToken: string | null;
   idToken: string;
   expiresAt: number;
+  sessionExpiresAt: number;
 };
 
 type KeycloakRefreshResponse = {
@@ -31,6 +32,7 @@ type StoredFrontendTokenSession = {
   refresh_token?: string | null;
   id_token: string;
   expires_at: number;
+  session_expires_at?: number;
 };
 
 function useSecureCookie(): boolean {
@@ -42,6 +44,10 @@ function useSecureCookie(): boolean {
 
 function frontendSessionCookieName(): string {
   return env.FRONTEND_SESSION_COOKIE_NAME || DEFAULT_FRONTEND_SESSION_COOKIE_NAME;
+}
+
+function internalBffSecret(): string {
+  return String(env.BFF_INTERNAL_SHARED_SECRET || "").trim();
 }
 
 function kcBaseUrl(): string {
@@ -102,6 +108,10 @@ function isExpired(record: FrontendTokenSession): boolean {
   return record.expiresAt <= nowEpochSeconds();
 }
 
+function isSessionExpired(record: FrontendTokenSession): boolean {
+  return record.sessionExpiresAt <= nowEpochSeconds();
+}
+
 function expiresSoon(record: FrontendTokenSession): boolean {
   return record.expiresAt <= nowEpochSeconds() + TOKEN_REFRESH_LEEWAY_SECONDS;
 }
@@ -112,7 +122,8 @@ function toFrontendTokenSession(record: StoredFrontendTokenSession): FrontendTok
     accessToken: record.access_token,
     refreshToken: record.refresh_token ?? null,
     idToken: record.id_token,
-    expiresAt: record.expires_at
+    expiresAt: record.expires_at,
+    sessionExpiresAt: record.session_expires_at ?? record.expires_at
   };
 }
 
@@ -127,7 +138,8 @@ async function fetchStoredTokenSession(
   const response = await fetchFn(buildApiUrl(BFF_SESSION_PATH), {
     method: "GET",
     headers: {
-      "x-gustav-bff-session": sessionId
+      "x-gustav-bff-session": sessionId,
+      "x-gustav-internal-secret": internalBffSecret()
     }
   });
   if (response.status === 204 || response.status === 401) {
@@ -157,6 +169,7 @@ async function persistTokenSession(
   if (sessionId) {
     headers["x-gustav-bff-session"] = sessionId;
   }
+  headers["x-gustav-internal-secret"] = internalBffSecret();
   const requestInit = {
     headers,
     body: JSON.stringify({
@@ -254,7 +267,7 @@ export async function readTokenSession(
   if (!record) {
     return null;
   }
-  if (isExpired(record)) {
+  if (isSessionExpired(record)) {
     await clearTokenSession(cookies, fetchFn);
     return null;
   }
@@ -266,8 +279,12 @@ export async function readFreshTokenSession(
   fetchFn: typeof fetch,
   options?: { forceRefresh?: boolean }
 ): Promise<FrontendTokenSession | null> {
-  const record = await readTokenSession(cookies, fetchFn);
+  const record = await fetchStoredTokenSession(cookies, fetchFn);
   if (!record) {
+    return null;
+  }
+  if (isSessionExpired(record)) {
+    await clearTokenSession(cookies, fetchFn);
     return null;
   }
   if (!options?.forceRefresh && !expiresSoon(record)) {
@@ -288,7 +305,8 @@ export async function clearTokenSession(
   await fetchFn(buildApiUrl(BFF_SESSION_PATH), {
     method: "DELETE",
     headers: {
-      "x-gustav-bff-session": sessionId
+      "x-gustav-bff-session": sessionId,
+      "x-gustav-internal-secret": internalBffSecret()
     }
   });
 }

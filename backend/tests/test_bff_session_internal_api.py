@@ -42,19 +42,23 @@ async def test_bff_session_internal_api_supports_machine_roundtrip_without_brows
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(main, "BFF_SESSION_STORE", BFFSessionStore())
+    monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "shared-test-secret")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        created = await client.put("/backend-internal/app/bff-session", json=_payload(access_token="access-1"))
+        headers = {"x-gustav-internal-secret": "shared-test-secret"}
+        created = await client.put("/backend-internal/app/bff-session", json=_payload(access_token="access-1"), headers=headers)
 
         assert created.status_code == 200
         assert created.headers.get("location") is None
         assert created.headers.get("Cache-Control") == "private, no-store"
         created_payload = created.json()
         session_id = str(created_payload["session_id"])
+        assert isinstance(created_payload.get("session_expires_at"), int)
+        assert created_payload["session_expires_at"] > 0
 
         loaded = await client.get(
             "/backend-internal/app/bff-session",
-            headers={"x-gustav-bff-session": session_id},
+            headers={"x-gustav-bff-session": session_id, **headers},
         )
         assert loaded.status_code == 200
         assert loaded.headers.get("location") is None
@@ -62,7 +66,7 @@ async def test_bff_session_internal_api_supports_machine_roundtrip_without_brows
 
         updated = await client.patch(
             "/backend-internal/app/bff-session",
-            headers={"x-gustav-bff-session": session_id},
+            headers={"x-gustav-bff-session": session_id, **headers},
             json=_payload(access_token="access-2", refresh_token="refresh-2", id_token="id-2"),
         )
         assert updated.status_code == 200
@@ -71,14 +75,14 @@ async def test_bff_session_internal_api_supports_machine_roundtrip_without_brows
 
         deleted = await client.delete(
             "/backend-internal/app/bff-session",
-            headers={"x-gustav-bff-session": session_id},
+            headers={"x-gustav-bff-session": session_id, **headers},
         )
         assert deleted.status_code == 204
         assert deleted.headers.get("location") is None
 
         missing_after_delete = await client.get(
             "/backend-internal/app/bff-session",
-            headers={"x-gustav-bff-session": session_id},
+            headers={"x-gustav-bff-session": session_id, **headers},
         )
         assert missing_after_delete.status_code == 204
         assert missing_after_delete.headers.get("location") is None
@@ -89,11 +93,13 @@ async def test_bff_session_internal_api_missing_header_paths_keep_api_semantics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(main, "BFF_SESSION_STORE", BFFSessionStore())
+    monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "shared-test-secret")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         read_missing = await client.get("/backend-internal/app/bff-session")
-        assert read_missing.status_code == 204
+        assert read_missing.status_code == 401
         assert read_missing.headers.get("location") is None
+        assert read_missing.json() == {"error": "unauthenticated"}
 
         patch_missing = await client.patch(
             "/backend-internal/app/bff-session",
@@ -104,5 +110,6 @@ async def test_bff_session_internal_api_missing_header_paths_keep_api_semantics(
         assert patch_missing.json() == {"error": "unauthenticated"}
 
         delete_missing = await client.delete("/backend-internal/app/bff-session")
-        assert delete_missing.status_code == 204
+        assert delete_missing.status_code == 401
         assert delete_missing.headers.get("location") is None
+        assert delete_missing.json() == {"error": "unauthenticated"}

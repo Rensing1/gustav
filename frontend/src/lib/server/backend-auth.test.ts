@@ -35,7 +35,13 @@ vi.mock("jose", () => ({
   jwtVerify: jwtVerifyMock
 }));
 
-import { handleAuthCallback, handleLogout, startLoginFlow, startRegisterFlow } from "./backend-auth";
+import {
+  assertSecureFrontendSessionConfig,
+  handleAuthCallback,
+  handleLogout,
+  startLoginFlow,
+  startRegisterFlow
+} from "./backend-auth";
 
 class MemoryCookies {
   store = new Map<string, string>();
@@ -57,13 +63,12 @@ class MemoryCookies {
   }
 }
 
-function decodeFlowCookie(rawCookie: string): { state: string; nonce: string; redirectPath: string | null } {
+function decodeFlowCookie(rawCookie: string): Array<{ state: string; nonce: string; redirectPath: string | null }> {
   const [payload] = rawCookie.split(".", 1);
-  return JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")) as {
-    state: string;
-    nonce: string;
-    redirectPath: string | null;
-  };
+  const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")) as
+    | { state: string; nonce: string; redirectPath: string | null }
+    | Array<{ state: string; nonce: string; redirectPath: string | null }>;
+  return Array.isArray(parsed) ? parsed : [parsed];
 }
 
 function createEvent(url: string, cookies: MemoryCookies, fetchMock: typeof fetch) {
@@ -104,7 +109,7 @@ describe("handleAuthCallback", () => {
 
     const cookies = new MemoryCookies();
     startLoginFlow(createEvent("https://app.localhost/auth/login?redirect=/profile", cookies, vi.fn() as never));
-    const flow = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+    const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
     jwtVerifyMock.mockResolvedValue({ payload: { nonce: flow.nonce } });
 
     const eventFetch = vi.fn<typeof fetch>();
@@ -114,8 +119,8 @@ describe("handleAuthCallback", () => {
 
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toEqual({ error: "session_setup_failed" });
-    expect(cookies.get("gustav_bff_oidc_flow")).toBeTruthy();
-    expect(cookies.deleteCalls).toHaveLength(0);
+    expect(cookies.get("gustav_bff_oidc_flow")).toBeUndefined();
+    expect(cookies.deleteCalls).toHaveLength(1);
     expect(eventFetch).not.toHaveBeenCalled();
   });
 
@@ -134,7 +139,7 @@ describe("handleAuthCallback", () => {
 
     const cookies = new MemoryCookies();
     startLoginFlow(createEvent("https://app.localhost/auth/login?redirect=/profile", cookies, vi.fn() as never));
-    const flow = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+    const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
     jwtVerifyMock.mockResolvedValue({ payload: { nonce: flow.nonce } });
 
     const eventFetch = vi.fn<typeof fetch>().mockResolvedValue(
@@ -151,8 +156,8 @@ describe("handleAuthCallback", () => {
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toEqual({ error: "session_setup_failed" });
     expect(clearTokenSessionMock).toHaveBeenCalledWith(cookies, eventFetch);
-    expect(cookies.get("gustav_bff_oidc_flow")).toBeTruthy();
-    expect(cookies.deleteCalls).toHaveLength(0);
+    expect(cookies.get("gustav_bff_oidc_flow")).toBeUndefined();
+    expect(cookies.deleteCalls).toHaveLength(1);
   });
 
   it("redirects the register callback back to the stored in-app target", async () => {
@@ -183,7 +188,7 @@ describe("handleAuthCallback", () => {
         eventFetch
       )
     );
-    const flow = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+    const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
     jwtVerifyMock.mockResolvedValue({ payload: { nonce: flow.nonce } });
 
     const response = await handleAuthCallback(
@@ -196,6 +201,73 @@ describe("handleAuthCallback", () => {
     expect(response.headers.get("set-cookie")).toContain("gustav_session=app-session");
     expect(cookies.get("gustav_bff_oidc_flow")).toBeUndefined();
     expect(cookies.deleteCalls).toHaveLength(1);
+  });
+
+  it("keeps older parallel OIDC flows valid until their own callback arrives", async () => {
+    const globalFetch = vi.fn<typeof fetch>().mockResolvedValue(tokenResponse());
+    vi.stubGlobal("fetch", globalFetch);
+    createTokenSessionMock.mockResolvedValue({
+      sessionId: "bff-session-3",
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      idToken: "id-token",
+      expiresAt: 4102444800
+    });
+    clearTokenSessionMock.mockResolvedValue(undefined);
+    readTokenSessionMock.mockResolvedValue(null);
+
+    const cookies = new MemoryCookies();
+    const eventFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(null, {
+        status: 204,
+        headers: { "set-cookie": "gustav_session=app-session; Path=/; HttpOnly" }
+      })
+    );
+
+    startLoginFlow(createEvent("https://app.localhost/auth/login?redirect=/learning", cookies, eventFetch));
+    const [firstFlow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+
+    startRegisterFlow(
+      createEvent(
+        "https://app.localhost/auth/register?login_hint=alice%40school.example&redirect=/teaching",
+        cookies,
+        eventFetch
+      )
+    );
+    const flowsAfterSecondStart = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+    expect(flowsAfterSecondStart).toHaveLength(2);
+
+    jwtVerifyMock.mockResolvedValue({ payload: { nonce: firstFlow.nonce } });
+
+    const response = await handleAuthCallback(
+      createEvent(`https://app.localhost/auth/callback?code=test-code&state=${firstFlow.state}`, cookies, eventFetch)
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/learning");
+    expect(response.headers.get("set-cookie")).toContain("gustav_session=app-session");
+    expect(cookies.setCalls.at(-1)?.[0]).toBe("gustav_bff_oidc_flow");
+  });
+});
+
+describe("assertSecureFrontendSessionConfig", () => {
+  it("fails fast in prod-like environments when the internal BFF secret is missing", async () => {
+    vi.resetModules();
+    vi.doMock("$env/dynamic/private", () => ({
+      env: {
+        BFF_INTERNAL_SHARED_SECRET: "",
+        FRONTEND_SESSION_SECRET: "frontend-secret",
+        GUSTAV_ENV: "prod",
+        NODE_ENV: "production",
+        ORIGIN: "https://app.localhost"
+      }
+    }));
+
+    const authModule = await import("./backend-auth");
+
+    expect(() => authModule.assertSecureFrontendSessionConfig()).toThrow(
+      "BFF_INTERNAL_SHARED_SECRET is unset or a placeholder"
+    );
   });
 });
 

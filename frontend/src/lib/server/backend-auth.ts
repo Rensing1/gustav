@@ -40,6 +40,10 @@ function frontendSessionSecret(): string {
   return String(env.FRONTEND_SESSION_SECRET || "").trim();
 }
 
+function internalBffSecret(): string {
+  return String(env.BFF_INTERNAL_SHARED_SECRET || "").trim();
+}
+
 function kcBaseUrl(): string {
   return env.KC_BASE_URL || DEFAULT_KC_BASE_URL;
 }
@@ -125,6 +129,12 @@ export function assertSecureFrontendSessionConfig(): void {
       "Refusing to start: FRONTEND_SESSION_SECRET is unset or a placeholder in production."
     );
   }
+  const bffSecret = internalBffSecret();
+  if (!bffSecret || bffSecret.toUpperCase().startsWith("CHANGE_ME")) {
+    throw new Error(
+      "Refusing to start: BFF_INTERNAL_SHARED_SECRET is unset or a placeholder in production."
+    );
+  }
 }
 
 function resolveAppBase(requestUrl: URL): string {
@@ -168,40 +178,43 @@ function signFlowPayload(value: string): string {
   return createHmac("sha256", frontendSessionSecret()).update(value).digest("base64url");
 }
 
-function serializeFlowCookie(record: AuthFlowRecord): string {
-  const payload = Buffer.from(JSON.stringify(record), "utf-8").toString("base64url");
+function serializeFlowCookie(records: AuthFlowRecord[]): string {
+  const payload = Buffer.from(JSON.stringify(records), "utf-8").toString("base64url");
   return `${payload}.${signFlowPayload(payload)}`;
 }
 
-function parseFlowCookie(value: string | undefined): AuthFlowRecord | null {
+function parseFlowCookie(value: string | undefined): AuthFlowRecord[] {
   if (!value) {
-    return null;
+    return [];
   }
   const [payload, signature] = value.split(".", 2);
   if (!payload || !signature) {
-    return null;
+    return [];
   }
   const expected = signFlowPayload(payload);
   try {
     if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-      return null;
+      return [];
     }
   } catch {
-    return null;
+    return [];
   }
   try {
     const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
-    if (typeof parsed !== "object" || parsed === null) {
-      return null;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is AuthFlowRecord => typeof item === "object" && item !== null);
     }
-    return parsed as AuthFlowRecord;
+    if (typeof parsed === "object" && parsed !== null) {
+      return [parsed as AuthFlowRecord];
+    }
+    return [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-function setFlowCookie(event: RequestEvent, record: AuthFlowRecord): void {
-  event.cookies.set(FRONTEND_FLOW_COOKIE_NAME, serializeFlowCookie(record), {
+function writeFlowCookie(event: RequestEvent, records: AuthFlowRecord[]): void {
+  event.cookies.set(FRONTEND_FLOW_COOKIE_NAME, serializeFlowCookie(records), {
     path: "/auth",
     httpOnly: true,
     sameSite: "lax",
@@ -209,16 +222,27 @@ function setFlowCookie(event: RequestEvent, record: AuthFlowRecord): void {
   });
 }
 
-function readFlowCookie(event: RequestEvent): AuthFlowRecord | null {
-  const record = parseFlowCookie(event.cookies.get(FRONTEND_FLOW_COOKIE_NAME));
-  if (!record) {
-    return null;
-  }
-  if (record.expiresAt <= Math.floor(Date.now() / 1000)) {
+function addFlowCookie(event: RequestEvent, record: AuthFlowRecord): void {
+  const now = Math.floor(Date.now() / 1000);
+  const existing = parseFlowCookie(event.cookies.get(FRONTEND_FLOW_COOKIE_NAME)).filter(
+    (candidate) => candidate.expiresAt > now && candidate.state !== record.state
+  );
+  writeFlowCookie(event, [...existing, record].slice(-3));
+}
+
+function consumeFlowCookie(event: RequestEvent, state: string): AuthFlowRecord | null {
+  const now = Math.floor(Date.now() / 1000);
+  const records = parseFlowCookie(event.cookies.get(FRONTEND_FLOW_COOKIE_NAME)).filter(
+    (candidate) => candidate.expiresAt > now
+  );
+  const match = records.find((candidate) => candidate.state === state) || null;
+  const remaining = records.filter((candidate) => candidate.state !== state);
+  if (remaining.length > 0) {
+    writeFlowCookie(event, remaining);
+  } else {
     clearFlowCookie(event);
-    return null;
   }
-  return record;
+  return match;
 }
 
 function clearFlowCookie(event: RequestEvent): void {
@@ -319,7 +343,7 @@ async function exchangeCodeForTokens(code: string, redirectUri: string, codeVeri
 
 export function startLoginFlow(event: RequestEvent): Response {
   const flow = createFlow(event.url, safeRedirectPath(event.url.searchParams.get("redirect")));
-  setFlowCookie(event, flow);
+  addFlowCookie(event, flow);
   return createRedirectResponse(buildAuthorizationUrl(flow));
 }
 
@@ -340,7 +364,7 @@ export function startRegisterFlow(event: RequestEvent): Response {
   }
 
   const flow = createFlow(event.url, safeRedirectPath(event.url.searchParams.get("redirect")));
-  setFlowCookie(event, flow);
+  addFlowCookie(event, flow);
   const extraParams: Record<string, string> = { kc_action: "register" };
   if (loginHint) {
     extraParams.login_hint = loginHint;
@@ -360,7 +384,7 @@ export function startForgotFlow(event: RequestEvent): Response {
 export function startPasswordFlow(event: RequestEvent): Response {
   const redirectPath = safeRedirectPath(event.url.searchParams.get("redirect")) || "/profile";
   const flow = createFlow(event.url, redirectPath);
-  setFlowCookie(event, flow);
+  addFlowCookie(event, flow);
   return createRedirectResponse(buildAuthorizationUrl(flow, { kc_action: "UPDATE_PASSWORD" }));
 }
 
@@ -372,22 +396,19 @@ export async function handleAuthCallback(event: RequestEvent): Promise<Response>
     return createJsonError(400, "invalid_code_or_state");
   }
 
-  const flow = readFlowCookie(event);
-  if (!flow || flow.state !== state) {
-    clearFlowCookie(event);
+  const flow = consumeFlowCookie(event, state);
+  if (!flow) {
     return createJsonError(400, "invalid_code_or_state");
   }
 
   const tokens = await exchangeCodeForTokens(code, flow.redirectUri, flow.codeVerifier);
   if (!tokens?.id_token || !tokens.access_token) {
-    clearFlowCookie(event);
     return createJsonError(400, "token_exchange_failed");
   }
 
   try {
     await verifyIdToken(tokens.id_token, flow.nonce);
   } catch (error) {
-    clearFlowCookie(event);
     const message = error instanceof Error && error.message === "invalid_nonce" ? "invalid_nonce" : "invalid_id_token";
     return createJsonError(400, message);
   }
@@ -411,7 +432,6 @@ export async function handleAuthCallback(event: RequestEvent): Promise<Response>
       return createJsonError(502, "session_setup_failed");
     }
 
-    clearFlowCookie(event);
     const response = createRedirectResponse(flow.redirectPath || "/");
     response.headers.append("set-cookie", appSessionCookie);
     return response;

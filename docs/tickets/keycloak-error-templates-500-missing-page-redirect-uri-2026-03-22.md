@@ -2,7 +2,7 @@
 
 Status: offen  
 Prioritaet: hoch  
-Betroffene Umgebung: Produktion (`app.gustav-lernplattform.de`, `id.gustav-lernplattform.de`)  
+Betroffene Umgebung: Produktion (`app.school.example`, `id.school.example`)  
 Erstellt am: 22. Maerz 2026
 
 ## Kurzfassung
@@ -79,7 +79,7 @@ Die zugehoerigen FreeMarker-Fehler referenzieren wiederholt:
 
 ### 2) Sichtbare HTTP-500-Auswirkungen am IdP
 
-Im selben Zeitraum wurden fuer `id.gustav-lernplattform.de` **209 HTTP-500-Antworten** beobachtet.
+Im selben Zeitraum wurden fuer `id.school.example` **209 HTTP-500-Antworten** beobachtet.
 
 Hauefig betroffene Pfade:
 
@@ -106,7 +106,7 @@ Fuer einen echten Passwort-Reset-Vorfall am **19. Maerz 2026** zeigt die Korrela
 Zusatzbefund:
 
 - Bei `UPDATE_PASSWORD_ERROR` wurde als `redirect_uri` ein IdP-Kontoziel protokolliert:
-  - `https://id.gustav-lernplattform.de/realms/gustav/account/`
+  - `https://id.school.example/realms/gustav/account/`
 
 Das passt sowohl zu den beobachteten Fehlermeldungen als auch zur Wahrnehmung von unpassenden Rueckwegen.
 
@@ -179,4 +179,3 @@ Folge:
 - Error-/Expired-/Info-Seiten bleiben im GUSTAV-Look und liefern klare Recovery-Links.
 - Passwort-Reset-/Required-Action-Fehler fuehren nicht auf ein unpassendes IdP-Kontoziel als primaeren Rueckweg.
 - Tests decken den fehlenden `pageRedirectUri`-Kontext explizit ab.
-

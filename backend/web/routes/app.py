@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import inspect
 from datetime import datetime, timedelta, timezone
+import hmac
+import os
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
@@ -83,6 +85,27 @@ def _start_target_for_role(role: str) -> str:
 
 def _private_headers() -> dict[str, str]:
     return {"Cache-Control": "private, no-store"}
+
+
+def _internal_bff_secret_configured() -> str:
+    return str(os.getenv("BFF_INTERNAL_SHARED_SECRET") or "").strip()
+
+
+def _require_internal_bff_secret(request: Request) -> bool:
+    expected = _internal_bff_secret_configured()
+    provided = str(request.headers.get("x-gustav-internal-secret") or "").strip()
+    return bool(expected) and bool(provided) and hmac.compare_digest(provided, expected)
+
+
+def _bff_session_payload(session) -> dict[str, object]:
+    return {
+        "session_id": session.session_id,
+        "access_token": session.access_token,
+        "refresh_token": session.refresh_token,
+        "id_token": session.id_token,
+        "expires_at": session.expires_at,
+        "session_expires_at": session.session_expires_at,
+    }
 
 
 def _current_user(request: Request) -> dict | None:
@@ -762,8 +785,10 @@ async def post_session_sync(request: Request, payload: AppSessionSyncPayload | N
 
 
 @app_router.put("/backend-internal/app/bff-session")
-async def put_bff_session(payload: BFFSessionSyncPayload):
+async def put_bff_session(request: Request, payload: BFFSessionSyncPayload):
     """Persist or update the opaque Browser-BFF token session."""
+    if not _require_internal_bff_secret(request):
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     mod = _resolve_main_module()
     store = getattr(mod, "BFF_SESSION_STORE")
     session = store.create(
@@ -772,21 +797,14 @@ async def put_bff_session(payload: BFFSessionSyncPayload):
         id_token=payload.id_token,
         expires_at=int(payload.expires_at),
     )
-    return JSONResponse(
-        {
-            "session_id": session.session_id,
-            "access_token": session.access_token,
-            "refresh_token": session.refresh_token,
-            "id_token": session.id_token,
-            "expires_at": session.expires_at,
-        },
-        headers=_private_headers(),
-    )
+    return JSONResponse(_bff_session_payload(session), headers=_private_headers())
 
 
 @app_router.get("/backend-internal/app/bff-session")
 async def get_bff_session(request: Request):
     """Return the stored Browser-BFF token session for an opaque session id."""
+    if not _require_internal_bff_secret(request):
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     session_id = str(request.headers.get("x-gustav-bff-session") or "").strip()
     if not session_id:
         return Response(status_code=204, headers=_private_headers())
@@ -795,21 +813,14 @@ async def get_bff_session(request: Request):
     session = store.get(session_id)
     if session is None:
         return Response(status_code=204, headers=_private_headers())
-    return JSONResponse(
-        {
-            "session_id": session.session_id,
-            "access_token": session.access_token,
-            "refresh_token": session.refresh_token,
-            "id_token": session.id_token,
-            "expires_at": session.expires_at,
-        },
-        headers=_private_headers(),
-    )
+    return JSONResponse(_bff_session_payload(session), headers=_private_headers())
 
 
 @app_router.patch("/backend-internal/app/bff-session")
 async def patch_bff_session(request: Request, payload: BFFSessionSyncPayload):
     """Update an existing Browser-BFF token session."""
+    if not _require_internal_bff_secret(request):
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     session_id = str(request.headers.get("x-gustav-bff-session") or "").strip()
     if not session_id:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
@@ -824,21 +835,14 @@ async def patch_bff_session(request: Request, payload: BFFSessionSyncPayload):
     )
     if session is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    return JSONResponse(
-        {
-            "session_id": session.session_id,
-            "access_token": session.access_token,
-            "refresh_token": session.refresh_token,
-            "id_token": session.id_token,
-            "expires_at": session.expires_at,
-        },
-        headers=_private_headers(),
-    )
+    return JSONResponse(_bff_session_payload(session), headers=_private_headers())
 
 
 @app_router.delete("/backend-internal/app/bff-session")
 async def delete_bff_session(request: Request):
     """Delete one Browser-BFF token session."""
+    if not _require_internal_bff_secret(request):
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     session_id = str(request.headers.get("x-gustav-bff-session") or "").strip()
     if session_id:
         mod = _resolve_main_module()

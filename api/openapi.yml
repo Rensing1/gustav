@@ -5782,7 +5782,11 @@ paths:
     get:
       tags: [Auth]
       summary: OAuth2/OIDC callback from Keycloak
-      description: Handles the authorization code, sets session cookie, and redirects.
+      description: >-
+        Handles the public SvelteKit Browser-BFF callback from Keycloak. On
+        success the route persists the opaque frontend BFF session cookie
+        `gustav_bff_session`, synchronizes the stable backend app session cookie
+        `gustav_session`, and redirects to the stored in-app target.
       operationId: authCallback
       security: []
       parameters:
@@ -5807,10 +5811,11 @@ paths:
               example: private, no-store
             Set-Cookie:
               description: >-
-                httpOnly session cookie `gustav_session`.
-                All environments: `HttpOnly; Secure; SameSite=lax` (OAuth/OIDC‑kompatibel),
-                ohne `Domain`‑Attribut (host‑only cookie).
-                In production, `Max-Age` matches the server session TTL (default 3600 seconds).
+                Sets the opaque frontend BFF cookie `gustav_bff_session` and the
+                stable backend app cookie `gustav_session`. Both remain host-only
+                `HttpOnly; Secure; SameSite=lax` cookies. `gustav_session`
+                `Max-Age` matches the server session TTL (default 86400 seconds);
+                `gustav_bff_session` follows the BFF session TTL.
               schema:
                 type: string
             Location:
@@ -5818,7 +5823,19 @@ paths:
               schema:
                 type: string
         '400':
-          description: Invalid or expired code/state
+          description: Invalid or expired callback input, state, nonce, or ID token
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached.
+              schema:
+                type: string
+              example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Session bridge failed while establishing app or BFF session
           headers:
             Cache-Control:
               description: Security — responses must not be cached.

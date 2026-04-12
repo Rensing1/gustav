@@ -111,6 +111,8 @@ services:
     build:
       context: ./frontend
     container_name: gustav-frontend
+    env_file:
+      - .env
     environment:
       - ORIGIN=${WEB_BASE:-https://app.localhost}
       - API_INTERNAL_BASE_URL=http://gustav-alpha2:8000
@@ -125,6 +127,7 @@ services:
       - ALLOWED_REGISTRATION_DOMAINS=${ALLOWED_REGISTRATION_DOMAINS:-}
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       - FRONTEND_SESSION_SECRET=${FRONTEND_SESSION_SECRET}
+      - BFF_INTERNAL_SHARED_SECRET=${BFF_INTERNAL_SHARED_SECRET}
       - FRONTEND_SESSION_COOKIE_NAME=${FRONTEND_SESSION_COOKIE_NAME:-gustav_bff_session}
     depends_on:
       - web

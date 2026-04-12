@@ -9,8 +9,8 @@ import type { BreadcrumbItem } from "$lib/types/navigation";
 
 export const load: PageServerLoad = async ({ fetch, cookies, params, url }) => {
   try {
-    const [bootstrap, units, home] = await Promise.all([
-      requireSpaceBootstrap(fetch, cookies, currentPath(url), "learning"),
+    const bootstrap = await requireSpaceBootstrap(fetch, cookies, currentPath(url), "learning");
+    const [units, home] = await Promise.all([
       requireBackendJson<LearningCourseUnit[]>(
         fetch,
         cookies,
@@ -47,6 +47,6 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, url }) => {
     if (caught instanceof BackendRequestError) {
       throw error(caught.response.status, "Lernkurs konnte nicht geladen werden.");
     }
-    throw error(500, "Lernkurs konnte nicht geladen werden.");
+    throw caught;
   }
 };

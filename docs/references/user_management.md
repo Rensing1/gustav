@@ -2,15 +2,22 @@
 
 Ziel: Übersicht über Authentifizierung, Session-Handling und den UserContextDTO, damit nachgelagerte Kontexte (z. B. „Unterrichten“) Nutzer stabil und datenschutzfreundlich adressieren.
 
+Für die kanonische technische Referenz zu Login-Flow, Cookies, BFF-Session,
+App-Session und Fehlerbildern siehe:
+`docs/references/auth_sessions_and_cookies.md`.
+
 ## Überblick
 - IdP: Keycloak (Realm `gustav`), OIDC Authorization Code Flow mit PKCE.
-- App-Session: httpOnly-Cookie `gustav_session` (opaque), Session-Daten serverseitig.
-- Cookie-Flags: Immer `HttpOnly; Secure; SameSite=lax` (host‑only, kein `Domain=`).
+- GUSTAV verwendet zusätzlich zum IdP eine Browser-BFF-Session und eine
+  stabile App-Session.
+- Die eigentlichen Auth- und Cookie-Details sind in
+  `docs/references/auth_sessions_and_cookies.md` beschrieben.
 - Anzeigename: Bei Registrierung optionales Feld „Wie möchtest du genannt werden?“ → Keycloak User-Attribut `display_name` → Token-Claim `gustav_display_name`.
 
 ## API
 - `GET /auth/login` → Redirect zu IdP.
-- `GET /auth/callback` → Code-Exchange, ID-Token verifizieren (JWKS, iss, aud, exp), Session anlegen.
+- `GET /auth/callback` → Code-Exchange, ID-Token verifizieren, BFF-Session und
+  App-Session synchronisieren.
 - `GET /auth/logout` → App-Session löschen, Redirect zu IdP End-Session (`id_token_hint` wenn vorhanden).
 - `GET /auth/forgot` → Redirect zur IdP-Passwort-Reset-Seite (Keycloak verschickt die E-Mails).
 - `GET /auth/register` → Redirect zur IdP-Registrierung; Domain-Whitelist kann `login_hint` vorab validieren.
@@ -30,16 +37,24 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
 - Optional: `gustav_display_name` (User-Attribut `display_name`, als OIDC Protocol‑Mapper im Client `gustav-web` konfiguriert)
 
 ## Session-Speicher
-- DEV: In‑Memory (schnell, aber flüchtig)
-- PROD: Postgres/Supabase (Tabelle `public.app_sessions`)
+- App-Session:
+  - DEV: In‑Memory (schnell, aber flüchtig)
+  - PROD: Postgres/Supabase (Tabelle `public.app_sessions`)
   - Spalten: `session_id` (PK), `sub`, `roles` (JSONB), `name`, `id_token`, `expires_at`
   - RLS aktiviert; Zugriffe nur mit Service‑Rolle (Clients greifen nicht direkt zu)
   - Migration: `supabase/migrations/20251019135804_persistent_app_sessions.sql`
+- BFF-Session:
+  - speichert OIDC-Tokens serverseitig getrennt von der App-Session
+  - Details zu TTL und Speichersemantik siehe
+    `docs/references/auth_sessions_and_cookies.md`
 
 ## Sicherheit
 - Signaturprüfung ID‑Token über JWKS; Fehlerfälle mit 400 und `Cache-Control: private, no-store`.
 - `state` und `nonce` im Login‑Flow; `nonce` wird gegen ID‑Token geprüft.
-- Cookies httpOnly; in PROD optional `Max-Age=<TTL>`; Flags bleiben `Secure; SameSite=lax` (host‑only).
+- Cookies sind host-only und verwenden `HttpOnly; Secure; SameSite=lax`.
+- Die genaue Rolle von `gustav_bff_oidc_flow`, `gustav_bff_session` und
+  `gustav_session` ist in `docs/references/auth_sessions_and_cookies.md`
+  beschrieben.
 - Open Redirects verhindert: In‑App‑Pfadprüfung für Redirect‑Parameter.
 - Keycloak-Client `gustav-web`:
   - `webOrigins` soll nur explizite Origins (z. B. `https://app.gustav.example`, `https://localhost/*`, `https://app.localhost/*`) enthalten – niemals `*`.
@@ -57,7 +72,8 @@ E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppel
   - Admins können das Feature im Realm abschalten, falls das Sicherheitskonzept kürzere Sitzungen erzwingt.
 - Wirkung auf Sessions:
   - „Angemeldet bleiben“ verlängert ausschließlich die IdP-Session nach Keycloak-Konfiguration (z. B. `SSO Session Max` vs. `SSO Session Idle` mit Remember-me-Werten).
-  - Die GUSTAV-App-Session im Cookie `gustav_session` behält ihre eigene, meist kürzere TTL; sie kann unabhängig von der IdP-Session auslaufen.
+  - Die GUSTAV-BFF-Session und App-Session behalten ihre eigene TTL; sie können
+    unabhängig von der IdP-Session auslaufen.
   - Praktisch bedeutet das: Auf privaten Geräten führt Remember-me dazu, dass der erneute Login seltener nötig ist; auf geteilten Geräten sollte die Option nicht genutzt werden.
 - UX-Hinweis:
   - In der UI kann ein kurzer Text unter der Checkbox darauf hinweisen, dass „Angemeldet bleiben“ nur auf privaten Geräten verwendet werden sollte.

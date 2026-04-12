@@ -336,12 +336,13 @@ def _is_public_path(path: str) -> bool:
     return path.startswith(("/auth/", "/static/")) or path in (
         "/health",
         "/favicon.ico",
-        # The SvelteKit Browser-BFF reaches this internal route over the
-        # compose network without a browser session. Keep the allowlist exact
-        # so we do not accidentally open the whole `/backend-internal/*`
-        # namespace.
-        "/backend-internal/app/bff-session",
     )
+
+
+def _has_valid_internal_bff_secret(request: Request) -> bool:
+    expected = str(os.getenv("BFF_INTERNAL_SHARED_SECRET") or "").strip()
+    provided = str(request.headers.get("x-gustav-internal-secret") or "").strip()
+    return bool(expected) and bool(provided) and hmac.compare_digest(provided, expected)
 
 
 def _bearer_token_from_authorization_header(request: Request) -> str | None:
@@ -455,11 +456,13 @@ async def auth_enforcement(request: Request, call_next):
     path = request.url.path
     if _is_public_path(path):
         return await call_next(request)
+    if path.startswith("/backend-internal/") and _has_valid_internal_bff_secret(request):
+        return await call_next(request)
 
     auth_context, auth_source = _auth_context_from_request(request)
 
     if not auth_context:
-        if path.startswith("/api/") or path.startswith("/internal/"):
+        if path.startswith("/api/") or path.startswith("/internal/") or path.startswith("/backend-internal/"):
             headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:

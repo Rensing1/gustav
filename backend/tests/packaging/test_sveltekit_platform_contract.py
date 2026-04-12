@@ -92,6 +92,7 @@ def test_compose_and_caddy_route_app_to_frontend_and_api_to_fastapi() -> None:
     assert "KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}" in compose_src
     assert "KC_REALM=${KC_REALM:-gustav}" in compose_src
     assert "FRONTEND_SESSION_SECRET=${FRONTEND_SESSION_SECRET}" in compose_src
+    assert "BFF_INTERNAL_SHARED_SECRET=${BFF_INTERNAL_SHARED_SECRET}" in compose_src
 
     assert "@api_path path /api/* /internal/*" in caddy_src
     assert "handle @api_path" in caddy_src

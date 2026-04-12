@@ -126,7 +126,9 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
   - Setup: `/etc/hosts` → `127.0.0.1 app.localhost id.localhost`.
 - PROD (Security‑first, geringe App‑Komplexität):
   - `/auth/login|register|forgot` leiten zur gebrandeten Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
-  - GUSTAV verarbeitet keine Passwörter; Sessions sind serverseitig und über `gustav_session` gesichert.
+  - GUSTAV verarbeitet keine Passwörter; Browser arbeiten nur mit opaken
+    Cookies. Die Details zu BFF-Session und App-Session sind in
+    `docs/references/auth_sessions_and_cookies.md` dokumentiert.
 
 #### Keycloak Theme (GUSTAV)
 - Pfad: `keycloak/themes/gustav/login`
@@ -144,9 +146,16 @@ Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Ad
 1) Browser: `GET /auth/login` (GUSTAV) → 302 zu IdP `…/protocol/openid-connect/auth` (Host: `id.localhost`).
 2) Login auf IdP‑UI (gebrandet). `GET /auth/register` nutzt ebenfalls den Auth‑Endpoint und setzt `kc_action=register` (statt altem `…/registrations`‑Pfad), optional mit `login_hint`.
 3) IdP → Redirect zu `REDIRECT_URI` (z. B. `https://app.localhost/auth/callback`).
-4) Web tauscht Code gegen Tokens am internen Token‑Endpoint (`KC_BASE_URL`) und verifiziert das ID‑Token.
-5) Web legt Serversession an und setzt `gustav_session` (httpOnly; Secure; SameSite=lax) — einheitlich in DEV und PROD.
+4) SvelteKit tauscht den Code gegen Tokens am internen Token‑Endpoint
+   (`KC_BASE_URL`) und verifiziert das ID‑Token.
+5) SvelteKit legt die BFF-Session an und synchronisiert danach die stabile
+   Backend-App-Session.
+6) Der Callback setzt `gustav_bff_session` und `gustav_session`
+   (httpOnly; Secure; SameSite=lax, host-only).
 6) HTMX-Anfragen (Sidebar-Link) erhalten statt 302 ein `204` mit `HX-Redirect`, damit der Browser trotzdem voll zur IdP-URL navigiert und der PKCE-State bestehen bleibt.
+
+Die kanonische Referenz für Cookies, Session-TTLs, interne BFF-Grenzen und
+Fehlerbilder ist `docs/references/auth_sessions_and_cookies.md`.
 
 ## API Contract‑First (Vorgehen)
 1) API‑Änderung zuerst im Vertrag: `api/openapi.yml:1`.
@@ -225,7 +234,10 @@ E2E‑Tests (Identity):
 
 #### Nonce & Session‑TTL
 - Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: private, no-store`.
-- Session‑TTL & Cookie: Serverseitige Sessions besitzen eine TTL (Standard 3600 s). Das `gustav_session`‑Cookie wird immer mit `HttpOnly; Secure; SameSite=lax` gesetzt (dev = prod). `Max-Age` kann je nach Deployment variieren.
+- Session‑TTL & Cookies: GUSTAV trennt Access-Token-Ablauf, BFF-Session-TTL
+  und App-Session-TTL. Der aktuelle Default für BFF- und App-Session beträgt
+  24 Stunden. Details siehe
+  `docs/references/auth_sessions_and_cookies.md`.
 - /api/me: liefert zusätzlich `expires_at` (UTC‑ISO‑8601), damit Clients die Restlaufzeit anzeigen können. Antworten sind nie cachebar.
 
 ## Deployment & Betrieb

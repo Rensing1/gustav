@@ -1520,16 +1520,14 @@ def _render_learning_task_history_wrapper_html(
     return wrapper_open + inner_html + poller_html + "</section>"
 
 def _enrich_submission_records_with_file_urls(
-    records: list[dict], *, storage_adapter: object | None = None
+    records: list[dict], *, course_id: str, task_id: str, storage_adapter: object | None = None
 ) -> None:
-    """Attach presigned download URLs to upload submissions for SSR previews.
+    """Attach stable same-origin file URLs to upload submissions for SSR previews.
 
     Why:
-        The Learning API intentionally returns only storage metadata (storage_key,
-        sha256, mime_type). For the learner history UI we still want to show the
-        actual uploaded artifact (image/PDF). We therefore presign a short-lived
-        download URL server-side and pass it into the rendering helper as an
-        extra key (`file_url`).
+        The learner history UI still renders against the legacy `file_url` key.
+        We therefore derive a stable same-origin GUSTAV route from the already
+        authorised submission metadata and store it under `file_url`.
 
     Testability:
         The presign-capable storage adapter can be injected via `storage_adapter`
@@ -1541,18 +1539,7 @@ def _enrich_submission_records_with_file_urls(
         see the submission metadata. The presigned URL is short-lived and scoped
         to the object key.
     """
-    try:
-        from backend.storage.config import get_submissions_bucket
-
-        adapter = storage_adapter
-        if adapter is None:
-            import routes.learning as learning_routes  # type: ignore
-
-            adapter = getattr(learning_routes, "STORAGE_ADAPTER", None)
-        if adapter is None or not hasattr(adapter, "presign_download"):
-            return
-        bucket = get_submissions_bucket()
-    except Exception:
+    if not course_id or not task_id:
         return
 
     for rec in records:
@@ -1565,20 +1552,12 @@ def _enrich_submission_records_with_file_urls(
             continue
         storage_key = str(rec.get("storage_key") or "").strip()
         mime_type = str(rec.get("mime_type") or "").strip()
-        if not storage_key or not mime_type:
+        submission_id = str(rec.get("id") or "").strip()
+        if not storage_key or not mime_type or not submission_id:
             continue
-        try:
-            presign = adapter.presign_download(  # type: ignore[call-arg]
-                bucket=bucket,
-                key=storage_key,
-                expires_in=120,
-                disposition="inline",
-            )
-            url = presign.get("url") if isinstance(presign, dict) else None
-            if isinstance(url, str) and url.strip():
-                rec["file_url"] = url.strip()
-        except Exception:
-            continue
+        rec["file_url"] = (
+            f"/api/learning/courses/{course_id}/tasks/{task_id}/submissions/{submission_id}/file?disposition=inline"
+        )
 
 
 def _resolve_student_material_file_url(
@@ -1650,16 +1629,7 @@ def _resolve_student_material_file_url(
         if not storage_key:
             return None
 
-        settings = MaterialFileSettings()
-        presign = adapter.presign_download(  # type: ignore[call-arg]
-            bucket=settings.storage_bucket,
-            key=storage_key,
-            expires_in=settings.download_url_ttl_seconds,
-            disposition="inline",
-        )
-        url = presign.get("url") if isinstance(presign, dict) else None
-        if isinstance(url, str) and url.strip():
-            return url.strip()
+        return f"/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file?disposition=inline"
     except Exception:
         return None
     return None
@@ -1802,16 +1772,7 @@ def _resolve_student_modular_material_file_url(
         if not storage_key:
             return None
 
-        settings = MaterialFileSettings()
-        presign = adapter.presign_download(  # type: ignore[call-arg]
-            bucket=settings.storage_bucket,
-            key=storage_key,
-            expires_in=settings.download_url_ttl_seconds,
-            disposition="inline",
-        )
-        url = presign.get("url") if isinstance(presign, dict) else None
-        if isinstance(url, str) and url.strip():
-            return url.strip()
+        return f"/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file?disposition=inline"
     except Exception:
         return None
     return None
@@ -2429,7 +2390,9 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         if r_hist.status_code == 200 and isinstance(r_hist.json(), list):
                             records = r_hist.json()
                             _enrich_submission_records_with_file_urls(
-                                [rec for rec in records if isinstance(rec, dict)]
+                                [rec for rec in records if isinstance(rec, dict)],
+                                course_id=course_id,
+                                task_id=tid,
                             )
                             # Render the full history wrapper directly so the poller can
                             # update only the dynamic zones without re-rendering previews.
@@ -2966,7 +2929,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
                 items = []
 
             items_dicts = [rec for rec in items if isinstance(rec, dict)] if isinstance(items, list) else []
-            _enrich_submission_records_with_file_urls(items_dicts)
+            _enrich_submission_records_with_file_urls(items_dicts, course_id=course_id, task_id=task_id)
             html = _render_learning_task_history_wrapper_html(
                 course_id=course_id,
                 task_id=task_id,
@@ -3018,7 +2981,11 @@ async def learning_task_history_fragment(request: Request, course_id: str, task_
     except Exception:
         items = []
     if isinstance(items, list):
-        _enrich_submission_records_with_file_urls([rec for rec in items if isinstance(rec, dict)])
+        _enrich_submission_records_with_file_urls(
+            [rec for rec in items if isinstance(rec, dict)],
+            course_id=course_id,
+            task_id=task_id,
+        )
     open_attempt_id = _normalize_open_attempt_id_uuid(str(request.query_params.get("open_attempt_id") or ""))
     items_dicts = [rec for rec in items if isinstance(rec, dict)] if isinstance(items, list) else []
     html = _render_learning_task_history_wrapper_html(

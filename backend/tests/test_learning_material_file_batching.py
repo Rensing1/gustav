@@ -85,8 +85,16 @@ def test_attach_section_material_files_batches_storage_lookup(monkeypatch: pytes
     )
 
     assert len(connect_calls) == 1
-    assert payload[0]["materials"][0]["file_url"] == "http://storage.local/materials/one.pdf"
-    assert payload[0]["materials"][1]["file_url"] == "http://storage.local/materials/two.pdf"
+    assert payload[0]["materials"][0]["file_url"] == (
+        "/api/learning/courses/33333333-3333-4333-8333-333333333333/sections/"
+        "44444444-4444-4444-8444-444444444444/materials/11111111-1111-1111-1111-111111111111/file"
+        "?disposition=inline"
+    )
+    assert payload[0]["materials"][1]["file_url"] == (
+        "/api/learning/courses/33333333-3333-4333-8333-333333333333/sections/"
+        "44444444-4444-4444-8444-444444444444/materials/22222222-2222-2222-2222-222222222222/file"
+        "?disposition=inline"
+    )
     assert len(cursor.execute_calls) == 2
 
 
@@ -130,6 +138,14 @@ def test_attach_modular_material_files_batches_storage_lookup(monkeypatch: pytes
     )
 
     assert len(connect_calls) == 1
-    assert payload["materials"][0]["file_url"] == "http://storage.local/materials/mod-one.pdf"
-    assert payload["materials"][1]["file_url"] == "http://storage.local/materials/mod-two.pdf"
+    assert payload["materials"][0]["file_url"] == (
+        "/api/learning/courses/33333333-3333-4333-8333-333333333333/sections/"
+        "77777777-7777-4777-8777-777777777777/materials/55555555-5555-4555-8555-555555555555/file"
+        "?disposition=inline"
+    )
+    assert payload["materials"][1]["file_url"] == (
+        "/api/learning/courses/33333333-3333-4333-8333-333333333333/sections/"
+        "77777777-7777-4777-8777-777777777777/materials/66666666-6666-4666-8666-666666666666/file"
+        "?disposition=inline"
+    )
     assert len(cursor.execute_calls) == 7

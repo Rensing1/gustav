@@ -61,7 +61,7 @@ from backend.storage.learning_policy import (
     verification_config_from_env,
 )
 from backend.storage.verification import verify_storage_object_integrity
-from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
+from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes, get_materials_max_upload_bytes
 from backend.storage.keys import make_submission_key
 from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.storage.sb3_validation import SCRATCH_SB3_MIME
@@ -110,6 +110,14 @@ def _current_emit_upload_proxy_telemetry() -> Any:
     module = _current_learning_module()
     emitter = getattr(module, "_emit_upload_proxy_telemetry", None) if module is not None else None
     return emitter or _emit_upload_proxy_telemetry
+
+
+def _current_download_bytes_with_limit() -> Any:
+    """Resolve the active storage downloader after reloads or monkeypatching."""
+
+    module = _current_learning_module()
+    downloader = getattr(module, "_download_bytes_with_limit", None) if module is not None else None
+    return downloader or _download_bytes_with_limit
 
 
 def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol, override_active: bool) -> None:
@@ -163,7 +171,7 @@ def _max_upload_bytes() -> int:
     return get_learning_max_upload_bytes()
 
 
-def _attach_submission_files(submission: dict[str, Any]) -> dict[str, Any]:
+def _attach_submission_files(submission: dict[str, Any], *, course_id: str, task_id: str) -> dict[str, Any]:
     """Attach short-lived artifact URLs for learner-visible submission history.
 
     Why:
@@ -194,36 +202,17 @@ def _attach_submission_files(submission: dict[str, Any]) -> dict[str, Any]:
     if size_int <= 0:
         return payload
 
-    bucket = _storage_bucket()
-    adapter = _current_storage_adapter()
-    if not bucket or isinstance(adapter, NullStorageAdapter):
+    submission_id = str(payload.get("id") or "").strip()
+    if not (_is_uuid_like(submission_id) and _is_uuid_like(course_id) and _is_uuid_like(task_id)):
         return payload
 
-    try:
-        presigned = adapter.presign_download(
-            bucket=bucket,
-            key=storage_key,
-            expires_in=60,
-            disposition="inline",
-        )
-    except Exception:
-        return payload
-
-    url = str((presigned or {}).get("url") or "").strip()
-    if not url:
-        return payload
-
-    try:
-        download_presigned = adapter.presign_download(
-            bucket=bucket,
-            key=storage_key,
-            expires_in=60,
-            disposition="attachment",
-        )
-    except Exception:
-        download_presigned = None
-
-    download_url = str((download_presigned or {}).get("url") or "").strip() or url
+    url = _submission_file_href(course_id=course_id, task_id=task_id, submission_id=submission_id, disposition="inline")
+    download_url = _submission_file_href(
+        course_id=course_id,
+        task_id=task_id,
+        submission_id=submission_id,
+        disposition="attachment",
+    )
 
     payload["files"] = [
         {
@@ -234,6 +223,58 @@ def _attach_submission_files(submission: dict[str, Any]) -> dict[str, Any]:
         }
     ]
     return payload
+
+
+def _submission_file_href(*, course_id: str, task_id: str, submission_id: str, disposition: str) -> str:
+    """Return a stable same-origin file URL for a learner submission."""
+
+    return (
+        f"/api/learning/courses/{_quote(str(course_id), safe='')}/tasks/{_quote(str(task_id), safe='')}"
+        f"/submissions/{_quote(str(submission_id), safe='')}/file?disposition={_quote(str(disposition), safe='')}"
+    )
+
+
+def _material_file_href(*, course_id: str, section_id: str, material_id: str, disposition: str) -> str:
+    """Return a stable same-origin file URL for a learner-visible material."""
+
+    return (
+        f"/api/learning/courses/{_quote(str(course_id), safe='')}/sections/{_quote(str(section_id), safe='')}"
+        f"/materials/{_quote(str(material_id), safe='')}/file?disposition={_quote(str(disposition), safe='')}"
+    )
+
+
+def _safe_download_filename(filename: str | None, fallback: str) -> str:
+    raw = str(filename or "").strip()
+    candidate = raw or fallback
+    cleaned = "".join(ch for ch in candidate if ch not in {'"', "\r", "\n"})
+    return cleaned or fallback
+
+
+async def _download_storage_object_via_presign(
+    *,
+    bucket: str,
+    key: str,
+    disposition: str,
+    max_bytes: int,
+    adapter: StorageAdapterProtocol | object | None = None,
+) -> bytes | None:
+    resolved_adapter = adapter if adapter is not None else _current_storage_adapter()
+    if not bucket or resolved_adapter is None or isinstance(resolved_adapter, NullStorageAdapter):
+        return None
+    try:
+        presigned = resolved_adapter.presign_download(bucket=bucket, key=key, expires_in=60, disposition=disposition)
+    except Exception:
+        return None
+    url = str((presigned or {}).get("url") or "").strip()
+    if not url:
+        return None
+    headers = presigned.get("headers") if isinstance(presigned, dict) else None
+    try:
+        hdrs = {str(k): str(v) for k, v in dict(headers or {}).items() if k and v}
+    except Exception:
+        hdrs = None
+    downloader = _current_download_bytes_with_limit()
+    return await downloader(url=url, max_bytes=max_bytes, headers=hdrs)
 
 
 def _upload_intent_ttl_seconds() -> int:
@@ -440,7 +481,7 @@ def _load_released_section_material_urls(
     course_id: str,
     section_material_pairs: list[tuple[str, str]],
 ) -> dict[str, str | None]:
-    """Load released section-material URLs with one DB connection."""
+    """Load stable released section-material URLs with one DB connection."""
 
     valid_pairs = [
         (str(section_id), str(material_id))
@@ -452,14 +493,13 @@ def _load_released_section_material_urls(
 
     repo = _get_repo()
     dsn = str(getattr(repo, "_dsn", "") or "").strip()
-    adapter = _teaching_storage_adapter()
-    if not dsn or adapter is None or not hasattr(adapter, "presign_download"):
+    if not dsn:
         return {}
 
     try:
         section_ids = [section_id for section_id, _ in valid_pairs]
         material_ids = [material_id for _, material_id in valid_pairs]
-        storage_keys: dict[str, str] = {}
+        visible_material_ids: set[str] = set()
         with psycopg.connect(dsn) as conn:
             with conn.cursor() as cur:
                 set_current_sub = getattr(repo, "_set_current_sub", None)
@@ -481,10 +521,15 @@ def _load_released_section_material_urls(
                 )
                 for material_id, storage_key in cur.fetchall() or []:
                     if isinstance(material_id, str) and isinstance(storage_key, str) and storage_key.strip():
-                        storage_keys[material_id] = storage_key.strip()
+                        visible_material_ids.add(material_id)
         return {
-            material_id: _presign_material_url(adapter=adapter, storage_key=storage_key)
-            for material_id, storage_key in storage_keys.items()
+            material_id: _material_file_href(
+                course_id=course_id,
+                section_id=next(section_id for section_id, current_material_id in valid_pairs if current_material_id == material_id),
+                material_id=material_id,
+                disposition="inline",
+            )
+            for material_id in visible_material_ids
         }
     except Exception:
         return {}
@@ -498,7 +543,7 @@ def _load_modular_material_urls(
     module_id: str,
     material_ids: list[str],
 ) -> dict[str, str | None]:
-    """Load modular material URLs with one DB connection."""
+    """Load stable modular material URLs with one DB connection."""
 
     valid_material_ids = [str(material_id) for material_id in material_ids if _is_uuid_like(material_id)]
     if not (
@@ -512,8 +557,7 @@ def _load_modular_material_urls(
 
     repo = _get_repo()
     dsn = str(getattr(repo, "_dsn", "") or "").strip()
-    adapter = _teaching_storage_adapter()
-    if not dsn or adapter is None or not hasattr(adapter, "presign_download"):
+    if not dsn:
         return {}
 
     try:
@@ -591,14 +635,19 @@ def _load_modular_material_urls(
                     """,
                     (valid_material_ids, str(section_id)),
                 )
-                storage_keys = {
+                visible_material_ids = {
                     str(material_id): str(storage_key).strip()
                     for material_id, storage_key in cur.fetchall() or []
                     if isinstance(material_id, str) and isinstance(storage_key, str) and storage_key.strip()
                 }
         return {
-            material_id: _presign_material_url(adapter=adapter, storage_key=storage_key)
-            for material_id, storage_key in storage_keys.items()
+            material_id: _material_file_href(
+                course_id=course_id,
+                section_id=section_id,
+                material_id=material_id,
+                disposition="inline",
+            )
+            for material_id in visible_material_ids
         }
     except Exception:
         return {}
@@ -1838,7 +1887,7 @@ async def finalize_submission(request: Request, course_id: str, task_id: str, pa
             headers=_cache_headers_error(),
         )
 
-    decorated = _attach_submission_files(submission)
+    decorated = _attach_submission_files(submission, course_id=course_id, task_id=task_id)
     return JSONResponse(decorated, status_code=201, headers=_cache_headers_success())
 
 
@@ -2637,5 +2686,179 @@ async def list_submissions(
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
-    decorated = [_attach_submission_files(submission) for submission in submissions]
+    decorated = [
+        _attach_submission_files(submission, course_id=course_id, task_id=task_id)
+        for submission in submissions
+    ]
     return JSONResponse(decorated, status_code=200, headers=_cache_headers_success())
+
+
+def _normalize_download_disposition(raw: str | None, *, default: str = "inline") -> str | None:
+    disposition = (raw or default).strip().lower()
+    if disposition not in {"inline", "attachment"}:
+        return None
+    return disposition
+
+
+@learning_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions/{submission_id}/file")
+async def get_submission_file(
+    request: Request,
+    course_id: str,
+    task_id: str,
+    submission_id: str,
+    disposition: str | None = None,
+):
+    """Stream a learner-visible submission file through a stable same-origin route."""
+
+    user, error = _require_student(request)
+    if error:
+        return error
+
+    normalized_disposition = _normalize_download_disposition(disposition)
+    if normalized_disposition is None:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_disposition"}, status_code=400, headers=_cache_headers_error())
+
+    try:
+        UUID(course_id)
+        UUID(task_id)
+        UUID(submission_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
+    try:
+        submissions = ListSubmissionsUseCase(_get_repo()).execute(
+            ListSubmissionsInput(
+                course_id=course_id,
+                task_id=task_id,
+                student_sub=str(user.get("sub", "")),
+                limit=100,
+                offset=0,
+            )
+        )
+    except PermissionError:
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    submission = next((item for item in submissions if str(item.get("id") or "") == submission_id), None)
+    if not isinstance(submission, dict):
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    storage_key = str(submission.get("storage_key") or "").strip()
+    mime_type = str(submission.get("mime_type") or "").strip().lower()
+    kind = str(submission.get("kind") or "").strip().lower()
+    try:
+        size_bytes = max(0, int(submission.get("size_bytes") or 0))
+    except (TypeError, ValueError):
+        size_bytes = 0
+    if kind not in {"image", "file"} or not storage_key or not mime_type:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    body = await _download_storage_object_via_presign(
+        bucket=_storage_bucket(),
+        key=storage_key,
+        disposition=normalized_disposition,
+        max_bytes=max(_max_upload_bytes(), size_bytes),
+    )
+    if body is None:
+        return JSONResponse({"error": "service_unavailable"}, status_code=503, headers=_cache_headers_error())
+
+    filename = _safe_download_filename(os.path.basename(storage_key), "submission.bin")
+    return Response(
+        content=body,
+        media_type=mime_type or "application/octet-stream",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Vary": "Origin",
+            "Content-Disposition": f'{normalized_disposition}; filename="{filename}"',
+        },
+    )
+
+
+@learning_router.get("/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file")
+async def get_material_file(
+    request: Request,
+    course_id: str,
+    section_id: str,
+    material_id: str,
+    disposition: str | None = None,
+):
+    """Stream a released material file through a stable same-origin route."""
+
+    user, error = _require_student(request)
+    if error:
+        return error
+
+    normalized_disposition = _normalize_download_disposition(disposition)
+    if normalized_disposition is None:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_disposition"}, status_code=400, headers=_cache_headers_error())
+
+    try:
+        UUID(course_id)
+        UUID(section_id)
+        UUID(material_id)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
+    repo = _get_repo()
+    dsn = str(getattr(repo, "_dsn", "") or "").strip()
+    if not dsn:
+        return JSONResponse({"error": "service_unavailable"}, status_code=503, headers=_cache_headers_error())
+
+    try:
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                set_current_sub = getattr(repo, "_set_current_sub", None)
+                if callable(set_current_sub):
+                    set_current_sub(cur, str(user.get("sub", "")))
+                else:
+                    cur.execute("select set_config('app.current_sub', %s, true)", (str(user.get("sub", "")),))
+                cur.execute(
+                    """
+                    select released.mime_type,
+                           released.size_bytes,
+                           released.storage_key,
+                           released.filename_original
+                      from public.get_released_materials_for_student(%s, %s::uuid, %s::uuid) released
+                     where released.id::text = %s
+                     limit 1
+                    """,
+                    (str(user.get("sub", "")), str(course_id), str(section_id), str(material_id)),
+                )
+                row = cur.fetchone()
+    except Exception:
+        row = None
+
+    if not row:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    mime_type, size_bytes_raw, storage_key, filename_original = row
+    mime_type = str(mime_type or "").strip().lower()
+    storage_key = str(storage_key or "").strip()
+    filename = _safe_download_filename(filename_original if isinstance(filename_original, str) else os.path.basename(storage_key), "material.bin")
+    try:
+        size_bytes = max(0, int(size_bytes_raw or 0))
+    except (TypeError, ValueError):
+        size_bytes = 0
+    if not storage_key or not mime_type:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    body = await _download_storage_object_via_presign(
+        bucket=(__import__("teaching.services.materials", fromlist=["MaterialFileSettings"]).MaterialFileSettings().storage_bucket),
+        key=storage_key,
+        disposition=normalized_disposition,
+        max_bytes=max(get_materials_max_upload_bytes(), size_bytes),
+        adapter=_teaching_storage_adapter(),
+    )
+    if body is None:
+        return JSONResponse({"error": "service_unavailable"}, status_code=503, headers=_cache_headers_error())
+
+    return Response(
+        content=body,
+        media_type=mime_type or "application/octet-stream",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Vary": "Origin",
+            "Content-Disposition": f'{normalized_disposition}; filename="{filename}"',
+        },
+    )

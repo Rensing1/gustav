@@ -370,8 +370,8 @@ async def test_sections_includes_unit_id_in_section_core():
 
 
 @pytest.mark.anyio
-async def test_sections_include_short_lived_file_url_for_released_file_materials():
-    """Released file materials expose a short-lived preview URL for the student UI."""
+async def test_sections_include_stable_file_url_for_released_file_materials():
+    """Released file materials expose a stable app URL for the student UI."""
     import routes.teaching as teaching  # noqa: E402
 
     fixture = await _prepare_learning_fixture()
@@ -415,7 +415,10 @@ async def test_sections_include_short_lived_file_url_for_released_file_materials
         payload = response.json()
         materials = payload[0]["materials"]
         file_material = next(item for item in materials if item["kind"] == "file")
-        assert file_material["file_url"] == "http://storage.local/material-preview.pdf"
+        assert file_material["file_url"] == (
+            f"/api/learning/courses/{fixture.course_id}/sections/{fixture.section_id}/materials/{file_material['id']}/file"
+            "?disposition=inline"
+        )
         assert "storage_key" not in file_material
     finally:
         teaching.set_storage_adapter(original_adapter)
@@ -976,12 +979,133 @@ async def test_finalize_latest_feedback_file_submission_returns_decorated_files(
             {
                 "mime": "application/pdf",
                 "size": 2048,
-                "url": "http://storage.local/finalized-upload.pdf",
-                "download_url": "http://storage.local/finalized-upload.pdf?download=1",
+                "url": (
+                    f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/{body['id']}/file"
+                    "?disposition=inline"
+                ),
+                "download_url": (
+                    f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/{body['id']}/file"
+                    "?disposition=attachment"
+                ),
             }
         ]
     finally:
         learning.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_learning_submission_file_route_streams_owner_file(monkeypatch: pytest.MonkeyPatch):
+    """Learners should open their own submission files through a stable app route."""
+
+    fixture = await _prepare_learning_fixture(max_attempts=2)
+    import routes.learning as learning  # noqa: E402
+
+    original_adapter = learning.STORAGE_ADAPTER
+    try:
+        class _Adapter:
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "https://storage.local/submission.pdf", "headers": {"authorization": "sig"}}
+
+        async def _fake_download(*, url, max_bytes, headers=None):  # noqa: ANN001
+            assert url == "https://storage.local/submission.pdf"
+            assert headers == {"authorization": "sig"}
+            assert max_bytes >= 2048
+            return b"%PDF-stable%"
+
+        learning.set_storage_adapter(_Adapter())
+        monkeypatch.setattr(learning, "_download_bytes_with_limit", _fake_download)
+
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", fixture.student_session_id)
+            feedback_response = await client.post(
+                f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+                json={
+                    "intent": "feedback",
+                    "kind": "file",
+                    "storage_key": "submissions/stable/native-upload.pdf",
+                    "mime_type": "application/pdf",
+                    "size_bytes": 2048,
+                    "sha256": "c" * 64,
+                },
+            )
+            assert feedback_response.status_code == 202, feedback_response.text
+            submission_id = feedback_response.json()["id"]
+
+            file_response = await client.get(
+                f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/{submission_id}/file",
+                params={"disposition": "inline"},
+            )
+
+        assert file_response.status_code == 200, file_response.text
+        assert file_response.content == b"%PDF-stable%"
+        assert file_response.headers.get("Cache-Control") == "private, no-store"
+        assert file_response.headers.get("Content-Type") == "application/pdf"
+        assert "inline" in str(file_response.headers.get("Content-Disposition") or "")
+    finally:
+        learning.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_learning_material_file_route_streams_released_material(monkeypatch: pytest.MonkeyPatch):
+    """Released learner materials should stream through a stable app route."""
+
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    fixture = await _prepare_learning_fixture()
+    original_adapter = teaching.STORAGE_ADAPTER
+    original_learning_adapter = learning.STORAGE_ADAPTER
+    try:
+        class _Adapter:
+            def presign_upload(self, *, bucket, key, expires_in, headers):
+                return {"url": "http://storage.local/upload", "headers": {}}
+
+            def head_object(self, *, bucket, key):
+                return {"content_length": 1024, "content_type": "application/pdf"}
+
+            def delete_object(self, *, bucket, key):
+                return None
+
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "https://storage.local/material.pdf", "headers": {"authorization": "sig"}}
+
+        async def _fake_download(*, url, max_bytes, headers=None):  # noqa: ANN001
+            assert url == "https://storage.local/material.pdf"
+            assert headers == {"authorization": "sig"}
+            assert max_bytes >= 1024
+            return b"%PDF-material%"
+
+        teaching.set_storage_adapter(_Adapter())
+        learning.set_storage_adapter(_Adapter())
+        monkeypatch.setattr(learning, "_download_bytes_with_limit", _fake_download)
+
+        async with (await _client()) as teacher_client:
+            teacher_client.cookies.set("gustav_session", fixture.teacher_session_id)
+            material = await _create_file_material(
+                teacher_client,
+                fixture.unit_id,
+                fixture.section_id,
+                title="Arbeitsblatt PDF",
+                filename="arbeitsblatt.pdf",
+                mime_type="application/pdf",
+                size_bytes=1024,
+            )
+
+        async with (await _client()) as student_client:
+            student_client.cookies.set("gustav_session", fixture.student_session_id)
+            response = await student_client.get(
+                f"/api/learning/courses/{fixture.course_id}/sections/{fixture.section_id}/materials/{material['id']}/file",
+                params={"disposition": "attachment"},
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.content == b"%PDF-material%"
+        assert response.headers.get("Cache-Control") == "private, no-store"
+        assert response.headers.get("Content-Type") == "application/pdf"
+        assert "attachment" in str(response.headers.get("Content-Disposition") or "")
+    finally:
+        learning.set_storage_adapter(original_learning_adapter)
+        teaching.set_storage_adapter(original_adapter)
 
 
 @pytest.mark.anyio

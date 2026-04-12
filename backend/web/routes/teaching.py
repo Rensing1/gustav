@@ -47,6 +47,48 @@ teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
 H5P_INTERNAL_BASE = (os.getenv("H5P_INTERNAL_BASE") or "http://h5p:3000").rstrip("/")
 
+
+def _safe_download_filename(filename: str | None, fallback: str) -> str:
+    raw = str(filename or "").strip()
+    candidate = raw or fallback
+    cleaned = "".join(ch for ch in candidate if ch not in {'"', "\r", "\n"})
+    return cleaned or fallback
+
+
+async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[str, str] | None = None) -> bytes | None:
+    """Fetch a private file download into memory with a hard size limit."""
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+            async with client.stream("GET", url, headers=headers) as resp:
+                code = int(getattr(resp, "status_code", 500))
+                if 300 <= code < 400 or code >= 400:
+                    return None
+                out = bytearray()
+                async for chunk in resp.aiter_bytes():
+                    if not chunk:
+                        continue
+                    out.extend(chunk)
+                    if len(out) > int(max_bytes):
+                        return None
+                return bytes(out)
+    except Exception:
+        return None
+
+
+def _teaching_submission_file_href(
+    *,
+    course_id: str,
+    unit_id: str,
+    task_id: str,
+    student_sub: str,
+    disposition: str,
+) -> str:
+    return (
+        f"/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest/file"
+        f"?disposition={disposition}"
+    )
+
 # Optional storage wiring helper (lazy rewire for local Supabase E2E)
 try:  # pragma: no cover - simple import guard
     from backend.web.storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
@@ -1285,6 +1327,14 @@ def _get_student_live_overview_service() -> StudentLiveOverviewService:
     if callable(factory) and factory is not _get_student_live_overview_service:
         return factory()
     return StudentLiveOverviewService(_get_repo())
+
+
+def _current_download_bytes_with_limit() -> Any:
+    """Resolve the active download helper after reloads or monkeypatching."""
+
+    module = _current_teaching_module()
+    downloader = getattr(module, "_download_bytes_with_limit", None) if module is not None else None
+    return downloader or _download_bytes_with_limit
 
 
 def set_repo(repo) -> None:
@@ -6369,21 +6419,7 @@ async def get_latest_submission_detail(
         files: List[Dict[str, Any]] = []
         if include_files and def_kind in ("file", "pdf", "image") and isinstance(storage_key, str):
             try:
-                # Prefer learning storage adapter (submissions bucket), fallback to teaching adapter.
-                try:
-                    import routes.learning as learning_routes  # type: ignore
-
-                    adapter = getattr(learning_routes, "STORAGE_ADAPTER", STORAGE_ADAPTER)
-                except Exception:
-                    adapter = STORAGE_ADAPTER
-                presign = adapter.presign_download(  # type: ignore[union-attr]
-                    bucket=get_submissions_bucket(),
-                    key=str(storage_key),
-                    expires_in=900,
-                    disposition="inline",
-                )
-                url = presign.get("url") if isinstance(presign, dict) else None
-                if url and size_bytes is not None:
+                if size_bytes is not None:
                     try:
                         size_int = int(size_bytes)
                         if size_int < 0:
@@ -6392,7 +6428,13 @@ async def get_latest_submission_detail(
                             {
                                 "mime": str(mime_type or ""),
                                 "size": size_int,
-                                "url": str(url),
+                                "url": _teaching_submission_file_href(
+                                    course_id=str(course_id),
+                                    unit_id=str(unit_id),
+                                    task_id=str(tid),
+                                    student_sub=str(ssub),
+                                    disposition="inline",
+                                ),
                             }
                         )
                     except (TypeError, ValueError):
@@ -6735,3 +6777,140 @@ async def get_latest_submission_detail(
 
     # Fallback when DB path not available or no submission was found
     return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+
+
+@teaching_router.get(
+    "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub:path}/submissions/latest/file"
+)
+async def get_teaching_submission_file(
+    request: Request,
+    course_id: str,
+    unit_id: str,
+    task_id: str,
+    student_sub: str,
+    disposition: Optional[str] = None,
+):
+    """Stream a teacher-visible submission file through a stable same-origin route."""
+
+    user, forbidden = _require_teacher(request)
+    if forbidden:
+        forbidden.headers.setdefault("Cache-Control", "private, no-store")
+        forbidden.headers.setdefault("Vary", "Origin")
+        return forbidden
+
+    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id) and _is_uuid_like(task_id)):
+        return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
+
+    normalized_disposition = (disposition or "inline").strip().lower()
+    if normalized_disposition not in {"inline", "attachment"}:
+        return _private_error({"error": "bad_request", "detail": "invalid_disposition"}, status_code=400, vary_origin=True)
+
+    sub = _current_sub(user)
+    guard = _guard_course_owner(course_id, sub)
+    if guard:
+        if isinstance(guard, JSONResponse):
+            guard.headers.setdefault("Cache-Control", "private, no-store")
+            guard.headers.setdefault("Vary", "Origin")
+            return guard
+        return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        repo = _get_repo()
+        if not isinstance(repo, DBTeachingRepo):
+            return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
+
+        import psycopg  # type: ignore
+
+        dsn = getattr(repo, "_dsn", None)
+        if not dsn:
+            return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
+
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                cur.execute(
+                    """
+                    select exists(
+                             select 1
+                               from public.course_modules
+                              where course_id = %s
+                                and unit_id = %s::uuid
+                         )
+                    """,
+                    (course_id, unit_id),
+                )
+                if not bool((cur.fetchone() or [False])[0]):
+                    return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+                cur.execute(
+                    """
+                    select s.mime_type,
+                           s.size_bytes,
+                           s.storage_key
+                      from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s) s
+                     where s.id::text is not null
+                     limit 1
+                    """,
+                    (sub, course_id, unit_id, task_id, student_sub),
+                )
+                row = cur.fetchone()
+    except Exception:
+        row = None
+
+    if not row:
+        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+
+    mime_type, size_bytes_raw, storage_key = row
+    mime_type = str(mime_type or "").strip().lower()
+    storage_key = str(storage_key or "").strip()
+    try:
+        size_bytes = max(0, int(size_bytes_raw or 0))
+    except (TypeError, ValueError):
+        size_bytes = 0
+    if not mime_type or not storage_key:
+        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+
+    try:
+        import routes.learning as learning_routes  # type: ignore
+
+        adapter = getattr(learning_routes, "STORAGE_ADAPTER", STORAGE_ADAPTER)
+    except Exception:
+        adapter = STORAGE_ADAPTER
+
+    if adapter is None or isinstance(adapter, NullStorageAdapter):
+        return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
+
+    try:
+        presigned = adapter.presign_download(  # type: ignore[union-attr]
+            bucket=get_submissions_bucket(),
+            key=storage_key,
+            expires_in=60,
+            disposition=normalized_disposition,
+        )
+    except Exception:
+        presigned = None
+
+    url = str((presigned or {}).get("url") or "").strip()
+    headers = (presigned or {}).get("headers") if isinstance(presigned, dict) else None
+    try:
+        forward_headers = {str(k): str(v) for k, v in dict(headers or {}).items() if k and v}
+    except Exception:
+        forward_headers = None
+    if not url:
+        return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
+
+    downloader = _current_download_bytes_with_limit()
+    body = await downloader(url=url, max_bytes=max(10 * 1024 * 1024, size_bytes), headers=forward_headers)
+    if body is None:
+        return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
+
+    filename = _safe_download_filename(os.path.basename(storage_key), "submission.bin")
+    return Response(
+        content=body,
+        media_type=mime_type or "application/octet-stream",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Vary": "Origin",
+            "Content-Disposition": f'{normalized_disposition}; filename="{filename}"',
+        },
+    )

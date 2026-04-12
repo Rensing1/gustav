@@ -46,14 +46,16 @@ if dspy is not None and hasattr(dspy, "Signature"):
         Ausgabe:
             - `criteria_results`: Liste von Objekten in exakt derselben Reihenfolge
               wie die gegebene `criteria`-Liste.
-            - Jedes Objekt enthaelt `score` (0..10) und `explanation_md`.
+            - Jedes Objekt enthält `score` (0..10) und `explanation_md`.
             - `explanation_md` ist eine kurze, sachliche Erklärung in Markdown
               (1–3 Sätze, auf Deutsch, mit Bezug zum Kriterium und zur Textstelle).
 
         Hinweis:
             - `max_score` wird serverseitig immer auf `10` gesetzt.
             - Der Kriteriumsname wird serverseitig positionsgebunden aus der
-              uebergebenen `criteria`-Liste befüllt.
+              übergebenen `criteria`-Liste befüllt.
+            - Wenn du unsicher bist, halte die Struktur trotzdem gültig und verwende
+              lieber `score = 0` als eine unvollständige oder längenfalsche Liste.
         """
 
         student_text_md: str = dspy.InputField(  # type: ignore[attr-defined]
@@ -171,13 +173,15 @@ if dspy is not None and hasattr(dspy, "Signature"):
               nicht als „Beleg“ herangezogen oder zitiert werden.
 
         Ausgabe:
-            - `criteria_results`: Liste von {score 0..10, explanation_md} in
-              exakt derselben Reihenfolge wie `criteria`.
+            - `criteria_results`: Liste von {score 0..10, explanation_md} in exakt
+              derselben Reihenfolge wie `criteria`.
 
         Hinweis:
             - `max_score` wird serverseitig immer auf `10` gesetzt.
             - Der Kriteriumsname wird serverseitig positionsgebunden aus der
-              uebergebenen `criteria`-Liste befüllt.
+              übergebenen `criteria`-Liste befüllt.
+            - Wenn du unsicher bist, halte die Struktur trotzdem gültig und verwende
+              lieber `score = 0` als eine unvollständige oder längenfalsche Liste.
         """
 
         student_image: dspy.Image = dspy.InputField(  # type: ignore[attr-defined]

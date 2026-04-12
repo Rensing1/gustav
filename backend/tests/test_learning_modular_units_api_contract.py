@@ -383,7 +383,10 @@ async def test_learning_modular_module_content_includes_file_preview_url_for_fil
             assert r_content.status_code == 200
             payload = r_content.json()
             material = payload["materials"][0]
-            assert material["file_url"] == "http://storage.local/modular-material.pdf"
+            assert material["file_url"] == (
+                f"/api/learning/courses/{course_id}/sections/{section_id}/materials/{material['id']}/file"
+                "?disposition=inline"
+            )
             assert "storage_key" not in material
     finally:
         teaching.set_storage_adapter(original_adapter)

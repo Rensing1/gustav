@@ -232,7 +232,7 @@ async def test_latest_detail_long_text_body_matches_learning():
 
 @pytest.mark.anyio
 async def test_latest_detail_includes_text_and_files_for_pdf_submission():
-    """File/PDF submissions should expose extracted text and signed file URLs."""
+    """File/PDF submissions should expose extracted text and stable app file URLs."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -328,7 +328,120 @@ async def test_latest_detail_includes_text_and_files_for_pdf_submission():
         assert isinstance(body.get("text_body"), str) and "Extrahierter Text" in body["text_body"]
         files = body.get("files") or []
         assert isinstance(files, list) and len(files) >= 1
-        assert "storage.test" in str(files[0].get("url"))
+        assert files[0]["url"] == (
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest/file"
+            "?disposition=inline"
+        )
+    finally:
+        teaching.set_storage_adapter(original_teaching_adapter)
+        learning.set_storage_adapter(original_learning_adapter)
+
+
+@pytest.mark.anyio
+async def test_teaching_submission_file_route_streams_owner_visible_bytes(monkeypatch: pytest.MonkeyPatch):
+    """Teachers should open live-detail submission files through a stable app route."""
+
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+        import psycopg  # type: ignore
+    except Exception:
+        pytest.skip("DB-backed repos and psycopg required for submission file route test")
+
+    def _dsn() -> str:
+        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+        port = os.getenv("TEST_DB_PORT", "54322")
+        user = os.getenv("APP_DB_USER", "gustav_app")
+        password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+        return os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv(
+            "DATABASE_URL"
+        ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+    class _FakeStorageAdapter:
+        def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> dict[str, str]:
+            return {"url": "https://storage.test/submissions/sample.pdf", "headers": {"authorization": "sig"}}
+
+    async def _fake_download(*, url, max_bytes, headers=None):  # noqa: ANN001
+        assert url == "https://storage.test/submissions/sample.pdf"
+        assert headers == {"authorization": "sig"}
+        assert max_bytes >= 1234
+        return b"%PDF-owner%"
+
+    monkeypatch.setattr(teaching, "_download_bytes_with_limit", _fake_download)
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-detail-file-stream-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-detail-file-stream", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        cid = await _create_course(c_owner, "Kurs Detail File Route")
+        unit = await _create_unit(c_owner, "Einheit Detail File Route")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Datei-Aufgabe")
+        module = await _attach_unit(c_owner, cid, unit["id"])
+        await _add_member(c_owner, cid, learner.sub)
+        r_vis = await c_owner.patch(
+            f"/api/teaching/courses/{cid}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert r_vis.status_code == 200
+
+    submission_id = str(uuid.uuid4())
+    with psycopg.connect(_dsn()) as conn:  # type: ignore
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, false)", (learner.sub,))
+            cur.execute(
+                """
+                insert into public.learning_submissions (
+                  id, course_id, task_id, section_id, student_sub, kind,
+                  storage_key, mime_type, size_bytes, sha256, attempt_nr,
+                  text_body, analysis_status, completed_at
+                ) values (
+                  %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                  %s, %s, %s, %s, 1,
+                  %s, 'completed', now()
+                )
+                """,
+                (
+                    submission_id,
+                    cid,
+                    task["id"],
+                    section["id"],
+                    learner.sub,
+                    f"submissions/{cid}/{task['id']}/{learner.sub}/orig/sample.pdf",
+                    "application/pdf",
+                    1234,
+                    "1" * 64,
+                    "Extrahierter Text aus PDF",
+                ),
+            )
+        conn.commit()
+
+    original_teaching_adapter = teaching.STORAGE_ADAPTER
+    original_learning_adapter = learning.STORAGE_ADAPTER
+    teaching.set_storage_adapter(_FakeStorageAdapter())
+    learning.set_storage_adapter(_FakeStorageAdapter())
+    try:
+        async with (await _client()) as c_owner:
+            c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+            response = await c_owner.get(
+                f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest/file",
+                params={"disposition": "attachment"},
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.content == b"%PDF-owner%"
+        assert response.headers.get("Cache-Control") == "private, no-store"
+        assert response.headers.get("Content-Type") == "application/pdf"
+        assert "attachment" in str(response.headers.get("Content-Disposition") or "")
     finally:
         teaching.set_storage_adapter(original_teaching_adapter)
         learning.set_storage_adapter(original_learning_adapter)
@@ -661,7 +774,10 @@ async def test_latest_detail_includes_integer_file_size_for_pdf_submission():
         first = files[0]
         assert isinstance(first.get("size"), int)
         assert first["size"] == 1234
-        assert "storage.test" in str(first.get("url"))
+        assert first["url"] == (
+            f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest/file"
+            "?disposition=inline"
+        )
     finally:
         teaching.set_storage_adapter(original_teaching_adapter)
         learning.set_storage_adapter(original_learning_adapter)

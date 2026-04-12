@@ -2308,7 +2308,9 @@ components:
           type: string
           format: uri
           nullable: true
-          description: Short-lived inline preview/download URL for file materials visible to the student
+          description: >-
+            Stable GUSTAV URL for inline preview/download of a visible file material.
+            The file response is authenticated and must not be cached.
         alt_text:
           type: string
           nullable: true
@@ -2564,9 +2566,9 @@ components:
               type: array
               description: |-
                 Optional learner-visible artifacts for file/image submissions.
-                Uses short-lived signed URLs so earlier upload attempts can be
-                opened again in the history workspace without exposing storage
-                keys directly.
+                URLs point to stable, authenticated GUSTAV file routes so
+                earlier upload attempts stay usable even when the page remains
+                open for a longer time.
               items:
                 type: object
                 required: [mime, size, url, download_url]
@@ -2578,13 +2580,14 @@ components:
                   url:
                     type: string
                     format: uri
+                    description: Stable authenticated GUSTAV URL for inline preview/open
                   download_url:
                     type: string
                     format: uri
                     description: |-
-                      Short-lived signed attachment URL for downloading the
-                      original uploaded file without relying on the inline
-                      preview target.
+                      Stable authenticated GUSTAV URL for downloading the
+                      original uploaded file with `Content-Disposition:
+                      attachment`.
             analysis_status:
               type: string
               enum: [pending, extracted, completed, failed]
@@ -2687,7 +2690,7 @@ components:
         files:
           type: array
           description: |
-            Original upload(s) with signed, short-lived URLs. Present for
+            Original upload(s) with stable authenticated GUSTAV file URLs. Present for
             file/image/pdf submissions; empty for text submissions in the normal
             case. In rare fallback situations (e.g. when Storage or helper
             functions are temporarily unavailable) the field may be omitted, while
@@ -2702,7 +2705,7 @@ components:
               url:
                 type: string
                 format: uri
-                description: Signed, short-lived URL (do not cache beyond TTL)
+                description: Stable authenticated GUSTAV URL (do not cache)
         feedback_md:
           type: string
           nullable: true
@@ -5707,6 +5710,148 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /api/learning/courses/{course_id}/tasks/{task_id}/submissions/{submission_id}/file:
+    get:
+      tags: [Learning]
+      summary: Stream a learner-visible submission file
+      description: >-
+        Streams a learner-visible submission file through GUSTAV. This avoids
+        exposing direct storage-signed URLs in page payloads while enforcing
+        authentication and visibility checks on every request.
+      operationId: streamLearningSubmissionFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: submission_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: disposition
+          required: false
+          schema:
+            type: string
+            enum: [inline, attachment]
+          description: Desired `Content-Disposition`; defaults to `inline`.
+      responses:
+        '200':
+          description: File bytes streamed successfully
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema: { type: string, example: private, no-store }
+            Content-Type:
+              description: MIME type of the stored submission file
+              schema: { type: string }
+            Content-Disposition:
+              description: Inline preview or attachment download disposition
+              schema: { type: string }
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid input (invalid UUID or disposition)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403':
+          description: Forbidden (not authorized to view this submission)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Submission not found or not visible in this scope
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Storage unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file:
+    get:
+      tags: [Learning]
+      summary: Stream a learner-visible material file
+      description: >-
+        Streams a released file material through GUSTAV for enrolled students.
+        This route provides a stable preview/download target instead of direct
+        storage-signed URLs in the learning payload.
+      operationId: streamLearningMaterialFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: material_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: disposition
+          required: false
+          schema:
+            type: string
+            enum: [inline, attachment]
+          description: Desired `Content-Disposition`; defaults to `inline`.
+      responses:
+        '200':
+          description: File bytes streamed successfully
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema: { type: string, example: private, no-store }
+            Content-Type:
+              description: MIME type of the released material file
+              schema: { type: string }
+            Content-Disposition:
+              description: Inline preview or attachment download disposition
+              schema: { type: string }
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid input (invalid UUID or disposition)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403':
+          description: Forbidden (not authorized to view this material)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Material not found or not visible in this scope
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Storage unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /auth/login:
     get:
@@ -11465,6 +11610,78 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '404':
           description: Not found (course/unit/task relation)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest/file:
+    get:
+      summary: Stream the latest file submission for a student-task (owner)
+      description: >-
+        Streams the latest teacher-visible file submission through GUSTAV using
+        the same ownership and relation checks as the latest-detail endpoint.
+        This route provides a stable same-origin preview/download target.
+      tags: [Teaching]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: student_sub
+          required: true
+          schema: { type: string }
+        - in: query
+          name: disposition
+          required: false
+          schema:
+            type: string
+            enum: [inline, attachment]
+          description: Desired `Content-Disposition`; defaults to `inline`.
+      responses:
+        '200':
+          description: File bytes streamed successfully
+          headers:
+            Cache-Control: { schema: { type: string, example: 'private, no-store' } }
+            Vary: { schema: { type: string, example: 'Origin' } }
+            Content-Type: { schema: { type: string } }
+            Content-Disposition: { schema: { type: string } }
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid identifiers or disposition
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden (not owner)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: No latest file submission visible in this scope
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Storage unavailable
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

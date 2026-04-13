@@ -39,6 +39,10 @@ from components.base import Component
 from components.pages import SciencePage
 from components.forms.course_edit_form import CourseEditForm
 from evidence_rendering import render_submission_text_html
+try:
+    from backend.web.material_file_access import load_student_material_file_metadata
+except ModuleNotFoundError:  # pragma: no cover - container fallback when package path is flattened
+    from material_file_access import load_student_material_file_metadata
 
 # Auth & OIDC Imports
 from identity_access.oidc import OIDCClient, OIDCConfig
@@ -1560,274 +1564,54 @@ def _enrich_submission_records_with_file_urls(
         )
 
 
+def _material_file_href(*, course_id: str, material_id: str, disposition: str = "inline") -> str:
+    """Return the canonical same-origin route for a learner-visible material file."""
+
+    return (
+        f"/api/learning/courses/{_quote_url_path_value(course_id)}/materials/"
+        f"{_quote_url_path_value(material_id)}/file?disposition={quote(disposition, safe='')}"
+    )
+
+
 def _resolve_student_material_file_url(
     *,
     student_sub: str,
     course_id: str,
-    section_id: str,
     material_id: str,
     storage_adapter: object | None = None,
 ) -> str | None:
-    """Resolve a short-lived inline URL for a released file material.
+    """Resolve the canonical URL for a visible file material.
 
     Why:
         Student-facing learning APIs intentionally do not expose internal
-        storage metadata (`storage_key`, `sha256`). SSR still needs a preview
-        URL for file cards, so we resolve it server-side under student scope.
+        storage metadata (`storage_key`, `sha256`). SSR still needs a stable
+        route for file cards, so we resolve visibility server-side.
 
     Security:
-        The lookup is limited to materials returned by
-        `get_released_materials_for_student(student_sub, course_id, section_id)`
-        and filtered by `material_id`. If no visible row is found, no URL is
-        returned.
+        The lookup delegates to the shared student material visibility helper.
+        If the material is not visible in this course, no URL is returned.
     """
-    if not (student_sub and _is_uuid_like(course_id) and _is_uuid_like(section_id) and _is_uuid_like(material_id)):
+    del storage_adapter
+    if not (student_sub and _is_uuid_like(course_id) and _is_uuid_like(material_id)):
         return None
     try:
-        from teaching.services.materials import MaterialFileSettings  # type: ignore
         import routes.learning as learning_routes  # type: ignore
 
         repo = getattr(learning_routes, "REPO", None)
-        dsn = str(getattr(repo, "_dsn", "") or "").strip()
-        if not dsn:
+        if repo is None:
             return None
-
-        adapter = storage_adapter
-        if adapter is None:
-            import routes.teaching as teaching_routes  # type: ignore
-
-            adapter = getattr(teaching_routes, "STORAGE_ADAPTER", None)
-        if adapter is None or not hasattr(adapter, "presign_download"):
+        metadata = load_student_material_file_metadata(
+            repo=repo,
+            student_sub=student_sub,
+            course_id=str(course_id),
+            material_id=str(material_id),
+        )
+        if metadata is None:
             return None
-
-        import psycopg  # type: ignore
-
-        storage_key = None
-        with psycopg.connect(dsn) as conn:
-            with conn.cursor() as cur:
-                try:
-                    set_current_sub = getattr(repo, "_set_current_sub", None)
-                    if callable(set_current_sub):
-                        set_current_sub(cur, student_sub)
-                    else:
-                        cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
-                except Exception:
-                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
-
-                cur.execute(
-                    """
-                    select storage_key
-                      from public.get_released_materials_for_student(%s, %s::uuid, %s::uuid)
-                     where id::text = %s
-                     limit 1
-                    """,
-                    (student_sub, str(course_id), str(section_id), str(material_id)),
-                )
-                row = cur.fetchone()
-                if row and isinstance(row[0], str) and row[0].strip():
-                    storage_key = row[0].strip()
-        if not storage_key:
-            return None
-
-        return f"/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file?disposition=inline"
+        return _material_file_href(course_id=course_id, material_id=material_id)
     except Exception:
         return None
-    return None
 
-
-def _resolve_student_modular_material_file_url(
-    *,
-    student_sub: str,
-    course_id: str,
-    unit_id: str,
-    module_id: str,
-    material_id: str,
-    storage_adapter: object | None = None,
-) -> str | None:
-    """Resolve a short-lived inline URL for a modular file material.
-
-    Why:
-        Modular module fragments do not always have a linear `section_id`
-        mapping available. SSR still needs a preview URL, so this helper
-        resolves the backing section via `unit_modules` and enforces modular
-        unlock rules before presigning the material.
-
-    Security:
-        The caller must be an enrolled student in the course/unit pair and the
-        module must currently be open or done according to
-        `modular_section_is_open_or_done_for_student(...)`. When any of these
-        checks fail, no URL is returned.
-    """
-    if not (
-        student_sub
-        and _is_uuid_like(course_id)
-        and _is_uuid_like(unit_id)
-        and _is_uuid_like(module_id)
-        and _is_uuid_like(material_id)
-    ):
-        return None
-    try:
-        from teaching.services.materials import MaterialFileSettings  # type: ignore
-        import routes.learning as learning_routes  # type: ignore
-
-        repo = getattr(learning_routes, "REPO", None)
-        dsn = str(getattr(repo, "_dsn", "") or "").strip()
-        if not dsn:
-            return None
-
-        adapter = storage_adapter
-        if adapter is None:
-            import routes.teaching as teaching_routes  # type: ignore
-
-            adapter = getattr(teaching_routes, "STORAGE_ADAPTER", None)
-        if adapter is None or not hasattr(adapter, "presign_download"):
-            return None
-
-        import psycopg  # type: ignore
-
-        storage_key: str | None = None
-        with psycopg.connect(dsn) as conn:
-            with conn.cursor() as cur:
-                try:
-                    set_current_sub = getattr(repo, "_set_current_sub", None)
-                    if callable(set_current_sub):
-                        set_current_sub(cur, student_sub)
-                    else:
-                        cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
-                except Exception:
-                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
-                try:
-                    set_current_course_id = getattr(repo, "_set_current_course_id", None)
-                    if callable(set_current_course_id):
-                        set_current_course_id(cur, str(course_id))
-                    else:
-                        cur.execute("select set_config('app.current_course_id', %s, true)", (str(course_id),))
-                except Exception:
-                    cur.execute("select set_config('app.current_course_id', %s, true)", (str(course_id),))
-
-                cur.execute(
-                    """
-                    select exists(
-                             select 1
-                               from public.course_memberships
-                              where course_id = %s::uuid
-                                and student_id = %s
-                         )
-                    """,
-                    (str(course_id), student_sub),
-                )
-                if not bool((cur.fetchone() or [False])[0]):
-                    return None
-
-                cur.execute(
-                    """
-                    select exists(
-                             select 1
-                               from public.course_modules
-                              where course_id = %s::uuid
-                                and unit_id = %s::uuid
-                         )
-                    """,
-                    (str(course_id), str(unit_id)),
-                )
-                if not bool((cur.fetchone() or [False])[0]):
-                    return None
-
-                cur.execute(
-                    """
-                    select section_id::text
-                      from public.unit_modules
-                     where id = %s::uuid
-                       and unit_id = %s::uuid
-                     limit 1
-                    """,
-                    (str(module_id), str(unit_id)),
-                )
-                row = cur.fetchone()
-                section_id = row[0] if row and isinstance(row[0], str) and row[0].strip() else None
-                if not section_id:
-                    return None
-
-                cur.execute(
-                    "select public.modular_section_is_open_or_done_for_student(%s, %s::uuid, %s::uuid, %s::uuid)",
-                    (student_sub, str(course_id), str(unit_id), str(section_id)),
-                )
-                if not bool((cur.fetchone() or [False])[0]):
-                    return None
-
-                cur.execute(
-                    """
-                    select storage_key
-                      from public.unit_materials
-                     where id = %s::uuid
-                       and section_id = %s::uuid
-                       and kind = 'file'
-                     limit 1
-                    """,
-                    (str(material_id), str(section_id)),
-                )
-                row = cur.fetchone()
-                if row and isinstance(row[0], str) and row[0].strip():
-                    storage_key = row[0].strip()
-        if not storage_key:
-            return None
-
-        return f"/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file?disposition=inline"
-    except Exception:
-        return None
-    return None
-
-
-async def _fetch_student_material_section_map_for_unit(
-    *,
-    course_id: str,
-    unit_id: str,
-    session_id: str,
-) -> dict[str, str]:
-    """Return a best-effort map of material_id -> section_id for a unit.
-
-    Why:
-        Modular module-content payloads do not expose section_id, but file URL
-        resolution needs section_id + material_id. We derive the mapping via the
-        released-sections Learning API under the current student session.
-    """
-    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
-        return {}
-    try:
-        async with _internal_api_client() as client:
-            if session_id:
-                client.cookies.set(SESSION_COOKIE_NAME, session_id)
-            resp = await client.get(
-                f"/api/learning/courses/{course_id}/units/{unit_id}/sections",
-                params={"include": "materials", "limit": 100, "offset": 0},
-            )
-    except Exception:
-        return {}
-    if resp.status_code != 200:
-        return {}
-    try:
-        payload = resp.json()
-    except Exception:
-        return {}
-    if not isinstance(payload, list):
-        return {}
-    out: dict[str, str] = {}
-    for entry in payload:
-        if not isinstance(entry, dict):
-            continue
-        section = entry.get("section")
-        if not isinstance(section, dict):
-            continue
-        section_id = str(section.get("id") or "")
-        if not _is_uuid_like(section_id):
-            continue
-        for material in (entry.get("materials") or []):
-            if not isinstance(material, dict):
-                continue
-            material_id = str(material.get("id") or "")
-            if _is_uuid_like(material_id):
-                out[material_id] = section_id
-    return out
 
 # --- Page Rendering Helpers -----------------------------------------------------
 
@@ -2322,7 +2106,6 @@ async def learning_unit_sections(request: Request, course_id: str, unit_id: str)
                         file_url_cache[cache_key] = _resolve_student_material_file_url(
                             student_sub=student_sub,
                             course_id=str(course_id),
-                            section_id=section_id,
                             material_id=mid,
                         )
                     preview_url = str(file_url_cache.get(cache_key) or "").strip()
@@ -2561,175 +2344,6 @@ async def learning_modular_unit_module_fragment(request: Request, course_id: str
         status_code=410,
         headers={"Cache-Control": "private, no-store"},
     )
-    if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id) and _is_uuid_like(module_id)):
-        return HTMLResponse("", status_code=400, headers={"Cache-Control": "private, no-store"})
-
-    payload: dict[str, Any] | None = None
-    try:
-        async with _internal_api_client() as client:
-            sid = _get_session_id(request) or ""
-            if sid:
-                client.cookies.set(SESSION_COOKIE_NAME, sid)
-            r = await client.get(
-                f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}",
-                params={"include": "materials,tasks"},
-            )
-        if r.status_code == 200 and isinstance(r.json(), dict):
-            payload = r.json()
-        else:
-            # Fail-closed: do not distinguish "locked" vs "missing".
-            return HTMLResponse(
-                '<p class="text-muted">Modul nicht verfügbar.</p>',
-                status_code=404,
-                headers={"Cache-Control": "private, no-store"},
-            )
-    except Exception:
-        return HTMLResponse(
-            '<p class="text-muted">Modul konnte nicht geladen werden.</p>',
-            status_code=503,
-            headers={"Cache-Control": "private, no-store"},
-        )
-
-    module = payload.get("module", {}) if isinstance(payload, dict) else {}
-    materials = payload.get("materials", []) if isinstance(payload, dict) else []
-    tasks = payload.get("tasks", []) if isinstance(payload, dict) else []
-
-    parts: list[str] = []
-    needs_h5p_player_js = False
-    student_sub = str((user or {}).get("sub") or "")
-    material_section_map: dict[str, str] | None = None
-    file_url_cache: dict[tuple[str, str], str | None] = {}
-    modular_file_url_cache: dict[tuple[str, str], str | None] = {}
-
-    # Render materials/tasks as the same cards used on the linear unit page.
-    for m in (materials if isinstance(materials, list) else []):
-        if not isinstance(m, dict):
-            continue
-        mid = str(m.get("id") or "")
-        title = str(m.get("title") or "Material")
-        kind = str(m.get("kind") or "")
-        preview_html = ""
-        if kind == "markdown":
-            preview_html = render_markdown_safe(str(m.get("body_md") or ""))
-        elif kind == "file":
-            mime = str(m.get("mime_type") or "").lower()
-            alt_text = str(m.get("alt_text") or "") or None
-            preview_url = str(m.get("file_url") or "").strip()
-            section_id = str(m.get("section_id") or "").strip()
-            if not preview_url and _is_uuid_like(mid) and student_sub:
-                if not _is_uuid_like(section_id):
-                    if material_section_map is None:
-                        material_section_map = await _fetch_student_material_section_map_for_unit(
-                            course_id=str(course_id),
-                            unit_id=str(unit_id),
-                            session_id=str(sid or ""),
-                        )
-                    section_id = str(material_section_map.get(mid) or "")
-                if _is_uuid_like(section_id):
-                    cache_key = (section_id, mid)
-                    if cache_key not in file_url_cache:
-                        file_url_cache[cache_key] = _resolve_student_material_file_url(
-                            student_sub=student_sub,
-                            course_id=str(course_id),
-                            section_id=section_id,
-                            material_id=mid,
-                        )
-                    preview_url = str(file_url_cache.get(cache_key) or "").strip()
-                if not preview_url and _is_uuid_like(module_id):
-                    modular_cache_key = (str(module_id), mid)
-                    if modular_cache_key not in modular_file_url_cache:
-                        modular_file_url_cache[modular_cache_key] = _resolve_student_modular_material_file_url(
-                            student_sub=student_sub,
-                            course_id=str(course_id),
-                            unit_id=str(unit_id),
-                            module_id=str(module_id),
-                            material_id=mid,
-                        )
-                    preview_url = str(modular_file_url_cache.get(modular_cache_key) or "").strip()
-            if mime and preview_url:
-                try:
-                    preview_html = FilePreview(
-                        url=preview_url,
-                        mime=mime,
-                        title=title,
-                        alt=alt_text,
-                        max_height="480px",
-                    ).render()
-                except Exception:
-                    preview_html = ""
-        card = MaterialCard(material_id=mid, title=title, preview_html=preview_html, is_open=True)
-        parts.append(card.render())
-
-    for t in (tasks if isinstance(tasks, list) else []):
-        if not isinstance(t, dict):
-            continue
-        tid = str(t.get("id") or "")
-        title = str(t.get("title") or "Aufgabe")
-        task_kind = str(t.get("kind") or "native")
-
-        if task_kind == "h5p":
-            needs_h5p_player_js = True
-            instruction_html = ""
-            content_id = ""
-            h5p_cfg = t.get("h5p") if isinstance(t.get("h5p"), dict) else {}
-            if isinstance(h5p_cfg, dict):
-                content_id = str(h5p_cfg.get("content_id") or "")
-            if not content_id:
-                form_html = '<p class="text-muted">Kein H5P-Inhalt verknüpft.</p>'
-            else:
-                form_html = (
-                    f'<div class="h5p-task-player" data-h5p-task-player="true" '
-                    f'data-course-id="{Component.escape(course_id)}" '
-                    f'data-task-id="{Component.escape(tid)}" '
-                    f'data-content-id="{Component.escape(content_id)}">'
-                    f'<p class="text-muted" data-h5p-status>Initialisiere H5P …</p>'
-                    "</div>"
-                )
-        else:
-            instruction_html = render_markdown_safe(str(t.get("instruction_md") or ""))
-            form_html = _build_task_submit_form_html(
-                course_id=course_id, unit_id=unit_id, task_id=tid, task_kind=task_kind
-            )
-
-        history_placeholder_html = ""
-        if task_kind != "h5p":
-            payload_json = _hx_vals_attr_payload({"open_attempt_id": ""})
-            history_placeholder_html = (
-                f'<section id="task-history-{Component.escape(tid)}" class="task-panel__history" '
-                f'data-pending="false" data-open-attempt-id="" '
-                f'hx-get="/learning/courses/{course_id}/tasks/{tid}/history" '
-                f'hx-trigger="load" hx-target="this" hx-swap="outerHTML" '
-                f'hx-vals="{payload_json}" '
-                'hx-on="toggle: window.gustav && window.gustav.handleHistoryToggle(event, this)">'
-                f'<div class="text-muted">Lade Verlauf …</div>'
-                f"</section>"
-            )
-        tcard = TaskCard(
-            task_id=tid,
-            title=title,
-            instruction_html=instruction_html,
-            history_entries=[],
-            history_placeholder_html=history_placeholder_html,
-            feedback_banner_html=None,
-            form_html=form_html,
-        )
-        parts.append(tcard.render())
-
-    inner = "\n".join(parts) if parts else "<p class=\"text-muted\">Noch keine Inhalte.</p>"
-    # We normally include the H5P player init script on the modular unit page.
-    # Keep this fragment robust when opened directly.
-    h5p_script = (
-        '<script type="module" src="/static/js/h5p_task_player.js?v=20260108"></script>'
-        if needs_h5p_player_js
-        else ""
-    )
-    html = (
-        f'<div class="modular-module" data-module-id="{Component.escape(str(module_id))}">'
-        f"{inner}"
-        f"{h5p_script}"
-        "</div>"
-    )
-    return HTMLResponse(content=html, headers={"Cache-Control": "private, no-store"})
 
 
 @app.post("/learning/courses/{course_id}/tasks/{task_id}/submit", response_class=HTMLResponse)

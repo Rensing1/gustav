@@ -312,7 +312,7 @@ async def test_learning_modular_module_content_happy_path_via_graph():
 
 @pytest.mark.anyio
 async def test_learning_modular_module_content_includes_file_preview_url_for_file_materials():
-    """Modular module content exposes preview URLs for visible file materials."""
+    """Modular module content exposes canonical file URLs for visible file materials."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -384,11 +384,105 @@ async def test_learning_modular_module_content_includes_file_preview_url_for_fil
             payload = r_content.json()
             material = payload["materials"][0]
             assert material["file_url"] == (
-                f"/api/learning/courses/{course_id}/sections/{section_id}/materials/{material['id']}/file"
+                f"/api/learning/courses/{course_id}/materials/{material['id']}/file"
                 "?disposition=inline"
             )
             assert "storage_key" not in material
     finally:
+        teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_learning_modular_material_file_url_streams_visible_material(monkeypatch: pytest.MonkeyPatch):
+    """A modular material `file_url` must stream successfully through the canonical route."""
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required")
+
+    main.SESSION_STORE = SessionStore()
+    teacher = main.SESSION_STORE.create(sub="t-mod-file-stream-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = main.SESSION_STORE.create(sub="s-mod-file-stream-1", name="Schüler", roles=["student"])  # type: ignore
+    original_adapter = teaching.STORAGE_ADAPTER
+    original_learning_adapter = learning.STORAGE_ADAPTER
+    try:
+        class _Adapter:
+            def presign_upload(self, *, bucket, key, expires_in, headers):
+                return {"url": "http://storage.local/upload", "headers": {}}
+
+            def head_object(self, *, bucket, key):
+                return {"content_length": 1024, "content_type": "application/pdf"}
+
+            def delete_object(self, *, bucket, key):
+                return None
+
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "https://storage.local/modular-material.pdf", "headers": {"authorization": "sig"}}
+
+        async def _fake_download(*, url, max_bytes, headers=None):  # noqa: ANN001
+            assert url == "https://storage.local/modular-material.pdf"
+            assert headers == {"authorization": "sig"}
+            assert max_bytes >= 1024
+            return b"%PDF-modular-material%"
+
+        teaching.set_storage_adapter(_Adapter())
+        learning.set_storage_adapter(_Adapter())
+        monkeypatch.setattr(learning, "_download_bytes_with_limit", _fake_download)
+
+        async with (await _client()) as c:
+            c.cookies.set("gustav_session", teacher.session_id)
+            course_id = await _create_course(c, "Kurs Modular File Stream")
+
+            r_unit = await c.post("/api/teaching/units", json={"title": "Unit Modular", "unit_type": "modular"})
+            assert r_unit.status_code == 201
+            unit_id = r_unit.json()["id"]
+
+            r_sec = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Modul 1"})
+            assert r_sec.status_code == 201
+            section_id = r_sec.json()["id"]
+
+            intent_resp = await c.post(
+                f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents",
+                json={"filename": "arbeitsblatt.pdf", "mime_type": "application/pdf", "size_bytes": 1024},
+            )
+            assert intent_resp.status_code == 200
+            intent = intent_resp.json()
+            finalize_resp = await c.post(
+                f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize",
+                json={"intent_id": intent["intent_id"], "title": "Arbeitsblatt PDF", "sha256": "f" * 64},
+            )
+            assert finalize_resp.status_code == 201
+
+            await _attach_unit(c, course_id, unit_id)
+            await _add_member(c, course_id, student.sub)
+
+            c.cookies.set("gustav_session", student.session_id)
+            r_graph = await c.get(f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph")
+            assert r_graph.status_code == 200
+            module_id = r_graph.json()["modules"][0]["id"]
+
+            r_content = await c.get(
+                f"/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}?include=materials"
+            )
+            assert r_content.status_code == 200
+            payload = r_content.json()
+            material = payload["materials"][0]
+
+            file_response = await c.get(material["file_url"], params={"disposition": "attachment"})
+            assert file_response.status_code == 200, file_response.text
+            assert file_response.content == b"%PDF-modular-material%"
+            assert file_response.headers.get("Cache-Control") == "private, no-store"
+            assert file_response.headers.get("Content-Type") == "application/pdf"
+            assert "attachment" in str(file_response.headers.get("Content-Disposition") or "")
+    finally:
+        learning.set_storage_adapter(original_learning_adapter)
         teaching.set_storage_adapter(original_adapter)
 
 

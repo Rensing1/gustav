@@ -2309,8 +2309,9 @@ components:
           format: uri
           nullable: true
           description: >-
-            Stable GUSTAV URL for inline preview/download of a visible file material.
-            The file response is authenticated and must not be cached.
+            Stable authenticated GUSTAV URL for a visible file material.
+            Student-facing payloads use the canonical material route; legacy
+            section-based routes may continue to work as compatibility aliases.
         alt_text:
           type: string
           nullable: true
@@ -5777,29 +5778,25 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '503':
-          description: Storage unavailable
+          description: Visibility lookup or storage unavailable
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
-  /api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file:
+  /api/learning/courses/{course_id}/materials/{material_id}/file:
     get:
       tags: [Learning]
       summary: Stream a learner-visible material file
       description: >-
-        Streams a released file material through GUSTAV for enrolled students.
-        This route provides a stable preview/download target instead of direct
-        storage-signed URLs in the learning payload.
-      operationId: streamLearningMaterialFile
+        Streams a visible file material through GUSTAV for enrolled students.
+        This is the canonical student-facing route used by learning payloads
+        and SSR previews instead of direct storage-signed URLs.
+      operationId: streamLearningMaterialFileCanonical
       security:
         - cookieAuth: []
       parameters:
         - in: path
           name: course_id
-          required: true
-          schema: { type: string, format: uuid }
-        - in: path
-          name: section_id
           required: true
           schema: { type: string, format: uuid }
         - in: path
@@ -5848,7 +5845,78 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '503':
-          description: Storage unavailable
+          description: Visibility lookup or storage unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file:
+    get:
+      tags: [Learning]
+      summary: Stream a learner-visible material file (legacy alias)
+      description: >-
+        Compatibility alias for the canonical material file route. The server
+        resolves student visibility from the material itself and only returns
+        `200` when the supplied `section_id` matches the visible material.
+      operationId: streamLearningMaterialFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: section_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: material_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: disposition
+          required: false
+          schema:
+            type: string
+            enum: [inline, attachment]
+          description: Desired `Content-Disposition`; defaults to `inline`.
+      responses:
+        '200':
+          description: File bytes streamed successfully
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached
+              schema: { type: string, example: private, no-store }
+            Content-Type:
+              description: MIME type of the visible material file
+              schema: { type: string }
+            Content-Disposition:
+              description: Inline preview or attachment download disposition
+              schema: { type: string }
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid input (invalid UUID or disposition)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403':
+          description: Forbidden (not authorized to view this material)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Material not found, not visible, or does not belong to the supplied section
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Visibility lookup or storage unavailable
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

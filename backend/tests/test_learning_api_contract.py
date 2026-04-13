@@ -416,7 +416,7 @@ async def test_sections_include_stable_file_url_for_released_file_materials():
         materials = payload[0]["materials"]
         file_material = next(item for item in materials if item["kind"] == "file")
         assert file_material["file_url"] == (
-            f"/api/learning/courses/{fixture.course_id}/sections/{fixture.section_id}/materials/{file_material['id']}/file"
+            f"/api/learning/courses/{fixture.course_id}/materials/{file_material['id']}/file"
             "?disposition=inline"
         )
         assert "storage_key" not in file_material
@@ -1047,7 +1047,7 @@ async def test_learning_submission_file_route_streams_owner_file(monkeypatch: py
 
 @pytest.mark.anyio
 async def test_learning_material_file_route_streams_released_material(monkeypatch: pytest.MonkeyPatch):
-    """Released learner materials should stream through a stable app route."""
+    """Released learner materials should stream through the canonical app route."""
 
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -1094,7 +1094,7 @@ async def test_learning_material_file_route_streams_released_material(monkeypatc
         async with (await _client()) as student_client:
             student_client.cookies.set("gustav_session", fixture.student_session_id)
             response = await student_client.get(
-                f"/api/learning/courses/{fixture.course_id}/sections/{fixture.section_id}/materials/{material['id']}/file",
+                f"/api/learning/courses/{fixture.course_id}/materials/{material['id']}/file",
                 params={"disposition": "attachment"},
             )
 
@@ -1106,6 +1106,119 @@ async def test_learning_material_file_route_streams_released_material(monkeypatc
     finally:
         learning.set_storage_adapter(original_learning_adapter)
         teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_learning_material_file_legacy_alias_requires_matching_section(monkeypatch: pytest.MonkeyPatch):
+    """Legacy alias route must stay fail-closed when section_id does not match the visible material."""
+
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+
+    fixture = await _prepare_learning_fixture(create_hidden_section=True)
+    assert fixture.hidden_section_id is not None
+    original_adapter = teaching.STORAGE_ADAPTER
+    original_learning_adapter = learning.STORAGE_ADAPTER
+    try:
+        class _Adapter:
+            def presign_upload(self, *, bucket, key, expires_in, headers):
+                return {"url": "http://storage.local/upload", "headers": {}}
+
+            def head_object(self, *, bucket, key):
+                return {"content_length": 1024, "content_type": "application/pdf"}
+
+            def delete_object(self, *, bucket, key):
+                return None
+
+            def presign_download(self, *, bucket, key, expires_in, disposition):
+                return {"url": "https://storage.local/material.pdf", "headers": {"authorization": "sig"}}
+
+        async def _fake_download(*, url, max_bytes, headers=None):  # noqa: ANN001
+            return b"%PDF-material%"
+
+        teaching.set_storage_adapter(_Adapter())
+        learning.set_storage_adapter(_Adapter())
+        monkeypatch.setattr(learning, "_download_bytes_with_limit", _fake_download)
+
+        async with (await _client()) as teacher_client:
+            teacher_client.cookies.set("gustav_session", fixture.teacher_session_id)
+            material = await _create_file_material(
+                teacher_client,
+                fixture.unit_id,
+                fixture.section_id,
+                title="Arbeitsblatt PDF",
+                filename="arbeitsblatt.pdf",
+                mime_type="application/pdf",
+                size_bytes=1024,
+            )
+
+        async with (await _client()) as student_client:
+            student_client.cookies.set("gustav_session", fixture.student_session_id)
+            response = await student_client.get(
+                f"/api/learning/courses/{fixture.course_id}/sections/{fixture.hidden_section_id}/materials/{material['id']}/file",
+                params={"disposition": "inline"},
+            )
+
+        assert response.status_code == 404, response.text
+    finally:
+        learning.set_storage_adapter(original_learning_adapter)
+        teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "path_template",
+    [
+        "/api/learning/courses/{course_id}/materials/{material_id}/file",
+        "/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file",
+    ],
+)
+async def test_learning_material_file_routes_return_503_when_visibility_lookup_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    path_template: str,
+):
+    """Visibility lookup failures must stay distinguishable from real 404 material misses."""
+
+    import routes.learning as learning  # noqa: E402
+
+    fixture = await _prepare_learning_fixture()
+
+    async def _unexpected_download(**kwargs):  # noqa: ANN001
+        raise AssertionError(f"material download should not start when lookup is unavailable: {kwargs}")
+
+    fake_repo_factory = lambda: type("_Repo", (), {"_dsn": ""})()
+    monkeypatch.setattr(learning, "_get_repo", fake_repo_factory)
+    monkeypatch.setattr(learning, "_download_storage_object_via_presign", _unexpected_download)
+
+    from fastapi.routing import APIRoute
+
+    for route in main.app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        if route.path not in {
+            "/api/learning/courses/{course_id}/materials/{material_id}/file",
+            "/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file",
+        }:
+            continue
+        monkeypatch.setitem(route.endpoint.__globals__, "_get_repo", fake_repo_factory)
+        monkeypatch.setitem(route.endpoint.__globals__, "_download_storage_object_via_presign", _unexpected_download)
+
+    async with (await _client()) as student_client:
+        student_client.cookies.set("gustav_session", fixture.student_session_id)
+        response = await student_client.get(
+            path_template.format(
+                course_id=fixture.course_id,
+                section_id=fixture.section_id,
+                material_id=fixture.material["id"],
+            ),
+            params={"disposition": "inline"},
+        )
+
+    assert response.status_code == 503, response.text
+    assert response.json() == {
+        "error": "service_unavailable",
+        "detail": "authorization_unavailable",
+    }
 
 
 @pytest.mark.anyio

@@ -2015,6 +2015,52 @@ def resolve_student_names(subs: list[str]) -> dict[str, str]:
         return {s: "Unbekannt" for s in subs}
 
 
+def resolve_live_student_names_by_sub(subs: list[str]) -> dict[str, str]:
+    """Resolve `/live` learner labels with person-name priority.
+
+    Why:
+        The live room should prefer a learner's first/last name, but still fall
+        back to a stable login-style localpart when profile data is incomplete.
+        The hot path must avoid fetching a fresh admin token for every single
+        learner lookup.
+    """
+    try:
+        from identity_access import directory  # type: ignore
+        return directory.resolve_live_student_names_by_sub(subs)  # type: ignore[attr-defined]
+    except Exception:
+        return _resolve_student_login_labels_runtime(subs)
+
+
+def _summary_snapshot_cursor(repo: Any) -> str | None:
+    """Return a DB-based live summary cursor when the teaching repo has a DSN.
+
+    Why:
+        The live dashboard seeds its next delta poll from the summary response.
+        Using the database clock avoids host/DB skew that could otherwise hide a
+        submission created right after the summary call. If the DB seed cannot be
+        read, the caller must fail closed instead of silently inventing a host
+        clock fallback.
+    """
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        if not isinstance(repo, DBTeachingRepo):
+            return None
+        dsn = getattr(repo, "_dsn", None)
+        if not dsn:
+            return None
+        import psycopg  # type: ignore
+
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select statement_timestamp()")
+                row = cur.fetchone()
+        if row and row[0] is not None:
+            return row[0].astimezone(timezone.utc).isoformat(timespec="microseconds")
+    except Exception:
+        return None
+    return None
+
+
 def _resolve_student_names_runtime(subs: list[str]) -> dict[str, str]:
     """Resolve student names via the currently active Teaching module."""
 
@@ -2033,6 +2079,16 @@ def _resolve_student_login_labels_runtime(subs: list[str]) -> dict[str, str]:
     if not callable(resolver) or resolver is _resolve_student_login_labels_runtime:
         resolver = resolve_student_login_labels_by_sub
     return resolver(subs)
+
+
+def _summary_snapshot_cursor_runtime(repo: Any) -> str | None:
+    """Resolve the active live summary cursor helper from the current module."""
+
+    module = _current_teaching_module()
+    resolver = getattr(module, "_summary_snapshot_cursor", None) if module is not None else None
+    if not callable(resolver) or resolver is _summary_snapshot_cursor_runtime:
+        resolver = _summary_snapshot_cursor
+    return resolver(repo)
 
 
 def _guard_course_owner_runtime(course_id: str, owner_sub: str):
@@ -5619,6 +5675,13 @@ async def get_unit_live_summary(
         modules = []
     if str(unit_id) not in {str(m.get("unit_id")) for m in modules}:
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+    snapshot_cursor = _summary_snapshot_cursor_runtime(repo)
+    if not snapshot_cursor:
+        return _private_error(
+            {"error": "service_unavailable", "detail": "summary_cursor_unavailable"},
+            status_code=503,
+            vary_origin=True,
+        )
 
     # Build task list across the unit in position order
     tasks: list[dict] = []
@@ -5667,7 +5730,7 @@ async def get_unit_live_summary(
         except Exception:
             roster = []
         member_subs = [sid for sid, _ in roster]
-        names = _resolve_student_login_labels_runtime(member_subs)
+        names = await asyncio.to_thread(resolve_live_student_names_by_sub, member_subs)
 
         has_map: set[tuple[str, str]] = set()
         avg_map: dict[tuple[str, str], float | None] = {}
@@ -5867,7 +5930,11 @@ async def get_unit_live_summary(
             }
             rows_out.append(row)
 
-    payload = {"tasks": tasks, "rows": rows_out}
+    payload = {
+        "cursor": snapshot_cursor,
+        "tasks": tasks,
+        "rows": rows_out,
+    }
     # private + Vary: Origin per contract
     return _json_private(payload, status_code=200, vary_origin=True)
 

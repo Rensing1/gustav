@@ -14,14 +14,64 @@ Security:
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, List
 import re
 import os
 import logging
+import threading
+import time
 import requests
 from identity_access.domain import ALLOWED_ROLES
 
 logger = logging.getLogger(__name__)
+_LIVE_STUDENT_NAME_CACHE_TTL_SECONDS = 30.0
+_LIVE_STUDENT_NAME_CACHE_MAX_ENTRIES = 512
+_LIVE_STUDENT_NAME_CACHE: Dict[str, tuple[float, str]] = {}
+_LIVE_STUDENT_NAME_CACHE_LOCK = threading.RLock()
+
+
+def _prune_live_student_name_cache(*, now: float | None = None) -> None:
+    """Remove expired labels and cap the tiny `/live` name cache."""
+    current = time.monotonic() if now is None else now
+    with _LIVE_STUDENT_NAME_CACHE_LOCK:
+        expired = [
+            sid
+            for sid, cached in _LIVE_STUDENT_NAME_CACHE.items()
+            if current >= float(cached[0])
+        ]
+        for sid in expired:
+            _LIVE_STUDENT_NAME_CACHE.pop(sid, None)
+
+        while len(_LIVE_STUDENT_NAME_CACHE) > _LIVE_STUDENT_NAME_CACHE_MAX_ENTRIES:
+            oldest_sid = next(iter(_LIVE_STUDENT_NAME_CACHE))
+            _LIVE_STUDENT_NAME_CACHE.pop(oldest_sid, None)
+
+
+def _get_live_student_name_cache(sub: str, *, now: float | None = None) -> str | None:
+    """Return a cached `/live` label when it is still fresh."""
+    current = time.monotonic() if now is None else now
+    with _LIVE_STUDENT_NAME_CACHE_LOCK:
+        _prune_live_student_name_cache(now=current)
+        cached = _LIVE_STUDENT_NAME_CACHE.get(sub)
+        if not cached:
+            return None
+        expires_at, label = cached
+        if current >= float(expires_at):
+            _LIVE_STUDENT_NAME_CACHE.pop(sub, None)
+            return None
+        return str(label)
+
+
+def _set_live_student_name_cache(sub: str, label: str, *, now: float | None = None) -> None:
+    """Store one `/live` label with TTL and deterministic oldest-entry eviction."""
+    current = time.monotonic() if now is None else now
+    with _LIVE_STUDENT_NAME_CACHE_LOCK:
+        _prune_live_student_name_cache(now=current)
+        if sub in _LIVE_STUDENT_NAME_CACHE:
+            _LIVE_STUDENT_NAME_CACHE.pop(sub, None)
+        _LIVE_STUDENT_NAME_CACHE[sub] = (current + _LIVE_STUDENT_NAME_CACHE_TTL_SECONDS, label)
+        _prune_live_student_name_cache(now=current)
 
 
 class _KC:
@@ -452,6 +502,85 @@ def resolve_student_login_labels_by_sub(subs: List[str]) -> Dict[str, str]:
             out[sid] = label if label else "Unbekannt"
         except Exception:
             out[sid] = "Unbekannt"
+    return out
+
+
+def resolve_live_student_names_by_sub(subs: List[str]) -> Dict[str, str]:
+    """Resolve `/live` learner labels with person-name priority and tiny TTL cache.
+
+    Why:
+        The live teacher room polls frequently. We prefer real person names when
+        the directory has them, but we must not re-fetch the same Keycloak user
+        on every poll tick.
+
+    Parameters:
+        subs: Stable learner subjects that appear in the live roster.
+
+    Behavior:
+        - Reuses one admin token for all uncached lookups in this call.
+        - Performs uncached Keycloak requests in parallel to keep the hot path
+          short for larger rosters.
+        - Commits cache entries in the original roster order so eviction stays
+          deterministic even when worker threads finish out of order.
+
+    Permissions:
+        Caller must run server-side with access to the Keycloak admin client.
+    """
+    out: Dict[str, str] = {}
+    now = time.monotonic()
+    unique_subs = list(dict.fromkeys(str(sid or "").strip() for sid in subs if str(sid or "").strip()))
+    unresolved: List[str] = []
+
+    for sid in unique_subs:
+        cached_label = _get_live_student_name_cache(sid, now=now)
+        if cached_label:
+            out[sid] = cached_label
+            continue
+        unresolved.append(sid)
+
+    if not unresolved:
+        return out
+
+    kc = _KC()
+    token = kc.token()
+    ca = os.getenv("KEYCLOAK_CA_BUNDLE")
+    verify_opt = ca if ca else True
+    max_workers = min(len(unresolved), _int_env_clamped("LIVE_STUDENT_NAME_LOOKUP_WORKERS", 4, 1, 16))
+
+    def _resolve_one(sid: str) -> tuple[str, str]:
+        label = ""
+        try:
+            url = f"{kc.base_url}/admin/realms/{kc.realm}/users/{sid}"
+            r = requests.get(url, headers=kc.hdr(token), timeout=10, verify=verify_opt, allow_redirects=False)
+            if r.status_code != 404:
+                r.raise_for_status()
+                u = r.json() or {}
+                first = str(u.get("firstName") or "").strip()
+                last = str(u.get("lastName") or "").strip()
+                if first or last:
+                    label = " ".join(part for part in (first, last) if part).strip()
+                if not label:
+                    label = _login_label(u)
+        except Exception:
+            label = ""
+        if label and label != "Unbekannt":
+            return sid, label
+
+        label = localpart_identifier(sid) or "Unbekannt"
+        return sid, label
+
+    resolved_labels: Dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures_by_sid = {sid: executor.submit(_resolve_one, sid) for sid in unresolved}
+        for future in as_completed(list(futures_by_sid.values())):
+            sid, label = future.result()
+            resolved_labels[sid] = label
+
+    # Preserve roster order for deterministic cache eviction and stable output.
+    for sid in unresolved:
+        label = resolved_labels[sid]
+        _set_live_student_name_cache(sid, label, now=now)
+        out[sid] = label
     return out
 
 

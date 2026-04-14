@@ -8,6 +8,7 @@ Why:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import inspect
 from datetime import datetime, timedelta, timezone
@@ -1829,6 +1830,30 @@ def _live_task_meta_by_id(tasks: list[dict[str, object]]) -> dict[str, dict[str,
     return out
 
 
+def _live_dashboard_localpart_identifier(*values: object) -> str:
+    """Return a stable localpart-style fallback for live dashboard labels."""
+    for candidate in values:
+        raw = str(candidate or "").strip()
+        if not raw:
+            continue
+        try:
+            from identity_access import directory  # type: ignore
+
+            extractor = getattr(directory, "localpart_identifier", None)
+            if callable(extractor):
+                localpart = str(extractor(raw) or "").strip()
+                if localpart:
+                    return localpart
+        except Exception:
+            pass
+        normalized = raw.split(":", 1)[1].strip() if raw.startswith("legacy-email:") else raw
+        if "@" in normalized:
+            localpart = normalized.split("@", 1)[0].strip()
+            if localpart:
+                return localpart
+    return ""
+
+
 @app_router.get("/api/live/views/courses/{course_id}/units/{unit_id}/dashboard")
 async def get_live_unit_dashboard(
     request: Request,
@@ -1873,7 +1898,6 @@ async def get_live_unit_dashboard(
     tasks = data.get("tasks") if isinstance(data.get("tasks"), list) else []
     rows_in = data.get("rows") if isinstance(data.get("rows"), list) else []
     task_meta = _live_task_meta_by_id([task for task in tasks if isinstance(task, dict)])
-
     rows: list[dict[str, object]] = []
     selected_student_panel: dict[str, object] | None = None
     row_average_values: list[float | None] = []
@@ -1885,7 +1909,11 @@ async def get_live_unit_dashboard(
             continue
         student = row.get("student") if isinstance(row.get("student"), dict) else {}
         current_student_sub = str(student.get("sub") or "")
-        student_name = str(student.get("name") or current_student_sub)
+        student_name = str(
+            student.get("name")
+            or _live_dashboard_localpart_identifier(current_student_sub)
+            or "Unbekannt"
+        )
         row_cells = [cell for cell in (row.get("tasks") or []) if isinstance(cell, dict)]
         total_cells += len(row_cells)
         submitted_count = sum(1 for cell in row_cells if bool(cell.get("has_submission")))
@@ -2037,7 +2065,7 @@ async def get_live_detail_sheet(request: Request, course_id: str, unit_id: str, 
         return detail_response
 
     submission = _decode_json_response_body(detail_response) if status_code == 200 else None
-    learner_names = teaching_routes.resolve_student_login_labels_by_sub([student_sub])
+    learner_names = await asyncio.to_thread(teaching_routes.resolve_live_student_names_by_sub, [student_sub])
     learner_name = str(learner_names.get(student_sub, student_sub))
 
     body = {

@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
 import pytest
 import psycopg
 from psycopg import errors as psy_errors
@@ -196,6 +197,7 @@ async def test_summary_happy_path_minimal_status_matrix_and_headers():
         assert r.headers.get("Cache-Control") == "private, no-store"
         assert r.headers.get("Vary") == "Origin"
         body = r.json()
+        assert isinstance(body.get("cursor"), str) and body["cursor"]
         assert sorted([t["id"] for t in body["tasks"]]) == sorted([t1["id"], t2["id"]])
         assert len(body["rows"]) == 2
         # Map by student sub for easier checks
@@ -210,6 +212,123 @@ async def test_summary_happy_path_minimal_status_matrix_and_headers():
         s2_cells = {c["task_id"]: c for c in rows[s2.sub]["tasks"]}
         assert s2_cells[t1["id"]]["has_submission"] is False
         assert s2_cells[t2["id"]]["has_submission"] is False
+
+
+@pytest.mark.anyio
+async def test_summary_cursor_can_seed_delta_for_new_changes_even_when_host_clock_is_ahead(monkeypatch):
+    """The summary cursor must not jump ahead of later DB-visible submission changes.
+
+    Why:
+        The live room seeds its polling cursor from the summary response. If that
+        cursor comes from an ahead-of-time host clock instead of the same DB
+        snapshot, a submission created right after the summary can disappear from
+        the next delta poll.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for live summary cursor regression")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-live-cursor-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = main.SESSION_STORE.create(sub="s-live-cursor-learner", name="Student", roles=["student"])  # type: ignore
+
+    async with (await _client()) as owner_client, (await _client()) as student_client:
+        owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        student_client.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        course_id = await _create_course(owner_client, "Cursor Kurs")
+        unit = await _create_unit(owner_client, "Cursor Einheit")
+        section = await _create_section(owner_client, unit["id"], "Abschnitt")
+        task = await _create_task(owner_client, unit["id"], section["id"], "### Aufgabe")
+        module = await _attach_unit(owner_client, course_id, unit["id"])
+        await _add_member(owner_client, course_id, learner.sub)
+        release = await owner_client.patch(
+            f"/api/teaching/courses/{course_id}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert release.status_code == 200
+
+        real_datetime = teaching.datetime
+
+        class _AheadDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                actual = real_datetime.now(tz or timezone.utc)
+                if tz is None:
+                    actual = actual.astimezone(timezone.utc).replace(tzinfo=None)
+                return actual + timedelta(minutes=5)
+
+        monkeypatch.setattr(teaching, "datetime", _AheadDateTime)
+        summary_response = await owner_client.get(
+            f"/api/teaching/courses/{course_id}/units/{unit['id']}/submissions/summary"
+        )
+        monkeypatch.setattr(teaching, "datetime", real_datetime)
+        assert summary_response.status_code == 200
+        summary_cursor = summary_response.json()["cursor"]
+
+        submit_response = await student_client.post(
+            f"/api/learning/courses/{course_id}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Antwort nach Summary"},
+        )
+        assert submit_response.status_code in (200, 201, 202)
+
+        delta_response = await owner_client.get(
+            f"/api/teaching/courses/{course_id}/units/{unit['id']}/submissions/delta",
+            params={"updated_since": summary_cursor},
+        )
+        assert delta_response.status_code == 200
+        cells = delta_response.json()["cells"]
+        assert any(cell["student_sub"] == learner.sub and cell["task_id"] == task["id"] for cell in cells)
+
+
+@pytest.mark.anyio
+async def test_summary_returns_503_when_db_cursor_seed_is_unavailable(monkeypatch):
+    """The live summary must fail closed when it cannot derive the DB cursor seed.
+
+    Why:
+        OpenAPI and the live polling docs define the summary cursor as a
+        database-based seed. Returning a host-clock fallback would silently
+        weaken that contract and reintroduce clock-skew risk.
+    """
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import routes.learning as learning  # noqa: E402
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for live summary cursor failure test")
+
+    main.SESSION_STORE = SessionStore()
+    owner = main.SESSION_STORE.create(sub="t-live-cursor-503-owner", name="Owner", roles=["teacher"])  # type: ignore
+
+    async with (await _client()) as c:
+        c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        course_id = await _create_course(c, "Cursor 503 Kurs")
+        unit = await _create_unit(c, "Cursor 503 Einheit")
+        await _attach_unit(c, course_id, unit["id"])
+
+        monkeypatch.setattr(teaching, "_summary_snapshot_cursor", lambda _repo: None)
+
+        response = await c.get(
+            f"/api/teaching/courses/{course_id}/units/{unit['id']}/submissions/summary"
+        )
+        assert response.status_code == 503
+        assert response.headers.get("Cache-Control") == "private, no-store"
+        assert response.headers.get("Vary") == "Origin"
+        assert response.json() == {
+            "error": "service_unavailable",
+            "detail": "summary_cursor_unavailable",
+        }
 
 
 @pytest.mark.anyio

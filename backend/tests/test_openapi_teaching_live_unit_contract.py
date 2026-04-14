@@ -26,11 +26,20 @@ def test_openapi_has_unit_live_summary_path_and_cache_header():
     # Basic response shape
     schema = resp200["content"]["application/json"]["schema"]
     assert schema["type"] == "object"
-    assert set(schema["required"]) >= {"tasks", "rows"}
+    assert set(schema["required"]) >= {"tasks", "rows", "cursor"}
     # Task list in the summary must include the task kind so UIs can render
     # H5P cells differently from native/visual tasks.
     task_items = schema["properties"]["tasks"]["items"]
     assert "kind" in task_items.get("required", []), "summary tasks must include kind"
+    assert schema["properties"]["cursor"]["type"] == "string"
+    assert schema["properties"]["cursor"]["format"] == "date-time"
+    cursor_description = schema["properties"]["cursor"]["description"]
+    assert "database clock" in cursor_description
+    assert "host/database skew" in cursor_description
+    assert "same database snapshot" not in cursor_description
+    resp503 = op["responses"]["503"]
+    assert "summary_cursor_unavailable" in resp503["description"]
+    assert "Cache-Control" in resp503.get("headers", {})
 
 
 def test_openapi_has_unit_live_delta_path():

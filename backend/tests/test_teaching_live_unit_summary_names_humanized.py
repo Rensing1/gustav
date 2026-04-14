@@ -1,5 +1,5 @@
 """
-Teaching API — Summary returns login-style localparts for live teacher views.
+Teaching API — Live summary prefers person names and falls back safely.
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 
 @pytest.mark.anyio
-async def test_summary_returns_login_localparts(monkeypatch):
+async def test_summary_prefers_person_names_and_uses_localpart_only_as_fallback(monkeypatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     try:
@@ -62,14 +62,14 @@ async def test_summary_returns_login_localparts(monkeypatch):
     except Exception:
         pytest.skip("DB-backed TeachingRepo required")
 
-    def _fake_dir_resolve(subs: list[str]) -> dict[str, str]:
-        m = {}
-        for i, sid in enumerate(subs):
-            m[sid] = "legacy-email:raphael.fournell" if i == 0 else "alice@example.com"
-        return m
+    def _fake_live_resolve(subs: list[str]) -> dict[str, str]:
+        return {
+            str(subs[0]): "Lena Beispiel",
+            str(subs[1]): "alice",
+        }
 
     import identity_access.directory as dir_mod  # type: ignore
-    monkeypatch.setattr(dir_mod, "resolve_student_login_labels_by_sub", _fake_dir_resolve)
+    monkeypatch.setattr(dir_mod, "resolve_live_student_names_by_sub", _fake_live_resolve)
 
     main.SESSION_STORE = SessionStore()
     owner = main.SESSION_STORE.create(sub="t-humanize-owner", name="Owner", roles=["teacher"])  # type: ignore
@@ -93,8 +93,7 @@ async def test_summary_returns_login_localparts(monkeypatch):
         rows = body.get("rows") or []
         assert rows, "expected rows with members"
         names = [row["student"]["name"] for row in rows]
-        # Must not include raw emails or legacy prefixes.
+        assert "Lena Beispiel" in names
+        assert "alice" in names
         assert not any(n.startswith("legacy-email:") for n in names)
         assert not any("@" in n for n in names)
-        assert "raphael.fournell" in names
-        assert "alice" in names

@@ -56,6 +56,11 @@ def _prune_external_wiring_env_by_default() -> None:
         "SUPABASE_SERVICE_ROLE_KEY",
     ):
         os.environ.pop(var, None)
+    for var in (
+        "KC_BASE_URL",
+        "KC_PUBLIC_BASE_URL",
+    ):
+        os.environ.pop(var, None)
 
 
 _guard_against_prod_env_during_pytest()

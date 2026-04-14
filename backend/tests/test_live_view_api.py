@@ -152,7 +152,7 @@ async def test_live_detail_sheet_returns_selected_submission(monkeypatch: pytest
     )
     monkeypatch.setattr(
         app_routes.teaching_routes,
-        "resolve_student_login_labels_by_sub",
+        "resolve_live_student_names_by_sub",
         lambda subs: {"student-1": "Anna"},
     )
     monkeypatch.setattr(
@@ -277,9 +277,15 @@ async def test_live_dashboard_returns_rows_summary_and_selected_panel(monkeypatc
         ),
     )
     monkeypatch.setattr(
-        app_routes.teaching_routes,
-        "resolve_student_login_labels_by_sub",
-        lambda subs: {"student-1": "Anna", "student-2": "Ben"},
+        app_routes.AdminClient,
+        "get_user",
+        lambda self, user_id: {
+            "id": user_id,
+            "firstName": "Anna" if user_id == "student-1" else "Ben",
+            "lastName": "",
+            "email": f"{user_id}@example.com",
+            "username": f"{user_id}@example.com",
+        },
     )
     monkeypatch.setattr(
         app_routes.teaching_routes,
@@ -451,7 +457,7 @@ async def test_live_dashboard_uses_explicit_task_selection_for_panel_detail(monk
     )
     monkeypatch.setattr(
         app_routes.teaching_routes,
-        "resolve_student_login_labels_by_sub",
+        "resolve_live_student_names_by_sub",
         lambda subs: {"student-1": "Anna"},
     )
     monkeypatch.setattr(
@@ -484,6 +490,106 @@ async def test_live_dashboard_uses_explicit_task_selection_for_panel_detail(monk
     assert response.status_code == 200
     assert response.json()["selected_student_panel"]["selected_task_id"] == "task-1"
     assert response.json()["selected_student_panel"]["selected_task_detail"]["task_id"] == "task-1"
+
+
+@pytest.mark.anyio
+async def test_live_detail_sheet_prefers_first_and_last_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(
+        app_routes,
+        "_get_teacher_course",
+        lambda course_id, owner_sub: {"id": course_id, "title": "Mathe 9b"},
+    )
+    monkeypatch.setattr(
+        app_routes,
+        "_list_teacher_course_units",
+        lambda course_id, owner_sub: [{"id": "unit-1", "title": "Brueche", "position": 1}],
+    )
+    monkeypatch.setattr(
+        app_routes.teaching_routes,
+        "get_latest_submission_detail",
+        lambda request, course_id, unit_id, task_id, student_sub: _json_response(
+            {
+                "id": "submission-1",
+                "task_id": task_id,
+                "student_sub": student_sub,
+                "instruction_md": "### Aufgabe 1",
+                "created_at": "2026-03-23T10:00:00+00:00",
+                "completed_at": "2026-03-23T10:01:00+00:00",
+                "kind": "text",
+                "text_body": "Meine Antwort",
+                "feedback_md": "Kurzfeedback",
+                "files": [],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        app_routes.teaching_routes,
+        "resolve_live_student_names_by_sub",
+        lambda subs: {"student-1": "Anna Adler"},
+    )
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-live", roles=["teacher"], name="Ada")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/live/views/courses/course-1/units/unit-1/detail-sheet",
+            params={"student_sub": "student-1", "task_id": "task-1"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["student"]["name"] == "Anna Adler"
+
+
+@pytest.mark.anyio
+async def test_live_detail_sheet_falls_back_to_localpart_when_names_are_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(
+        app_routes,
+        "_get_teacher_course",
+        lambda course_id, owner_sub: {"id": course_id, "title": "Mathe 9b"},
+    )
+    monkeypatch.setattr(
+        app_routes,
+        "_list_teacher_course_units",
+        lambda course_id, owner_sub: [{"id": "unit-1", "title": "Brueche", "position": 1}],
+    )
+    monkeypatch.setattr(
+        app_routes.teaching_routes,
+        "get_latest_submission_detail",
+        lambda request, course_id, unit_id, task_id, student_sub: _json_response(
+            {
+                "id": "submission-1",
+                "task_id": task_id,
+                "student_sub": student_sub,
+                "instruction_md": "### Aufgabe 1",
+                "created_at": "2026-03-23T10:00:00+00:00",
+                "completed_at": "2026-03-23T10:01:00+00:00",
+                "kind": "text",
+                "text_body": "Meine Antwort",
+                "feedback_md": "Kurzfeedback",
+                "files": [],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        app_routes.teaching_routes,
+        "resolve_live_student_names_by_sub",
+        lambda subs: {"student-1": "anna.adler"},
+    )
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-live", roles=["teacher"], name="Ada")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/live/views/courses/course-1/units/unit-1/detail-sheet",
+            params={"student_sub": "student-1", "task_id": "task-1"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["student"]["name"] == "anna.adler"
 
 
 @pytest.mark.anyio
@@ -553,7 +659,7 @@ async def test_live_detail_sheet_returns_no_content_state(monkeypatch: pytest.Mo
     )
     monkeypatch.setattr(
         app_routes.teaching_routes,
-        "resolve_student_login_labels_by_sub",
+        "resolve_live_student_names_by_sub",
         lambda subs: {"student-1": "Anna"},
     )
     monkeypatch.setattr(

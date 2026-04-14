@@ -142,6 +142,7 @@ export type LearningUnitPageData = {
   sections: LearningSection[];
   graph: LearningUnitGraph | null;
   activeModule: LearningModuleContent | null;
+  initialView: "overview" | "content";
   historyTaskId: string | null;
   history: LearningSubmission[];
   submittedTaskId: string | null;

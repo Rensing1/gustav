@@ -179,7 +179,7 @@ describe("LearningUnitContentWorkspace", () => {
 
     expect(screen.getByText("Was tut die Europäische Union für mich?")).toBeInTheDocument();
     expect(screen.getAllByText("Aufgabe 1").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Bearbeitung schließen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
     expect(container.querySelectorAll(".learning-work-item")).toHaveLength(3);
   });
 

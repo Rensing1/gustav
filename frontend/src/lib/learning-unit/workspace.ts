@@ -44,6 +44,21 @@ export type ContentGroup = {
   items: LearningContentItem[];
 };
 
+export type LearningUnitViewState = "overview" | "content";
+
+export type ModularWorkspaceSnapshot = {
+  view: LearningUnitViewState;
+  openTabs: string[];
+  activeTab: string | null;
+};
+
+export type ModularWorkspaceReconciliationInput = {
+  moduleOrder: string[];
+  openableModuleIds: Set<string>;
+  requestedView: LearningUnitViewState;
+  requestedModuleId: string | null;
+};
+
 export function emptyPaneStacks(): PaneStacks {
   return {
     left: [],
@@ -319,6 +334,45 @@ export function contentGroupsForSections(sections: LearningSection[]): ContentGr
 
 export function flattenContentGroups(groups: ContentGroup[]): LearningContentItem[] {
   return groups.flatMap((group) => group.items);
+}
+
+export function reconcileModularWorkspaceState(
+  workspace: ModularWorkspaceSnapshot,
+  input: ModularWorkspaceReconciliationInput
+): ModularWorkspaceSnapshot {
+  const allowed = input.openableModuleIds;
+  const orderedOpenTabs = input.moduleOrder.filter((moduleId) =>
+    workspace.openTabs.includes(moduleId) && allowed.has(moduleId)
+  );
+
+  const requestedModuleId =
+    input.requestedModuleId && allowed.has(input.requestedModuleId) ? input.requestedModuleId : null;
+  const activeTab =
+    requestedModuleId
+    ?? (workspace.activeTab && orderedOpenTabs.includes(workspace.activeTab) ? workspace.activeTab : orderedOpenTabs[0] ?? null);
+
+  if (input.requestedView === "overview") {
+    return {
+      view: "overview",
+      openTabs: orderedOpenTabs,
+      activeTab
+    };
+  }
+
+  if (!activeTab) {
+    return {
+      view: "overview",
+      openTabs: orderedOpenTabs,
+      activeTab: null
+    };
+  }
+
+  const openTabs = orderedOpenTabs.includes(activeTab) ? orderedOpenTabs : [...orderedOpenTabs, activeTab];
+  return {
+    view: "content",
+    openTabs,
+    activeTab
+  };
 }
 
 export function filterPaneStacks(stacks: PaneStacks, allowedKeys: Set<string>): PaneStacks {

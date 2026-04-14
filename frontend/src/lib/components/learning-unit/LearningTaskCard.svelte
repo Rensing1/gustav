@@ -34,7 +34,8 @@
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
     onExitSubmissionWorkspace = null,
-    onSubmitUploadFeedback = null
+    onSubmitUploadFeedback = null,
+    onProgressPersisted = null
   }: {
     courseId: string;
     task: LearningTask;
@@ -67,6 +68,7 @@
       file: File;
       moduleId: string | null;
     }) => void | Promise<void>) | null;
+    onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
 
   type SummaryTab = "submission" | "feedback" | "evaluation";
@@ -535,7 +537,7 @@
 
             {#if task.kind === "h5p"}
               {#if task.h5p?.content_id}
-                <H5PTaskPlayer {courseId} taskId={task.id} contentId={task.h5p.content_id} />
+                <H5PTaskPlayer {courseId} taskId={task.id} contentId={task.h5p.content_id} {onProgressPersisted} />
               {:else}
                 <p class="workspace-note">Diese H5P-Aufgabe ist noch nicht bereit.</p>
               {/if}

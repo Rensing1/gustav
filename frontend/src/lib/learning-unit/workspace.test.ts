@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   emptyReviewFocus,
   emptySubmissionFocus,
+  reconcileModularWorkspaceState,
   reopenMaterialEntries,
   setPaneReviewFocus,
   togglePaneReviewFocus,
   togglePaneSubmissionFocus,
   type LearningContentItem,
+  type LearningUnitViewState,
+  type ModularWorkspaceSnapshot,
   type PaneStackEntry
 } from "./workspace";
 
@@ -115,5 +118,68 @@ describe("workspace helpers", () => {
 
     expect(closed.reviewFocus.left).toBeNull();
     expect(closed.submissionFocus.left).toEqual({ itemKey: null, mode: null });
+  });
+
+  it("drops locked modules from the modular workspace and falls back to overview when no tab survives", () => {
+    const workspace: ModularWorkspaceSnapshot = {
+      view: "content",
+      openTabs: ["module-a", "module-b"],
+      activeTab: "module-b"
+    };
+
+    expect(
+      reconcileModularWorkspaceState(workspace, {
+        moduleOrder: ["module-a", "module-b", "module-c"],
+        openableModuleIds: new Set(["module-c"]),
+        requestedView: "content",
+        requestedModuleId: "module-b"
+      })
+    ).toEqual({
+      view: "overview",
+      openTabs: [],
+      activeTab: null
+    });
+  });
+
+  it("keeps content view when the requested module remains openable and orders tabs by graph order", () => {
+    const workspace: ModularWorkspaceSnapshot = {
+      view: "content",
+      openTabs: ["module-b", "module-a"],
+      activeTab: "module-b"
+    };
+
+    expect(
+      reconcileModularWorkspaceState(workspace, {
+        moduleOrder: ["module-a", "module-b", "module-c"],
+        openableModuleIds: new Set(["module-a", "module-b", "module-c"]),
+        requestedView: "content",
+        requestedModuleId: "module-b"
+      })
+    ).toEqual({
+      view: "content",
+      openTabs: ["module-a", "module-b"],
+      activeTab: "module-b"
+    });
+  });
+
+  it("prioritizes an explicit overview request over stale local content state", () => {
+    const workspace: ModularWorkspaceSnapshot = {
+      view: "content",
+      openTabs: ["module-a"],
+      activeTab: "module-a"
+    };
+
+    expect(
+      reconcileModularWorkspaceState(workspace, {
+        moduleOrder: ["module-a"],
+        openableModuleIds: new Set(["module-a"]),
+        requestedView: "overview",
+        requestedModuleId: null
+      })
+    ).toEqual({
+      view: "overview",
+      openTabs: ["module-a"],
+      activeTab: "module-a"
+    });
   });
 });

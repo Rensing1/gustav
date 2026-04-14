@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/svelte";
+import { render, screen, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import H5PTaskPlayer from "./H5PTaskPlayer.svelte";
 
@@ -19,6 +19,10 @@ vi.mock("$lib/runtime/h5p-webcomponents", () => ({
 }));
 
 describe("H5PTaskPlayer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("creates a fresh player when remounted with another task", async () => {
     const first = render(H5PTaskPlayer, {
       props: {
@@ -48,5 +52,50 @@ describe("H5PTaskPlayer", () => {
     await Promise.resolve();
     expect(document.querySelectorAll("h5p-player")).toHaveLength(1);
     expect(document.querySelector("h5p-player")?.getAttribute("content-id")).toBe("content-b");
+  });
+
+  it("notifies the workspace after a persisted scored attempt", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "submission-1" }), {
+      status: 201,
+      headers: { "content-type": "application/json" }
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onProgressPersisted = vi.fn();
+
+    render(H5PTaskPlayer, {
+      props: {
+        courseId: "course-1",
+        taskId: "task-a",
+        contentId: "content-a",
+        onProgressPersisted
+      }
+    });
+
+    await tick();
+    await Promise.resolve();
+
+    const player = document.querySelector("h5p-player");
+    expect(player).not.toBeNull();
+
+    player?.dispatchEvent(
+      new CustomEvent("xAPI", {
+        detail: {
+          statement: {
+            id: "statement-1",
+            verb: { id: "https://adlnet.gov/expapi/verbs/completed" },
+            result: {
+              completion: true,
+              score: { raw: 4, max: 4 }
+            }
+          }
+        }
+      })
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(onProgressPersisted).toHaveBeenCalledTimes(1);
+    });
   });
 });

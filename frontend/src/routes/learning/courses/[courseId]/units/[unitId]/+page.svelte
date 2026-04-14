@@ -18,8 +18,11 @@
     emptyReviewFocus,
     emptySubmissionFocus,
     flattenContentGroups,
+    type LearningUnitViewState,
+    type ModularWorkspaceSnapshot,
     normalizePaneStacks,
     orderedOpenModules,
+    reconcileModularWorkspaceState,
     reconcilePaneStacks,
     reopenMaterialEntries,
     setPaneReviewFocus,
@@ -40,15 +43,15 @@
     LearningSubmission,
     LearningModuleContent,
     LearningTask,
+    LearningUnitGraph,
     LearningUnitGraphModule
   } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { ActionData, PageData } from "./$types";
 
-  type WorkspaceViewMode = "overview" | "content";
   type ModularRestoreState = "idle" | "restoring" | "ready" | "failed";
   type ModularWorkspaceState = {
-    view: WorkspaceViewMode;
+    view: LearningUnitViewState;
     openTabs: string[];
     activeTab: string | null;
     splitView: boolean;
@@ -73,7 +76,7 @@
     fontScale: number;
   };
   type StoredWorkspaceState = {
-    version: 11 | 12 | 13 | 14 | 15;
+    version: 11 | 12 | 13 | 14 | 15 | 16;
     modular?: Partial<ModularWorkspaceState>;
     linear?: Partial<LinearWorkspaceState>;
     layout?: Partial<LayoutPreferences>;
@@ -90,6 +93,7 @@
   let flowNodes = $state.raw<LearningFlowNode[]>([]);
   let flowEdges = $state.raw<TeacherFlowEdge[]>([]);
   let graphBusy = $state(false);
+  let graphState = $state<LearningUnitGraph | null>(null);
   let modularWorkspace = $state<ModularWorkspaceState>(defaultModularWorkspaceState());
   let linearWorkspace = $state<LinearWorkspaceState>(defaultLinearWorkspaceState());
   let moduleCache = $state.raw<Record<string, LearningModuleContent>>({});
@@ -102,7 +106,7 @@
   let workspaceRoot = $state<HTMLDivElement | null>(null);
   let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({});
   let reviewFocusByPane = $state<ReviewFocusByPane>(emptyReviewFocus());
-  let submissionMessageState = $state<string | null>(data.message);
+  let submissionMessageState = $state<string | null>(null);
   let clientSubmissionErrorTaskId = $state<string | null>(null);
   let clientSubmissionErrorMessage = $state<string | null>(null);
   let feedbackPendingTaskId = $state<string | null>(null);
@@ -125,6 +129,10 @@
 
   function plainModule(module: LearningModuleContent): LearningModuleContent {
     return JSON.parse(JSON.stringify(module)) as LearningModuleContent;
+  }
+
+  function plainGraph(graph: LearningUnitGraph): LearningUnitGraph {
+    return JSON.parse(JSON.stringify(graph)) as LearningUnitGraph;
   }
 
   function currentViewportWidth(): number {
@@ -280,12 +288,12 @@
     if (!moduleId) {
       return null;
     }
-    return data.graph?.modules.find((module) => module.id === moduleId) ?? null;
+    return graphState?.modules.find((module) => module.id === moduleId) ?? null;
   }
 
   function openableModuleIds(): Set<string> {
     return new Set(
-      (data.graph?.modules ?? [])
+      (graphState?.modules ?? [])
         .filter((module) => module.status === "open" || module.status === "done")
         .map((module) => module.id)
     );
@@ -363,7 +371,7 @@
         parsed &&
         typeof parsed === "object" &&
         "version" in parsed &&
-        (parsed.version === 11 || parsed.version === 12 || parsed.version === 13 || parsed.version === 14 || parsed.version === 15) &&
+        (parsed.version === 11 || parsed.version === 12 || parsed.version === 13 || parsed.version === 14 || parsed.version === 15 || parsed.version === 16) &&
         ("modular" in parsed || "linear" in parsed)
       ) {
         return {
@@ -389,30 +397,35 @@
 
   function seedModularWorkspaceState(base: ModularWorkspaceState): ModularWorkspaceState {
     const seeded = normalizeModularWorkspaceState(base);
-    if (!data.activeModule) {
-      return seeded;
-    }
-
-    const activeModuleId = data.activeModule.module.id;
-    const openTabs = seeded.openTabs.includes(activeModuleId)
-      ? seeded.openTabs
-      : [...seeded.openTabs, activeModuleId];
+    const next = reconcileModularWorkspaceState(
+      {
+        view: seeded.view,
+        openTabs: seeded.openTabs,
+        activeTab: seeded.activeTab
+      },
+      {
+        moduleOrder: (graphState?.modules ?? []).map((module) => module.id),
+        openableModuleIds: openableModuleIds(),
+        requestedView: data.initialView,
+        requestedModuleId: data.activeModule?.module.id ?? null
+      }
+    );
 
     return {
       ...seeded,
-      view: "content",
-      openTabs,
-      activeTab: activeModuleId
+      view: next.view,
+      openTabs: next.openTabs,
+      activeTab: next.activeTab
     };
   }
 
   function orderedOpenModulesForContent(): LearningUnitGraphModule[] {
-    return orderedOpenModules(data.graph, modularWorkspace.openTabs);
+    return orderedOpenModules(graphState, modularWorkspace.openTabs);
   }
 
   function contentGroups(): ContentGroup[] {
     if (isModularUnit()) {
-      return contentGroupsForModules(data.graph, modularWorkspace.openTabs, moduleCache);
+      return contentGroupsForModules(graphState, modularWorkspace.openTabs, moduleCache);
     }
 
     return contentGroupsForSections(data.sections);
@@ -497,13 +510,14 @@
     };
   }
 
-  function syncModuleUrl(moduleId: string | null) {
+  function syncModularWorkspaceUrl(view: LearningUnitViewState, moduleId: string | null) {
     if (!browser) {
       return;
     }
 
     const next = new URL(window.location.href);
-    if (moduleId) {
+    next.searchParams.set("view", view);
+    if (view === "content" && moduleId) {
       next.searchParams.set("module", moduleId);
     } else {
       next.searchParams.delete("module");
@@ -520,6 +534,82 @@
     return new Promise((resolve) => {
       window.setTimeout(resolve, ms);
     });
+  }
+
+  function modularWorkspaceSnapshot(): ModularWorkspaceSnapshot {
+    return {
+      view: modularWorkspace.view,
+      openTabs: modularWorkspace.openTabs,
+      activeTab: modularWorkspace.activeTab
+    };
+  }
+
+  async function fetchModularGraph(): Promise<LearningUnitGraph> {
+    const response = await fetch(
+      `/api/learning/courses/${encodeURIComponent(data.courseId)}/units/${encodeURIComponent(data.unitId)}/modules/graph`,
+      {
+        credentials: "include",
+        cache: "no-store"
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`graph_fetch_failed_${response.status}`);
+    }
+    return (await response.json()) as LearningUnitGraph;
+  }
+
+  function applyRefreshedGraph(nextGraph: LearningUnitGraph) {
+    const openableIds = new Set(
+      nextGraph.modules
+        .filter((module) => module.status === "open" || module.status === "done")
+        .map((module) => module.id)
+    );
+    const requestedView =
+      modularWorkspace.view === "content" && modularWorkspace.activeTab && openableIds.has(modularWorkspace.activeTab)
+        ? "content"
+        : "overview";
+    const next = reconcileModularWorkspaceState(modularWorkspaceSnapshot(), {
+      moduleOrder: nextGraph.modules.map((module) => module.id),
+      openableModuleIds: openableIds,
+      requestedView,
+      requestedModuleId: requestedView === "content" ? modularWorkspace.activeTab : null
+    });
+
+    graphState = plainGraph(nextGraph);
+    setModularWorkspaceState({
+      ...modularWorkspace,
+      view: next.view,
+      openTabs: next.openTabs,
+      activeTab: next.activeTab
+    });
+
+    if (next.view === "content" && next.activeTab && !moduleCache[next.activeTab]) {
+      void ensureModuleLoaded(next.activeTab);
+    }
+
+    syncModularWorkspaceUrl(next.view, next.view === "content" ? next.activeTab : null);
+  }
+
+  let graphRefreshInFlight: Promise<void> | null = null;
+
+  async function refreshModularGraph() {
+    if (!browser || !isModularUnit()) {
+      return;
+    }
+    if (graphRefreshInFlight) {
+      return graphRefreshInFlight;
+    }
+
+    graphRefreshInFlight = (async () => {
+      const nextGraph = await fetchModularGraph();
+      applyRefreshedGraph(nextGraph);
+    })();
+
+    try {
+      await graphRefreshInFlight;
+    } finally {
+      graphRefreshInFlight = null;
+    }
   }
 
   async function fetchModuleContent(moduleId: string): Promise<LearningModuleContent> {
@@ -606,7 +696,7 @@
         submissionFocus: emptySubmissionFocus()
       });
       reviewFocusByPane = emptyReviewFocus();
-      syncModuleUrl(null);
+      syncModularWorkspaceUrl("overview", null);
   }
 
   function setModularWorkspaceState(next: ModularWorkspaceState) {
@@ -966,6 +1056,7 @@
           feedbackStatusMessage = null;
           pendingSubmissionIntent = null;
           applyTaskDetailState(setPaneReviewFocus(submissionFocusState(), reviewFocusByPane, paneId, taskItemKey(taskId)));
+          await refreshModularGraph().catch(() => undefined);
           return;
         }
 
@@ -1027,6 +1118,7 @@
         fallbackMimeType: mimeType
       });
       const submission = await createUploadSubmission(taskId, taskKind, file, prepared.intent as UploadIntent, prepared.sha256);
+      await refreshModularGraph().catch(() => undefined);
       await pollFeedbackSubmission(taskId, submission.id ?? null, "feedback", paneId);
     } catch (caught) {
       feedbackPendingTaskId = null;
@@ -1052,6 +1144,10 @@
       feedbackStatusMessage = "Die Rückmeldung konnte nicht angefordert werden.";
       setClientSubmissionError(taskId, "Die Rückmeldung konnte nicht angefordert werden.");
     }
+  }
+
+  async function handleProgressPersisted() {
+    await refreshModularGraph().catch(() => undefined);
   }
 
   function enhanceTaskForm(taskId: string, paneId: PaneId): SubmitFunction {
@@ -1091,8 +1187,10 @@
             feedbackStatusTaskId = null;
             pendingSubmissionIntent = null;
             feedbackStatusMessage = null;
+            await refreshModularGraph().catch(() => undefined);
             return;
           }
+          await refreshModularGraph().catch(() => undefined);
           await pollFeedbackSubmission(
             payload.feedbackRequestedTaskId ?? taskId,
             payload.feedbackSubmissionId ?? null,
@@ -1160,7 +1258,7 @@
     });
     modularRestoreState = "ready";
     modularRestoreMessage = null;
-    syncModuleUrl(moduleId);
+    syncModularWorkspaceUrl("content", moduleId);
 
     if (moduleAlreadyLoaded) {
       reopenModularMaterials([moduleId]);
@@ -1191,15 +1289,16 @@
       openTabs: remaining,
       activeTab: nextActive
     });
-    syncModuleUrl(nextActive);
+    syncModularWorkspaceUrl(nextActive ? "content" : "overview", nextActive);
   }
 
-  function switchView(view: WorkspaceViewMode) {
+  function switchView(view: LearningUnitViewState) {
     modularSettingsMenuOpen = false;
     setModularWorkspaceState({
       ...modularWorkspace,
       view
     });
+    syncModularWorkspaceUrl(view, view === "content" ? modularWorkspace.activeTab : null);
   }
 
   function updateLayoutPreferences(next: Partial<LayoutPreferences>) {
@@ -1265,7 +1364,7 @@
   }
 
   async function rebuildGraph() {
-    if (!isModularUnit() || !data.graph || !data.user) {
+    if (!isModularUnit() || !graphState || !data.user) {
       flowNodes = [];
       flowEdges = [];
       return;
@@ -1276,7 +1375,7 @@
 
     try {
       const flow = await buildLearningUnitFlow(
-        data.graph,
+        graphState,
         data.user,
         highlightedLearnerGraphModuleIds(modularWorkspace.openTabs),
         openModule
@@ -1343,6 +1442,10 @@
   });
 
   $effect(() => {
+    graphState = data.graph ? plainGraph(data.graph) : null;
+  });
+
+  $effect(() => {
     if (data.historyTaskId) {
       setTaskHistory(data.historyTaskId, data.history);
     }
@@ -1355,7 +1458,7 @@
     }
 
     const payload: StoredWorkspaceState = {
-      version: 15,
+      version: 16,
       modular: modularWorkspace,
       linear: linearWorkspace,
       layout: layoutPreferences
@@ -1500,7 +1603,7 @@
     </section>
 
     {#if modularWorkspace.view === "overview"}
-      <LearningUnitOverview graph={data.graph} nodes={flowNodes} edges={flowEdges} />
+      <LearningUnitOverview graph={graphState} nodes={flowNodes} edges={flowEdges} />
     {:else}
       <div class="learning-unit-layout-rail">
         <div class="learning-unit-layout-frame">
@@ -1584,6 +1687,7 @@
                 onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
                 onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
                 onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
+                onProgressPersisted={handleProgressPersisted}
               />
             {/if}
           </section>
@@ -1648,6 +1752,7 @@
             onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
             onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
             onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
+            onProgressPersisted={handleProgressPersisted}
           />
         </section>
       </div>

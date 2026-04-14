@@ -5,11 +5,13 @@
   let {
     courseId,
     taskId,
-    contentId
+    contentId,
+    onProgressPersisted = null
   }: {
     courseId: string;
     taskId: string;
     contentId: string;
+    onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
 
   let root: HTMLDivElement | undefined;
@@ -160,6 +162,7 @@
           }
           const statementId = String((statement as { id?: string }).id || "");
           await submitAttempt(statementId, score.raw, score.max);
+          await onProgressPersisted?.();
           status = `Gespeichert (${score.raw}/${score.max}).`;
         } catch (error) {
           status = toDisplayMessage(error) || "Abgabe fehlgeschlagen.";

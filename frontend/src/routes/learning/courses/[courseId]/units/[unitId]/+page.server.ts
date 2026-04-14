@@ -39,6 +39,17 @@ function submissionMode(task: LearningTask, file: File | null, textBody: string)
   return null;
 }
 
+function requestedInitialView(url: URL, moduleId: string | null): "overview" | "content" {
+  const raw = url.searchParams.get("view");
+  if (raw === "overview") {
+    return "overview";
+  }
+  if (raw === "content") {
+    return "content";
+  }
+  return moduleId ? "content" : "overview";
+}
+
 async function loadPageData(
   fetchFn: typeof fetch,
   cookies: Parameters<PageServerLoad>[0]["cookies"],
@@ -69,6 +80,7 @@ async function loadPageData(
 
   const historyTaskId = url.searchParams.get("history");
   const moduleId = moduleIdOverride ?? url.searchParams.get("module");
+  const initialView = requestedInitialView(url, moduleId);
 
   let sections: LearningSection[] = [];
   let graph: LearningUnitGraph | null = null;
@@ -80,7 +92,7 @@ async function loadPageData(
       cookies,
       `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(unitId)}/modules/graph`
     );
-    if (moduleId) {
+    if (moduleId && initialView === "content") {
       try {
         activeModule = await requireBackendJson<LearningModuleContent>(
           fetchFn,
@@ -126,6 +138,7 @@ async function loadPageData(
     sections,
     graph,
     activeModule,
+    initialView,
     historyTaskId,
     history,
     submittedTaskId: url.searchParams.get("submitted"),

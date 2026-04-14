@@ -25,7 +25,7 @@ vi.mock("$lib/server/guards", () => ({
   }))
 }));
 
-import { actions } from "./+page.server";
+import { actions, load } from "./+page.server";
 import { backendRequest, requireBackendJson } from "$lib/server/api";
 import { requireSpaceBootstrap } from "$lib/server/guards";
 
@@ -265,5 +265,49 @@ describe("learning unit route actions", () => {
         location: "/?redirect=%2Flearning%2Fcourses%2Fcourse-1%2Funits%2Funit-1"
       });
     }
+  });
+});
+
+describe("learning unit route load", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("keeps overview view when the URL explicitly requests it even if a module param exists", async () => {
+    mockModularLoad();
+
+    const result = (await load({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof load>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1?view=overview&module=module-7")
+    } as Parameters<typeof load>[0])) as Exclude<Awaited<ReturnType<typeof load>>, void>;
+
+    expect(requireBackendJsonMock).not.toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      "/api/learning/courses/course-1/units/unit-1/modules/module-7?include=materials,tasks"
+    );
+    expect(result.initialView).toBe("overview");
+    expect(result.activeModule).toBeNull();
+  });
+
+  it("treats legacy module-only links as content view for backward compatibility", async () => {
+    mockModularLoad();
+
+    const result = (await load({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof load>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1?module=module-7")
+    } as Parameters<typeof load>[0])) as Exclude<Awaited<ReturnType<typeof load>>, void>;
+
+    expect(requireBackendJsonMock).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      "/api/learning/courses/course-1/units/unit-1/modules/module-7?include=materials,tasks"
+    );
+    expect(result.initialView).toBe("content");
+    expect(result.activeModule?.module.id).toBe("module-7");
   });
 });

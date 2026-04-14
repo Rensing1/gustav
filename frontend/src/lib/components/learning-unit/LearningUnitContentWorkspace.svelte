@@ -66,7 +66,8 @@
     onEnterUploadWorkspace,
     onExitSubmissionWorkspace,
     onToggleReviewPanel,
-    onSubmitUploadFeedback = null
+    onSubmitUploadFeedback = null,
+    onProgressPersisted = null
   }: {
     titleLabel: string;
     title: string;
@@ -130,6 +131,7 @@
           paneId: PaneId;
         }) => void | Promise<void>)
       | null;
+    onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
 
   function tocItemActive(itemKey: string): boolean {
@@ -378,6 +380,7 @@
                                   ? (payload) => onSubmitUploadFeedback({ ...payload, paneId })
                                   : null
                               }
+                              {onProgressPersisted}
                             />
                           {/if}
                         {/each}
@@ -429,6 +432,7 @@
                           ? (payload) => onSubmitUploadFeedback({ ...payload, paneId })
                           : null
                       }
+                      {onProgressPersisted}
                     />
                   {/if}
                 {/each}

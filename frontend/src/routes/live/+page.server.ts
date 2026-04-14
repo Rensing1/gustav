@@ -1,15 +1,26 @@
+import { env } from "$env/dynamic/private";
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
 import { requireBackendJson } from "$lib/server/api";
 import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
-import type { LiveCourseUnitsView, LiveUnitDashboardView } from "$lib/types/home";
+import type { LiveCourseUnitsView, LiveDetailSheetView, LiveSummaryPayload } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
+import { buildLivePageHref, normalizeLiveSelection } from "./page-state";
 
 type LiveCourseListItem = {
   id: string;
   title: string;
 };
+
+function loadLivePollIntervalSeconds(): number {
+  const raw = String(env.GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS ?? "3").trim();
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) {
+    return 3;
+  }
+  return Math.min(60, Math.max(1, parsed));
+}
 
 export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
   await requireSpaceBootstrap(fetch, cookies, currentPath(url), "live");
@@ -26,7 +37,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
   const selectedTaskId = url.searchParams.get("task_id");
 
   let courseUnits: LiveCourseUnitsView | null = null;
-  let dashboard: LiveUnitDashboardView | null = null;
+  let summary: LiveSummaryPayload | null = null;
+  let detail: LiveDetailSheetView | null = null;
 
   if (selectedCourseId) {
     courseUnits = await requireBackendJson<LiveCourseUnitsView>(
@@ -37,27 +49,39 @@ export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
   }
 
   if (selectedCourseId && selectedUnitId) {
-    const query = new URLSearchParams();
-    if (selectedStudentSub) {
-      query.set("student_sub", selectedStudentSub);
-    }
-    if (selectedTaskId) {
-      query.set("task_id", selectedTaskId);
-    }
-    dashboard = await requireBackendJson<LiveUnitDashboardView>(
+    summary = await requireBackendJson<LiveSummaryPayload>(
       fetch,
       cookies,
-      `/api/live/views/courses/${selectedCourseId}/units/${selectedUnitId}/dashboard${query.size ? `?${query.toString()}` : ""}`
+      `/api/teaching/courses/${selectedCourseId}/units/${selectedUnitId}/submissions/summary`
     );
 
-    const defaultTaskId = dashboard.selected_student_panel?.selected_task_id;
-    if (selectedStudentSub && !selectedTaskId && defaultTaskId) {
-      const nextQuery = new URLSearchParams();
-      nextQuery.set("course_id", selectedCourseId);
-      nextQuery.set("unit_id", selectedUnitId);
-      nextQuery.set("student_sub", selectedStudentSub);
-      nextQuery.set("task_id", defaultTaskId);
-      throw redirect(302, `/live?${nextQuery.toString()}`);
+    const normalizedSelection = normalizeLiveSelection(summary, {
+      courseId: selectedCourseId,
+      unitId: selectedUnitId,
+      studentSub: selectedStudentSub,
+      taskId: selectedTaskId
+    });
+    const canonicalHref = buildLivePageHref(normalizedSelection);
+    const requestedHref = buildLivePageHref({
+      courseId: selectedCourseId,
+      unitId: selectedUnitId,
+      studentSub: selectedStudentSub,
+      taskId: selectedTaskId
+    });
+    if (canonicalHref !== requestedHref) {
+      throw redirect(302, canonicalHref);
+    }
+
+    if (normalizedSelection.studentSub && normalizedSelection.taskId) {
+      const query = new URLSearchParams({
+        student_sub: normalizedSelection.studentSub,
+        task_id: normalizedSelection.taskId
+      });
+      detail = await requireBackendJson<LiveDetailSheetView>(
+        fetch,
+        cookies,
+        `/api/live/views/courses/${selectedCourseId}/units/${selectedUnitId}/detail-sheet?${query.toString()}`
+      );
     }
   }
 
@@ -65,12 +89,15 @@ export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
     breadcrumbs: [{ label: "Live" }] satisfies BreadcrumbItem[],
     courseUnits,
     courses,
-    dashboard,
+    detail,
+    liveCursorSeed: summary?.cursor ?? null,
+    livePollIntervalSeconds: loadLivePollIntervalSeconds(),
     liveWideWorkspaceShell: true,
     selectedCourseId,
     selectedStudentSub,
     selectedTaskId,
     selectedUnitId,
+    summary,
     wideWorkspaceShell: true
   };
 };

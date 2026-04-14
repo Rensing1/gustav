@@ -403,6 +403,32 @@ export type LiveTask = {
   kind: string;
 };
 
+export type LiveSummaryStudent = {
+  sub: string;
+  name: string;
+};
+
+export type LiveSummaryCell = {
+  task_id: string;
+  has_submission: boolean;
+  average_score: number | null;
+  created_at?: string | null;
+  score_raw?: number | null;
+  score_max?: number | null;
+  h5p_completed?: boolean | null;
+};
+
+export type LiveSummaryRow = {
+  student: LiveSummaryStudent;
+  tasks: LiveSummaryCell[];
+};
+
+export type LiveSummaryPayload = {
+  cursor: string;
+  tasks: LiveTask[];
+  rows: LiveSummaryRow[];
+};
+
 export type LiveMatrixStudent = {
   sub: string;
   name: string;
@@ -413,6 +439,7 @@ export type LiveMatrixCell = {
   task_id: string;
   has_submission: boolean;
   average_score: number | null;
+  created_at?: string | null;
   score_raw?: number | null;
   score_max?: number | null;
   h5p_completed?: boolean | null;

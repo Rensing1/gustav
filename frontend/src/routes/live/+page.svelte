@@ -1,17 +1,27 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import type { LearningSubmission } from "$lib/types/learning";
-  import type { LiveDetailSubmission, LiveUnitDashboardRow } from "$lib/types/home";
+  import type { LiveDetailSubmission, LiveSummaryPayload, LiveUnitDashboardRow, LiveUnitDashboardView } from "$lib/types/home";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
+  import {
+    buildDashboardViewModel,
+    buildLiveDeltaPath,
+    buildLiveDetailSheetPath,
+    buildLivePageHref,
+    buildLiveSummaryPath,
+    createLiveWorkspaceController,
+    navigateWithLiveSelectionFallback,
+    type SortDirection,
+    type SortKey
+  } from "./page-state";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
   type PanelTab = "submission" | "evaluation" | "feedback";
-  type SortKey = "student" | "progress" | "average" | "latest";
-  type SortDirection = "asc" | "desc";
 
   const formatScore = (value: number | null | undefined) =>
     typeof value === "number" ? `Ø ${value.toFixed(1)}` : "Noch unbewertet";
@@ -94,6 +104,7 @@
   function detailToLearningSubmission(submission: LiveDetailSubmission): LearningSubmission {
     const primaryFile = submission.files?.[0];
     return {
+      intent: "submit",
       id: submission.id,
       attempt_nr: 1,
       kind: submission.kind === "pdf" ? "file" : (submission.kind as LearningSubmission["kind"]),
@@ -119,12 +130,17 @@
           }
         : null,
       files:
-        submission.files?.map((file) => ({
-          mime_type: file.mime,
-          size_bytes: file.size,
-          url: file.url,
-          download_url: file.url,
-        })) ?? [],
+        submission.files?.flatMap((file) => {
+          if (typeof file.mime !== "string" || typeof file.size !== "number" || typeof file.url !== "string") {
+            return [];
+          }
+          return [{
+            mime: file.mime,
+            size: file.size,
+            url: file.url,
+            download_url: file.url,
+          }];
+        }) ?? [],
     };
   }
 
@@ -168,13 +184,160 @@
     return direction === "asc" ? leftMs - rightMs : rightMs - leftMs;
   }
 
+  async function fetchSummaryState(args: {
+    courseId: string | null;
+    unitId: string | null;
+  }): Promise<LiveSummaryPayload> {
+    const href = buildLiveSummaryPath(args);
+    if (!href) {
+      throw new Error("live_summary_selection_incomplete");
+    }
+    const response = await fetch(href, {
+      cache: "no-store",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error(`live_summary_fetch_failed_${response.status}`);
+    }
+    return (await response.json()) as LiveSummaryPayload;
+  }
+
+  async function fetchDetailState(selection: {
+    courseId: string | null;
+    unitId: string | null;
+    studentSub: string | null;
+    taskId: string | null;
+  }): Promise<LiveDetailSubmission | null> {
+    if (!selection.courseId || !selection.unitId || !selection.studentSub || !selection.taskId) {
+      return null;
+    }
+    const response = await fetch(
+      buildLiveDetailSheetPath({
+        courseId: selection.courseId,
+        unitId: selection.unitId,
+        studentSub: selection.studentSub,
+        taskId: selection.taskId
+      }),
+      {
+        cache: "no-store",
+        credentials: "include",
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`live_detail_fetch_failed_${response.status}`);
+    }
+    const payload = (await response.json()) as { submission?: LiveDetailSubmission | null };
+    return payload.submission ?? null;
+  }
+
+  async function fetchLiveDeltaState(args: { courseId: string; unitId: string; cursor: string }) {
+    const response = await fetch(buildLiveDeltaPath(args), {
+      cache: "no-store",
+      credentials: "include",
+    });
+    if (response.status === 204) {
+      return { status: 204 as const };
+    }
+    if (!response.ok) {
+      throw new Error(`live_delta_fetch_failed_${response.status}`);
+    }
+    const payload = (await response.json()) as {
+      cells?: Array<{ student_sub?: string | null; task_id?: string | null; changed_at?: string | null }>;
+    };
+    const cursor = (payload.cells ?? []).reduce((latest, cell) => {
+      const changedAt = String(cell?.changed_at ?? "");
+      return changedAt > latest ? changedAt : latest;
+    }, args.cursor);
+    return { status: 200 as const, cursor, cells: payload.cells ?? [] };
+  }
+
+  const workspaceController = createLiveWorkspaceController({
+    initialSummary: null,
+    initialDetail: null,
+    initialSelection: {
+      courseId: null,
+      unitId: null,
+      studentSub: null,
+      taskId: null,
+    },
+    initialCursor: null,
+    syncHref: (href: string) => {
+      if (!browser) {
+        return;
+      }
+      window.history.replaceState(window.history.state, "", href);
+    },
+    fetchSummary: fetchSummaryState,
+    fetchDetail: fetchDetailState,
+    fetchDelta: fetchLiveDeltaState,
+  });
+
+  let summaryState = $state<LiveSummaryPayload | null>(null);
+  let detailState = $state<LiveDetailSubmission | null>(null);
   let unitsLoading = $state(false);
+  let selectedStudentSubState = $state<string | null>(null);
+  let selectedTaskIdState = $state<string | null>(null);
+  let liveCursor = $state<string | null>(null);
   let activePanelTab = $state<PanelTab>("submission");
   let activeSortKey = $state<SortKey | null>(null);
   let activeSortDirection = $state<SortDirection | null>(null);
 
+  function syncWorkspaceState(): void {
+    const state = workspaceController.getState();
+    summaryState = state.summary;
+    detailState = state.detail;
+    selectedStudentSubState = state.studentSub;
+    selectedTaskIdState = state.taskId;
+    activeSortKey = state.activeSortKey;
+    activeSortDirection = state.activeSortDirection;
+    liveCursor = state.cursor;
+  }
+
+  const courseRef = $derived.by(() => {
+    const selectedCourse = data.courses.find((course) => course.id === data.selectedCourseId) ?? null;
+    return {
+      id: data.selectedCourseId ?? "",
+      title: data.courseUnits?.course.title ?? selectedCourse?.title ?? "",
+      href: data.selectedCourseId ? `/live?course_id=${data.selectedCourseId}` : "/live"
+    };
+  });
+
+  const unitRef = $derived.by(() => {
+    const selectedUnit = data.courseUnits?.units.find((unit) => unit.id === data.selectedUnitId) ?? null;
+    return {
+      id: data.selectedUnitId ?? "",
+      title: selectedUnit?.title ?? "",
+      position: selectedUnit?.position ?? 0,
+      href:
+        data.selectedCourseId && data.selectedUnitId
+          ? `/live?course_id=${data.selectedCourseId}&unit_id=${data.selectedUnitId}`
+          : "/live"
+    };
+  });
+
+  const dashboardState = $derived.by(() =>
+    buildDashboardViewModel({
+      summary: summaryState,
+      selection: {
+        courseId: data.selectedCourseId ?? null,
+        unitId: data.selectedUnitId ?? null,
+        studentSub: selectedStudentSubState,
+        taskId: selectedTaskIdState
+      },
+      detail: detailState,
+      course: courseRef,
+      unit: unitRef,
+      user: data.detail?.user ?? {
+        sub: "",
+        name: "",
+        role: "teacher",
+        roles: ["teacher"]
+      }
+    })
+  );
+
   const sortedRows = $derived.by(() => {
-    const rows = [...(data.dashboard?.rows ?? [])];
+    const rows = [...(dashboardState?.rows ?? [])];
     rows.sort((left, right) => {
       if (!activeSortKey || !activeSortDirection) {
         return defaultRowSort(left, right);
@@ -200,17 +363,8 @@
   });
 
   function toggleSort(key: SortKey): void {
-    if (activeSortKey !== key) {
-      activeSortKey = key;
-      activeSortDirection = "desc";
-      return;
-    }
-    if (activeSortDirection === "desc") {
-      activeSortDirection = "asc";
-      return;
-    }
-    activeSortKey = null;
-    activeSortDirection = null;
+    workspaceController.toggleSort(key);
+    syncWorkspaceState();
   }
 
   function ariaSortFor(key: SortKey): "ascending" | "descending" | "none" {
@@ -253,6 +407,44 @@
     });
   }
 
+  async function openStudent(studentSub: string, event: MouseEvent): Promise<void> {
+    event.preventDefault();
+    const dashboard = dashboardState;
+    const row = dashboard?.rows.find((entry) => entry.student.sub === studentSub) ?? null;
+    await navigateWithLiveSelectionFallback({
+      href: row?.href ?? buildLivePageHref({
+        courseId: data.selectedCourseId ?? null,
+        unitId: data.selectedUnitId ?? null,
+        studentSub,
+        taskId: null
+      }),
+      trySelect: async () => {
+        await workspaceController.selectStudent(studentSub);
+        syncWorkspaceState();
+      },
+      goto
+    });
+  }
+
+  async function openTask(taskId: string, event: MouseEvent): Promise<void> {
+    event.preventDefault();
+    const taskHref = dashboardState?.selected_student_panel?.tasks.find((entry) => entry.task_id === taskId)?.href
+      ?? buildLivePageHref({
+        courseId: data.selectedCourseId ?? null,
+        unitId: data.selectedUnitId ?? null,
+        studentSub: selectedStudentSubState,
+        taskId
+      });
+    await navigateWithLiveSelectionFallback({
+      href: taskHref,
+      trySelect: async () => {
+        await workspaceController.selectTask(taskId);
+        syncWorkspaceState();
+      },
+      goto
+    });
+  }
+
   $effect(() => {
     if (data.courseUnits) {
       unitsLoading = false;
@@ -260,8 +452,52 @@
   });
 
   $effect(() => {
-    data.selectedTaskId;
+    workspaceController.resetFromServer({
+      summary: data.summary,
+      detail: data.detail?.submission ?? null,
+      selection: {
+        courseId: data.selectedCourseId ?? null,
+        unitId: data.selectedUnitId ?? null,
+        studentSub: data.selectedStudentSub ?? null,
+        taskId: data.selectedTaskId ?? null,
+      },
+      cursor: data.liveCursorSeed ?? null,
+    });
+    syncWorkspaceState();
+  });
+
+  $effect(() => {
+    selectedTaskIdState;
     activePanelTab = "submission";
+  });
+
+  $effect(() => {
+    if (!browser || !data.selectedCourseId || !data.selectedUnitId) {
+      return;
+    }
+    const intervalSeconds = Math.min(60, Math.max(1, Number(data.livePollIntervalSeconds ?? 3)));
+    let cancelled = false;
+    let inFlight = false;
+    const timer = window.setInterval(async () => {
+      if (cancelled || inFlight) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const reloaded = await workspaceController.poll();
+        if (!cancelled && reloaded) {
+          syncWorkspaceState();
+        }
+      } catch {
+        // Keep the current workspace stable when one poll fails.
+      } finally {
+        inFlight = false;
+      }
+    }, intervalSeconds * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   });
 </script>
 
@@ -316,31 +552,31 @@
       {/if}
     </section>
 
-    {#if data.dashboard}
+    {#if dashboardState}
       <section class="workspace-section live-kpi-section">
         <div class="live-summary-grid">
           <article class="live-summary-card">
             <span>Lernende</span>
-            <strong>{data.dashboard.summary.learners_count}</strong>
+            <strong>{dashboardState.summary.learners_count}</strong>
           </article>
           <article class="live-summary-card">
             <span>Aufgaben</span>
-            <strong>{data.dashboard.summary.tasks_count}</strong>
+            <strong>{dashboardState.summary.tasks_count}</strong>
           </article>
           <article class="live-summary-card">
             <span>Bearbeitet</span>
-            <strong>{data.dashboard.summary.completion_rate_percent}%</strong>
+            <strong>{dashboardState.summary.completion_rate_percent}%</strong>
           </article>
           <article class="live-summary-card">
             <span>Ø Bewertung</span>
-            <strong>{formatScore(data.dashboard.summary.average_score)}</strong>
+            <strong>{formatScore(dashboardState.summary.average_score)}</strong>
           </article>
         </div>
       </section>
     {/if}
   </div>
 
-  {#if data.dashboard}
+  {#if dashboardState}
     <section class="live-page__workspace" aria-label="Live-Arbeitsbereich">
       <div class="live-workspace">
         <section class="workspace-panel workspace-section live-table-panel">
@@ -374,13 +610,13 @@
             </thead>
             <tbody>
               {#each sortedRows as row}
-                <tr class:is-selected={data.selectedStudentSub === row.student.sub}>
-                  <td><a href={row.href}>{row.student.name}</a></td>
+                <tr class:is-selected={selectedStudentSubState === row.student.sub}>
+                  <td><a href={row.href} onclick={(event) => void openStudent(row.student.sub, event)}>{row.student.name}</a></td>
                   <td>{row.progress_percent}%</td>
                   <td>{formatScore(row.average_score)}</td>
                   <td>
                     {#if row.latest_submission}
-                      <a href={row.href} class="live-latest-link">
+                      <a href={row.href} class="live-latest-link" onclick={(event) => void openStudent(row.student.sub, event)}>
                         <span class="live-latest-link__date">{formatSubmissionDate(row.latest_submission.created_at)}</span>
                         <span class="live-latest-link__score">{formatScore(row.latest_submission.average_score)}</span>
                       </a>
@@ -396,29 +632,30 @@
         </section>
 
         <aside class="workspace-panel live-panel" aria-label="Schülerdetail">
-          {#if data.dashboard.selected_student_panel}
+          {#if dashboardState.selected_student_panel}
             <header class="live-panel__header">
               <div class="live-panel__copy">
-                <h3>{data.dashboard.selected_student_panel.student.name}</h3>
+                <h3>{dashboardState.selected_student_panel.student.name}</h3>
               </div>
             </header>
 
             <nav class="live-task-strip" aria-label="Aufgaben der Lerneinheit">
-              {#each data.dashboard.selected_student_panel.tasks as task}
+              {#each dashboardState.selected_student_panel.tasks as task}
                 <a
                   href={task.href}
                   class={`live-task-strip__item live-task-strip__item--${taskStripTone(task.average_score, task.has_submission)}`}
-                  class:is-active={data.dashboard.selected_student_panel.selected_task_id === task.task_id}
+                  class:is-active={selectedTaskIdState === task.task_id}
                   class:is-latest={task.is_latest_submission}
                   aria-label={`${task.task_label}: ${task.has_submission ? formatScore(task.average_score) : "Noch offen"}`}
                   title={`${task.task_label}: ${task.has_submission ? formatScore(task.average_score) : "Noch offen"}`}
+                  onclick={(event) => void openTask(task.task_id, event)}
                 >
                 </a>
               {/each}
             </nav>
 
-            {#if data.dashboard.selected_student_panel.selected_task_detail}
-              {@const selectedSubmission = data.dashboard.selected_student_panel.selected_task_detail}
+            {#if dashboardState.selected_student_panel.selected_task_detail}
+              {@const selectedSubmission = dashboardState.selected_student_panel.selected_task_detail}
               {@const selectedFile = primaryFile(selectedSubmission)}
               {@const artifactSubmission = detailToLearningSubmission(selectedSubmission)}
               {@const selectedArtifact = buildSubmissionArtifactView(artifactSubmission)}

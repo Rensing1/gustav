@@ -12,7 +12,7 @@
   <p class="kicker">Live</p>
   <h2>{data.course?.course?.title ?? "Kurs"}</h2>
   <p class="lead">
-    Waehle eine zugeordnete Lerneinheit. Die Matrix selbst laeuft jetzt im
+    Wähle eine zugeordnete Lerneinheit. Die Matrix selbst läuft jetzt im
     SvelteKit-Raum mit eigenem Read-Model.
   </p>
 
@@ -21,12 +21,12 @@
       {#each data.course.units as unit}
         <a class="unit-card" href={`/live/courses/${data.course?.course?.id}/units/${unit.id}`}>
           <strong>{unit.position}. {unit.title}</strong>
-          <span>Live-Matrix oeffnen</span>
+          <span>Live-Matrix öffnen</span>
         </a>
       {/each}
     </div>
   {:else}
-    <p class="empty">Diesem Kurs sind noch keine Lerneinheiten fuer Live zugeordnet.</p>
+    <p class="empty">Diesem Kurs sind noch keine Lerneinheiten für Live zugeordnet.</p>
   {/if}
 </section>
 

@@ -8,19 +8,24 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_frontend_live_page_uses_dashboard_read_model() -> None:
+def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     live_loader_path = REPO_ROOT / "frontend" / "src" / "routes" / "live" / "+page.server.ts"
     live_page_path = REPO_ROOT / "frontend" / "src" / "routes" / "live" / "+page.svelte"
+    live_state_path = REPO_ROOT / "frontend" / "src" / "routes" / "live" / "page-state.ts"
 
-    for path in (live_loader_path, live_page_path):
+    for path in (live_loader_path, live_page_path, live_state_path):
         assert path.is_file(), f"Missing live dashboard page: {path}"
 
     loader_source = live_loader_path.read_text(encoding="utf-8")
     page_source = live_page_path.read_text(encoding="utf-8")
+    helper_source = live_state_path.read_text(encoding="utf-8")
 
     assert "/api/live/views/courses/" in loader_source
     assert "/units" in loader_source
-    assert "/dashboard" in loader_source
+    assert "/detail-sheet" in loader_source
+    assert "/api/teaching/courses/" in loader_source
+    assert "/submissions/summary" in loader_source
+    assert "/dashboard" not in loader_source
     assert "/api/teaching/views/courses/" not in loader_source
     assert "course_id" in loader_source
     assert "unit_id" in loader_source
@@ -43,6 +48,17 @@ def test_frontend_live_page_uses_dashboard_read_model() -> None:
     assert "goto(" in page_source
     assert 'onchange={(event)' in page_source
     assert 'type="submit"' not in page_source
+    assert "window.history.replaceState" in page_source
+    assert "livePollIntervalSeconds" in page_source
+    assert "liveCursorSeed" in page_source
+    assert "setInterval(" in page_source or "window.setInterval(" in page_source
+    assert "clearInterval(" in page_source or "window.clearInterval(" in page_source
+    assert "preventDefault" in page_source
+    assert "/live/courses/" in helper_source
+    assert "/summary" in helper_source
+    assert "/detail-sheet" in helper_source
+    assert "/submissions/delta" in helper_source
+    assert "/api/live/views/courses/" not in helper_source
     assert "live-selection__stack" in page_source
     assert '<section class="workspace-panel workspace-section">\n    {#if data.courses.length}' not in page_source
     assert "live-workspace-breakout" not in page_source
@@ -55,7 +71,7 @@ def test_frontend_live_page_uses_dashboard_read_model() -> None:
     assert "renderMarkdown" in page_source
     assert 'role="tablist"' in page_source
     assert "selected_task_detail" in page_source
-    assert "selected_task_id" in page_source
+    assert "selectedTaskIdState" in page_source
     assert "score-zero" in page_source
     assert "submitted-unscored" in page_source
     assert "<pre>{data.dashboard.selected_student_panel" not in page_source

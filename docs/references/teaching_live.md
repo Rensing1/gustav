@@ -7,8 +7,9 @@ Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
 ## Endpunkte (API)
 
 - GET `/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary`
-  - Liefert die Aufgaben der Einheit (`tasks[]`) und optional die Schülerzeilen (`rows[]`) mit Minimalstatus je Zelle:
+  - Liefert einen initialen Polling-Cursor (`cursor`) auf Basis der Datenbank-Uhr als robusten Seed für den nächsten Delta-Poll, die Aufgaben der Einheit (`tasks[]`) und optional die Schülerzeilen (`rows[]`) mit Minimalstatus je Zelle:
     `{ task_id, has_submission, average_score, created_at }`.
+  - Kann der DB-basierte Cursor-Seed nicht bestimmt werden, antwortet der Endpunkt fail-closed mit `503 service_unavailable` und `detail=summary_cursor_unavailable`, statt still auf die Host-Uhr zurückzufallen.
   - `average_score` ist ein optionaler Float (0..10) für den Durchschnitt der Kriterien-Scores der
     neuesten Einreichung; `null` wenn keine abgeschlossene Auswertung vorliegt.
   - `created_at` ist der UTC-Zeitstempel der neuesten Abgabe in dieser Zelle; `null`, wenn noch keine Abgabe existiert.
@@ -57,10 +58,21 @@ OpenAPI: siehe `api/openapi.yml` (Schemas `TeachingUnitLiveRow`, `TeachingUnitTa
 
 1) Initial: `GET …/summary?include_students=false`
 2) Erste Matrix: `GET …/summary` (optional paginiert)
-3) Cursor setzen: `cursor = now()` (ISO)
+3) Cursor setzen: `cursor = summary.cursor`
 4) Polling (alle 3–5 s): `GET …/delta?updated_since=cursor`
-   - Bei `200`: Zellen in UI anwenden, `cursor = max(cells[].changed_at)`
+   - Bei `200`: Zellen in UI anwenden, `cursor = max(cells[].changed_at)`; ein anschließender Summary-Reload aktualisiert nur das UI-Read-Model, aber überschreibt diesen Delta-Cursor nicht
    - Bei `204`: UI unverändert lassen
+
+Hinweis fuer das kanonische `/live`-Dashboard:
+
+- Die SvelteKit-Seite bootstrapt initial per SSR das Dashboard-Read-Model.
+- Danach pollt sie denselben Delta-Endpunkt in-place weiter und lädt bei
+  echten Änderungen das aktuelle Dashboard mit derselben `student_sub` /
+  `task_id`-Auswahl nach.
+- Klicks auf Schüler und Aufgaben bleiben innerhalb desselben Workspace und
+  synchronisieren nur die URL, nicht die ganze Seite.
+- Die Tabellenanzeige priorisiert `Vorname Nachname`; nur ohne Personenname
+  fällt `/live` auf den Mail-Localpart zurück.
 
 Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen separat über dedizierte Endpunkte geladen werden.
 

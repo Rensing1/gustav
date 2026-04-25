@@ -6052,6 +6052,13 @@ paths:
         in-app redirect.
       operationId: authCallback
       security: []
+      x-gustav-query-contract:
+        required: [state]
+        oneOf:
+          - required: [code]
+          - required: [error]
+        not:
+          required: [code, error]
       parameters:
         - in: query
           name: code

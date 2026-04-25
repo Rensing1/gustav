@@ -42,3 +42,20 @@ def test_openapi_documents_silent_session_continuity_flow():
     assert "redirect" in params
     assert "prompt=none" in operation["description"]
     assert "302" in operation["responses"]
+
+
+def test_openapi_documents_auth_callback_query_invariant():
+    spec = _load_spec()
+    operation = spec["paths"]["/auth/callback"]["get"]
+
+    params = {param["name"]: param for param in operation.get("parameters", [])}
+    assert params["state"]["required"] is True
+    assert params["code"]["required"] is False
+    assert params["error"]["required"] is False
+
+    query_contract = operation.get("x-gustav-query-contract")
+    assert query_contract == {
+        "required": ["state"],
+        "oneOf": [{"required": ["code"]}, {"required": ["error"]}],
+        "not": {"required": ["code", "error"]},
+    }

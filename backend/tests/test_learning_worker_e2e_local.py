@@ -33,6 +33,7 @@ from backend.learning.usecases.submissions import (  # noqa: E402
 )
 from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
+from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
 
 
 def _dsn() -> str:
@@ -75,6 +76,7 @@ def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_worker_completes_text_submission(monkeypatch: pytest.MonkeyPatch) -> None:
     _require_db_or_skip()
     fixture = await _prepare_learning_fixture()
+    test_run_id = current_test_run_id()
     dsn = _dsn()
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
 
@@ -99,7 +101,7 @@ async def test_worker_completes_text_submission(monkeypatch: pytest.MonkeyPatch)
     # Clean queue + previous submissions for idempotency key.
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+            cleanup_learning_jobs_for_run(conn, test_run_id)
             cur.execute("select set_config('app.current_sub', %s, false)", (fixture.student_sub,))
             cur.execute(
                 """
@@ -143,6 +145,7 @@ async def test_worker_completes_text_submission(monkeypatch: pytest.MonkeyPatch)
         vision_adapter=local_vision,
         feedback_adapter=local_feedback,
         now=datetime.now(tz=timezone.utc),
+        test_run_id=test_run_id,
     )
     assert processed is True
 
@@ -168,13 +171,14 @@ async def test_worker_completes_text_submission(monkeypatch: pytest.MonkeyPatch)
 async def test_worker_schedules_retry_when_image_bytes_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     _require_db_or_skip()
     fixture = await _prepare_learning_fixture()
+    test_run_id = current_test_run_id()
     dsn = _dsn()
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
 
     # Clean queue
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+            cleanup_learning_jobs_for_run(conn, test_run_id)
             cur.execute("select set_config('app.current_sub', %s, false)", (fixture.student_sub,))
             cur.execute(
                 """
@@ -243,6 +247,8 @@ async def test_worker_schedules_retry_when_image_bytes_missing(monkeypatch: pyte
             )
             submission_id = str(cur.fetchone()[0])
             job_payload = {
+                "_gustav_source": "pytest",
+                "_gustav_test_run_id": test_run_id,
                 "submission_id": submission_id,
                 "course_id": fixture.course_id,
                 "task_id": fixture.task["id"],
@@ -278,6 +284,7 @@ async def test_worker_schedules_retry_when_image_bytes_missing(monkeypatch: pyte
         vision_adapter=local_vision,
         feedback_adapter=local_feedback,
         now=future_tick,
+        test_run_id=test_run_id,
     )
     assert processed is True
 

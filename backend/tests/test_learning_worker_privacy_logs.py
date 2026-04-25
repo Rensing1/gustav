@@ -11,6 +11,7 @@ from backend.learning.workers.process_learning_submission_jobs import FeedbackRe
 from backend.learning.repo_db import DBLearningRepo
 from backend.learning.usecases.submissions import CreateSubmissionInput, CreateSubmissionUseCase
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db_isolation import current_test_run_id
 
 pytest.importorskip("psycopg")
 
@@ -84,6 +85,7 @@ async def test_worker_logs_do_not_include_text_body(caplog):
         vision_adapter=_Vision(text_md=secret_text),
         feedback_adapter=_Feedback(feedback_md="OK"),
         now=datetime.now(tz=timezone.utc),
+        test_run_id=current_test_run_id(),
     )
     assert processed is True
 

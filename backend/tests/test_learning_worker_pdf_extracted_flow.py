@@ -16,6 +16,7 @@ pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
 
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
+from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
 from backend.storage.config import get_submissions_bucket
 from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives  # noqa: E402
 from backend.learning.adapters.ports import FeedbackResult
@@ -68,6 +69,7 @@ async def test_worker_completes_pdf_from_extracted(
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN")
     if not worker_dsn:
         pytest.skip("SERVICE_ROLE_DSN required for worker integration test")
+    test_run_id = current_test_run_id()
 
     storage_root = tmp_path / "storage"
     storage_root.mkdir(parents=True, exist_ok=True)
@@ -84,8 +86,7 @@ async def test_worker_completes_pdf_from_extracted(
 
     # Clean queue to avoid interference from previous runs
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()
 
     # Provision minimal course/task data directly via SQL (keeps test isolated)
@@ -144,6 +145,7 @@ async def test_worker_completes_pdf_from_extracted(
                 # Tag test-created jobs so a running docker worker can ignore them
                 # (avoids race conditions during local `make verify`).
                 "_gustav_source": "pytest",
+                "_gustav_test_run_id": test_run_id,
                 "submission_id": str(submission_id),
                 "course_id": str(course_id),
                 "task_id": str(task_id),
@@ -212,6 +214,7 @@ async def test_worker_completes_pdf_from_extracted(
         vision_adapter=__import__("backend.learning.adapters.local_vision", fromlist=["build"]).build(),  # type: ignore[attr-defined]
         feedback_adapter=__import__("backend.learning.adapters.local_feedback", fromlist=["build"]).build(),  # type: ignore[attr-defined]
         now=datetime.now(tz=timezone.utc),
+        test_run_id=test_run_id,
     )
     assert processed is True
 

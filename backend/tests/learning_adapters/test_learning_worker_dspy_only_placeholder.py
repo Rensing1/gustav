@@ -33,6 +33,7 @@ from backend.learning.repo_db import DBLearningRepo  # type: ignore
 from backend.learning.usecases import CreateSubmissionInput, CreateSubmissionUseCase  # type: ignore
 from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore
 from backend.tests.test_learning_worker_jobs import _dsn  # type: ignore
+from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # type: ignore
 
 
 class _ExplodingVisionAdapter(VisionAdapterProtocol):
@@ -69,12 +70,12 @@ async def test_worker_persists_dspy_feedback_without_legacy_calls(monkeypatch: p
 
     fixture = await _prepare_learning_fixture()
     dsn = _dsn()
+    test_run_id = current_test_run_id()
     monkeypatch.setenv("SERVICE_ROLE_DSN", dsn)
 
     # Clean queue for determinism.
     with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()
 
     repo = DBLearningRepo(dsn=dsn)
@@ -104,6 +105,7 @@ async def test_worker_persists_dspy_feedback_without_legacy_calls(monkeypatch: p
         vision_adapter=vision,
         feedback_adapter=feedback,
         now=datetime.now(tz=timezone.utc),
+        test_run_id=test_run_id,
     )
 
     assert processed is True

@@ -27,6 +27,7 @@ import psycopg  # type: ignore  # noqa: E402
 
 from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
+from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
 
 
 def _dsn_with_application_name(dsn: str, application_name: str) -> str:
@@ -62,11 +63,12 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
     )
 
     monkeypatch.setenv("WORKER_CONCURRENCY", "1")
+    test_run_id = current_test_run_id()
 
     # Clean queue
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+            cleanup_learning_jobs_for_run(conn, test_run_id)
             cur.execute("select set_config('app.current_sub', %s, false)", (fixture.student_sub,))
         conn.commit()
 
@@ -120,6 +122,8 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
             )
             submission_id = str(cur.fetchone()[0])
             job_payload = {
+                "_gustav_source": "pytest",
+                "_gustav_test_run_id": test_run_id,
                 "submission_id": submission_id,
                 "course_id": fixture.course_id,
                 "task_id": fixture.task["id"],
@@ -184,6 +188,7 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
                 vision_adapter=_VisionAdapter(),
                 feedback_adapter=_FeedbackAdapter(),
                 now=future_tick,
+                test_run_id=test_run_id,
             )
         except BaseException as exc:  # pragma: no cover - unexpected
             worker_exc.append(exc)

@@ -8,6 +8,7 @@ import os
 import importlib
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 import pytest
 
 def _truthy_env(name: str) -> bool:
@@ -16,6 +17,22 @@ def _truthy_env(name: str) -> bool:
 
 def _is_prod_like(env_value: str | None) -> bool:
     return (env_value or "").strip().lower() in {"prod", "production", "stage", "staging"}
+
+
+def _is_local_db_host(hostname: str | None) -> bool:
+    if not hostname:
+        return True
+    normalized = hostname.strip().lower().strip("[]")
+    return normalized in {"localhost", "127.0.0.1", "::1"} or normalized.endswith(".localhost")
+
+
+def _is_safe_db_test_dsn(dsn: str) -> bool:
+    parsed = urlparse(dsn)
+    if _is_local_db_host(parsed.hostname):
+        return True
+    return (os.getenv("GUSTAV_DB_TEST_MODE") or "").strip().lower() == "isolated" and bool(
+        (os.getenv("GUSTAV_TEST_RUN_ID") or "").strip()
+    )
 
 
 def _guard_against_prod_env_during_pytest() -> None:
@@ -157,7 +174,7 @@ def _ensure_db_env_defaults() -> None:
     # Ensure session tests use the real DB unless already configured.
     def _assign_or_override(var: str, default: str) -> None:
         current = os.getenv(var)
-        if not current or "supabase_db_gustav-alpha2" in current:
+        if not current or "supabase_db_gustav-alpha2" in current or not _is_safe_db_test_dsn(current):
             os.environ[var] = default
 
     # Prefer the app login DSN (IN ROLE gustav_limited) for application traffic so every query is RLS-protected.

@@ -37,6 +37,7 @@ from backend.learning.workers.process_learning_submission_jobs import (  # noqa:
     run_once,
 )
 from backend.tests.test_learning_worker_jobs import _dsn  # type: ignore  # noqa: E402
+from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
 from backend.tests.test_learning_visual_upload_only_api import _prepare_visual_task_fixture  # type: ignore  # noqa: E402
 from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
@@ -90,6 +91,7 @@ class _StubVisualFeedbackAdapter:
 async def test_worker_routes_visual_tasks_to_visual_feedback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fx = await _prepare_visual_task_fixture()
     dsn = _dsn()
+    test_run_id = current_test_run_id()
     monkeypatch.setenv("SERVICE_ROLE_DSN", dsn)
 
     # Provide a local storage root with a real file so future implementations
@@ -98,8 +100,7 @@ async def test_worker_routes_visual_tasks_to_visual_feedback(monkeypatch: pytest
 
     # Clean queue for determinism.
     with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()
 
     # Prepare a dummy PNG under the storage key.
@@ -138,6 +139,7 @@ async def test_worker_routes_visual_tasks_to_visual_feedback(monkeypatch: pytest
         vision_adapter=vision,
         feedback_adapter=feedback,
         now=datetime.now(tz=timezone.utc),
+        test_run_id=test_run_id,
     )
 
     assert processed is True
@@ -166,12 +168,12 @@ async def test_worker_routes_visual_tasks_to_visual_feedback(monkeypatch: pytest
 async def test_worker_routes_native_uploads_to_visual_feedback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fx = await _prepare_learning_fixture()
     dsn = _dsn()
+    test_run_id = current_test_run_id()
     monkeypatch.setenv("SERVICE_ROLE_DSN", dsn)
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
 
     with psycopg.connect(dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()
 
     storage_key = f"submissions/{fx.course_id}/{fx.task['id']}/{fx.student_sub}/native-upload.png"
@@ -209,6 +211,7 @@ async def test_worker_routes_native_uploads_to_visual_feedback(monkeypatch: pyte
         vision_adapter=vision,
         feedback_adapter=feedback,
         now=datetime.now(tz=timezone.utc),
+        test_run_id=test_run_id,
     )
 
     assert processed is True

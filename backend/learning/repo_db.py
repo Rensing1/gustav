@@ -65,6 +65,18 @@ def _running_under_pytest() -> bool:
     return False
 
 
+def _pytest_test_run_id() -> str | None:
+    """Return the same sanitized test-run id that DB test cleanup uses."""
+
+    explicit = (os.getenv("GUSTAV_TEST_RUN_ID") or "").strip()
+    if explicit:
+        return explicit
+    current = (os.getenv("PYTEST_CURRENT_TEST") or "").strip()
+    if current:
+        return re.sub(r"[^A-Za-z0-9_.:-]+", "-", current)[:180]
+    return None
+
+
 def _default_app_login_dsn() -> str:
     """Return the local dev DSN using the app login role (e.g. gustav_app).
 
@@ -1668,6 +1680,9 @@ class DBLearningRepo:
                         # Tag jobs created by in-process tests so a local docker worker
                         # can be configured to ignore them (avoid race conditions).
                         job_payload["_gustav_source"] = "pytest"
+                        test_run_id = _pytest_test_run_id()
+                        if test_run_id:
+                            job_payload["_gustav_test_run_id"] = test_run_id
                     queue_table = self._resolve_queue_table(cur)
                     insert_sql = sql.SQL(
                         "insert into public.{} (submission_id, payload) values (%s::uuid, %s)"

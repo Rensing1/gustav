@@ -2,12 +2,12 @@ import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 import { backendRequest, requireBackendJson } from "$lib/server/api";
-import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import type { LearnerConcernBoxView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
-export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
-  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "learning");
+export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
+  await requireParentSpaceBootstrap(parent, currentPath(url), "learning");
 
   const concernBox = await requireBackendJson<LearnerConcernBoxView>(
     fetch,

@@ -129,7 +129,8 @@ function toFrontendTokenSession(record: StoredFrontendTokenSession): FrontendTok
 
 async function fetchStoredTokenSession(
   cookies: Cookies,
-  fetchFn: typeof fetch
+  fetchFn: typeof fetch,
+  options?: { clearMissing?: boolean }
 ): Promise<FrontendTokenSession | null> {
   const sessionId = readFrontendSessionCookie(cookies);
   if (!sessionId) {
@@ -143,6 +144,9 @@ async function fetchStoredTokenSession(
     }
   });
   if (response.status === 204 || response.status === 401) {
+    if (options?.clearMissing === false) {
+      return null;
+    }
     clearFrontendSessionCookie(cookies);
     return null;
   }
@@ -150,6 +154,29 @@ async function fetchStoredTokenSession(
     return null;
   }
   return toFrontendTokenSession((await response.json()) as StoredFrontendTokenSession);
+}
+
+async function readConcurrentFreshSession(
+  cookies: Cookies,
+  fetchFn: typeof fetch
+): Promise<FrontendTokenSession | null> {
+  const latest = await fetchStoredTokenSession(cookies, fetchFn, { clearMissing: false });
+  if (!latest || isSessionExpired(latest) || isExpired(latest)) {
+    return null;
+  }
+  return latest;
+}
+
+async function clearExpiredSessionUnlessRecovered(
+  cookies: Cookies,
+  fetchFn: typeof fetch
+): Promise<FrontendTokenSession | null> {
+  const recovered = await readConcurrentFreshSession(cookies, fetchFn);
+  if (recovered) {
+    return recovered;
+  }
+  await clearTokenSession(cookies, fetchFn);
+  return null;
 }
 
 async function persistTokenSession(
@@ -197,8 +224,7 @@ async function refreshTokenSession(
 ): Promise<FrontendTokenSession | null> {
   if (!current.refreshToken) {
     if (isExpired(current)) {
-      await clearTokenSession(cookies, fetchFn);
-      return null;
+      return await clearExpiredSessionUnlessRecovered(cookies, fetchFn);
     }
     return current;
   }
@@ -218,8 +244,7 @@ async function refreshTokenSession(
 
   if (!response.ok) {
     if (isExpired(current)) {
-      await clearTokenSession(cookies, fetchFn);
-      return null;
+      return await clearExpiredSessionUnlessRecovered(cookies, fetchFn);
     }
     return current;
   }
@@ -227,13 +252,12 @@ async function refreshTokenSession(
   const tokens = (await response.json()) as KeycloakRefreshResponse;
   if (!tokens.access_token) {
     if (isExpired(current)) {
-      await clearTokenSession(cookies, fetchFn);
-      return null;
+      return await clearExpiredSessionUnlessRecovered(cookies, fetchFn);
     }
     return current;
   }
 
-  return await persistTokenSession(
+  const persisted = await persistTokenSession(
     cookies,
     fetchFn,
     {
@@ -244,6 +268,13 @@ async function refreshTokenSession(
     },
     current.sessionId
   );
+  if (persisted) {
+    return persisted;
+  }
+  if (isExpired(current)) {
+    return await clearExpiredSessionUnlessRecovered(cookies, fetchFn);
+  }
+  return current;
 }
 
 export async function createTokenSession(

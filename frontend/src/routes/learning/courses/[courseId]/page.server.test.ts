@@ -19,15 +19,15 @@ vi.mock("$lib/server/api", () => {
 
 vi.mock("$lib/server/guards", () => ({
   currentPath: vi.fn(() => "/learning/courses/course-1"),
-  requireSpaceBootstrap: vi.fn()
+  requireParentSpaceBootstrap: vi.fn()
 }));
 
 import { load } from "./+page.server";
 import { requireBackendJson } from "$lib/server/api";
-import { requireSpaceBootstrap } from "$lib/server/guards";
+import { requireParentSpaceBootstrap } from "$lib/server/guards";
 
 const requireBackendJsonMock = vi.mocked(requireBackendJson);
-const requireSpaceBootstrapMock = vi.mocked(requireSpaceBootstrap);
+const requireParentSpaceBootstrapMock = vi.mocked(requireParentSpaceBootstrap);
 
 function redirectError(status: Parameters<typeof redirect>[0], location: string) {
   try {
@@ -44,7 +44,7 @@ describe("learning course route load", () => {
   });
 
   it("preserves auth redirects from the shared space guard", async () => {
-    requireSpaceBootstrapMock.mockRejectedValue(
+    requireParentSpaceBootstrapMock.mockRejectedValue(
       redirectError(302, "/?redirect=%2Flearning%2Fcourses%2Fcourse-1")
     );
 
@@ -53,6 +53,7 @@ describe("learning course route load", () => {
         fetch: vi.fn() as unknown as typeof fetch,
         cookies: {} as Parameters<typeof load>[0]["cookies"],
         params: { courseId: "course-1" },
+        parent: vi.fn(async () => ({ bootstrap: null })) as Parameters<typeof load>[0]["parent"],
         url: new URL("http://test.local/learning/courses/course-1")
       } as Parameters<typeof load>[0]);
       throw new Error("expected redirect");

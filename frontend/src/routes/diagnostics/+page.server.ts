@@ -1,9 +1,9 @@
 import type { PageServerLoad } from "./$types";
 
-import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 
-export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
-  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "diagnostics");
+export const load: PageServerLoad = async ({ parent, url }) => {
+  await requireParentSpaceBootstrap(parent, currentPath(url), "diagnostics");
 
   return {};
 };

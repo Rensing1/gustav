@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from "./$types";
 
 import { backendRequest, requireBackendJson } from "$lib/server/api";
-import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 import type { Cookies } from "@sveltejs/kit";
 import { fail, redirect } from "@sveltejs/kit";
@@ -97,8 +97,8 @@ async function loadCourseWorkspace(
   };
 }
 
-export const load: PageServerLoad = async ({ fetch, cookies, params, url }) => {
-  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "teaching");
+export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
+  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
 
   const workspace = await loadCourseWorkspace(fetch, cookies, params.courseId);
   const memberSearchQuery = (url.searchParams.get("member-q") ?? "").trim();

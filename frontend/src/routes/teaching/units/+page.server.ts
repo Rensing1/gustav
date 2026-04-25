@@ -2,7 +2,7 @@ import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 import { backendRequest, requireBackendJson } from "$lib/server/api";
-import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import type { TeacherUnitsCatalogView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
@@ -11,8 +11,8 @@ function pageHref(url: URL): string {
   return query ? `/api/teaching/views/units/catalog?${query}` : "/api/teaching/views/units/catalog";
 }
 
-export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
-  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "teaching");
+export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
+  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
 
   const catalog = await requireBackendJson<TeacherUnitsCatalogView>(
     fetch,

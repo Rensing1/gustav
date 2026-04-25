@@ -1,12 +1,12 @@
 import type { PageServerLoad } from "./$types";
 
 import { requireBackendJson } from "$lib/server/api";
-import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import type { TeacherCourseContextView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
-export const load: PageServerLoad = async ({ fetch, cookies, params, url }) => {
-  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "teaching");
+export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
+  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
 
   const home = await requireBackendJson<TeacherCourseContextView>(
     fetch,

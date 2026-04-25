@@ -20,6 +20,9 @@ vi.mock("$lib/server/api", () => {
 
 vi.mock("$lib/server/guards", () => ({
   currentPath: vi.fn(() => "/learning/courses/course-1/units/unit-1"),
+  requireParentSpaceBootstrap: vi.fn(async () => ({
+    user: { sub: "student-1", name: "Test", roles: ["student"] }
+  })),
   requireSpaceBootstrap: vi.fn(async () => ({
     user: { sub: "student-1", name: "Test", roles: ["student"] }
   }))
@@ -280,6 +283,7 @@ describe("learning unit route load", () => {
       fetch: vi.fn() as unknown as typeof fetch,
       cookies: {} as Parameters<typeof load>[0]["cookies"],
       params: { courseId: "course-1", unitId: "unit-1" },
+      parent: vi.fn(async () => ({ bootstrap: null })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/learning/courses/course-1/units/unit-1?view=overview&module=module-7")
     } as Parameters<typeof load>[0])) as Exclude<Awaited<ReturnType<typeof load>>, void>;
 
@@ -299,6 +303,7 @@ describe("learning unit route load", () => {
       fetch: vi.fn() as unknown as typeof fetch,
       cookies: {} as Parameters<typeof load>[0]["cookies"],
       params: { courseId: "course-1", unitId: "unit-1" },
+      parent: vi.fn(async () => ({ bootstrap: null })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/learning/courses/course-1/units/unit-1?module=module-7")
     } as Parameters<typeof load>[0])) as Exclude<Awaited<ReturnType<typeof load>>, void>;
 

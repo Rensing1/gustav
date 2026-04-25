@@ -105,4 +105,53 @@ describe("readFreshTokenSession", () => {
     });
     expect(cookies.deleteCalls).toHaveLength(0);
   });
+
+  it("keeps a concurrently refreshed BFF session instead of deleting it after a stale refresh failure", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const cookies = new MemoryCookies();
+    cookies.store.set("gustav_bff_session", "bff-session-race");
+    let bffReads = 0;
+
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      const method = init?.method || "GET";
+
+      if (url === "http://backend.test/backend-internal/app/bff-session" && method === "GET") {
+        bffReads += 1;
+        if (bffReads === 1) {
+          return jsonResponse({
+            session_id: "bff-session-race",
+            access_token: "expired-access-token",
+            refresh_token: "stale-refresh-token",
+            id_token: "old-id-token",
+            expires_at: now - 30,
+            session_expires_at: now + 3600
+          });
+        }
+        return jsonResponse({
+          session_id: "bff-session-race",
+          access_token: "fresh-access-token-from-other-request",
+          refresh_token: "fresh-refresh-token",
+          id_token: "fresh-id-token",
+          expires_at: now + 300,
+          session_expires_at: now + 3600
+        });
+      }
+
+      if (url === "http://keycloak:8080/realms/gustav/protocol/openid-connect/token" && method === "POST") {
+        return jsonResponse({ error: "invalid_grant" }, 400);
+      }
+
+      throw new Error(`unexpected request: ${method} ${url}`);
+    });
+
+    const session = await readFreshTokenSession(cookies as never, fetchMock, { forceRefresh: true });
+
+    expect(session?.accessToken).toBe("fresh-access-token-from-other-request");
+    expect(cookies.deleteCalls).toHaveLength(0);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "http://backend.test/backend-internal/app/bff-session",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
 });

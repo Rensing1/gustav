@@ -2,13 +2,13 @@ import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 import { backendRequest, requireBackendJson } from "$lib/server/api";
-import { currentPath, requireSessionBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSessionBootstrap } from "$lib/server/guards";
 import { readFreshTokenSession } from "$lib/server/session";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 import type { AppProfileView } from "$lib/types/profile";
 
-export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
-  await requireSessionBootstrap(fetch, cookies, currentPath(url));
+export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
+  await requireParentSessionBootstrap(parent, currentPath(url));
 
   const profile = await requireBackendJson<AppProfileView>(
     fetch,

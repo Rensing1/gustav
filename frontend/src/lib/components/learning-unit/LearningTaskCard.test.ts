@@ -103,6 +103,31 @@ describe("LearningTaskCard", () => {
     expect(screen.queryByRole("button", { name: "Pausieren" })).toBeNull();
   });
 
+  it("shows persisted draft affordances from task metadata before history is loaded", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          has_submission: true,
+          latest_submission_intent: "feedback",
+          latest_submission_analysis_status: "completed",
+          latest_submission_created_at: "2026-04-21T09:00:00+00:00"
+        },
+        taskTitle: "Aufgabe 3",
+        unitType: "modular",
+        compactLayout: true,
+        expanded: true,
+        history: []
+      }
+    });
+
+    expect(screen.getByRole("button", { name: "Meine Abgabe" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entwurf weiterbearbeiten" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeInTheDocument();
+    expect(document.querySelector(".learning-task-row--draft")).not.toBeNull();
+  });
+
   it("keeps the compact task row visible while review and editor open underneath", async () => {
     const history = [
       {

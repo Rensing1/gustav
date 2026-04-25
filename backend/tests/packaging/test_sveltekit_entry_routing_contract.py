@@ -5,7 +5,7 @@ Why:
     tests lock in three behaviors:
     - `/` shows a public auth entry when no session exists.
     - `/` redirects authenticated users into the role-specific start target.
-    - room routes protect themselves with a shared guard helper.
+    - room routes reuse the layout bootstrap through a shared guard helper.
     - diagnostics gains a top-level server loader instead of a static orphan page.
 """
 
@@ -50,6 +50,8 @@ def test_root_route_is_public_but_redirects_authenticated_users() -> None:
 
     assert "requireSessionBootstrap" in guard_src
     assert "requireSpaceBootstrap" in guard_src
+    assert "requireParentSessionBootstrap" in guard_src
+    assert "requireParentSpaceBootstrap" in guard_src
     assert '"/api/app/session-bootstrap"' in guard_src
     assert "/?redirect=" in guard_src
     assert "redirect" in guard_src
@@ -79,4 +81,5 @@ def test_room_loaders_use_shared_space_guard() -> None:
 
     for path in route_loader_paths:
         src = path.read_text(encoding="utf-8")
-        assert "requireSpaceBootstrap" in src, f"Route loader must use shared space guard: {path}"
+        assert "parent" in src, f"Route loader must receive parent bootstrap: {path}"
+        assert "requireParentSpaceBootstrap" in src, f"Route loader must use parent space guard: {path}"

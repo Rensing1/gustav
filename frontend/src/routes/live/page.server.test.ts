@@ -7,15 +7,15 @@ vi.mock("$lib/server/api", () => ({
 
 vi.mock("$lib/server/guards", () => ({
   currentPath: vi.fn(() => "/live"),
-  requireSpaceBootstrap: vi.fn()
+  requireParentSpaceBootstrap: vi.fn()
 }));
 
 import { load } from "./+page.server";
 import { requireBackendJson } from "$lib/server/api";
-import { requireSpaceBootstrap } from "$lib/server/guards";
+import { requireParentSpaceBootstrap } from "$lib/server/guards";
 
 const requireBackendJsonMock = vi.mocked(requireBackendJson);
-const requireSpaceBootstrapMock = vi.mocked(requireSpaceBootstrap);
+const requireParentSpaceBootstrapMock = vi.mocked(requireParentSpaceBootstrap);
 
 function summaryPayload() {
   return {
@@ -39,7 +39,7 @@ function summaryPayload() {
 describe("live page load", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireSpaceBootstrapMock.mockResolvedValue({
+    requireParentSpaceBootstrapMock.mockResolvedValue({
       user: { sub: "teacher-1", name: "Ada", role: "teacher", roles: ["teacher"] },
       start_target: "/teaching",
       spaces: ["teaching"]
@@ -66,6 +66,7 @@ describe("live page load", () => {
     await expect(load({
       fetch: vi.fn() as unknown as typeof fetch,
       cookies: {} as Parameters<typeof load>[0]["cookies"],
+      parent: vi.fn(async () => ({ bootstrap: null })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/live?course_id=course-1&unit_id=unit-1&student_sub=student-1&task_id=task-stale")
     } as Parameters<typeof load>[0])).rejects.toSatisfy((caught: unknown) => {
       expect(isRedirect(caught)).toBe(true);
@@ -97,6 +98,7 @@ describe("live page load", () => {
     await expect(load({
       fetch: vi.fn() as unknown as typeof fetch,
       cookies: {} as Parameters<typeof load>[0]["cookies"],
+      parent: vi.fn(async () => ({ bootstrap: null })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/live?course_id=course-1&unit_id=unit-1&student_sub=student-stale&task_id=task-2")
     } as Parameters<typeof load>[0])).rejects.toSatisfy((caught: unknown) => {
       expect(isRedirect(caught)).toBe(true);

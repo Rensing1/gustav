@@ -31,6 +31,17 @@ export async function requireSessionBootstrap(
   return bootstrap;
 }
 
+export async function requireParentSessionBootstrap(
+  parent: () => Promise<{ bootstrap?: SessionBootstrap | null }>,
+  path: string
+): Promise<SessionBootstrap> {
+  const { bootstrap } = await parent();
+  if (!bootstrap) {
+    throw redirect(302, loginHref(path));
+  }
+  return bootstrap;
+}
+
 export async function requireSpaceBootstrap(
   fetchFn: typeof fetch,
   cookies: Cookies,
@@ -38,6 +49,18 @@ export async function requireSpaceBootstrap(
   space: AppSpace
 ): Promise<SessionBootstrap> {
   const bootstrap = await requireSessionBootstrap(fetchFn, cookies, path);
+  if (!bootstrap.spaces.includes(space)) {
+    throw redirect(303, bootstrap.start_target);
+  }
+  return bootstrap;
+}
+
+export async function requireParentSpaceBootstrap(
+  parent: () => Promise<{ bootstrap?: SessionBootstrap | null }>,
+  path: string,
+  space: AppSpace
+): Promise<SessionBootstrap> {
+  const bootstrap = await requireParentSessionBootstrap(parent, path);
   if (!bootstrap.spaces.includes(space)) {
     throw redirect(303, bootstrap.start_target);
   }

@@ -688,15 +688,7 @@
     }
 
     modularRestoreState = "failed";
-      modularRestoreMessage = "Die Inhalte konnten nicht wiederhergestellt werden. Bitte öffne die Module erneut.";
-      historyRestored = false;
-      setModularWorkspaceState({
-        ...modularWorkspace,
-        view: "overview",
-        submissionFocus: emptySubmissionFocus()
-      });
-      reviewFocusByPane = emptyReviewFocus();
-      syncModularWorkspaceUrl("overview", null);
+    modularRestoreMessage = "Die Inhalte konnten nicht vollständig wiederhergestellt werden. Du kannst offene Module im Graph erneut öffnen.";
   }
 
   function setModularWorkspaceState(next: ModularWorkspaceState) {
@@ -1412,6 +1404,7 @@
   onMount(() => {
     const viewportWidth = currentViewportWidth();
     const stored = readStoredWorkspaceState(viewportWidth);
+    graphState = data.graph ? plainGraph(data.graph) : null;
 
     if (data.activeModule) {
       moduleCache = {

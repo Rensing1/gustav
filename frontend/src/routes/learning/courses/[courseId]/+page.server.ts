@@ -2,14 +2,14 @@ import { error } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
 import { BackendRequestError, requireBackendJson } from "$lib/server/api";
-import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import type { LearnerHome } from "$lib/types/home";
 import type { LearningCoursePageData, LearningCourseUnit } from "$lib/types/learning";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
-export const load: PageServerLoad = async ({ fetch, cookies, params, url }) => {
+export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
   try {
-    const bootstrap = await requireSpaceBootstrap(fetch, cookies, currentPath(url), "learning");
+    const bootstrap = await requireParentSpaceBootstrap(parent, currentPath(url), "learning");
     const [units, home] = await Promise.all([
       requireBackendJson<LearningCourseUnit[]>(
         fetch,

@@ -3,7 +3,7 @@ import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
 import { requireBackendJson } from "$lib/server/api";
-import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import type { LiveCourseUnitsView, LiveDetailSheetView, LiveSummaryPayload } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 import { buildLivePageHref, normalizeLiveSelection } from "./page-state";
@@ -22,8 +22,8 @@ function loadLivePollIntervalSeconds(): number {
   return Math.min(60, Math.max(1, parsed));
 }
 
-export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
-  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "live");
+export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
+  await requireParentSpaceBootstrap(parent, currentPath(url), "live");
 
   const courses = await requireBackendJson<LiveCourseListItem[]>(
     fetch,

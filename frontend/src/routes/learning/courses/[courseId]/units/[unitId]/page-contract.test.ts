@@ -288,7 +288,9 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain("async function restoreOpenModules");
     expect(routeSource).toContain("Promise.race([restorePromise, timeoutPromise])");
     expect(routeSource).toContain("modularRestoreState = \"failed\"");
-    expect(routeSource).toContain("view: \"overview\"");
+    expect(routeSource).toContain("graphState = data.graph ? plainGraph(data.graph) : null;");
+    expect(routeSource).toContain("modularRestoreMessage = \"Die Inhalte konnten nicht vollständig wiederhergestellt werden. Du kannst offene Module im Graph erneut öffnen.\"");
+    expect(routeSource).not.toContain("view: \"overview\",\n        submissionFocus: emptySubmissionFocus()");
     expect(routeSource).not.toContain("if (!isModularUnit() || !workspaceReady || !modularWorkspace.openTabs.length)");
     expect(routeSource).not.toContain("for (const moduleId of modularWorkspace.openTabs)");
   });

@@ -1,11 +1,11 @@
 import type { PageServerLoad } from "./$types";
 
 import { requireBackendJson } from "$lib/server/api";
-import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import type { TeacherHome } from "$lib/types/home";
 
-export const load: PageServerLoad = async ({ fetch, cookies, url }) => {
-  await requireSpaceBootstrap(fetch, cookies, currentPath(url), "teaching");
+export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
+  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
 
   const home = await requireBackendJson<TeacherHome>(
     fetch,

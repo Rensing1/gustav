@@ -4,7 +4,8 @@ import { error, fail, isRedirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
-import { currentPath, requireSpaceBootstrap } from "$lib/server/guards";
+import { currentPath, requireParentSpaceBootstrap, requireSpaceBootstrap } from "$lib/server/guards";
+import type { SessionBootstrap } from "$lib/types/session-bootstrap";
 import type { LearnerHome } from "$lib/types/home";
 import type {
   LearningCourseUnit,
@@ -56,9 +57,10 @@ async function loadPageData(
   courseId: string,
   unitId: string,
   url: URL,
-  moduleIdOverride: string | null = null
+  moduleIdOverride: string | null = null,
+  bootstrapOverride: SessionBootstrap | null = null
 ): Promise<LearningUnitPageData> {
-  const bootstrap = await requireSpaceBootstrap(fetchFn, cookies, currentPath(url), "learning");
+  const bootstrap = bootstrapOverride ?? await requireSpaceBootstrap(fetchFn, cookies, currentPath(url), "learning");
   const [units, home] = await Promise.all([
     requireBackendJson<LearningCourseUnit[]>(
       fetchFn,
@@ -152,9 +154,10 @@ async function loadPageData(
   };
 }
 
-export const load: PageServerLoad = async ({ fetch, cookies, params, url }) => {
+export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
   try {
-    const pageData = await loadPageData(fetch, cookies, params.courseId, params.unitId, url);
+    const bootstrap = await requireParentSpaceBootstrap(parent, currentPath(url), "learning");
+    const pageData = await loadPageData(fetch, cookies, params.courseId, params.unitId, url, null, bootstrap);
     const breadcrumbs: BreadcrumbItem[] = [
       { label: "Lernraum", href: "/learning" },
       { label: pageData.courseTitle, href: `/learning/courses/${encodeURIComponent(params.courseId)}` },

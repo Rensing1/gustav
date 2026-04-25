@@ -9,6 +9,7 @@ backups/
 # Agents
 AGENTS.md
 CLAUDE.md
+.playwright-mcp/
 
 # UI-Konzepte
 ui-concepts/

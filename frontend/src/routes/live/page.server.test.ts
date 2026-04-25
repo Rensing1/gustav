@@ -66,7 +66,11 @@ describe("live page load", () => {
     await expect(load({
       fetch: vi.fn() as unknown as typeof fetch,
       cookies: {} as Parameters<typeof load>[0]["cookies"],
-      parent: vi.fn(async () => ({ bootstrap: null })) as Parameters<typeof load>[0]["parent"],
+      parent: vi.fn(async () => ({
+        bootstrap: null,
+        appSessionActive: false,
+        theme: "light"
+      })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/live?course_id=course-1&unit_id=unit-1&student_sub=student-1&task_id=task-stale")
     } as Parameters<typeof load>[0])).rejects.toSatisfy((caught: unknown) => {
       expect(isRedirect(caught)).toBe(true);
@@ -98,7 +102,11 @@ describe("live page load", () => {
     await expect(load({
       fetch: vi.fn() as unknown as typeof fetch,
       cookies: {} as Parameters<typeof load>[0]["cookies"],
-      parent: vi.fn(async () => ({ bootstrap: null })) as Parameters<typeof load>[0]["parent"],
+      parent: vi.fn(async () => ({
+        bootstrap: null,
+        appSessionActive: false,
+        theme: "light"
+      })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/live?course_id=course-1&unit_id=unit-1&student_sub=student-stale&task_id=task-2")
     } as Parameters<typeof load>[0])).rejects.toSatisfy((caught: unknown) => {
       expect(isRedirect(caught)).toBe(true);

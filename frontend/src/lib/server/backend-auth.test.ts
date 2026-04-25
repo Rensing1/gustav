@@ -39,6 +39,7 @@ import {
   assertSecureFrontendSessionConfig,
   handleAuthCallback,
   handleLogout,
+  startContinuationFlow,
   startLoginFlow,
   startRegisterFlow
 } from "./backend-auth";
@@ -63,11 +64,16 @@ class MemoryCookies {
   }
 }
 
-function decodeFlowCookie(rawCookie: string): Array<{ state: string; nonce: string; redirectPath: string | null }> {
+function decodeFlowCookie(rawCookie: string): Array<{
+  state: string;
+  nonce: string;
+  redirectPath: string | null;
+  mode?: string;
+}> {
   const [payload] = rawCookie.split(".", 1);
   const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")) as
-    | { state: string; nonce: string; redirectPath: string | null }
-    | Array<{ state: string; nonce: string; redirectPath: string | null }>;
+    | { state: string; nonce: string; redirectPath: string | null; mode?: string }
+    | Array<{ state: string; nonce: string; redirectPath: string | null; mode?: string }>;
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
@@ -247,6 +253,91 @@ describe("handleAuthCallback", () => {
     expect(response.headers.get("location")).toBe("/learning");
     expect(response.headers.get("set-cookie")).toContain("gustav_session=app-session");
     expect(cookies.setCalls.at(-1)?.[0]).toBe("gustav_bff_oidc_flow");
+  });
+
+  it("handles a successful silent continuity callback like a normal BFF session setup", async () => {
+    const globalFetch = vi.fn<typeof fetch>().mockResolvedValue(tokenResponse());
+    vi.stubGlobal("fetch", globalFetch);
+    createTokenSessionMock.mockResolvedValue({
+      sessionId: "bff-session-continuity",
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      idToken: "id-token",
+      expiresAt: 4102444800
+    });
+    clearTokenSessionMock.mockResolvedValue(undefined);
+    readTokenSessionMock.mockResolvedValue(null);
+
+    const cookies = new MemoryCookies();
+    const eventFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(null, {
+        status: 204,
+        headers: { "set-cookie": "gustav_session=app-session; Path=/; HttpOnly" }
+      })
+    );
+
+    startContinuationFlow(createEvent("https://app.localhost/auth/continue?redirect=/learning", cookies, eventFetch));
+    const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+    jwtVerifyMock.mockResolvedValue({ payload: { nonce: flow.nonce } });
+
+    const response = await handleAuthCallback(
+      createEvent(`https://app.localhost/auth/callback?code=test-code&state=${flow.state}`, cookies, eventFetch)
+    );
+
+    expect(flow.mode).toBe("silent-continuity");
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/learning");
+    expect(response.headers.get("set-cookie")).toContain("gustav_session=app-session");
+  });
+
+  it("returns to the normal login entry when silent continuity cannot use the active SSO session", async () => {
+    const cookies = new MemoryCookies();
+    startContinuationFlow(createEvent("https://app.localhost/auth/continue?redirect=/teaching", cookies, vi.fn() as never));
+    const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+
+    const response = await handleAuthCallback(
+      createEvent(
+        `https://app.localhost/auth/callback?error=login_required&state=${flow.state}`,
+        cookies,
+        vi.fn() as never
+      )
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/?redirect=%2Fteaching&reason=session_expired");
+    expect(cookies.get("gustav_bff_oidc_flow")).toBeUndefined();
+  });
+});
+
+describe("startContinuationFlow", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("starts a prompt=none OIDC flow for safe in-app redirects", () => {
+    const cookies = new MemoryCookies();
+    const response = startContinuationFlow(
+      createEvent("https://app.localhost/auth/continue?redirect=/learning/courses/course-1", cookies, vi.fn() as never)
+    );
+    const location = new URL(response.headers.get("location") || "");
+    const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+
+    expect(response.status).toBe(302);
+    expect(location.searchParams.get("prompt")).toBe("none");
+    expect(location.searchParams.get("state")).toBe(flow.state);
+    expect(flow.mode).toBe("silent-continuity");
+    expect(flow.redirectPath).toBe("/learning/courses/course-1");
+  });
+
+  it("ignores unsafe continuation redirects", () => {
+    const cookies = new MemoryCookies();
+    startContinuationFlow(
+      createEvent("https://app.localhost/auth/continue?redirect=https://evil.example", cookies, vi.fn() as never)
+    );
+
+    const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+
+    expect(flow.redirectPath).toBeNull();
   });
 });
 

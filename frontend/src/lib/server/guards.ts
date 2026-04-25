@@ -15,6 +15,10 @@ function loginHref(path: string): string {
   return `/?redirect=${encodeURIComponent(path || "/")}`;
 }
 
+function continuationHref(path: string): string {
+  return `/auth/continue?redirect=${encodeURIComponent(path || "/")}`;
+}
+
 export async function requireSessionBootstrap(
   fetchFn: typeof fetch,
   cookies: Cookies,
@@ -32,11 +36,14 @@ export async function requireSessionBootstrap(
 }
 
 export async function requireParentSessionBootstrap(
-  parent: () => Promise<{ bootstrap?: SessionBootstrap | null }>,
+  parent: () => Promise<{ bootstrap?: SessionBootstrap | null; appSessionActive?: boolean }>,
   path: string
 ): Promise<SessionBootstrap> {
-  const { bootstrap } = await parent();
+  const { bootstrap, appSessionActive } = await parent();
   if (!bootstrap) {
+    if (appSessionActive) {
+      throw redirect(302, continuationHref(path));
+    }
     throw redirect(302, loginHref(path));
   }
   return bootstrap;
@@ -56,7 +63,7 @@ export async function requireSpaceBootstrap(
 }
 
 export async function requireParentSpaceBootstrap(
-  parent: () => Promise<{ bootstrap?: SessionBootstrap | null }>,
+  parent: () => Promise<{ bootstrap?: SessionBootstrap | null; appSessionActive?: boolean }>,
   path: string,
   space: AppSpace
 ): Promise<SessionBootstrap> {

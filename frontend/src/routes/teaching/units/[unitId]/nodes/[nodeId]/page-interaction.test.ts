@@ -7,6 +7,7 @@ import type { PageData } from "./$types";
 const sampleData: PageData = {
   theme: "light",
   bootstrap: null,
+  appSessionActive: false,
   breadcrumbs: [],
   hidePageHeading: true,
   pageTitle: "Orientierung",

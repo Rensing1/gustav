@@ -6,10 +6,29 @@ import {
 import type { Cookies } from "@sveltejs/kit";
 
 const DEFAULT_API_INTERNAL_BASE_URL = "http://gustav-alpha2:8000";
+const APP_SESSION_COOKIE_NAME = "gustav_session";
 
 export function buildApiUrl(path: string): string {
   const baseUrl = env.API_INTERNAL_BASE_URL || DEFAULT_API_INTERNAL_BASE_URL;
   return new URL(path, baseUrl).toString();
+}
+
+export async function readAppSessionActive(fetchFn: typeof fetch, cookies: Cookies): Promise<boolean> {
+  const sessionId = cookies.get(APP_SESSION_COOKIE_NAME);
+  if (!sessionId) {
+    return false;
+  }
+  try {
+    const response = await fetchFn(buildApiUrl("/api/me"), {
+      method: "GET",
+      headers: {
+        cookie: `${APP_SESSION_COOKIE_NAME}=${encodeURIComponent(sessionId)}`
+      }
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 function internalOrigin(): string {

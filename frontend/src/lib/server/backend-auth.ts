@@ -20,6 +20,7 @@ type AuthFlowRecord = {
   redirectPath: string | null;
   redirectUri: string;
   expiresAt: number;
+  mode?: "silent-continuity";
 };
 
 type KeycloakTokenResponse = {
@@ -78,6 +79,11 @@ function createJsonError(status: number, error: string): Response {
     status,
     headers: noStoreHeaders({ "content-type": "application/json" })
   });
+}
+
+function loginEntryHref(path: string | null): string {
+  const safe = safeRedirectPath(path) || "/";
+  return `/?redirect=${encodeURIComponent(safe)}&reason=session_expired`;
 }
 
 async function syncAppSession(event: RequestEvent, accessToken: string, idToken: string): Promise<string | null> {
@@ -347,6 +353,15 @@ export function startLoginFlow(event: RequestEvent): Response {
   return createRedirectResponse(buildAuthorizationUrl(flow));
 }
 
+export function startContinuationFlow(event: RequestEvent): Response {
+  const flow: AuthFlowRecord = {
+    ...createFlow(event.url, safeRedirectPath(event.url.searchParams.get("redirect"))),
+    mode: "silent-continuity"
+  };
+  addFlowCookie(event, flow);
+  return createRedirectResponse(buildAuthorizationUrl(flow, { prompt: "none" }));
+}
+
 export function startRegisterFlow(event: RequestEvent): Response {
   const loginHint = event.url.searchParams.get("login_hint")?.trim() || null;
   const allowedDomains = parseAllowedRegistrationDomains(env.ALLOWED_REGISTRATION_DOMAINS);
@@ -389,15 +404,28 @@ export function startPasswordFlow(event: RequestEvent): Response {
 }
 
 export async function handleAuthCallback(event: RequestEvent): Promise<Response> {
+  const error = event.url.searchParams.get("error");
   const code = event.url.searchParams.get("code");
   const state = event.url.searchParams.get("state");
-  if (!code || !state) {
+  if (!state || (!code && !error)) {
     clearFlowCookie(event);
     return createJsonError(400, "invalid_code_or_state");
   }
 
   const flow = consumeFlowCookie(event, state);
   if (!flow) {
+    return createJsonError(400, "invalid_code_or_state");
+  }
+  if (error) {
+    if (
+      flow.mode === "silent-continuity" &&
+      ["login_required", "interaction_required", "account_selection_required"].includes(error)
+    ) {
+      return createRedirectResponse(loginEntryHref(flow.redirectPath));
+    }
+    return createJsonError(400, "token_exchange_failed");
+  }
+  if (!code) {
     return createJsonError(400, "invalid_code_or_state");
   }
 

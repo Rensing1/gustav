@@ -53,7 +53,11 @@ describe("learning course route load", () => {
         fetch: vi.fn() as unknown as typeof fetch,
         cookies: {} as Parameters<typeof load>[0]["cookies"],
         params: { courseId: "course-1" },
-        parent: vi.fn(async () => ({ bootstrap: null })) as Parameters<typeof load>[0]["parent"],
+        parent: vi.fn(async () => ({
+          bootstrap: null,
+          appSessionActive: false,
+          theme: "light"
+        })) as Parameters<typeof load>[0]["parent"],
         url: new URL("http://test.local/learning/courses/course-1")
       } as Parameters<typeof load>[0]);
       throw new Error("expected redirect");

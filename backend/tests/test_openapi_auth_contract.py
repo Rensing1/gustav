@@ -30,3 +30,15 @@ def test_csrf_write_endpoints_vary_origin():
     assert vary, "CSRF-protected endpoints must document Vary header"
     example = vary.get("example", "")
     assert "Origin" in example, "Vary example must include Origin"
+
+
+def test_openapi_documents_silent_session_continuity_flow():
+    spec = _load_spec()
+    operation = spec["paths"]["/auth/continue"]["get"]
+
+    assert operation["security"] == []
+    assert operation["operationId"] == "continueSession"
+    params = {param["name"]: param for param in operation.get("parameters", [])}
+    assert "redirect" in params
+    assert "prompt=none" in operation["description"]
+    assert "302" in operation["responses"]

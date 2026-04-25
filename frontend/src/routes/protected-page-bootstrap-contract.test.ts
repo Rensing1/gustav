@@ -41,4 +41,14 @@ describe("protected Svelte page bootstrap contract", () => {
       expect(loadSource, relativePath).not.toContain("requireSpaceBootstrap(");
     }
   });
+
+  it("routes recoverable app sessions through the silent continuity flow", () => {
+    const guardSource = readFileSync(path.resolve(routesDir, "../lib/server/guards.ts"), "utf8");
+    const layoutSource = readFileSync(path.resolve(routesDir, "+layout.server.ts"), "utf8");
+
+    expect(guardSource).toContain("/auth/continue");
+    expect(guardSource).toContain("appSessionActive");
+    expect(layoutSource).toContain("readAppSessionActive");
+    expect(layoutSource).toContain("appSessionActive");
+  });
 });

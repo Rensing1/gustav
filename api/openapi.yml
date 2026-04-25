@@ -5989,7 +5989,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        
+
+  /auth/continue:
+    get:
+      tags: [Auth]
+      summary: Continue an active SSO session without visible login
+      description: >-
+        Starts a SvelteKit Browser-BFF continuity flow for protected page reloads
+        where the stable app session is still valid but the BFF bootstrap is
+        missing. The route redirects to Keycloak with `prompt=none`, PKCE,
+        server-generated `state`, and `nonce`. It must not authenticate backend
+        Bearer-only APIs via `gustav_session`; the callback recreates the BFF
+        token session only if Keycloak confirms an active SSO session.
+      operationId: continueSession
+      security: []
+      parameters:
+        - in: query
+          name: redirect
+          schema:
+            type: string
+            maxLength: 256
+            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
+          description: Optional safe in-app path to return to after continuity.
+      responses:
+        '302':
+          description: Redirect to Keycloak authorization endpoint with prompt=none
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached.
+              schema:
+                type: string
+              example: private, no-store
+            Location:
+              description: Silent authorization URL at Keycloak
+              schema:
+                type: string
+        '400':
+          description: Invalid or expired request
+          headers:
+            Cache-Control:
+              description: Security — responses must not be cached.
+              schema:
+                type: string
+              example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
 
   /auth/callback:
@@ -6000,13 +6046,16 @@ paths:
         Handles the public SvelteKit Browser-BFF callback from Keycloak. On
         success the route persists the opaque frontend BFF session cookie
         `gustav_bff_session`, synchronizes the stable backend app session cookie
-        `gustav_session`, and redirects to the stored in-app target.
+        `gustav_session`, and redirects to the stored in-app target. Silent
+        continuity callbacks may return Keycloak errors such as `login_required`;
+        those are handled by returning to the normal login entry with the stored
+        in-app redirect.
       operationId: authCallback
       security: []
       parameters:
         - in: query
           name: code
-          required: true
+          required: false
           schema:
             type: string
         - in: query
@@ -6014,6 +6063,12 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: error
+          required: false
+          schema:
+            type: string
+          description: Keycloak error for silent continuity callbacks.
       responses:
         '302':
           description: Session established, redirect to application page

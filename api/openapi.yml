@@ -6009,7 +6009,7 @@ paths:
           schema:
             type: string
             maxLength: 256
-            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
+            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*(?:\?[A-Za-z0-9._~%&=+\-/:@]*)?$'
           description: Optional safe in-app path to return to after continuity.
       responses:
         '302':

@@ -329,6 +329,21 @@ describe("startContinuationFlow", () => {
     expect(flow.redirectPath).toBe("/learning/courses/course-1");
   });
 
+  it("keeps safe query strings on continuation redirects", () => {
+    const cookies = new MemoryCookies();
+    startContinuationFlow(
+      createEvent(
+        "https://app.localhost/auth/continue?redirect=/learning/courses/course-1?module=module-7",
+        cookies,
+        vi.fn() as never
+      )
+    );
+
+    const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+
+    expect(flow.redirectPath).toBe("/learning/courses/course-1?module=module-7");
+  });
+
   it("ignores unsafe continuation redirects", () => {
     const cookies = new MemoryCookies();
     startContinuationFlow(

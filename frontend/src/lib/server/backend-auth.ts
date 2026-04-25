@@ -12,6 +12,7 @@ const DEFAULT_KC_PUBLIC_BASE_URL = "https://id.localhost";
 const DEFAULT_KC_CLIENT_ID = "gustav-web";
 const DEFAULT_KC_REALM = "gustav";
 const FRONTEND_FLOW_COOKIE_NAME = "gustav_bff_oidc_flow";
+const SAFE_REDIRECT_PATH_PATTERN = /^(?!.*\/\/)(?!.*\.\.)\/[A-Za-z0-9._\/-]*(?:\?[A-Za-z0-9._~%&=+\-\/:@]*)?$/;
 
 type AuthFlowRecord = {
   state: string;
@@ -114,10 +115,7 @@ function createCodeChallenge(codeVerifier: string): string {
 }
 
 function safeRedirectPath(path: string | null | undefined): string | null {
-  if (!path || !path.startsWith("/")) {
-    return null;
-  }
-  if (path.startsWith("//") || path.includes("..") || path.length > 256) {
+  if (!path || path.length > 256 || !SAFE_REDIRECT_PATH_PATTERN.test(path)) {
     return null;
   }
   return path;

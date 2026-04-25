@@ -13,7 +13,8 @@ Defaults:
 from __future__ import annotations
 
 import os
-from urllib.parse import urlparse
+import ipaddress
+from urllib.parse import parse_qsl, urlparse
 
 import pytest
 
@@ -26,11 +27,49 @@ def _default_test_dsn() -> str:
     return f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
 
-def _is_local_db_host(hostname: str | None) -> bool:
-    if not hostname:
+def _split_libpq_host_values(values: list[str]) -> list[str]:
+    """Return individual libpq host targets from repeated/comma-separated fields."""
+
+    targets: list[str] = []
+    for value in values:
+        targets.extend(part.strip() for part in value.split(",") if part.strip())
+    return targets
+
+
+def _declared_db_targets(dsn: str) -> list[tuple[str, bool]]:
+    """Extract every declared DB target and whether it may be a Unix socket.
+
+    libpq URLs can hide the actual host in query parameters, for example
+    `postgresql:///postgres?host=db.example`. Tests mutate their target DB, so
+    the guard must inspect both the URI authority and libpq's query fields.
+    """
+
+    parsed = urlparse(dsn)
+    targets: list[tuple[str, bool]] = []
+    if parsed.hostname:
+        targets.append((parsed.hostname, False))
+
+    query_values: dict[str, list[str]] = {}
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        query_values.setdefault(key.lower(), []).append(value)
+
+    for host in _split_libpq_host_values(query_values.get("host", [])):
+        targets.append((host, True))
+    for hostaddr in _split_libpq_host_values(query_values.get("hostaddr", [])):
+        targets.append((hostaddr, False))
+    return targets
+
+
+def _is_local_db_target(target: str, *, allow_unix_socket: bool) -> bool:
+    normalized = target.strip().lower().strip("[]")
+    if allow_unix_socket and normalized.startswith("/"):
         return True
-    normalized = hostname.strip().lower().strip("[]")
-    return normalized in {"localhost", "127.0.0.1", "::1"} or normalized.endswith(".localhost")
+    if normalized == "localhost" or normalized.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
 
 
 def is_safe_db_test_dsn(dsn: str) -> bool:
@@ -41,8 +80,8 @@ def is_safe_db_test_dsn(dsn: str) -> bool:
     exported production DSN cannot be used accidentally.
     """
 
-    parsed = urlparse(dsn)
-    if _is_local_db_host(parsed.hostname):
+    targets = _declared_db_targets(dsn)
+    if targets and all(_is_local_db_target(target, allow_unix_socket=allow_socket) for target, allow_socket in targets):
         return True
     return (os.getenv("GUSTAV_DB_TEST_MODE") or "").strip().lower() == "isolated" and bool(
         (os.getenv("GUSTAV_TEST_RUN_ID") or "").strip()

@@ -8,6 +8,7 @@ Why:
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import yaml
 
 
@@ -42,6 +43,18 @@ def test_openapi_documents_silent_session_continuity_flow():
     assert "redirect" in params
     assert "prompt=none" in operation["description"]
     assert "302" in operation["responses"]
+
+
+def test_openapi_auth_continue_redirect_pattern_matches_runtime_contract():
+    spec = _load_spec()
+    operation = spec["paths"]["/auth/continue"]["get"]
+    params = {param["name"]: param for param in operation.get("parameters", [])}
+    pattern = re.compile(params["redirect"]["schema"]["pattern"])
+
+    assert pattern.fullmatch("/learning/courses/course-1?module=module-7")
+    assert not pattern.fullmatch("//evil.example")
+    assert not pattern.fullmatch("/../admin")
+    assert not pattern.fullmatch("/learning?next=https://evil.example")
 
 
 def test_openapi_documents_auth_callback_query_invariant():

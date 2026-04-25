@@ -136,6 +136,7 @@ def run_once(
     vision_adapter: VisionAdapterProtocol,
     feedback_adapter: FeedbackAdapterProtocol,
     now: Optional[datetime] = None,
+    test_run_id: str | None = None,
 ) -> bool:
     """
     Lease and process up to WORKER_CONCURRENCY pending submission jobs.
@@ -171,7 +172,7 @@ def run_once(
     with psycopg.connect(dsn, row_factory=dict_row) as lease_conn:  # type: ignore[arg-type]
         lease_conn.autocommit = False
 
-        jobs = _lease_jobs(lease_conn, now=tick, limit=concurrency)
+        jobs = _lease_jobs(lease_conn, now=tick, limit=concurrency, test_run_id=test_run_id)
         if not jobs:
             lease_conn.rollback()
             return False
@@ -205,7 +206,7 @@ def run_once(
     return True
 
 
-def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJob]:
+def _lease_jobs(conn: Connection, *, now: datetime, limit: int, test_run_id: str | None = None) -> list[QueuedJob]:
     """Lease up to `limit` visible jobs from the queue."""
     lease_key = uuid4()
     lease_until = now + timedelta(seconds=_lease_duration_seconds())
@@ -217,6 +218,13 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
         pytest_filter = _sql.SQL("")
         if _truthy_env("WORKER_SKIP_PYTEST_JOBS", default=False):
             pytest_filter = _sql.SQL("and coalesce(payload->>'_gustav_source', '') <> 'pytest'")
+        run_filter = _sql.SQL("")
+        params: list[object] = [now, now]
+        active_test_run_id = test_run_id or os.getenv("WORKER_TEST_RUN_ID")
+        if active_test_run_id:
+            run_filter = _sql.SQL("and payload->>'_gustav_test_run_id' = %s")
+            params.append(active_test_run_id)
+        params.extend([limit, str(lease_key), lease_until])
         stmt = _sql.SQL(
             """
             with candidate as (
@@ -237,6 +245,7 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
                           )
                        )
                   {pytest_filter}
+                  {run_filter}
                  order by visible_at asc, created_at asc
                  limit %s
                  for update skip locked
@@ -253,8 +262,13 @@ def _lease_jobs(conn: Connection, *, now: datetime, limit: int) -> list[QueuedJo
                      candidate.retry_count,
                      candidate.payload
             """
-        ).format(_sql.Identifier(queue_table), _sql.Identifier(queue_table), pytest_filter=pytest_filter)
-        cur.execute(stmt, (now, now, limit, str(lease_key), lease_until))
+        ).format(
+            _sql.Identifier(queue_table),
+            _sql.Identifier(queue_table),
+            pytest_filter=pytest_filter,
+            run_filter=run_filter,
+        )
+        cur.execute(stmt, params)
         rows = cur.fetchall()
     jobs: list[QueuedJob] = []
     for row in rows or []:

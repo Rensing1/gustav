@@ -63,6 +63,7 @@ def _ensure_audit_structures(conn: "psycopg.Connection") -> None:
               reason text null,
               created_at_utc timestamptz not null default now()
             );
+            alter table public.import_audit_runs add column if not exists batch_id uuid null;
             create table if not exists public.legacy_user_map (
               legacy_id uuid primary key,
               sub text unique
@@ -71,16 +72,16 @@ def _ensure_audit_structures(conn: "psycopg.Connection") -> None:
         )
 
 
-def _start_run(conn: "psycopg.Connection", source: str, dry_run: bool) -> str:
+def _start_run(conn: "psycopg.Connection", source: str, dry_run: bool, batch_id: str | None = None) -> str:
     notes = "dry-run" if dry_run else None
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
             """
-            insert into public.import_audit_runs (source, notes)
-            values (%s, %s)
+            insert into public.import_audit_runs (source, notes, batch_id)
+            values (%s, %s, %s::uuid)
             returning id
             """,
-            (source, notes),
+            (source, notes, batch_id),
         )
         row = cur.fetchone()
     return str(row[0])
@@ -108,10 +109,35 @@ def _fail_run(conn: "psycopg.Connection", run_id: str, message: str) -> None:
         )
 
 
-def _load_staging_users(conn: "psycopg.Connection") -> Sequence[Tuple[str, str]]:
+def _staging_batch_clause(conn: "psycopg.Connection", table_name: str, batch_id: str | None) -> tuple[str, tuple[str, ...]]:
+    """Return a WHERE clause that scopes a staging table to one import batch."""
+
+    if not batch_id:
+        return "", ()
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
-            "select id::text, sub from staging.users order by id"
+            """
+            select 1
+              from information_schema.columns
+             where table_schema = 'staging'
+               and table_name = %s
+               and column_name = 'import_batch_id'
+            """,
+            (table_name,),
+        )
+        if cur.fetchone() is None:
+            raise RuntimeError(
+                f"staging.{table_name} must expose import_batch_id when --batch-id is used"
+            )
+    return " where import_batch_id = %s::uuid", (batch_id,)
+
+
+def _load_staging_users(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str]]:
+    where_sql, params = _staging_batch_clause(conn, "users", batch_id)
+    with conn.cursor() as cur:  # type: ignore[attr-defined]
+        cur.execute(
+            f"select id::text, sub from staging.users{where_sql} order by id",
+            params,
         )
         rows = cur.fetchall()
     return [(row[0], row[1]) for row in rows]
@@ -211,64 +237,78 @@ def _load_legacy_user_map(conn: "psycopg.Connection") -> dict[str, str]:
     return {row[0]: row[1] for row in rows}
 
 
-def _load_staging_courses(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, str]]:
+def _load_staging_courses(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str, str]]:
+    where_sql, params = _staging_batch_clause(conn, "courses", batch_id)
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
-            "select id::text, title, creator_id::text from staging.courses order by title"
+            f"select id::text, title, creator_id::text from staging.courses{where_sql} order by title",
+            params,
         )
         rows = cur.fetchall()
     return [(row[0], row[1], row[2]) for row in rows]
 
 
-def _load_staging_course_memberships(conn: "psycopg.Connection") -> Sequence[Tuple[str, str]]:
+def _load_staging_course_memberships(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str]]:
+    where_sql, params = _staging_batch_clause(conn, "course_students", batch_id)
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
-            "select course_id::text, student_id::text from staging.course_students order by course_id"
+            f"select course_id::text, student_id::text from staging.course_students{where_sql} order by course_id",
+            params,
         )
         rows = cur.fetchall()
     return [(row[0], row[1]) for row in rows]
 
 
-def _load_staging_units(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, str | None]]:
+def _load_staging_units(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str, str | None]]:
+    where_sql, params = _staging_batch_clause(conn, "learning_units", batch_id)
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
-            "select id::text, title, description from staging.learning_units order by title"
+            f"select id::text, title, description from staging.learning_units{where_sql} order by title",
+            params,
         )
         rows = cur.fetchall()
     return [(row[0], row[1], row[2]) for row in rows]
 
 
-def _load_staging_units_with_authors(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, str | None, str]]:
+def _load_staging_units_with_authors(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str, str | None, str]]:
+    where_sql, params = _staging_batch_clause(conn, "learning_units", batch_id)
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
-            "select id::text, title, description, creator_id::text from staging.learning_units order by title"
+            f"select id::text, title, description, creator_id::text from staging.learning_units{where_sql} order by title",
+            params,
         )
         rows = cur.fetchall()
     return [(row[0], row[1], row[2], row[3]) for row in rows]
 
 
-def _load_staging_unit_sections(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, str, int]]:
+def _load_staging_unit_sections(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str, str, int]]:
+    where_sql, params = _staging_batch_clause(conn, "unit_sections", batch_id)
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
-            "select id::text, unit_id::text, title, order_in_unit from staging.unit_sections order by title"
+            f"select id::text, unit_id::text, title, order_in_unit from staging.unit_sections{where_sql} order by title",
+            params,
         )
         rows = cur.fetchall()
     return [(row[0], row[1], row[2], int(row[3])) for row in rows]
 
 
-def _load_staging_course_unit_assignments(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, int | None]]:
+def _load_staging_course_unit_assignments(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str, int | None]]:
+    where_sql, params = _staging_batch_clause(conn, "course_unit_assignments", batch_id)
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
-            "select course_id::text, unit_id::text, position from staging.course_unit_assignments order by course_id, position nulls last, unit_id"
+            f"select course_id::text, unit_id::text, position from staging.course_unit_assignments{where_sql} order by course_id, position nulls last, unit_id",
+            params,
         )
         rows = cur.fetchall()
     return [(row[0], row[1], (int(row[2]) if row[2] is not None else None)) for row in rows]
 
 
-def _load_staging_section_releases(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, str, bool, object | None]]:
+def _load_staging_section_releases(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str, str, bool, object | None]]:
+    where_sql, params = _staging_batch_clause(conn, "section_releases", batch_id)
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
-            "select course_id::text, unit_id::text, section_id::text, coalesce(visible, true), released_at from staging.section_releases"
+            f"select course_id::text, unit_id::text, section_id::text, coalesce(visible, true), released_at from staging.section_releases{where_sql}",
+            params,
         )
         rows = cur.fetchall()
     return [(row[0], row[1], row[2], bool(row[3]), row[4]) for row in rows]
@@ -801,20 +841,23 @@ def _apply_section_releases(
         if batch_size and idx % batch_size == 0:
             click.echo(f"  … releases progress {idx}/{total}")
 
-def _load_staging_materials(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, str, str | None, str | None, str | None, int | None, str | None, int, object | None, str | None]]:
+def _load_staging_materials(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str, str, str | None, str | None, str | None, int | None, str | None, int, object | None, str | None]]:
+    where_sql, params = _staging_batch_clause(conn, "materials_json", batch_id)
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         try:
             cur.execute(
-                """
+                f"""
                 select id::text, section_id::text, kind, title, body_md, storage_key, size_bytes, sha256, position, created_at, mime_type, legacy_url
                 from staging.materials_json
+                {where_sql}
                 order by section_id, position, id
-                """
+                """,
+                params,
             )
         except Exception:
             # Fallback for minimal schemas: project missing columns as NULLs
             cur.execute(
-                """
+                f"""
                 select id::text,
                        section_id::text,
                        kind,
@@ -828,8 +871,10 @@ def _load_staging_materials(conn: "psycopg.Connection") -> Sequence[Tuple[str, s
                        null::text as mime_type,
                        null::text as legacy_url
                 from staging.materials_json
+                {where_sql}
                 order by section_id, position, id
-                """
+                """,
+                params,
             )
         rows = cur.fetchall()
     return [
@@ -957,10 +1002,17 @@ def _apply_materials(
             click.echo(f"  … materials progress {idx}/{total}")
 
 
-def _load_staging_tasks(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, str, list[str], str | None, int | None, int, object | None]]:
+def _load_staging_tasks(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str, str, list[str], str | None, int | None, int, object | None]]:
+    where_sql, params = _staging_batch_clause(conn, "tasks_regular", batch_id)
     with conn.cursor() as cur:  # type: ignore[attr-defined]
         cur.execute(
-            "select tr.id::text, tr.section_id::text, tb.instruction_md, tb.assessment_criteria, tb.hints_md, tr.max_attempts, tr.order_in_section, tr.created_at from staging.tasks_regular tr join staging.tasks_base tb on tb.id = tr.id"
+            f"""
+            select tr.id::text, tr.section_id::text, tb.instruction_md, tb.assessment_criteria, tb.hints_md, tr.max_attempts, tr.order_in_section, tr.created_at
+              from staging.tasks_regular tr
+              join staging.tasks_base tb on tb.id = tr.id
+              {where_sql.replace('import_batch_id', 'tr.import_batch_id') if where_sql else ''}
+            """,
+            params,
         )
         rows = cur.fetchall()
     tasks = []
@@ -1048,7 +1100,7 @@ def _apply_tasks(
             click.echo(f"  … tasks progress {idx}/{total}")
 
 
-def _load_staging_submissions(conn: "psycopg.Connection") -> Sequence[Tuple[str, str, str, str, str | None, str | None, str | None, int | None, str | None, object]]:
+def _load_staging_submissions(conn: "psycopg.Connection", batch_id: str | None = None) -> Sequence[Tuple[str, str, str, str, str | None, str | None, str | None, int | None, str | None, object]]:
     """Load legacy submissions if the staging table exists; otherwise return empty.
 
     Tests may prepare only a subset of staging tables (units/sections/tasks).
@@ -1063,12 +1115,15 @@ def _load_staging_submissions(conn: "psycopg.Connection") -> Sequence[Tuple[str,
         cur.execute("select to_regclass('staging.submissions')")
         if cur.fetchone()[0] is None:
             return []
+        where_sql, params = _staging_batch_clause(conn, "submissions", batch_id)
         cur.execute(
-            """
+            f"""
             select id::text, task_id::text, student_sub, kind, text_body, storage_key, mime_type, size_bytes, sha256, created_at
             from staging.submissions
+            {where_sql}
             order by created_at asc
-            """
+            """,
+            params,
         )
         rows = cur.fetchall()
     return [
@@ -1207,7 +1262,13 @@ def _apply_submissions(
     show_default=True,
     help="Emit progress every N processed items.",
 )
-def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_size: int) -> None:
+@click.option(
+    "--batch-id",
+    type=str,
+    required=False,
+    help="Only process staging rows with this import_batch_id UUID.",
+)
+def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_size: int, batch_id: str | None) -> None:
     """Execute the Phase 1 legacy migration (identity map ingestion).
 
     Why:
@@ -1227,6 +1288,8 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
     _ensure_psycopg()
     mode_text = "DRY-RUN" if dry_run else "LIVE"
     click.echo(f"Starting legacy migration ({mode_text})")
+    if batch_id:
+        click.echo(f"Batch ID: {batch_id}")
 
     run_id: str | None = None
     try:
@@ -1235,7 +1298,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
             # Ensure required audit structures exist before starting a run.
             # Keeps first-time executions reproducible without manual SQL.
             _ensure_audit_structures(conn)
-            run_id = _start_run(conn, source, dry_run)
+            run_id = _start_run(conn, source, dry_run, batch_id=batch_id)
             click.echo(f"Run ID: {run_id}")
             completed: set[str] = set()
             if resume_run:
@@ -1244,7 +1307,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
                     click.echo(f"Resuming from run {resume_run}: completed phases = {', '.join(sorted(completed)) or 'none'}")
                 except Exception:
                     click.echo("Warning: could not load completed phases; proceeding without resume.")
-            legacy_users = _load_staging_users(conn)
+            legacy_users = _load_staging_users(conn, batch_id=batch_id)
             if resume_run and "identity_map" in completed:
                 click.echo("Skipping phase identity_map (resume)")
             else:
@@ -1256,7 +1319,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
             if dry_run:
                 # Merge staged users so dry-run output reflects potential imports.
                 identity_map = {**identity_map, **{legacy_id: sub for legacy_id, sub in legacy_users}}
-            courses = _load_staging_courses(conn)
+            courses = _load_staging_courses(conn, batch_id=batch_id)
             if resume_run and "courses" in completed:
                 imported_courses = set()
                 click.echo("Skipping phase courses (resume)")
@@ -1265,7 +1328,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
                 imported_courses = _apply_courses(conn, run_id, courses, identity_map, dry_run=dry_run, batch_size=batch_size)
                 _mark_phase(conn, run_id, "courses")
                 click.echo(f"Processed {len(imported_courses)}/{len(courses)} courses")
-            memberships = _load_staging_course_memberships(conn)
+            memberships = _load_staging_course_memberships(conn, batch_id=batch_id)
             if dry_run:
                 available_courses = {
                     course_id
@@ -1294,7 +1357,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
                 _mark_phase(conn, run_id, "memberships")
                 click.echo(f"Processed {len(memberships)} course memberships (see audit for outcomes)")
             # Units & Sections
-            units = _load_staging_units_with_authors(conn)
+            units = _load_staging_units_with_authors(conn, batch_id=batch_id)
             if resume_run and "units" in completed:
                 imported_units = set()
                 click.echo("Skipping phase units (resume)")
@@ -1303,7 +1366,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
                 imported_units = _apply_units(conn, run_id, units, identity_map, dry_run=dry_run, batch_size=batch_size)
                 _mark_phase(conn, run_id, "units")
                 click.echo(f"Processed {len(imported_units)}/{len(units)} units")
-            sections = _load_staging_unit_sections(conn)
+            sections = _load_staging_unit_sections(conn, batch_id=batch_id)
             if dry_run:
                 available_units = {unit_id for unit_id, _t, _s, legacy_author in units if identity_map.get(legacy_author)}
             else:
@@ -1320,7 +1383,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
                 _mark_phase(conn, run_id, "sections")
                 click.echo(f"Processed {len(sections)} unit sections (see audit for outcomes)")
             # Course modules & releases
-            modules = _load_staging_course_unit_assignments(conn)
+            modules = _load_staging_course_unit_assignments(conn, batch_id=batch_id)
             if resume_run and "modules" in completed:
                 click.echo("Skipping phase modules (resume)")
             else:
@@ -1328,7 +1391,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
                 processed_pairs = _apply_course_modules(conn, run_id, modules, dry_run=dry_run, batch_size=batch_size)
                 _mark_phase(conn, run_id, "modules")
                 click.echo(f"Processed {len(processed_pairs)}/{len(modules)} course modules (pairs)")
-            rels = _load_staging_section_releases(conn)
+            rels = _load_staging_section_releases(conn, batch_id=batch_id)
             if resume_run and "releases" in completed:
                 click.echo("Skipping phase releases (resume)")
             else:
@@ -1337,7 +1400,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
                 _mark_phase(conn, run_id, "releases")
                 click.echo(f"Processed {len(rels)} section releases (see audit for outcomes)")
             # Materials
-            materials = _load_staging_materials(conn)
+            materials = _load_staging_materials(conn, batch_id=batch_id)
             if resume_run and "materials" in completed:
                 click.echo("Skipping phase materials (resume)")
             else:
@@ -1346,7 +1409,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
                 _mark_phase(conn, run_id, "materials")
                 click.echo(f"Processed {len(materials)} materials (see audit for outcomes)")
             # Tasks
-            tasks = _load_staging_tasks(conn)
+            tasks = _load_staging_tasks(conn, batch_id=batch_id)
             if resume_run and "tasks" in completed:
                 click.echo("Skipping phase tasks (resume)")
             else:
@@ -1355,7 +1418,7 @@ def cli(db_dsn: str, source: str, dry_run: bool, resume_run: str | None, batch_s
                 _mark_phase(conn, run_id, "tasks")
                 click.echo(f"Processed {len(tasks)} tasks (see audit for outcomes)")
             # Submissions
-            subs = _load_staging_submissions(conn)
+            subs = _load_staging_submissions(conn, batch_id=batch_id)
             if resume_run and "submissions" in completed:
                 click.echo("Skipping phase submissions (resume)")
             else:

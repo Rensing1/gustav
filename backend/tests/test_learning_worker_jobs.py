@@ -32,6 +32,7 @@ except pytest.skip.Exception as exc:  # pragma: no cover - module level skip
 import psycopg  # type: ignore  # noqa: E402
 
 from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore
+from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id
 from backend.learning.workers import process_learning_submission_jobs as worker_module  # noqa: E402  # type: ignore
 from backend.learning.workers.process_learning_submission_jobs import (  # noqa: E402  # type: ignore
     FeedbackResult,
@@ -165,13 +166,13 @@ class _CountingVisionAdapter:
 
 async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, str, str, str]:
     """Create a pending submission and return (fixture, worker_dsn, job_id, submission_id)."""
+    test_run_id = current_test_run_id()
     fixture = await _prepare_learning_fixture()
     dsn = _dsn()
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()
 
     # Ensure membership exists (some suite orders may skip API add_member on errors)
@@ -235,7 +236,15 @@ async def _prepare_submission_with_job(*, idempotency_key: str) -> tuple[dict, s
                     values (%s::uuid, %s::jsonb, now(), 'queued', 0)
                     returning id::text
                     """,
-                    (submission_id, {"student_sub": fixture.student_sub, "criteria": []}),
+                    (
+                        submission_id,
+                        {
+                            "student_sub": fixture.student_sub,
+                            "criteria": [],
+                            "_gustav_source": "pytest",
+                            "_gustav_test_run_id": test_run_id,
+                        },
+                    ),
                 )
                 job_id = cur.fetchone()[0]
             else:
@@ -313,9 +322,8 @@ async def test_worker_processes_pending_submission_to_completed():
 
     # Ensure a clean queue so the worker leases the job created in this test.
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
-            conn.commit()
+        cleanup_learning_jobs_for_run(conn)
+        conn.commit()
 
     repo = DBLearningRepo(dsn=dsn)
     usecase = CreateSubmissionUseCase(repo)
@@ -370,6 +378,7 @@ async def test_worker_processes_pending_submission_to_completed():
         vision_adapter=_StubVisionAdapter(text_md="## Vision Extract\n\nStub content."),
         feedback_adapter=_StubFeedbackAdapter(feedback_md="### Feedback\n\n- Gut gemacht."),
         now=datetime.now(tz=timezone.utc),
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True
@@ -446,6 +455,7 @@ async def test_worker_retries_vision_transient_error(monkeypatch):
         vision_adapter=_TransientVisionAdapter(),
         feedback_adapter=_StubFeedbackAdapter(feedback_md="unused"),
         now=tick,
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True
@@ -520,6 +530,7 @@ async def test_worker_marks_failed_after_max_retries(monkeypatch):
         vision_adapter=_PermanentVisionAdapter(),
         feedback_adapter=_StubFeedbackAdapter(feedback_md="unused"),
         now=tick,
+        test_run_id=current_test_run_id(),
     )
 
     # Use a slightly larger offset than the nominal backoff to avoid
@@ -531,6 +542,7 @@ async def test_worker_marks_failed_after_max_retries(monkeypatch):
         vision_adapter=_PermanentVisionAdapter(),
         feedback_adapter=_StubFeedbackAdapter(feedback_md="unused"),
         now=second_tick,
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True
@@ -592,6 +604,7 @@ async def test_worker_retries_feedback_transient_error(monkeypatch):
         vision_adapter=_StubVisionAdapter(text_md="## Student answer\n\nContent."),
         feedback_adapter=_TransientFeedbackAdapter(),
         now=tick,
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True
@@ -660,6 +673,7 @@ async def test_worker_marks_feedback_failure_records_job_error(monkeypatch: pyte
         vision_adapter=_StubVisionAdapter(text_md="## Answer\n\nContent."),
         feedback_adapter=_PermanentFeedbackAdapter(),
         now=tick,
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True
@@ -724,6 +738,7 @@ async def test_worker_logs_safe_feedback_context_and_persists_specific_feedback_
         vision_adapter=_StubVisionAdapter(text_md="## Answer\n\nContent."),
         feedback_adapter=_PermanentFeedbackAdapter(message="invalid_feedback_format"),
         now=tick,
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True
@@ -788,6 +803,7 @@ async def test_worker_marks_invalid_analysis_without_retry(monkeypatch: pytest.M
         vision_adapter=_StubVisionAdapter(text_md="## Answer\n\nContent."),
         feedback_adapter=_InvalidAnalysisFeedbackAdapter(),
         now=tick,
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True
@@ -847,6 +863,7 @@ async def test_worker_success_updates_metrics_and_gauge():
         vision_adapter=_StubVisionAdapter(text_md="# Metrics Success"),
         feedback_adapter=_StubFeedbackAdapter(feedback_md="Well done"),
         now=tick,
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True
@@ -873,6 +890,7 @@ async def test_worker_retry_emits_retry_metric_and_warning(caplog: pytest.LogCap
         vision_adapter=_TransientVisionAdapter(message="temporary retry"),
         feedback_adapter=_StubFeedbackAdapter(feedback_md="unused"),
         now=tick,
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True
@@ -890,6 +908,7 @@ async def test_worker_concurrency_leases_multiple_jobs(monkeypatch: pytest.Monke
     _require_db_or_skip()
     telemetry.reset_for_tests()
     monkeypatch.setenv("WORKER_CONCURRENCY", "2")
+    test_run_id = current_test_run_id()
 
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or _dsn()
     teacher_sub = f"teacher-{uuid.uuid4()}"
@@ -897,7 +916,7 @@ async def test_worker_concurrency_leases_multiple_jobs(monkeypatch: pytest.Monke
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+            cleanup_learning_jobs_for_run(conn, test_run_id)
 
             cur.execute("select set_config('app.current_sub', %s, false)", (teacher_sub,))
             cur.execute(
@@ -957,6 +976,7 @@ async def test_worker_concurrency_leases_multiple_jobs(monkeypatch: pytest.Monke
                     # (See `WORKER_SKIP_PYTEST_JOBS` in docker-compose.yml and the
                     # dedicated contract tests below.)
                     "_gustav_source": "pytest",
+                    "_gustav_test_run_id": test_run_id,
                     "submission_id": submission_id,
                     "course_id": str(course_id),
                     "task_id": str(task_id),
@@ -977,13 +997,17 @@ async def test_worker_concurrency_leases_multiple_jobs(monkeypatch: pytest.Monke
         vision_adapter=_StubVisionAdapter(text_md="## Vision Extract\n\nContent."),
         feedback_adapter=_StubFeedbackAdapter(feedback_md="Feedback"),
         now=datetime.now(tz=timezone.utc),
+        test_run_id=test_run_id,
     )
 
     assert processed is True
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("select count(*) from public.learning_submission_jobs")
+            cur.execute(
+                "select count(*) from public.learning_submission_jobs where payload->>'_gustav_test_run_id' = %s",
+                (test_run_id,),
+            )
             remaining_jobs = int(cur.fetchone()[0])
             cur.execute(
                 """
@@ -1005,6 +1029,7 @@ async def test_worker_feedback_retry_uses_cached_ocr(monkeypatch: pytest.MonkeyP
 
     _require_db_or_skip()
     telemetry.reset_for_tests()
+    test_run_id = current_test_run_id()
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or _dsn()
 
     teacher_sub = f"teacher-{uuid.uuid4()}"
@@ -1013,7 +1038,7 @@ async def test_worker_feedback_retry_uses_cached_ocr(monkeypatch: pytest.MonkeyP
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+            cleanup_learning_jobs_for_run(conn, test_run_id)
             cur.execute("select set_config('app.current_sub', %s, false)", (teacher_sub,))
             cur.execute(
                 "insert into public.courses (title, teacher_id) values (%s, %s) returning id",
@@ -1055,6 +1080,8 @@ async def test_worker_feedback_retry_uses_cached_ocr(monkeypatch: pytest.MonkeyP
                 (submission_id, course_id, task_id, section_id, student_sub, "0" * 64),
             )
             payload = {
+                "_gustav_source": "pytest",
+                "_gustav_test_run_id": test_run_id,
                 "submission_id": submission_id,
                 "course_id": str(course_id),
                 "task_id": str(task_id),
@@ -1076,6 +1103,7 @@ async def test_worker_feedback_retry_uses_cached_ocr(monkeypatch: pytest.MonkeyP
         vision_adapter=counting_vision,
         feedback_adapter=_StubFeedbackAdapter(feedback_md="Feedback"),
         now=datetime.now(tz=timezone.utc),
+        test_run_id=test_run_id,
     )
 
     assert processed is True
@@ -1083,7 +1111,10 @@ async def test_worker_feedback_retry_uses_cached_ocr(monkeypatch: pytest.MonkeyP
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("select count(*) from public.learning_submission_jobs")
+            cur.execute(
+                "select count(*) from public.learning_submission_jobs where payload->>'_gustav_test_run_id' = %s",
+                (test_run_id,),
+            )
             remaining_jobs = int(cur.fetchone()[0])
             cur.execute(
                 """
@@ -1113,6 +1144,7 @@ async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.M
     # - external docker workers (default true) should skip them.
     monkeypatch.setenv("WORKER_SKIP_PYTEST_JOBS", "false")
     lease_now = datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+    test_run_id = current_test_run_id()
 
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or _dsn()
     teacher_sub = f"teacher-{uuid.uuid4()}"
@@ -1120,7 +1152,7 @@ async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.M
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+            cleanup_learning_jobs_for_run(conn, test_run_id)
             cur.execute("select set_config('app.current_sub', %s, false)", (teacher_sub,))
             cur.execute(
                 "insert into public.courses (title, teacher_id) values (%s, %s) returning id",
@@ -1170,6 +1202,7 @@ async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.M
             )
             payload = {
                 "_gustav_source": "pytest",
+                "_gustav_test_run_id": test_run_id,
                 "submission_id": submission_id,
                 "course_id": str(course_id),
                 "task_id": str(task_id),
@@ -1198,6 +1231,7 @@ async def test_worker_releases_job_when_processing_crashes(monkeypatch: pytest.M
             vision_adapter=_StubVisionAdapter(text_md="# boom"),
             feedback_adapter=_StubFeedbackAdapter(feedback_md="unused"),
             now=lease_now,
+            test_run_id=test_run_id,
         )
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
@@ -1224,6 +1258,7 @@ async def test_worker_concurrency_is_capped(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     telemetry.reset_for_tests()
     monkeypatch.setenv("WORKER_CONCURRENCY", "10")
+    test_run_id = current_test_run_id()
 
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or _dsn()
     teacher_sub = f"teacher-{uuid.uuid4()}"
@@ -1231,7 +1266,7 @@ async def test_worker_concurrency_is_capped(monkeypatch: pytest.MonkeyPatch):
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+            cleanup_learning_jobs_for_run(conn, test_run_id)
             cur.execute("select set_config('app.current_sub', %s, false)", (teacher_sub,))
             cur.execute(
                 "insert into public.courses (title, teacher_id) values (%s, %s) returning id",
@@ -1284,6 +1319,8 @@ async def test_worker_concurrency_is_capped(monkeypatch: pytest.MonkeyPatch):
                     ),
                 )
                 payload = {
+                    "_gustav_source": "pytest",
+                    "_gustav_test_run_id": test_run_id,
                     "submission_id": submission_id,
                     "course_id": str(course_id),
                     "task_id": str(task_id),
@@ -1303,13 +1340,17 @@ async def test_worker_concurrency_is_capped(monkeypatch: pytest.MonkeyPatch):
         vision_adapter=_StubVisionAdapter(text_md="## Vision Extract\n\nContent."),
         feedback_adapter=_StubFeedbackAdapter(feedback_md="Feedback"),
         now=datetime.now(tz=timezone.utc),
+        test_run_id=test_run_id,
     )
 
     assert processed is True
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
         with conn.cursor() as cur:
-            cur.execute("select count(*) from public.learning_submission_jobs")
+            cur.execute(
+                "select count(*) from public.learning_submission_jobs where payload->>'_gustav_test_run_id' = %s",
+                (test_run_id,),
+            )
             remaining_jobs = int(cur.fetchone()[0])
 
     assert remaining_jobs >= 2, "concurrency should be capped, leaving some jobs queued"
@@ -1329,7 +1370,7 @@ async def test_worker_extends_lease_window(monkeypatch: pytest.MonkeyPatch):
 
     now = datetime.now(tz=timezone.utc)
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        leased = worker_module._lease_jobs(conn, now=now, limit=1)
+        leased = worker_module._lease_jobs(conn, now=now, limit=1, test_run_id=current_test_run_id())
         job = leased[0] if leased else None
         conn.commit()
     assert job is not None
@@ -1348,8 +1389,7 @@ async def test_worker_extends_lease_window(monkeypatch: pytest.MonkeyPatch):
 
     # Cleanup to avoid leaking leased jobs to other tests
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs where id = %s::uuid", (job_id,))
+        cleanup_learning_jobs_for_run(conn)
         conn.commit()
 
 
@@ -1359,14 +1399,14 @@ async def test_create_submission_tags_queue_jobs_under_pytest(monkeypatch: pytes
 
     _require_db_or_skip()
     monkeypatch.setenv("PYTEST_CURRENT_TEST", "worker-job-tagging")
+    test_run_id = current_test_run_id()
 
     fixture = await _prepare_learning_fixture()
     dsn = _dsn()
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()
 
     repo = DBLearningRepo(dsn=dsn)
@@ -1408,10 +1448,10 @@ async def test_create_submission_tags_queue_jobs_under_pytest(monkeypatch: pytes
     if isinstance(payload, str):
         payload = json.loads(payload)
     assert payload.get("_gustav_source") == "pytest"
+    assert payload.get("_gustav_test_run_id") == test_run_id
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs where submission_id = %s::uuid", (submission["id"],))
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()
 
 
@@ -1423,14 +1463,14 @@ async def test_worker_skips_pytest_tagged_jobs_when_configured(monkeypatch: pyte
     telemetry.reset_for_tests()
     monkeypatch.setenv("WORKER_SKIP_PYTEST_JOBS", "true")
     monkeypatch.setenv("PYTEST_CURRENT_TEST", "worker-skip-pytest-jobs")
+    test_run_id = current_test_run_id()
 
     fixture = await _prepare_learning_fixture()
     dsn = _dsn()
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()
 
     repo = DBLearningRepo(dsn=dsn)
@@ -1514,16 +1554,12 @@ async def test_worker_skips_pytest_tagged_jobs_when_configured(monkeypatch: pyte
                     """,
                     (visible_at, job_id),
                 )
-        leased_jobs = worker_module._lease_jobs(conn, now=now, limit=1)
+        leased_jobs = worker_module._lease_jobs(conn, now=now, limit=1, test_run_id=test_run_id)
         leased = leased_jobs[0] if leased_jobs else None
         conn.commit()
     assert leased is not None
     assert leased.id == real_job_id
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute(
-                "delete from public.learning_submission_jobs where id in (%s::uuid, %s::uuid)",
-                (pytest_job_id, real_job_id),
-            )
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()

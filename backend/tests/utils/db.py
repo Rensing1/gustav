@@ -13,6 +13,8 @@ Defaults:
 from __future__ import annotations
 
 import os
+from urllib.parse import urlparse
+
 import pytest
 
 
@@ -22,6 +24,29 @@ def _default_test_dsn() -> str:
     user = os.getenv("APP_DB_USER", "gustav_app")
     password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
     return f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+
+def _is_local_db_host(hostname: str | None) -> bool:
+    if not hostname:
+        return True
+    normalized = hostname.strip().lower().strip("[]")
+    return normalized in {"localhost", "127.0.0.1", "::1"} or normalized.endswith(".localhost")
+
+
+def is_safe_db_test_dsn(dsn: str) -> bool:
+    """Return whether pytest may use this DSN as a mutable DB target.
+
+    Local Postgres/Supabase is always acceptable because it is the documented
+    test target. External hosts require an explicit isolation contract so an
+    exported production DSN cannot be used accidentally.
+    """
+
+    parsed = urlparse(dsn)
+    if _is_local_db_host(parsed.hostname):
+        return True
+    return (os.getenv("GUSTAV_DB_TEST_MODE") or "").strip().lower() == "isolated" and bool(
+        (os.getenv("GUSTAV_TEST_RUN_ID") or "").strip()
+    )
 
 
 def require_db_or_skip() -> None:
@@ -38,7 +63,8 @@ def require_db_or_skip() -> None:
 
     candidates: list[str] = []
     env_dsn = os.getenv("DATABASE_URL")
-    if env_dsn:
+    unsafe_env_dsn = bool(env_dsn and not is_safe_db_test_dsn(env_dsn))
+    if env_dsn and not unsafe_env_dsn:
         candidates.append(env_dsn)
     candidates.append(_default_test_dsn())
 
@@ -50,6 +76,11 @@ def require_db_or_skip() -> None:
             continue
     strict = (os.getenv("REQUIRE_DB_TESTS", "0") or "").strip().lower() in {"1", "true", "yes", "on"}
     message = "Database not reachable; ensure local DB at 127.0.0.1:54322 or set DATABASE_URL"
+    if unsafe_env_dsn:
+        message = (
+            "External DATABASE_URL ignored for DB tests without "
+            "GUSTAV_DB_TEST_MODE=isolated and GUSTAV_TEST_RUN_ID; local DB was not reachable"
+        )
     if strict:
         pytest.fail(message)
     pytest.skip(message)

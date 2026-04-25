@@ -18,6 +18,7 @@ from backend.learning.repo_db import DBLearningRepo  # type: ignore
 from backend.learning.usecases import CreateSubmissionInput, CreateSubmissionUseCase  # type: ignore
 from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore
 from backend.tests.test_learning_worker_jobs import _dsn  # type: ignore
+from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # type: ignore
 from backend.learning.workers.process_learning_submission_jobs import FeedbackResult, run_once  # type: ignore
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -50,10 +51,10 @@ async def test_worker_bypasses_vision_for_text_and_preserves_text(monkeypatch: p
     # Ensure worker and app use the same DSN (avoid cross-DB drift)
     monkeypatch.setenv("SERVICE_ROLE_DSN", dsn)
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
+    test_run_id = current_test_run_id()
     # Keep queue deterministic for this test: remove any leftover jobs
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn, test_run_id)
         conn.commit()
     repo = DBLearningRepo(dsn=dsn)
     usecase = CreateSubmissionUseCase(repo)
@@ -83,6 +84,7 @@ async def test_worker_bypasses_vision_for_text_and_preserves_text(monkeypatch: p
         vision_adapter=exploding,
         feedback_adapter=feedback,
         now=datetime.now(tz=timezone.utc),
+        test_run_id=test_run_id,
     )
 
     # Assert: job processed, vision not called, feedback called

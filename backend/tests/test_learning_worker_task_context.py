@@ -30,6 +30,7 @@ from backend.learning.workers.process_learning_submission_jobs import (  # noqa:
     run_once,
 )
 from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
+from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 
 
@@ -62,8 +63,7 @@ async def test_job_payload_does_not_contain_teacher_context():
 
     # Reset queue
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn)
         conn.commit()
 
     # Enqueue a new submission
@@ -243,8 +243,7 @@ async def test_worker_passes_task_context_to_feedback_adapter():
 
     # Reset queue
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn)
         conn.commit()
 
     # Enqueue submission
@@ -278,6 +277,7 @@ async def test_worker_passes_task_context_to_feedback_adapter():
             vision_adapter=_Vision(text="Text"),
             feedback_adapter=adapter,
             now=datetime.now(tz=timezone.utc),
+            test_run_id=current_test_run_id(),
         )
         assert processed is True
         if not _job_pending(worker_dsn=worker_dsn, submission_id=sub_id):
@@ -296,8 +296,7 @@ async def test_modular_submission_job_payload_includes_instruction_but_not_teach
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn)
         conn.commit()
 
     repo = DBLearningRepo(dsn=dsn)
@@ -345,8 +344,7 @@ async def test_worker_passes_modular_visual_task_context_to_visual_feedback_adap
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
 
     with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute("delete from public.learning_submission_jobs")
+        cleanup_learning_jobs_for_run(conn)
         conn.commit()
 
     storage_key = f"submissions/{fixture['course_id']}/{fixture['task']['id']}/{fixture['student_sub']}/visual-context.png"
@@ -381,6 +379,7 @@ async def test_worker_passes_modular_visual_task_context_to_visual_feedback_adap
         vision_adapter=_Vision(text="unused"),
         feedback_adapter=adapter,
         now=datetime.now(tz=timezone.utc),
+        test_run_id=current_test_run_id(),
     )
 
     assert processed is True

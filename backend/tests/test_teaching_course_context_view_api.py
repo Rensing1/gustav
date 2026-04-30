@@ -148,3 +148,41 @@ async def test_teacher_course_context_forbids_student(monkeypatch: pytest.Monkey
 
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}
+
+
+@pytest.mark.anyio
+async def test_teacher_course_ai_usage_empty_course_returns_zero_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = SessionStore()
+    monkeypatch.setattr(main, "SESSION_STORE", store)
+    monkeypatch.setattr(app_routes.teaching_routes, "resolve_student_names", lambda subs: {"student-usage": "Lena"})
+    teacher = store.create(sub="teacher-usage", roles=["teacher"], name="Ada", ttl_seconds=60)
+    student = store.create(sub="student-usage", roles=["student"], name="Lena", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-usage", roles=["teacher"], name="Ada")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        course_id, _unit_id = await _seed_teacher_course_context(client)
+        await client.post(
+            f"/api/teaching/courses/{course_id}/members",
+            json={"student_sub": student.sub},
+            headers={"Origin": "http://test"},
+        )
+
+        response = await client.get(f"/api/teaching/views/courses/{course_id}/ai-usage", headers=headers)
+
+    assert response.status_code == 200
+    assert response.headers.get("Cache-Control") == "private, no-store"
+    body = response.json()
+    assert body["course"]["id"] == course_id
+    assert body["totals"] == {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "known_events": 0,
+        "unknown_events": 0,
+        "breakdown": [],
+    }
+    assert body["learners"][0]["student"]["sub"] == "student-usage"
+    assert body["learners"][0]["totals"]["known_events"] == 0

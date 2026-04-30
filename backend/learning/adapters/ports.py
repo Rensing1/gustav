@@ -17,11 +17,38 @@ Notes:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Protocol, Sequence
 
 
 # ----------------------------- Result types ---------------------------------
+
+
+@dataclass
+class TokenUsageEvent:
+    """Technical token counter for one observed model response.
+
+    Parameters:
+        event_key: Capture-generated UUID used for idempotent persistence.
+        model: Provider/model identifier as reported by the configured LM.
+        stage: Processing stage (`ocr`, `analysis`, `feedback`).
+        modality: Input modality (`text`, `visual`).
+        call_kind: Call type (`primary`, `repair`, `no_criteria`).
+        usage_known: Whether token counters are known for this response.
+        input_tokens/output_tokens/total_tokens: Optional provider counters.
+        unknown_reason: Stable technical code when usage is unknown.
+    """
+
+    event_key: str
+    model: str
+    stage: str
+    modality: str
+    call_kind: str
+    usage_known: bool
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    unknown_reason: str | None = None
 
 
 @dataclass
@@ -35,6 +62,7 @@ class VisionResult:
 
     text_md: str
     raw_metadata: Optional[dict] = None
+    usage_events: list[TokenUsageEvent] = field(default_factory=list)
 
 
 @dataclass
@@ -50,6 +78,7 @@ class FeedbackResult:
     feedback_md: str
     analysis_json: dict
     parse_status: Optional[str] = None
+    usage_events: list[TokenUsageEvent] = field(default_factory=list)
 
 
 # ----------------------------- Protocols ------------------------------------
@@ -75,6 +104,10 @@ class FeedbackAdapterProtocol(Protocol):
 class VisionError(Exception):
     """Base class for Vision adapter failures."""
 
+    def __init__(self, *args: object, usage_events: list[TokenUsageEvent] | None = None) -> None:
+        super().__init__(*args)
+        self.usage_events = list(usage_events or [])
+
 
 class VisionTransientError(VisionError):
     """Recoverable Vision error; worker should retry with backoff."""
@@ -86,6 +119,10 @@ class VisionPermanentError(VisionError):
 
 class FeedbackError(Exception):
     """Base class for Feedback adapter failures."""
+
+    def __init__(self, *args: object, usage_events: list[TokenUsageEvent] | None = None) -> None:
+        super().__init__(*args)
+        self.usage_events = list(usage_events or [])
 
 
 class FeedbackTransientError(FeedbackError):
@@ -102,6 +139,7 @@ class FeedbackInvalidAnalysisError(FeedbackPermanentError):
 
 __all__ = [
     # Results
+    "TokenUsageEvent",
     "VisionResult",
     "FeedbackResult",
     # Protocols

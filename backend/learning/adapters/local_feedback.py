@@ -36,11 +36,12 @@ LOG = logging.getLogger(__name__)
 def _raise_feedback_error_for_exception(exc: Exception, *, default_transient_code: str) -> None:
     """Classify adapter exceptions into stable transient/permanent error codes."""
     normalized = str(exc or "").strip().lower()
+    usage_events = list(getattr(exc, "usage_events", []) or [])
     if ("invalid_criterion_idx" in normalized) or ("invalid_analysis_json" in normalized):
-        raise FeedbackInvalidAnalysisError("feedback_invalid_analysis") from exc
+        raise FeedbackInvalidAnalysisError("feedback_invalid_analysis", usage_events=usage_events) from exc
     if normalized in {"invalid_feedback_format", "empty_feedback_md"}:
-        raise FeedbackPermanentError(normalized) from exc
-    raise FeedbackTransientError(default_transient_code) from exc
+        raise FeedbackPermanentError(normalized, usage_events=usage_events) from exc
+    raise FeedbackTransientError(default_transient_code, usage_events=usage_events) from exc
 
 
 def _require_secure_openai_base_url(base_url: str) -> None:

@@ -801,6 +801,7 @@ class _LocalVisionAdapter:
         lm = self._get_ocr_lm()
         try:
             import dspy  # type: ignore
+            from backend.learning.adapters.dspy.usage import capture_dspy_usage
             from backend.learning.adapters.dspy import vision_program
 
             with dspy.context(  # type: ignore[attr-defined]
@@ -808,8 +809,14 @@ class _LocalVisionAdapter:
                 adapter=dspy.JSONAdapter(),  # type: ignore[attr-defined]
                 disable_history=True,
             ):
-                text_md, program_meta = vision_program.extract_text_from_image(  # type: ignore[attr-defined]
-                    image_data_uri=image_data_uri
+                (text_md, program_meta), usage_events = capture_dspy_usage(
+                    lambda: vision_program.extract_text_from_image(  # type: ignore[attr-defined]
+                        image_data_uri=image_data_uri
+                    ),
+                    model=str(getattr(lm, "model", self._ocr_model) or self._ocr_model),
+                    stage="ocr",
+                    modality="visual",
+                    call_kind="primary",
                 )
         except TimeoutError as exc:
             raise VisionTransientError("timeout") from exc
@@ -820,7 +827,8 @@ class _LocalVisionAdapter:
         except VisionPermanentError:
             raise
         except Exception as exc:
-            raise VisionTransientError("vision_failed") from exc
+            usage_events = list(getattr(exc, "usage_events", []) or [])
+            raise VisionTransientError("vision_failed", usage_events=usage_events) from exc
 
         if not isinstance(text_md, str) or not text_md.strip():
             raise VisionTransientError("empty_ocr_text")
@@ -831,7 +839,7 @@ class _LocalVisionAdapter:
         # Merge program meta into adapter meta for observability.
         if isinstance(program_meta, dict):
             meta.update({k: v for k, v in program_meta.items() if k not in {"text_md"}})
-        return VisionResult(text_md=text_md, raw_metadata=meta)
+        return VisionResult(text_md=text_md, raw_metadata=meta, usage_events=usage_events)
 
 
 def build() -> _LocalVisionAdapter:

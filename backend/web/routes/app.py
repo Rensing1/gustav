@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 import hmac
 import os
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -486,6 +486,135 @@ def _list_teacher_course_members(course_id: str, owner_sub: str, limit: int, off
         }
         for student_sub, joined_at in pairs
     ]
+
+
+def _list_teacher_course_members_window(course_id: str, owner_sub: str, limit: int, offset: int) -> list[dict]:
+    """Return a larger member window even when the DB helper clamps pages to 50."""
+    remaining = max(0, int(limit))
+    current_offset = max(0, int(offset))
+    members: list[dict] = []
+    while remaining > 0:
+        page_size = min(50, remaining)
+        page = _list_teacher_course_members(course_id, owner_sub, limit=page_size, offset=current_offset)
+        members.extend(page)
+        if len(page) < page_size:
+            break
+        remaining -= len(page)
+        current_offset += len(page)
+    return members
+
+
+def _parse_usage_filter_timestamp(value: str | None) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError("invalid_time_filter")
+    if parsed.tzinfo is None:
+        raise ValueError("invalid_time_filter")
+    return parsed.astimezone(timezone.utc)
+
+
+def _empty_usage_totals() -> dict[str, object]:
+    return {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "known_events": 0,
+        "unknown_events": 0,
+        "breakdown": [],
+    }
+
+
+def _build_usage_totals(events: list[dict[str, object]]) -> dict[str, object]:
+    totals = _empty_usage_totals()
+    breakdown: dict[tuple[str, str, str, str], dict[str, object]] = {}
+
+    for event in events:
+        known = bool(event.get("usage_known"))
+        if known:
+            totals["known_events"] = int(totals["known_events"]) + 1
+        else:
+            totals["unknown_events"] = int(totals["unknown_events"]) + 1
+
+        for source_key, target_key in (
+            ("input_tokens", "input_tokens"),
+            ("output_tokens", "output_tokens"),
+            ("total_tokens", "total_tokens"),
+        ):
+            value = event.get(source_key)
+            if value is not None:
+                totals[target_key] = int(totals[target_key] or 0) + int(value)
+
+        key = (
+            str(event.get("model") or "unknown"),
+            str(event.get("stage") or ""),
+            str(event.get("modality") or ""),
+            str(event.get("call_kind") or ""),
+        )
+        item = breakdown.setdefault(
+            key,
+            {
+                "model": key[0],
+                "stage": key[1],
+                "modality": key[2],
+                "call_kind": key[3],
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "known_events": 0,
+                "unknown_events": 0,
+            },
+        )
+        if known:
+            item["known_events"] = int(item["known_events"]) + 1
+        else:
+            item["unknown_events"] = int(item["unknown_events"]) + 1
+        for token_key in ("input_tokens", "output_tokens", "total_tokens"):
+            value = event.get(token_key)
+            if value is not None:
+                item[token_key] = int(item[token_key] or 0) + int(value)
+
+    totals["breakdown"] = sorted(
+        breakdown.values(),
+        key=lambda item: (
+            str(item.get("model") or ""),
+            str(item.get("stage") or ""),
+            str(item.get("modality") or ""),
+            str(item.get("call_kind") or ""),
+        ),
+    )
+    return totals
+
+
+def _list_teacher_course_ai_usage_events(
+    *,
+    course_id: str,
+    owner_sub: str,
+    from_at: datetime | None,
+    to_at: datetime | None,
+    unit_id: str | None,
+    task_id: str | None,
+    student_sub: str | None,
+) -> list[dict[str, object]]:
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    method = getattr(repo, "list_ai_usage_events_for_owner", None)
+    if not callable(method):
+        return []
+    return list(
+        method(
+            course_id=course_id,
+            owner_sub=owner_sub,
+            from_at=from_at,
+            to_at=to_at,
+            unit_id=unit_id,
+            task_id=task_id,
+            student_sub=student_sub,
+        )
+        or []
+    )
 
 
 def _get_teacher_course(course_id: str, owner_sub: str):
@@ -1611,6 +1740,103 @@ async def get_teacher_course_context(request: Request, course_id: str, limit: in
         },
         "units": units,
         "members": members,
+    }
+    return JSONResponse(body, headers=_private_headers())
+
+
+@app_router.get("/api/teaching/views/courses/{course_id}/ai-usage")
+async def get_teacher_course_ai_usage(
+    request: Request,
+    course_id: str,
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = None,
+    unit_id: str | None = None,
+    task_id: str | None = None,
+    student_sub: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """Return owner-scoped technical AI token counters for one course.
+
+    Why:
+        Teachers need a cost-estimation view for GUSTAV's AI processing. The
+        response deliberately contains only counters and grouping dimensions,
+        never prompts, answers, file names or provider raw payloads.
+
+    Permissions:
+        Caller must be a teacher who owns the course. Admins intentionally get
+        no cross-course shortcut in v1.
+    """
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not _user_has_role(user, "teacher"):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    owner_sub = str(user.get("sub") or "")
+    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    if guard:
+        return guard
+
+    try:
+        from_at = _parse_usage_filter_timestamp(from_)
+        to_at = _parse_usage_filter_timestamp(to)
+    except ValueError:
+        return JSONResponse({"error": "invalid_time_filter"}, status_code=422, headers=_private_headers())
+    if from_at is not None and to_at is not None and from_at >= to_at:
+        return JSONResponse({"error": "invalid_time_range"}, status_code=422, headers=_private_headers())
+
+    course = _get_teacher_course(course_id, owner_sub)
+    if course is None:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+
+    page_limit = max(1, min(int(limit or 50), 200))
+    page_offset = max(0, int(offset or 0))
+    members = _list_teacher_course_members_window(course_id, owner_sub, limit=page_limit, offset=page_offset)
+    events = _list_teacher_course_ai_usage_events(
+        course_id=course_id,
+        owner_sub=owner_sub,
+        from_at=from_at,
+        to_at=to_at,
+        unit_id=str(unit_id).strip() if unit_id else None,
+        task_id=str(task_id).strip() if task_id else None,
+        student_sub=str(student_sub).strip() if student_sub else None,
+    )
+
+    events_by_student: dict[str, list[dict[str, object]]] = {}
+    for event in events:
+        key = str(event.get("student_sub") or "")
+        if key:
+            events_by_student.setdefault(key, []).append(event)
+
+    learners = []
+    for member in members:
+        sub = str(member.get("sub") or "")
+        member_events = events_by_student.get(sub, [])
+        learners.append({"student": member, "totals": _build_usage_totals(member_events)})
+
+    body = {
+        "user": _user_payload(user),
+        "course": {
+            "id": str(_field_value(course, "id") or ""),
+            "title": str(_field_value(course, "title") or ""),
+            "href": f"/teaching/courses/{course_id}",
+            "members_href": f"/teaching/courses/{course_id}/members",
+            "diagnostics_href": f"/diagnostics/courses/{course_id}",
+            "members_count": len(members),
+            "units_count": len(_list_teacher_course_units(course_id, owner_sub)),
+        },
+        "filters": {
+            "from": from_at.isoformat() if from_at else None,
+            "to": to_at.isoformat() if to_at else None,
+            "unit_id": str(unit_id).strip() if unit_id else None,
+            "task_id": str(task_id).strip() if task_id else None,
+            "student_sub": str(student_sub).strip() if student_sub else None,
+        },
+        "totals": _build_usage_totals(events),
+        "learners": learners,
+        "pagination": {"limit": page_limit, "offset": page_offset, "count": len(learners)},
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     return JSONResponse(body, headers=_private_headers())
 

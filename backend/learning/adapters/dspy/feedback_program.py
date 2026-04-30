@@ -24,8 +24,9 @@ from typing import Any, Sequence
 
 from backend.learning.adapters.dspy import json_observability
 from backend.learning.adapters.dspy import programs as dspy_programs
+from backend.learning.adapters.dspy.usage import capture_dspy_usage
 from backend.learning.adapters.dspy.types import CriteriaAnalysis
-from backend.learning.adapters.ports import FeedbackResult
+from backend.learning.adapters.ports import FeedbackResult, TokenUsageEvent
 
 LOG = logging.getLogger(__name__)
 
@@ -162,6 +163,10 @@ def _dspy_context_for_lm(lm, *, stage: str):  # type: ignore[no-untyped-def]
     )
 
 
+def _lm_model(lm) -> str:  # type: ignore[no-untyped-def]
+    return str(getattr(lm, "model", None) or "unknown")
+
+
 def _run_analysis_with_repair(
     *,
     text_md: str,
@@ -169,32 +174,48 @@ def _run_analysis_with_repair(
     teacher_instructions_md: str | None,
     teacher_context_md: str | None,
     analysis_lm=None,  # type: ignore[no-untyped-def]
-) -> tuple[CriteriaAnalysis | dict[str, Any], str]:
+) -> tuple[CriteriaAnalysis | dict[str, Any], str, list[TokenUsageEvent]]:
     """Run analysis once and attempt exactly one repair on format errors."""
+    events: list[TokenUsageEvent] = []
     try:
         with _dspy_context_for_lm(analysis_lm, stage="analysis"):
-            analysis = dspy_programs.run_structured_analysis(
+            analysis, captured = capture_dspy_usage(
+                lambda: dspy_programs.run_structured_analysis(
                     text_md=text_md,
                     criteria=criteria,
                     teacher_instructions_md=teacher_instructions_md,
                     teacher_context_md=teacher_context_md,
+                ),
+                model=_lm_model(analysis_lm),
+                stage="analysis",
+                modality="text",
+                call_kind="primary",
             )
+            events.extend(captured)
         _log_stage_metadata(stage="analysis", parse_status="parsed_structured")
-        return (analysis, "parsed_structured")
+        return (analysis, "parsed_structured", events)
     except RuntimeError as exc:
+        events.extend(list(getattr(exc, "usage_events", []) or []))
         reason = str(exc or "").strip().lower()
         if reason not in _REPAIRABLE_ANALYSIS_ERRORS:
             raise
         with _dspy_context_for_lm(analysis_lm, stage="analysis"):
-            analysis = dspy_programs.run_structured_analysis_repair(
-                text_md=text_md,
-                criteria=criteria,
-                repair_reason=reason,
-                teacher_instructions_md=teacher_instructions_md,
-                teacher_context_md=teacher_context_md,
+            analysis, captured = capture_dspy_usage(
+                lambda: dspy_programs.run_structured_analysis_repair(
+                    text_md=text_md,
+                    criteria=criteria,
+                    repair_reason=reason,
+                    teacher_instructions_md=teacher_instructions_md,
+                    teacher_context_md=teacher_context_md,
+                ),
+                model=_lm_model(analysis_lm),
+                stage="analysis",
+                modality="text",
+                call_kind="repair",
             )
+            events.extend(captured)
         _log_stage_metadata(stage="analysis", parse_status="repaired_structured")
-        return analysis, "repaired_structured"
+        return analysis, "repaired_structured", events
 
 
 def analyze_feedback(
@@ -220,40 +241,62 @@ def analyze_feedback(
         raise ImportError("dspy is not available")
 
     crit = [str(c).strip() for c in (criteria or []) if str(c).strip()]
+    usage_events: list[TokenUsageEvent] = []
     if not crit:
         with _dspy_context_for_lm(synthesis_lm, stage="synthesis"):
-            feedback_md = dspy_programs.run_feedback_no_criteria(
-                text_md=text_md,
-                teacher_instructions_md=teacher_instructions_md,
-                teacher_context_md=teacher_context_md,
+            feedback_md, captured = capture_dspy_usage(
+                lambda: dspy_programs.run_feedback_no_criteria(
+                    text_md=text_md,
+                    teacher_instructions_md=teacher_instructions_md,
+                    teacher_context_md=teacher_context_md,
+                ),
+                model=_lm_model(synthesis_lm),
+                stage="feedback",
+                modality="text",
+                call_kind="no_criteria",
             )
+            usage_events.extend(captured)
         _log_stage_metadata(stage="synthesis", parse_status="skipped")
-        return FeedbackResult(feedback_md=_validate_feedback_md(feedback_md), analysis_json={}, parse_status="skipped")
+        return FeedbackResult(
+            feedback_md=_validate_feedback_md(feedback_md),
+            analysis_json={},
+            parse_status="skipped",
+            usage_events=usage_events,
+        )
 
-    analysis, parse_status = _run_analysis_with_repair(
+    analysis, parse_status, captured = _run_analysis_with_repair(
         text_md=text_md,
         criteria=crit,
         teacher_instructions_md=teacher_instructions_md,
         teacher_context_md=teacher_context_md,
         analysis_lm=analysis_lm,
     )
+    usage_events.extend(captured)
     raw = analysis.to_dict() if isinstance(analysis, CriteriaAnalysis) else analysis
     if not isinstance(raw, dict):
         raise RuntimeError("invalid_analysis_json")
     analysis_json = _normalize_v2(raw=raw, criteria=crit)
 
     with _dspy_context_for_lm(synthesis_lm, stage="synthesis"):
-        feedback_md = dspy_programs.run_structured_feedback(
-            text_md=text_md,
-            criteria=crit,
-            analysis_json=analysis_json,
-            teacher_instructions_md=teacher_instructions_md,
-            teacher_context_md=teacher_context_md,
+        feedback_md, captured = capture_dspy_usage(
+            lambda: dspy_programs.run_structured_feedback(
+                text_md=text_md,
+                criteria=crit,
+                analysis_json=analysis_json,
+                teacher_instructions_md=teacher_instructions_md,
+                teacher_context_md=teacher_context_md,
+            ),
+            model=_lm_model(synthesis_lm),
+            stage="feedback",
+            modality="text",
+            call_kind="primary",
         )
+        usage_events.extend(captured)
     _log_stage_metadata(stage="synthesis")
 
     return FeedbackResult(
         feedback_md=_validate_feedback_md(feedback_md),
         analysis_json=analysis_json,
         parse_status=parse_status,
+        usage_events=usage_events,
     )

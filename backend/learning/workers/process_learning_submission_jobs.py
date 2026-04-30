@@ -32,6 +32,7 @@ from backend.learning.adapters.ports import (
     FeedbackPermanentError,
     FeedbackResult,
     FeedbackTransientError,
+    TokenUsageEvent,
     VisionAdapterProtocol,
     VisionPermanentError,
     VisionResult,
@@ -68,6 +69,7 @@ def _require_psycopg() -> None:
 __all__ = [
     "VisionResult",
     "FeedbackResult",
+    "TokenUsageEvent",
     "VisionAdapterProtocol",
     "FeedbackAdapterProtocol",
     "VisionTransientError",
@@ -480,6 +482,11 @@ def _process_job(
                 _exception_cause_class_name(exc),
             )
             _set_current_sub(conn, student_sub)
+            _persist_ai_usage_events(
+                conn=conn,
+                submission_id=job.submission_id,
+                usage_events=_usage_events_from_exception(exc),
+            )
             _handle_feedback_error(
                 conn=conn,
                 job=job,
@@ -510,6 +517,11 @@ def _process_job(
                 _exception_cause_class_name(exc),
             )
             _set_current_sub(conn, student_sub)
+            _persist_ai_usage_events(
+                conn=conn,
+                submission_id=job.submission_id,
+                usage_events=_usage_events_from_exception(exc),
+            )
             _handle_feedback_error(
                 conn=conn,
                 job=job,
@@ -522,6 +534,11 @@ def _process_job(
             return
 
         _set_current_sub(conn, student_sub)
+        _persist_ai_usage_events(
+            conn=conn,
+            submission_id=job.submission_id,
+            usage_events=list(getattr(feedback_result, "usage_events", []) or []),
+        )
         _update_submission_completed(
             conn=conn,
             submission_id=job.submission_id,
@@ -557,6 +574,11 @@ def _process_job(
             exc.__class__.__name__,
         )
         _set_current_sub(conn, student_sub)
+        _persist_ai_usage_events(
+            conn=conn,
+            submission_id=job.submission_id,
+            usage_events=_usage_events_from_exception(exc),
+        )
         _handle_vision_error(
             conn=conn,
             job=job,
@@ -575,6 +597,11 @@ def _process_job(
             exc.__class__.__name__,
         )
         _set_current_sub(conn, student_sub)
+        _persist_ai_usage_events(
+            conn=conn,
+            submission_id=job.submission_id,
+            usage_events=_usage_events_from_exception(exc),
+        )
         _handle_vision_error(
             conn=conn,
             job=job,
@@ -619,6 +646,14 @@ def _process_job(
             _exception_cause_class_name(exc),
             )
         _set_current_sub(conn, student_sub)
+        _persist_ai_usage_events(
+            conn=conn,
+            submission_id=job.submission_id,
+            usage_events=[
+                *list(getattr(vision_result, "usage_events", []) or []),
+                *_usage_events_from_exception(exc),
+            ],
+        )
         if cached_vision is None and (submission.get("kind") or "").strip() != "text":
             _persist_cached_vision(conn=conn, job_id=job.id, vision_result=vision_result)
         _handle_feedback_error(
@@ -651,6 +686,14 @@ def _process_job(
             _exception_cause_class_name(exc),
         )
         _set_current_sub(conn, student_sub)
+        _persist_ai_usage_events(
+            conn=conn,
+            submission_id=job.submission_id,
+            usage_events=[
+                *list(getattr(vision_result, "usage_events", []) or []),
+                *_usage_events_from_exception(exc),
+            ],
+        )
         if cached_vision is None and (submission.get("kind") or "").strip() != "text":
             _persist_cached_vision(conn=conn, job_id=job.id, vision_result=vision_result)
         _handle_feedback_error(
@@ -665,6 +708,14 @@ def _process_job(
         return
 
     _set_current_sub(conn, student_sub)
+    _persist_ai_usage_events(
+        conn=conn,
+        submission_id=job.submission_id,
+        usage_events=[
+            *list(getattr(vision_result, "usage_events", []) or []),
+            *list(getattr(feedback_result, "usage_events", []) or []),
+        ],
+    )
     _update_submission_completed(
         conn=conn,
         submission_id=job.submission_id,
@@ -770,6 +821,67 @@ def _set_current_sub(conn: Connection, sub: str) -> None:
         return
     with conn.cursor() as cur:
         cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+
+
+def _usage_events_from_exception(exc: Exception) -> list[TokenUsageEvent]:
+    """Return adapter-captured usage events without depending on concrete error types."""
+    events = getattr(exc, "usage_events", None)
+    if not isinstance(events, list):
+        return []
+    return [event for event in events if isinstance(event, TokenUsageEvent)]
+
+
+def _persist_ai_usage_events(
+    *,
+    conn: Connection,
+    submission_id: str,
+    usage_events: Sequence[TokenUsageEvent],
+) -> None:
+    """Persist technical AI usage events through the worker DB helper.
+
+    Why:
+        The worker should not write derived course/student context directly.
+        The database helper derives that context from `submission_id`, keeping
+        spoofable identifiers out of this boundary.
+
+    Permissions:
+        Requires EXECUTE on `learning_worker_record_ai_usage` for the
+        dedicated `gustav_worker` role.
+    """
+    if not usage_events:
+        return
+    with conn.cursor() as cur:
+        for event in usage_events:
+            cur.execute(
+                """
+                select public.learning_worker_record_ai_usage(
+                    %s::uuid,
+                    %s::uuid,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s
+                )
+                """,
+                (
+                    submission_id,
+                    event.event_key,
+                    event.model,
+                    event.stage,
+                    event.modality,
+                    event.call_kind,
+                    event.usage_known,
+                    event.input_tokens,
+                    event.output_tokens,
+                    event.total_tokens,
+                    event.unknown_reason,
+                ),
+            )
 
 
 def _update_submission_completed(

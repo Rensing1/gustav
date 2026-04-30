@@ -30,6 +30,7 @@ def test_openapi_documents_bearer_auth_for_bff_endpoints() -> None:
         ("/api/teaching/concern-box/entries/{entry_id}/archive", "post"),
         ("/api/teaching/concern-box/entries/{entry_id}/restore", "post"),
         ("/api/teaching/views/courses/{course_id}/context", "get"),
+        ("/api/teaching/views/courses/{course_id}/ai-usage", "get"),
         ("/api/diagnostics/views/courses/{course_id}/matrix", "get"),
         ("/api/diagnostics/views/learners/{student_sub}/profile", "get"),
         ("/api/live/views/courses/{course_id}/units", "get"),

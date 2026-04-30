@@ -36,6 +36,7 @@ from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, curr
 from backend.learning.workers import process_learning_submission_jobs as worker_module  # noqa: E402  # type: ignore
 from backend.learning.workers.process_learning_submission_jobs import (  # noqa: E402  # type: ignore
     FeedbackResult,
+    TokenUsageEvent,
     VisionResult,
     run_once,
 )
@@ -161,6 +162,32 @@ class _CountingVisionAdapter:
         return VisionResult(
             text_md="## Counting Vision\n\nShould be bypassed when cache is present.",
             raw_metadata={"source": "counting_adapter"},
+        )
+
+
+class _UsageFeedbackAdapter:
+    """Return deterministic feedback with one technical token usage event."""
+
+    def __init__(self, event_key: str) -> None:
+        self.event_key = event_key
+
+    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
+        return FeedbackResult(
+            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            usage_events=[
+                TokenUsageEvent(
+                    event_key=self.event_key,
+                    model="openai/mistral-small-latest",
+                    stage="feedback",
+                    modality="text",
+                    call_kind="primary",
+                    usage_known=True,
+                    input_tokens=11,
+                    output_tokens=7,
+                    total_tokens=18,
+                )
+            ],
         )
 
 
@@ -431,6 +458,65 @@ async def test_worker_processes_pending_submission_to_completed():
     assert isinstance(analysis_json, dict)
     assert analysis_json["schema"] == "criteria.v2"
     assert analysis_json["score"] == _StubFeedbackAdapter.base_score
+
+
+@pytest.mark.anyio
+async def test_worker_persists_ai_usage_events_from_feedback_result():
+    """Worker should persist captured token events before completing a submission."""
+
+    _require_db_or_skip()
+    fixture, worker_dsn, _job_id, submission_id = await _prepare_submission_with_job(
+        idempotency_key=f"worker-ai-usage-{uuid.uuid4().hex}"
+    )
+    tick = datetime.now(tz=timezone.utc)
+    event_key = str(uuid.uuid4())
+
+    processed = run_once(
+        dsn=worker_dsn,
+        vision_adapter=_StubVisionAdapter(text_md="## Student answer\n\nContent."),
+        feedback_adapter=_UsageFeedbackAdapter(event_key=event_key),
+        now=tick,
+        test_run_id=current_test_run_id(),
+    )
+
+    assert processed is True
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (fixture.student_sub,))
+            cur.execute(
+                """
+                select model,
+                       stage,
+                       modality,
+                       call_kind,
+                       usage_known,
+                       input_tokens,
+                       output_tokens,
+                       total_tokens,
+                       student_sub,
+                       course_id::text,
+                       task_id::text
+                  from public.ai_usage_events
+                 where event_key = %s::uuid
+                """,
+                (event_key,),
+            )
+            row = cur.fetchone()
+
+    assert row == (
+        "openai/mistral-small-latest",
+        "feedback",
+        "text",
+        "primary",
+        True,
+        11,
+        7,
+        18,
+        fixture.student_sub,
+        fixture.course_id,
+        fixture.task["id"],
+    )
 
 
 @pytest.mark.anyio

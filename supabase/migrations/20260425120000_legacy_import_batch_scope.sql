@@ -54,7 +54,12 @@ begin
   ]
   loop
     if to_regclass(format('staging.%I', staging_table)) is not null then
-      execute format('alter table staging.%I add column if not exists import_batch_id uuid null', staging_table);
+      begin
+        execute format('alter table staging.%I add column if not exists import_batch_id uuid null', staging_table);
+      exception
+        when insufficient_privilege then
+          raise notice 'Skipping staging.% import_batch_id backfill: current role is not table owner', staging_table;
+      end;
     end if;
   end loop;
 end $$;

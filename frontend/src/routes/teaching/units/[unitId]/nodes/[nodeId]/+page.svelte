@@ -63,6 +63,30 @@
     return candidate.values ?? {};
   }
 
+  function actionError(value: unknown): string | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const candidate = value as { error?: unknown };
+    return typeof candidate.error === "string" ? candidate.error : null;
+  }
+
+  function actionMaterialId(value: unknown): string | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const candidate = value as { material_id?: unknown };
+    return typeof candidate.material_id === "string" ? candidate.material_id : null;
+  }
+
+  function actionTaskId(value: unknown): string | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const candidate = value as { task_id?: unknown };
+    return typeof candidate.task_id === "string" ? candidate.task_id : null;
+  }
+
   function sectionId(): string {
     return editorState.node.backing_section_id ?? editorState.node.id;
   }
@@ -187,25 +211,27 @@
   }
 
   function materialValues(material: TeacherUnitNodeEditorMaterial): Partial<MaterialFormValues> {
-    if (form?.saveMaterial?.material_id !== material.id) {
+    const saveMaterial = form?.saveMaterial;
+    if (actionMaterialId(saveMaterial) !== material.id) {
       return {};
     }
-    return actionValues<MaterialFormValues>(form.saveMaterial);
+    return actionValues<MaterialFormValues>(saveMaterial);
   }
 
   function materialError(material: TeacherUnitNodeEditorMaterial): string | null {
-    return form?.saveMaterial?.material_id === material.id ? (form.saveMaterial.error ?? null) : null;
+    return actionMaterialId(form?.saveMaterial) === material.id ? actionError(form?.saveMaterial) : null;
   }
 
   function taskValues(task: TeacherUnitNodeEditorTask): Partial<TaskFormValues> {
-    if (form?.saveTask?.task_id !== task.id) {
+    const saveTask = form?.saveTask;
+    if (actionTaskId(saveTask) !== task.id) {
       return {};
     }
-    return actionValues<TaskFormValues>(form.saveTask);
+    return actionValues<TaskFormValues>(saveTask);
   }
 
   function taskError(task: TeacherUnitNodeEditorTask): string | null {
-    return form?.saveTask?.task_id === task.id ? (form.saveTask.error ?? null) : null;
+    return actionTaskId(form?.saveTask) === task.id ? actionError(form?.saveTask) : null;
   }
 
   function createMaterialValues(): Partial<MaterialFormValues> {
@@ -221,7 +247,7 @@
   }
 
   function saveNodeError(): string | null {
-    return form?.saveNode?.error ?? null;
+    return actionError(form?.saveNode);
   }
 
   function materialKindLabel(material: TeacherUnitNodeEditorMaterial): string {
@@ -466,25 +492,27 @@
       return;
     }
 
-    if (form.saveNode?.error) {
+    if (actionError(form.saveNode)) {
       editorMessage = null;
     }
-    if (form.saveMaterial?.material_id) {
+    const saveMaterialId = actionMaterialId(form.saveMaterial);
+    if (saveMaterialId) {
       editorMessage = null;
-      expandedMaterialId = form.saveMaterial.material_id;
+      expandedMaterialId = saveMaterialId;
     }
-    if (form.saveTask?.task_id) {
+    const saveTaskId = actionTaskId(form.saveTask);
+    if (saveTaskId) {
       editorMessage = null;
-      expandedTaskId = form.saveTask.task_id;
+      expandedTaskId = saveTaskId;
     }
-    if (form.createMaterial?.error) {
+    if (actionError(form.createMaterial)) {
       editorMessage = null;
       showCreateMaterial = true;
       if (!createMaterialValues().intent_id || !createMaterialValues().sha256) {
         preparedMaterialUploadName = null;
       }
     }
-    if (form.createTask?.error) {
+    if (actionError(form.createTask)) {
       editorMessage = null;
       showCreateTask = true;
     }
@@ -577,8 +605,8 @@
             <p class="workspace-note workspace-note--error">{createMaterialClientError}</p>
           {/if}
 
-          {#if form?.createMaterial?.error}
-            <p class="workspace-note workspace-note--error">{form.createMaterial.error}</p>
+          {#if actionError(form?.createMaterial)}
+            <p class="workspace-note workspace-note--error">{actionError(form?.createMaterial)}</p>
           {/if}
 
           <div class="workspace-node-editor-card-actions">
@@ -743,8 +771,8 @@
 
           <input name="h5p_content_id" type="hidden" value={createTaskValues().h5p_content_id ?? ""} />
 
-          {#if form?.createTask?.error}
-            <p class="workspace-note workspace-note--error">{form.createTask.error}</p>
+          {#if actionError(form?.createTask)}
+            <p class="workspace-note workspace-note--error">{actionError(form?.createTask)}</p>
           {/if}
 
           <div class="workspace-node-editor-card-actions">

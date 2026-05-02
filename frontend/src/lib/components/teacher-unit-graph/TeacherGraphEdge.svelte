@@ -38,12 +38,6 @@
       offset: pathOptions?.offset ?? 0
     })
   );
-
-  const enhanceGraphForm = () => {
-    return async ({ update }: { update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void> }) => {
-      await update({ reset: false, invalidateAll: false });
-    };
-  };
 </script>
 
 <BaseEdge path={edgeGeometry[0]} {markerEnd} />
@@ -56,7 +50,7 @@
     height="36"
     class="teacher-flow-edge-chip"
   >
-    <form method="POST" action="?/deleteEdge" class="teacher-flow-edge-chip__form" use:enhance={enhanceGraphForm}>
+    <form method="POST" action="?/deleteEdge" class="teacher-flow-edge-chip__form" use:enhance={data.enhanceGraphForm}>
       <input type="hidden" name="from_module_id" value={data.from} />
       <input type="hidden" name="to_module_id" value={data.to} />
       <button class="teacher-flow-edge-chip__button nodrag nopan" type="submit" aria-label="Kante löschen">

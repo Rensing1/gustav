@@ -19,12 +19,6 @@
     stopPropagation(event);
     data.onCloseProperties?.();
   }
-
-  const enhanceGraphForm = () => {
-    return async ({ update }: { update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void> }) => {
-      await update({ reset: false, invalidateAll: false });
-    };
-  };
 </script>
 
 <div class:teacher-flow-unit-node--compact={data.compact} class:teacher-flow-unit-node--selected={selected} class="teacher-flow-unit-node">
@@ -128,7 +122,7 @@
         </button>
       </div>
 
-      <form method="POST" action="?/saveModule" class="teacher-flow-unit-node__quickedit-form" use:enhance={enhanceGraphForm}>
+      <form method="POST" action="?/saveModule" class="teacher-flow-unit-node__quickedit-form" use:enhance={data.enhanceGraphForm}>
         <input type="hidden" name="module_id" value={id} />
         <input type="hidden" name="current_phase_id" value={data.phaseId ?? ""} />
         <label class="teacher-flow-unit-node__quickedit-field workspace-field">
@@ -167,7 +161,7 @@
         </div>
       </form>
 
-      <form method="POST" action="?/deleteModule" class="teacher-flow-unit-node__quickedit-delete" use:enhance={enhanceGraphForm}>
+      <form method="POST" action="?/deleteModule" class="teacher-flow-unit-node__quickedit-delete" use:enhance={data.enhanceGraphForm}>
         <input type="hidden" name="module_id" value={id} />
         <button class="workspace-link-action workspace-link-action--danger" type="submit">Modul löschen</button>
       </form>

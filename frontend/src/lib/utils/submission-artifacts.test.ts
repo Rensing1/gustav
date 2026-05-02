@@ -59,7 +59,11 @@ describe("buildSubmissionArtifactView", () => {
         downloadUrl: "https://example.com/test.sb3?download=1"
       })
     );
-    expect(artifact?.html).toContain("Target Stage");
-    expect(artifact?.html).not.toContain("scratch.evidence.v2");
+    expect(artifact?.kind).toBe("scratch");
+    if (artifact?.kind !== "scratch") {
+      throw new Error("Expected a scratch artifact");
+    }
+    expect(artifact.html).toContain("Target Stage");
+    expect(artifact.html).not.toContain("scratch.evidence.v2");
   });
 });

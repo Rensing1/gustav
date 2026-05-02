@@ -3,6 +3,7 @@ build
 .svelte-kit
 dist
 coverage
+playwright-report/
+test-results/
 *.log
 *.tsbuildinfo
-

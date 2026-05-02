@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+  import { applyAction, enhance } from "$app/forms";
+  import { invalidateAll, replaceState } from "$app/navigation";
   import { page } from "$app/state";
   import {
     Controls,
@@ -8,6 +9,7 @@
     type Connection
   } from "@xyflow/svelte";
   import "@xyflow/svelte/dist/style.css";
+  import type { SubmitFunction } from "@sveltejs/kit";
 
   import GraphPhaseBand from "$lib/components/teacher-unit-graph/GraphPhaseBand.svelte";
   import type { TeacherGraphCommandBarAction } from "$lib/components/teacher-unit-graph/TeacherGraphCommandBar.svelte";
@@ -38,14 +40,55 @@
     return JSON.parse(JSON.stringify(workspace)) as TeacherUnitWorkspaceView;
   }
 
+  function initialWorkspace(): TeacherUnitWorkspaceView {
+    return plainWorkspace(data.workspace);
+  }
+
+  function workspaceGraphSignature(workspace: TeacherUnitWorkspaceView): string {
+    if (workspace.graph.kind === "linear") {
+      return JSON.stringify({
+        unit: workspace.unit.id,
+        kind: workspace.graph.kind,
+        sections: (workspace.graph.nodes ?? []).map((section) => [section.id, section.title, section.position]),
+        edges: workspace.graph.edges
+      });
+    }
+
+    return JSON.stringify({
+      unit: workspace.unit.id,
+      kind: workspace.graph.kind,
+      phases: (workspace.graph.phases ?? []).map((phase) => [
+        phase.id,
+        phase.title,
+        phase.position,
+        phase.modules.map((module) => [
+          module.id,
+          module.title,
+          module.phase_id,
+          module.position_in_phase,
+          module.required_prereq_count
+        ])
+      ]),
+      edges: workspace.graph.edges
+    });
+  }
+
   let flowNodes = $state.raw<TeacherFlowNode[]>([]);
   let flowEdges = $state.raw<TeacherFlowEdge[]>([]);
   let flowBusy = $state(false);
   let graphMessage = $state<{ tone: "info" | "success" | "error"; text: string } | null>(null);
-  let workspaceState = $state<TeacherUnitWorkspaceView>(plainWorkspace(data.workspace));
+  let workspaceState = $state<TeacherUnitWorkspaceView>(initialWorkspace());
   let localSelection = $state<TeacherUnitWorkspaceSelection>({ kind: "none" });
   let openModulePropertiesId = $state<string | null>(null);
-  let handledForm = $state<ActionData | undefined>(undefined);
+  let handledForm: ActionData | undefined = undefined;
+  let initialCreateDialogStateApplied = $state(false);
+  let createPhaseOpen = $state(false);
+  let createModuleOpen = $state(false);
+  let createSectionOpen = $state(false);
+  let flowViewport = $state<{ x: number; y: number; zoom: number } | undefined>(undefined);
+  let lastWorkspaceSignature = "";
+  let pendingViewportReset = false;
+  let flowBuildSequence = 0;
 
   const nodeTypes = {
     unitNode: GraphUnitNode,
@@ -56,9 +99,19 @@
     teacherEdge: TeacherGraphEdge
   };
 
-  const enhanceGraphForm = () => {
-    return async ({ update }: { update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void> }) => {
-      await update({ reset: false, invalidateAll: false });
+  const enhanceGraphForm: SubmitFunction = () => {
+    return async ({ result, update }) => {
+      const success = graphActionSuccessFromResult(result);
+      if (success?.next) {
+        syncUrlPatch(success.next);
+      }
+      if (success) {
+        closeCreateDialogsFromNext(success.next);
+        await applyAction(result);
+        await invalidateAll();
+        return;
+      }
+      await update({ reset: false });
     };
   };
 
@@ -66,7 +119,6 @@
     ok: true;
     message: string;
     next?: Record<string, string | null>;
-    workspace: TeacherUnitWorkspaceView;
   };
 
   function asGraphActionSuccess(value: unknown): GraphActionSuccess | null {
@@ -74,7 +126,26 @@
       return null;
     }
     const candidate = value as Partial<GraphActionSuccess>;
-    return candidate.ok && candidate.workspace ? (candidate as GraphActionSuccess) : null;
+    return candidate.ok ? (candidate as GraphActionSuccess) : null;
+  }
+
+  function graphActionSuccessFromResult(result: unknown): GraphActionSuccess | null {
+    if (!result || typeof result !== "object") {
+      return null;
+    }
+
+    const data = (result as { data?: unknown }).data;
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+
+    for (const value of Object.values(data)) {
+      const success = asGraphActionSuccess(value);
+      if (success) {
+        return success;
+      }
+    }
+    return null;
   }
 
   function actionError(value: unknown): string | null {
@@ -106,7 +177,7 @@
   }
 
   function currentUrl(): URL {
-    return typeof window === "undefined" ? new URL(page.url) : new URL(window.location.href);
+    return new URL(page.url);
   }
 
   function pageHref(next: Record<string, string | null>): string {
@@ -128,15 +199,15 @@
   }
 
   function showCreatePhaseDialog(): boolean {
-    return currentUrl().searchParams.get("create-phase") === "1";
+    return createPhaseOpen || (!initialCreateDialogStateApplied && Boolean(data.showCreatePhaseDialog || form?.createPhase));
   }
 
   function showCreateModuleDialog(): boolean {
-    return currentUrl().searchParams.get("create-module") === "1";
+    return createModuleOpen || (!initialCreateDialogStateApplied && Boolean(data.showCreateModuleDialog || form?.createModule));
   }
 
   function showCreateSectionDialog(): boolean {
-    return currentUrl().searchParams.get("create-section") === "1";
+    return createSectionOpen || (!initialCreateDialogStateApplied && Boolean(data.showCreateSectionDialog || form?.createSection));
   }
 
   function selectedPhaseId(): string | null {
@@ -165,25 +236,72 @@
     openModulePropertiesId = null;
   }
 
-  function commandHref(href: string | null | undefined): string {
-    return href ?? page.url.pathname;
+  function openCreatePhaseDialog() {
+    createPhaseOpen = true;
+  }
+
+  function closeCreatePhaseDialog() {
+    createPhaseOpen = false;
+    if (currentUrl().searchParams.has("create-phase")) {
+      replaceCurrentUrl(pageHref({ "create-phase": null }));
+    }
+  }
+
+  function openCreateModuleDialog() {
+    createModuleOpen = true;
+  }
+
+  function closeCreateModuleDialog() {
+    createModuleOpen = false;
+    if (currentUrl().searchParams.has("create-module")) {
+      replaceCurrentUrl(pageHref({ "create-module": null }));
+    }
+  }
+
+  function openCreateSectionDialog() {
+    createSectionOpen = true;
+  }
+
+  function closeCreateSectionDialog() {
+    createSectionOpen = false;
+    if (currentUrl().searchParams.has("create-section")) {
+      replaceCurrentUrl(pageHref({ "create-section": null }));
+    }
+  }
+
+  function closeCreateDialogsFromNext(next: Record<string, string | null> | undefined) {
+    if (next?.["create-phase"] === null) {
+      createPhaseOpen = false;
+    }
+    if (next?.["create-module"] === null) {
+      createModuleOpen = false;
+    }
+    if (next?.["create-section"] === null) {
+      createSectionOpen = false;
+    }
+  }
+
+  function replaceCurrentUrl(href: string) {
+    if (typeof window !== "undefined") {
+      replaceState(href, page.state);
+    }
   }
 
   function graphCommandActions(): TeacherGraphCommandBarAction[] {
     if (workspaceState.graph.kind === "linear") {
-      return [{ label: "Abschnitt hinzufügen", href: commandHref(workspaceState.graph.create_section_href) }];
+      return [{ label: "Abschnitt hinzufügen", active: showCreateSectionDialog(), onClick: openCreateSectionDialog }];
     }
 
     return [
       {
         label: "Phase hinzufügen",
-        href: commandHref(workspaceState.graph.create_phase_href),
-        active: showCreatePhaseDialog()
+        active: showCreatePhaseDialog(),
+        onClick: openCreatePhaseDialog
       },
       {
         label: "Modul hinzufügen",
-        href: commandHref(workspaceState.graph.create_module_href),
-        active: showCreateModuleDialog()
+        active: showCreateModuleDialog(),
+        onClick: openCreateModuleDialog
       }
     ];
   }
@@ -192,8 +310,8 @@
     return target instanceof Element && Boolean(target.closest("a,button,summary,input,textarea,select,label,form"));
   }
 
-  function modularPhases() {
-    return workspaceState.graph.kind === "modular" ? (workspaceState.graph.phases ?? []) : [];
+  function modularPhases(workspace: TeacherUnitWorkspaceView = workspaceState) {
+    return workspace.graph.kind === "modular" ? (workspace.graph.phases ?? []) : [];
   }
 
   function graphSections(): TeacherUnitWorkspaceSectionItem[] {
@@ -293,7 +411,7 @@
       return;
     }
 
-    const url = new URL(window.location.href);
+    const url = currentUrl();
     ["section", "phase", "module", "edgeFrom", "edgeTo"].forEach((key) => url.searchParams.delete(key));
 
     if (selection.kind === "section") {
@@ -307,7 +425,7 @@
       url.searchParams.set("edgeTo", selection.edge.to_id);
     }
 
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    replaceCurrentUrl(`${url.pathname}${url.search}${url.hash}`);
   }
 
   function syncUrlPatch(next: Record<string, string | null>) {
@@ -315,24 +433,11 @@
       return;
     }
 
-    window.history.replaceState(window.history.state, "", pageHref(next));
+    replaceCurrentUrl(pageHref(next));
   }
 
   async function applyLocalSelection(selection: TeacherUnitWorkspaceSelection) {
     localSelection = selection;
-    syncSelectionUrl(selection);
-  }
-
-  async function applyWorkspaceUpdate(
-    workspace: TeacherUnitWorkspaceView,
-    selection: TeacherUnitWorkspaceSelection = workspace.selection,
-    next: Record<string, string | null> | null = null
-  ) {
-    workspaceState = workspace;
-    localSelection = selection;
-    if (next) {
-      syncUrlPatch(next);
-    }
     syncSelectionUrl(selection);
   }
 
@@ -364,38 +469,24 @@
     return response.json();
   }
 
-  async function refreshWorkspaceView(next: Record<string, string | null> = {}): Promise<TeacherUnitWorkspaceView> {
-    const url = currentUrl();
-    const params = new URLSearchParams(url.searchParams);
-    for (const [key, value] of Object.entries(next)) {
-      if (!value) {
-        params.delete(key);
-      } else {
-        params.set(key, value);
-      }
-    }
-    const query = params.toString();
-    const href = query
-      ? `/teaching/units/${workspaceState.unit.id}/graph/workspace?${query}`
-      : `/teaching/units/${workspaceState.unit.id}/graph/workspace`;
-    const response = await fetch(href, {
-      method: "GET",
-      credentials: "same-origin"
-    });
-
-    if (!response.ok) {
-      throw new Error("workspace_refresh_failed");
-    }
-
-    return response.json() as Promise<TeacherUnitWorkspaceView>;
+  async function reloadWorkspace(next: Record<string, string | null> = {}) {
+    syncUrlPatch(next);
+    await invalidateAll();
   }
 
-  async function rebuildFlow(selection: TeacherUnitWorkspaceSelection = localSelection) {
+  async function rebuildFlow(
+    selection: TeacherUnitWorkspaceSelection = localSelection,
+    workspaceForBuild: TeacherUnitWorkspaceView = workspaceState
+  ) {
+    const buildSequence = ++flowBuildSequence;
     flowBusy = true;
     try {
       const saveModuleValues = actionValues<{ title: string; phase_id: string; required_prereq_count: string }>(form?.saveModule);
       const saveModuleFormError = actionError(form?.saveModule);
-      const layout = await buildTeacherUnitFlow(workspaceState, selection);
+      const layout = await buildTeacherUnitFlow(workspaceForBuild, selection);
+      if (buildSequence !== flowBuildSequence) {
+        return;
+      }
       flowNodes = layout.nodes.map((node) => {
         const nodeData = flowNodeData(node);
         if (nodeData.kind !== "module") {
@@ -409,6 +500,7 @@
             ...node,
             data: {
               ...nodeData,
+              enhanceGraphForm,
               onOpenProperties: () => openModuleProperties(node.id),
               onCloseProperties: null,
               quickEdit: null
@@ -420,12 +512,13 @@
           ...node,
           data: {
             ...nodeData,
+            enhanceGraphForm,
             onOpenProperties: null,
             onCloseProperties: () => closeModuleProperties(),
             quickEdit: {
               title: saveModuleValues.title ?? selection.module.title,
               phaseId: saveModuleValues.phase_id ?? selection.module.phase_id,
-              phaseOptions: modularPhases().map((phase) => ({ id: phase.id, title: phase.title })),
+              phaseOptions: modularPhases(workspaceForBuild).map((phase) => ({ id: phase.id, title: phase.title })),
               requiredPrereqCount:
                 saveModuleValues.required_prereq_count ?? String(selection.module.required_prereq_count),
               error: saveModuleFormError
@@ -433,15 +526,52 @@
           }
         };
       });
-      flowEdges = layout.edges;
+      flowEdges = layout.edges.map((edge) => ({
+        ...edge,
+        data: {
+          ...flowEdgeData(edge),
+          enhanceGraphForm
+        }
+      }));
+      if (pendingViewportReset) {
+        flowViewport = { x: 0, y: 0, zoom: 1 };
+        pendingViewportReset = false;
+      }
     } finally {
-      flowBusy = false;
+      if (buildSequence === flowBuildSequence) {
+        flowBusy = false;
+      }
     }
   }
 
+  function scheduleFlowRebuild(
+    selection: TeacherUnitWorkspaceSelection = localSelection,
+    workspaceForBuild: TeacherUnitWorkspaceView = workspaceState
+  ) {
+    queueMicrotask(() => {
+      void rebuildFlow(selection, workspaceForBuild);
+    });
+  }
+
   $effect(() => {
-    data.workspace;
-    workspaceState = plainWorkspace(data.workspace);
+    if (initialCreateDialogStateApplied) {
+      return;
+    }
+    initialCreateDialogStateApplied = true;
+    createPhaseOpen = Boolean(data.showCreatePhaseDialog);
+    createModuleOpen = Boolean(data.showCreateModuleDialog || form?.createModule);
+    createSectionOpen = Boolean(data.showCreateSectionDialog);
+  });
+
+  $effect(() => {
+    const nextWorkspaceSignature = workspaceGraphSignature(data.workspace);
+    const workspaceChanged = Boolean(lastWorkspaceSignature && nextWorkspaceSignature !== lastWorkspaceSignature);
+    if (workspaceChanged) {
+      pendingViewportReset = true;
+    }
+    lastWorkspaceSignature = nextWorkspaceSignature;
+    const nextWorkspace = plainWorkspace(data.workspace);
+    workspaceState = nextWorkspace;
     localSelection = data.workspace.selection;
     openModulePropertiesId = null;
   });
@@ -451,7 +581,8 @@
     localSelection;
     openModulePropertiesId;
     form?.saveModule;
-    void rebuildFlow(localSelection);
+    const selection = localSelection;
+    scheduleFlowRebuild(selection);
   });
 
   $effect(() => {
@@ -472,6 +603,16 @@
     const deleteModuleSuccess = asGraphActionSuccess(form.deleteModule);
     const createEdgeSuccess = asGraphActionSuccess(form.createEdge);
     const deleteEdgeSuccess = asGraphActionSuccess(form.deleteEdge);
+
+    if (actionError(form.createPhase)) {
+      createPhaseOpen = true;
+    }
+    if (actionError(form.createModule)) {
+      createModuleOpen = true;
+    }
+    if (actionError(form.createSection)) {
+      createSectionOpen = true;
+    }
 
     const success =
       saveSectionSuccess
@@ -496,7 +637,15 @@
       } else if (deleteModuleSuccess || createModuleSuccess || createEdgeSuccess || deleteEdgeSuccess) {
         openModulePropertiesId = null;
       }
-      void applyWorkspaceUpdate(success.workspace, success.workspace.selection, success.next ?? null);
+      if (createPhaseSuccess) {
+        closeCreatePhaseDialog();
+      }
+      if (createModuleSuccess) {
+        closeCreateModuleDialog();
+      }
+      if (createSectionSuccess) {
+        closeCreateSectionDialog();
+      }
     }
   });
 
@@ -522,8 +671,7 @@
     try {
       await apiJson("POST", `/teaching/units/${workspaceState.unit.id}/graph/sections`, { section_ids: next });
       setGraphMessage("Abschnitte gespeichert.", "success");
-      const workspace = await refreshWorkspaceView({ section: localSelection.kind === "section" ? localSelection.section.id : null });
-      await applyWorkspaceUpdate(workspace);
+      await reloadWorkspace({ section: localSelection.kind === "section" ? localSelection.section.id : null });
     } catch (error) {
       setGraphMessage("Abschnitte konnten nicht neu geordnet werden.", "error");
       await rebuildFlow(localSelection);
@@ -635,8 +783,7 @@
         { phase_id: targetPhaseId, module_ids: nextIds }
       );
       setGraphMessage("Module gespeichert.", "success");
-      const workspace = await refreshWorkspaceView({ module: nodeId, phase: targetPhaseId });
-      await applyWorkspaceUpdate(workspace);
+      await reloadWorkspace({ module: nodeId, phase: targetPhaseId });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "";
       console.warn("Module reorder failed", {
@@ -673,8 +820,7 @@
         phase_ids: reordered
       });
       setGraphMessage("Phasen gespeichert.", "success");
-      const workspace = await refreshWorkspaceView({ phase: localSelection.phase.id });
-      await applyWorkspaceUpdate(workspace);
+      await reloadWorkspace({ phase: localSelection.phase.id });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "";
       setGraphMessage(phaseReorderMessage(detail), "error");
@@ -733,16 +879,11 @@
         to_module_id: connection.target
       });
       setGraphMessage("Kante angelegt.", "success");
-      const workspace = await refreshWorkspaceView({
+      await reloadWorkspace({
         module: connection.target,
         edgeFrom: connection.source,
         edgeTo: connection.target
       });
-      await applyWorkspaceUpdate(
-        workspace,
-        deriveEdgeSelection(connection.source, connection.target),
-        { module: connection.target, edgeFrom: connection.source, edgeTo: connection.target }
-      );
     } catch (error) {
       setGraphMessage("Die Kante konnte nicht angelegt werden.", "error");
       await rebuildFlow(localSelection);
@@ -794,9 +935,9 @@
           <p class="workspace-label">Canvas</p>
           <h2>Phase hinzufügen</h2>
         </div>
-        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-phase": null })}>
+        <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={closeCreatePhaseDialog}>
           Schließen
-        </a>
+        </button>
       </div>
       <form method="POST" action="?/createPhase" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
         <label class="workspace-field">
@@ -819,9 +960,9 @@
           <p class="workspace-label">Canvas</p>
           <h2>Modul hinzufügen</h2>
         </div>
-        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-module": null })}>
+        <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={closeCreateModuleDialog}>
           Schließen
-        </a>
+        </button>
       </div>
       <form method="POST" action="?/createModule" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
         <label class="workspace-field">
@@ -869,6 +1010,7 @@
     <SvelteFlow
       bind:nodes={flowNodes}
       bind:edges={flowEdges}
+      bind:viewport={flowViewport}
       class="teacher-flow-canvas"
       {nodeTypes}
       {edgeTypes}
@@ -939,9 +1081,9 @@
               <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={() => moveSelectedPhase(1)}>
                 Nach unten
               </button>
-              <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-module": "1" })}>
+              <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={openCreateModuleDialog}>
                 Modul hinzufügen
-              </a>
+              </button>
             </div>
           </form>
         {/if}
@@ -1014,7 +1156,7 @@
     <div class="dialog-card">
       <div class="dialog-card__header">
         <div><p class="workspace-label">Canvas</p><h2>Abschnitt hinzufügen</h2></div>
-        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ "create-section": null })}>Schließen</a>
+        <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={closeCreateSectionDialog}>Schließen</button>
       </div>
       <form method="POST" action="?/createSection" class="workspace-form" use:enhance={enhanceGraphForm}>
         <label class="workspace-field">

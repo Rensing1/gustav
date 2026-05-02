@@ -1,11 +1,14 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  export type TeacherGraphCommandBarAction = {
+  type TeacherGraphCommandBarActionBase = {
     label: string;
-    href: string;
     active?: boolean;
   };
+
+  export type TeacherGraphCommandBarAction =
+    | (TeacherGraphCommandBarActionBase & { href: string; onClick?: never })
+    | (TeacherGraphCommandBarActionBase & { href?: never; onClick: () => void });
 
   let {
     actions,
@@ -24,12 +27,22 @@
 
   <div class="workspace-unit-commandbar" role="toolbar" aria-label="Graphwerkzeuge">
     {#each actions as action}
-      <a
-        class={`workspace-top-action workspace-top-action--quiet ${action.active ? "workspace-top-action--active" : ""}`.trim()}
-        href={action.href}
-      >
-        {action.label}
-      </a>
+      {#if action.onClick}
+        <button
+          class={`workspace-top-action workspace-top-action--quiet ${action.active ? "workspace-top-action--active" : ""}`.trim()}
+          type="button"
+          onclick={action.onClick}
+        >
+          {action.label}
+        </button>
+      {:else}
+        <a
+          class={`workspace-top-action workspace-top-action--quiet ${action.active ? "workspace-top-action--active" : ""}`.trim()}
+          href={action.href}
+        >
+          {action.label}
+        </a>
+      {/if}
     {/each}
   </div>
 

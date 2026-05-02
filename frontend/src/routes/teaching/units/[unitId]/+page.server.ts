@@ -18,19 +18,6 @@ function workspaceHref(unitId: string): string {
   return `/api/teaching/views/units/${encodeURIComponent(unitId)}/workspace`;
 }
 
-function nextPageHref(unitId: string, url: URL, next: Record<string, string | null>): string {
-  const params = new URLSearchParams(url.searchParams);
-  for (const [key, value] of Object.entries(next)) {
-    if (!value) {
-      params.delete(key);
-    } else {
-      params.set(key, value);
-    }
-  }
-  const query = params.toString();
-  return query ? `/teaching/units/${unitId}?${query}` : `/teaching/units/${unitId}`;
-}
-
 async function readErrorDetail(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as { detail?: string; error?: string };
@@ -38,18 +25,6 @@ async function readErrorDetail(response: Response): Promise<string> {
   } catch {
     return "";
   }
-}
-
-function applySearchPatch(url: URL, next: Record<string, string | null>): URLSearchParams {
-  const params = new URLSearchParams(url.searchParams);
-  for (const [key, value] of Object.entries(next)) {
-    if (!value) {
-      params.delete(key);
-    } else {
-      params.set(key, value);
-    }
-  }
-  return params;
 }
 
 function workspaceRequestPath(unitId: string, searchParams: URLSearchParams): string {
@@ -61,21 +36,6 @@ function workspaceRequestPath(unitId: string, searchParams: URLSearchParams): st
     }
   }
   return `${apiUrl.pathname}${apiUrl.search}`;
-}
-
-async function loadWorkspace(
-  fetchFn: typeof fetch,
-  cookies: Parameters<PageServerLoad>[0]["cookies"],
-  unitId: string,
-  url: URL,
-  next: Record<string, string | null>
-): Promise<TeacherUnitWorkspaceView> {
-  const searchParams = applySearchPatch(url, next);
-  return requireBackendJson<TeacherUnitWorkspaceView>(
-    fetchFn,
-    cookies,
-    workspaceRequestPath(unitId, searchParams)
-  );
 }
 
 function saveModuleError(detail: string): string {
@@ -172,7 +132,7 @@ export const actions: Actions = {
     throw redirect(303, "/teaching/units");
   },
 
-  saveSection: async ({ fetch, cookies, params, request, url }) => {
+  saveSection: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const sectionId = String(formData.get("section_id") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
@@ -196,13 +156,12 @@ export const actions: Actions = {
       saveSection: {
         ok: true,
         message: "Abschnitt gespeichert.",
-        next: { section: sectionId, quick: null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, { section: sectionId, quick: null })
+        next: { section: sectionId, quick: null }
       }
     };
   },
 
-  createSection: async ({ fetch, cookies, params, request, url }) => {
+  createSection: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
 
@@ -226,13 +185,12 @@ export const actions: Actions = {
       createSection: {
         ok: true,
         message: "Abschnitt angelegt.",
-        next: { section: created.id, "create-section": null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, { section: created.id, "create-section": null })
+        next: { section: created.id, "create-section": null }
       }
     };
   },
 
-  deleteSection: async ({ fetch, cookies, params, request, url }) => {
+  deleteSection: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const sectionId = String(formData.get("section_id") ?? "").trim();
 
@@ -253,13 +211,12 @@ export const actions: Actions = {
       deleteSection: {
         ok: true,
         message: "Abschnitt gelöscht.",
-        next: { section: null, quick: null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, { section: null, quick: null })
+        next: { section: null, quick: null }
       }
     };
   },
 
-  savePhase: async ({ fetch, cookies, params, request, url }) => {
+  savePhase: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const phaseId = String(formData.get("phase_id") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
@@ -283,13 +240,12 @@ export const actions: Actions = {
       savePhase: {
         ok: true,
         message: "Phase gespeichert.",
-        next: { phase: phaseId, quick: null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, { phase: phaseId, quick: null })
+        next: { phase: phaseId, quick: null }
       }
     };
   },
 
-  createPhase: async ({ fetch, cookies, params, request, url }) => {
+  createPhase: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
 
@@ -315,13 +271,12 @@ export const actions: Actions = {
       createPhase: {
         ok: true,
         message: "Phase angelegt.",
-        next: { phase: created.id, "create-phase": null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, { phase: created.id, "create-phase": null })
+        next: { phase: created.id, "create-phase": null }
       }
     };
   },
 
-  deletePhase: async ({ fetch, cookies, params, request, url }) => {
+  deletePhase: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const phaseId = String(formData.get("phase_id") ?? "").trim();
 
@@ -342,13 +297,12 @@ export const actions: Actions = {
       deletePhase: {
         ok: true,
         message: "Phase gelöscht.",
-        next: { phase: null, quick: null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, { phase: null, quick: null })
+        next: { phase: null, quick: null }
       }
     };
   },
 
-  saveModule: async ({ fetch, cookies, params, request, url }) => {
+  saveModule: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const moduleId = String(formData.get("module_id") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
@@ -437,17 +391,12 @@ export const actions: Actions = {
       saveModule: {
         ok: true,
         message: "Modul gespeichert.",
-        next: { module: moduleId, phase: phaseId, quick: null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, {
-          module: moduleId,
-          phase: phaseId,
-          quick: null
-        })
+        next: { module: moduleId, phase: phaseId, quick: null }
       }
     };
   },
 
-  createModule: async ({ fetch, cookies, params, request, url }) => {
+  createModule: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
     const phaseId = String(formData.get("phase_id") ?? "").trim();
@@ -482,17 +431,12 @@ export const actions: Actions = {
       createModule: {
         ok: true,
         message: "Modul angelegt.",
-        next: { module: created.id, phase: phaseId, "create-module": null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, {
-          module: created.id,
-          phase: phaseId,
-          "create-module": null
-        })
+        next: { module: created.id, phase: phaseId, "create-module": null }
       }
     };
   },
 
-  deleteModule: async ({ fetch, cookies, params, request, url }) => {
+  deleteModule: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const moduleId = String(formData.get("module_id") ?? "").trim();
 
@@ -513,18 +457,12 @@ export const actions: Actions = {
       deleteModule: {
         ok: true,
         message: "Modul gelöscht.",
-        next: { module: null, edgeFrom: null, edgeTo: null, quick: null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, {
-          module: null,
-          edgeFrom: null,
-          edgeTo: null,
-          quick: null
-        })
+        next: { module: null, edgeFrom: null, edgeTo: null, quick: null }
       }
     };
   },
 
-  createEdge: async ({ fetch, cookies, params, request, url }) => {
+  createEdge: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const fromModuleId = String(formData.get("from_module_id") ?? "").trim();
     const toModuleId = String(formData.get("to_module_id") ?? "").trim();
@@ -548,17 +486,12 @@ export const actions: Actions = {
       createEdge: {
         ok: true,
         message: "Kante angelegt.",
-        next: { edgeFrom: fromModuleId, edgeTo: toModuleId, module: toModuleId },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, {
-          edgeFrom: fromModuleId,
-          edgeTo: toModuleId,
-          module: toModuleId
-        })
+        next: { edgeFrom: fromModuleId, edgeTo: toModuleId, module: toModuleId }
       }
     };
   },
 
-  deleteEdge: async ({ fetch, cookies, params, request, url }) => {
+  deleteEdge: async ({ fetch, cookies, params, request }) => {
     const formData = await request.formData();
     const fromModuleId = String(formData.get("from_module_id") ?? "").trim();
     const toModuleId = String(formData.get("to_module_id") ?? "").trim();
@@ -582,11 +515,7 @@ export const actions: Actions = {
       deleteEdge: {
         ok: true,
         message: "Kante gelöscht.",
-        next: { edgeFrom: null, edgeTo: null },
-        workspace: await loadWorkspace(fetch, cookies, params.unitId, url, {
-          edgeFrom: null,
-          edgeTo: null
-        })
+        next: { edgeFrom: null, edgeTo: null }
       }
     };
   }

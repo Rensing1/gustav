@@ -1,4 +1,5 @@
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/svelte";
+import type { SubmitFunction } from "@sveltejs/kit";
 
 import type {
   TeacherUnitWorkspaceEdge,
@@ -54,6 +55,7 @@ export type TeacherFlowNodeData = {
   position?: number | null;
   connectable?: boolean;
   compact?: boolean;
+  enhanceGraphForm?: SubmitFunction;
   onOpenProperties?: (() => void) | null;
   onCloseProperties?: (() => void) | null;
   quickEdit?: {
@@ -69,6 +71,7 @@ export type TeacherFlowNode = Node<TeacherFlowNodeData, "unitNode" | "phaseBand"
 export type TeacherFlowEdgeData = {
   from: string;
   to: string;
+  enhanceGraphForm?: SubmitFunction;
 };
 export type SmoothStepPathOptionsLike = {
   offset?: number;

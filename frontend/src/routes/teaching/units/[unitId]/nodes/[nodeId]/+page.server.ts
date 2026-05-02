@@ -102,7 +102,7 @@ async function success<K extends EditorActionName>(
       editor: await readEditor(fetchFn, cookies, unitId, nodeId),
       ...extra
     }
-  };
+  } as Record<K, EditorActionSuccess>;
 }
 
 async function readCreatedMaterial(response: Response): Promise<TeacherUnitNodeEditorMaterial | null> {

@@ -46,6 +46,16 @@ def _validate_feedback_md(feedback_md: str) -> str:
     return text
 
 
+def _validate_feedback_md_with_usage(feedback_md: str, usage_events: list[TokenUsageEvent]) -> str:
+    """Validate feedback and preserve already captured provider usage on errors."""
+    try:
+        return _validate_feedback_md(feedback_md)
+    except RuntimeError as exc:
+        if usage_events:
+            setattr(exc, "usage_events", list(usage_events))
+        raise
+
+
 def _normalize_v2(*, raw: dict[str, Any], criteria: Sequence[str]) -> dict[str, Any]:
     items = raw.get("criteria_results") or raw.get("criteria") or []
     model_items: list[dict[str, Any]] = [it for it in items if isinstance(it, dict)] if isinstance(items, list) else []
@@ -247,7 +257,7 @@ def analyze_visual_feedback(
             usage_events.extend(captured)
         _log_stage_metadata(stage="visual_synthesis", parse_status="skipped")
         return FeedbackResult(
-            feedback_md=_validate_feedback_md(feedback_md),
+            feedback_md=_validate_feedback_md_with_usage(feedback_md, usage_events),
             analysis_json={},
             parse_status="skipped",
             usage_events=usage_events,
@@ -284,7 +294,7 @@ def analyze_visual_feedback(
     _log_stage_metadata(stage="visual_synthesis")
 
     return FeedbackResult(
-        feedback_md=_validate_feedback_md(feedback_md),
+        feedback_md=_validate_feedback_md_with_usage(feedback_md, usage_events),
         analysis_json=analysis_json,
         parse_status=parse_status,
         usage_events=usage_events,

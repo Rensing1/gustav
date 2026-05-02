@@ -186,3 +186,24 @@ async def test_teacher_course_ai_usage_empty_course_returns_zero_rows(
     }
     assert body["learners"][0]["student"]["sub"] == "student-usage"
     assert body["learners"][0]["totals"]["known_events"] == 0
+
+
+@pytest.mark.anyio
+async def test_teacher_course_ai_usage_missing_course_has_private_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = SessionStore()
+    monkeypatch.setattr(main, "SESSION_STORE", store)
+    teacher = store.create(sub="teacher-usage-missing", roles=["teacher"], name="Ada", ttl_seconds=60)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-usage-missing", roles=["teacher"], name="Ada")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        response = await client.get(
+            "/api/teaching/views/courses/00000000-0000-0000-0000-000000000000/ai-usage",
+            headers=headers,
+        )
+
+    assert response.status_code == 404
+    assert response.headers.get("Cache-Control") == "private, no-store"
+    assert response.json() == {"error": "not_found"}

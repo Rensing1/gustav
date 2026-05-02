@@ -1776,6 +1776,7 @@ async def get_teacher_course_ai_usage(
     owner_sub = str(user.get("sub") or "")
     guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
     if guard:
+        guard.headers.setdefault("Cache-Control", _private_headers()["Cache-Control"])
         return guard
 
     try:

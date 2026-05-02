@@ -39,6 +39,8 @@ def test_openapi_documents_teacher_course_ai_usage_view() -> None:
     response = operation["responses"]["200"]
     assert "Cache-Control" in response["headers"]
     assert response["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/TeacherCourseAiUsageView"
+    assert "404" in operation["responses"]
+    assert "Cache-Control" in operation["responses"]["404"]["headers"]
 
     view = spec["components"]["schemas"]["TeacherCourseAiUsageView"]
     assert view["required"] == ["user", "course", "filters", "totals", "learners", "pagination", "generated_at"]

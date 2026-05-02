@@ -39,7 +39,15 @@ def _event_from_usage(
     output_tokens = _int_or_none(usage.get("completion_tokens"))
     total_tokens = _int_or_none(usage.get("total_tokens"))
     if input_tokens is None and output_tokens is None and total_tokens is None:
-        return None
+        return TokenUsageEvent(
+            event_key=str(uuid4()),
+            model=str(model or "unknown"),
+            stage=stage,
+            modality=modality,
+            call_kind=call_kind,
+            usage_known=False,
+            unknown_reason="missing_provider_usage",
+        )
     return TokenUsageEvent(
         event_key=str(uuid4()),
         model=str(model or "unknown"),

@@ -65,6 +65,33 @@ def test_capture_dspy_usage_keeps_total_only_usage_known(monkeypatch) -> None:  
     assert events[0].usage_known is True
 
 
+def test_capture_dspy_usage_records_unknown_event_when_provider_omits_usage(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    class _Tracker:
+        usage_data = {"openai/provider-model": [{}]}
+
+    @contextmanager
+    def _track_usage():  # type: ignore[no-untyped-def]
+        yield _Tracker()
+
+    monkeypatch.setitem(__import__("sys").modules, "dspy", SimpleNamespace(track_usage=_track_usage))
+
+    _result, events = capture_dspy_usage(
+        lambda: "ok",
+        model="fallback-model",
+        stage="feedback",
+        modality="text",
+        call_kind="primary",
+    )
+
+    assert len(events) == 1
+    assert events[0].model == "openai/provider-model"
+    assert events[0].usage_known is False
+    assert events[0].input_tokens is None
+    assert events[0].output_tokens is None
+    assert events[0].total_tokens is None
+    assert events[0].unknown_reason == "missing_provider_usage"
+
+
 def test_capture_dspy_usage_attaches_events_to_parse_error(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     class _Tracker:
         usage_data = {"openai/provider-model": [{"prompt_tokens": 9, "completion_tokens": 4, "total_tokens": 13}]}
@@ -88,3 +115,31 @@ def test_capture_dspy_usage_attaches_events_to_parse_error(monkeypatch) -> None:
     assert len(events) == 1
     assert events[0].input_tokens == 9
     assert events[0].output_tokens == 4
+
+
+def test_feedback_validation_error_keeps_captured_usage_events(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    class _Tracker:
+        usage_data = {"openai/provider-model": [{"prompt_tokens": 15, "completion_tokens": 3, "total_tokens": 18}]}
+
+    @contextmanager
+    def _track_usage():  # type: ignore[no-untyped-def]
+        yield _Tracker()
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "dspy",
+        SimpleNamespace(__version__="test", track_usage=_track_usage, context=lambda **_kwargs: _track_usage()),
+    )
+
+    from backend.learning.adapters.dspy import feedback_program
+
+    monkeypatch.setattr(feedback_program.dspy_programs, "run_feedback_no_criteria", lambda **_kwargs: "Ungültig")
+
+    with pytest.raises(RuntimeError) as raised:
+        feedback_program.analyze_feedback(text_md="Antwort", criteria=[])
+
+    assert str(raised.value) == "invalid_feedback_format"
+    events = getattr(raised.value, "usage_events", [])
+    assert len(events) == 1
+    assert events[0].input_tokens == 15
+    assert events[0].output_tokens == 3

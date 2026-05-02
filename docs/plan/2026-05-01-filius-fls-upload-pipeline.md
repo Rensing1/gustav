@@ -1,6 +1,6 @@
 # Plan: Filius `.fls` Upload + deterministische Evidence-Pipeline
 
-Datum: 2026-05-01  
+Datum: 2026-05-01
 Status: Planned
 
 ## Kontext / Problem
@@ -38,54 +38,54 @@ Als Informatiklehrkraft möchte ich Filius-Projekte als `.fls` einreichen lassen
 
 ## BDD-Szenarien
 
-1. Filius-Task erstellen  
-   Given eine Lehrkraft erstellt eine Aufgabe mit `filius: {}`  
-   When die Teaching-API die Aufgabe speichert  
+1. Filius-Task erstellen
+   Given eine Lehrkraft erstellt eine Aufgabe mit `filius: {}`
+   When die Teaching-API die Aufgabe speichert
    Then hat die Aufgabe `kind=filius` und gibt ein leeres `filius`-Config-Objekt zurück.
 
-2. Upload-only UI  
-   Given `Task.kind=filius`  
-   When ein Schüler die Task-Seite öffnet  
+2. Upload-only UI
+   Given `Task.kind=filius`
+   When ein Schüler die Task-Seite öffnet
    Then sieht er nur ein Upload-Feld für `.fls`.
 
-3. Upload-Intent erlaubt nur FLS  
-   Given `Task.kind=filius`  
-   When Upload-Intent mit `kind=file`, Dateiname `projekt.fls` und MIME `application/x.filius.fls` angefragt wird  
+3. Upload-Intent erlaubt nur FLS
+   Given `Task.kind=filius`
+   When Upload-Intent mit `kind=file`, Dateiname `projekt.fls` und MIME `application/x.filius.fls` angefragt wird
    Then enthält die Response `accepted_mime_types=["application/x.filius.fls"]`.
 
-4. Submission akzeptiert gültige FLS  
-   Given `Task.kind=filius` und eine gültige `.fls` mit `projekt/konfiguration.xml`  
-   When `POST .../submissions` mit `kind=file` und Filius-Metadata kommt  
+4. Submission akzeptiert gültige FLS
+   Given `Task.kind=filius` und eine gültige `.fls` mit `projekt/konfiguration.xml`
+   When `POST .../submissions` mit `kind=file` und Filius-Metadata kommt
    Then Response `202`, Submission `analysis_status=pending`.
 
-5. Submission lehnt falsche Abgabearten ab  
-   Given `Task.kind=filius`  
-   When ein Schüler Text, Bild, PDF, SB3 oder HEX einreicht  
+5. Submission lehnt falsche Abgabearten ab
+   Given `Task.kind=filius`
+   When ein Schüler Text, Bild, PDF, SB3 oder HEX einreicht
    Then Response `400 invalid_input` oder `400 invalid_file_payload`.
 
-6. Nicht-Filius-Tasks lehnen FLS ab  
-   Given `Task.kind=native|visual|scratch|calliope`  
-   When ein Schüler `.fls` einreicht  
+6. Nicht-Filius-Tasks lehnen FLS ab
+   Given `Task.kind=native|visual|scratch|calliope`
+   When ein Schüler `.fls` einreicht
    Then Response `400 mime_not_allowed` beim Upload-Intent oder `400 invalid_file_payload` beim Finalisieren.
 
-7. Security: defekter Container  
-   Given eine Datei mit `.fls`-Endung, die kein gültiges ZIP ist  
-   When sie finalisiert wird  
+7. Security: defekter Container
+   Given eine Datei mit `.fls`-Endung, die kein gültiges ZIP ist
+   When sie finalisiert wird
    Then Response `400 invalid_filius_archive`.
 
-8. Security: fehlende Konfiguration  
-   Given ein gültiges ZIP ohne `projekt/konfiguration.xml`  
-   When es finalisiert wird  
+8. Security: fehlende Konfiguration
+   Given ein gültiges ZIP ohne `projekt/konfiguration.xml`
+   When es finalisiert wird
    Then Response `400 missing_filius_configuration`.
 
-9. Security: XML nicht erlaubt  
-   Given `konfiguration.xml` enthält DOCTYPE/DTD, externe Entities oder unbekannte ausführungsnahe Klassen  
-   When sie geparst wird  
+9. Security: XML nicht erlaubt
+   Given `konfiguration.xml` enthält DOCTYPE/DTD, externe Entities oder unbekannte ausführungsnahe Klassen
+   When sie geparst wird
    Then Response `400 invalid_filius_configuration`.
 
-10. Worker: Evidence -> Feedback  
-    Given eine gültige Filius-Submission  
-    When der Worker den Job verarbeitet  
+10. Worker: Evidence -> Feedback
+    Given eine gültige Filius-Submission
+    When der Worker den Job verarbeitet
     Then `text_md` beginnt mit `# filius.evidence.v1`, `analysis_json` bleibt im bestehenden Kriterien-Schema und `feedback_md` wird aus der Evidence erzeugt.
 
 ## Contract-first: OpenAPI-Änderungen

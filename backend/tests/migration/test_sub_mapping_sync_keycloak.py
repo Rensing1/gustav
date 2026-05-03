@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+pytestmark = pytest.mark.legacy_migration
+
 psycopg = None
 try:  # pragma: no cover
     import psycopg  # type: ignore
@@ -99,4 +101,3 @@ def test_keycloak_email_mode_updates_placeholders(monkeypatch, tmp_path: Path) -
             assert cur.fetchone()[0] == 0
             cur.execute("select count(*) from public.course_memberships where student_id like 'legacy:%'")
             assert cur.fetchone()[0] == 0
-

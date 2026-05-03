@@ -9,6 +9,8 @@ from click.testing import CliRunner
 
 from backend.tests.utils import db as db_utils
 
+pytestmark = pytest.mark.legacy_migration
+
 psycopg = None
 try:  # pragma: no cover - optional dependency at runtime
     import psycopg  # type: ignore

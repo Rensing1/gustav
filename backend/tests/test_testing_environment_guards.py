@@ -14,6 +14,7 @@ import importlib
 import os
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -208,6 +209,76 @@ def test_e2e_conftest_keeps_explicit_email_domain_override(
 
     assert calls == 1
     assert os.getenv("E2E_EMAIL_DOMAIN") == "custom.example"
+
+
+class _CollectedItem:
+    def __init__(self, path: Path, *, marked_legacy: bool = False) -> None:
+        self.fspath = str(path)
+        self.path = path
+        self.keywords: dict[str, bool] = {"legacy_migration": True} if marked_legacy else {}
+        self.markers: list[object] = []
+
+    def add_marker(self, marker: object) -> None:
+        self.markers.append(marker)
+
+
+def _marker_names(item: _CollectedItem) -> set[str]:
+    names: set[str] = set()
+    for marker in item.markers:
+        mark = getattr(marker, "mark", marker)
+        name = getattr(mark, "name", None)
+        if name:
+            names.add(str(name))
+    return names
+
+
+def test_legacy_migration_marker_is_default_skip_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import backend.tests.conftest as mod
+
+    monkeypatch.delenv("RUN_LEGACY_MIGRATION_TESTS", raising=False)
+    neutral_path = tmp_path / "test_neutral_name.py"
+    neutral_path.write_text("def test_placeholder():\n    assert True\n", encoding="utf-8")
+    item = _CollectedItem(neutral_path, marked_legacy=True)
+
+    mod.pytest_collection_modifyitems(None, [item])
+
+    assert "skip" in _marker_names(item)
+
+
+def test_legacy_migration_tests_can_be_enabled_explicitly(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import backend.tests.conftest as mod
+
+    monkeypatch.setenv("RUN_LEGACY_MIGRATION_TESTS", "1")
+    neutral_path = tmp_path / "test_neutral_name.py"
+    neutral_path.write_text("def test_placeholder():\n    assert True\n", encoding="utf-8")
+    item = _CollectedItem(neutral_path, marked_legacy=True)
+
+    mod.pytest_collection_modifyitems(None, [item])
+
+    assert "skip" not in _marker_names(item)
+
+
+def test_unmarked_global_public_truncate_is_rejected(tmp_path: Path) -> None:
+    import backend.tests.conftest as mod
+
+    destructive_path = tmp_path / "test_destructive.py"
+    destructive_sql = "truncate table " + "public.courses cascade"
+    destructive_path.write_text(
+        f'SQL = "{destructive_sql}"\n'
+        "def test_placeholder():\n"
+        "    assert SQL\n",
+        encoding="utf-8",
+    )
+    item = _CollectedItem(destructive_path)
+
+    with pytest.raises(pytest.UsageError, match="legacy_migration"):
+        mod.pytest_collection_modifyitems(None, [item])
 
 
 def test_service_dsn_prefers_supabase_admin_when_available(monkeypatch: pytest.MonkeyPatch):

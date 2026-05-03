@@ -6,6 +6,8 @@ import pytest
 
 from backend.tools import legacy_migration
 
+pytestmark = pytest.mark.legacy_migration
+
 
 class _Cursor:
     def __init__(self, *, has_batch_column: bool) -> None:

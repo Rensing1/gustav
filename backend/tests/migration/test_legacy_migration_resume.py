@@ -9,6 +9,8 @@ from click.testing import CliRunner
 
 from backend.tests.utils import db as db_utils
 
+pytestmark = pytest.mark.legacy_migration
+
 psycopg = None
 try:  # pragma: no cover - optional dependency at runtime
     import psycopg  # type: ignore
@@ -105,4 +107,3 @@ def test_resume_skips_completed_identity_phase() -> None:
         rows = _fetch_all(conn, "select * from public.legacy_user_map")
         # skipped: no new entries created
         assert rows == []
-

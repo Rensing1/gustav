@@ -6,14 +6,79 @@ that can affect the Trio backend (e.g., socketpair permission errors).
 """
 import os
 import importlib
+import re
 import sys
 from pathlib import Path
 import pytest
 
 from backend.tests.utils.db import is_safe_db_test_dsn
 
+LEGACY_MIGRATION_MARKER = "legacy_migration"
+GLOBAL_PUBLIC_TRUNCATE_RE = re.compile(r"truncate\s+table\s+public\.", re.IGNORECASE)
+
 def _truthy_env(name: str) -> bool:
     return (os.getenv(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _item_path(item: object) -> Path | None:
+    """Return a filesystem path for a collected pytest item, if available."""
+    raw = getattr(item, "path", None) or getattr(item, "fspath", None)
+    if not raw:
+        return None
+    return Path(str(raw))
+
+
+def _item_has_marker(item: object, marker: str) -> bool:
+    """Return whether a collected pytest item has a marker keyword."""
+    keywords = getattr(item, "keywords", {})
+    try:
+        return marker in keywords
+    except TypeError:
+        return False
+
+
+def _item_source_contains_global_public_truncate(item: object) -> bool:
+    """Return whether the test source contains a global public table truncate.
+
+    Why:
+        Test collection is the last safe point before an accidentally collected
+        DB test could clear prod-like local data.
+    """
+    path = _item_path(item)
+    if not path or not path.exists() or not path.is_file():
+        return False
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return bool(GLOBAL_PUBLIC_TRUNCATE_RE.search(text))
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:  # pragma: no cover
+    """Skip retired Alpha1 import tests unless explicitly requested."""
+    offenders: list[str] = []
+    for item in items:
+        if _item_source_contains_global_public_truncate(item) and not _item_has_marker(item, LEGACY_MIGRATION_MARKER):
+            path = _item_path(item)
+            offenders.append(str(path) if path else getattr(item, "nodeid", "<unknown test item>"))
+    if offenders:
+        raise pytest.UsageError(
+            "Tests with global `TRUNCATE table public.*` must be marked "
+            f"`pytest.mark.{LEGACY_MIGRATION_MARKER}` and gated out of default verify: "
+            + ", ".join(sorted(set(offenders)))
+        )
+
+    if _truthy_env("RUN_LEGACY_MIGRATION_TESTS"):
+        return
+    skip_legacy = pytest.mark.skip(
+        reason=(
+            "Alpha1 legacy migration tests are retired from the default suite; "
+            "set RUN_LEGACY_MIGRATION_TESTS=1 to run them explicitly."
+        )
+    )
+    for item in items:
+        if _item_has_marker(item, LEGACY_MIGRATION_MARKER):
+            item.add_marker(skip_legacy)
 
 
 def _is_prod_like(env_value: str | None) -> bool:

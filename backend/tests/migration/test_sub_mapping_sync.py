@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+pytestmark = pytest.mark.legacy_migration
+
 psycopg = None
 try:  # pragma: no cover - optional at runtime
     import psycopg  # type: ignore

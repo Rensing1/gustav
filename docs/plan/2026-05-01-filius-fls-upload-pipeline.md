@@ -1,7 +1,310 @@
 # Plan: Filius `.fls` Upload + deterministische Evidence-Pipeline
 
 Datum: 2026-05-01
-Status: Planned
+Status: In Progress
+
+## Live-Implementierungslog
+
+Dieses Dokument dient während der Umsetzung als lebendes Kontextfenster.
+Vor jedem TDD-Slice werden die relevanten bestehenden Codeabschnitte geprüft
+und hier festgehalten. Ziel ist KISS/DRY/YAGNI: vorhandene Patterns werden
+erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
+
+### 2026-05-07 — Slice 0: Branch und Arbeitsregeln
+
+- Branch: `feature/filius-fls-upload-pipeline`.
+- TDD-Regel: kein Produktionscode ohne vorherigen roten Test.
+- Reporting: Zwischenbericht vor RED, nach erwartetem Fail, nach GREEN und bei Abweichungen.
+- Fixture-Strategie: öffentliche Filius-Dateien werden geprüft; wenn Redistribution nicht eindeutig public-repo-tauglich ist, werden synthetische Minimal-Fixtures committed und öffentliche Dateien nur lokal validiert.
+
+### 2026-05-07 — Slice 1: Contract/API-Start
+
+- Geprüfte Codeabschnitte:
+  - `backend/tests/test_openapi_calliope_hex_contract.py`
+  - `backend/tests/test_learning_calliope_hex_upload_only_api.py`
+  - `api/openapi.yml`
+  - `backend/teaching/services/tasks.py`
+  - `backend/web/routes/learning.py`
+  - `backend/storage/learning_policy.py`
+- Wiederverwendung:
+  - Calliope/Scratch-Contracttests als Muster für Filius-RED-Tests.
+  - Bestehende Learning-Upload-Policy und Upload-Intent-Branching statt neuer Plugin-Schicht.
+- Minimale Änderung für diesen Slice:
+  - Erst nur öffentliche API-/Task-/Upload-Intent-Erwartungen rot spezifizieren.
+  - Danach OpenAPI und vorhandene Service-/Route-Guards additiv erweitern.
+- Komplexitätsentscheidung:
+  - Keine neue allgemeine Format-Registry in diesem Slice. Falls spätere Duplikation in Upload-Intent, Repo-Guard und UI sichtbar wird, wird sie gezielt nach Tests eingeführt.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_openapi_filius_fls_contract.py`
+  - Ergebnis: 5 erwartete Fails wegen fehlendem `FiliusTaskConfig`, fehlenden `filius`-Enums, fehlendem FLS-MIME und fehlenden Filius-Fehlercodes.
+- GREEN:
+  - `api/openapi.yml` additiv um `FiliusTaskConfig`, `filius`-Enums, `filius`-Felder, FLS-MIME und Fehlercode-Beschreibungen erweitert.
+  - `.venv/bin/pytest -q backend/tests/test_openapi_filius_fls_contract.py` -> 5 passed.
+
+### 2026-05-07 — Slice 2: Teaching-Service `Task.kind=filius`
+
+- Geprüfte Codeabschnitte:
+  - `backend/tests/test_teaching_tasks_service_unit.py`
+  - `backend/teaching/services/tasks.py`
+- Wiederverwendung:
+  - Filius folgt dem vorhandenen leeren Marker-Config-Muster von `scratch` und `calliope`.
+- Minimale Änderung:
+  - Keine neue Config-Basisklasse; eine kleine `_normalize_filius_config`-Funktion analog zu Scratch/Calliope reicht.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_teaching_tasks_service_unit.py -k filius`
+  - Ergebnis: 4 erwartete Fails, weil `create_task`/`update_task` `filius` noch nicht als Keyword akzeptieren.
+- GREEN:
+  - `backend/teaching/services/tasks.py` minimal um `_normalize_filius_config`, `create_task(..., filius=...)` und `update_task(..., filius=...)` erweitert.
+  - `.venv/bin/pytest -q backend/tests/test_teaching_tasks_service_unit.py -k filius` -> 4 passed.
+
+### 2026-05-07 — Slice 3: Teaching-Web-Adapter
+
+- Geprüfte Codeabschnitte:
+  - `backend/web/routes/teaching.py` Payload-Modelle, Create-/Update-Weitergabe und `_serialize_task`.
+- Wiederverwendung:
+  - Bestehende Pydantic-Modelle und `_serialize_task`-Branches werden additiv erweitert.
+- Minimale Änderung:
+  - `filius` als optionales Payloadfeld, Weitergabe an `TasksService`, Allowlist des Fehlercodes und Serialisierung als leeres Marker-Objekt.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_teaching_filius_task_adapter.py`
+  - Ergebnis: 3 erwartete Fails, weil Payloads/Serialisierung `filius` noch nicht kennen.
+- GREEN:
+  - `backend/web/routes/teaching.py` additiv um `filius` in Payloads, Service-Weitergabe, Fehlercode-Allowlist und `_serialize_task` erweitert.
+  - `.venv/bin/pytest -q backend/tests/test_teaching_filius_task_adapter.py backend/tests/test_teaching_tasks_service_unit.py -k 'filius or not filius'` -> 25 passed.
+
+### 2026-05-07 — Slice 4: Learning-Upload-Policy
+
+- Geprüfte Codeabschnitte:
+  - `backend/storage/learning_policy.py`
+  - `backend/web/routes/learning.py`
+- Wiederverwendung:
+  - Bestehende `ALLOWED_FILE_MIME`/`DEFAULT_POLICY`-Struktur wird additiv erweitert.
+- Minimale Änderung:
+  - `FILIUS_FLS_MIME` als zentrale Konstante und Eintrag in `ALLOWED_FILE_MIME`.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_learning_filius_fls_upload_policy.py`
+  - Ergebnis: erwarteter Fail, weil `application/x.filius.fls` noch nicht in `ALLOWED_FILE_MIME`/`DEFAULT_POLICY` enthalten ist.
+- GREEN:
+  - `backend/storage/learning_policy.py` um `FILIUS_FLS_MIME` und FLS-Datei-MIME erweitert.
+  - `.venv/bin/pytest -q backend/tests/test_learning_filius_fls_upload_policy.py` -> 1 passed.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_learning_filius_fls_upload_intent.py`
+  - Ergebnis: 1 erwarteter Fail, weil `Task.kind=filius` im Upload-Intent noch nicht FLS-only akzeptiert; Nicht-Filius-FLS wird bereits abgelehnt.
+- GREEN:
+  - `backend/web/routes/learning.py` um FLS-only Branch für `Task.kind=filius` und `.fls`-Storage-Key-Endung erweitert.
+  - `.venv/bin/pytest -q backend/tests/test_learning_filius_fls_upload_policy.py backend/tests/test_learning_filius_fls_upload_intent.py` -> 3 passed.
+
+### 2026-05-07 — Slice 5: FLS-Container-Validation
+
+- Geprüfte Codeabschnitte:
+  - `backend/storage/sb3_validation.py`
+  - `backend/storage/makecode_hex_validation.py`
+  - `backend/web/routes/learning.py` frühe SB3/HEX-Validation
+- Wiederverwendung:
+  - Eigenes kleines Storage-Validierungsmodul analog zu SB3 statt Parserlogik in der Route.
+- Minimale Änderung:
+  - ZIP bounded lesen, `projekt/konfiguration.xml` extrahieren, DOCTYPE/Entity/gefährliche XMLDecoder-Konstrukte ablehnen.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_filius_fls_validation.py`
+  - Ergebnis: 6 erwartete Fails, weil `backend.storage.filius_validation` noch fehlt.
+- GREEN:
+  - `backend/storage/filius_validation.py` mit bounded ZIP-Lesen, `projekt/konfiguration.xml`-Extraktion und stabilen Fehlercodes ergänzt.
+  - `.venv/bin/pytest -q backend/tests/test_filius_fls_validation.py` -> 6 passed.
+
+### 2026-05-07 — Slice 6: Filius-Submission-Validation
+
+- Geprüfte Codeabschnitte:
+  - `backend/web/routes/learning.py` Submission-Finalisierung für SB3/HEX.
+  - `backend/storage/filius_validation.py`.
+- Wiederverwendung:
+  - FLS folgt der bestehenden frühen SB3/HEX-Validation vor `CreateSubmissionUseCase`.
+- Minimale Änderung:
+  - Bei FLS-MIME Task-kind lesen, Nicht-Filius ablehnen, Storage-Bytes laden, `extract_configuration_xml_bytes` validieren.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_learning_filius_fls_submission_api.py`
+  - Ergebnis: 3 erwartete Fails; gültige FLS persistiert bereits generisch, aber Invalid/Unavailable/Nicht-Filius-FLS fehlen.
+- GREEN:
+  - `backend/web/routes/learning.py` um frühe FLS-Validation vor Persistenz erweitert.
+  - `.venv/bin/pytest -q backend/tests/test_filius_fls_validation.py backend/tests/test_learning_filius_fls_submission_api.py` -> 10 passed.
+
+### 2026-05-07 — Slice 7: Repo-Guard-Matrix
+
+- Geprüfte Codeabschnitte:
+  - `backend/learning/repo_db.py` inline Task-kind/Submission-kind Guard.
+  - `backend/tests/test_learning_repo_submission_mapping.py` als Muster für DB-freie Repo-Tests.
+- Wiederverwendung:
+  - Bestehende Guard-Matrix bleibt fachlich gleich und wird nur in eine pure Funktion verschoben, damit sie ohne DB testbar bleibt.
+- Minimale Änderung:
+  - `_validate_task_submission_kind(task_kind, submission_kind, mime_type)` ergänzt und in `create_submission` verwendet.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_learning_submission_kind_guard.py`
+  - Ergebnis: erwarteter ImportError, weil die pure Guard-Funktion noch nicht existiert.
+- GREEN:
+  - `backend/learning/repo_db.py` um `_validate_task_submission_kind` erweitert und inline-Matrix dadurch ersetzt.
+  - `.venv/bin/pytest -q backend/tests/test_learning_submission_kind_guard.py backend/tests/test_learning_repo_submission_mapping.py` -> 11 passed.
+
+### 2026-05-07 — Slice 8: Erste Filius-Evidence
+
+- Geprüfte Codeabschnitte:
+  - `backend/scratch/sb3_evidence_v2.py`
+  - `backend/makecode/hex_evidence_v1.py`
+  - `backend/storage/filius_validation.py`
+- Wiederverwendung:
+  - Neues Formatmodul wie Scratch/MakeCode; keine generische Worker-Registry.
+- Minimale Änderung:
+  - Deterministischer Markdown-Rahmen mit festen Abschnitten, Projektversion und bekannten XMLDecoder-Klassen; keine Roh-XML-Ausgabe.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py`
+  - Ergebnis: erwarteter Fail, weil `backend.filius.evidence_v1` noch fehlt.
+- GREEN:
+  - `backend/filius/evidence_v1.py` und `backend/filius/__init__.py` ergänzt.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/test_filius_fls_validation.py` -> 7 passed.
+- Abweichung:
+  - Die aktuelle Evidence ist ein sicherer, deterministischer Grundrahmen mit Version und bekannten Filius-Klassen. Die im Zielbild geforderte vollständige fachliche Topologie-/Routing-/DNS-/Web-/Mail-Extraktion ist noch nicht abgeschlossen und bleibt als weiterer TDD-Ausbau offen.
+
+### 2026-05-07 — Slice 9: Worker-Filius-Branch
+
+- Geprüfte Codeabschnitte:
+  - `backend/learning/adapters/local_vision.py` SB3- und HEX-Branches.
+  - `backend/tests/learning_adapters/test_local_vision_makecode_hex.py`.
+- Wiederverwendung:
+  - Bestehende lokale/remote Storage-Lesehelper und `VisionResult`-Rückgabeform.
+- Minimale Änderung:
+  - FLS in `SUPPORTED_MIME` aufnehmen und einen Branch mit `backend.filius.evidence_v1.build_evidence_markdown_v1` ergänzen.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/learning_adapters/test_local_vision_filius_fls.py`
+  - Ergebnis: erwarteter Fail `unsupported mime: application/x.filius.fls`.
+- GREEN:
+  - `backend/learning/adapters/local_vision.py` um FLS-MIME und deterministischen Filius-Branch erweitert.
+  - `.venv/bin/pytest -q backend/tests/learning_adapters/test_local_vision_filius_fls.py backend/tests/learning_adapters/test_local_vision_makecode_hex.py backend/tests/learning_adapters/test_local_vision_sb3.py` -> 3 passed.
+
+### 2026-05-07 — Slice 10: Learning-UI Upload-only
+
+- Geprüfte Codeabschnitte:
+  - `frontend/src/lib/components/learning-unit/LearningSubmissionWorkspace.svelte`
+  - `frontend/src/lib/components/learning-unit/LearningTaskCard.test.ts`
+  - `frontend/src/lib/types/learning.ts`
+  - `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.server.ts`
+- Wiederverwendung:
+  - Filius wird in die vorhandene upload-only Bedingung aufgenommen; kein neuer UI-Modus.
+- Minimale Änderung:
+  - Type-Union erweitern, upload-only für `filius`, Label `.fls-Datei hochladen`.
+- RED:
+  - `npm test -- --run src/lib/components/learning-unit/LearningTaskCard.test.ts`
+  - Ergebnis: 1 erwarteter Fail; Filius zeigt noch den Text/Upload-Switch statt upload-only.
+- GREEN:
+  - `frontend/src/lib/types/learning.ts`, `frontend/src/lib/types/home.ts`, `LearningSubmissionWorkspace.svelte`, `LearningTaskCard.svelte` und Learning-Page-Server um Filius upload-only erweitert.
+  - `npm test -- --run src/lib/components/learning-unit/LearningTaskCard.test.ts` -> 30 passed.
+
+### 2026-05-07 — Slice 11: Supabase-Migrationen und lokale Bucket-Allowlist
+
+- Geprüfte Codeabschnitte:
+  - Calliope-Migrationen `20260223120000_*`, `20260223121000_*`, `20260223122000_*`.
+  - `supabase/config.toml` Bucket `submissions`.
+  - Storage-/Migration-Contracttests.
+- Wiederverwendung:
+  - Filius-Migrationen folgen exakt den additiven Calliope-Mustern.
+- Minimale Änderung:
+  - Drei neue Migrationen für Task-kind, Submission-MIME und Storage-Bucket-Allowlist; keine neuen Spalten.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_learning_storage_policy_contract.py backend/tests/test_storage_buckets_provisioning.py::test_local_supabase_config_allows_makecode_hex_in_submissions_bucket backend/tests/test_storage_buckets_provisioning.py::test_filius_storage_migration_updates_allowlist_additively backend/tests/test_filius_migrations_contract.py`
+  - Ergebnis: 4 erwartete Fails wegen fehlender Filius-Migrationen und fehlendem FLS-MIME in `supabase/config.toml`.
+- GREEN:
+  - Drei additive Filius-Migrationen und `supabase/config.toml` Bucket-Allowlist ergänzt.
+  - `.venv/bin/pytest -q backend/tests/test_learning_storage_policy_contract.py backend/tests/test_storage_buckets_provisioning.py::test_local_supabase_config_allows_makecode_hex_in_submissions_bucket backend/tests/test_storage_buckets_provisioning.py::test_filius_storage_migration_updates_allowlist_additively backend/tests/test_filius_migrations_contract.py` -> 6 passed.
+
+### 2026-05-07 — Slice 12: Verstreute Upload-MIME-Mappings
+
+- Geprüfte Codeabschnitte:
+  - `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte`
+  - `backend/web/main.py`
+- Wiederverwendung:
+  - Bestehende task-kind/Dateiendungs-Mappings werden nur additiv erweitert.
+- Minimale Änderung:
+  - Filius in `UploadTaskKind`, Svelte-MIME-Mapping, SSR-Upload-Form und Dateiendungs-MIME-Erkennung ergänzen.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_filius_upload_client_surface_contract.py`
+  - Ergebnis: 2 erwartete Fails, weil die verstreuten Client-/SSR-Mappings Filius noch nicht enthalten.
+- GREEN:
+  - `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` und `backend/web/main.py` additiv um `.fls`/`application/x.filius.fls` erweitert.
+  - `.venv/bin/pytest -q backend/tests/test_filius_upload_client_surface_contract.py` -> 2 passed.
+
+### 2026-05-07 — Slice 13: Snapshot-Import/Restore
+
+- Geprüfte Codeabschnitte:
+  - `backend/tools/import_snapshot_backup.py`
+  - `backend/tests/migration/test_import_snapshot_backup.py`
+- Wiederverwendung:
+  - Bestehende lokale Bucket-Allowlist-Synchronisierung und Dateiendungs-MIME-Erkennung für `.sb3`/`.hex`.
+- Minimale Änderung:
+  - `application/x.filius.fls` in die Submission-Bucket-Allowlist aufnehmen und `.fls` beim Restore als Filius-MIME erkennen.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/migration/test_import_snapshot_backup.py::test_sync_bucket_allowlists_adds_makecode_hex_for_submissions backend/tests/migration/test_import_snapshot_backup.py::test_guess_content_type_handles_snapshot_submission_extensions`
+  - Ergebnis: 2 erwartete Fails; Restore-SQL enthielt FLS nicht und `.fls` fiel auf `application/octet-stream` zurück.
+- GREEN:
+  - `backend/tools/import_snapshot_backup.py` minimal um FLS-Allowlist und `.fls`-Suffix-Mapping erweitert.
+  - `.venv/bin/pytest -q backend/tests/migration/test_import_snapshot_backup.py::test_sync_bucket_allowlists_adds_makecode_hex_for_submissions backend/tests/migration/test_import_snapshot_backup.py::test_guess_content_type_handles_snapshot_submission_extensions` -> 4 passed.
+
+### 2026-05-07 — Slice 14: Filius-Evidence-Anzeige
+
+- Geprüfte Codeabschnitte:
+  - `frontend/src/lib/utils/submission-artifacts.ts`
+  - `frontend/src/lib/components/learning-unit/LearningSubmissionArtifactView.svelte`
+  - `frontend/src/lib/components/learning-unit/LearningTaskCard.test.ts`
+  - `frontend/src/lib/components/learning-unit/LearningSubmissionWorkspace.test.ts`
+  - `frontend/src/routes/live/+page.svelte`
+- Wiederverwendung:
+  - Bestehender Scratch/MakeCode-Artifact-Pfad; Filius wird als strukturierte Markdown-Evidence gerendert, keine neue Viewer-Komponente.
+- Minimale Änderung:
+  - `filius.evidence.v1` erkennen, Schema-Heading ausblenden, mit `filius-evidence`-Wrapper rendern und Live-Ansicht um Header-Stripping ergänzen.
+- RED:
+  - `npm test -- src/lib/utils/submission-artifacts.test.ts --run`
+  - Ergebnis: 1 erwarteter Fail; `.fls` wurde vom Artifact-Parser noch ignoriert.
+- GREEN:
+  - `frontend/src/lib/utils/submission-artifacts.ts` und `LearningSubmissionArtifactView.svelte` um Filius erweitert.
+  - `npm test -- src/lib/utils/submission-artifacts.test.ts --run` -> 3 passed.
+  - `npm test -- src/lib/components/learning-unit/LearningTaskCard.test.ts src/lib/components/learning-unit/LearningSubmissionWorkspace.test.ts --run` -> 39 passed.
+- Hinweis:
+  - Die Frontend-Tests benötigen außerhalb der Sandbox localhost-Auflösung; der initiale Sandbox-Lauf brach mit `getaddrinfo EAI_AGAIN localhost` ab.
+
+### 2026-05-07 — Slice 15: Legacy-Browser-Skript und Teaching-SSR-Create
+
+- Geprüfte Codeabschnitte:
+  - `backend/web/static/js/gustav.js`
+  - `backend/web/main.py` SSR-Upload- und Task-Create-Hilfen.
+- Wiederverwendung:
+  - Bestehende Dateiendungs-Fallbacks und Task-kind-Payload-Branches werden additiv erweitert.
+- Minimale Änderung:
+  - Legacy-JS erkennt `.fls`, zeigt FLS-spezifische Fehlermeldung, SSR-Task-Create setzt `payload["filius"] = {}`.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_filius_upload_client_surface_contract.py`
+  - Ergebnis: 1 erwarteter Fail; `backend/web/static/js/gustav.js` kannte FLS noch nicht.
+- GREEN:
+  - `backend/web/static/js/gustav.js` und `backend/web/main.py` additiv erweitert.
+  - `.venv/bin/pytest -q backend/tests/test_filius_upload_client_surface_contract.py` -> 3 passed.
+
+### 2026-05-07 — Slice 16: Gesamtverify-Folgearbeiten
+
+- Geprüfte Codeabschnitte:
+  - `backend/tests/test_openapi_teaching_unit_workspace_view_contract.py`
+  - `backend/tests/test_storage_buckets_provisioning.py`
+  - neue Filius-Migrationen in `supabase/migrations/`
+- Befund:
+  - Erster `make verify`-Lauf wurde durch undichte Filius-Tests verfälscht: `FakeLearningRepo` blieb global gesetzt und ließ spätere Learning-/H5P-/Live-Tests gegen den Fake laufen.
+  - Nach Test-Isolation blieben zwei echte Folgepunkte: veraltete OpenAPI-Erwartung für `TeacherUnitNodeEditorTask.kind` und lokal noch nicht angewendete Storage-Bucket-Migration.
+- Minimale Änderung:
+  - Filius-Tests restaurieren Repo/Storage-/Validierungsstubs nach jedem Test.
+  - Workspace-View-Contracttest um `filius` erweitern.
+  - `supabase migration up` lokal ausführen, damit die DB-Allowlist dem Migrationsstand entspricht.
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_learning_filius_fls_upload_intent.py backend/tests/test_learning_filius_fls_submission_api.py backend/tests/test_learning_h5p_access_check_api.py::test_learning_h5p_access_204_for_enrolled_student_and_released_task` -> 6 passed, 1 skipped.
+  - `supabase migration up` -> `Local database is up to date.`
+  - `make verify` -> passed:
+    - Backend pytest: 1520 passed, 33 skipped.
+    - H5P Node tests: 15 passed.
+    - Supabase integration: 5 passed.
+    - OpenAI-compatible endpoint smoke: 2 passed.
+    - Docker/E2E: 13 passed.
 
 ## Kontext / Problem
 

@@ -80,6 +80,8 @@ class FakeTasksRepo(TasksRepoProtocol):
             task["h5p"] = {"content_id": h5p_content_id, "display_options": h5p_display_options}
         elif kind == "visual":
             task["visual"] = {}
+        elif kind == "filius":
+            task["filius"] = {}
         self.tasks[task["id"]] = task
         return task
 
@@ -126,6 +128,9 @@ class FakeTasksRepo(TasksRepoProtocol):
             task["kind"] = kind
             task.pop("h5p", None)
             task.pop("visual", None)
+            task.pop("filius", None)
+            if kind == "filius":
+                task["filius"] = {}
         if h5p_content_id is not _UNSET or h5p_display_options is not _UNSET:
             # minimal emulation: when h5p fields are updated, expose nested config
             task["h5p"] = {
@@ -233,6 +238,50 @@ def test_create_task_unknown_section(service: TasksService):
         service.create_task("unit-x", "section-x", "teacher-1", instruction_md="Aufgabe")
 
 
+def test_create_filius_task_uses_upload_only_marker_config(service: TasksService, repo: FakeTasksRepo):
+    task = service.create_task(
+        "unit-1",
+        "section-1",
+        "teacher-1",
+        instruction_md="Analysiere das Filius-Netz",
+        filius={},
+    )
+
+    assert repo.created_payload is not None
+    assert repo.created_payload["kind"] == "filius"
+    assert repo.created_payload["h5p_content_id"] is None
+    assert repo.created_payload["h5p_display_options"] == {}
+    assert task["kind"] == "filius"
+    assert task["filius"] == {}
+
+
+def test_create_filius_task_rejects_non_empty_config(service: TasksService):
+    with pytest.raises(ValueError) as exc:
+        service.create_task(
+            "unit-1",
+            "section-1",
+            "teacher-1",
+            instruction_md="Analysiere das Filius-Netz",
+            filius={"mode": "extra"},
+        )
+
+    assert str(exc.value) == "invalid_filius_config"
+
+
+def test_create_filius_task_is_mutually_exclusive(service: TasksService):
+    with pytest.raises(ValueError) as exc:
+        service.create_task(
+            "unit-1",
+            "section-1",
+            "teacher-1",
+            instruction_md="Analysiere das Filius-Netz",
+            filius={},
+            calliope={},
+        )
+
+    assert str(exc.value) == "invalid_task_kind_config"
+
+
 def test_update_task_delegates_only_provided_fields(service: TasksService, repo: FakeTasksRepo):
     updated = service.update_task(
         "unit-1",
@@ -289,6 +338,23 @@ def test_update_task_unknown_task_returns_lookup_error(service: TasksService, re
             "teacher-1",
             criteria=["X"],
         )
+
+
+def test_update_task_to_filius_marker_config(service: TasksService, repo: FakeTasksRepo):
+    updated = service.update_task(
+        "unit-1",
+        "section-1",
+        "task-1",
+        "teacher-1",
+        filius={},
+    )
+
+    assert repo.updated_payload is not None
+    assert repo.updated_payload["kind"] == "filius"
+    assert repo.updated_payload["h5p_content_id"] is None
+    assert repo.updated_payload["h5p_display_options"] == {}
+    assert updated["kind"] == "filius"
+    assert updated["filius"] == {}
 
 
 def test_delete_and_reorder_delegate(service: TasksService, repo: FakeTasksRepo):

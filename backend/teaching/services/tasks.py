@@ -184,6 +184,12 @@ def _normalize_calliope_config(value: object) -> None:
     if value:
         raise ValueError("invalid_calliope_config")
 
+def _normalize_filius_config(value: object) -> None:
+    if not isinstance(value, dict):
+        raise ValueError("invalid_filius_config")
+    if value:
+        raise ValueError("invalid_filius_config")
+
 
 @dataclass
 class TasksService:
@@ -211,6 +217,7 @@ class TasksService:
         visual: object | None = None,
         scratch: object | None = None,
         calliope: object | None = None,
+        filius: object | None = None,
     ) -> dict:
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
@@ -219,7 +226,7 @@ class TasksService:
         teacher_context = _normalize_teacher_context(teacher_context_md)
         due_dt = _parse_due_at(due_at)
         attempts = _normalize_max_attempts(max_attempts)
-        kind_configs = [h5p is not None, visual is not None, scratch is not None, calliope is not None]
+        kind_configs = [h5p is not None, visual is not None, scratch is not None, calliope is not None, filius is not None]
         if sum(1 for flag in kind_configs if flag) > 1:
             raise ValueError("invalid_task_kind_config")
         if h5p is not None:
@@ -237,6 +244,10 @@ class TasksService:
             _normalize_calliope_config(calliope)
             h5p_content_id, h5p_display_options = None, {}
             kind = "calliope"
+        elif filius is not None:
+            _normalize_filius_config(filius)
+            h5p_content_id, h5p_display_options = None, {}
+            kind = "filius"
         else:
             h5p_content_id, h5p_display_options = None, {}
             kind = "native"
@@ -270,6 +281,7 @@ class TasksService:
         visual: object = _UNSET,
         scratch: object = _UNSET,
         calliope: object = _UNSET,
+        filius: object = _UNSET,
     ) -> dict:
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
@@ -284,7 +296,7 @@ class TasksService:
             repo_kwargs["due_at"] = _parse_due_at(due_at)
         if max_attempts is not _UNSET:
             repo_kwargs["max_attempts"] = _normalize_max_attempts(max_attempts)
-        kind_updates = [h5p is not _UNSET, visual is not _UNSET, scratch is not _UNSET, calliope is not _UNSET]
+        kind_updates = [h5p is not _UNSET, visual is not _UNSET, scratch is not _UNSET, calliope is not _UNSET, filius is not _UNSET]
         if sum(1 for flag in kind_updates if flag) > 1:
             raise ValueError("invalid_task_kind_config")
         if h5p is not _UNSET:
@@ -325,6 +337,16 @@ class TasksService:
             else:
                 _normalize_calliope_config(calliope)
                 repo_kwargs["kind"] = "calliope"
+                repo_kwargs["h5p_content_id"] = None
+                repo_kwargs["h5p_display_options"] = {}
+        if filius is not _UNSET:
+            if filius is None:
+                repo_kwargs["kind"] = "native"
+                repo_kwargs["h5p_content_id"] = None
+                repo_kwargs["h5p_display_options"] = {}
+            else:
+                _normalize_filius_config(filius)
+                repo_kwargs["kind"] = "filius"
                 repo_kwargs["h5p_content_id"] = None
                 repo_kwargs["h5p_display_options"] = {}
         result = self.repo.update_task(

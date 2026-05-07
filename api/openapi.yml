@@ -760,7 +760,7 @@ components:
           minimum: 1
         kind:
           type: string
-          enum: [native, h5p, visual, scratch, calliope]
+          enum: [native, h5p, visual, scratch, calliope, filius]
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
@@ -772,6 +772,9 @@ components:
           nullable: true
         calliope:
           $ref: '#/components/schemas/CalliopeTaskConfig'
+          nullable: true
+        filius:
+          $ref: '#/components/schemas/FiliusTaskConfig'
           nullable: true
     TeacherUnitWorkspaceSelectionSection:
       type: object
@@ -2165,6 +2168,15 @@ components:
         submissions are rejected (400 invalid_input). Other `kind=file` MIME
         types (e.g. application/pdf) are rejected (400 invalid_file_payload).
         Empty object in MVP.
+    FiliusTaskConfig:
+      type: object
+      additionalProperties: false
+      description: >-
+        Marker config for upload-only Filius network simulation tasks. Students
+        submit exactly one `.fls` file (application/x.filius.fls). Image/text
+        submissions are rejected (400 invalid_input). Other `kind=file` MIME
+        types (e.g. application/pdf) are rejected (400 invalid_file_payload).
+        Empty object in MVP.
     Task:
       type: object
       required: [id, unit_id, section_id, instruction_md, criteria, position, created_at, updated_at]
@@ -2208,8 +2220,9 @@ components:
           type: string
           readOnly: true
           default: native
+          enum: [native, h5p, visual, scratch, calliope, filius]
           description: >-
-            Task type (native|h5p|visual|scratch|calliope). This field is read-only and must not
+            Task type (native|h5p|visual|scratch|calliope|filius). This field is read-only and must not
             be provided by clients.
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
@@ -2222,6 +2235,9 @@ components:
           nullable: true
         calliope:
           $ref: '#/components/schemas/CalliopeTaskConfig'
+          nullable: true
+        filius:
+          $ref: '#/components/schemas/FiliusTaskConfig'
           nullable: true
         created_at:
           type: string
@@ -2260,19 +2276,23 @@ components:
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
-          description: Optional. When set, creates an H5P task. Mutually exclusive with `visual`, `scratch`, and `calliope`.
+          description: Optional. When set, creates an H5P task. Mutually exclusive with `visual`, `scratch`, `calliope`, and `filius`.
         visual:
           $ref: '#/components/schemas/VisualTaskConfig'
           nullable: true
-          description: Optional. When set, creates a visual task. Mutually exclusive with `h5p`, `scratch`, and `calliope`.
+          description: Optional. When set, creates a visual task. Mutually exclusive with `h5p`, `scratch`, `calliope`, and `filius`.
         scratch:
           $ref: '#/components/schemas/ScratchTaskConfig'
           nullable: true
-          description: Optional. When set, creates a Scratch task. Mutually exclusive with `h5p`, `visual`, and `calliope`.
+          description: Optional. When set, creates a Scratch task. Mutually exclusive with `h5p`, `visual`, `calliope`, and `filius`.
         calliope:
           $ref: '#/components/schemas/CalliopeTaskConfig'
           nullable: true
-          description: Optional. When set, creates a Calliope task. Mutually exclusive with `h5p`, `visual`, and `scratch`.
+          description: Optional. When set, creates a Calliope task. Mutually exclusive with `h5p`, `visual`, `scratch`, and `filius`.
+        filius:
+          $ref: '#/components/schemas/FiliusTaskConfig'
+          nullable: true
+          description: Optional. When set, creates a Filius task. Mutually exclusive with `h5p`, `visual`, `scratch`, and `calliope`.
     TaskUpdate:
       type: object
       properties:
@@ -2301,19 +2321,23 @@ components:
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
-          description: Optional. When set, updates the H5P configuration. Mutually exclusive with `visual`, `scratch`, and `calliope`.
+          description: Optional. When set, updates the H5P configuration. Mutually exclusive with `visual`, `scratch`, `calliope`, and `filius`.
         visual:
           $ref: '#/components/schemas/VisualTaskConfig'
           nullable: true
-          description: Optional. When set, updates the visual configuration. Mutually exclusive with `h5p`, `scratch`, and `calliope`.
+          description: Optional. When set, updates the visual configuration. Mutually exclusive with `h5p`, `scratch`, `calliope`, and `filius`.
         scratch:
           $ref: '#/components/schemas/ScratchTaskConfig'
           nullable: true
-          description: Optional. When set, updates the Scratch configuration. Mutually exclusive with `h5p`, `visual`, and `calliope`.
+          description: Optional. When set, updates the Scratch configuration. Mutually exclusive with `h5p`, `visual`, `calliope`, and `filius`.
         calliope:
           $ref: '#/components/schemas/CalliopeTaskConfig'
           nullable: true
-          description: Optional. When set, updates the Calliope configuration. Mutually exclusive with `h5p`, `visual`, and `scratch`.
+          description: Optional. When set, updates the Calliope configuration. Mutually exclusive with `h5p`, `visual`, `scratch`, and `filius`.
+        filius:
+          $ref: '#/components/schemas/FiliusTaskConfig'
+          nullable: true
+          description: Optional. When set, updates the Filius configuration. Mutually exclusive with `h5p`, `visual`, `scratch`, and `calliope`.
     TaskReorder:
       type: object
       required: [task_ids]
@@ -2503,7 +2527,7 @@ components:
           description: Creation timestamp of the learner's newest final submission (`intent=submit`) for this task.
         kind:
           type: string
-          enum: [native, h5p, visual, scratch, calliope]
+          enum: [native, h5p, visual, scratch, calliope, filius]
           description: Backend task type identifier.
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
@@ -2516,6 +2540,9 @@ components:
           nullable: true
         calliope:
           $ref: '#/components/schemas/CalliopeTaskConfig'
+          nullable: true
+        filius:
+          $ref: '#/components/schemas/FiliusTaskConfig'
           nullable: true
     LearningSection:
       type: object
@@ -3169,7 +3196,7 @@ components:
           type: integer
         kind:
           type: string
-          enum: [native, h5p, visual, scratch, calliope]
+          enum: [native, h5p, visual, scratch, calliope, filius]
         has_submission:
           type: boolean
         h5p_completed:
@@ -3223,7 +3250,8 @@ components:
           type: string
           description: >-
             Expected MIME type (image/jpeg, image/png, application/pdf,
-            application/x.scratch.sb3, application/x.makecode.hex). Compared
+            application/x.scratch.sb3, application/x.makecode.hex,
+            application/x.filius.fls). Compared
             case-insensitively; canonical values are lowercase.
         size_bytes:
           type: integer
@@ -5525,6 +5553,7 @@ paths:
         - For `Task.kind=visual`, only `kind=image|file` is accepted (upload-only).
         - For `Task.kind=scratch`, only `kind=file` with `mime_type=application/x.scratch.sb3` is accepted (upload-only).
         - For `Task.kind=calliope`, only `kind=file` with `mime_type=application/x.makecode.hex` is accepted (upload-only).
+        - For `Task.kind=filius`, only `kind=file` with `mime_type=application/x.filius.fls` is accepted (upload-only).
         - For `Task.kind=h5p`, only `kind=h5p` is accepted and the score is persisted synchronously (response 201).
         - When `intent` is omitted, the server treats the request as `intent=submit` for backwards compatibility.
         - `intent=feedback` creates a feedback snapshot but does not consume the task's `max_attempts` budget.
@@ -5628,7 +5657,7 @@ paths:
                       minLength: 1
                     mime_type:
                       type: string
-                      enum: ['application/pdf', 'application/x.scratch.sb3', 'application/x.makecode.hex']
+                      enum: ['application/pdf', 'application/x.scratch.sb3', 'application/x.makecode.hex', 'application/x.filius.fls']
                       description: >-
                         Canonical lowercase MIME type. Compared
                         case-insensitively by the server.
@@ -5685,7 +5714,9 @@ paths:
           description: >-
             Bad request (invalid_input | invalid_image_payload | invalid_file_payload | invalid_h5p_payload |
             invalid_sb3_archive | missing_project_json | invalid_hex_file | missing_makecode_source |
-            makecode_source_too_large | max_attempts_exceeded | invalid_uuid)
+            makecode_source_too_large | invalid_filius_archive | missing_filius_configuration |
+            invalid_filius_configuration | filius_configuration_too_large |
+            max_attempts_exceeded | invalid_uuid)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -5735,7 +5766,8 @@ paths:
         '503':
           description: >-
             Service unavailable (submission_persistence_unavailable |
-            submission_validation_unavailable | sb3_validation_unavailable | hex_validation_unavailable)
+            submission_validation_unavailable | sb3_validation_unavailable | hex_validation_unavailable |
+            filius_validation_unavailable)
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -11336,8 +11368,10 @@ paths:
         Returns a short-lived presigned URL to upload a task submission asset.
         For `Task.kind=scratch`, only `.sb3`
         (`application/x.scratch.sb3`) is accepted. For `Task.kind=calliope`,
-        only `.hex` (`application/x.makecode.hex`) is accepted. For other task
-        kinds in MVP, uploads are image/PDF assets. The client must later call the
+        only `.hex` (`application/x.makecode.hex`) is accepted. For
+        `Task.kind=filius`, only `.fls` (`application/x.filius.fls`) is
+        accepted. For other task kinds in MVP, uploads are image/PDF assets.
+        The client must later call the
         submissions endpoint with storage metadata (storage_key, mime_type,
         size_bytes, sha256) to finalize the submission.
       operationId: createLearningSubmissionUploadIntent
@@ -11699,7 +11733,7 @@ paths:
                         position: { type: integer }
                         kind:
                           type: string
-                          enum: [native, h5p, visual, scratch, calliope]
+                          enum: [native, h5p, visual, scratch, calliope, filius]
                           description: Backend task type identifier.
                   rows:
                     type: array

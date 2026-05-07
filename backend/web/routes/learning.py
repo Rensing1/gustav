@@ -57,6 +57,7 @@ except ModuleNotFoundError:  # pragma: no cover - container fallback when packag
 from backend.storage.learning_policy import (
     ALLOWED_FILE_MIME,
     ALLOWED_IMAGE_MIME,
+    FILIUS_FLS_MIME,
     STORAGE_KEY_RE,
     verification_config_from_env,
 )
@@ -1596,6 +1597,57 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                     headers=_cache_headers_error(),
                 )
 
+    # Filius `.fls` validation for Filius tasks (fail early with stable detail codes).
+    if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == FILIUS_FLS_MIME:
+        task_kind = "native"
+        repo = _get_repo()
+        task_kind_reader = getattr(repo, "get_task_kind_for_student", None)
+        if callable(task_kind_reader):
+            try:
+                task_kind = str(
+                    task_kind_reader(
+                        student_sub=str(user.get("sub", "")),
+                        course_id=str(course_id),
+                        task_id=str(task_id),
+                    )
+                )
+            except PermissionError:
+                return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+            except LookupError:
+                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+            except Exception:
+                return JSONResponse(
+                    {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
+                    status_code=503,
+                    headers=_cache_headers_error(),
+                )
+
+        if str(task_kind or "").strip().lower() != "filius":
+            return JSONResponse(
+                {"error": "bad_request", "detail": "invalid_file_payload"},
+                status_code=400,
+                headers=_cache_headers_error(),
+            )
+
+        storage_key = str(clean_payload.get("storage_key") or "")
+        fls_bytes = await _load_storage_bytes_for_validation(storage_key=storage_key, max_bytes=_max_upload_bytes())
+        if not fls_bytes:
+            return JSONResponse(
+                {"error": "service_unavailable", "detail": "filius_validation_unavailable"},
+                status_code=503,
+                headers=_cache_headers_error(),
+            )
+        from backend.storage.filius_validation import FiliusValidationError, extract_configuration_xml_bytes
+
+        try:
+            _ = extract_configuration_xml_bytes(fls_bytes)
+        except FiliusValidationError as exc:
+            return JSONResponse(
+                {"error": "bad_request", "detail": str(exc.code)},
+                status_code=400,
+                headers=_cache_headers_error(),
+            )
+
     submission_input = CreateSubmissionInput(
         course_id=course_id,
         task_id=task_id,
@@ -1943,6 +1995,13 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         if mime_type != MAKECODE_HEX_MIME:
             return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
         accepted = [MAKECODE_HEX_MIME]
+    elif task_kind == "filius":
+        # Filius tasks are FLS-only (upload-only). We do not accept images/PDF here.
+        if kind != "file":
+            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+        if mime_type != FILIUS_FLS_MIME:
+            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
+        accepted = [FILIUS_FLS_MIME]
     else:
         if kind == "image":
             if mime_type not in ALLOWED_IMAGE_MIME:
@@ -1970,6 +2029,8 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         ext = ".sb3"
     elif mime_type == MAKECODE_HEX_MIME:
         ext = ".hex"
+    elif mime_type == FILIUS_FLS_MIME:
+        ext = ".fls"
     else:
         ext = ".pdf"
     storage_key = make_submission_key(

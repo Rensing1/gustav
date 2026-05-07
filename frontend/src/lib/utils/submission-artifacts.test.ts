@@ -66,4 +66,39 @@ describe("buildSubmissionArtifactView", () => {
     expect(artifact.html).toContain("Target Stage");
     expect(artifact.html).not.toContain("scratch.evidence.v2");
   });
+
+  it("renders filius evidence as a structure view without the schema heading", () => {
+    const artifact = buildSubmissionArtifactView({
+      id: "submission-3",
+      attempt_nr: 1,
+      kind: "file",
+      intent: "submit",
+      created_at: "2026-04-09T08:13:00+00:00",
+      analysis_status: "completed",
+      text_body:
+        "\uFEFF \n# filius.evidence.v1\n\n## Project\n- filius_version: 1.15.1\n\n## Ground Frame\n- class: filius.software.dhcp.DHCPServer",
+      files: [
+        {
+          mime: "application/x.filius.fls",
+          size: 8192,
+          url: "https://example.com/network.fls",
+          download_url: "https://example.com/network.fls?download=1"
+        }
+      ]
+    });
+
+    expect(artifact).toEqual(
+      expect.objectContaining({
+        kind: "filius",
+        downloadUrl: "https://example.com/network.fls?download=1"
+      })
+    );
+    expect(artifact?.kind).toBe("filius");
+    if (artifact?.kind !== "filius") {
+      throw new Error("Expected a filius artifact");
+    }
+    expect(artifact.html).toContain("Ground Frame");
+    expect(artifact.html).toContain("filius.software.dhcp.DHCPServer");
+    expect(artifact.html).not.toContain("filius.evidence.v1");
+  });
 });

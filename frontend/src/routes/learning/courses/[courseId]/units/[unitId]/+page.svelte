@@ -81,7 +81,7 @@
     linear?: Partial<LinearWorkspaceState>;
     layout?: Partial<LayoutPreferences>;
   };
-  type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope">;
+  type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
   type UploadIntent = {
     storage_key: string;
     url: string;
@@ -957,6 +957,9 @@
     }
     if (taskKind === "calliope") {
       return "application/x.makecode.hex";
+    }
+    if (taskKind === "filius") {
+      return "application/x.filius.fls";
     }
     const fileType = String(file.type || "").trim().toLowerCase();
     if (fileType) {

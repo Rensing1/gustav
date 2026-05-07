@@ -213,7 +213,7 @@ export type TeacherUnitNodeEditorTask = {
   due_at?: string | null;
   max_attempts?: number | null;
   position: number;
-  kind: "native" | "h5p" | "visual" | "scratch" | "calliope";
+  kind: "native" | "h5p" | "visual" | "scratch" | "calliope" | "filius";
   h5p?: {
     content_id?: string | null;
     display_options?: Record<string, unknown> | null;
@@ -221,6 +221,7 @@ export type TeacherUnitNodeEditorTask = {
   visual?: Record<string, never> | null;
   scratch?: Record<string, never> | null;
   calliope?: Record<string, never> | null;
+  filius?: Record<string, never> | null;
 };
 
 export type TeacherUnitWorkspaceSelectionSection = {

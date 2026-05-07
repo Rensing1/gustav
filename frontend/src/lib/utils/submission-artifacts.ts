@@ -17,6 +17,12 @@ export type SubmissionArtifactView =
       html: string;
       downloadUrl: string | null;
       fileSummary: string;
+    }
+  | {
+      kind: "filius";
+      html: string;
+      downloadUrl: string | null;
+      fileSummary: string;
     };
 
 function submissionFile(submission: LearningSubmission): SubmissionFile | null {
@@ -87,6 +93,15 @@ function renderScratchEvidence(markdown: string): string | null {
   return renderMarkdown(withoutSchemaHeading);
 }
 
+function renderFiliusEvidence(markdown: string): string | null {
+  const normalized = normalizeArtifactMarkdown(markdown);
+  if (!normalized.startsWith("# filius.evidence.v1")) {
+    return null;
+  }
+  const withoutSchemaHeading = normalized.replace(/^# filius\.evidence\.v1\s*\r?\n+/u, "");
+  return renderMarkdown(withoutSchemaHeading);
+}
+
 export function buildSubmissionArtifactView(submission: LearningSubmission): SubmissionArtifactView | null {
   const file = submissionFile(submission);
   if (!file) {
@@ -119,6 +134,19 @@ export function buildSubmissionArtifactView(submission: LearningSubmission): Sub
     }
     return {
       kind: "scratch",
+      html,
+      downloadUrl,
+      fileSummary
+    };
+  }
+
+  if (file.mime === "application/x.filius.fls") {
+    const html = renderFiliusEvidence(markdown);
+    if (!html) {
+      return null;
+    }
+    return {
+      kind: "filius",
       html,
       downloadUrl,
       fileSummary

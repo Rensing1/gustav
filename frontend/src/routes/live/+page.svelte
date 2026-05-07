@@ -74,12 +74,17 @@
       .replace(/^\uFEFF/u, "")
       .replace(/^\s*# scratch\.evidence\.v2\s*\r?\n+/u, "")
       .replace(/^\s*# makecode\.evidence\.v1\s*\r?\n+/u, "")
+      .replace(/^\s*# filius\.evidence\.v1\s*\r?\n+/u, "")
       .trimStart();
   }
 
   function isSubmissionSchemaPayload(value: string | null | undefined): boolean {
     const raw = typeof value === "string" ? value.replace(/^\uFEFF/u, "").trimStart() : "";
-    return raw.startsWith("# scratch.evidence.v2") || raw.startsWith("# makecode.evidence.v1");
+    return (
+      raw.startsWith("# scratch.evidence.v2") ||
+      raw.startsWith("# makecode.evidence.v1") ||
+      raw.startsWith("# filius.evidence.v1")
+    );
   }
 
   function taskStripTone(score: number | null, hasSubmission: boolean): string {

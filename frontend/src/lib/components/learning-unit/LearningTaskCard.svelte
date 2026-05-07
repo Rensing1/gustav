@@ -73,7 +73,7 @@
 
   type SummaryTab = "submission" | "feedback" | "evaluation";
   type SubmissionMode = "text" | "upload";
-  type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope">;
+  type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
   type CompactTaskTone = "new" | "draft" | "pending" | "final" | "error";
   let activeSummaryTab = $state<SummaryTab>("submission");
   let draftText = $state("");
@@ -84,7 +84,7 @@
   let lastSubmissionFocused = $state(false);
 
   function uploadOnly(): boolean {
-    return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope";
+    return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius";
   }
 
   function hasSubmission(): boolean {
@@ -215,6 +215,9 @@
     if (task.kind === "calliope") {
       return ".hex-Datei auswählen";
     }
+    if (task.kind === "filius") {
+      return ".fls-Datei auswählen";
+    }
     return "Datei auswählen";
   }
 
@@ -224,6 +227,9 @@
     }
     if (task.kind === "calliope") {
       return "Calliope-Datei (.hex) hochladen";
+    }
+    if (task.kind === "filius") {
+      return "Filius-Datei (.fls) hochladen";
     }
     if (task.kind === "visual") {
       return "Bild oder PDF auswählen";
@@ -237,6 +243,9 @@
     }
     if (task.kind === "calliope") {
       return ".hex,application/x.makecode.hex";
+    }
+    if (task.kind === "filius") {
+      return ".fls,application/x.filius.fls";
     }
     return ".pdf,image/png,image/jpeg,application/pdf,image/png,image/jpeg";
   }

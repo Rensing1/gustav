@@ -437,6 +437,27 @@ describe("LearningTaskCard", () => {
     expect(screen.getByText(".sb3-Datei auswählen")).toBeInTheDocument();
   });
 
+  it("renders filius tasks directly in the fls upload editor", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          id: "task-filius",
+          kind: "filius"
+        },
+        taskTitle: "Filius-Aufgabe",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true
+      }
+    });
+
+    expect(screen.queryByRole("button", { name: "Text" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Upload" })).toBeNull();
+    expect(screen.getByText(".fls-Datei auswählen")).toBeInTheDocument();
+  });
+
   it("shows a compact file card with only a subtle remove action after selecting a file", async () => {
     render(LearningTaskCard, {
       props: {
@@ -972,6 +993,85 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("link", { name: "Originaldatei herunterladen" })).toHaveAttribute(
       "href",
       "/uploads/test.sb3?download=1"
+    );
+  });
+
+  it("renders filius fls submissions as a structure view plus a download action", async () => {
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          kind: "filius",
+          has_submission: true
+        },
+        taskTitle: "Aufgabe 14",
+        unitType: "linear",
+        expanded: true,
+        reviewPanelOpen: false,
+        history: [
+          {
+            id: "submission-fls",
+            attempt_nr: 1,
+            kind: "file",
+            intent: "submit",
+            created_at: "2026-04-07T12:10:00+00:00",
+            analysis_status: "completed",
+            text_body:
+              "# filius.evidence.v1\n\n## Project\n- filius_version: 1.15.1\n\n## Ground Frame\n- class: filius.software.dhcp.DHCPServer",
+            files: [
+              {
+                mime: "application/x.filius.fls",
+                size: 8192,
+                url: "/uploads/test.fls",
+                download_url: "/uploads/test.fls?download=1"
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    await rerender({
+      courseId: "course-1",
+      task: {
+        ...task,
+        kind: "filius",
+        has_submission: true
+      },
+      taskTitle: "Aufgabe 14",
+      unitType: "linear",
+      expanded: true,
+      reviewPanelOpen: true,
+      history: [
+        {
+          id: "submission-fls",
+          attempt_nr: 1,
+          kind: "file",
+          intent: "submit",
+          created_at: "2026-04-07T12:10:00+00:00",
+          analysis_status: "completed",
+          text_body:
+            "# filius.evidence.v1\n\n## Project\n- filius_version: 1.15.1\n\n## Ground Frame\n- class: filius.software.dhcp.DHCPServer",
+          files: [
+            {
+              mime: "application/x.filius.fls",
+              size: 8192,
+              url: "/uploads/test.fls",
+              download_url: "/uploads/test.fls?download=1"
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(document.querySelector(".filius-evidence")).not.toBeNull();
+    expect(screen.queryByText("filius.evidence.v1")).toBeNull();
+    expect(screen.getByText("Ground Frame")).toBeInTheDocument();
+    expect(screen.getByText(/filius\.software\.dhcp\.DHCPServer/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Originaldatei herunterladen" })).toHaveAttribute(
+      "href",
+      "/uploads/test.fls?download=1"
     );
   });
 

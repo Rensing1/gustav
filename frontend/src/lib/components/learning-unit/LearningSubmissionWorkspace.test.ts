@@ -231,4 +231,41 @@ describe("LearningSubmissionWorkspace", () => {
       "https://example.com/upload.sb3?download=1"
     );
   });
+
+  it("renders filius fls history entries as a structure view plus a download action", () => {
+    render(LearningSubmissionWorkspace, {
+      props: {
+        courseId: "course-1",
+        task: { ...nativeTask, kind: "filius" },
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialTab: "history",
+        initialHistoryLoaded: true,
+        initialHistory: [
+          feedbackSubmission({
+            kind: "file",
+            text_body:
+              "# filius.evidence.v1\n\n## Project\n- filius_version: 1.15.1\n\n## Ground Frame\n- class: filius.software.dhcp.DHCPServer",
+            files: [
+              {
+                mime: "application/x.filius.fls",
+                size: 4096,
+                url: "https://example.com/upload.fls",
+                download_url: "https://example.com/upload.fls?download=1"
+              }
+            ]
+          })
+        ]
+      }
+    });
+
+    expect(document.querySelector(".filius-evidence")).not.toBeNull();
+    expect(screen.queryByText("filius.evidence.v1")).toBeNull();
+    expect(screen.getByText("Ground Frame")).toBeInTheDocument();
+    expect(screen.getByText(/filius\.software\.dhcp\.DHCPServer/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Originaldatei herunterladen" })).toHaveAttribute(
+      "href",
+      "https://example.com/upload.fls?download=1"
+    );
+  });
 });

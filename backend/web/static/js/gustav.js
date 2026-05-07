@@ -431,6 +431,8 @@ class Gustav {
               this.showNotification('Dateiformat nicht erlaubt. Erlaubt ist nur .sb3.', 'error');
             } else if (allowedMimeAttr.indexOf('application/x.makecode.hex') !== -1) {
               this.showNotification('Dateiformat nicht erlaubt. Erlaubt ist nur .hex.', 'error');
+            } else if (allowedMimeAttr.indexOf('application/x.filius.fls') !== -1) {
+              this.showNotification('Dateiformat nicht erlaubt. Erlaubt ist nur .fls.', 'error');
             } else {
               this.showNotification('Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.', 'error');
             }
@@ -887,6 +889,7 @@ class Gustav {
     if (!mime || mime === 'application/octet-stream') {
       if (lowerName.endsWith('.sb3')) mime = 'application/x.scratch.sb3';
       else if (lowerName.endsWith('.hex')) mime = 'application/x.makecode.hex';
+      else if (lowerName.endsWith('.fls')) mime = 'application/x.filius.fls';
       else if (lowerName.endsWith('.png')) mime = 'image/png';
       else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) mime = 'image/jpeg';
       else if (lowerName.endsWith('.pdf')) mime = 'application/pdf';

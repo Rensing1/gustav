@@ -33,7 +33,7 @@ export type LearningTask = {
   latest_submission_created_at?: string | null;
   latest_final_submission_at?: string | null;
   position?: number | null;
-  kind: "native" | "h5p" | "visual" | "scratch" | "calliope";
+  kind: "native" | "h5p" | "visual" | "scratch" | "calliope" | "filius";
   h5p?: {
     content_id?: string | null;
   } | null;

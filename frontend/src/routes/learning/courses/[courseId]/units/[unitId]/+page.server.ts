@@ -31,7 +31,7 @@ function submissionMode(task: LearningTask, file: File | null, textBody: string)
   if (file && file.size > 0) {
     return "upload";
   }
-  if (task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope") {
+  if (task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius") {
     return null;
   }
   if (textBody.trim()) {

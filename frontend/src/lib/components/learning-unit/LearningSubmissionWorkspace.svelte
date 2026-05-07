@@ -50,7 +50,7 @@
   let historyError = $state<string | null>(null);
 
   function uploadOnly(): boolean {
-    return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope";
+    return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius";
   }
 
   function storageKey(): string {
@@ -287,6 +287,8 @@
                 `.sb3`-Datei hochladen
               {:else if task.kind === "calliope"}
                 `.hex`-Datei hochladen
+              {:else if task.kind === "filius"}
+                `.fls`-Datei hochladen
               {:else}
                 Bild oder PDF hochladen
               {/if}

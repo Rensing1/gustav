@@ -817,7 +817,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         course_id: ID of the learning course context.
         unit_id: ID of the unit whose sections/tasks are shown.
         task_id: ID of the task for which the form is rendered.
-        task_kind: Optional task type selector (native|h5p|visual|scratch).
+        task_kind: Optional task type selector (native|h5p|visual|scratch|calliope|filius).
 
     Returns:
         HTML string containing the <form> element.
@@ -830,8 +830,8 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
     idempotency_key = Component.escape(_generate_task_submit_idempotency_key())
     from backend.storage.learning_policy import DEFAULT_POLICY
 
-    if kind_norm in {"visual", "scratch", "calliope"}:
-        # Visual/Scratch tasks are upload-only: no mode switch and no textarea.
+    if kind_norm in {"visual", "scratch", "calliope", "filius"}:
+        # Upload-only tasks have no mode switch and no textarea.
         max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
         max_mb_value = max_bytes / (1024 * 1024)
         max_mb = str(int(max_mb_value)) if max_mb_value.is_integer() else f"{max_mb_value:.2f}".rstrip("0").rstrip(".")
@@ -846,6 +846,10 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
             accept = ".hex,application/x.makecode.hex"
             hint = f".hex bis {max_mb} MB"
             allowed_mime = "application/x.makecode.hex"
+        elif kind_norm == "filius":
+            accept = ".fls,application/x.filius.fls"
+            hint = f".fls bis {max_mb} MB"
+            allowed_mime = "application/x.filius.fls"
         return (
             f'<form method="post" action="{form_action}" class="task-submit-form" '
             f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
@@ -940,6 +944,8 @@ async def _server_side_prepare_submission_upload(
         mime_type = "application/x.scratch.sb3"
     if filename.lower().endswith(".hex"):
         mime_type = "application/x.makecode.hex"
+    if filename.lower().endswith(".fls"):
+        mime_type = "application/x.filius.fls"
     try:
         file_bytes = await upload_file.read()  # type: ignore[attr-defined]
     except AttributeError:
@@ -8038,7 +8044,7 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
 
     Parameters form fields:
     - instruction_md: Required Markdown instruction
-    - task_kind: Optional task type selector (native|h5p|visual|scratch|calliope)
+    - task_kind: Optional task type selector (native|h5p|visual|scratch|calliope|filius)
     - csrf_token: Required
 
     Returns 200 fragment for `#task-list-section-<section_id>` or 403 on CSRF.
@@ -8094,6 +8100,8 @@ async def tasks_create(request: Request, unit_id: str, section_id: str):
                 payload["scratch"] = {}
             elif task_kind == "calliope":
                 payload["calliope"] = {}
+            elif task_kind == "filius":
+                payload["filius"] = {}
             resp = await client.post(f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks", json=payload)
             if resp.status_code >= 400:
                 error = _extract_api_error_detail(resp)

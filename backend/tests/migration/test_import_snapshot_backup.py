@@ -862,6 +862,7 @@ def test_sync_bucket_allowlists_adds_makecode_hex_for_submissions(monkeypatch: p
     assert "update storage.buckets" in sql
     assert "where id = 'submissions'" in sql
     assert "application/x.makecode.hex" in sql
+    assert "application/x.filius.fls" in sql
 
 
 def test_guess_content_type_prefers_key_extension(tmp_path: Path) -> None:
@@ -879,6 +880,10 @@ def test_guess_content_type_prefers_key_extension(tmp_path: Path) -> None:
         (
             "submissions/course/task/student/1771234567890-robot.hex/object-id",
             "application/x.makecode.hex",
+        ),
+        (
+            "submissions/course/task/student/1771234567890-network.fls/object-id",
+            "application/x.filius.fls",
         ),
     ],
 )

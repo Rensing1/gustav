@@ -80,6 +80,7 @@ LOCAL_BUCKET_ALLOWED_MIME_TYPES: dict[str, tuple[str, ...]] = {
     ),
     "submissions": (
         "application/pdf",
+        "application/x.filius.fls",
         "application/x.makecode.hex",
         "application/x.scratch.sb3",
         "image/jpeg",
@@ -1254,6 +1255,8 @@ def _guess_content_type(file_path: Path, key: str) -> str:
             return "application/x.scratch.sb3"
         if suffix == ".hex":
             return "application/x.makecode.hex"
+        if suffix == ".fls":
+            return "application/x.filius.fls"
         mime, _ = mimetypes.guess_type(candidate)
         if mime:
             return mime

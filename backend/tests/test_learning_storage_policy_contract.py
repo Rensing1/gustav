@@ -34,6 +34,7 @@ def test_learning_upload_policy_exposes_shared_limits():
         "application/pdf",
         "application/x.scratch.sb3",
         "application/x.makecode.hex",
+        "application/x.filius.fls",
     }
     assert policy.MAX_UPLOAD_BYTES == 10 * 1024 * 1024
     assert re.fullmatch(policy.STORAGE_KEY_RE, "a/b/file.pdf")

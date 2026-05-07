@@ -119,7 +119,7 @@ public = false
 # Keep generous limit for mixed media uploads in dev
 file_size_limit = "50MiB"
 # Accept common image, PDF, Scratch SB3, and MakeCode HEX types used in GUSTAV learning tasks
-allowed_mime_types = ["application/pdf", "application/x.scratch.sb3", "application/x.makecode.hex", "image/png", "image/jpeg"]
+allowed_mime_types = ["application/pdf", "application/x.scratch.sb3", "application/x.makecode.hex", "application/x.filius.fls", "image/png", "image/jpeg"]
 objects_path = "./storage/submissions"
 
 [auth]

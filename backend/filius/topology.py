@@ -11,6 +11,7 @@ Why:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import html
 import ipaddress
 import re
@@ -79,6 +80,33 @@ class FiliusManualRoute:
 
 
 @dataclass(frozen=True, slots=True)
+class FiliusApplication:
+    """An installed Filius application that is relevant for evidence."""
+
+    id: str
+    node_id: str
+    class_name: str
+    kind: str
+    name: str
+    active: str
+
+
+@dataclass(frozen=True, slots=True)
+class FiliusFilesystemFile:
+    """An allowlisted simulated file from a Filius node filesystem."""
+
+    id: str
+    node_id: str
+    path: str
+    file_type: str
+    content_kind: str
+    size_bytes: int
+    sha256: str
+    content: str
+    truncated: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class FiliusTopology:
     """Structured topology facts used by the evidence renderer."""
 
@@ -86,6 +114,8 @@ class FiliusTopology:
     links: tuple[FiliusLink, ...]
     derived_networks: tuple[FiliusDerivedNetwork, ...]
     manual_routes: tuple[FiliusManualRoute, ...] = ()
+    applications: tuple[FiliusApplication, ...] = ()
+    filesystem_files: tuple[FiliusFilesystemFile, ...] = ()
     unresolved_links: int = 0
     invalid_interfaces: int = 0
 
@@ -106,6 +136,9 @@ _TOOLTIP_INTERFACE_RE = re.compile(
 )
 _GATEWAY_RE = re.compile(r"Gateway:[^\S\n]*(?P<value>[^\n<]*)")
 _DNS_RE = re.compile(r"DNS-Server:[^\S\n]*(?P<value>[^\n<]*)")
+_TEXT_FILE_TYPES = {"", "html", "htm", "text", "txt", "css", "js", "conf"}
+_TEXT_FILE_SUFFIXES = (".html", ".htm", ".txt", ".css", ".js", ".conf")
+_MAX_EXTRACTED_FILE_CHARS = 4000
 
 
 def extract_topology(xml_bytes: bytes) -> FiliusTopology:
@@ -118,6 +151,8 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
     invalid_interfaces = 0
     networks: dict[tuple[str, str], list[str]] = {}
     route_rows: list[tuple[str, str, str, str, str, str]] = []
+    applications: list[FiliusApplication] = []
+    filesystem_files: list[FiliusFilesystemFile] = []
 
     for node_index, node_object in enumerate(node_objects, start=1):
         node_id = f"n{node_index}"
@@ -152,6 +187,12 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
             route_rows.extend(
                 (node_id, f"{node_id}-r{route_index}", destination, netmask, next_hop_ip, via_ip)
                 for route_index, (destination, netmask, next_hop_ip, via_ip) in enumerate(_manual_route_rows(hardware), start=1)
+            )
+            applications.extend(
+                _installed_applications(hardware, node_id=node_id, start_index=len(applications) + 1)
+            )
+            filesystem_files.extend(
+                _filesystem_files(hardware, node_id=node_id, start_index=len(filesystem_files) + 1)
             )
 
         nodes.append(
@@ -199,6 +240,8 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
         links=tuple(links),
         derived_networks=derived_networks,
         manual_routes=manual_routes,
+        applications=tuple(applications),
+        filesystem_files=tuple(filesystem_files),
         unresolved_links=unresolved_links,
         invalid_interfaces=invalid_interfaces,
     )
@@ -213,6 +256,15 @@ def _find_direct_property_object(element: ET.Element | None, property_name: str)
         obj = child.find("./object")
         if obj is not None:
             return obj
+    return None
+
+
+def _find_direct_property_element(element: ET.Element | None, property_name: str) -> ET.Element | None:
+    if element is None:
+        return None
+    for child in element.findall("./void"):
+        if child.attrib.get("property") == property_name:
+            return child
     return None
 
 
@@ -249,6 +301,153 @@ def _manual_route_rows(hardware: ET.Element) -> list[tuple[str, str, str, str]]:
             if len(values) >= 4:
                 rows.append((values[0], values[1], values[2], values[3]))
     return rows
+
+
+def _installed_applications(hardware: ET.Element, *, node_id: str, start_index: int) -> list[FiliusApplication]:
+    system_software = _find_direct_property_element(hardware, "systemSoftware")
+    installed = _find_direct_property_element(system_software, "installierteAnwendungen")
+    if installed is None:
+        return []
+
+    applications: list[FiliusApplication] = []
+    for app_index, entry in enumerate(installed.findall("./void"), start=start_index):
+        class_name = _application_class_name(entry)
+        kind = _application_kind(class_name)
+        if kind == "unknown":
+            continue
+        app_object = entry.find("./object")
+        value_source = app_object if app_object is not None else entry
+        applications.append(
+            FiliusApplication(
+                id=f"app{app_index}",
+                node_id=node_id,
+                class_name=class_name,
+                kind=kind,
+                name=_property_text(value_source, "name") or "unknown",
+                active=_property_text(value_source, "aktiv") or "unknown",
+            )
+        )
+    return applications
+
+
+def _application_class_name(entry: ET.Element) -> str:
+    key = entry.find("./string")
+    if key is not None and key.text:
+        return key.text.strip()
+    app_object = entry.find("./object")
+    if app_object is not None:
+        return app_object.attrib.get("class") or "unknown"
+    return "unknown"
+
+
+def _application_kind(class_name: str) -> str:
+    if class_name == "filius.software.dns.DNSServer":
+        return "dns_server"
+    if class_name == "filius.software.www.WebServer":
+        return "web_server"
+    return "unknown"
+
+
+def _filesystem_files(hardware: ET.Element, *, node_id: str, start_index: int) -> list[FiliusFilesystemFile]:
+    system_software = _find_direct_property_element(hardware, "systemSoftware")
+    filesystem = _find_direct_property_element(system_software, "dateisystem")
+    working_directory = _find_direct_property_element(filesystem, "arbeitsVerzeichnis")
+    if working_directory is None:
+        return []
+
+    files: list[FiliusFilesystemFile] = []
+    for root_entry in working_directory.findall("./void"):
+        node = root_entry.find("./object")
+        if node is not None:
+            _collect_filesystem_files(
+                node,
+                node_id=node_id,
+                path_parts=(),
+                files=files,
+                start_index=start_index,
+            )
+    return files
+
+
+def _collect_filesystem_files(
+    tree_node: ET.Element,
+    *,
+    node_id: str,
+    path_parts: tuple[str, ...],
+    files: list[FiliusFilesystemFile],
+    start_index: int,
+) -> None:
+    user_object = _find_direct_property_element(tree_node, "userObject")
+    if user_object is None:
+        return
+
+    file_object = user_object.find("./object")
+    if file_object is not None and file_object.attrib.get("class") == "filius.software.system.Datei":
+        file_name = _property_text(file_object, "name") or "unknown"
+        file_path = "/" + "/".join((*path_parts, file_name))
+        if _is_allowed_filesystem_path(file_path):
+            files.append(
+                _build_filesystem_file(
+                    file_object,
+                    node_id=node_id,
+                    file_id=f"file{start_index + len(files)}",
+                    path=file_path,
+                )
+            )
+        return
+
+    folder = user_object.find("./string")
+    folder_name = (folder.text or "").strip() if folder is not None else ""
+    if not folder_name:
+        return
+    next_parts = (*path_parts, folder_name)
+    for child_entry in tree_node.findall("./void"):
+        if child_entry.attrib.get("method") != "add":
+            continue
+        child_node = child_entry.find("./object")
+        if child_node is not None:
+            _collect_filesystem_files(
+                child_node,
+                node_id=node_id,
+                path_parts=next_parts,
+                files=files,
+                start_index=start_index,
+            )
+
+
+def _build_filesystem_file(file_object: ET.Element, *, node_id: str, file_id: str, path: str) -> FiliusFilesystemFile:
+    content = _property_text(file_object, "dateiInhalt") or ""
+    file_type = _property_text(file_object, "dateiTyp") or "unknown"
+    raw = content.encode("utf-8")
+    content_kind = "text" if _is_text_file(path, file_type) else "binary"
+    shown_content = ""
+    truncated = False
+    if content_kind == "text":
+        shown_content = content
+        if len(shown_content) > _MAX_EXTRACTED_FILE_CHARS:
+            shown_content = shown_content[:_MAX_EXTRACTED_FILE_CHARS]
+            truncated = True
+    return FiliusFilesystemFile(
+        id=file_id,
+        node_id=node_id,
+        path=path,
+        file_type=_normalize_optional(file_type),
+        content_kind=content_kind,
+        size_bytes=len(raw),
+        sha256=hashlib.sha256(raw).hexdigest(),
+        content=shown_content,
+        truncated=truncated,
+    )
+
+
+def _is_allowed_filesystem_path(path: str) -> bool:
+    return path == "/dns/hosts" or path == "/www.conf/vhosts" or path.startswith("/webserver/")
+
+
+def _is_text_file(path: str, file_type: str) -> bool:
+    normalized_type = (file_type or "").casefold()
+    normalized_path = path.casefold()
+    return normalized_type in _TEXT_FILE_TYPES or normalized_path.endswith(_TEXT_FILE_SUFFIXES)
 
 
 def _array_string_values(array: ET.Element) -> list[str]:

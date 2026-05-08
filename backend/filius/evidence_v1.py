@@ -13,7 +13,14 @@ import re
 import xml.etree.ElementTree as ET
 
 from backend.storage.filius_validation import extract_configuration_xml_bytes
-from backend.filius.topology import FiliusInterface, FiliusManualRoute, FiliusTopology, extract_topology
+from backend.filius.topology import (
+    FiliusApplication,
+    FiliusFilesystemFile,
+    FiliusInterface,
+    FiliusManualRoute,
+    FiliusTopology,
+    extract_topology,
+)
 
 
 EVIDENCE_SCHEMA_V1 = "filius.evidence.v1"
@@ -88,6 +95,10 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             lines.append(f"- links: {len(topology.links)}")
             lines.append(f"- derived_networks: {len(topology.derived_networks)}")
             lines.append(f"- manual_routes: {len(topology.manual_routes)}")
+            lines.append(f"- applications: {len(topology.applications)}")
+            lines.append(f"- filesystem_files: {len(topology.filesystem_files)}")
+            truncated_files = sum(1 for file in topology.filesystem_files if file.truncated)
+            lines.append(f"- truncated_files: {truncated_files}")
             lines.append(f"- unresolved_links: {topology.unresolved_links}")
             lines.append(f"- invalid_interfaces: {topology.invalid_interfaces}")
         elif heading == "Nodes":
@@ -96,6 +107,10 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             _render_links(lines, topology)
         elif heading == "Routing":
             _render_routing(lines, topology)
+        elif heading == "DNS":
+            _render_dns(lines, topology)
+        elif heading == "Web":
+            _render_web(lines, topology)
         else:
             lines.append("none")
         lines.append("")
@@ -182,3 +197,66 @@ def _format_manual_route(route: FiliusManualRoute) -> str:
         ("via_interface", route.via_interface),
     )
     return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
+
+
+def _render_dns(lines: list[str], topology: FiliusTopology) -> None:
+    dns_apps = [app for app in topology.applications if app.kind == "dns_server"]
+    dns_files = [file for file in topology.filesystem_files if file.path == "/dns/hosts"]
+    if not dns_apps and not dns_files:
+        lines.append("none")
+        return
+    _render_applications(lines, dns_apps)
+    _render_files(lines, dns_files)
+
+
+def _render_web(lines: list[str], topology: FiliusTopology) -> None:
+    web_apps = [app for app in topology.applications if app.kind == "web_server"]
+    web_files = [
+        file
+        for file in topology.filesystem_files
+        if file.path.startswith("/webserver/") or file.path == "/www.conf/vhosts"
+    ]
+    if not web_apps and not web_files:
+        lines.append("none")
+        return
+    _render_applications(lines, web_apps)
+    _render_files(lines, web_files)
+
+
+def _render_applications(lines: list[str], applications: list[FiliusApplication]) -> None:
+    if not applications:
+        return
+    lines.append("- applications:")
+    for app in applications:
+        fields = (
+            ("id", app.id),
+            ("node", app.node_id),
+            ("class", app.class_name),
+            ("name", app.name),
+            ("active", app.active),
+        )
+        rendered_fields = "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
+        lines.append(f"  - {rendered_fields}")
+
+
+def _render_files(lines: list[str], files: list[FiliusFilesystemFile]) -> None:
+    if not files:
+        return
+    lines.append("- files:")
+    for file in files:
+        fields = (
+            ("id", file.id),
+            ("node", file.node_id),
+            ("path", file.path),
+            ("type", file.file_type),
+            ("content_kind", file.content_kind),
+            ("size_bytes", str(file.size_bytes)),
+            ("sha256", file.sha256),
+        )
+        parts = [f'{key}: "{_safe_text(value)}"' for key, value in fields]
+        if file.content_kind == "text":
+            content = file.content
+            if file.truncated:
+                content = f"{content} [truncated: shown_chars={len(file.content)}]"
+            parts.append(f'content: "{_safe_text(content, max_chars=5000)}"')
+        lines.append("  - " + "; ".join(parts))

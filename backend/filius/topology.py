@@ -10,7 +10,7 @@ Why:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import html
 import ipaddress
 import re
@@ -64,12 +64,28 @@ class FiliusDerivedNetwork:
 
 
 @dataclass(frozen=True, slots=True)
+class FiliusManualRoute:
+    """A manual route from a Filius forwarding table."""
+
+    id: str
+    node_id: str
+    destination: str
+    netmask: str
+    next_hop_ip: str
+    via_ip: str
+    via_interface: str
+    next_hop_interface: str
+    next_hop_node: str
+
+
+@dataclass(frozen=True, slots=True)
 class FiliusTopology:
     """Structured topology facts used by the evidence renderer."""
 
     nodes: tuple[FiliusNode, ...]
     links: tuple[FiliusLink, ...]
     derived_networks: tuple[FiliusDerivedNetwork, ...]
+    manual_routes: tuple[FiliusManualRoute, ...] = ()
     unresolved_links: int = 0
     invalid_interfaces: int = 0
 
@@ -101,6 +117,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
     source_to_node_id: dict[str, str] = {}
     invalid_interfaces = 0
     networks: dict[tuple[str, str], list[str]] = {}
+    route_rows: list[tuple[str, str, str, str, str, str]] = []
 
     for node_index, node_object in enumerate(node_objects, start=1):
         node_id = f"n{node_index}"
@@ -132,6 +149,10 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
                     networks.setdefault((iface.network, iface.netmask), []).append(iface.id)
                 elif iface.ip != "unknown" or iface.netmask != "unknown":
                     invalid_interfaces += 1
+            route_rows.extend(
+                (node_id, f"{node_id}-r{route_index}", destination, netmask, next_hop_ip, via_ip)
+                for route_index, (destination, netmask, next_hop_ip, via_ip) in enumerate(_manual_route_rows(hardware), start=1)
+            )
 
         nodes.append(
             FiliusNode(
@@ -171,11 +192,13 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
         FiliusDerivedNetwork(cidr=cidr, netmask=netmask, interface_ids=tuple(interface_ids))
         for (cidr, netmask), interface_ids in sorted(networks.items(), key=lambda item: item[0][0])
     )
+    manual_routes = _resolve_manual_routes(route_rows, nodes)
 
     return FiliusTopology(
         nodes=tuple(nodes),
         links=tuple(links),
         derived_networks=derived_networks,
+        manual_routes=manual_routes,
         unresolved_links=unresolved_links,
         invalid_interfaces=invalid_interfaces,
     )
@@ -208,8 +231,39 @@ def _property_text(element: ET.Element | None, property_name: str) -> str | None
 def _interface_objects(hardware: ET.Element) -> list[ET.Element]:
     for child in hardware.findall("./void"):
         if child.attrib.get("property") == "netzwerkInterfaces":
-            return child.findall("./void")
+            interfaces: list[ET.Element] = []
+            for entry in child.findall("./void"):
+                obj = entry.find("./object")
+                interfaces.append(obj if obj is not None else entry)
+            return interfaces
     return []
+
+
+def _manual_route_rows(hardware: ET.Element) -> list[tuple[str, str, str, str]]:
+    rows: list[tuple[str, str, str, str]] = []
+    for table in hardware.iter("void"):
+        if table.attrib.get("property") != "manuelleTabelle":
+            continue
+        for array in table.findall(".//array"):
+            values = _array_string_values(array)
+            if len(values) >= 4:
+                rows.append((values[0], values[1], values[2], values[3]))
+    return rows
+
+
+def _array_string_values(array: ET.Element) -> list[str]:
+    indexed: dict[int, str] = {}
+    for item in array.findall("./void"):
+        raw_index = item.attrib.get("index")
+        if raw_index is None:
+            continue
+        try:
+            index = int(raw_index)
+        except ValueError:
+            continue
+        value = item.find("./string")
+        indexed[index] = (value.text or "").strip() if value is not None else ""
+    return [indexed[index] for index in sorted(indexed)]
 
 
 def _parse_tooltip_interfaces(tooltip: str) -> list[_TooltipInterface]:
@@ -269,11 +323,45 @@ def _build_interface(
 def _derive_network(ip: str, netmask: str) -> tuple[str, bool]:
     if ip == "unknown" or netmask == "unknown":
         return "unknown", False
+    if ip == "0.0.0.0":
+        return "unknown", False
     try:
         network = ipaddress.IPv4Network((ip, netmask), strict=False)
     except Exception:
         return "unknown", False
     return str(network), True
+
+
+def _resolve_manual_routes(
+    route_rows: list[tuple[str, str, str, str, str, str]], nodes: list[FiliusNode]
+) -> tuple[FiliusManualRoute, ...]:
+    interface_by_ip: dict[str, tuple[str, str]] = {}
+    for node in nodes:
+        for interface in node.interfaces:
+            if interface.ip != "unknown" and interface.ip not in interface_by_ip:
+                interface_by_ip[interface.ip] = (node.id, interface.id)
+
+    routes: list[FiliusManualRoute] = []
+    for node_id, route_id, destination, netmask, next_hop_ip, via_ip in route_rows:
+        destination_cidr, valid_destination = _derive_network(destination, netmask)
+        if not valid_destination:
+            destination_cidr = "unknown"
+        _, via_interface = interface_by_ip.get(via_ip, ("unknown", "unknown"))
+        next_hop_node, next_hop_interface = interface_by_ip.get(next_hop_ip, ("unknown", "unknown"))
+        routes.append(
+            FiliusManualRoute(
+                id=route_id,
+                node_id=node_id,
+                destination=destination_cidr,
+                netmask=_normalize_optional(netmask),
+                next_hop_ip=_normalize_optional(next_hop_ip),
+                via_ip=_normalize_optional(via_ip),
+                via_interface=via_interface,
+                next_hop_interface=next_hop_interface,
+                next_hop_node=next_hop_node,
+            )
+        )
+    return tuple(routes)
 
 
 def _link_endpoint_refs(link_object: ET.Element) -> list[str]:

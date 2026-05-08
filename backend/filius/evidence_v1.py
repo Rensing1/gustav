@@ -13,7 +13,7 @@ import re
 import xml.etree.ElementTree as ET
 
 from backend.storage.filius_validation import extract_configuration_xml_bytes
-from backend.filius.topology import FiliusInterface, FiliusTopology, extract_topology
+from backend.filius.topology import FiliusInterface, FiliusManualRoute, FiliusTopology, extract_topology
 
 
 EVIDENCE_SCHEMA_V1 = "filius.evidence.v1"
@@ -87,6 +87,7 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             lines.append(f"- interfaces: {sum(len(node.interfaces) for node in topology.nodes)}")
             lines.append(f"- links: {len(topology.links)}")
             lines.append(f"- derived_networks: {len(topology.derived_networks)}")
+            lines.append(f"- manual_routes: {len(topology.manual_routes)}")
             lines.append(f"- unresolved_links: {topology.unresolved_links}")
             lines.append(f"- invalid_interfaces: {topology.invalid_interfaces}")
         elif heading == "Nodes":
@@ -151,13 +152,33 @@ def _render_links(lines: list[str], topology: FiliusTopology) -> None:
 
 
 def _render_routing(lines: list[str], topology: FiliusTopology) -> None:
-    if not topology.derived_networks:
+    if not topology.derived_networks and not topology.manual_routes:
         lines.append("none")
         return
-    lines.append("- derived_networks:")
-    for network in topology.derived_networks:
-        interface_list = ", ".join(network.interface_ids)
-        lines.append(
-            f'  - cidr: "{_safe_text(network.cidr)}"; netmask: "{_safe_text(network.netmask)}"; '
-            f'interfaces: "{_safe_text(interface_list, max_chars=4000)}"'
-        )
+    if topology.derived_networks:
+        lines.append("- derived_networks:")
+        for network in topology.derived_networks:
+            interface_list = ", ".join(network.interface_ids)
+            lines.append(
+                f'  - cidr: "{_safe_text(network.cidr)}"; netmask: "{_safe_text(network.netmask)}"; '
+                f'interfaces: "{_safe_text(interface_list, max_chars=4000)}"'
+            )
+    if topology.manual_routes:
+        lines.append("- manual_routes:")
+        for route in topology.manual_routes:
+            lines.append(f"  - {_format_manual_route(route)}")
+
+
+def _format_manual_route(route: FiliusManualRoute) -> str:
+    fields = (
+        ("id", route.id),
+        ("node", route.node_id),
+        ("destination", route.destination),
+        ("netmask", route.netmask),
+        ("next_hop_ip", route.next_hop_ip),
+        ("next_hop_node", route.next_hop_node),
+        ("next_hop_interface", route.next_hop_interface),
+        ("via_ip", route.via_ip),
+        ("via_interface", route.via_interface),
+    )
+    return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)

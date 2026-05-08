@@ -11,6 +11,7 @@
 - interfaces: 13
 - links: 15
 - derived_networks: 1
+- manual_routes: 0
 - unresolved_links: 0
 - invalid_interfaces: 0
 

@@ -373,6 +373,43 @@ erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
     - OpenAI-compatible endpoint smoke: 2 passed.
     - Docker/E2E: 13 passed.
 
+### 2026-05-08 — Slice 19: DNS- und Web-Evidence
+
+- Geprüfte Codeabschnitte:
+  - `backend/filius/topology.py`
+  - `backend/filius/evidence_v1.py`
+  - `backend/tests/test_filius_evidence_v1.py`
+  - `backend/tests/learning_adapters/test_local_vision_filius_fls.py`
+  - reale Referenzdateien in `/tmp`: `filius_webserver.fls`, `dns0.fls`, `email0.fls`
+- Befund:
+  - `filius_webserver.fls` enthält WebServer-Prozesse, aber keine DNS-Konfiguration und kaum fachliche Webdatei-Inhalte.
+  - `dns0.fls` enthält Webdateien, aber keinen DNS-Server.
+  - `email0.fls` enthält einen DNS-Server und `/dns/hosts`, aber die Hosts-Datei ist leer.
+- Entscheidung:
+  - Für TDD wird eine kleine synthetische DNS+Web-Fixture genutzt, damit DNS-Server, `/dns/hosts`, WebServer, textuelle Webdateien, Binär-Webdateien und nicht erlaubte Pfade präzise abgedeckt werden.
+  - DNS-Hosts werden in diesem Slice als sichere, bounded Dateiinhalte gerendert, nicht semantisch in Domain/IP-Paare zerlegt.
+  - Web-Binärdaten werden nur als Metadaten mit Größe und SHA-256 gerendert.
+- Minimale Änderung:
+  - Das vorhandene Topologie-Modell wird um installierte Anwendungen und allowlist-gefilterte Filius-Dateisystemeinträge erweitert.
+  - `evidence_v1.py` rendert `## DNS` und `## Web`; API, DB und Frontend bleiben unverändert.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py::test_filius_synthetic_dns_web_fixture_renders_safe_dns_and_web_evidence backend/tests/learning_adapters/test_local_vision_filius_fls.py::test_local_vision_filius_fls_returns_dns_web_evidence_for_synthetic_fixture`
+  - Ergebnis: 2 erwartete Fails, weil `## DNS` und `## Web` noch `none` renderten.
+- GREEN:
+  - `backend/filius/topology.py` extrahiert allowlist-relevante Anwendungen (`DNSServer`, `WebServer`) und erlaubte Dateisystempfade (`/dns/hosts`, `/webserver/*`, `/www.conf/vhosts`).
+  - `backend/filius/evidence_v1.py` rendert DNS-/Web-Anwendungen, Textdateiinhalte bounded und Binärdateien nur als Metadaten mit SHA-256.
+  - `backend/tests/fixtures/filius/synthetic-dns-web/` enthält die kleine synthetische XML-Fixture und ein Markdown-Golden-File.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py` -> 10 passed.
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py backend/tests/test_filius_fls_validation.py backend/tests/test_learning_filius_fls_submission_api.py` -> 20 passed.
+  - `git diff --check` -> passed.
+  - `make verify` -> passed:
+    - Backend pytest: 1528 passed, 33 skipped.
+    - H5P Node tests: 15 passed.
+    - Supabase integration: 5 passed.
+    - OpenAI-compatible endpoint smoke: 2 passed.
+    - Docker/E2E: 13 passed.
+
 ## Kontext / Problem
 
 GUSTAV unterstützt für besondere Aufgabenformate bereits upload-only Abgaben:

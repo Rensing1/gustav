@@ -12,6 +12,9 @@
 - links: 9
 - derived_networks: 6
 - manual_routes: 4
+- applications: 3
+- filesystem_files: 0
+- truncated_files: 0
 - unresolved_links: 0
 - invalid_interfaces: 2
 
@@ -151,7 +154,10 @@ none
 none
 
 ## Web
-none
+- applications:
+  - id: "app1"; node: "n2"; class: "filius.software.www.WebServer"; name: "Thread-95"; active: "true"
+  - id: "app2"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-105"; active: "true"
+  - id: "app3"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-110"; active: "true"
 
 ## Email
 none

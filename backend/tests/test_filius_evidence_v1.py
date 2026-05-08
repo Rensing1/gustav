@@ -116,3 +116,32 @@ def test_filius_mehrere_netze_fixture_keeps_source_attribution() -> None:
     assert "NM" in attribution
     assert "CC BY-SA 4.0" in attribution
     assert "filius_mehrere_netze.fls" in attribution
+
+
+def test_filius_synthetic_dns_web_fixture_renders_safe_dns_and_web_evidence() -> None:
+    """DNS/Web evidence should include allowlisted files and hide unrelated paths."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    fixture_dir = Path("backend/tests/fixtures/filius/synthetic-dns-web")
+    xml = (fixture_dir / "configuration.xml").read_bytes()
+    expected = (fixture_dir / "dns_web.evidence.md").read_text(encoding="utf-8")
+
+    md = build_evidence_markdown_v1(_fls_with_config(xml))
+
+    assert md == expected
+    assert "## DNS" in md
+    assert 'class: "filius.software.dns.DNSServer"' in md
+    assert 'path: "/dns/hosts"' in md
+    assert "example.test 192.168.0.10" in md
+    assert "## Web" in md
+    assert 'class: "filius.software.www.WebServer"' in md
+    assert 'path: "/webserver/index.html"' in md
+    assert "&lt;html&gt;&lt;body&gt;\\\"Hallo\\\" & willkommen&lt;/body&gt;&lt;/html&gt;" in md
+    assert 'path: "/webserver/logo.png"' in md
+    assert 'content: "' not in md.split('path: "/webserver/logo.png"', maxsplit=1)[1].split("\n", maxsplit=1)[0]
+    assert "must not leak" not in md
+    assert "/peer2peer" not in md
+    assert "<java" not in md
+    assert "<object" not in md
+    assert "idref" not in md
+    assert "password" not in md.lower()

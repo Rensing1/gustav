@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<java version="17" class="java.beans.XMLDecoder">
+  <string>2.5</string>
+  <object class="filius.gui.netzwerksicht.GUIKnotenItem" id="GUIKnotenItem0">
+    <void property="imageLabel">
+      <object class="filius.gui.netzwerksicht.JSidebarButton">
+        <void property="text">
+          <string>Server</string>
+        </void>
+        <void property="toolTipText">
+          <string>&lt;html&gt;&lt;pre&gt;IP-Adresse(n)/Netzmaske (MAC):
+ 192.168.0.10 / 255.255.255.0 (AA:BB:CC:DD:EE:FF)
+Gateway:
+DNS-Server: 192.168.0.10&lt;/pre&gt;&lt;/html&gt;</string>
+        </void>
+        <void property="typ">
+          <string>Rechner</string>
+        </void>
+      </object>
+    </void>
+    <void property="knoten">
+      <object class="filius.hardware.knoten.Rechner" id="Rechner0">
+        <void property="name">
+          <string>Server</string>
+        </void>
+        <void property="netzwerkInterfaces">
+          <void id="NetzwerkInterface0" index="0">
+            <void property="ip">
+              <string>192.168.0.10</string>
+            </void>
+            <void property="mac">
+              <string>AA:BB:CC:DD:EE:FF</string>
+            </void>
+          </void>
+        </void>
+        <void property="systemSoftware">
+          <void property="dateisystem">
+            <void property="arbeitsVerzeichnis">
+              <void method="add">
+                <object class="javax.swing.tree.DefaultMutableTreeNode">
+                  <void property="userObject">
+                    <string>dns</string>
+                  </void>
+                  <void method="add">
+                    <object class="javax.swing.tree.DefaultMutableTreeNode">
+                      <void property="userObject">
+                        <object class="filius.software.system.Datei">
+                          <void property="dateiInhalt">
+                            <string>example.test 192.168.0.10
+www.example.test 192.168.0.10</string>
+                          </void>
+                          <void property="dateiTyp">
+                            <string>text</string>
+                          </void>
+                          <void property="name">
+                            <string>hosts</string>
+                          </void>
+                        </object>
+                      </void>
+                    </object>
+                  </void>
+                </object>
+              </void>
+              <void method="add">
+                <object class="javax.swing.tree.DefaultMutableTreeNode">
+                  <void property="userObject">
+                    <string>webserver</string>
+                  </void>
+                  <void method="add">
+                    <object class="javax.swing.tree.DefaultMutableTreeNode">
+                      <void property="userObject">
+                        <object class="filius.software.system.Datei">
+                          <void property="dateiInhalt">
+                            <string>&lt;html&gt;&lt;body&gt;"Hallo" &amp; willkommen&lt;/body&gt;&lt;/html&gt;</string>
+                          </void>
+                          <void property="dateiTyp">
+                            <string>html</string>
+                          </void>
+                          <void property="name">
+                            <string>index.html</string>
+                          </void>
+                        </object>
+                      </void>
+                    </object>
+                  </void>
+                  <void method="add">
+                    <object class="javax.swing.tree.DefaultMutableTreeNode">
+                      <void property="userObject">
+                        <object class="filius.software.system.Datei">
+                          <void property="dateiInhalt">
+                            <string>iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB</string>
+                          </void>
+                          <void property="dateiTyp">
+                            <string>png</string>
+                          </void>
+                          <void property="name">
+                            <string>logo.png</string>
+                          </void>
+                        </object>
+                      </void>
+                    </object>
+                  </void>
+                </object>
+              </void>
+              <void method="add">
+                <object class="javax.swing.tree.DefaultMutableTreeNode">
+                  <void property="userObject">
+                    <string>peer2peer</string>
+                  </void>
+                  <void method="add">
+                    <object class="javax.swing.tree.DefaultMutableTreeNode">
+                      <void property="userObject">
+                        <object class="filius.software.system.Datei">
+                          <void property="dateiInhalt">
+                            <string>must not leak</string>
+                          </void>
+                          <void property="dateiTyp">
+                            <string>text</string>
+                          </void>
+                          <void property="name">
+                            <string>Nachricht.txt</string>
+                          </void>
+                        </object>
+                      </void>
+                    </object>
+                  </void>
+                </object>
+              </void>
+            </void>
+          </void>
+          <void property="installierteAnwendungen">
+            <void method="put">
+              <string>filius.software.dns.DNSServer</string>
+              <object class="filius.software.dns.DNSServer">
+                <void property="name">
+                  <string>DNS</string>
+                </void>
+              </object>
+            </void>
+            <void method="put">
+              <string>filius.software.www.WebServer</string>
+              <object class="filius.software.www.WebServer">
+                <void property="aktiv">
+                  <boolean>true</boolean>
+                </void>
+                <void property="name">
+                  <string>Web</string>
+                </void>
+              </object>
+            </void>
+          </void>
+        </void>
+      </object>
+    </void>
+  </object>
+</java>

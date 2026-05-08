@@ -333,6 +333,46 @@ erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
 - Integrationssicherung:
   - `backend/tests/learning_adapters/test_local_vision_filius_fls.py` erweitert, damit der lokale Workerpfad für die echte Fixture Topologie-Evidence liefert.
 
+### 2026-05-08 — Slice 18: Routing-Evidence aus Mehr-Netze-Fixture
+
+- Geprüfte Codeabschnitte:
+  - `backend/filius/topology.py`
+  - `backend/filius/evidence_v1.py`
+  - `backend/tests/test_filius_evidence_v1.py`
+  - `backend/tests/learning_adapters/test_local_vision_filius_fls.py`
+  - bestehende inf-schule Fixture-Struktur unter `backend/tests/fixtures/filius/inf-schule-clientserver/`
+- Befund:
+  - Filius speichert Router-Interfaces in `netzwerkInterfaces` teils als `void method="add"` mit enthaltenem `object class="filius.hardware.NetzwerkInterface"`. Der bisherige Parser las dort das umschließende `void` statt des Interface-Objekts.
+  - Manuelle Routingtabellen liegen in `weiterleitungstabelle.manuelleTabelle` als String-Arrays mit Ziel-IP, Netzmaske, Next-Hop-IP und lokaler Interface-IP.
+- Entscheidung:
+  - Neue Fixture: echte inf-schule Datei `filius_mehrere_netze.fls` mit eigener `ATTRIBUTION.md`.
+  - Evidence bleibt faktisch und knapp: keine Diagnose, keine Pfadsuche, keine didaktische Interpretation. Ausgegeben werden nur abgeleitete Netze und manuelle Routingzeilen mit stabilen synthetischen IDs.
+  - `0.0.0.0`-Platzhalter-Interfaces werden als ungültig gezählt, erzeugen aber kein künstliches `0.0.0.0/24`-Netz.
+- Minimale Änderung:
+  - `_interface_objects` löst `void method="add"` korrekt auf echte Interface-Objekte auf.
+  - `FiliusManualRoute` und `manual_routes` werden im vorhandenen Topologie-Modell ergänzt; keine neue Parser-Registry.
+  - Renderer ergänzt im bestehenden Abschnitt `Routing` die Liste `manual_routes`.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py -k mehrere_netze`
+  - Ergebnis: erwarteter Fail wegen fehlendem Golden-File bzw. fehlender Routing-Evidence.
+- GREEN:
+  - `backend/filius/topology.py` extrahiert Router-Interfaces, abgeleitete Netze und manuelle Routen.
+  - `backend/filius/evidence_v1.py` rendert `manual_routes` unter `filius.evidence.v1`.
+  - `backend/tests/fixtures/filius/inf-schule-mehrere-netze/` enthält `.fls`, `ATTRIBUTION.md` und Markdown-Golden-File.
+  - Bestehendes Clientserver-Golden-File wurde nur um den neuen Parser-Note-Zähler `manual_routes: 0` ergänzt.
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py -k mehrere_netze` -> 2 passed, 3 deselected.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py backend/tests/test_filius_fls_validation.py` -> 13 passed.
+  - `.venv/bin/pytest -q backend/tests/learning_adapters/test_local_vision_filius_fls.py` -> 3 passed.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py backend/tests/test_filius_fls_validation.py backend/tests/test_learning_filius_fls_submission_api.py` -> 18 passed.
+  - `git diff --check` -> passed.
+  - `make verify` -> passed:
+    - Backend pytest: 1526 passed, 33 skipped.
+    - H5P Node tests: 15 passed.
+    - Supabase integration: 5 passed.
+    - OpenAI-compatible endpoint smoke: 2 passed.
+    - Docker/E2E: 13 passed.
+
 ## Kontext / Problem
 
 GUSTAV unterstützt für besondere Aufgabenformate bereits upload-only Abgaben:

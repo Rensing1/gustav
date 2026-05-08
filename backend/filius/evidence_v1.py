@@ -13,6 +13,7 @@ import re
 import xml.etree.ElementTree as ET
 
 from backend.storage.filius_validation import extract_configuration_xml_bytes
+from backend.filius.topology import FiliusInterface, FiliusTopology, extract_topology
 
 
 EVIDENCE_SCHEMA_V1 = "filius.evidence.v1"
@@ -70,6 +71,7 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
     xml_bytes = extract_configuration_xml_bytes(fls_bytes)
     version = _safe_text(_extract_version(xml_bytes))
     classes = _extract_classes(xml_bytes)
+    topology = extract_topology(xml_bytes)
 
     lines: list[str] = [f"# {EVIDENCE_SCHEMA_V1}", ""]
     for heading in _SECTION_HEADINGS:
@@ -79,11 +81,83 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             lines.append(f'- filius_version: "{version}"')
         elif heading == "Parser Notes":
             lines.append(f"- extracted_classes: {len(classes)}")
-        elif heading == "Nodes" and classes:
-            for index, class_name in enumerate(classes, start=1):
-                lines.append(f'### n{index}')
-                lines.append(f'- class: "{_safe_text(class_name)}"')
+            if classes:
+                lines.append(f'- extracted_class_names: "{_safe_text(", ".join(classes), max_chars=4000)}"')
+            lines.append(f"- nodes: {len(topology.nodes)}")
+            lines.append(f"- interfaces: {sum(len(node.interfaces) for node in topology.nodes)}")
+            lines.append(f"- links: {len(topology.links)}")
+            lines.append(f"- derived_networks: {len(topology.derived_networks)}")
+            lines.append(f"- unresolved_links: {topology.unresolved_links}")
+            lines.append(f"- invalid_interfaces: {topology.invalid_interfaces}")
+        elif heading == "Nodes":
+            _render_nodes(lines, topology)
+        elif heading == "Links":
+            _render_links(lines, topology)
+        elif heading == "Routing":
+            _render_routing(lines, topology)
         else:
             lines.append("none")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_nodes(lines: list[str], topology: FiliusTopology) -> None:
+    if not topology.nodes:
+        lines.append("none")
+        return
+    for node in topology.nodes:
+        lines.append(f"### {node.id}")
+        lines.append(f'- source_id: "{_safe_text(node.source_id)}"')
+        lines.append(f'- class: "{_safe_text(node.class_name)}"')
+        lines.append(f'- type: "{_safe_text(node.device_type)}"')
+        lines.append(f'- name: "{_safe_text(node.name)}"')
+        lines.append(f'- label_type: "{_safe_text(node.label_type)}"')
+        if not node.interfaces:
+            lines.append("- interfaces: none")
+            lines.append("")
+            continue
+        lines.append("- interfaces:")
+        for interface in node.interfaces:
+            lines.append(f"  - {_format_interface(interface)}")
+        lines.append("")
+    if lines and lines[-1] == "":
+        lines.pop()
+
+
+def _format_interface(interface: FiliusInterface) -> str:
+    fields = (
+        ("id", interface.id),
+        ("ip", interface.ip),
+        ("netmask", interface.netmask),
+        ("network", interface.network),
+        ("gateway", interface.gateway),
+        ("dns", interface.dns),
+        ("mac", interface.mac),
+        ("wireless", interface.wireless),
+    )
+    return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
+
+
+def _render_links(lines: list[str], topology: FiliusTopology) -> None:
+    if not topology.links:
+        lines.append("none")
+        return
+    for link in topology.links:
+        lines.append(f"### {link.id}")
+        lines.append(f'- endpoints: "{_safe_text(link.endpoint_a)}" <-> "{_safe_text(link.endpoint_b)}"')
+        lines.append("")
+    if lines and lines[-1] == "":
+        lines.pop()
+
+
+def _render_routing(lines: list[str], topology: FiliusTopology) -> None:
+    if not topology.derived_networks:
+        lines.append("none")
+        return
+    lines.append("- derived_networks:")
+    for network in topology.derived_networks:
+        interface_list = ", ".join(network.interface_ids)
+        lines.append(
+            f'  - cidr: "{_safe_text(network.cidr)}"; netmask: "{_safe_text(network.netmask)}"; '
+            f'interfaces: "{_safe_text(interface_list, max_chars=4000)}"'
+        )

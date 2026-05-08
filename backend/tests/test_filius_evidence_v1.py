@@ -9,6 +9,7 @@ Intent:
 from __future__ import annotations
 
 import io
+from pathlib import Path
 import zipfile
 
 
@@ -53,3 +54,30 @@ def test_filius_evidence_v1_renders_stable_sections_without_raw_xml() -> None:
     assert "GUIKnotenItem" in md
     assert "<java" not in md
     assert "<object" not in md
+
+
+def test_filius_clientserver_fixture_matches_topology_golden_file() -> None:
+    """The real inf-schule fixture should render byte-stable topology evidence."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    fixture_dir = Path("backend/tests/fixtures/filius/inf-schule-clientserver")
+    fls_bytes = (fixture_dir / "filius_ClientServer.fls").read_bytes()
+    expected = (fixture_dir / "filius_ClientServer.evidence.md").read_text(encoding="utf-8")
+
+    md = build_evidence_markdown_v1(fls_bytes)
+
+    assert md == expected
+    assert "<java" not in md
+    assert "<object" not in md
+    assert "idref" not in md
+    assert "password" not in md.lower()
+
+
+def test_filius_clientserver_fixture_keeps_source_attribution() -> None:
+    """Committed OER fixtures must carry source and license metadata."""
+    fixture_dir = Path("backend/tests/fixtures/filius/inf-schule-clientserver")
+    attribution = (fixture_dir / "ATTRIBUTION.md").read_text(encoding="utf-8")
+
+    assert "inf-schule" in attribution
+    assert "CC BY-SA 4.0" in attribution
+    assert "filius_ClientServer.fls" in attribution

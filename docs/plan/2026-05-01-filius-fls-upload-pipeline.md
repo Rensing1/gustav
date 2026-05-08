@@ -306,6 +306,33 @@ erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
     - OpenAI-compatible endpoint smoke: 2 passed.
     - Docker/E2E: 13 passed.
 
+### 2026-05-08 — Slice 17: Topologie-Evidence aus echter Filius-Fixture
+
+- Geprüfte Codeabschnitte:
+  - `backend/filius/evidence_v1.py`
+  - `backend/storage/filius_validation.py`
+  - `backend/tests/test_filius_evidence_v1.py`
+  - `backend/tests/learning_adapters/test_local_vision_filius_fls.py`
+  - inf-schule Lizenzseite: Inhalte grundsätzlich CC BY-SA 4.0 mit Namensnennung und Lizenzhinweis.
+- Entscheidung:
+  - `filius.evidence.v1` bleibt das öffentliche Schema.
+  - Erste Qualitätsstufe: Nodes, Interfaces, Links und deterministisch abgeleitete IPv4-Netze; keine Diagnosehinweise.
+  - Testfixture: echte `filius_ClientServer.fls` von inf-schule mit Attribution.
+  - Golden-Test: erwartete Evidence als Markdown-Datei neben der Fixture.
+- Minimale Änderung:
+  - Neues reines Parser-Modul `backend/filius/topology.py`; `evidence_v1.py` rendert weiter Markdown.
+  - Keine DNS/Web/Mail/Firewall-/manuelle Routing-Extraktion in diesem Slice.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py`
+  - Ergebnis: 1 erwarteter Fail, weil die echte `filius_ClientServer.fls`-Fixture noch nur Klassenlisten statt Topologie-Evidence renderte.
+- GREEN:
+  - `backend/filius/topology.py` ergänzt: passive XMLDecoder-Auswertung für GUI-Knoten, Hardware-Klassen, Interface-Properties, Tooltip-Fallbacks für Netzmaske/Gateway/DNS, Kabel-Endpunkte und abgeleitete IPv4-Netze.
+  - `backend/filius/evidence_v1.py` rendert Nodes, Interfaces, Links und abgeleitete Netze weiter unter `filius.evidence.v1`.
+  - `backend/tests/fixtures/filius/inf-schule-clientserver/` enthält `.fls`, `ATTRIBUTION.md` und Markdown-Golden-File.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py` -> 3 passed.
+- Integrationssicherung:
+  - `backend/tests/learning_adapters/test_local_vision_filius_fls.py` erweitert, damit der lokale Workerpfad für die echte Fixture Topologie-Evidence liefert.
+
 ## Kontext / Problem
 
 GUSTAV unterstützt für besondere Aufgabenformate bereits upload-only Abgaben:

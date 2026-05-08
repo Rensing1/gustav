@@ -81,3 +81,38 @@ def test_filius_clientserver_fixture_keeps_source_attribution() -> None:
     assert "inf-schule" in attribution
     assert "CC BY-SA 4.0" in attribution
     assert "filius_ClientServer.fls" in attribution
+
+
+def test_filius_mehrere_netze_fixture_matches_routing_golden_file() -> None:
+    """The real inf-schule routing fixture should render byte-stable routing evidence."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    fixture_dir = Path("backend/tests/fixtures/filius/inf-schule-mehrere-netze")
+    fls_bytes = (fixture_dir / "filius_mehrere_netze.fls").read_bytes()
+    expected = (fixture_dir / "filius_mehrere_netze.evidence.md").read_text(encoding="utf-8")
+
+    md = build_evidence_markdown_v1(fls_bytes)
+
+    assert md == expected
+    assert 'ip: "3.0.0.1"' in md
+    assert 'ip: "192.168.0.100"' in md
+    assert 'cidr: "3.0.0.0/24"' in md
+    assert "- manual_routes:" in md
+    assert 'destination: "192.168.1.0/24"' in md
+    assert 'next_hop_ip: "1.0.0.2"' in md
+    assert 'via_interface: "n2-if1"' in md
+    assert "<java" not in md
+    assert "<object" not in md
+    assert "idref" not in md
+    assert "password" not in md.lower()
+
+
+def test_filius_mehrere_netze_fixture_keeps_source_attribution() -> None:
+    """Committed OER routing fixtures must carry source and license metadata."""
+    fixture_dir = Path("backend/tests/fixtures/filius/inf-schule-mehrere-netze")
+    attribution = (fixture_dir / "ATTRIBUTION.md").read_text(encoding="utf-8")
+
+    assert "inf-schule" in attribution
+    assert "NM" in attribution
+    assert "CC BY-SA 4.0" in attribution
+    assert "filius_mehrere_netze.fls" in attribution

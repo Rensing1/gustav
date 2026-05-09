@@ -13,7 +13,7 @@ scanner as part of your release process.
 - **Location:** `h5p-service/vendor/h5p/core/`
 - **Upstream:** `https://github.com/h5p/h5p-php-library`
 - **Revision:** `1.27.0` (tag)
-- **License:** GNU General Public License v3 (GPL-3.0)  
+- **License:** GNU General Public License v3 (GPL-3.0)
   **License text:** `h5p-service/vendor/h5p/core/LICENSE.txt`
 - **Notes:** This is a vendored snapshot of upstream H5P core runtime assets
   (JS/CSS/fonts). When updating, also update this file with provenance info.
@@ -67,6 +67,17 @@ browser ESM compatible without a bundler.
   - `h5p-service/vendor/webcomponents/overrides/dom-utils.js`
 - **Local change:** only the import paths are adjusted; functional logic stays
   aligned with upstream (see file headers for rationale).
+
+## Filius official example fixtures
+
+- **Location:** `backend/tests/fixtures/filius/filius-official-firewall/`
+- **Upstream:** `https://gitlab.com/filius1/filius`
+- **Revision:** `dcd965f6139baef4c27cc6d3cc34106f6bebda40` (`version 2.10.1`)
+- **License:** GNU General Public License v3 (GPL-3.0)
+- **License text:** `h5p-service/vendor/h5p/core/LICENSE.txt`
+- **Notes:** The `.fls` files are unchanged upstream example projects used as
+  parser/evidence test fixtures. Each fixture directory contains its own
+  `ATTRIBUTION.md` with the original source path and pinned commit.
 
 ## How to update vendored assets (checklist)
 

@@ -522,6 +522,38 @@ erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
     - Supabase/OpenAI-smoke: 2 passed.
     - E2E: 13 passed.
 
+### 2026-05-09 — Slice 23: PR-Cleanup vor Review
+
+- Geprüfte Codeabschnitte vor Implementierung:
+  - `backend/filius/evidence_v1.py`: Text-Escaping und Markdown-Rendering für mehrzeilige Webserver-Dateien.
+  - `backend/tests/test_filius_migrations_contract.py`: statische Migrationsvertragsprüfungen.
+  - `backend/tests/test_third_party_notices_contract.py` und `THIRD_PARTY_NOTICES.md`: zentrale Third-Party-Notice-Verträge.
+  - `supabase/migrations/*filius*.sql`: Filius-Migrationsnamen und Reihenfolge.
+- Befund:
+  - `git diff --check master...HEAD` fand trailing whitespace in generierten Filius-Golden-Files.
+  - Zwei Filius-Migrationen nutzten ungültige Timestamp-Präfixe (`11:80:00`, `11:90:00`) und wirkten damit nicht wie `supabase migration new`.
+  - Die zentralen Third-Party-Notices dokumentierten nur offizielle Filius-GPL-Fixtures, aber nicht die inf-schule-CC-BY-SA-Fixtures.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_filius_migrations_contract.py::test_filius_migration_names_use_valid_supabase_timestamps backend/tests/test_third_party_notices_contract.py::test_third_party_notices_document_filius_fixtures` -> 2 erwartete Fails.
+  - `git diff --check master...HEAD` -> erwarteter Fail wegen trailing whitespace in Filius-Golden-Files.
+- GREEN:
+  - `_safe_text` trimmt Zeilenenden innerhalb mehrzeiliger Evidence-Felder; Golden-Files wurden aus dem Renderer neu erzeugt.
+  - Filius-Migrationen wurden auf gültige, sortierte Timestamp-Präfixe umbenannt:
+    - `20260507115800_unit_tasks_kind_filius.sql`
+    - `20260507115900_learning_submissions_file_kind_filius_fls.sql`
+    - `20260507120000_storage_submissions_bucket_allow_filius_fls.sql`
+  - `THIRD_PARTY_NOTICES.md` dokumentiert jetzt zusätzlich inf-schule-Fixtures zentral und präzisiert den Filius-GPL-Hinweis.
+  - Contract-Tests prüfen gültige Filius-Migrationstimestamps und zentrale Fixture-Notices.
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_filius_migrations_contract.py backend/tests/test_third_party_notices_contract.py backend/tests/test_filius_evidence_v1.py` -> 19 passed.
+  - `git diff --check master` -> passed.
+  - `make verify` -> passed:
+    - Backend: 1540 passed, 33 skipped.
+    - Node/H5P: 15 passed.
+    - Supabase: 5 passed.
+    - OpenAI-smoke: 2 passed.
+    - E2E: 13 passed.
+
 ## Kontext / Problem
 
 GUSTAV unterstützt für besondere Aufgabenformate bereits upload-only Abgaben:

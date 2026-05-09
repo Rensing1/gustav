@@ -49,6 +49,7 @@ def _safe_text(value: object, *, max_chars: int = 2000) -> str:
     text = str(value or "")
     text = text.replace("\\", "\\\\").replace('"', '\\"')
     text = text.replace("<", "&lt;").replace(">", "&gt;")
+    text = "\n".join(line.rstrip() for line in text.splitlines())
     if len(text) > max_chars:
         text = text[:max_chars] + f" [truncated: original_chars={len(text)} shown_chars={max_chars}]"
     return text

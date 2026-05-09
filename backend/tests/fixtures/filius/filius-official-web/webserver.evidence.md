@@ -80,7 +80,7 @@ none
 
 &lt;p&gt; Hier geht es zur &lt;a href=\"beispiel.html\"&gt;Beispielseite&lt;/a&gt;! &lt;/p&gt;
 
-   
+
     &lt;p align=\"center\"&gt; &lt;img src=\"splashscreen-mini.png\"&gt; &lt;/p&gt;
 
     &lt;p&gt; http://www.lernsoftware-filius.de &lt;/p&gt;

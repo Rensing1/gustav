@@ -403,8 +403,8 @@
 
     &lt;h1&gt;Externer WebServer!&lt;/h1&gt;
 
-    &lt;p&gt; Diese Seite wurde automatisch mit der Installation des 
-      Webservers eingerichtet, es lassen sich jedoch auch 
+    &lt;p&gt; Diese Seite wurde automatisch mit der Installation des
+      Webservers eingerichtet, es lassen sich jedoch auch
       eigene Seiten hier unterbringen. &lt;/p&gt;
 
     &lt;p align=\"center\"&gt; &lt;img src=\"splashscreen-mini.png\"&gt; &lt;/p&gt;
@@ -422,8 +422,8 @@
 
     &lt;h1&gt;Herzlich Willkommen bei Meine-Schule!&lt;/h1&gt;
 
-    &lt;p&gt; Diese Seite wurde automatisch mit der Installation des 
-      Webservers eingerichtet, es lassen sich jedoch auch 
+    &lt;p&gt; Diese Seite wurde automatisch mit der Installation des
+      Webservers eingerichtet, es lassen sich jedoch auch
       eigene Seiten hier unterbringen. &lt;/p&gt;
 
     &lt;p align=\"center\"&gt; &lt;img src=\"splashscreen-mini.png\"&gt; &lt;/p&gt;

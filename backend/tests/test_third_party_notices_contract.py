@@ -55,3 +55,15 @@ def test_third_party_notices_license_paths_are_repo_stable_and_exist() -> None:
     for rel_path in license_paths:
         license_file = repo_root / rel_path
         assert license_file.is_file(), f"License text file not found: {rel_path}"
+
+
+def test_third_party_notices_document_filius_fixtures() -> None:
+    """Committed Filius fixtures must be visible in the central notice file."""
+    repo_root = _repo_root()
+    notices = (repo_root / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+
+    assert "backend/tests/fixtures/filius/filius-official-*/" in notices
+    assert "GNU General Public License v3" in notices
+    assert "backend/tests/fixtures/filius/inf-schule-*/" in notices
+    assert "Creative Commons Attribution-ShareAlike 4.0" in notices
+    assert "CC BY-SA 4.0" in notices

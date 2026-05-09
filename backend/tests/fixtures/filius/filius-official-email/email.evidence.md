@@ -153,13 +153,13 @@ none
 
     &lt;p&gt;Herzlich Willkommen auf dem Webserver der Anwendung FILIUS!&lt;/p&gt;
 
-    &lt;p&gt; Diese Seite wurde automatisch mit der installation des 
-      Webservers eingerichtet, es lassen sich jedoch auch 
+    &lt;p&gt; Diese Seite wurde automatisch mit der installation des
+      Webservers eingerichtet, es lassen sich jedoch auch
       eigene Seiten hier unterbringen. &lt;/p&gt;
 
     &lt;p align=\"center\"&gt; &lt;img src=\"splashscreen-mini.png\"&gt; &lt;/p&gt;
 
-    &lt;p&gt; Universit&auml;t Siegen 2008 
+    &lt;p&gt; Universit&auml;t Siegen 2008
       (http://www.die.informatik.uni-siegen.de/pgfilius/)&lt;/p&gt;
   &lt;/body&gt;
 &lt;/html&gt;"

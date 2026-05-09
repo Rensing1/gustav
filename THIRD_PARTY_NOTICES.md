@@ -74,10 +74,22 @@ browser ESM compatible without a bundler.
 - **Upstream:** `https://gitlab.com/filius1/filius`
 - **Revision:** `dcd965f6139baef4c27cc6d3cc34106f6bebda40` (`version 2.10.1`)
 - **License:** GNU General Public License v3 (GPL-3.0)
-- **License text:** `h5p-service/vendor/h5p/core/LICENSE.txt`
+- **License text:** `LICENCE.md` section 13 covers GPLv3 compatibility via
+  AGPLv3; upstream GPLv3 text is linked in each fixture `ATTRIBUTION.md`.
 - **Notes:** The `.fls` files are unchanged upstream example projects used as
   parser/evidence test fixtures. Each fixture directory contains its own
   `ATTRIBUTION.md` with the original source path and pinned commit.
+
+## inf-schule Filius example fixtures
+
+- **Location:** `backend/tests/fixtures/filius/inf-schule-*/`
+- **Upstream:** `https://inf-schule.de/rechnernetze/filius`
+- **License:** Creative Commons Attribution-ShareAlike 4.0 International
+  (CC BY-SA 4.0)
+- **Notes:** The `.fls` files are unchanged inf-schule example projects used as
+  parser/evidence test fixtures. Each fixture directory contains its own
+  `ATTRIBUTION.md` with the source URL, context page, license link, and
+  attribution details.
 
 ## How to update vendored assets (checklist)
 

@@ -1,4 +1,5 @@
 import { renderMarkdown } from "$lib/utils/markdown";
+import { FILIUS_FLS_MIME, MAKECODE_HEX_MIME, SCRATCH_SB3_MIME } from "$lib/utils/submission-mime-types";
 import type { LearningSubmission } from "$lib/types/learning";
 
 type SubmissionFile = NonNullable<LearningSubmission["files"]>[number];
@@ -112,7 +113,7 @@ export function buildSubmissionArtifactView(submission: LearningSubmission): Sub
   const fileSummary = `${file.mime} · ${formatBytes(file.size)}`;
   const markdown = submissionText(submission);
 
-  if (file.mime === "application/x.makecode.hex") {
+  if (file.mime === MAKECODE_HEX_MIME) {
     const parsed = parseMakecodeCode(markdown);
     if (!parsed) {
       return null;
@@ -127,7 +128,7 @@ export function buildSubmissionArtifactView(submission: LearningSubmission): Sub
     };
   }
 
-  if (file.mime === "application/x.scratch.sb3") {
+  if (file.mime === SCRATCH_SB3_MIME) {
     const html = renderScratchEvidence(markdown);
     if (!html) {
       return null;
@@ -140,7 +141,7 @@ export function buildSubmissionArtifactView(submission: LearningSubmission): Sub
     };
   }
 
-  if (file.mime === "application/x.filius.fls") {
+  if (file.mime === FILIUS_FLS_MIME) {
     const html = renderFiliusEvidence(markdown);
     if (!html) {
       return null;

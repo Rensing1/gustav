@@ -31,13 +31,11 @@ from backend.learning.adapters.ports import (
 from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.vision.pipeline import stitch_images_vertically, process_pdf_bytes
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
-from backend.storage.sb3_validation import SCRATCH_SB3_MIME
-from backend.storage.makecode_hex_validation import MAKECODE_HEX_MIME
-from backend.storage.learning_policy import FILIUS_FLS_MIME
+from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
 
 LOG = logging.getLogger(__name__)
 
-SUPPORTED_MIME = {"image/jpeg", "image/png", "application/pdf", SCRATCH_SB3_MIME, MAKECODE_HEX_MIME, FILIUS_FLS_MIME}
+SUPPORTED_MIME = {JPEG_MIME, PNG_MIME, PDF_MIME, SCRATCH_SB3_MIME, MAKECODE_HEX_MIME, FILIUS_FLS_MIME}
 _LOCAL_HTTP_HOSTS = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
 
 def _require_secure_openai_base_url(base_url: str) -> None:
@@ -294,7 +292,7 @@ def _resolve_submission_image_bytes(
     """Return base64 image bytes (JPEG/PNG) from local storage or Supabase."""
     mime = (job_payload or {}).get("mime_type") or (submission or {}).get("mime_type") or ""
     mime = str(mime or "").strip().lower()
-    if mime not in {"image/jpeg", "image/png"}:
+    if mime not in {JPEG_MIME, PNG_MIME}:
         return None
     root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
     storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
@@ -801,7 +799,7 @@ class _LocalVisionAdapter:
                 raise VisionPermanentError("empty_evidence")
             return VisionResult(text_md=evidence_md, raw_metadata=meta)
 
-        if mime in {"image/jpeg", "image/png"}:
+        if mime in {JPEG_MIME, PNG_MIME}:
             image_b64 = _resolve_submission_image_bytes(
                 submission=submission,
                 job_payload=job_payload,
@@ -813,7 +811,7 @@ class _LocalVisionAdapter:
                 image_data_uri = f"data:{mime};base64,{image_b64}"
 
         # Local fetch for PDF derived pages (independent of original PDF presence)
-        if mime == "application/pdf":
+        if mime == PDF_MIME:
             # Validate local PDF bytes (size/hash) when a verify root is configured.
             # This must happen before derived-page stitching so tests and operators
             # get deterministic permanent errors for corrupt/mismatched uploads.
@@ -836,7 +834,7 @@ class _LocalVisionAdapter:
             stitched_b64 = base64.b64encode(stitched_png).decode("ascii")
             image_data_uri = f"data:image/png;base64,{stitched_b64}"
 
-        if mime in {"image/jpeg", "image/png"} and not image_data_uri:
+        if mime in {JPEG_MIME, PNG_MIME} and not image_data_uri:
             raise VisionTransientError("image_unavailable")
         if not image_data_uri:
             raise VisionTransientError("image_unavailable")

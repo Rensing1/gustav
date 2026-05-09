@@ -8,9 +8,7 @@ import json
 import os
 import re
 from uuid import UUID, uuid5
-from backend.storage.sb3_validation import SCRATCH_SB3_MIME
-from backend.storage.makecode_hex_validation import MAKECODE_HEX_MIME
-from backend.storage.learning_policy import FILIUS_FLS_MIME
+from backend.storage.mime_types import FILIUS_FLS_MIME, MAKECODE_HEX_MIME, SCRATCH_SB3_MIME
 
 try:  # pragma: no cover -- optional dependency in some environments
     import psycopg

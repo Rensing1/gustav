@@ -21,9 +21,9 @@ import re
 import zipfile
 
 from backend.storage.config import get_learning_max_upload_bytes
+from backend.storage.mime_types import FILIUS_FLS_MIME
 
 
-FILIUS_FLS_MIME = "application/x.filius.fls"
 FILIUS_CONFIGURATION_PATH = "projekt/konfiguration.xml"
 
 

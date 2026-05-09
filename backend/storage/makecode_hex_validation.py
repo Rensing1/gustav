@@ -22,8 +22,7 @@ import os
 import struct
 from typing import Any
 
-
-MAKECODE_HEX_MIME = "application/x.makecode.hex"
+from backend.storage.mime_types import MAKECODE_HEX_MIME
 
 # MakeCode source embedding magic bytes. See: https://makecode.com/source-embedding
 _PXT_MAGIC = b"\x41\x14\x0E\x2F\xB8\x2F\xA2\xBB"

@@ -13,6 +13,12 @@
   } from "$lib/graph/learning-unit-flow";
   import { prepareBrowserStorageUpload } from "$lib/utils/browser-storage-upload";
   import {
+    FILIUS_FLS_MIME,
+    MAKECODE_HEX_MIME,
+    PDF_MIME,
+    SCRATCH_SB3_MIME
+  } from "$lib/utils/submission-mime-types";
+  import {
     contentGroupsForModules,
     contentGroupsForSections,
     emptyReviewFocus,
@@ -953,19 +959,19 @@
 
   function canonicalUploadMimeType(taskKind: UploadTaskKind, file: File): string {
     if (taskKind === "scratch") {
-      return "application/x.scratch.sb3";
+      return SCRATCH_SB3_MIME;
     }
     if (taskKind === "calliope") {
-      return "application/x.makecode.hex";
+      return MAKECODE_HEX_MIME;
     }
     if (taskKind === "filius") {
-      return "application/x.filius.fls";
+      return FILIUS_FLS_MIME;
     }
     const fileType = String(file.type || "").trim().toLowerCase();
     if (fileType) {
       return fileType;
     }
-    return taskKind === "visual" ? "image/png" : "application/pdf";
+    return taskKind === "visual" ? "image/png" : PDF_MIME;
   }
 
   async function createUploadSubmission(

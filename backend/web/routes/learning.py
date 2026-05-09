@@ -57,7 +57,6 @@ except ModuleNotFoundError:  # pragma: no cover - container fallback when packag
 from backend.storage.learning_policy import (
     ALLOWED_FILE_MIME,
     ALLOWED_IMAGE_MIME,
-    FILIUS_FLS_MIME,
     STORAGE_KEY_RE,
     verification_config_from_env,
 )
@@ -65,8 +64,7 @@ from backend.storage.verification import verify_storage_object_integrity
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes, get_materials_max_upload_bytes
 from backend.storage.keys import make_submission_key
 from backend.storage.upload_intents import normalize_upload_intent_headers
-from backend.storage.sb3_validation import SCRATCH_SB3_MIME
-from backend.storage.makecode_hex_validation import MAKECODE_HEX_MIME
+from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
 try:
     from backend.web.material_file_access import (
         MaterialVisibilityLookupUnavailable,
@@ -1716,7 +1714,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     # read the uploaded PDF bytes directly and kick off the rendering pipeline.
     # This is best-effort and must not block or affect the API response.
     try:
-        if kind == "file" and str(clean_payload.get("mime_type")) == "application/pdf":
+        if kind == "file" and str(clean_payload.get("mime_type")) == PDF_MIME:
             root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
             env = _current_environment()
             prod_like = env in {"prod", "production", "stage", "staging"}
@@ -2011,9 +2009,9 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
             accepted = sorted(list(ALLOWED_IMAGE_MIME))
         else:  # kind == "file"
             # Non-scratch tasks accept only PDFs in MVP.
-            if mime_type != "application/pdf":
+            if mime_type != PDF_MIME:
                 return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-            accepted = ["application/pdf"]
+            accepted = [PDF_MIME]
 
     # Build a storage key (lowercase path, no traversal) — the value is later
     # validated again at submission time with a strict regex.
@@ -2021,9 +2019,9 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
     from uuid import uuid4 as _uuid4
     student_sub = str(user.get("sub", "student")).lower()
     ts = int(_time.time() * 1000)
-    if mime_type == "image/png":
+    if mime_type == PNG_MIME:
         ext = ".png"
-    elif mime_type == "image/jpeg":
+    elif mime_type == JPEG_MIME:
         ext = ".jpg"
     elif mime_type == SCRATCH_SB3_MIME:
         ext = ".sb3"

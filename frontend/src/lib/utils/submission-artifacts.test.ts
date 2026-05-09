@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildSubmissionArtifactView } from "./submission-artifacts";
+import { FILIUS_FLS_MIME, MAKECODE_HEX_MIME, SCRATCH_SB3_MIME } from "./submission-mime-types";
 
 describe("buildSubmissionArtifactView", () => {
   it("parses makecode evidence even with leading whitespace or bom", () => {
@@ -15,7 +16,7 @@ describe("buildSubmissionArtifactView", () => {
         '\uFEFF  \n# makecode.evidence.v1\n\n## Files\n\n### file: "main.py"\n```python\nprint("hi")\n```',
       files: [
         {
-          mime: "application/x.makecode.hex",
+          mime: MAKECODE_HEX_MIME,
           size: 2048,
           url: "https://example.com/test.hex",
           download_url: "https://example.com/test.hex?download=1"
@@ -45,7 +46,7 @@ describe("buildSubmissionArtifactView", () => {
         '\uFEFF \n# scratch.evidence.v2\n\n## Summary\n- stage_present: true\n\n## Target Stage\n### Script 1\n- event_whenflagclicked',
       files: [
         {
-          mime: "application/x.scratch.sb3",
+          mime: SCRATCH_SB3_MIME,
           size: 4096,
           url: "https://example.com/test.sb3",
           download_url: "https://example.com/test.sb3?download=1"
@@ -79,7 +80,7 @@ describe("buildSubmissionArtifactView", () => {
         "\uFEFF \n# filius.evidence.v1\n\n## Project\n- filius_version: 1.15.1\n\n## Ground Frame\n- class: filius.software.dhcp.DHCPServer",
       files: [
         {
-          mime: "application/x.filius.fls",
+          mime: FILIUS_FLS_MIME,
           size: 8192,
           url: "https://example.com/network.fls",
           download_url: "https://example.com/network.fls?download=1"

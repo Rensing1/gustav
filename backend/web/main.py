@@ -39,6 +39,7 @@ from components.base import Component
 from components.pages import SciencePage
 from components.forms.course_edit_form import CourseEditForm
 from evidence_rendering import render_submission_text_html
+from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
 try:
     from backend.web.material_file_access import load_student_material_file_metadata
 except ModuleNotFoundError:  # pragma: no cover - container fallback when package path is flattened
@@ -835,21 +836,21 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
         max_mb_value = max_bytes / (1024 * 1024)
         max_mb = str(int(max_mb_value)) if max_mb_value.is_integer() else f"{max_mb_value:.2f}".rstrip("0").rstrip(".")
-        accept = "image/png,image/jpeg,application/pdf"
+        accept = f"{PNG_MIME},{JPEG_MIME},{PDF_MIME}"
         hint = f"JPG/PNG/PDF, bis {max_mb} MB"
-        allowed_mime = "image/png,image/jpeg,application/pdf"
+        allowed_mime = f"{PNG_MIME},{JPEG_MIME},{PDF_MIME}"
         if kind_norm == "scratch":
-            accept = ".sb3,application/x.scratch.sb3"
+            accept = f".sb3,{SCRATCH_SB3_MIME}"
             hint = f".sb3 bis {max_mb} MB"
-            allowed_mime = "application/x.scratch.sb3"
+            allowed_mime = SCRATCH_SB3_MIME
         elif kind_norm == "calliope":
-            accept = ".hex,application/x.makecode.hex"
+            accept = f".hex,{MAKECODE_HEX_MIME}"
             hint = f".hex bis {max_mb} MB"
-            allowed_mime = "application/x.makecode.hex"
+            allowed_mime = MAKECODE_HEX_MIME
         elif kind_norm == "filius":
-            accept = ".fls,application/x.filius.fls"
+            accept = f".fls,{FILIUS_FLS_MIME}"
             hint = f".fls bis {max_mb} MB"
-            allowed_mime = "application/x.filius.fls"
+            allowed_mime = FILIUS_FLS_MIME
         return (
             f'<form method="post" action="{form_action}" class="task-submit-form" '
             f'hx-post="{form_action}" hx-target="#task-history-{tid_escaped}" hx-swap="outerHTML" '
@@ -873,7 +874,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         )
 
     max_bytes = int(DEFAULT_POLICY.max_size_bytes or 0) or 10 * 1024 * 1024
-    allowed_mime = "image/png,image/jpeg,application/pdf"
+    allowed_mime = f"{PNG_MIME},{JPEG_MIME},{PDF_MIME}"
     max_mb_value = max_bytes / (1024 * 1024)
     max_mb = str(int(max_mb_value)) if max_mb_value.is_integer() else f"{max_mb_value:.2f}".rstrip("0").rstrip(".")
     return (
@@ -900,7 +901,7 @@ def _build_task_submit_form_html(*, course_id: str, unit_id: str, task_id: str, 
         '</div>'
         '<div class="task-form-fields fields-upload" hidden>'
         '<label>Datei auswählen '
-        '<input type="file" name="upload_file" accept="image/png,image/jpeg,application/pdf"></label>'
+        f'<input type="file" name="upload_file" accept="{PNG_MIME},{JPEG_MIME},{PDF_MIME}"></label>'
         f'<p class="text-muted">JPG/PNG/PDF, bis {max_mb} MB</p>'
         '<input type="hidden" name="storage_key" value="">'
         '<input type="hidden" name="mime_type" value="">'
@@ -941,11 +942,11 @@ async def _server_side_prepare_submission_upload(
     declared_mime = str(getattr(upload_file, "content_type", "") or "").strip()
     mime_type = declared_mime or (mimetypes.guess_type(filename)[0] or "application/octet-stream")
     if filename.lower().endswith(".sb3"):
-        mime_type = "application/x.scratch.sb3"
+        mime_type = SCRATCH_SB3_MIME
     if filename.lower().endswith(".hex"):
-        mime_type = "application/x.makecode.hex"
+        mime_type = MAKECODE_HEX_MIME
     if filename.lower().endswith(".fls"):
-        mime_type = "application/x.filius.fls"
+        mime_type = FILIUS_FLS_MIME
     try:
         file_bytes = await upload_file.read()  # type: ignore[attr-defined]
     except AttributeError:
@@ -1449,7 +1450,7 @@ def _render_submission_artifact_container(
     container_id = f"submission-artifact-{safe_sid}"
 
     open_tab_link = ""
-    if mime == "application/pdf":
+    if mime == PDF_MIME:
         safe_url = Component.escape(file_url)
         open_tab_link = (
             f'<a class="btn btn-sm" href="{safe_url}" target="_blank" rel="noopener">In neuem Tab öffnen</a>'
@@ -2404,7 +2405,7 @@ async def learning_submit_task(request: Request, course_id: str, task_id: str):
             if computed_sha:
                 sha256 = computed_sha
         api_kind = "image" if mime_type.startswith("image/") else "file"
-        if mime_type == "application/pdf":
+        if mime_type == PDF_MIME:
             api_kind = "file"
         if mode in ("image", "file"):
             api_kind = mode

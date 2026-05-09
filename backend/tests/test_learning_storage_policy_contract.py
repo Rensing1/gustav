@@ -21,21 +21,18 @@ def _import(name: str):
 
 
 def test_learning_upload_policy_exposes_shared_limits():
+    mime_types = _import("backend.storage.mime_types")
     policy = _import("backend.storage.learning_policy")
     assert getattr(policy, "ALLOWED_IMAGE_MIME")
     assert getattr(policy, "ALLOWED_FILE_MIME")
     assert getattr(policy, "MAX_UPLOAD_BYTES")
     assert getattr(policy, "STORAGE_KEY_RE")
 
-    assert policy.ALLOWED_IMAGE_MIME == {"image/jpeg", "image/png"}
+    assert policy.ALLOWED_IMAGE_MIME == mime_types.ALLOWED_IMAGE_MIME
     # Global allowlist for file uploads in the learning flow.
     # Per-task constraints (e.g. Scratch vs Calliope) are enforced downstream.
-    assert policy.ALLOWED_FILE_MIME == {
-        "application/pdf",
-        "application/x.scratch.sb3",
-        "application/x.makecode.hex",
-        "application/x.filius.fls",
-    }
+    assert policy.ALLOWED_FILE_MIME == mime_types.ALLOWED_FILE_MIME
+    assert mime_types.FILIUS_FLS_MIME == "application/x.filius.fls"
     assert policy.MAX_UPLOAD_BYTES == 10 * 1024 * 1024
     assert re.fullmatch(policy.STORAGE_KEY_RE, "a/b/file.pdf")
 

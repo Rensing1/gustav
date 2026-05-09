@@ -14,6 +14,7 @@
 - manual_routes: 0
 - applications: 2
 - filesystem_files: 3
+- firewalls: 0
 - truncated_files: 0
 - unresolved_links: 0
 - invalid_interfaces: 0

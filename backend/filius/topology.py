@@ -107,6 +107,33 @@ class FiliusFilesystemFile:
 
 
 @dataclass(frozen=True, slots=True)
+class FiliusFirewallRule:
+    """A normalized firewall rule extracted from a Filius firewall."""
+
+    id: str
+    source: str
+    destination: str
+    protocol: str
+    port: str
+    action: str
+
+
+@dataclass(frozen=True, slots=True)
+class FiliusFirewall:
+    """A Filius firewall configuration with bounded rule evidence."""
+
+    id: str
+    node_id: str
+    name: str
+    activated: str
+    default_policy: str
+    drop_icmp: str
+    filter_syn_segments_only: str
+    filter_udp: str
+    rules: tuple[FiliusFirewallRule, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class FiliusTopology:
     """Structured topology facts used by the evidence renderer."""
 
@@ -116,6 +143,7 @@ class FiliusTopology:
     manual_routes: tuple[FiliusManualRoute, ...] = ()
     applications: tuple[FiliusApplication, ...] = ()
     filesystem_files: tuple[FiliusFilesystemFile, ...] = ()
+    firewalls: tuple[FiliusFirewall, ...] = ()
     unresolved_links: int = 0
     invalid_interfaces: int = 0
 
@@ -153,6 +181,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
     route_rows: list[tuple[str, str, str, str, str, str]] = []
     applications: list[FiliusApplication] = []
     filesystem_files: list[FiliusFilesystemFile] = []
+    firewalls: list[FiliusFirewall] = []
 
     for node_index, node_object in enumerate(node_objects, start=1):
         node_id = f"n{node_index}"
@@ -193,6 +222,9 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
             )
             filesystem_files.extend(
                 _filesystem_files(hardware, node_id=node_id, start_index=len(filesystem_files) + 1)
+            )
+            firewalls.extend(
+                _firewalls(hardware, node_id=node_id, start_index=len(firewalls) + 1)
             )
 
         nodes.append(
@@ -242,6 +274,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
         manual_routes=manual_routes,
         applications=tuple(applications),
         filesystem_files=tuple(filesystem_files),
+        firewalls=tuple(firewalls),
         unresolved_links=unresolved_links,
         invalid_interfaces=invalid_interfaces,
     )
@@ -275,8 +308,10 @@ def _property_text(element: ET.Element | None, property_name: str) -> str | None
         if child.attrib.get("property") != property_name:
             continue
         value = next(iter(child), None)
-        if value is not None and value.tag in {"string", "int", "boolean"}:
+        if value is not None and value.tag in {"string", "int", "short", "boolean"}:
             return (value.text or "").strip()
+        if value is not None and value.tag == "object" and value.attrib.get("idref") == "Boolean0":
+            return "true"
     return None
 
 
@@ -438,6 +473,130 @@ def _build_filesystem_file(file_object: ET.Element, *, node_id: str, file_id: st
         content=shown_content,
         truncated=truncated,
     )
+
+
+def _firewalls(hardware: ET.Element, *, node_id: str, start_index: int) -> list[FiliusFirewall]:
+    firewalls: list[FiliusFirewall] = []
+    for firewall_index, firewall_element in enumerate(
+        (element for element in hardware.iter("void") if element.attrib.get("property") == "firewall"),
+        start=start_index,
+    ):
+        firewall_id = f"fw{firewall_index}"
+        firewalls.append(
+            FiliusFirewall(
+                id=firewall_id,
+                node_id=node_id,
+                name=_property_text(firewall_element, "name") or "unknown",
+                activated=_normalize_boolean(_property_text(firewall_element, "activated"), default="true"),
+                default_policy=_normalize_firewall_action(_property_text(firewall_element, "defaultPolicy"), default="0"),
+                drop_icmp=_normalize_boolean(_property_text(firewall_element, "dropICMP"), default="false"),
+                filter_syn_segments_only=_normalize_boolean(
+                    _property_text(firewall_element, "filterSYNSegmentsOnly"), default="true"
+                ),
+                filter_udp=_normalize_boolean(_property_text(firewall_element, "filterUdp"), default="true"),
+                rules=tuple(_firewall_rules(firewall_element, firewall_id=firewall_id)),
+            )
+        )
+    return firewalls
+
+
+def _firewall_rules(firewall_element: ET.Element, *, firewall_id: str) -> list[FiliusFirewallRule]:
+    ruleset = _find_direct_property_element(firewall_element, "ruleset")
+    if ruleset is None:
+        return []
+
+    rules: list[FiliusFirewallRule] = []
+    for rule_entry in ruleset.findall("./void"):
+        if rule_entry.attrib.get("method") != "add":
+            continue
+        rule_object = rule_entry.find("./object")
+        if rule_object is None or rule_object.attrib.get("class") != "filius.software.firewall.FirewallRule":
+            continue
+        rule_id = f"{firewall_id}-r{len(rules) + 1}"
+        fields = _firewall_rule_fields(rule_object)
+        rules.append(
+            FiliusFirewallRule(
+                id=rule_id,
+                source=_normalize_firewall_endpoint(fields.get("srcIP"), fields.get("srcMask")),
+                destination=_normalize_firewall_endpoint(fields.get("destIP"), fields.get("destMask")),
+                protocol=_normalize_firewall_protocol(fields.get("protocol")),
+                port=_normalize_firewall_port(fields.get("port")),
+                action=_normalize_firewall_action(fields.get("action"), default="0"),
+            )
+        )
+    return rules
+
+
+def _firewall_rule_fields(rule_object: ET.Element) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for field_access in rule_object.findall("./void"):
+        if field_access.attrib.get("class") != "filius.software.firewall.FirewallRule":
+            continue
+        if field_access.attrib.get("method") != "getField":
+            continue
+        field_name = field_access.find("./string")
+        if field_name is None or not field_name.text:
+            continue
+        value = _field_set_value(field_access)
+        if value is not None:
+            fields[field_name.text.strip()] = value
+    return fields
+
+
+def _field_set_value(field_access: ET.Element) -> str | None:
+    for set_call in field_access.findall("./void"):
+        if set_call.attrib.get("method") != "set":
+            continue
+        for value in set_call:
+            if value.tag in {"string", "int", "short", "boolean"}:
+                return (value.text or "").strip()
+    return None
+
+
+def _normalize_firewall_endpoint(ip: str | None, netmask: str | None) -> str:
+    ip_text = _normalize_optional(ip)
+    mask_text = _normalize_optional(netmask)
+    if ip_text == "unknown" and mask_text == "unknown":
+        return "any"
+    if ip_text == "999.999.999.999":
+        return "same_network"
+    cidr, valid_network = _derive_network(ip_text, mask_text)
+    if valid_network:
+        return cidr
+    if mask_text != "unknown":
+        return f"{ip_text}/{mask_text}"
+    return ip_text
+
+
+def _normalize_firewall_protocol(value: str | None) -> str:
+    return {
+        "-1": "*",
+        "1": "ICMP",
+        "6": "TCP",
+        "17": "UDP",
+    }.get(_normalize_optional(value) if value is not None else "6", _normalize_optional(value))
+
+
+def _normalize_firewall_port(value: str | None) -> str:
+    text = _normalize_optional(value)
+    if text in {"unknown", "-1"}:
+        return "any"
+    return text
+
+
+def _normalize_firewall_action(value: str | None, *, default: str = "unknown") -> str:
+    text = _normalize_optional(value) if value is not None else default
+    return {
+        "0": "DROP",
+        "1": "ACCEPT",
+    }.get(text, text)
+
+
+def _normalize_boolean(value: str | None, *, default: str = "unknown") -> str:
+    text = _normalize_optional(value) if value is not None else default
+    if text in {"true", "false", "unknown"}:
+        return text
+    return text
 
 
 def _is_allowed_filesystem_path(path: str) -> bool:

@@ -15,6 +15,8 @@ import xml.etree.ElementTree as ET
 from backend.storage.filius_validation import extract_configuration_xml_bytes
 from backend.filius.topology import (
     FiliusApplication,
+    FiliusFirewall,
+    FiliusFirewallRule,
     FiliusFilesystemFile,
     FiliusInterface,
     FiliusManualRoute,
@@ -97,6 +99,7 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             lines.append(f"- manual_routes: {len(topology.manual_routes)}")
             lines.append(f"- applications: {len(topology.applications)}")
             lines.append(f"- filesystem_files: {len(topology.filesystem_files)}")
+            lines.append(f"- firewalls: {len(topology.firewalls)}")
             truncated_files = sum(1 for file in topology.filesystem_files if file.truncated)
             lines.append(f"- truncated_files: {truncated_files}")
             lines.append(f"- unresolved_links: {topology.unresolved_links}")
@@ -107,6 +110,8 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             _render_links(lines, topology)
         elif heading == "Routing":
             _render_routing(lines, topology)
+        elif heading == "Firewall":
+            _render_firewall(lines, topology)
         elif heading == "DNS":
             _render_dns(lines, topology)
         elif heading == "Web":
@@ -195,6 +200,49 @@ def _format_manual_route(route: FiliusManualRoute) -> str:
         ("next_hop_interface", route.next_hop_interface),
         ("via_ip", route.via_ip),
         ("via_interface", route.via_interface),
+    )
+    return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
+
+
+def _render_firewall(lines: list[str], topology: FiliusTopology) -> None:
+    firewalls = [firewall for firewall in topology.firewalls if firewall.rules]
+    if not firewalls:
+        lines.append("none")
+        return
+    lines.append("- firewalls:")
+    for firewall in firewalls:
+        lines.append(f"  - {_format_firewall(firewall)}")
+        if not firewall.rules:
+            lines.append("    rules: none")
+            continue
+        lines.append("    rules:")
+        for rule in firewall.rules:
+            lines.append(f"      - {_format_firewall_rule(rule)}")
+
+
+def _format_firewall(firewall: FiliusFirewall) -> str:
+    fields = (
+        ("id", firewall.id),
+        ("node", firewall.node_id),
+        ("name", firewall.name),
+        ("activated", firewall.activated),
+        ("default_policy", firewall.default_policy),
+        ("drop_icmp", firewall.drop_icmp),
+        ("filter_syn_segments_only", firewall.filter_syn_segments_only),
+        ("filter_udp", firewall.filter_udp),
+        ("rules", str(len(firewall.rules))),
+    )
+    return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
+
+
+def _format_firewall_rule(rule: FiliusFirewallRule) -> str:
+    fields = (
+        ("id", rule.id),
+        ("source", rule.source),
+        ("destination", rule.destination),
+        ("protocol", rule.protocol),
+        ("port", rule.port),
+        ("action", rule.action),
     )
     return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
 

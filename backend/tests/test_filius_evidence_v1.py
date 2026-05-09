@@ -145,3 +145,43 @@ def test_filius_synthetic_dns_web_fixture_renders_safe_dns_and_web_evidence() ->
     assert "<object" not in md
     assert "idref" not in md
     assert "password" not in md.lower()
+
+
+def test_filius_official_firewall_fixture_renders_real_rules() -> None:
+    """The official Filius firewall fixture should render real rule evidence."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    fixture_dir = Path("backend/tests/fixtures/filius/filius-official-firewall")
+    fls_bytes = (
+        fixture_dir / "Internet_Komplett_mit_eMail_Webserver_Intranet_Portforwarding_Firewall_DHCP_DE.fls"
+    ).read_bytes()
+    expected = (fixture_dir / "firewall.evidence.md").read_text(encoding="utf-8")
+
+    md = build_evidence_markdown_v1(fls_bytes)
+
+    assert md == expected
+    assert "## Firewall" in md
+    assert "- firewalls:" in md
+    assert 'node: "n' in md
+    assert 'activated: "true"' in md
+    assert 'protocol: "*"' in md
+    assert 'action: "ACCEPT"' in md
+    assert 'action: "DROP"' in md
+    assert 'source: "10.10.20.0/24"' in md
+    assert 'destination: "42.0.0.10/32"' in md
+    assert "<java" not in md
+    assert "<object" not in md
+    assert "idref" not in md
+    assert "password" not in md.lower()
+    assert "passwort" not in md.lower()
+
+
+def test_filius_official_firewall_fixture_keeps_source_attribution() -> None:
+    """Committed upstream fixtures must carry source and license metadata."""
+    fixture_dir = Path("backend/tests/fixtures/filius/filius-official-firewall")
+    attribution = (fixture_dir / "ATTRIBUTION.md").read_text(encoding="utf-8")
+
+    assert "Filius upstream repository" in attribution
+    assert "GPL-3.0" in attribution
+    assert "dcd965f6139baef4c27cc6d3cc34106f6bebda40" in attribution
+    assert "Internet_Komplett_mit_eMail_Webserver_Intranet_Portforwarding_Firewall_DHCP_DE.fls" in attribution

@@ -249,6 +249,8 @@ function taskPayloadFromForm(
     payload.scratch = {};
   } else if (taskKind === "calliope") {
     payload.calliope = {};
+  } else if (taskKind === "filius") {
+    payload.filius = {};
   }
 
   return { ok: true, payload, values };

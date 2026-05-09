@@ -237,6 +237,33 @@ describe("teacher node editor server helpers", () => {
     });
   });
 
+  it("creates Filius tasks with the Filius marker payload", () => {
+    const formData = new FormData();
+    formData.set("task_kind", "filius");
+    formData.set("instruction_md", "Analysiere das Netzwerk.");
+    formData.append("criteria[]", "DNS ist korrekt eingerichtet");
+    formData.set("teacher_context_md", "Achte auf IP-Adressierung.");
+
+    const parsed = __testables.taskPayloadFromForm(formData, {
+      allowImplicitInstructionForH5P: true
+    });
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      return;
+    }
+    expect(parsed.payload).toMatchObject({
+      instruction_md: "Analysiere das Netzwerk.",
+      criteria: ["DNS ist korrekt eingerichtet"],
+      teacher_context_md: "Achte auf IP-Adressierung.",
+      filius: {}
+    });
+    expect(parsed.payload).not.toHaveProperty("h5p");
+    expect(parsed.payload).not.toHaveProperty("visual");
+    expect(parsed.payload).not.toHaveProperty("scratch");
+    expect(parsed.payload).not.toHaveProperty("calliope");
+  });
+
   it("rejects raw file posts without prepared upload metadata", async () => {
     const form = new FormData();
     form.set("section_id", "section-1");

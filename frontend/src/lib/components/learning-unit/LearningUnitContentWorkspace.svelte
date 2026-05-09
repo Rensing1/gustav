@@ -125,7 +125,7 @@
     onSubmitUploadFeedback?:
       | ((payload: {
           taskId: string;
-          taskKind: "native" | "visual" | "scratch" | "calliope";
+          taskKind: "native" | "visual" | "scratch" | "calliope" | "filius";
           file: File;
           moduleId: string | null;
           paneId: PaneId;

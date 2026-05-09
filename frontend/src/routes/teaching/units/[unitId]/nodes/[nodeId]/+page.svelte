@@ -98,7 +98,7 @@
   let showCreateMaterial = $state(false);
   let showCreateTask = $state(false);
   let createMaterialKind = $state<"markdown" | "file">("markdown");
-  let createTaskKind = $state<"native" | "h5p" | "visual" | "scratch" | "calliope">("native");
+  let createTaskKind = $state<"native" | "h5p" | "visual" | "scratch" | "calliope" | "filius">("native");
   let handledForm: ActionData | undefined = undefined;
   let createMaterialCard = $state<HTMLElement | null>(null);
   let createTaskCard = $state<HTMLElement | null>(null);
@@ -290,6 +290,8 @@
         return "Scratch";
       case "calliope":
         return "Calliope";
+      case "filius":
+        return "Filius";
       default:
         return "Aufgabe";
     }
@@ -430,7 +432,7 @@
 
   $effect(() => {
     const taskKind = createTaskValues().task_kind;
-    if (taskKind === "h5p" || taskKind === "visual" || taskKind === "scratch" || taskKind === "calliope") {
+    if (taskKind === "h5p" || taskKind === "visual" || taskKind === "scratch" || taskKind === "calliope" || taskKind === "filius") {
       createTaskKind = taskKind;
       return;
     }
@@ -726,6 +728,7 @@
               <option value="visual">Visuelle Aufgabe</option>
               <option value="scratch">Scratch</option>
               <option value="calliope">Calliope</option>
+              <option value="filius">Filius</option>
             </select>
           </label>
 
@@ -858,14 +861,16 @@
                       <textarea name="teacher_context_md" rows="4">{taskTeacherContextValue(task)}</textarea>
                     </label>
 
-                    {#if task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope"}
+                    {#if task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius"}
                       <p class="workspace-note">
                         {#if task.kind === "visual"}
                           Lernende reichen hier eine visuelle Datei ein.
                         {:else if task.kind === "scratch"}
                           Lernende reichen hier ein Scratch-Projekt als `.sb3` ein.
-                        {:else}
+                        {:else if task.kind === "calliope"}
                           Lernende reichen hier ein Calliope-MakeCode-Projekt als `.hex` ein.
+                        {:else}
+                          Lernende reichen hier ein Filius-Projekt als `.fls` ein.
                         {/if}
                       </p>
                     {/if}

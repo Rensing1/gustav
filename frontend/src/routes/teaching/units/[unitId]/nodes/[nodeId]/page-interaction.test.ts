@@ -77,6 +77,53 @@ describe("teacher node editor page", () => {
     expect(fields).toHaveLength(10);
   });
 
+  it("offers Filius task creation and labels existing Filius tasks", async () => {
+    render(Page, {
+      props: {
+        data: {
+          ...sampleData,
+          editor: {
+            ...sampleData.editor,
+            tasks: [
+              {
+                id: "task-filius",
+                kind: "filius",
+                instruction_md: "Untersuche das Filius-Netzwerk.",
+                criteria: [],
+                teacher_context_md: null,
+                due_at: null,
+                max_attempts: null,
+                position: 1,
+                filius: {}
+              }
+            ]
+          }
+        },
+        form: {} as never
+      }
+    });
+
+    const tasksHeading = screen.getByRole("heading", { name: "Aufgaben" }).closest("section");
+    expect(tasksHeading).not.toBeNull();
+    const tasksSection = tasksHeading as HTMLElement;
+
+    await fireEvent.click(within(tasksSection).getByRole("button", { name: /^Aufgabe hinzufügen$/i }));
+
+    const typeSelect = within(tasksSection).getByLabelText("Aufgabentyp");
+    expect(within(typeSelect).getByRole("option", { name: "Filius" })).toHaveValue("filius");
+
+    await fireEvent.change(typeSelect, { target: { value: "filius" } });
+
+    expect(within(tasksSection).getByLabelText("Anweisung & Beschreibung")).toBeInTheDocument();
+    expect(within(tasksSection).getAllByLabelText(/Kriterium \d+/i)).toHaveLength(10);
+    expect(within(tasksSection).getByLabelText("Lehrkraft-Kontext")).toBeInTheDocument();
+
+    await fireEvent.click(within(tasksSection).getByRole("button", { name: /Untersuche das Filius-Netzwerk/i }));
+
+    expect(within(tasksSection).getAllByText("Filius").length).toBeGreaterThan(0);
+    expect(within(tasksSection).getByText("Lernende reichen hier ein Filius-Projekt als `.fls` ein.")).toBeInTheDocument();
+  });
+
   it("shows a success message and the created material immediately after a successful create action", () => {
     render(Page, {
       props: {

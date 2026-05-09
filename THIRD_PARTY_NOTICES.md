@@ -70,7 +70,7 @@ browser ESM compatible without a bundler.
 
 ## Filius official example fixtures
 
-- **Location:** `backend/tests/fixtures/filius/filius-official-firewall/`
+- **Location:** `backend/tests/fixtures/filius/filius-official-*/`
 - **Upstream:** `https://gitlab.com/filius1/filius`
 - **Revision:** `dcd965f6139baef4c27cc6d3cc34106f6bebda40` (`version 2.10.1`)
 - **License:** GNU General Public License v3 (GPL-3.0)

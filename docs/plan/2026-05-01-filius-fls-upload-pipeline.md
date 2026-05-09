@@ -447,6 +447,41 @@ erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
     - OpenAI-compatible endpoint smoke: 2 passed.
     - Docker/E2E: 13 passed.
 
+### 2026-05-09 — Slice 21: E-Mail-Metadaten und offizielle App-Fixtures
+
+- Geprüfte Codeabschnitte vor Implementierung:
+  - `backend/filius/topology.py`: bestehende Dataclasses, App-Kind-Erkennung, installierte Anwendungen, XMLDecoder-Helfer.
+  - `backend/filius/evidence_v1.py`: Abschnittsreihenfolge, `## Email`-Platzhalter, Safe-Text-Rendering.
+  - `backend/tests/test_filius_evidence_v1.py` und `backend/tests/learning_adapters/test_local_vision_filius_fls.py`: Golden-File- und Adapter-Konventionen.
+  - Filius-Quellklassen `EmailAnwendung.java`, `EmailServer.java`, `EmailKonto.java`, `Email.java`, `AddressEntry.java`.
+  - Offizielle Filius-Beispiele `dns_server.fls`, `webserver.fls`, `email_komplett.fls`.
+- Befund:
+  - `email_komplett.fls` enthält Mailclient-Konten und Mailserver-Konten, aber keine gespeicherten `Email`-Nachrichten.
+  - Die komplexe offizielle Firewall-Fixture enthält gespeicherte `Email`-Objekte; diese bleiben bewusst außerhalb dieses Slices.
+  - `EmailKonto` persistiert `passwort`, `vorname` und `nachname`; diese Felder sind für Netzwerkdiagnose nicht erforderlich und werden nicht gerendert.
+- Entscheidung:
+  - Offizielle DNS-/Web-/E-Mail-Fixtures werden ergänzend aufgenommen; die synthetische DNS/Web-Fixture bleibt für Security-/Edge-Cases bestehen.
+  - E-Mail-Evidence ist metadata-only: Mailclient, Mailserver, Domain, Benutzername, E-Mail-Adresse, POP3-/SMTP-Server und Ports.
+  - Keine Vor-/Nachnamen, keine Passwörter, kein Roh-`konten.txt`, keine Betreffzeilen und keine Mailkörper.
+- RED:
+  - Offizielle DNS-/Web-Golden-Tests scheiterten erwartungsgemäß an Platzhalter-Golden-Files.
+  - E-Mail-Golden- und Adaptertests scheiterten erwartungsgemäß, weil `## Email` noch `none` rendert.
+- GREEN:
+  - `backend/filius/topology.py` ergänzt E-Mail-Client-/Server-Modelle und passive Extraktion von `EmailAnwendung.kontoListe` und `EmailServer.listeBenutzerkonten`.
+  - `backend/filius/evidence_v1.py` rendert `## Email` mit Accounts und Servermetadaten.
+  - `EmailServer.mailDomain` nutzt den belegten Filius-Default `filius.de`, wenn die Domain nicht explizit persistiert ist.
+  - Neue offizielle Fixture-Verzeichnisse enthalten `.fls`, `ATTRIBUTION.md` und Golden-Files für DNS, Web und E-Mail.
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py` -> 18 passed.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py backend/tests/test_filius_fls_validation.py backend/tests/test_learning_filius_fls_submission_api.py` -> 28 passed.
+  - `git diff --check` -> passed.
+  - `make verify` -> passed:
+    - Backend pytest: 1536 passed, 33 skipped.
+    - H5P Node tests: 15 passed.
+    - Supabase integration: 5 passed.
+    - OpenAI-compatible endpoint smoke: 2 passed.
+    - Docker/E2E: 13 passed.
+
 ## Kontext / Problem
 
 GUSTAV unterstützt für besondere Aufgabenformate bereits upload-only Abgaben:

@@ -410,6 +410,43 @@ erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
     - OpenAI-compatible endpoint smoke: 2 passed.
     - Docker/E2E: 13 passed.
 
+### 2026-05-09 — Slice 20: Firewall-Evidence aus offizieller Filius-Fixture
+
+- Geprüfte Codeabschnitte vor Implementierung:
+  - `backend/filius/topology.py`: vorhandene Dataclasses, Anwendungsextraktion, XMLDecoder-Helfer, Dateisystem-Allowlist.
+  - `backend/filius/evidence_v1.py`: stabile Abschnittsreihenfolge, Renderer für Routing/DNS/Web, Escape- und Truncation-Logik.
+  - `backend/tests/test_filius_evidence_v1.py`: Golden-File-Konvention, Attribution-Tests, Roh-XML-/Passwort-Sicherheitsassertions.
+  - `backend/tests/learning_adapters/test_local_vision_filius_fls.py`: End-to-end-Adapterpfad für deterministische Filius-Evidence.
+  - `THIRD_PARTY_NOTICES.md` und bestehende Fixture-`ATTRIBUTION.md`: Provenance- und Lizenzkonventionen.
+- Befund:
+  - Bisherige lokale und inf-schule-Fixtures enthalten keine echten `FirewallRule`-Einträge.
+  - Offizielle Filius-Beispieldatei `Internet_Komplett_mit_eMail_Webserver_Intranet_Portforwarding_Firewall_DHCP_DE.fls` aus dem Filius-GitLab-Repository enthält sechs echte Regeln unter `FirewallWebKonfig -> firewall -> ruleset -> FirewallRule`.
+  - Filius speichert FirewallRule-Felder als XMLDecoder-Reflection-Form: `void class="filius.software.firewall.FirewallRule" method="getField"` mit anschließendem `void method="set"`.
+- Entscheidung:
+  - Für Firewall-Evidence wird eine unveränderte offizielle Filius-Fixture verwendet, gepinnt auf Commit `dcd965f6139baef4c27cc6d3cc34106f6bebda40`.
+  - Synthetische Fixtures bleiben nur für gezielte Security-/Grenzfalltests vorgesehen.
+  - GPLv3-Fixture-Provenance wird pro Fixture und in `THIRD_PARTY_NOTICES.md` dokumentiert.
+- RED:
+  - Golden-Test erwartet `## Firewall` mit aktivierter Firewall und sechs normalisierten Regeln.
+  - Adaptertest erwartet, dass `local_vision` diese Firewall-Evidence durchreicht.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py::test_filius_official_firewall_fixture_renders_real_rules backend/tests/test_filius_evidence_v1.py::test_filius_official_firewall_fixture_keeps_source_attribution backend/tests/learning_adapters/test_local_vision_filius_fls.py::test_local_vision_filius_fls_returns_firewall_evidence_for_official_fixture` -> erwartete Fails in Evidence-/Adaptertest, Attribution grün.
+- GREEN:
+  - `backend/filius/topology.py` ergänzt ein kleines Firewall-Modell und extrahiert nur passive, fachliche Felder.
+  - `backend/filius/evidence_v1.py` rendert Firewall-Evidence deterministisch; Roh-XML, `idref` und Passwörter bleiben ausgeschlossen.
+  - Fehlende `FirewallRule`-Felder werden anhand belegter Filius-Java-Defaults normalisiert: `action=DROP`, `port=*`, `protocol=TCP`.
+  - Offizielle Fixture liegt unverändert unter `backend/tests/fixtures/filius/filius-official-firewall/` mit `ATTRIBUTION.md` und Golden File.
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py::test_filius_official_firewall_fixture_renders_real_rules backend/tests/test_filius_evidence_v1.py::test_filius_official_firewall_fixture_keeps_source_attribution backend/tests/learning_adapters/test_local_vision_filius_fls.py::test_local_vision_filius_fls_returns_firewall_evidence_for_official_fixture` -> 3 passed.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py` -> 13 passed.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py backend/tests/test_filius_fls_validation.py backend/tests/test_learning_filius_fls_submission_api.py` -> 23 passed.
+  - `git diff --check` -> passed.
+  - `make verify` -> passed:
+    - Backend pytest: 1531 passed, 33 skipped.
+    - H5P Node tests: 15 passed.
+    - Supabase integration: 5 passed.
+    - OpenAI-compatible endpoint smoke: 2 passed.
+    - Docker/E2E: 13 passed.
+
 ## Kontext / Problem
 
 GUSTAV unterstützt für besondere Aufgabenformate bereits upload-only Abgaben:

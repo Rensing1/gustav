@@ -580,6 +580,60 @@ erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
   - `npm test -- --run src/lib/utils/submission-artifacts.test.ts src/lib/components/learning-unit/LearningSubmissionWorkspace.test.ts` -> 11 passed.
   - `npm test -- --run src/lib/components/learning-unit/LearningTaskCard.test.ts src/lib/utils/submission-artifacts.test.ts` -> 34 passed.
 
+### 2026-05-09 — Slice 25: Filius-Auswahl im modernen Teaching-Node-Editor
+
+- Geprüfte Codeabschnitte vor Implementierung:
+  - `frontend/src/routes/teaching/units/[unitId]/nodes/[nodeId]/+page.svelte`: Aufgabentyp-Select, Create-State, Task-Label und Upload-only-Hinweise.
+  - `frontend/src/routes/teaching/units/[unitId]/nodes/[nodeId]/+page.server.ts`: `taskPayloadFromForm` als SvelteKit-Action-Payload-Mapping.
+  - `frontend/src/routes/teaching/units/[unitId]/nodes/[nodeId]/page.server.test.ts` und `page-interaction.test.ts`: vorhandene Server-Helper- und UI-Verträge.
+  - `frontend/src/lib/components/learning-unit/LearningUnitContentWorkspace.svelte`: Upload-Feedback-Callback-Typen, nachdem `npm run check` eine noch zu enge Filius-Union gefunden hat.
+  - `backend/web/main.py`: älterer SSR-Aufgabenpfad; bewusst nicht geändert, weil er obsolet ist und nicht mehr genutzt wird.
+- Befund:
+  - API, Backend und Learning-Upload kennen `Task.kind=filius` bereits.
+  - Der moderne Teaching-Node-Editor bot im Dropdown nur `native`, `h5p`, `visual`, `scratch` und `calliope` an.
+  - Die SvelteKit-Server-Action setzte bei `task_kind=filius` noch kein `filius: {}` in den Create-Payload.
+- RED:
+  - `npm test -- --run src/routes/teaching/units/[unitId]/nodes/[nodeId]/page.server.test.ts src/routes/teaching/units/[unitId]/nodes/[nodeId]/page-interaction.test.ts` -> erwartete Fails:
+    - Server-Payload enthält kein `filius: {}`.
+    - UI-Select enthält keine Option `Filius`.
+- GREEN:
+  - Create-State im Node-Editor erlaubt `filius`.
+  - Aufgabentyp-Select enthält `Filius`.
+  - Bestehende Filius-Aufgaben werden als `Filius` gelabelt und erklären `.fls` als erwartete Abgabe.
+  - `taskPayloadFromForm` mappt `task_kind=filius` auf `payload.filius = {}`.
+  - Der Learning-Workspace-Callback-Typ akzeptiert `filius`, passend zum bereits vorhandenen `LearningTaskCard`-Upload-Typ.
+- Verifikation:
+  - `npm test -- --run src/routes/teaching/units/[unitId]/nodes/[nodeId]/page.server.test.ts src/routes/teaching/units/[unitId]/nodes/[nodeId]/page-interaction.test.ts` -> 11 passed.
+  - `npm run check` -> 0 errors, 0 warnings.
+  - `git diff --check` -> passed.
+  - `docker compose up -d --build frontend` -> Frontend-Image gebaut und `gustav-frontend` neu gestartet.
+  - Nach Type-Union-Fix erneut `docker compose up -d --build frontend` -> Frontend-Image gebaut und `gustav-frontend` neu gestartet.
+
+### 2026-05-09 — Slice 26: Worker-Packaging für Filius-Evidence
+
+- Geprüfte Codeabschnitte vor Implementierung:
+  - `docker-compose.yml`: Web-/Worker-Bind-Mounts für lokale bounded contexts.
+  - `Dockerfile`: Python-Runtime-Paketierung für Web und Learning-Worker.
+  - `backend/learning/adapters/local_vision.py`: deterministische Imports für Scratch, MakeCode und Filius Evidence.
+  - Lokale DB-Tabellen `learning_submissions` und `learning_submission_jobs`: Status der hängenden Filius-Submission.
+  - `docker logs gustav-learning-worker`: Worker-Crashursache.
+- Befund:
+  - `gustav-learning-worker` lief in einer Restart-Schleife.
+  - Crash: `ModuleNotFoundError: No module named 'backend.filius'` beim Import von `backend.filius.evidence_v1`.
+  - Die Filius-Submission war korrekt angelegt (`task_kind=filius`, MIME `application/x.filius.fls`), blieb aber `analysis_status=pending`.
+  - `Dockerfile` kopierte `backend/filius` nicht ins Image; `docker-compose.yml` mountete `backend/filius` nicht in den Worker.
+- RED:
+  - Neuer Contract-Test `backend/tests/test_learning_worker_packaging_contract.py` -> erwartete Fails wegen fehlender Evidence-Pakete im Dockerfile und fehlendem Filius-Mount im Compose-Setup.
+- GREEN:
+  - `Dockerfile` kopiert jetzt `backend/scratch`, `backend/makecode` und `backend/filius` explizit ins Runtime-Image.
+  - `docker-compose.yml` mountet `./backend/filius:/app/backend/filius:z` für Web und Learning-Worker, analog zu Scratch/MakeCode.
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_learning_worker_packaging_contract.py backend/tests/learning_adapters/test_local_vision_filius_fls.py` -> 8 passed.
+  - `docker compose up -d --build web learning-worker` -> Web und Worker neu gebaut und gestartet.
+  - `docker ps` -> `gustav-learning-worker` healthy.
+  - Worker-Logs zeigen `fetch_remote_fls` und abgeschlossene DSPy-Synthesis statt Import-Crash.
+  - DB-Prüfung der konkreten Filius-Submission `3c6a7edf-601a-5dc6-a072-9214c72e0683` -> `analysis_status=completed`, `vision_attempts=1`, `text_body` enthält `# filius.evidence.v1`.
+
 ## Kontext / Problem
 
 GUSTAV unterstützt für besondere Aufgabenformate bereits upload-only Abgaben:

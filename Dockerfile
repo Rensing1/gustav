@@ -26,6 +26,9 @@ COPY backend/teaching ./teaching
 COPY backend/learning ./backend/learning
 COPY backend/vision ./backend/vision
 COPY backend/storage ./backend/storage
+COPY backend/scratch ./backend/scratch
+COPY backend/makecode ./backend/makecode
+COPY backend/filius ./backend/filius
 COPY backend/__init__.py ./backend/__init__.py
 
 ENV PYTHONPATH=/app:/app/backend

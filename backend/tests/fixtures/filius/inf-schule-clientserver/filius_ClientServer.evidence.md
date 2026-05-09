@@ -15,6 +15,8 @@
 - applications: 0
 - filesystem_files: 0
 - firewalls: 0
+- email_clients: 0
+- email_servers: 0
 - truncated_files: 0
 - unresolved_links: 0
 - invalid_interfaces: 0

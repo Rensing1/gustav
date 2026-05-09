@@ -15,6 +15,9 @@ import xml.etree.ElementTree as ET
 from backend.storage.filius_validation import extract_configuration_xml_bytes
 from backend.filius.topology import (
     FiliusApplication,
+    FiliusEmailAccount,
+    FiliusEmailClient,
+    FiliusEmailServer,
     FiliusFirewall,
     FiliusFirewallRule,
     FiliusFilesystemFile,
@@ -100,6 +103,8 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             lines.append(f"- applications: {len(topology.applications)}")
             lines.append(f"- filesystem_files: {len(topology.filesystem_files)}")
             lines.append(f"- firewalls: {len(topology.firewalls)}")
+            lines.append(f"- email_clients: {len(topology.email_clients)}")
+            lines.append(f"- email_servers: {len(topology.email_servers)}")
             truncated_files = sum(1 for file in topology.filesystem_files if file.truncated)
             lines.append(f"- truncated_files: {truncated_files}")
             lines.append(f"- unresolved_links: {topology.unresolved_links}")
@@ -116,6 +121,8 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             _render_dns(lines, topology)
         elif heading == "Web":
             _render_web(lines, topology)
+        elif heading == "Email":
+            _render_email(lines, topology)
         else:
             lines.append("none")
         lines.append("")
@@ -269,6 +276,67 @@ def _render_web(lines: list[str], topology: FiliusTopology) -> None:
         return
     _render_applications(lines, web_apps)
     _render_files(lines, web_files)
+
+
+def _render_email(lines: list[str], topology: FiliusTopology) -> None:
+    if not topology.email_clients and not topology.email_servers:
+        lines.append("none")
+        return
+    if topology.email_clients:
+        lines.append("- email_clients:")
+        for client in topology.email_clients:
+            lines.append(f"  - {_format_email_client(client)}")
+            _render_email_accounts(lines, client.accounts)
+    if topology.email_servers:
+        lines.append("- email_servers:")
+        for server in topology.email_servers:
+            lines.append(f"  - {_format_email_server(server)}")
+            _render_email_accounts(lines, server.accounts)
+
+
+def _format_email_client(client: FiliusEmailClient) -> str:
+    fields = (
+        ("id", client.id),
+        ("node", client.node_id),
+        ("name", client.name),
+        ("active", client.active),
+        ("accounts", str(len(client.accounts))),
+    )
+    return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
+
+
+def _format_email_server(server: FiliusEmailServer) -> str:
+    fields = (
+        ("id", server.id),
+        ("node", server.node_id),
+        ("name", server.name),
+        ("active", server.active),
+        ("mail_domain", server.mail_domain),
+        ("accounts", str(len(server.accounts))),
+    )
+    return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
+
+
+def _render_email_accounts(lines: list[str], accounts: tuple[FiliusEmailAccount, ...]) -> None:
+    if not accounts:
+        lines.append("    accounts: none")
+        return
+    lines.append("    accounts:")
+    for account in accounts:
+        lines.append(f"      - {_format_email_account(account)}")
+
+
+def _format_email_account(account: FiliusEmailAccount) -> str:
+    fields = (
+        ("id", account.id),
+        ("username", account.username),
+        ("email", account.email),
+        ("pop3_server", account.pop3_server),
+        ("pop3_port", account.pop3_port),
+        ("smtp_server", account.smtp_server),
+        ("smtp_port", account.smtp_port),
+    )
+    return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
 
 
 def _render_applications(lines: list[str], applications: list[FiliusApplication]) -> None:

@@ -268,3 +268,51 @@ def test_local_vision_filius_fls_returns_firewall_evidence_for_official_fixture(
     assert 'destination: "42.0.0.10/32"' in result.text_md
     assert "password" not in result.text_md.lower()
     assert "passwort" not in result.text_md.lower()
+
+
+def test_local_vision_filius_fls_returns_email_metadata_for_official_fixture(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fls_bytes = Path("backend/tests/fixtures/filius/filius-official-email/email_komplett.fls").read_bytes()
+    digest = sha256(fls_bytes).hexdigest()
+
+    bucket = get_submissions_bucket()
+    submission = {
+        "id": "deadbeef-dead-beef-dead-beef0000ff06",
+        "kind": "file",
+        "text_body": None,
+        "course_id": "course-1",
+        "task_id": "task-1",
+        "student_sub": "student-1",
+    }
+
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+
+    storage_key = f"{bucket}/{submission['course_id']}/{submission['task_id']}/{submission['student_sub']}/project.fls"
+    file_path = storage_root / storage_key
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_bytes(fls_bytes)
+
+    job_payload = {
+        "mime_type": FILIUS_MIME,
+        "storage_key": storage_key,
+        "size_bytes": file_path.stat().st_size,
+        "sha256": digest,
+    }
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    result: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
+
+    assert "- email_clients:" in result.text_md
+    assert "- email_servers:" in result.text_md
+    assert 'mail_domain: "senior.de"' in result.text_md
+    assert 'email: "rechner3@senior.de"' in result.text_md
+    assert "password" not in result.text_md.lower()
+    assert "passwort" not in result.text_md.lower()
+    assert "subject:" not in result.text_md.lower()

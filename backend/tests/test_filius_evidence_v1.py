@@ -185,3 +185,83 @@ def test_filius_official_firewall_fixture_keeps_source_attribution() -> None:
     assert "GPL-3.0" in attribution
     assert "dcd965f6139baef4c27cc6d3cc34106f6bebda40" in attribution
     assert "Internet_Komplett_mit_eMail_Webserver_Intranet_Portforwarding_Firewall_DHCP_DE.fls" in attribution
+
+
+def test_filius_official_dns_fixture_matches_golden_file() -> None:
+    """The official Filius DNS fixture should render byte-stable DNS evidence."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    fixture_dir = Path("backend/tests/fixtures/filius/filius-official-dns")
+    fls_bytes = (fixture_dir / "dns_server.fls").read_bytes()
+    expected = (fixture_dir / "dns_server.evidence.md").read_text(encoding="utf-8")
+
+    md = build_evidence_markdown_v1(fls_bytes)
+
+    assert md == expected
+    assert 'class: "filius.software.dns.DNSServer"' in md
+    assert 'path: "/dns/hosts"' in md
+    assert "<java" not in md
+    assert "<object" not in md
+    assert "idref" not in md
+
+
+def test_filius_official_web_fixture_matches_golden_file() -> None:
+    """The official Filius Web fixture should render byte-stable Web evidence."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    fixture_dir = Path("backend/tests/fixtures/filius/filius-official-web")
+    fls_bytes = (fixture_dir / "webserver.fls").read_bytes()
+    expected = (fixture_dir / "webserver.evidence.md").read_text(encoding="utf-8")
+
+    md = build_evidence_markdown_v1(fls_bytes)
+
+    assert md == expected
+    assert 'class: "filius.software.www.WebServer"' in md
+    assert 'path: "/webserver/index.html"' in md
+    assert "<java" not in md
+    assert "<object" not in md
+    assert "idref" not in md
+
+
+def test_filius_official_email_fixture_renders_metadata_without_secrets() -> None:
+    """Email evidence should include configuration metadata but never secrets or messages."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    fixture_dir = Path("backend/tests/fixtures/filius/filius-official-email")
+    fls_bytes = (fixture_dir / "email_komplett.fls").read_bytes()
+    expected = (fixture_dir / "email.evidence.md").read_text(encoding="utf-8")
+
+    md = build_evidence_markdown_v1(fls_bytes)
+
+    assert md == expected
+    assert "## Email" in md
+    assert "- email_clients:" in md
+    assert "- email_servers:" in md
+    assert 'mail_domain: "senior.de"' in md
+    assert 'email: "rechner3@senior.de"' in md
+    assert 'pop3_server: "141.99.50.233"' in md
+    assert "passwort" not in md.lower()
+    assert "password" not in md.lower()
+    assert "vorname" not in md.lower()
+    assert "nachname" not in md.lower()
+    assert "subject:" not in md.lower()
+    assert "huhu" not in md.lower()
+    assert "<java" not in md
+    assert "<object" not in md
+    assert "idref" not in md
+
+
+def test_filius_official_app_fixtures_keep_source_attribution() -> None:
+    """Committed upstream app fixtures must carry source and license metadata."""
+    fixtures = {
+        "filius-official-dns": "dns_server.fls",
+        "filius-official-web": "webserver.fls",
+        "filius-official-email": "email_komplett.fls",
+    }
+
+    for directory, filename in fixtures.items():
+        attribution = Path(f"backend/tests/fixtures/filius/{directory}/ATTRIBUTION.md").read_text(encoding="utf-8")
+        assert "Filius upstream repository" in attribution
+        assert "GPL-3.0" in attribution
+        assert "dcd965f6139baef4c27cc6d3cc34106f6bebda40" in attribution
+        assert filename in attribution

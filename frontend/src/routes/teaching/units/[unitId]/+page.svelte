@@ -992,6 +992,31 @@
       </form>
     </div>
   {/if}
+  {#if showCreateSectionDialog()}
+    <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Abschnitt hinzufügen">
+      <div class="workspace-unit-commandbar-popover__header">
+        <div>
+          <p class="workspace-label">Canvas</p>
+          <h2>Abschnitt hinzufügen</h2>
+        </div>
+        <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={closeCreateSectionDialog}>
+          Schließen
+        </button>
+      </div>
+      <form method="POST" action="?/createSection" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
+        <label class="workspace-field">
+          <span>Titel</span>
+          <input name="title" type="text" value={createSectionValues().title ?? ""} />
+        </label>
+        {#if actionError(form?.createSection)}
+          <p class="workspace-note workspace-note--error">{actionError(form?.createSection)}</p>
+        {/if}
+        <div class="workspace-unit-commandbar-popover__actions">
+          <button class="workspace-link-action" type="submit">Anlegen</button>
+        </div>
+      </form>
+    </div>
+  {/if}
 {/snippet}
 
 <TeacherGraphWorkspaceFrame
@@ -1147,29 +1172,6 @@
           <button class="workspace-link-action workspace-link-action--danger" type="submit">Lerneinheit löschen</button>
         </form>
       </div>
-    </div>
-  </div>
-{/if}
-
-{#if showCreateSectionDialog()}
-  <div class="dialog-backdrop">
-    <div class="dialog-card">
-      <div class="dialog-card__header">
-        <div><p class="workspace-label">Canvas</p><h2>Abschnitt hinzufügen</h2></div>
-        <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={closeCreateSectionDialog}>Schließen</button>
-      </div>
-      <form method="POST" action="?/createSection" class="workspace-form" use:enhance={enhanceGraphForm}>
-        <label class="workspace-field">
-          <span>Titel</span>
-          <input name="title" type="text" value={createSectionValues().title ?? ""} />
-        </label>
-        {#if actionError(form?.createSection)}
-          <p class="workspace-note workspace-note--error">{actionError(form?.createSection)}</p>
-        {/if}
-        <div class="dialog-card__actions">
-          <button class="workspace-link-action" type="submit">Anlegen</button>
-        </div>
-      </form>
     </div>
   </div>
 {/if}

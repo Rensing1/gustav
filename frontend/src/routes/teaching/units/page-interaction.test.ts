@@ -90,6 +90,8 @@ describe("teacher units catalog page", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Neue Lerneinheit" }));
 
     expect(screen.getByRole("dialog", { name: "Neue Lerneinheit" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Modular" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Linear" })).not.toBeChecked();
     expect(goto).not.toHaveBeenCalled();
   });
 

@@ -38,6 +38,15 @@ describe("teacher unit graph route contract", () => {
     expect(source).not.toContain("window.history.replaceState");
   });
 
+  it("renders linear section creation in the commandbar popover instead of the legacy dialog shell", () => {
+    const source = routeSource();
+
+    expect(source).toContain('role="dialog" aria-label="Abschnitt hinzufügen"');
+    expect(source).toContain('class="workspace-unit-commandbar-popover"');
+    expect(source).toContain('action="?/createSection"');
+    expect(source).not.toContain('{#if showCreateSectionDialog()}\n  <div class="dialog-backdrop">');
+  });
+
   it("updates successful graph action workspaces through route data and resets the SvelteFlow viewport once", () => {
     const source = routeSource();
 

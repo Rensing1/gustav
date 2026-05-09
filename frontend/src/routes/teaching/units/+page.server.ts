@@ -37,12 +37,22 @@ export const actions: Actions = {
     const form = await request.formData();
     const title = String(form.get("title") || "").trim();
     const summary = String(form.get("summary") || "").trim();
+    const unitType = String(form.get("unit_type") || "modular").trim();
 
     if (!title) {
       return fail(400, {
         createUnit: {
           error: "Bitte gib einen Titel für die Lerneinheit ein.",
-          values: { title, summary }
+          values: { title, summary, unit_type: unitType }
+        }
+      });
+    }
+
+    if (unitType !== "linear" && unitType !== "modular") {
+      return fail(400, {
+        createUnit: {
+          error: "Bitte wähle einen gültigen Typ für die Lerneinheit.",
+          values: { title, summary, unit_type: unitType }
         }
       });
     }
@@ -55,7 +65,8 @@ export const actions: Actions = {
       },
       body: JSON.stringify({
         title,
-        summary: summary || null
+        summary: summary || null,
+        unit_type: unitType
       })
     });
 
@@ -63,7 +74,7 @@ export const actions: Actions = {
       return fail(response.status, {
         createUnit: {
           error: "Die Lerneinheit konnte gerade nicht erstellt werden.",
-          values: { title, summary }
+          values: { title, summary, unit_type: unitType }
         }
       });
     }

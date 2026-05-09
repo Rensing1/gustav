@@ -53,6 +53,11 @@
   $effect(() => {
     queryDraft = data.catalog.query;
   });
+
+  function createUnitType(): "linear" | "modular" {
+    const raw = form?.createUnit?.values?.unit_type;
+    return raw === "linear" ? "linear" : "modular";
+  }
 </script>
 
 <svelte:head>
@@ -117,6 +122,18 @@
           <span>Zusammenfassung</span>
           <textarea name="summary" rows="4">{form?.createUnit?.values?.summary ?? ""}</textarea>
         </label>
+
+        <fieldset class="workspace-field">
+          <span>Typ</span>
+          <label>
+            <input name="unit_type" type="radio" value="modular" checked={createUnitType() === "modular"} />
+            Modular
+          </label>
+          <label>
+            <input name="unit_type" type="radio" value="linear" checked={createUnitType() === "linear"} />
+            Linear
+          </label>
+        </fieldset>
 
         {#if form?.createUnit?.error}
           <p class="workspace-form-error">{form.createUnit.error}</p>

@@ -24,7 +24,7 @@
         <p class="learning-submission-artifact__eyebrow">Strukturansicht</p>
         <p class="learning-submission-artifact__meta">{artifact.fileSummary}</p>
       </div>
-      <div class={`markdown-prose ${artifact.kind}-evidence`}>
+      <div class={`markdown-prose structure-evidence ${artifact.kind}-evidence`}>
         {@html artifact.html}
       </div>
     {/if}

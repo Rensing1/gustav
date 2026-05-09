@@ -554,6 +554,32 @@ erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
     - OpenAI-smoke: 2 passed.
     - E2E: 13 passed.
 
+### 2026-05-09 — Slice 24: Evidence-Konsistenz und MIME-Konstanten
+
+- Geprüfte Codeabschnitte vor Implementierung:
+  - `frontend/src/lib/components/learning-unit/LearningSubmissionArtifactView.svelte`: gemeinsames Rendering für Scratch-/Filius-Strukturansichten.
+  - `frontend/src/lib/styles/app.css`: bestehende `.scratch-evidence`-Styles und fehlende Filius-Entsprechung.
+  - `frontend/src/lib/utils/submission-artifacts.ts` und `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte`: Frontend-MIME-Entscheidungen für Spezialabgaben.
+  - `backend/storage/learning_policy.py`, `backend/storage/*_validation.py`, `backend/web/routes/learning.py`, `backend/web/main.py`, `backend/learning/repo_db.py`, `backend/learning/adapters/local_vision.py`: Backend-MIME-Konstanten, Upload-Policy, Repo-Guard und Worker-Routing.
+- Befund:
+  - Filius-Evidence wurde mit `filius-evidence` gerendert, bekam aber nicht die bestehenden Strukturstyles von Scratch.
+  - Filius-, Scratch- und MakeCode-MIME-Strings waren an mehreren Runtime-Stellen verteilt.
+  - OpenAPI, Migrationen, Supabase-Config und Legacy-JS bleiben absichtlich literal-basiert, weil sie Verträge/Konfiguration bzw. ein separater Browser-Script-Kontext sind.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_learning_storage_policy_contract.py` -> erwarteter Fail wegen fehlendem `backend.storage.mime_types`.
+  - `npm test -- --run src/lib/utils/submission-artifacts.test.ts src/lib/components/learning-unit/LearningSubmissionWorkspace.test.ts` -> erwartete Fails wegen fehlendem `submission-mime-types.ts` und fehlender `structure-evidence`-Klasse.
+- GREEN:
+  - `backend/storage/mime_types.py` bündelt zentrale Learning-Upload-MIME-Konstanten und Allowlist-Sets.
+  - Backend-Runtime-Module importieren Scratch/MakeCode/Filius/PDF/Image-MIMEs aus `mime_types.py`; Validator-Module behalten ihre bisherigen Konstantennamen als Re-Export-kompatible Imports.
+  - `frontend/src/lib/utils/submission-mime-types.ts` bündelt die Svelte/TS-MIME-Konstanten für Upload- und Artifact-Fluss.
+  - `LearningSubmissionArtifactView.svelte` rendert Struktur-Evidence mit gemeinsamer Klasse `structure-evidence` plus spezifischem Hook (`scratch-evidence`/`filius-evidence`).
+  - `app.css` nutzt `structure-evidence` für die bisherigen Strukturstyles, damit Scratch und Filius konsistent dargestellt werden.
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_learning_storage_policy_contract.py backend/tests/test_filius_upload_client_surface_contract.py backend/tests/test_learning_submission_kind_guard.py` -> 13 passed.
+  - `.venv/bin/pytest -q backend/tests/test_learning_filius_fls_upload_intent.py backend/tests/test_learning_filius_fls_submission_api.py backend/tests/learning_adapters/test_local_vision_filius_fls.py backend/tests/test_filius_evidence_v1.py` -> 25 passed.
+  - `npm test -- --run src/lib/utils/submission-artifacts.test.ts src/lib/components/learning-unit/LearningSubmissionWorkspace.test.ts` -> 11 passed.
+  - `npm test -- --run src/lib/components/learning-unit/LearningTaskCard.test.ts src/lib/utils/submission-artifacts.test.ts` -> 34 passed.
+
 ## Kontext / Problem
 
 GUSTAV unterstützt für besondere Aufgabenformate bereits upload-only Abgaben:

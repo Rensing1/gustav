@@ -2890,33 +2890,33 @@ select {
   white-space: pre;
 }
 
-.scratch-evidence {
+.structure-evidence {
   font-size: calc(0.92rem * var(--learning-unit-font-scale));
   line-height: 1.58;
 }
 
-.scratch-evidence > * {
+.structure-evidence > * {
   margin: 0;
 }
 
-.scratch-evidence > h1:first-child {
+.structure-evidence > h1:first-child {
   display: none;
 }
 
-.scratch-evidence h2 {
+.structure-evidence h2 {
   margin-top: 0.9rem;
   padding-top: 0.45rem;
   border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
   font-size: calc(1rem * var(--learning-unit-font-scale));
 }
 
-.scratch-evidence h2:first-of-type {
+.structure-evidence h2:first-of-type {
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
 }
 
-.scratch-evidence h3 {
+.structure-evidence h3 {
   margin-top: 0.7rem;
   color: var(--color-text-muted);
   font-size: calc(0.88rem * var(--learning-unit-font-scale));

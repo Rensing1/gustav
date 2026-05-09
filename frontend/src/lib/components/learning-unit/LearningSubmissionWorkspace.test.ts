@@ -223,6 +223,7 @@ describe("LearningSubmissionWorkspace", () => {
       }
     });
 
+    expect(document.querySelector(".structure-evidence")).not.toBeNull();
     expect(document.querySelector(".scratch-evidence")).not.toBeNull();
     expect(screen.queryByText("scratch.evidence.v2")).toBeNull();
     expect(screen.getByText("Target Stage")).toBeInTheDocument();
@@ -259,6 +260,7 @@ describe("LearningSubmissionWorkspace", () => {
       }
     });
 
+    expect(document.querySelector(".structure-evidence")).not.toBeNull();
     expect(document.querySelector(".filius-evidence")).not.toBeNull();
     expect(screen.queryByText("filius.evidence.v1")).toBeNull();
     expect(screen.getByText("Ground Frame")).toBeInTheDocument();

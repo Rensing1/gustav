@@ -17,6 +17,7 @@
 - firewalls: 3
 - email_clients: 0
 - email_servers: 0
+- email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
 - invalid_interfaces: 2
@@ -158,9 +159,9 @@ none
 
 ## Web
 - applications:
-  - id: "app1"; node: "n2"; class: "filius.software.www.WebServer"; name: "Thread-95"; active: "true"
-  - id: "app2"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-105"; active: "true"
-  - id: "app3"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-110"; active: "true"
+  - id: "app1"; node: "n2"; class: "filius.software.www.WebServer"; name: "Thread-95"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app2"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-105"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app3"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-110"; installed: "true"; active: "true"; active_source: "persisted"
 
 ## Email
 none

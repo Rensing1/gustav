@@ -482,6 +482,46 @@ erweitert, neue Abstraktionen nur bei belegtem Nutzen eingeführt.
     - OpenAI-compatible endpoint smoke: 2 passed.
     - Docker/E2E: 13 passed.
 
+### 2026-05-09 — Slice 22: Evidence-Qualität nach LLM-Evaluation
+
+- Geprüfte Codeabschnitte vor Implementierung:
+  - `backend/filius/topology.py`: E-Mail-Client-/Server-Extraktion, Dateisystem-Parser, App-Status.
+  - `backend/filius/evidence_v1.py`: Parser-Notes, DNS-/Web-App-Rendering, E-Mail-Rendering.
+  - `backend/tests/test_filius_evidence_v1.py`: Golden-File-Konvention und Security-Assertions.
+  - `backend/learning/adapters/dspy/signatures.py` und `docs/references/LLM-Prompts.md`: Feedback-Synthesis-Prompt-Vertrag.
+- Befund:
+  - Die echte inf-schule-Datei `email_netzwerk.fls` speichert ältere E-Mail-Client-Konten nicht in `EmailAnwendung.kontoListe`, sondern als root-nahe Filius-Datei `konten.txt` im jeweiligen Client-Dateisystem.
+  - Die Serverdatei `/mailserver/konten.txt` enthält ebenfalls Kontendaten, darf aber nicht roh gerendert werden; für Serverkonten bleibt `EmailServer.listeBenutzerkonten` die sauberere Quelle.
+  - Die neuere offizielle Fixture `email_komplett.fls` nutzt `EmailAnwendung.kontoListe` und bleibt damit bereits abgedeckt.
+  - `active: "unknown"` bei installierten Anwendungen wurde vom Feedback-LLM teils als möglicherweise inaktiver Dienst interpretiert. Tatsächlich ist die Installation belegt; nur der Aktivstatus ist in manchen Filius-Versionen nicht persistiert.
+  - In der Routing-Evaluation erkannte die strukturierte Analyse fehlende Router-III-Routen, aber die Feedback-Synthese formulierte teilweise konkrete falsche Next-Hop-/Interface-Vorschläge.
+- Entscheidung:
+  - E-Mail-Client-Konten werden zusätzlich aus root-`/konten.txt` gelesen, bounded und ohne Passwörter/Vor-/Nachnamen/Rohdatei.
+  - Parser-Notes bekommen einen Zähler für E-Mail-Clients ohne Konto, damit fehlende Client-Konfiguration ausdrücklich sichtbar ist.
+  - DNS-/Web-App-Evidence unterscheidet künftig `installed: "true"` von `active` und `active_source`, ohne das Schema `filius.evidence.v1` zu ändern.
+  - Der Feedback-Synthesis-Prompt wird gehärtet: konkrete technische Vorschläge nur bei eindeutiger Belegbarkeit; bei Unsicherheit allgemeiner formulieren.
+- RED-Ziele:
+  - Ein synthetischer Legacy-E-Mail-Test erwartet Client-Konten aus root-`konten.txt`.
+  - Der bestehende DNS/Web-Golden-Test erwartet `installed` und `active_source`.
+  - Ein Prompt-Contract-Test erwartet die neue Halluzinationsbremse in Signature und Referenzdoku.
+- RED:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py::test_filius_legacy_email_client_konten_file_renders_metadata_without_secrets backend/tests/test_filius_evidence_v1.py::test_filius_synthetic_dns_web_fixture_renders_safe_dns_and_web_evidence backend/tests/learning_adapters/test_signature_docstrings_match_prompt_reference.py::test_feedback_synthesis_contract_avoids_unverifiable_technical_suggestions` -> 3 erwartete Fails.
+- GREEN:
+  - `backend/filius/topology.py` liest ältere E-Mail-Client-Konten zusätzlich aus root-`/konten.txt` und ignoriert `/mailserver/konten.txt` für Client-Konten.
+  - `backend/filius/evidence_v1.py` rendert `email_clients_without_accounts` sowie `installed`/`active_source` für DNS-/Web-Anwendungen.
+  - `FeedbackSynthesisSignature` und `docs/references/LLM-Prompts.md` verbieten konkrete technische Werte, wenn sie nicht eindeutig aus Analyse oder Schülerabgabe belegt sind.
+  - Golden-Files wurden aus dem Renderer neu erzeugt.
+- Verifikation:
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py::test_filius_legacy_email_client_konten_file_renders_metadata_without_secrets backend/tests/test_filius_evidence_v1.py::test_filius_synthetic_dns_web_fixture_renders_safe_dns_and_web_evidence backend/tests/learning_adapters/test_signature_docstrings_match_prompt_reference.py::test_feedback_synthesis_contract_avoids_unverifiable_technical_suggestions` -> 3 passed.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py backend/tests/learning_adapters/test_signature_docstrings_match_prompt_reference.py` -> 27 passed.
+  - `.venv/bin/pytest -q backend/tests/test_filius_evidence_v1.py backend/tests/learning_adapters/test_local_vision_filius_fls.py backend/tests/test_filius_fls_validation.py backend/tests/test_learning_filius_fls_submission_api.py backend/tests/learning_adapters/test_signature_docstrings_match_prompt_reference.py backend/tests/learning_adapters/test_feedback_program_dspy.py backend/tests/learning_adapters/test_feedback_program_dspy_prompt.py` -> 42 passed.
+  - `git diff --check` -> passed.
+  - `make verify` -> passed:
+    - Backend: 1538 passed, 33 skipped.
+    - Node/H5P: 15 passed.
+    - Supabase/OpenAI-smoke: 2 passed.
+    - E2E: 13 passed.
+
 ## Kontext / Problem
 
 GUSTAV unterstützt für besondere Aufgabenformate bereits upload-only Abgaben:

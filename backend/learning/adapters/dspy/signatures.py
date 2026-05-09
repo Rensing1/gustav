@@ -109,6 +109,9 @@ if dspy is not None and hasattr(dspy, "Signature"):
               (2) `**Das kannst du besser:** ...`
             - Stütze dich auf die Analysewerte (`criteria_results`) und die Aufgabenstellung.
             - Der lehrkraftseitige KI-Kontext darf nicht zitiert werden.
+            - Nenne konkrete technische Werte wie IP-Adressen, Ports, Interfaces oder Next-Hops
+              nur, wenn sie eindeutig in der Analyse oder Schülerabgabe belegt sind.
+              Wenn ein technischer nächster Schritt unsicher ist, formuliere allgemeiner.
             - Wiederhole den Schülertext nicht vollständig; formuliere kurz, konkret
               und ermutigend in deutscher Sprache.
 

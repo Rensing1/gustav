@@ -99,3 +99,13 @@ def test_signature_docstrings_match_reference(monkeypatch: pytest.MonkeyPatch, s
     cls = getattr(sigs, signature_name)
     doc = inspect.getdoc(cls) or ""
     assert doc == docs_blocks[signature_name]
+
+
+def test_feedback_synthesis_contract_avoids_unverifiable_technical_suggestions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Feedback prose should not invent concrete network values from weak evidence."""
+    _install_fake_dspy(monkeypatch)
+    sigs = _load_signatures_module()
+    doc = inspect.getdoc(getattr(sigs, "FeedbackSynthesisSignature")) or ""
+
+    assert "Nenne konkrete technische Werte" in doc
+    assert "nur, wenn sie eindeutig" in doc

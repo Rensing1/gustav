@@ -17,6 +17,7 @@
 - firewalls: 0
 - email_clients: 4
 - email_servers: 2
+- email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
 - invalid_interfaces: 8
@@ -135,13 +136,13 @@ none
 
 ## DNS
 - applications:
-  - id: "app6"; node: "n7"; class: "filius.software.dns.DNSServer"; name: "Thread-242"; active: "true"
+  - id: "app6"; node: "n7"; class: "filius.software.dns.DNSServer"; name: "Thread-242"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
   - id: "file3"; node: "n7"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "172"; sha256: "3f2713270030baf0cd7eee33f16e321655c7e94b849758a907ee26ec34e9f2be"
 
 ## Web
 - applications:
-  - id: "app1"; node: "n1"; class: "filius.software.www.WebServer"; name: "Thread-98"; active: "true"
+  - id: "app1"; node: "n1"; class: "filius.software.www.WebServer"; name: "Thread-98"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
   - id: "file1"; node: "n1"; path: "/webserver/index.html"; type: "html"; content_kind: "text"; size_bytes: "556"; sha256: "dedcd01878af5e3857f6137200baafb425e585b2df168cbdfe3ea198c4e86ec3"; content: "&lt;html&gt;
   &lt;head&gt;

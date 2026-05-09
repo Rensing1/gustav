@@ -17,6 +17,7 @@
 - firewalls: 0
 - email_clients: 0
 - email_servers: 0
+- email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
 - invalid_interfaces: 6
@@ -122,10 +123,10 @@ none
 
 ## DNS
 - applications:
-  - id: "app1"; node: "n2"; class: "filius.software.dns.DNSServer"; name: "unknown"; active: "true"
-  - id: "app3"; node: "n5"; class: "filius.software.dns.DNSServer"; name: "Thread-97"; active: "true"
-  - id: "app4"; node: "n7"; class: "filius.software.dns.DNSServer"; name: "Thread-98"; active: "true"
-  - id: "app5"; node: "n8"; class: "filius.software.dns.DNSServer"; name: "Thread-99"; active: "true"
+  - id: "app1"; node: "n2"; class: "filius.software.dns.DNSServer"; name: "unknown"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app3"; node: "n5"; class: "filius.software.dns.DNSServer"; name: "Thread-97"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app4"; node: "n7"; class: "filius.software.dns.DNSServer"; name: "Thread-98"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app5"; node: "n8"; class: "filius.software.dns.DNSServer"; name: "Thread-99"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
   - id: "file1"; node: "n2"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "83"; sha256: "499739202bde71cecf83d0db8bc6c557a0337d17bf086b3de02ee84ba078d64f"
   - id: "file4"; node: "n5"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "46"; sha256: "382059e73f110b89d56c0e9a065c900f41f4db75b8039e0deb6d6db1b870105a"
@@ -134,7 +135,7 @@ none
 
 ## Web
 - applications:
-  - id: "app2"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-149"; active: "true"
+  - id: "app2"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-149"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
   - id: "file2"; node: "n3"; path: "/webserver/index.html"; type: "html"; content_kind: "text"; size_bytes: "556"; sha256: "dedcd01878af5e3857f6137200baafb425e585b2df168cbdfe3ea198c4e86ec3"; content: "&lt;html&gt;
   &lt;head&gt;

@@ -17,6 +17,7 @@
 - firewalls: 0
 - email_clients: 0
 - email_servers: 0
+- email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
 - invalid_interfaces: 0
@@ -43,14 +44,14 @@ none
 
 ## DNS
 - applications:
-  - id: "app1"; node: "n1"; class: "filius.software.dns.DNSServer"; name: "DNS"; active: "unknown"
+  - id: "app1"; node: "n1"; class: "filius.software.dns.DNSServer"; name: "DNS"; installed: "true"; active: "unknown"; active_source: "not_persisted"
 - files:
   - id: "file1"; node: "n1"; path: "/dns/hosts"; type: "text"; content_kind: "text"; size_bytes: "55"; sha256: "373ed99201e5ca9dfcbf35d51983079fa12de52cb3c95fe0ec23204f6efa80b6"; content: "example.test 192.168.0.10
 www.example.test 192.168.0.10"
 
 ## Web
 - applications:
-  - id: "app2"; node: "n1"; class: "filius.software.www.WebServer"; name: "Web"; active: "true"
+  - id: "app2"; node: "n1"; class: "filius.software.www.WebServer"; name: "Web"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
   - id: "file2"; node: "n1"; path: "/webserver/index.html"; type: "html"; content_kind: "text"; size_bytes: "46"; sha256: "56355ba550bca81b35d8aef2b5ebcb55a8694991f4ef9e9002337816c03c8cca"; content: "&lt;html&gt;&lt;body&gt;\"Hallo\" & willkommen&lt;/body&gt;&lt;/html&gt;"
   - id: "file3"; node: "n1"; path: "/webserver/logo.png"; type: "png"; content_kind: "binary"; size_bytes: "32"; sha256: "dfa249f4e1ad4fb682255ab739cb92abb56e11a698535d077cdb8fc01b4938ba"

@@ -105,6 +105,7 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             lines.append(f"- firewalls: {len(topology.firewalls)}")
             lines.append(f"- email_clients: {len(topology.email_clients)}")
             lines.append(f"- email_servers: {len(topology.email_servers)}")
+            lines.append(f"- email_clients_without_accounts: {topology.email_clients_without_accounts}")
             truncated_files = sum(1 for file in topology.filesystem_files if file.truncated)
             lines.append(f"- truncated_files: {truncated_files}")
             lines.append(f"- unresolved_links: {topology.unresolved_links}")
@@ -349,7 +350,9 @@ def _render_applications(lines: list[str], applications: list[FiliusApplication]
             ("node", app.node_id),
             ("class", app.class_name),
             ("name", app.name),
+            ("installed", app.installed),
             ("active", app.active),
+            ("active_source", app.active_source),
         )
         rendered_fields = "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
         lines.append(f"  - {rendered_fields}")

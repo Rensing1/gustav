@@ -17,6 +17,7 @@
 - firewalls: 0
 - email_clients: 0
 - email_servers: 0
+- email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
 - invalid_interfaces: 1
@@ -66,7 +67,7 @@ none
 
 ## Web
 - applications:
-  - id: "app1"; node: "n1"; class: "filius.software.www.WebServer"; name: "Thread-288"; active: "true"
+  - id: "app1"; node: "n1"; class: "filius.software.www.WebServer"; name: "Thread-288"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
   - id: "file1"; node: "n1"; path: "/webserver/index.html"; type: "html"; content_kind: "text"; size_bytes: "442"; sha256: "93144bf4d7b2608f142074653055fb063591365d35859c2c2bc8fc9e1687d41b"; content: "&lt;html&gt;
   &lt;head&gt;

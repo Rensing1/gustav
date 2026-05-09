@@ -88,7 +88,9 @@ class FiliusApplication:
     class_name: str
     kind: str
     name: str
+    installed: str
     active: str
+    active_source: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +184,7 @@ class FiliusTopology:
     firewalls: tuple[FiliusFirewall, ...] = ()
     email_clients: tuple[FiliusEmailClient, ...] = ()
     email_servers: tuple[FiliusEmailServer, ...] = ()
+    email_clients_without_accounts: int = 0
     unresolved_links: int = 0
     invalid_interfaces: int = 0
 
@@ -323,6 +326,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
         firewalls=tuple(firewalls),
         email_clients=tuple(email_clients),
         email_servers=tuple(email_servers),
+        email_clients_without_accounts=sum(1 for client in email_clients if not client.accounts),
         unresolved_links=unresolved_links,
         invalid_interfaces=invalid_interfaces,
     )
@@ -400,6 +404,7 @@ def _installed_applications(hardware: ET.Element, *, node_id: str, start_index: 
             continue
         app_object = entry.find("./object")
         value_source = app_object if app_object is not None else entry
+        active = _property_text(value_source, "aktiv")
         applications.append(
             FiliusApplication(
                 id=f"app{app_index}",
@@ -407,7 +412,9 @@ def _installed_applications(hardware: ET.Element, *, node_id: str, start_index: 
                 class_name=class_name,
                 kind=kind,
                 name=_property_text(value_source, "name") or "unknown",
-                active=_property_text(value_source, "aktiv") or "unknown",
+                installed="true",
+                active=active or "unknown",
+                active_source="persisted" if active is not None else "not_persisted",
             )
         )
     return applications
@@ -655,13 +662,16 @@ def _email_clients(hardware: ET.Element, *, node_id: str, start_index: int) -> l
     clients: list[FiliusEmailClient] = []
     for app_object in _installed_application_objects(hardware, "filius.software.email.EmailAnwendung"):
         client_id = f"mailc{start_index + len(clients)}"
+        accounts = _email_client_accounts(app_object, owner_id=client_id)
+        if not accounts:
+            accounts = _email_client_accounts_from_konten_file(hardware, owner_id=client_id)
         clients.append(
             FiliusEmailClient(
                 id=client_id,
                 node_id=node_id,
                 name=_property_text(app_object, "name") or "unknown",
                 active=_property_text(app_object, "aktiv") or "unknown",
-                accounts=tuple(_email_client_accounts(app_object, owner_id=client_id)),
+                accounts=tuple(accounts),
             )
         )
     return clients
@@ -750,6 +760,83 @@ def _email_server_accounts(app_object: ET.Element, *, owner_id: str, mail_domain
             )
         )
     return accounts
+
+
+def _email_client_accounts_from_konten_file(hardware: ET.Element, *, owner_id: str) -> list[FiliusEmailAccount]:
+    accounts: list[FiliusEmailAccount] = []
+    for path, content in _filesystem_text_files(hardware):
+        if path != "/konten.txt":
+            continue
+        for line in content.splitlines():
+            account = _build_email_account_from_konten_line(
+                line,
+                account_id=f"{owner_id}-a{len(accounts) + 1}",
+            )
+            if account is not None:
+                accounts.append(account)
+    return accounts
+
+
+def _filesystem_text_files(hardware: ET.Element) -> list[tuple[str, str]]:
+    system_software = _find_direct_property_element(hardware, "systemSoftware")
+    filesystem = _find_direct_property_element(system_software, "dateisystem")
+    working_directory = _find_direct_property_element(filesystem, "arbeitsVerzeichnis")
+    if working_directory is None:
+        return []
+
+    files: list[tuple[str, str]] = []
+    for root_entry in working_directory.findall("./void"):
+        node = root_entry.find("./object")
+        if node is not None:
+            _collect_filesystem_text_files(node, path_parts=(), files=files)
+    return files
+
+
+def _collect_filesystem_text_files(
+    tree_node: ET.Element, *, path_parts: tuple[str, ...], files: list[tuple[str, str]]
+) -> None:
+    user_object = _find_direct_property_element(tree_node, "userObject")
+    if user_object is None:
+        return
+
+    file_object = user_object.find("./object")
+    if file_object is not None and file_object.attrib.get("class") == "filius.software.system.Datei":
+        file_name = _property_text(file_object, "name") or "unknown"
+        file_type = _property_text(file_object, "dateiTyp") or "unknown"
+        file_path = "/" + "/".join((*path_parts, file_name))
+        if _is_text_file(file_path, file_type):
+            files.append((file_path, _property_text(file_object, "dateiInhalt") or ""))
+        return
+
+    folder = user_object.find("./string")
+    folder_name = (folder.text or "").strip() if folder is not None else ""
+    if not folder_name:
+        return
+    next_parts = (*path_parts, folder_name)
+    for child_entry in tree_node.findall("./void"):
+        if child_entry.attrib.get("method") != "add":
+            continue
+        child_node = child_entry.find("./object")
+        if child_node is not None:
+            _collect_filesystem_text_files(child_node, path_parts=next_parts, files=files)
+
+
+def _build_email_account_from_konten_line(line: str, *, account_id: str) -> FiliusEmailAccount | None:
+    parts = [part.strip() for part in (line or "").split(";")]
+    if len(parts) < 9:
+        return None
+    pop3_server, smtp_server, pop3_port, smtp_port, username, _password, _unused, _display_name, email = parts[:9]
+    if not username and not email:
+        return None
+    return FiliusEmailAccount(
+        id=account_id,
+        username=_normalize_optional(username),
+        email=_normalize_optional(email),
+        pop3_server=_normalize_optional(pop3_server),
+        pop3_port=_normalize_optional(pop3_port),
+        smtp_server=_normalize_optional(smtp_server),
+        smtp_port=_normalize_optional(smtp_port),
+    )
 
 
 def _build_email_account(

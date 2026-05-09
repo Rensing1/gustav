@@ -17,6 +17,7 @@
 - firewalls: 9
 - email_clients: 4
 - email_servers: 2
+- email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
 - invalid_interfaces: 0
@@ -373,25 +374,25 @@
 
 ## DNS
 - applications:
-  - id: "app9"; node: "n10"; class: "filius.software.dns.DNSServer"; name: "Thread-2096"; active: "true"
-  - id: "app14"; node: "n14"; class: "filius.software.dns.DNSServer"; name: "Thread-7347"; active: "true"
+  - id: "app9"; node: "n10"; class: "filius.software.dns.DNSServer"; name: "Thread-2096"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app14"; node: "n14"; class: "filius.software.dns.DNSServer"; name: "Thread-7347"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
   - id: "file1"; node: "n10"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "209"; sha256: "4e1db13eb52d6893611e28eae8ec1a84d06a9fe9de641a9706d526968c23d962"
   - id: "file6"; node: "n14"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "32"; sha256: "922d1592dbf4b6bc55a698c69070dc1fcf3b477c76b37ce4a9cf72ec12a84712"
 
 ## Web
 - applications:
-  - id: "app3"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-17"; active: "true"
-  - id: "app4"; node: "n5"; class: "filius.software.www.WebServer"; name: "Thread-40"; active: "true"
-  - id: "app5"; node: "n6"; class: "filius.software.www.WebServer"; name: "Thread-45"; active: "true"
-  - id: "app6"; node: "n7"; class: "filius.software.www.WebServer"; name: "Thread-50"; active: "true"
-  - id: "app7"; node: "n8"; class: "filius.software.www.WebServer"; name: "Thread-67"; active: "true"
-  - id: "app8"; node: "n9"; class: "filius.software.www.WebServer"; name: "Thread-72"; active: "true"
-  - id: "app10"; node: "n11"; class: "filius.software.www.WebServer"; name: "Thread-2362"; active: "true"
-  - id: "app13"; node: "n14"; class: "filius.software.www.WebServer"; name: "Thread-835"; active: "true"
-  - id: "app15"; node: "n15"; class: "filius.software.www.WebServer"; name: "Thread-1134"; active: "true"
-  - id: "app18"; node: "n22"; class: "filius.software.www.WebServer"; name: "Thread-9435"; active: "true"
-  - id: "app19"; node: "n23"; class: "filius.software.www.WebServer"; name: "Thread-1713"; active: "true"
+  - id: "app3"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-17"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app4"; node: "n5"; class: "filius.software.www.WebServer"; name: "Thread-40"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app5"; node: "n6"; class: "filius.software.www.WebServer"; name: "Thread-45"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app6"; node: "n7"; class: "filius.software.www.WebServer"; name: "Thread-50"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app7"; node: "n8"; class: "filius.software.www.WebServer"; name: "Thread-67"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app8"; node: "n9"; class: "filius.software.www.WebServer"; name: "Thread-72"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app10"; node: "n11"; class: "filius.software.www.WebServer"; name: "Thread-2362"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app13"; node: "n14"; class: "filius.software.www.WebServer"; name: "Thread-835"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app15"; node: "n15"; class: "filius.software.www.WebServer"; name: "Thread-1134"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app18"; node: "n22"; class: "filius.software.www.WebServer"; name: "Thread-9435"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app19"; node: "n23"; class: "filius.software.www.WebServer"; name: "Thread-1713"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
   - id: "file2"; node: "n11"; path: "/webserver/index.html"; type: "html"; content_kind: "text"; size_bytes: "499"; sha256: "ee6f3fc8f04220002649d5638eb41b57a723cf1ce135ddca395c78a187886f82"; content: "&lt;html&gt;
   &lt;head&gt;
@@ -434,14 +435,18 @@
 
 ## Email
 - email_clients:
-  - id: "mailc1"; node: "n1"; name: "Thread-4572"; active: "unknown"; accounts: "0"
-    accounts: none
-  - id: "mailc2"; node: "n3"; name: "Thread-4569"; active: "unknown"; accounts: "0"
-    accounts: none
-  - id: "mailc3"; node: "n16"; name: "Thread-1627"; active: "unknown"; accounts: "0"
-    accounts: none
-  - id: "mailc4"; node: "n17"; name: "Thread-1699"; active: "unknown"; accounts: "0"
-    accounts: none
+  - id: "mailc1"; node: "n1"; name: "Thread-4572"; active: "unknown"; accounts: "1"
+    accounts:
+      - id: "mailc1-a1"; username: "herbert"; email: "herbert@gmx.de"; pop3_server: "mail.gmx.de"; pop3_port: "110"; smtp_server: "mail.gmx.de"; smtp_port: "25"
+  - id: "mailc2"; node: "n3"; name: "Thread-4569"; active: "unknown"; accounts: "1"
+    accounts:
+      - id: "mailc2-a1"; username: "frimp"; email: "frimp@webmail.de"; pop3_server: "mail.webmail.de"; pop3_port: "110"; smtp_server: "mail.webmail.de"; smtp_port: "25"
+  - id: "mailc3"; node: "n16"; name: "Thread-1627"; active: "unknown"; accounts: "1"
+    accounts:
+      - id: "mailc3-a1"; username: "george"; email: "george@gmx.de"; pop3_server: "mail.gmx.de"; pop3_port: "110"; smtp_server: "mail.gmx.de"; smtp_port: "25"
+  - id: "mailc4"; node: "n17"; name: "Thread-1699"; active: "unknown"; accounts: "1"
+    accounts:
+      - id: "mailc4-a1"; username: "herbert"; email: "herbert@gmx.de"; pop3_server: "mail.gmx.de"; pop3_port: "110"; smtp_server: "mail.gmx.de"; smtp_port: "25"
 - email_servers:
   - id: "mails1"; node: "n12"; name: "Thread-4564"; active: "true"; mail_domain: "gmx.de"; accounts: "2"
     accounts:

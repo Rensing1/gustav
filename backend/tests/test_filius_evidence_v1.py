@@ -22,6 +22,82 @@ MINIMAL_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 </java>
 """
 
+LEGACY_EMAIL_CLIENT_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<java version="17" class="java.beans.XMLDecoder">
+  <string>1.12.4</string>
+  <object class="filius.gui.netzwerksicht.GUIKnotenItem" id="GUIKnotenItem0">
+    <void property="imageLabel">
+      <object class="filius.gui.netzwerksicht.JSidebarButton">
+        <void property="text"><string>Alice</string></void>
+        <void property="toolTipText">
+          <string>&lt;html&gt;&lt;pre&gt;IP-Adresse(n)/Netzmaske (MAC):
+ 172.16.1.10 / 255.255.255.0 (AA:BB:CC:DD:EE:01)
+Gateway:
+DNS-Server: 172.16.1.1&lt;/pre&gt;&lt;/html&gt;</string>
+        </void>
+        <void property="typ"><string>Notebook</string></void>
+      </object>
+    </void>
+    <void property="knoten">
+      <object class="filius.hardware.knoten.Notebook" id="Notebook0">
+        <void property="name"><string>Alice</string></void>
+        <void property="netzwerkInterfaces">
+          <void id="NetzwerkInterface0" index="0">
+            <void property="ip"><string>172.16.1.10</string></void>
+            <void property="mac"><string>AA:BB:CC:DD:EE:01</string></void>
+          </void>
+        </void>
+        <void property="systemSoftware">
+          <void property="dateisystem">
+            <void property="arbeitsVerzeichnis">
+              <void method="add">
+                <object class="javax.swing.tree.DefaultMutableTreeNode">
+                  <void property="userObject">
+                    <object class="filius.software.system.Datei">
+                      <void property="dateiInhalt">
+                        <string>example.com;example.com;110;25;Alice;alice-secret;;Alice;Alice@example.com</string>
+                      </void>
+                      <void property="dateiTyp"><string>text/txt</string></void>
+                      <void property="name"><string>konten.txt</string></void>
+                    </object>
+                  </void>
+                </object>
+              </void>
+              <void method="add">
+                <object class="javax.swing.tree.DefaultMutableTreeNode">
+                  <void property="userObject"><string>mailserver</string></void>
+                  <void method="add">
+                    <object class="javax.swing.tree.DefaultMutableTreeNode">
+                      <void property="userObject">
+                        <object class="filius.software.system.Datei">
+                          <void property="dateiInhalt">
+                            <string>Mallory;example.com;mallory-secret;Nachname;Vorname;</string>
+                          </void>
+                          <void property="dateiTyp"><string>txt</string></void>
+                          <void property="name"><string>konten.txt</string></void>
+                        </object>
+                      </void>
+                    </object>
+                  </void>
+                </object>
+              </void>
+            </void>
+          </void>
+          <void property="installierteAnwendungen">
+            <void method="put">
+              <string>filius.software.email.EmailAnwendung</string>
+              <object class="filius.software.email.EmailAnwendung">
+                <void property="name"><string>Mail</string></void>
+              </object>
+            </void>
+          </void>
+        </void>
+      </object>
+    </void>
+  </object>
+</java>
+"""
+
 
 def _fls_with_config(config: bytes = MINIMAL_XML) -> bytes:
     buf = io.BytesIO()
@@ -145,6 +221,32 @@ def test_filius_synthetic_dns_web_fixture_renders_safe_dns_and_web_evidence() ->
     assert "<object" not in md
     assert "idref" not in md
     assert "password" not in md.lower()
+
+
+def test_filius_legacy_email_client_konten_file_renders_metadata_without_secrets() -> None:
+    """Older Filius clients store account metadata in root `konten.txt`."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    md = build_evidence_markdown_v1(_fls_with_config(LEGACY_EMAIL_CLIENT_XML))
+
+    assert "- email_clients:" in md
+    assert 'accounts: "1"' in md
+    assert 'username: "Alice"' in md
+    assert 'email: "Alice@example.com"' in md
+    assert 'pop3_server: "example.com"' in md
+    assert 'pop3_port: "110"' in md
+    assert 'smtp_server: "example.com"' in md
+    assert 'smtp_port: "25"' in md
+    assert "email_clients_without_accounts: 0" in md
+    assert "alice-secret" not in md
+    assert "mallory" not in md.lower()
+    assert "passwort" not in md.lower()
+    assert "password" not in md.lower()
+    assert "vorname" not in md.lower()
+    assert "nachname" not in md.lower()
+    assert "konten.txt" not in md
+    assert "<java" not in md
+    assert "<object" not in md
 
 
 def test_filius_official_firewall_fixture_renders_real_rules() -> None:

@@ -1,4 +1,4 @@
--- Storage — Allow Filius `.fls` uploads in `submissions` bucket
+-- Storage — Allow Filius `.fls` uploads in learning submission buckets
 --
 -- Why:
 --   Filius tasks in GUSTAV use FLS upload-only submissions with MIME
@@ -6,7 +6,7 @@
 --   allowlists via `storage.buckets.allowed_mime_types`.
 --
 -- Behavior:
---   - Idempotent: updates only when the column exists and the bucket exists.
+--   - Idempotent: updates only when the column exists and a supported bucket exists.
 --   - No-ops on stacks without Supabase Storage schema.
 
 begin;
@@ -34,7 +34,7 @@ begin
            ]::text[]
          ) as mime
        )
-     where id = 'submissions';
+     where id in ('submissions', 'learning-submissions');
   end if;
 end$$;
 

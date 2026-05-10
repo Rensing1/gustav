@@ -127,3 +127,14 @@ def test_filius_storage_migration_updates_allowlist_additively() -> None:
     assert "coalesce(allowed_mime_types" in sql
     assert "unnest(" in sql
     assert "application/x.filius.fls" in sql
+
+
+def test_filius_storage_migration_updates_all_supported_submission_buckets() -> None:
+    """Both canonical and legacy learning submission buckets must accept FLS uploads."""
+    migration = Path("supabase/migrations/20260507120000_storage_submissions_bucket_allow_filius_fls.sql")
+    sql = migration.read_text(encoding="utf-8").lower()
+
+    assert "'submissions'" in sql
+    assert "'learning-submissions'" in sql
+    assert "where id in" in sql
+    assert "application/x.filius.fls" in sql

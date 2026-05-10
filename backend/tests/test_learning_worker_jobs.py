@@ -615,6 +615,118 @@ async def test_worker_calliope_hex_missing_source_uses_fallback_evidence_and_com
 
 
 @pytest.mark.anyio
+async def test_worker_filius_fls_extracts_evidence_and_completes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Filius FLS submissions should run through deterministic evidence extraction."""
+
+    _require_db_or_skip()
+    fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
+        idempotency_key=f"worker-filius-fls-{uuid.uuid4().hex}"
+    )
+    fls_bytes = Path("backend/tests/fixtures/filius/inf-schule-clientserver/filius_ClientServer.fls").read_bytes()
+    digest = sha256(fls_bytes).hexdigest()
+
+    from backend.storage.config import get_submissions_bucket
+    from backend.storage.mime_types import FILIUS_FLS_MIME
+
+    bucket = get_submissions_bucket()
+    storage_root = tmp_path / "storage"
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+    storage_key = f"{bucket}/{fixture.course_id}/{fixture.task['id']}/{fixture.student_sub}/network.fls"
+    file_path = storage_root / storage_key
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_bytes(fls_bytes)
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (fixture.student_sub,))
+            cur.execute("update public.unit_tasks set kind = 'filius' where id = %s::uuid", (fixture.task["id"],))
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set kind = 'file',
+                       mime_type = %s,
+                       text_body = null,
+                       storage_key = %s,
+                       size_bytes = %s,
+                       sha256 = %s
+                 where id = %s::uuid
+                """,
+                (FILIUS_FLS_MIME, storage_key, len(fls_bytes), digest, submission_id),
+            )
+            cur.execute(
+                """
+                update public.learning_submission_jobs
+                   set payload = payload || %s::jsonb,
+                       status = 'queued',
+                       visible_at = now(),
+                       lease_key = null,
+                       leased_until = null
+                 where id = %s::uuid
+                """,
+                (
+                    json.dumps(
+                        {
+                            "task_kind": "filius",
+                            "kind": "file",
+                            "mime_type": FILIUS_FLS_MIME,
+                            "storage_key": storage_key,
+                            "size_bytes": len(fls_bytes),
+                            "sha256": digest,
+                            "criteria": ["Netzwerkstruktur"],
+                        }
+                    ),
+                    job_id,
+                ),
+            )
+        conn.commit()
+
+    from backend.learning.adapters import local_vision
+
+    feedback = _RecordingFeedbackAdapter()
+    processed = run_once(
+        dsn=worker_dsn,
+        vision_adapter=local_vision.build(),
+        feedback_adapter=feedback,
+        now=datetime.now(tz=timezone.utc),
+        test_run_id=current_test_run_id(),
+    )
+
+    assert processed is True
+    assert feedback.calls == 1
+    assert "filius.evidence.v1" in feedback.seen_text_md
+    assert "## Nodes" in feedback.seen_text_md
+    assert "## Links" in feedback.seen_text_md
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select analysis_status, text_body, feedback_md, analysis_json, error_code
+                  from public.learning_submissions
+                 where id = %s::uuid
+                """,
+                (submission_id,),
+            )
+            row = cur.fetchone()
+            cur.execute("select count(*) from public.learning_submission_jobs where id = %s::uuid", (job_id,))
+            remaining_jobs = int(cur.fetchone()[0])
+
+    assert row is not None
+    status, text_body, feedback_md, analysis_json, error_code = row
+    assert status == "completed"
+    assert "filius.evidence.v1" in str(text_body)
+    assert "## Nodes" in str(text_body)
+    assert feedback_md == "Automatische Rückmeldung auf Basis der verfügbaren Abgabe."
+    assert isinstance(analysis_json, dict)
+    assert analysis_json.get("schema") == "criteria.v2"
+    assert error_code is None
+    assert remaining_jobs == 0
+
+
+@pytest.mark.anyio
 async def test_worker_persists_ai_usage_events_from_feedback_result():
     """Worker should persist captured token events before completing a submission."""
 

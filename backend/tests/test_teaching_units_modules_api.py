@@ -15,6 +15,7 @@ import uuid
 
 import pytest
 import httpx
+from fastapi.routing import APIRoute
 from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -32,6 +33,17 @@ from utils.db import require_db_or_skip as _require_db_or_skip
 
 async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
+
+
+def _endpoint_globals(path: str, method: str) -> dict:
+    for route in main.app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        if route.path == path and method.upper() in (route.methods or set()):
+            globals_dict = getattr(route.endpoint, "__globals__", None)
+            if isinstance(globals_dict, dict):
+                return globals_dict
+    raise AssertionError(f"Route not registered: {method.upper()} {path}")
 
 
 async def _create_course(client: httpx.AsyncClient, title: str = "Mathe") -> str:
@@ -447,7 +459,11 @@ async def test_deleting_unit_keeps_unit_when_storage_cleanup_fails(monkeypatch: 
     def collect_storage_objects(repo_arg: object, *, unit_id: str) -> list[tuple[str, str]]:
         return [("submissions", "unit/delete/file.pdf")]
 
-    monkeypatch.setattr(teaching, "_collect_unit_delete_storage_objects", collect_storage_objects)
+    monkeypatch.setitem(
+        _endpoint_globals("/api/teaching/units/{unit_id}", "DELETE"),
+        "_collect_unit_delete_storage_objects",
+        collect_storage_objects,
+    )
 
     teacher = main.SESSION_STORE.create(sub="teacher-storage-abort", name="Storage Abort", roles=["teacher"])
 
@@ -510,7 +526,7 @@ async def test_deleting_unit_removes_material_and_submission_storage_objects():
                           unit_id, section_id, title, body_md, kind, storage_key,
                           filename_original, mime_type, size_bytes, sha256, position
                         ) values (
-                          %s::uuid, %s::uuid, 'Arbeitsblatt', null, 'file', %s,
+                          %s::uuid, %s::uuid, 'Arbeitsblatt', '', 'file', %s,
                           'arbeitsblatt.pdf', 'application/pdf', 1024, %s, 1
                         )
                         """,
@@ -525,7 +541,7 @@ async def test_deleting_unit_removes_material_and_submission_storage_objects():
                         ) values (
                           %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
                           %s, 'application/pdf', 2048, %s, 1,
-                          'extracted', jsonb_build_object('page_keys', jsonb_build_array(%s)), now()
+                          'extracted', jsonb_build_object('page_keys', jsonb_build_array(%s::text)), now()
                         )
                         """,
                         (
@@ -582,7 +598,7 @@ async def test_deleting_unit_aborts_when_storage_delete_fails():
                       unit_id, section_id, title, body_md, kind, storage_key,
                       filename_original, mime_type, size_bytes, sha256, position
                     ) values (
-                      %s::uuid, %s::uuid, 'Arbeitsblatt', null, 'file', %s,
+                      %s::uuid, %s::uuid, 'Arbeitsblatt', '', 'file', %s,
                       'arbeitsblatt.pdf', 'application/pdf', 1024, %s, 1
                     )
                     """,

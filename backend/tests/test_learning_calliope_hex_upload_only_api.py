@@ -5,8 +5,9 @@ Intent:
     Specify the contract for `Task.kind="calliope"`:
     - Students may only submit HEX uploads (`kind=file`, `mime_type=application/x.makecode.hex`).
     - Image/PDF/text submissions are rejected with 400 (detail=invalid_input).
-    - The server validates the HEX at submission time:
-        * missing MakeCode source embedding -> 400 missing_makecode_source
+    - The server verifies storage/hash/size at submission time.
+    - MakeCode source extraction is best-effort: known extraction errors are
+      handled later through fallback evidence, not as upload rejection.
 """
 
 from __future__ import annotations
@@ -345,7 +346,7 @@ async def test_calliope_submission_accepts_hex_even_if_eurl_host_is_unexpected(m
 
 
 @pytest.mark.anyio
-async def test_calliope_submission_rejects_missing_makecode_source(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_calliope_submission_accepts_missing_makecode_source(monkeypatch: pytest.MonkeyPatch) -> None:
     fx = await _prepare_calliope_task_fixture()
     hex_bytes = _make_hex_without_magic()
     digest = sha256(hex_bytes).hexdigest()
@@ -373,5 +374,40 @@ async def test_calliope_submission_rejects_missing_makecode_source(monkeypatch: 
                     "sha256": digest,
                 },
             )
-    assert r.status_code == 400
-    assert r.json().get("detail") == "missing_makecode_source"
+    assert r.status_code == 202
+    assert r.json().get("analysis_status") == "pending"
+
+
+@pytest.mark.anyio
+async def test_calliope_submission_accepts_invalid_hex_file_soft_extraction_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fx = await _prepare_calliope_task_fixture()
+    hex_bytes = b":00000001FE\n"
+    digest = sha256(hex_bytes).hexdigest()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(root))
+        monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
+
+        storage_key = "submissions/x/y/z/invalid_hex.hex"
+        path = root / storage_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(hex_bytes)
+
+        async with (await _client()) as c:
+            c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)
+            r = await c.post(
+                f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
+                headers={"Idempotency-Key": "calliope-hex-invalid-soft"},
+                json={
+                    "kind": "file",
+                    "storage_key": storage_key,
+                    "mime_type": "application/x.makecode.hex",
+                    "size_bytes": len(hex_bytes),
+                    "sha256": digest,
+                },
+            )
+    assert r.status_code == 202
+    assert r.json().get("analysis_status") == "pending"

@@ -1550,7 +1550,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                     headers=_cache_headers_error(),
                 )
 
-    # MakeCode `.hex` validation for Calliope tasks (fail early with stable detail codes).
+    # MakeCode `.hex` validation for Calliope tasks.
     if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == MAKECODE_HEX_MIME:
         task_kind = "native"
         repo = _get_repo()
@@ -1589,11 +1589,17 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
             try:
                 _ = extract_makecode_project_from_hex(hex_bytes)
             except MakeCodeHexValidationError as exc:
-                return JSONResponse(
-                    {"error": "bad_request", "detail": str(exc.code)},
-                    status_code=400,
-                    headers=_cache_headers_error(),
-                )
+                if str(exc.code) in {"invalid_hex_file", "missing_makecode_source"}:
+                    logger.info(
+                        "calliope_hex_soft_extraction_error",
+                        extra={"detail": str(exc.code), "course_id": str(course_id), "task_id": str(task_id)},
+                    )
+                else:
+                    return JSONResponse(
+                        {"error": "bad_request", "detail": str(exc.code)},
+                        status_code=400,
+                        headers=_cache_headers_error(),
+                    )
 
     # Filius `.fls` validation for Filius tasks (fail early with stable detail codes).
     if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == FILIUS_FLS_MIME:

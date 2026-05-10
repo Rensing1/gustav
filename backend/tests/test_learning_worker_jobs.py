@@ -10,9 +10,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 import json
 import logging
 import os
+from pathlib import Path
 import uuid
 from typing import Sequence
 
@@ -125,6 +127,30 @@ class _TransientFeedbackAdapter:
     def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
         self.calls += 1
         raise worker_module.FeedbackTransientError(self.message)  # type: ignore[attr-defined]
+
+
+class _RecordingFeedbackAdapter:
+    """Return valid criteria feedback and retain the Evidence text for assertions."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.seen_text_md = ""
+
+    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
+        self.calls += 1
+        self.seen_text_md = text_md
+        return FeedbackResult(
+            feedback_md="Automatische Rückmeldung auf Basis der verfügbaren Abgabe.",
+            analysis_json={
+                "schema": "criteria.v2",
+                "criteria_results": [
+                    {
+                        "criterion": str(criteria[0] if criteria else "Abgabe"),
+                        "explanation_md": "Die Abgabe wurde verarbeitet.",
+                    }
+                ],
+            },
+        )
 
 
 class _PermanentFeedbackAdapter:
@@ -326,6 +352,22 @@ def _force_submission_to_file(worker_dsn: str, submission_id: str) -> None:
         conn.commit()
 
 
+def _hex_record(*, addr: int, record_type: int, data: bytes) -> str:
+    ll = len(data)
+    total = ll + ((addr >> 8) & 0xFF) + (addr & 0xFF) + (record_type & 0xFF) + sum(data)
+    checksum = (-total) & 0xFF
+    return f":{ll:02X}{addr:04X}{record_type:02X}{data.hex().upper()}{checksum:02X}"
+
+
+def _make_hex_without_magic() -> bytes:
+    blob = b"\x00" * 64
+    lines: list[str] = []
+    for i in range(0, len(blob), 16):
+        lines.append(_hex_record(addr=i, record_type=0x00, data=blob[i : i + 16]))
+    lines.append(_hex_record(addr=0, record_type=0x01, data=b""))
+    return ("\n".join(lines) + "\n").encode("ascii")
+
+
 def _counter_value(name: str, **labels: str) -> int:
     snapshot = telemetry.counter_snapshot(name)
     key = tuple(sorted(labels.items()))
@@ -458,6 +500,118 @@ async def test_worker_processes_pending_submission_to_completed():
     assert isinstance(analysis_json, dict)
     assert analysis_json["schema"] == "criteria.v2"
     assert analysis_json["score"] == _StubFeedbackAdapter.base_score
+
+
+@pytest.mark.anyio
+async def test_worker_calliope_hex_missing_source_uses_fallback_evidence_and_completes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Calliope HEX soft extraction failures must still reach feedback."""
+
+    _require_db_or_skip()
+    fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
+        idempotency_key=f"worker-calliope-soft-{uuid.uuid4().hex}"
+    )
+    hex_bytes = _make_hex_without_magic()
+    digest = sha256(hex_bytes).hexdigest()
+
+    from backend.storage.config import get_submissions_bucket
+    from backend.storage.mime_types import MAKECODE_HEX_MIME
+
+    bucket = get_submissions_bucket()
+    storage_root = tmp_path / "storage"
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
+    storage_key = f"{bucket}/{fixture.course_id}/{fixture.task['id']}/{fixture.student_sub}/missing-source.hex"
+    file_path = storage_root / storage_key
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_bytes(hex_bytes)
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (fixture.student_sub,))
+            cur.execute("update public.unit_tasks set kind = 'calliope' where id = %s::uuid", (fixture.task["id"],))
+            cur.execute(
+                """
+                update public.learning_submissions
+                   set kind = 'file',
+                       mime_type = %s,
+                       text_body = null,
+                       storage_key = %s,
+                       size_bytes = %s,
+                       sha256 = %s
+                 where id = %s::uuid
+                """,
+                (MAKECODE_HEX_MIME, storage_key, len(hex_bytes), digest, submission_id),
+            )
+            cur.execute(
+                """
+                update public.learning_submission_jobs
+                   set payload = payload || %s::jsonb,
+                       status = 'queued',
+                       visible_at = now(),
+                       lease_key = null,
+                       leased_until = null
+                 where id = %s::uuid
+                """,
+                (
+                    json.dumps(
+                        {
+                            "task_kind": "calliope",
+                            "kind": "file",
+                            "mime_type": MAKECODE_HEX_MIME,
+                            "storage_key": storage_key,
+                            "size_bytes": len(hex_bytes),
+                            "sha256": digest,
+                            "criteria": ["Abgabe"],
+                        }
+                    ),
+                    job_id,
+                ),
+            )
+        conn.commit()
+
+    from backend.learning.adapters import local_vision
+
+    feedback = _RecordingFeedbackAdapter()
+    processed = run_once(
+        dsn=worker_dsn,
+        vision_adapter=local_vision.build(),
+        feedback_adapter=feedback,
+        now=datetime.now(tz=timezone.utc),
+        test_run_id=current_test_run_id(),
+    )
+
+    assert processed is True
+    assert feedback.calls == 1
+    assert "makecode.evidence.v1" in feedback.seen_text_md
+    assert "extraction_status: source_unavailable" in feedback.seen_text_md
+    assert "extraction_error: missing_makecode_source" in feedback.seen_text_md
+    assert "### file:" not in feedback.seen_text_md
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select analysis_status, text_body, feedback_md, analysis_json, error_code
+                  from public.learning_submissions
+                 where id = %s::uuid
+                """,
+                (submission_id,),
+            )
+            row = cur.fetchone()
+            cur.execute("select count(*) from public.learning_submission_jobs where id = %s::uuid", (job_id,))
+            remaining_jobs = int(cur.fetchone()[0])
+
+    assert row is not None
+    status, text_body, feedback_md, analysis_json, error_code = row
+    assert status == "completed"
+    assert "extraction_status: source_unavailable" in str(text_body)
+    assert feedback_md == "Automatische Rückmeldung auf Basis der verfügbaren Abgabe."
+    assert isinstance(analysis_json, dict)
+    assert analysis_json.get("schema") == "criteria.v2"
+    assert error_code is None
+    assert remaining_jobs == 0
 
 
 @pytest.mark.anyio

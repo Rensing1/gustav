@@ -3,6 +3,41 @@
 Datum: 2026-02-23  
 Status: Implemented (HEX-only Pipeline + `makecode.evidence.v1`)
 
+Maintenance Update (2026-05-10): Prod-Hotfix gegen zu strikte HEX-Extraktion
+- Kontext geprueft:
+  - Submit-Validierung: `backend/web/routes/learning.py`
+  - HEX-Parser: `backend/storage/makecode_hex_validation.py`
+  - Evidence: `backend/makecode/hex_evidence_v1.py`
+  - Worker-Adapter: `backend/learning/adapters/local_vision.py`
+  - Worker-Erfolgspfad: `backend/learning/workers/process_learning_submission_jobs.py`
+  - API-Vertrag: `api/openapi.yml`
+- Abweichung vom urspruenglichen MVP:
+  - `invalid_hex_file` und `missing_makecode_source` sind fuer Calliope-HEX keine harten Submit-Abbrueche mehr.
+  - Die Lockerung ist strikt begrenzt auf `Task.kind=calliope`, `mime_type=application/x.makecode.hex`
+    und genau diese zwei Extraktionsfehler.
+  - Auth-, Storage-, Hash-, Groessen- und MIME-Pruefungen bleiben hart.
+  - `makecode_source_too_large` bleibt ein harter Fehler.
+- Begruendung:
+  - Reale MakeCode-Exports koennen erfolgreich als Unterrichtsabgabe gespeichert werden, obwohl Source-Embedding
+    nicht oder nicht vollstaendig extrahierbar ist. Die Plattform darf diese Abgaben nicht als Upload- oder
+    Worker-Fehler behandeln.
+- Umsetzung:
+  - Submit loggt die zwei bekannten Extraktionsfehler nur noch als Soft-Fail.
+  - Der Parser toleriert malformed UTF-8 in eingebetteten MakeCode-Daten per `errors="replace"` und haelt
+    `decode_mode`/`decode_replacements` intern in `MakeCodeProject.meta` fest.
+  - `local_vision` erzeugt fuer die zwei Soft-Faelle eine minimale `makecode.evidence.v1`-Fallback-Evidence.
+  - Der Worker bleibt dadurch im normalen Erfolgspfad: Evidence -> Feedback-Adapter -> `completed` mit
+    `feedback_md` und gueltigem `analysis_json`.
+- Guardrails:
+  - Die Fallback-Evidence enthaelt keine Code-Dateien (`### file:`), sondern markiert klar
+    `extraction_status: source_unavailable` und den konkreten Fehlercode.
+  - Das Feedback-LLM darf dadurch keine Codeanalyse vortaeuschen; es bewertet nur die transparente Evidence.
+- TDD-Abdeckung:
+  - Parser: malformed UTF-8 wird toleriert.
+  - LocalVision: `invalid_hex_file` und `missing_makecode_source` liefern Fallback-Evidence.
+  - API: Calliope-Submit akzeptiert beide Soft-Faelle (`202`), sofern Storage/Hash/Size/MIME stimmen.
+  - Worker: Soft-Fall erreicht Feedback und endet `completed` ohne `vision_failed` (DB-Test; laeuft nur mit Test-DB).
+
 Re-Verification (2026-03-14):
 - `backend/tests/test_learning_calliope_hex_upload_only_api.py`
 - `backend/tests/test_learning_ui_calliope_hex_upload_only.py`
@@ -23,9 +58,10 @@ Evidence entstehen.
 ## Zielbild (MVP)
 - Lehrkraft erstellt `Task.kind=calliope`.
 - Schueler koennen bei Calliope-Tasks **nur** `.hex` hochladen (upload-only; keine Screenshots/keine Textabgabe).
-- API validiert die `.hex` bereits beim `POST .../submissions`:
-  - keine Intel-HEX-Struktur / Checksumme falsch -> `400 invalid_hex_file`
-  - keine eingebetteten MakeCode-Quellen -> `400 missing_makecode_source`
+- API validiert die `.hex` bereits beim `POST .../submissions` (2026-05-10 aktualisiert):
+  - Auth, Storage, Hash, MIME und Groesse bleiben harte Guards.
+  - keine Intel-HEX-Struktur / Checksumme falsch -> Soft-Fallback-Evidence fuer Calliope-HEX
+  - keine eingebetteten MakeCode-Quellen -> Soft-Fallback-Evidence fuer Calliope-HEX
   - Embedded Source zu gross -> `400 makecode_source_too_large`
 - Worker-Pipeline bleibt bestehen:
   - statt OCR erzeugt ein Extractor aus den eingebetteten Dateien einen versionierten Markdown Evidence-Report (`makecode.evidence.v1`)
@@ -56,15 +92,15 @@ nachvollziehbares Feedback erhalte und keine Screenshots von Blockprogrammen meh
    When `POST .../submissions` mit `kind=image` oder `kind=text` kommt  
    Then Response `400 invalid_input`.
 
-5. Security: invalid HEX  
+5. Soft-Fall: invalid HEX
    Given Datei mit `.hex`-Endung ohne gueltige Intel-HEX Records/Checksum  
    When `POST .../submissions`  
-   Then `400 invalid_hex_file`.
+   Then Response `202`; der Worker erzeugt Fallback-Evidence statt `vision_failed`.
 
-6. Security: missing embedded source  
+6. Soft-Fall: missing embedded source
    Given gueltige Intel-HEX Datei ohne MakeCode Source Embedding  
    When `POST .../submissions`  
-   Then `400 missing_makecode_source`.
+   Then Response `202`; der Worker erzeugt Fallback-Evidence statt `vision_failed`.
 
 7. Worker: Evidence -> Feedback  
    Given eine gueltige Calliope-Submission  
@@ -120,7 +156,8 @@ UI-Strategie (Lesbarkeit):
   wird er als normaler Markdown-Text gerendert (defense-in-depth gegen False Positives).
 
 ## Security / Hardening
-- strikte Intel-HEX Parser/Checksum-Validierung (kein "best effort")
+- strikte Intel-HEX Parser/Checksum-Validierung bleibt im Parser erhalten; fuer Calliope-HEX werden die zwei bekannten
+  Extraktionsfehler `invalid_hex_file`/`missing_makecode_source` aber als Fallback-Evidence weiterverarbeitet
 - harte Groessenlimits (Input bytes, embedded source bytes, decompressed bytes, max file count, max per-file bytes)
 - LZMA Decompression bounded (max output cap) gegen Zip/LZMA bombs
 - `eURL` wird bewusst ignoriert: keine Host-Allowlist, keine Netzwerkzugriffe basierend auf `eURL`

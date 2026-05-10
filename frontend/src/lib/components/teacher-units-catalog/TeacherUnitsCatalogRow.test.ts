@@ -28,6 +28,10 @@ describe("TeacherUnitsCatalogRow", () => {
       "href",
       "/teaching/units/unit-1"
     );
+    expect(screen.getByRole("link", { name: "Löschen" })).toHaveAttribute(
+      "href",
+      "/teaching/units/unit-1?delete=1"
+    );
     expect(screen.getByText("Mehr Staat in der Krise")).toBeInTheDocument();
     expect(screen.queryByText("In Bearbeitung")).not.toBeInTheDocument();
     expect(screen.getByText("9L, 10b")).toBeInTheDocument();

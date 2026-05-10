@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from uuid import uuid4
+import uuid
 
 import pytest
 import httpx
@@ -46,6 +47,42 @@ async def _create_unit(client: httpx.AsyncClient, title: str = "Funktionen", sum
     resp = await client.post("/api/teaching/units", json=payload)
     assert resp.status_code == 201
     return resp.json()
+
+
+async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str = "Abschnitt") -> dict:
+    resp = await client.post(f"/api/teaching/units/{unit_id}/sections", json={"title": title})
+    assert resp.status_code == 201
+    return resp.json()
+
+
+async def _create_task(client: httpx.AsyncClient, unit_id: str, section_id: str, instruction: str = "Aufgabe") -> dict:
+    resp = await client.post(
+        f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+        json={"instruction_md": instruction, "criteria": ["Kriterium 1"]},
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+def _service_dsn() -> str:
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    return os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv(
+        "DATABASE_URL"
+    ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
+
+
+class _RecordingDeleteStorage:
+    def __init__(self, *, fail_on_key: str | None = None) -> None:
+        self.fail_on_key = fail_on_key
+        self.delete_calls: list[dict[str, str]] = []
+
+    def delete_object(self, *, bucket: str, key: str) -> None:
+        self.delete_calls.append({"bucket": bucket, "key": key})
+        if self.fail_on_key and key == self.fail_on_key:
+            raise RuntimeError("storage_delete_failed")
 
 
 @pytest.mark.anyio
@@ -393,6 +430,178 @@ async def test_deleting_unit_cascades_course_modules():
         modules_after = await client.get(f"/api/teaching/courses/{course_id}/modules")
         assert modules_after.status_code == 200
         assert modules_after.json() == []
+
+
+@pytest.mark.anyio
+async def test_deleting_unit_keeps_unit_when_storage_cleanup_fails(monkeypatch: pytest.MonkeyPatch):
+    main.SESSION_STORE = SessionStore()
+    import routes.teaching as teaching  # noqa: E402
+
+    original_repo = teaching.REPO
+    original_storage = teaching.STORAGE_ADAPTER
+    original_override = teaching._STORAGE_ADAPTER_OVERRIDE_ACTIVE
+    repo = teaching._Repo()
+    teaching.set_repo(repo)
+    teaching.set_storage_adapter(_RecordingDeleteStorage(fail_on_key="unit/delete/file.pdf"))
+
+    def collect_storage_objects(repo_arg: object, *, unit_id: str) -> list[tuple[str, str]]:
+        return [("submissions", "unit/delete/file.pdf")]
+
+    monkeypatch.setattr(teaching, "_collect_unit_delete_storage_objects", collect_storage_objects)
+
+    teacher = main.SESSION_STORE.create(sub="teacher-storage-abort", name="Storage Abort", roles=["teacher"])
+
+    try:
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", teacher.session_id)
+            unit = await _create_unit(client, title="Nicht löschen")
+
+            deleted = await client.delete(f"/api/teaching/units/{unit['id']}")
+            assert deleted.status_code == 502
+            assert deleted.json()["detail"] == "storage_delete_failed"
+
+            still_there = await client.get(f"/api/teaching/units/{unit['id']}")
+            assert still_there.status_code == 200
+    finally:
+        teaching.set_repo(original_repo)
+        teaching.set_storage_adapter(original_storage, override=original_override)
+
+
+@pytest.mark.anyio
+async def test_deleting_unit_removes_material_and_submission_storage_objects():
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import psycopg  # type: ignore  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    storage = _RecordingDeleteStorage()
+    original_adapter = teaching.STORAGE_ADAPTER
+    teaching.set_storage_adapter(storage)
+    teacher = main.SESSION_STORE.create(sub="teacher-unit-storage-delete", name="Storage Delete", roles=["teacher"])
+    learner = main.SESSION_STORE.create(sub="learner-unit-storage-delete", name="Learner", roles=["student"])
+
+    try:
+        async with (await _client()) as client:
+            client.cookies.set("gustav_session", teacher.session_id)
+            course_id = await _create_course(client, title="Storage Kurs")
+            unit = await _create_unit(client, title="Storage Einheit")
+            section = await _create_section(client, unit["id"], "Materialien")
+            task = await _create_task(client, unit["id"], section["id"], "Datei bearbeiten")
+            module = await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit["id"]})
+            assert module.status_code == 201
+
+            material_storage_key = f"materials/{unit['id']}/{section['id']}/{uuid.uuid4()}/file.pdf"
+            submission_storage_key = f"submissions/{course_id}/{task['id']}/{learner.sub}/orig/answer.pdf"
+            derived_storage_key = f"submissions/{course_id}/{task['id']}/{learner.sub}/derived/{uuid.uuid4()}/page_0001.png"
+
+            with psycopg.connect(_service_dsn()) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("select set_config('app.current_sub', %s, false)", (teacher.sub,))
+                    cur.execute(
+                        """
+                        insert into public.unit_materials (
+                          unit_id, section_id, title, body_md, kind, storage_key,
+                          filename_original, mime_type, size_bytes, sha256, position
+                        ) values (
+                          %s::uuid, %s::uuid, 'Arbeitsblatt', null, 'file', %s,
+                          'arbeitsblatt.pdf', 'application/pdf', 1024, %s, 1
+                        )
+                        """,
+                        (unit["id"], section["id"], material_storage_key, "a" * 64),
+                    )
+                    cur.execute(
+                        """
+                        insert into public.learning_submissions (
+                          id, course_id, task_id, section_id, student_sub, kind,
+                          storage_key, mime_type, size_bytes, sha256, attempt_nr,
+                          analysis_status, internal_metadata, completed_at
+                        ) values (
+                          %s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, 'file',
+                          %s, 'application/pdf', 2048, %s, 1,
+                          'extracted', jsonb_build_object('page_keys', jsonb_build_array(%s)), now()
+                        )
+                        """,
+                        (
+                            str(uuid.uuid4()),
+                            course_id,
+                            task["id"],
+                            section["id"],
+                            learner.sub,
+                            submission_storage_key,
+                            "b" * 64,
+                            derived_storage_key,
+                        ),
+                    )
+                conn.commit()
+
+            response = await client.delete(f"/api/teaching/units/{unit['id']}")
+
+            assert response.status_code == 204
+            assert {"bucket": teaching.MATERIAL_FILE_SETTINGS.storage_bucket, "key": material_storage_key} in storage.delete_calls
+            assert {"bucket": teaching.get_submissions_bucket(), "key": submission_storage_key} in storage.delete_calls
+            assert {"bucket": teaching.get_submissions_bucket(), "key": derived_storage_key} in storage.delete_calls
+    finally:
+        teaching.set_storage_adapter(original_adapter)
+
+
+@pytest.mark.anyio
+async def test_deleting_unit_aborts_when_storage_delete_fails():
+    main.SESSION_STORE = SessionStore()
+    _require_db_or_skip()
+    import routes.teaching as teaching  # noqa: E402
+    import psycopg  # type: ignore  # noqa: E402
+
+    try:
+        from teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = main.SESSION_STORE.create(sub="teacher-unit-storage-fail", name="Storage Fail", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client, title="Bleibt erhalten")
+        section = await _create_section(client, unit["id"], "Materialien")
+        failing_key = f"materials/{unit['id']}/{section['id']}/{uuid.uuid4()}/file.pdf"
+
+        with psycopg.connect(_service_dsn()) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select set_config('app.current_sub', %s, false)", (teacher.sub,))
+                cur.execute(
+                    """
+                    insert into public.unit_materials (
+                      unit_id, section_id, title, body_md, kind, storage_key,
+                      filename_original, mime_type, size_bytes, sha256, position
+                    ) values (
+                      %s::uuid, %s::uuid, 'Arbeitsblatt', null, 'file', %s,
+                      'arbeitsblatt.pdf', 'application/pdf', 1024, %s, 1
+                    )
+                    """,
+                    (unit["id"], section["id"], failing_key, "c" * 64),
+                )
+            conn.commit()
+
+        storage = _RecordingDeleteStorage(fail_on_key=failing_key)
+        original_adapter = teaching.STORAGE_ADAPTER
+        teaching.set_storage_adapter(storage)
+        try:
+            response = await client.delete(f"/api/teaching/units/{unit['id']}")
+        finally:
+            teaching.set_storage_adapter(original_adapter)
+
+        assert response.status_code == 502
+        assert response.json().get("detail") == "storage_delete_failed"
+        still_there = await client.get(f"/api/teaching/units/{unit['id']}")
+        assert still_there.status_code == 200
 
 
 @pytest.mark.anyio

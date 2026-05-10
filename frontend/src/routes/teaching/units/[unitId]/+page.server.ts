@@ -70,6 +70,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     hidePageHeading: true,
     pageTitle: workspace.unit.title,
     showEditDialog: url.searchParams.get("edit") == "1",
+    showDeleteDialog: url.searchParams.get("delete") == "1",
     showCreateSectionDialog: url.searchParams.get("create-section") == "1",
     showCreatePhaseDialog: url.searchParams.get("create-phase") == "1",
     showCreateModuleDialog: url.searchParams.get("create-module") == "1",

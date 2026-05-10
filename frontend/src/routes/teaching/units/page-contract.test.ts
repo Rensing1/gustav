@@ -37,6 +37,18 @@ describe("teacher units catalog route contract", () => {
     expect(serverSource).not.toContain("showCreateDialog:");
   });
 
+  it("keeps delete entry points in the catalog while routing deletion to the unit workspace", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const rowSource = readFileSync(
+      path.resolve(currentDir, "../../../lib/components/teacher-units-catalog/TeacherUnitsCatalogRow.svelte"),
+      "utf8"
+    );
+
+    expect(rowSource).toContain('href={`${unit.href}?delete=1`}');
+    expect(rowSource).toContain(">Löschen<");
+    expect(rowSource).not.toContain('action="?/deleteUnit"');
+  });
+
   it("lets teachers choose the unit type and forwards it to the backend", () => {
     const pageSource = routeSource("+page.svelte");
     const serverSource = routeSource("+page.server.ts");

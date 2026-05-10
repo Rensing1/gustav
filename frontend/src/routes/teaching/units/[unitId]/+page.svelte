@@ -919,12 +919,8 @@
 </svelte:head>
 
 {#snippet unitHeaderActions()}
-  <details class="workspace-row-menu">
-    <summary aria-label="Einheitsaktionen">···</summary>
-    <div class="workspace-row-menu-popover">
-      <a class="workspace-link-action workspace-link-action--subtle" href={workspaceState.unit.edit_href}>Bearbeiten</a>
-    </div>
-  </details>
+  <a class="workspace-link-action workspace-link-action--subtle" href={workspaceState.unit.edit_href}>Bearbeiten</a>
+  <a class="workspace-link-action workspace-link-action--danger" href={pageHref({ delete: "1" })}>Löschen</a>
 {/snippet}
 
 {#snippet unitCommandPopovers()}
@@ -1158,20 +1154,39 @@
           <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ edit: null })}>Abbrechen</a>
         </div>
       </form>
-      <div class="dialog-card__danger">
-        <p class="workspace-label">Danger Zone</p>
-        <form method="POST" action="?/deleteUnit" class="workspace-form">
-          <input type="hidden" name="expected_title" value={workspaceState.unit.title} />
-          <label class="workspace-field">
-            <span>Titel zur Bestätigung</span>
-            <input name="confirmation" type="text" />
-          </label>
-          {#if form?.deleteUnit?.error}
-            <p class="workspace-note workspace-note--error">{form.deleteUnit.error}</p>
-          {/if}
-          <button class="workspace-link-action workspace-link-action--danger" type="submit">Lerneinheit löschen</button>
-        </form>
+    </div>
+  </div>
+{/if}
+
+{#if data.showDeleteDialog}
+  <div class="dialog-backdrop">
+    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="delete-unit-title">
+      <div class="dialog-card__header">
+        <div>
+          <p class="workspace-label">Lerneinheit</p>
+          <h2 id="delete-unit-title">Endgültig löschen</h2>
+        </div>
+        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ delete: null })}>Schließen</a>
       </div>
+      <p class="workspace-note">
+        Diese Lerneinheit ist {workspaceState.counts.courses_count === 1
+          ? "einem Kurs"
+          : `${workspaceState.counts.courses_count} Kursen`} zugeordnet. Beim Löschen werden diese Kurszuordnungen entfernt.
+      </p>
+      <form method="POST" action="?/deleteUnit" class="workspace-form">
+        <input type="hidden" name="expected_title" value={workspaceState.unit.title} />
+        <label class="workspace-field">
+          <span>Titel zur Bestätigung</span>
+          <input name="confirmation" type="text" autocomplete="off" />
+        </label>
+        {#if form?.deleteUnit?.error}
+          <p class="workspace-note workspace-note--error">{form.deleteUnit.error}</p>
+        {/if}
+        <div class="dialog-card__actions">
+          <button class="workspace-link-action workspace-link-action--danger" type="submit">Lerneinheit endgültig löschen</button>
+          <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ delete: null })}>Abbrechen</a>
+        </div>
+      </form>
     </div>
   </div>
 {/if}

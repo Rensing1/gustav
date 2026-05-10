@@ -8648,6 +8648,30 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '502':
+          description: Storage cleanup failed; the unit was not deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                storage_delete_failed:
+                  summary: A storage object could not be deleted
+                  value:
+                    error: bad_gateway
+                    detail: storage_delete_failed
+        '503':
+          description: Storage cleanup is currently unavailable; the unit was not deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                storage_adapter_unavailable:
+                  summary: Storage adapter unavailable
+                  value:
+                    error: service_unavailable
+                    detail: storage_adapter_unavailable
 
   /api/teaching/units/{unit_id}/phases:
     get:

@@ -57,5 +57,9 @@
       <span class="teacher-units-catalog-row__kicker">Aktualisiert</span>
       <span>{formatUpdatedAt(unit.updated_at)}</span>
     </div>
+
+    <div class="teacher-units-catalog-row__actions">
+      <a class="workspace-link-action workspace-link-action--danger" href={`${unit.href}?delete=1`}>Löschen</a>
+    </div>
   </div>
 </li>

@@ -133,4 +133,27 @@ describe("teacher unit graph route contract", () => {
     expect(source).toContain("function currentUrl(");
     expect(source).toContain("new URL(page.url)");
   });
+
+  it("exposes edit and delete as direct design-system header actions", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = routeSource();
+    const serverSource = readFileSync(path.resolve(currentDir, "+page.server.ts"), "utf8");
+
+    expect(serverSource).toContain('showDeleteDialog: url.searchParams.get("delete") == "1"');
+    expect(source).toContain('href={workspaceState.unit.edit_href}>Bearbeiten</a>');
+    expect(source).toContain('href={pageHref({ delete: "1" })}>Löschen</a>');
+    expect(source).not.toContain('aria-label="Einheitsaktionen"');
+    expect(source).not.toContain('class="workspace-row-menu"');
+  });
+
+  it("renders the unit delete dialog with exact-title confirmation and course warning", () => {
+    const source = routeSource();
+
+    expect(source).toContain("{#if data.showDeleteDialog}");
+    expect(source).toContain('action="?/deleteUnit"');
+    expect(source).toContain("Diese Lerneinheit ist");
+    expect(source).toContain("Kurs");
+    expect(source).toContain("Titel zur Bestätigung");
+    expect(source).toContain("Lerneinheit endgültig löschen");
+  });
 });

@@ -28,6 +28,17 @@ def test_units_delete_path_is_correct_and_not_under_reorder():
     assert "delete" not in paths[reorder_path], "Unexpected DELETE under sections/reorder"
 
 
+def test_units_delete_documents_storage_cleanup_failures():
+    root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+
+    responses = spec["paths"]["/api/teaching/units/{unit_id}"]["delete"]["responses"]
+    assert "502" in responses
+    assert "503" in responses
+    assert "storage_delete_failed" in str(responses["502"])
+    assert "storage_adapter_unavailable" in str(responses["503"])
+
+
 def test_units_patch_uses_author_permission_semantics():
     root = Path(__file__).resolve().parents[2]
     spec = yaml.safe_load((root / "api" / "openapi.yml").read_text(encoding="utf-8"))

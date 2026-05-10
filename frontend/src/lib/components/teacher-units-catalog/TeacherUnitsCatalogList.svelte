@@ -52,6 +52,7 @@
       <span>Titel & Beschreibung</span>
       <span>Kurse</span>
       <span>Update</span>
+      <span>Aktion</span>
     </div>
 
     <ul class="teacher-units-catalog-list__items">

@@ -295,8 +295,14 @@ def extract_makecode_project_from_hex(hex_bytes: bytes, *, limits: MakeCodeHexLi
                     raise
                 continue
 
+            decode_mode = "strict"
+            decode_replacements = 0
             try:
                 text_str = decompressed.decode("utf-8")
+            except UnicodeDecodeError:
+                text_str = decompressed.decode("utf-8", errors="replace")
+                decode_mode = "replace"
+                decode_replacements = text_str.count("\ufffd")
             except Exception:
                 continue
 
@@ -327,7 +333,12 @@ def extract_makecode_project_from_hex(hex_bytes: bytes, *, limits: MakeCodeHexLi
             files = _bounded_files_map(files_raw, limits=limits)
             if not files:
                 continue
-            meta = {"header": header, "extra_header": extra_header}
+            meta = {
+                "header": header,
+                "extra_header": extra_header,
+                "decode_mode": decode_mode,
+                "decode_replacements": decode_replacements,
+            }
             return MakeCodeProject(files=files, meta=meta)
 
     # Distinguish "no marker present" from "marker present but corrupted" so

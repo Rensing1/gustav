@@ -717,7 +717,11 @@ class _LocalVisionAdapter:
         # MakeCode HEX: deterministic evidence extraction (no OCR).
         if mime == MAKECODE_HEX_MIME:
             from backend.storage.makecode_hex_validation import MakeCodeHexValidationError, extract_makecode_project_from_hex
-            from backend.makecode.hex_evidence_v1 import EVIDENCE_SCHEMA_V1, build_evidence_markdown_v1
+            from backend.makecode.hex_evidence_v1 import (
+                EVIDENCE_SCHEMA_V1,
+                build_evidence_markdown_v1,
+                build_fallback_evidence_markdown_v1,
+            )
 
             meta = {"adapter": "local_vision", "backend": "makecode_hex", "schema": EVIDENCE_SCHEMA_V1}
             root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
@@ -751,6 +755,11 @@ class _LocalVisionAdapter:
             try:
                 project = extract_makecode_project_from_hex(data)
             except MakeCodeHexValidationError as exc:
+                task_kind = str((job_payload or {}).get("task_kind") or "").strip().lower()
+                if task_kind == "calliope" and str(exc.code) in {"invalid_hex_file", "missing_makecode_source"}:
+                    meta["soft_error_code"] = str(exc.code)
+                    evidence_md = build_fallback_evidence_markdown_v1(error_code=str(exc.code))
+                    return VisionResult(text_md=evidence_md, raw_metadata=meta)
                 raise VisionPermanentError(str(exc.code))
             evidence_md = build_evidence_markdown_v1(project=project)
             if not evidence_md.strip():

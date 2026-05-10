@@ -115,6 +115,17 @@ def _make_hex_from_blob(blob: bytes, *, record_type: int = 0x0E) -> bytes:
     return ("\n".join(lines) + "\n").encode("ascii")
 
 
+def _make_hex_with_malformed_utf8_source() -> bytes:
+    """Build a valid HEX container whose embedded MakeCode JSON has bad UTF-8."""
+    header = {"eURL": "https://makecode.calliope.cc/#editor", "headerSize": 2, "textSize": 24}
+    header_bytes = json.dumps(header, separators=(",", ":")).encode("utf-8")
+    text = b'{}{"main.ts":"basic \xff show"}'
+    magic = b"\x41\x14\x0E\x2F\xB8\x2F\xA2\xBB"
+    blob = magic + struct.pack("<H", len(header_bytes)) + struct.pack("<I", len(text)) + b"\x00\x00"
+    blob += header_bytes + text
+    return _make_hex_from_blob(blob, record_type=0x0E)
+
+
 def test_extract_makecode_project_from_hex_returns_files() -> None:
     from backend.storage.makecode_hex_validation import extract_makecode_project_from_hex
 
@@ -153,6 +164,17 @@ def test_does_not_reject_hex_when_eurl_host_is_unexpected() -> None:
     hex_bytes = _make_hex_with_embedded_source(eurl="https://makecode.microbit.org/#editor")
     project = extract_makecode_project_from_hex(hex_bytes)
     assert "main.ts" in project.files
+
+
+def test_extract_makecode_project_tolerates_malformed_utf8_source() -> None:
+    from backend.storage.makecode_hex_validation import extract_makecode_project_from_hex
+
+    project = extract_makecode_project_from_hex(_make_hex_with_malformed_utf8_source())
+
+    assert "main.ts" in project.files
+    assert "\ufffd" in project.files["main.ts"]
+    assert project.meta.get("decode_mode") == "replace"
+    assert project.meta.get("decode_replacements") == 1
 
 
 def test_missing_makecode_source_raises() -> None:

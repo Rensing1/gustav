@@ -64,10 +64,17 @@ def _make_hex_with_embedded_source(*, eurl: str, record_type: int = 0x0E, place_
     return ("\n".join(lines) + "\n").encode("ascii")
 
 
-def test_local_vision_makecode_hex_returns_evidence_markdown(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    hex_bytes = _make_hex_with_embedded_source(eurl="https://makecode.calliope.cc/#editor")
-    digest = sha256(hex_bytes).hexdigest()
+def _make_hex_without_magic() -> bytes:
+    blob = b"\x00" * 64
+    lines: list[str] = []
+    for i in range(0, len(blob), 16):
+        lines.append(_hex_record(addr=i, record_type=0x00, data=blob[i : i + 16]))
+    lines.append(_hex_record(addr=0, record_type=0x01, data=b""))
+    return ("\n".join(lines) + "\n").encode("ascii")
 
+
+def _write_hex_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, hex_bytes: bytes) -> tuple[dict, dict]:
+    digest = sha256(hex_bytes).hexdigest()
     bucket = get_submissions_bucket()
     submission = {
         "id": "deadbeef-dead-beef-dead-beef0000aa01",
@@ -88,11 +95,18 @@ def test_local_vision_makecode_hex_returns_evidence_markdown(monkeypatch: pytest
     file_path.write_bytes(hex_bytes)
 
     job_payload = {
+        "task_kind": "calliope",
         "mime_type": "application/x.makecode.hex",
         "storage_key": storage_key,
         "size_bytes": file_path.stat().st_size,
         "sha256": digest,
     }
+    return submission, job_payload
+
+
+def test_local_vision_makecode_hex_returns_evidence_markdown(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    hex_bytes = _make_hex_with_embedded_source(eurl="https://makecode.calliope.cc/#editor")
+    submission, job_payload = _write_hex_fixture(monkeypatch, tmp_path, hex_bytes)
 
     import importlib
 
@@ -104,3 +118,57 @@ def test_local_vision_makecode_hex_returns_evidence_markdown(monkeypatch: pytest
     assert "makecode.evidence.v1" in result.text_md
     assert isinstance(result.raw_metadata, dict)
     assert result.raw_metadata.get("adapter") == "local_vision"
+
+
+def test_local_vision_makecode_hex_missing_source_returns_fallback_evidence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    submission, job_payload = _write_hex_fixture(monkeypatch, tmp_path, _make_hex_without_magic())
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    result: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
+
+    assert "# makecode.evidence.v1" in result.text_md
+    assert "extraction_status: source_unavailable" in result.text_md
+    assert "extraction_error: missing_makecode_source" in result.text_md
+    assert "### file:" not in result.text_md
+    assert result.raw_metadata.get("soft_error_code") == "missing_makecode_source"
+
+
+def test_local_vision_makecode_hex_invalid_file_returns_fallback_evidence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    submission, job_payload = _write_hex_fixture(monkeypatch, tmp_path, b":00000001FE\n")
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    result: VisionResult = adapter.extract(submission=submission, job_payload=job_payload)
+
+    assert "# makecode.evidence.v1" in result.text_md
+    assert "extraction_status: source_unavailable" in result.text_md
+    assert "extraction_error: invalid_hex_file" in result.text_md
+    assert "### file:" not in result.text_md
+    assert result.raw_metadata.get("soft_error_code") == "invalid_hex_file"
+
+
+def test_local_vision_makecode_hex_invalid_file_stays_hard_for_non_calliope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    submission, job_payload = _write_hex_fixture(monkeypatch, tmp_path, b":00000001FE\n")
+    job_payload["task_kind"] = "native"
+
+    import importlib
+
+    mod = importlib.import_module("backend.learning.adapters.local_vision")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    with pytest.raises(mod.VisionPermanentError) as exc:  # type: ignore[attr-defined]
+        adapter.extract(submission=submission, job_payload=job_payload)
+    assert str(exc.value) == "invalid_hex_file"

@@ -156,4 +156,31 @@ def build_evidence_markdown_v1(*, project: MakeCodeProject, limits: EvidenceV1Li
     return out if out.strip() else f"# {EVIDENCE_SCHEMA_V1}\n\n_No evidence._\n"
 
 
-__all__ = ["EVIDENCE_SCHEMA_V1", "EvidenceV1Limits", "build_evidence_markdown_v1", "limits_from_env"]
+def build_fallback_evidence_markdown_v1(*, error_code: str, limits: EvidenceV1Limits | None = None) -> str:
+    """Build minimal Evidence when a Calliope HEX source cannot be extracted."""
+    limits = limits or limits_from_env()
+    code = str(error_code or "unknown").strip() or "unknown"
+    allowed = {"invalid_hex_file", "missing_makecode_source"}
+    if code not in allowed:
+        code = "unknown"
+    text = (
+        f"# {EVIDENCE_SCHEMA_V1}\n\n"
+        "## Summary\n"
+        "- file_received: true\n"
+        "- files_count: 0\n"
+        "- extraction_status: source_unavailable\n"
+        f"- extraction_error: {code}\n\n"
+        "## Hinweis\n"
+        "Die HEX-Datei wurde abgegeben. Der eingebettete MakeCode-Quelltext konnte nicht extrahiert werden.\n"
+        "Die folgende Rückmeldung darf deshalb keine Codeanalyse vortäuschen.\n"
+    )
+    return text[: int(limits.max_markdown_chars)]
+
+
+__all__ = [
+    "EVIDENCE_SCHEMA_V1",
+    "EvidenceV1Limits",
+    "build_evidence_markdown_v1",
+    "build_fallback_evidence_markdown_v1",
+    "limits_from_env",
+]

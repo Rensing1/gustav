@@ -39,6 +39,22 @@ def test_h5p_ajax_requires_cookie_auth_and_action_param() -> None:
         assert code in responses, f"missing response {code} for /h5p/ajax"
 
 
+def test_h5p_ajax_documents_h5p_urlencoded_library_arrays() -> None:
+    spec = _load_spec()
+    post_op = spec["paths"]["/h5p/ajax"]["post"]
+    form_schema = (
+        post_op.get("requestBody", {})
+        .get("content", {})
+        .get("application/x-www-form-urlencoded", {})
+        .get("schema", {})
+    )
+
+    libraries = (form_schema.get("properties") or {}).get("libraries[]")
+    assert libraries is not None, "H5P ajax must document jQuery-style libraries[] form arrays"
+    assert libraries.get("type") == "array"
+    assert (libraries.get("items") or {}).get("type") == "string"
+
+
 def test_h5p_finisheddata_requires_cookie_auth_and_has_success_response() -> None:
     spec = _load_spec()
     post_op = spec["paths"]["/h5p/finishedData"]["post"]
@@ -52,4 +68,3 @@ def test_h5p_finisheddata_requires_cookie_auth_and_has_success_response() -> Non
         .get("schema", {})
     )
     assert (schema.get("properties") or {}).get("success"), "200 response must contain {success: boolean}"
-

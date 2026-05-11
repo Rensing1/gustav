@@ -3747,6 +3747,14 @@ paths:
           application/x-www-form-urlencoded:
             schema:
               type: object
+              properties:
+                libraries[]:
+                  type: array
+                  items:
+                    type: string
+                  description: >-
+                    H5P editor jQuery-style array field used by `action=libraries`
+                    requests, e.g. `H5P.AdvancedText 1.1`.
               additionalProperties: true
           multipart/form-data:
             schema:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import stat
+from urllib.error import HTTPError
 
 from backend.tools.gustav_cli import cli, config
 
@@ -22,6 +23,22 @@ def _capture_http(monkeypatch, responses: list[tuple[int, object]] | None = None
 
     monkeypatch.setattr(cli, "_http_json", fake_request)
     return calls
+
+
+class _HTTPResponse:
+    status = 200
+
+    def __init__(self, raw: bytes) -> None:
+        self._raw = raw
+
+    def __enter__(self) -> "_HTTPResponse":
+        return self
+
+    def __exit__(self, *args) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._raw
 
 
 def test_auth_configure_reads_token_from_stdin_and_writes_0600_config(tmp_path, monkeypatch) -> None:
@@ -48,6 +65,44 @@ def test_auth_configure_reads_token_from_stdin_and_writes_0600_config(tmp_path, 
         "base_url": "https://gustav.example",
         "token": "gustav_cli_token_secret",
     }
+
+
+def test_http_json_returns_structured_body_for_non_json_success(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cli.urllib_request,
+        "urlopen",
+        lambda req, timeout: _HTTPResponse(b"plain text from proxy"),
+    )
+
+    status, body = cli._http_json("GET", "https://gustav.example/api/teaching/units")
+
+    assert status == 200
+    assert body == {"raw": "plain text from proxy"}
+
+
+def test_http_json_returns_structured_body_for_non_json_http_error(monkeypatch) -> None:
+    def fail_urlopen(req, timeout):
+        raise HTTPError(
+            "https://gustav.example/api/teaching/units",
+            502,
+            "Bad Gateway",
+            {},
+            io.BytesIO(b"<html>proxy error</html>"),
+        )
+
+    monkeypatch.setattr(cli.urllib_request, "urlopen", fail_urlopen)
+
+    status, body = cli._http_json(
+        "GET",
+        "https://gustav.example/api/teaching/units",
+        headers={"Authorization": "Bearer gustav_cli_secret_token"},
+    )
+
+    assert status == 502
+    assert body["error"] == "http_error"
+    assert body["detail"] == "Bad Gateway"
+    assert body["body_preview"] == "<html>proxy error</html>"
+    assert "gustav_cli_secret_token" not in str(body)
 
 
 def test_auth_status_redacts_configured_token(tmp_path, monkeypatch) -> None:

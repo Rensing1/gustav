@@ -10,6 +10,30 @@ def load_compose():
     return yaml.safe_load(compose_path.read_text())
 
 
+def _environment_lines(service: dict) -> list[str]:
+    environment = service.get("environment", [])
+    if isinstance(environment, dict):
+        return [f"{key}={value}" for key, value in environment.items()]
+    return [str(item) for item in environment]
+
+
+def test_web_service_sets_container_service_role_dsn_for_storage_cleanup():
+    """Teaching storage cleanup must use the Compose DB host, not localhost."""
+    compose = load_compose()
+    web = compose.get("services", {}).get("web")
+    assert web, "web service is missing in compose file"
+
+    service_role_lines = [
+        line
+        for line in _environment_lines(web)
+        if line.startswith("SERVICE_ROLE_DSN=")
+    ]
+
+    assert service_role_lines, "web service must expose SERVICE_ROLE_DSN"
+    assert "supabase_db_gustav-alpha2:5432" in service_role_lines[0]
+    assert "127.0.0.1:54322" not in service_role_lines[0]
+
+
 def test_keycloak_uses_postgres_service():
     """Keycloak must rely on a dedicated Postgres 16 service with persistent storage."""
     compose = load_compose()

@@ -6780,6 +6780,9 @@ paths:
       operationId: listAppProfileCliTokens
       security:
         - bearerAuth: []
+      x-security-notes:
+        - "CLI bearer tokens are rejected for token-management endpoints."
+        - "Auth: users can list only their own CLI token metadata."
       responses:
         '200':
           description: CLI token metadata without raw token values
@@ -6798,6 +6801,7 @@ paths:
         - bearerAuth: []
       x-security-notes:
         - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "CLI bearer tokens are rejected for token-management endpoints."
         - "Auth: raw token is returned exactly once and is never returned by list endpoints."
       requestBody:
         required: true
@@ -6829,6 +6833,7 @@ paths:
         - bearerAuth: []
       x-security-notes:
         - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "CLI bearer tokens are rejected for token-management endpoints."
         - "Auth: users can revoke only their own CLI tokens."
       parameters:
         - in: path

@@ -44,6 +44,7 @@ def test_openapi_documents_cli_token_profile_endpoints() -> None:
         op = spec["paths"][path][method]
         assert op["security"] == [{"bearerAuth": []}]
         assert {"cliTokenAuth": []} not in op["security"]
+        assert "CLI bearer tokens are rejected" in " ".join(op["x-security-notes"])
 
 
 def test_openapi_documents_cli_read_scope_for_units_list() -> None:

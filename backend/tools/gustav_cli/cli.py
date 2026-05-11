@@ -11,6 +11,19 @@ from urllib.error import HTTPError, URLError
 from .config import GustavCLIConfig, load_config, save_config
 
 
+def _parse_json_response(raw: str, *, non_json_body: dict[str, object]) -> Any:
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return non_json_body
+
+
+def _body_preview(raw: str, *, limit: int = 200) -> str:
+    return raw.strip().replace("\n", " ")[:limit]
+
+
 def _http_json(
     method: str,
     url: str,
@@ -26,11 +39,19 @@ def _http_json(
     req = urllib_request.Request(url, data=body, method=method, headers=merged_headers)
     try:
         with urllib_request.urlopen(req, timeout=20) as response:  # noqa: S310 - URL comes from local CLI config.
-            raw = response.read().decode("utf-8")
-            return response.status, json.loads(raw) if raw else None
+            raw = response.read().decode("utf-8", errors="replace")
+            body = _parse_json_response(raw, non_json_body={"raw": _body_preview(raw)})
+            return response.status, body
     except HTTPError as exc:
-        raw = exc.read().decode("utf-8")
-        body = json.loads(raw) if raw else {"error": exc.reason}
+        raw = exc.read().decode("utf-8", errors="replace")
+        body = _parse_json_response(
+            raw,
+            non_json_body={
+                "error": "http_error",
+                "detail": str(exc.reason),
+                "body_preview": _body_preview(raw),
+            },
+        )
         return exc.code, body
     except URLError as exc:
         return 0, {"error": "network_error", "detail": str(exc.reason)}

@@ -297,13 +297,25 @@ if (not _running_under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").low
 else:
     BFF_SESSION_STORE = BFFSessionStore()
 
-if (not _running_under_pytest()) and os.getenv("CLI_TOKENS_BACKEND", os.getenv("SESSIONS_BACKEND", "memory")).lower() == "db":
-    try:
-        CLI_TOKEN_STORE = DBCLITokenStore()
-    except (ImportError, RuntimeError):
-        CLI_TOKEN_STORE = InMemoryCLITokenStore()
-else:
-    CLI_TOKEN_STORE = InMemoryCLITokenStore()
+def _build_cli_token_store(*, running_under_pytest: bool | None = None):
+    """Create the CLI token store and fail fast when the configured DB store is unavailable.
+
+    CLI tokens are bearer credentials for write-capable authoring actions. A
+    silent fallback from DB to memory would make all existing tokens unusable
+    after a restart and could hide a broken production deployment.
+    """
+    under_pytest = _running_under_pytest() if running_under_pytest is None else running_under_pytest
+    backend = os.getenv("CLI_TOKENS_BACKEND", os.getenv("SESSIONS_BACKEND", "memory")).lower()
+    if under_pytest and "CLI_TOKENS_BACKEND" not in os.environ:
+        return InMemoryCLITokenStore()
+    if backend == "db":
+        return DBCLITokenStore()
+    if backend == "memory":
+        return InMemoryCLITokenStore()
+    raise RuntimeError(f"Unsupported CLI_TOKENS_BACKEND: {backend}")
+
+
+CLI_TOKEN_STORE = _build_cli_token_store()
 
 # --- Auth Helpers & Middleware --------------------------------------------------
 
@@ -414,11 +426,13 @@ def _user_context_from_claims(claims: Mapping[str, object]) -> dict[str, object]
 
 
 def _bearer_auth_context_from_request(request: Request) -> tuple[bool, dict[str, object] | None]:
-    """Return (attempted, context) for JWT bearer authentication."""
+    """Return (attempted, context) for JWT or CLI bearer authentication."""
     token = _bearer_token_from_authorization_header(request)
     if not token:
         return False, None
     if token.startswith("gustav_cli_"):
+        if not _cli_bearer_allowed_for_path(request.url.path):
+            return True, None
         return True, _cli_bearer_auth_context_from_token(token, request=request)
     try:
         claims = verify_bearer_token(token=token, cfg=OIDC_CFG)
@@ -428,6 +442,11 @@ def _bearer_auth_context_from_request(request: Request) -> tuple[bool, dict[str,
     exp = claims.get("exp")
     expires_at = int(exp) if isinstance(exp, (int, float)) else None
     return True, {"user": _user_context_from_claims(claims), "expires_at": expires_at, "id_token": None}
+
+
+def _cli_bearer_allowed_for_path(path: str) -> bool:
+    """Limit opaque CLI tokens to the authoring API surface they were built for."""
+    return path == "/api/teaching/units" or path.startswith("/api/teaching/units/")
 
 
 def _required_cli_scope_for_request(request: Request) -> str:

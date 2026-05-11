@@ -9,6 +9,8 @@ Owner: Platform/App
 | Web | DATABASE_URL | postgresql://gustav_app@127.0.0.1:54322/postgres | Secret | env/.env | App‑DSN (RLS) |
 | Web | TEACHING_DATABASE_URL | =DATABASE_URL | Secret | env/.env | Repo DSN |
 | Web | SESSION_DATABASE_URL | postgresql://postgres@supabase_db_gustav-alpha2:5432/postgres | Secret | env/.env | Sessions (Service Role) |
+| Web | SERVICE_ROLE_DSN | postgresql://postgres@supabase_db_gustav-alpha2:5432/postgres | Secret | env/.env | Server-seitige Metadaten-Cleanups (z. B. Teaching-Storage) |
+| Web | CLI_TOKENS_BACKEND | =SESSIONS_BACKEND | db | env/.env | Persistenz für opake CLI-Tokens |
 | Web | WEB_BASE | https://app.localhost | FQDN | env/.env | Browser Base |
 | Web | REDIRECT_URI | https://app.localhost/auth/callback | FQDN/callback | env/.env | OIDC Callback |
 | KC | KC_BASE_URL | https://id.localhost | HTTPS FQDN | env/.env | IdP Base |

@@ -54,6 +54,7 @@ Sicherheitsregeln:
 
 - CLI-Tokens sind opake Bearer-Tokens, keine OIDC/JWT-Tokens.
 - GUSTAV speichert serverseitig nur einen Hash des geheimen Token-Anteils.
+- In DB-Backends startet GUSTAV nicht mit einem stillen Memory-Fallback, wenn der CLI-Token-Store nicht verfügbar ist.
 - Scopes sind `read`, `write` und `delete`.
 - Ein Token kann keine neuen CLI-Tokens erstellen oder widerrufen.
 - Fachliche Rollen und Besitzrechte werden bei jedem API-Aufruf aktuell geprüft.

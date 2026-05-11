@@ -161,6 +161,50 @@ async def test_cli_bearer_can_authenticate_teaching_units_without_jwt_verificati
 
 
 @pytest.mark.anyio
+async def test_cli_bearer_is_rejected_outside_teaching_authoring_paths(monkeypatch):
+    _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/teaching/views/teacher-home",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_cannot_manage_profile_cli_tokens(monkeypatch):
+    store, created = _install_cli_token(
+        monkeypatch,
+        scopes=["read", "write", "delete"],
+        roles=["teacher"],
+    )
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/app/profile/cli-tokens",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+            json={"label": "Escalated", "scopes": ["read", "write", "delete"], "ttl_days": 30},
+        )
+
+    assert response.status_code == 401
+    assert len(store.list_tokens("teacher-cli-auth")) == 1
+
+
+def test_cli_token_store_db_mode_fails_fast_outside_pytest(monkeypatch):
+    class BrokenDBStore:
+        def __init__(self) -> None:
+            raise RuntimeError("db unavailable")
+
+    monkeypatch.setenv("CLI_TOKENS_BACKEND", "db")
+    monkeypatch.setattr(main, "DBCLITokenStore", BrokenDBStore)
+
+    with pytest.raises(RuntimeError, match="db unavailable"):
+        main._build_cli_token_store(running_under_pytest=False)
+
+
+@pytest.mark.anyio
 async def test_cli_bearer_write_bypasses_browser_csrf_after_scope_and_role_checks(monkeypatch):
     _, created = _install_cli_token(
         monkeypatch,

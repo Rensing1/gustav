@@ -10,3 +10,13 @@ export type AppProfileView = {
   name_can_edit: boolean;
   password_change_href: string;
 };
+
+export type AppProfileCliToken = {
+  id: string;
+  label: string;
+  scopes: string[];
+  created_at: string;
+  expires_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};

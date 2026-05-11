@@ -156,3 +156,26 @@ class AdminClient:
         )
         if add.status_code not in (204,):
             raise ValueError("role_assign_failed")
+
+    def get_realm_roles(self, *, user_id: str) -> list[str]:
+        """Return current realm role names for one Keycloak user."""
+        token = self._token()
+        url = f"{self.cfg.base_url}/admin/realms/{self.cfg.realm}/users/{user_id}/role-mappings/realm"
+        response = requests.get(
+            url,
+            headers=self._admin(token),
+            timeout=10,
+            verify=self._kc._verify_opt(),
+            allow_redirects=False,
+        )
+        if response.status_code == 404:
+            raise ValueError("user_not_found")
+        response.raise_for_status()
+        payload = response.json() or []
+        if not isinstance(payload, list):
+            return []
+        roles: list[str] = []
+        for item in payload:
+            if isinstance(item, dict) and isinstance(item.get("name"), str):
+                roles.append(str(item["name"]))
+        return roles

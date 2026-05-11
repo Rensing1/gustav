@@ -19,9 +19,30 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
+from identity_access.cli_tokens import InMemoryCLITokenStore  # type: ignore
+from routes import teaching as teaching_routes  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
+
+
+def _install_cli_token(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    scopes: list[str],
+    roles: list[str],
+    user_sub: str = "teacher-cli-auth",
+):
+    store = InMemoryCLITokenStore(now=lambda: 1_000)
+    created = store.create_token(
+        user_sub=user_sub,
+        label="Laptop",
+        scopes=scopes,
+        ttl_seconds=3_600,
+    )
+    monkeypatch.setattr(main, "CLI_TOKEN_STORE", store)
+    monkeypatch.setattr(main, "_roles_for_cli_sub", lambda sub: list(roles))
+    return store, created
 
 
 @pytest.mark.anyio
@@ -111,3 +132,103 @@ async def test_favicon_is_allowlisted():
         r_favicon = await client.get("/favicon.ico", follow_redirects=False)
     # It may 404, but must not redirect to login
     assert r_favicon.status_code != 302 or r_favicon.headers.get("location") != "/auth/login"
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_can_authenticate_teaching_units_without_jwt_verification(monkeypatch):
+    _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
+
+    def _fail_jwt_verification(token, cfg):  # pragma: no cover - called only on regression
+        raise AssertionError("CLI tokens must not be sent to JWT verification")
+
+    monkeypatch.setattr(main, "verify_bearer_token", _fail_jwt_verification)
+
+    class StubRepo:
+        def list_units_for_author(self, *, author_id: str, limit: int, offset: int):
+            assert author_id == "teacher-cli-auth"
+            return []
+
+    monkeypatch.setattr(teaching_routes, "_REPO", StubRepo())
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/teaching/units",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_write_bypasses_browser_csrf_after_scope_and_role_checks(monkeypatch):
+    _, created = _install_cli_token(
+        monkeypatch,
+        scopes=["write"],
+        roles=["teacher"],
+        user_sub="teacher-cli-write",
+    )
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/teaching/units",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+            json={"title": "CLI Unit"},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["title"] == "CLI Unit"
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_read_token_cannot_write_teaching_units(monkeypatch):
+    _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/teaching/units",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+            json={"title": "CLI Unit"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_write_token_cannot_delete_teaching_units(monkeypatch):
+    _, created = _install_cli_token(monkeypatch, scopes=["write"], roles=["teacher"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.delete(
+            "/api/teaching/units/00000000-0000-4000-8000-000000000001",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_revoked_token_is_rejected(monkeypatch):
+    store, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
+    assert store.revoke_token(user_sub="teacher-cli-auth", token_id=created.record.id)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/teaching/units",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_valid_token_without_teacher_role_is_forbidden(monkeypatch):
+    _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["student"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/teaching/units",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 403

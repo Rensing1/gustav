@@ -30,6 +30,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    cliTokenAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-cli-token
   responses:
     Unauthorized401:
       description: Authentication required
@@ -165,6 +169,62 @@ components:
         last_name:
           type: string
           maxLength: 80
+    CLIToken:
+      type: object
+      required: [id, label, scopes, created_at, expires_at, last_used_at, revoked_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [read, write, delete]
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+    CLITokenCreate:
+      type: object
+      required: [label, scopes]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+        scopes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [read, write, delete]
+        ttl_days:
+          type: integer
+          minimum: 1
+          maximum: 90
+          default: 30
+    CLITokenCreated:
+      type: object
+      required: [token, record]
+      properties:
+        token:
+          type: string
+          description: Raw CLI token shown exactly once after creation.
+        record:
+          $ref: '#/components/schemas/CLIToken'
     LearnerHomeCourse:
       type: object
       required: [id, title, href]
@@ -6713,6 +6773,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/app/profile/cli-tokens:
+    get:
+      tags: [App]
+      summary: List CLI token metadata for the current user
+      operationId: listAppProfileCliTokens
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: CLI token metadata without raw token values
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CLIToken'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+    post:
+      tags: [App]
+      summary: Create a CLI token for the current user
+      operationId: createAppProfileCliToken
+      security:
+        - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "Auth: raw token is returned exactly once and is never returned by list endpoints."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CLITokenCreate'
+      responses:
+        '201':
+          description: CLI token created; raw token is included once
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CLITokenCreated'
+        '400':
+          description: Invalid token request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+
+  /api/app/profile/cli-tokens/{token_id}:
+    delete:
+      tags: [App]
+      summary: Revoke one CLI token for the current user
+      operationId: revokeAppProfileCliToken
+      security:
+        - bearerAuth: []
+      x-security-notes:
+        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "Auth: users can revoke only their own CLI tokens."
+      parameters:
+        - in: path
+          name: token_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Token revoked or already unusable
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '404':
+          description: Token not found for current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/learning/views/learner-home:
     get:
       tags: [App]
@@ -8405,6 +8546,9 @@ paths:
       operationId: listUnits
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       x-permissions:
         requiredRole: teacher
       parameters:
@@ -8444,10 +8588,14 @@ paths:
       operationId: createUnit
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
       requestBody:
         required: true
         content:
@@ -8550,8 +8698,12 @@ paths:
       operationId: updateUnit
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -8618,8 +8770,12 @@ paths:
       operationId: deleteUnit
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - delete
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the delete scope."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -8689,6 +8845,9 @@ paths:
       operationId: listUnitPhases
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -8740,6 +8899,9 @@ paths:
       operationId: createUnitPhase
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -8798,6 +8960,9 @@ paths:
       operationId: updateUnitPhase
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -8864,6 +9029,9 @@ paths:
       operationId: deleteUnitPhase
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - delete
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -8914,6 +9082,9 @@ paths:
       operationId: reorderUnitPhases
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -8982,6 +9153,9 @@ paths:
       operationId: getTeachingUnitModulesGraph
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9019,6 +9193,71 @@ paths:
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  /api/teaching/units/{unit_id}/modules/{module_id}/content-target:
+    get:
+      tags: [Teaching]
+      summary: Resolve the hidden section that stores module content
+      description: |
+        Returns the section id that backs a module's material and task content.
+        CLI clients use this resolver so the hidden content-container detail does not
+        leak into local configuration or scripts.
+      operationId: getUnitModuleContentTarget
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: module_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Module content target resolved
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [module_id, section_id]
+                properties:
+                  module_id:
+                    type: string
+                    format: uuid
+                  section_id:
+                    type: string
+                    format: uuid
+        '400':
+          description: |
+            Invalid input. detail codes:
+              - invalid_unit_id
+              - invalid_module_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit or module not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repository capability missing), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
   /api/teaching/units/{unit_id}/modules:
     post:
       tags: [Teaching]
@@ -9027,6 +9266,9 @@ paths:
       operationId: createTeachingUnitModule
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9090,6 +9332,9 @@ paths:
       operationId: updateTeachingUnitModule
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9156,6 +9401,9 @@ paths:
       operationId: deleteTeachingUnitModule
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - delete
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9209,6 +9457,9 @@ paths:
       operationId: reorderTeachingUnitPhaseModules
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9282,6 +9533,9 @@ paths:
       operationId: createTeachingUnitModuleEdge
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9424,6 +9678,9 @@ paths:
       operationId: deleteTeachingUnitModuleEdgeByPath
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - delete
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9480,6 +9737,9 @@ paths:
       operationId: listSections
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9532,6 +9792,9 @@ paths:
       operationId: createSection
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -9575,6 +9838,9 @@ paths:
       operationId: updateSection
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -9623,6 +9889,9 @@ paths:
       operationId: deleteSection
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - delete
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -9677,6 +9946,9 @@ paths:
       operationId: reorderSections
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9757,6 +10029,9 @@ paths:
       operationId: listSectionTasks
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -9813,6 +10088,9 @@ paths:
       operationId: createSectionTask
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -9892,6 +10170,9 @@ paths:
       operationId: updateSectionTask
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -9979,6 +10260,9 @@ paths:
       operationId: deleteSectionTask
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - delete
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -10278,6 +10562,9 @@ paths:
       operationId: reorderSectionTasks
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -10344,6 +10631,9 @@ paths:
       operationId: listSectionMaterials
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -10404,6 +10694,9 @@ paths:
       operationId: createSectionMaterial
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -10463,6 +10756,9 @@ paths:
       operationId: updateSectionMaterial
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -10545,6 +10841,9 @@ paths:
       operationId: deleteSectionMaterial
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - delete
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -10624,6 +10923,9 @@ paths:
       operationId: reorderSectionMaterials
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-permissions:
         requiredRole: teacher
         authorOnly: true

@@ -1821,6 +1821,8 @@ def _csrf_guard(request: Request) -> JSONResponse | None:
         - Require Origin or Referer AND exact same-origin (scheme/host/port).
           Missing or foreign headers → 403 with detail=csrf_violation.
     """
+    if getattr(request.state, "cli_token_id", None):
+        return None
     origin_present = (request.headers.get("origin") or request.headers.get("referer"))
     if not origin_present or (not _is_same_origin(request)):
         return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, vary_origin=True)
@@ -3271,6 +3273,49 @@ async def get_unit_modules_graph(request: Request, unit_id: str):
         "edges": [_serialize_unit_graph_edge(e) for e in edges],
     }
     return _json_private(payload, status_code=200)
+
+
+@teaching_router.get("/api/teaching/units/{unit_id}/modules/{module_id}/content-target")
+async def get_unit_module_content_target(request: Request, unit_id: str, module_id: str):
+    """Return the backing section id for a modular unit module.
+
+    Why:
+        Module authoring stores materials and tasks in a backing `unit_sections`
+        row. The regular module graph intentionally hides that implementation
+        detail, so machine clients need this narrow resolver instead of relying
+        on UI read-model payloads.
+    """
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return guard
+    if not hasattr(repo, "get_unit_module_for_author"):
+        return _private_error({"error": "service_unavailable", "detail": "modular_repo_unavailable"}, status_code=503)
+    try:
+        try:
+            module = repo.get_unit_module_for_author(unit_id=unit_id, module_id=module_id, author_id=sub)
+        except TypeError as exc:
+            if not _is_signature_compat_type_error(exc):
+                raise
+            module = repo.get_unit_module_for_author(unit_id, module_id, sub)
+    except LookupError:
+        return _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not module:
+        return _private_error({"error": "not_found"}, status_code=404)
+    section_id = module.get("section_id") if isinstance(module, dict) else getattr(module, "section_id", None)
+    if not section_id:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _json_private({"module_id": str(module_id), "section_id": str(section_id)}, status_code=200)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/modules")

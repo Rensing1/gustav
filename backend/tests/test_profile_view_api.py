@@ -18,6 +18,7 @@ if str(WEB_DIR) not in sys.path:
 
 import main  # type: ignore
 from routes import app as app_routes  # type: ignore
+from identity_access.cli_tokens import InMemoryCLITokenStore  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -213,3 +214,41 @@ def test_update_profile_display_name_updates_only_attributes(monkeypatch: pytest
             "display_name": ["Lena Neu"],
         }
     }
+
+
+@pytest.mark.anyio
+async def test_profile_cli_token_lifecycle_returns_raw_token_only_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = {"value": 1_000}
+    store = InMemoryCLITokenStore(now=lambda: now["value"])
+    monkeypatch.setattr(main, "CLI_TOKEN_STORE", store)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-cli-profile", roles=["teacher"], name="Lena")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        created = await client.post(
+            "/api/app/profile/cli-tokens",
+            headers={**headers, "Origin": "http://test"},
+            json={"label": "Laptop", "scopes": ["read"], "ttl_days": 30},
+        )
+        listed = await client.get("/api/app/profile/cli-tokens", headers=headers)
+        token_id = created.json()["record"]["id"]
+        revoked = await client.delete(
+            f"/api/app/profile/cli-tokens/{token_id}",
+            headers={**headers, "Origin": "http://test"},
+        )
+        listed_after_revoke = await client.get("/api/app/profile/cli-tokens", headers=headers)
+
+    assert created.status_code == 201
+    created_body = created.json()
+    assert created_body["token"].startswith("gustav_cli_")
+    assert created_body["record"]["label"] == "Laptop"
+    assert created_body["record"]["scopes"] == ["read"]
+
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert len(listed_body) == 1
+    assert "token" not in listed_body[0]
+    assert "token_hash" not in listed_body[0]
+
+    assert revoked.status_code == 204
+    assert listed_after_revoke.status_code == 200
+    assert listed_after_revoke.json()[0]["revoked_at"] is not None

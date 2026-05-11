@@ -2,6 +2,12 @@
 
 Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und verwalten Kurse, fügen Schüler hinzu/entfernen und sehen Mitglieder. Schüler sehen ihre belegten Kurse.
 
+## Teaching Authoring CLI
+
+Lehrkräfte können zentrale Authoring-Aufgaben auch über die GUSTAV CLI ausführen: Lerneinheiten, Abschnitte, Phasen, Module, Material und Aufgaben listen, erstellen, bearbeiten, löschen und umsortieren. Die CLI nutzt dieselben Teaching-Endpunkte wie die Weboberfläche und authentifiziert sich mit eigenen CLI-Tokens.
+
+Siehe: `docs/references/gustav_cli.md`.
+
 ## Endpunkte (API)
 - `GET /api/teaching/courses?limit&offset`
   - Lehrer: eigene Kurse; Schüler: belegte Kurse

@@ -176,6 +176,7 @@ Start here:
 Useful references:
 
 - Teaching: `docs/references/teaching.md`
+- Teaching Authoring CLI: `docs/references/gustav_cli.md`
 - Learning: `docs/references/learning.md`
 - Identity & sessions: `docs/references/user_management.md`
 - Storage wiring: `docs/references/storage_and_gateway.md`

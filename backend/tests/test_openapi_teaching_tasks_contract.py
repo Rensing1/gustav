@@ -17,6 +17,13 @@ def load_spec() -> dict:
         return yaml.safe_load(handle)
 
 
+def assert_teaching_security(op: dict, scope: str, label: str) -> None:
+    security = op.get("security")
+    assert {"cookieAuth": []} in security, f"{label} must allow cookieAuth"
+    assert {"cliTokenAuth": []} in security, f"{label} must allow cliTokenAuth"
+    assert op.get("x-required-cli-scopes") == [scope], f"{label} must document CLI {scope} scope"
+
+
 def test_tasks_paths_and_permissions_defined():
     spec = load_spec()
     paths = spec.get("paths", {})
@@ -35,7 +42,8 @@ def test_tasks_paths_and_permissions_defined():
 
     for verb in ("get", "post"):
         op = list_ops[verb]
-        assert op.get("security") == [{"cookieAuth": []}], f"{verb.upper()} /tasks must require cookieAuth"
+        scope = "read" if verb == "get" else "write"
+        assert_teaching_security(op, scope, f"{verb.upper()} /tasks")
         perms = op.get("x-permissions") or {}
         assert perms.get("requiredRole") == "teacher", f"{verb.upper()} /tasks must be teacher-only"
         assert perms.get("authorOnly") is True, f"{verb.upper()} /tasks must enforce authorOnly"
@@ -59,7 +67,7 @@ def test_tasks_paths_and_permissions_defined():
     assert "delete" in detail_ops, "DELETE /tasks/{task_id} must be documented"
 
     patch_op = detail_ops["patch"]
-    assert patch_op.get("security") == [{"cookieAuth": []}], "PATCH /tasks/{task_id} must require cookieAuth"
+    assert_teaching_security(patch_op, "write", "PATCH /tasks/{task_id}")
     perms = patch_op.get("x-permissions") or {}
     assert perms.get("requiredRole") == "teacher", "PATCH /tasks/{task_id} must be teacher-only"
     assert perms.get("authorOnly") is True, "PATCH /tasks/{task_id} must enforce authorOnly"
@@ -69,7 +77,7 @@ def test_tasks_paths_and_permissions_defined():
     assert patch_resp_ref == "#/components/schemas/Task", "PATCH /tasks/{task_id} 200 must return Task"
 
     delete_op = detail_ops["delete"]
-    assert delete_op.get("security") == [{"cookieAuth": []}], "DELETE /tasks/{task_id} must require cookieAuth"
+    assert_teaching_security(delete_op, "delete", "DELETE /tasks/{task_id}")
     perms = delete_op.get("x-permissions") or {}
     assert perms.get("requiredRole") == "teacher", "DELETE /tasks/{task_id} must be teacher-only"
     assert perms.get("authorOnly") is True, "DELETE /tasks/{task_id} must enforce authorOnly"
@@ -77,7 +85,7 @@ def test_tasks_paths_and_permissions_defined():
 
     reorder_op = paths[reorder_path].get("post")
     assert reorder_op is not None, "POST /tasks/reorder must be documented"
-    assert reorder_op.get("security") == [{"cookieAuth": []}], "POST /tasks/reorder must require cookieAuth"
+    assert_teaching_security(reorder_op, "write", "POST /tasks/reorder")
     perms = reorder_op.get("x-permissions") or {}
     assert perms.get("requiredRole") == "teacher", "POST /tasks/reorder must be teacher-only"
     assert perms.get("authorOnly") is True, "POST /tasks/reorder must enforce authorOnly"

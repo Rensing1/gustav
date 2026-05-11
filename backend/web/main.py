@@ -51,6 +51,7 @@ from identity_access.stores import StateStore, SessionStore
 from identity_access.domain import ALLOWED_ROLES
 from identity_access.tokens import BearerTokenVerificationError, IDTokenVerificationError, verify_bearer_token, verify_id_token
 from identity_access.bff_sessions import BFFSessionStore
+from identity_access.cli_tokens import DBCLITokenStore, InMemoryCLITokenStore
 import sys as _sys
 
 try:
@@ -296,6 +297,14 @@ if (not _running_under_pytest()) and os.getenv("SESSIONS_BACKEND", "memory").low
 else:
     BFF_SESSION_STORE = BFFSessionStore()
 
+if (not _running_under_pytest()) and os.getenv("CLI_TOKENS_BACKEND", os.getenv("SESSIONS_BACKEND", "memory")).lower() == "db":
+    try:
+        CLI_TOKEN_STORE = DBCLITokenStore()
+    except (ImportError, RuntimeError):
+        CLI_TOKEN_STORE = InMemoryCLITokenStore()
+else:
+    CLI_TOKEN_STORE = InMemoryCLITokenStore()
+
 # --- Auth Helpers & Middleware --------------------------------------------------
 
 def _session_cookie_options() -> dict:
@@ -409,6 +418,8 @@ def _bearer_auth_context_from_request(request: Request) -> tuple[bool, dict[str,
     token = _bearer_token_from_authorization_header(request)
     if not token:
         return False, None
+    if token.startswith("gustav_cli_"):
+        return True, _cli_bearer_auth_context_from_token(token, request=request)
     try:
         claims = verify_bearer_token(token=token, cfg=OIDC_CFG)
     except BearerTokenVerificationError as exc:
@@ -417,6 +428,55 @@ def _bearer_auth_context_from_request(request: Request) -> tuple[bool, dict[str,
     exp = claims.get("exp")
     expires_at = int(exp) if isinstance(exp, (int, float)) else None
     return True, {"user": _user_context_from_claims(claims), "expires_at": expires_at, "id_token": None}
+
+
+def _required_cli_scope_for_request(request: Request) -> str:
+    if request.method.upper() == "DELETE":
+        return "delete"
+    if request.method.upper() in {"POST", "PUT", "PATCH"}:
+        return "write"
+    return "read"
+
+
+def _roles_for_cli_sub(sub: str) -> list[str]:
+    """Load current roles for a CLI-authenticated user.
+
+    The default is fail-closed when roles cannot be loaded. Tests may monkeypatch
+    this function to keep auth-middleware behavior isolated from Keycloak.
+    """
+    try:
+        from identity_access.admin_client import AdminClient
+
+        roles = AdminClient(OIDC_CFG).get_realm_roles(user_id=sub)
+    except Exception as exc:
+        logger.warning("CLI role lookup failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
+        return []
+    return [role for role in roles if role in ALLOWED_ROLES]
+
+
+def _cli_bearer_auth_context_from_token(token: str, *, request: Request) -> dict[str, object] | None:
+    required_scope = _required_cli_scope_for_request(request)
+    try:
+        record = CLI_TOKEN_STORE.verify_token(token, required_scope=required_scope)
+    except Exception as exc:
+        logger.warning("CLI token verification failed: %s", exc.__class__.__name__)
+        return None
+    if record is None:
+        return None
+    roles = _roles_for_cli_sub(record.user_sub)
+    if not roles:
+        return None
+    return {
+        "user": {
+            "sub": record.user_sub,
+            "name": "CLI",
+            "role": _primary_role(roles),
+            "roles": roles,
+        },
+        "expires_at": record.expires_at,
+        "id_token": None,
+        "cli_token_id": record.id,
+    }
 
 
 def _session_auth_context_from_request(request: Request) -> dict[str, object] | None:
@@ -503,6 +563,8 @@ async def auth_enforcement(request: Request, call_next):
     request.state.user = auth_context["user"]
     request.state.auth_source = auth_source
     request.state.auth_expires_at = auth_context.get("expires_at")
+    if auth_context.get("cli_token_id"):
+        request.state.cli_token_id = auth_context.get("cli_token_id")
     # Also expose the raw id_token for logout flows to hint the IdP, but do not
     # leak it to templates or clients. This stays on the server-side request state.
     try:

@@ -21,7 +21,18 @@ describe("ProfileEditor", () => {
           name_locked_until: null,
           name_can_edit: true,
           password_change_href: "/auth/password"
-        }
+        },
+        cliTokens: [
+          {
+            id: "token-1",
+            label: "Laptop",
+            scopes: ["read"],
+            created_at: "2026-05-11T12:00:00+00:00",
+            expires_at: "2026-06-10T12:00:00+00:00",
+            last_used_at: null,
+            revoked_at: null
+          }
+        ]
       }
     });
 
@@ -33,6 +44,12 @@ describe("ProfileEditor", () => {
     expect(screen.getByRole("button", { name: "Anzeigename speichern" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Vor- und Nachname speichern" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Passwort ändern" })).toHaveAttribute("href", "/auth/password");
+    expect(screen.getByText("CLI-Tokens")).toBeInTheDocument();
+    expect(screen.getByLabelText("Tokenname")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "CLI-Token erstellen" })).toBeInTheDocument();
+    expect(screen.getByText("Laptop")).toBeInTheDocument();
+    expect(screen.getAllByText("read").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "CLI-Token widerrufen" })).toBeInTheDocument();
   });
 
   it("shows lock and validation messages", () => {
@@ -64,5 +81,42 @@ describe("ProfileEditor", () => {
     expect(screen.getByText(/wieder ab 03\.10\.2026, 02:00 geändert werden/i)).toBeInTheDocument();
     expect(screen.getByText("Der Anzeigename wurde gespeichert.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Vor- und Nachname speichern" })).toBeDisabled();
+  });
+
+  it("shows a newly created raw CLI token separately from the token list", () => {
+    render(ProfileEditor, {
+      props: {
+        profile: {
+          user: {
+            sub: "teacher-1",
+            name: "Lena",
+            role: "teacher",
+            roles: ["teacher"]
+          },
+          display_name: "Lena",
+          email: "lena.schmidt@example.com",
+          first_name: "Lena",
+          last_name: "Schmidt",
+          name_locked_until: null,
+          name_can_edit: true,
+          password_change_href: "/auth/password"
+        },
+        cliTokens: [
+          {
+            id: "token-1",
+            label: "Laptop",
+            scopes: ["read"],
+            created_at: "2026-05-11T12:00:00+00:00",
+            expires_at: "2026-06-10T12:00:00+00:00",
+            last_used_at: null,
+            revoked_at: null
+          }
+        ],
+        createdCliToken: "gustav_cli_secret"
+      }
+    });
+
+    expect(screen.getByText("gustav_cli_secret")).toBeInTheDocument();
+    expect(screen.getByText("Dieses Token wird nur jetzt angezeigt.")).toBeInTheDocument();
   });
 });

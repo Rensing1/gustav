@@ -14,8 +14,11 @@
 
   <ProfileEditor
     profile={data.profile}
+    cliTokens={data.cliTokens}
+    createdCliToken={form?.createCliToken?.token ?? null}
     displayNameError={form?.displayName?.error ?? null}
     nameError={form?.name?.error ?? null}
+    cliTokenError={form?.createCliToken?.error ?? form?.revokeCliToken?.error ?? null}
     saved={data.saved}
   />
 </div>

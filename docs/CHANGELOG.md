@@ -29,6 +29,7 @@
 - ai(vision): `_call_model` kapselt nun alle Ollama-Aufrufe (Timeouts, Markdown-Unwrap, Images-Handling), sodass `extract()` nur noch orchestriert und Tests den Helper gezielt prüfen können.
 
 ### Docs (updates)
+- docs(reference): Neue Referenz `docs/references/gustav_cli.md` dokumentiert die Teaching-Authoring-CLI, CLI-Tokens, Scopes, aktuelle Befehle, Beispiele und Grenzen.
 - docs(storage): Document that the learning upload proxy enforces SUPABASE_URL scheme/port, streams uploads with the central limit, and replays presign headers for proxy calls; highlight that `*_MAX_UPLOAD_BYTES` overrides are clamped to the published contract.
 - docs(plan): Neu `2025-11-05_vision-images-param.md` (Vision-Bilder an Modell) und Update in `2025-11-04-ollama-client-compat.md` (Hinweis auf `images`).
 - docs(plan): `2025-11-04_ui_htmx_submit.md` und `2025-11-04_learning_ui_autorefresh.md` dokumentieren die UI-Verbesserungen.

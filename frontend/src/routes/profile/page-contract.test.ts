@@ -14,6 +14,9 @@ describe("profile route contract", () => {
     expect(routeSource).toContain("<PageActionHead");
     expect(routeSource).toContain("<ProfileEditor");
     expect(serverSource).toContain('"/api/app/profile"');
+    expect(serverSource).toContain('"/api/app/profile/cli-tokens"');
+    expect(serverSource).toContain("createCliToken");
+    expect(serverSource).toContain("revokeCliToken");
     expect(serverSource).toContain("includeSameOrigin: true");
     expect(serverSource).toContain("hidePageHeading: true");
   });

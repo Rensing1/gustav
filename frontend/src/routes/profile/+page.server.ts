@@ -5,7 +5,7 @@ import { backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSessionBootstrap } from "$lib/server/guards";
 import { readFreshTokenSession } from "$lib/server/session";
 import type { BreadcrumbItem } from "$lib/types/navigation";
-import type { AppProfileView } from "$lib/types/profile";
+import type { AppProfileCliToken, AppProfileView } from "$lib/types/profile";
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
   await requireParentSessionBootstrap(parent, currentPath(url));
@@ -15,12 +15,18 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     cookies,
     "/api/app/profile"
   );
+  const cliTokens = await requireBackendJson<AppProfileCliToken[]>(
+    fetch,
+    cookies,
+    "/api/app/profile/cli-tokens"
+  );
 
   const breadcrumbs: BreadcrumbItem[] = [{ label: "Profil" }];
 
   return {
     breadcrumbs,
     profile,
+    cliTokens,
     hidePageHeading: true,
     pageTitle: "Profil",
     pageCopy: "",
@@ -101,5 +107,71 @@ export const actions: Actions = {
     }
 
     throw redirect(303, "/profile?saved=name");
+  },
+
+  createCliToken: async ({ fetch, cookies, request }) => {
+    const form = await request.formData();
+    const label = String(form.get("label") ?? "").trim();
+    const scopes = form.getAll("scopes").map((scope) => String(scope));
+
+    if (!label || scopes.length === 0) {
+      return fail(400, {
+        createCliToken: {
+          error: "Bitte gib einen Namen und mindestens einen Scope an."
+        }
+      });
+    }
+
+    const response = await backendRequest(fetch, cookies, "/api/app/profile/cli-tokens", {
+      method: "POST",
+      includeSameOrigin: true,
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ label, scopes, ttl_days: 30 })
+    });
+
+    if (!response.ok) {
+      return fail(response.status, {
+        createCliToken: {
+          error: "Das CLI-Token konnte nicht erstellt werden."
+        }
+      });
+    }
+
+    const body = await response.json();
+    return {
+      createCliToken: {
+        token: String(body.token ?? "")
+      }
+    };
+  },
+
+  revokeCliToken: async ({ fetch, cookies, request }) => {
+    const form = await request.formData();
+    const tokenId = String(form.get("token_id") ?? "").trim();
+
+    if (!tokenId) {
+      return fail(400, {
+        revokeCliToken: {
+          error: "Das CLI-Token konnte nicht gefunden werden."
+        }
+      });
+    }
+
+    const response = await backendRequest(fetch, cookies, `/api/app/profile/cli-tokens/${tokenId}`, {
+      method: "DELETE",
+      includeSameOrigin: true
+    });
+
+    if (!response.ok) {
+      return fail(response.status, {
+        revokeCliToken: {
+          error: "Das CLI-Token konnte nicht widerrufen werden."
+        }
+      });
+    }
+
+    throw redirect(303, "/profile?saved=cli-token-revoked");
   }
 };

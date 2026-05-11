@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from backend.learning.usecases.courses import ListCoursesInput, ListCoursesUseCase
 from identity_access.admin_client import AdminClient
+from identity_access.cli_tokens import CLITokenRecord, InMemoryCLITokenStore
 
 try:
     from . import learning as learning_routes
@@ -31,6 +32,7 @@ except ImportError:  # pragma: no cover - flat import fallback
 
 
 app_router = APIRouter(tags=["App"])
+CLI_TOKEN_STORE = InMemoryCLITokenStore()
 
 
 class ConcernBoxEntryCreatePayload(BaseModel):
@@ -46,6 +48,12 @@ class ProfileDisplayNameUpdatePayload(BaseModel):
 class ProfileNameUpdatePayload(BaseModel):
     first_name: str = Field(default="", max_length=80)
     last_name: str = Field(default="", max_length=80)
+
+
+class CLITokenCreatePayload(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+    scopes: list[str] = Field(min_length=1)
+    ttl_days: int = Field(default=30, ge=1, le=90)
 
 
 class BFFSessionSyncPayload(BaseModel):
@@ -86,6 +94,32 @@ def _start_target_for_role(role: str) -> str:
 
 def _private_headers() -> dict[str, str]:
     return {"Cache-Control": "private, no-store"}
+
+
+def _cli_token_store():
+    try:
+        mod = _resolve_main_module()
+        return getattr(mod, "CLI_TOKEN_STORE")
+    except Exception:
+        return CLI_TOKEN_STORE
+
+
+def _epoch_to_iso(value: int | None) -> str | None:
+    if value is None:
+        return None
+    return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+
+
+def _serialize_cli_token(record: CLITokenRecord) -> dict[str, object]:
+    return {
+        "id": record.id,
+        "label": record.label,
+        "scopes": record.scopes,
+        "created_at": _epoch_to_iso(record.created_at),
+        "expires_at": _epoch_to_iso(record.expires_at),
+        "last_used_at": _epoch_to_iso(record.last_used_at),
+        "revoked_at": _epoch_to_iso(record.revoked_at),
+    }
 
 
 def _internal_bff_secret_configured() -> str:
@@ -1037,6 +1071,53 @@ async def patch_profile_name(request: Request, payload: ProfileNameUpdatePayload
             status_code=409,
             headers=_private_headers(),
         )
+    return Response(status_code=204, headers=_private_headers())
+
+
+@app_router.get("/api/app/profile/cli-tokens")
+async def list_profile_cli_tokens(request: Request):
+    """Return CLI token metadata for the current user without raw token values."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    records = _cli_token_store().list_tokens(str(user.get("sub") or ""))
+    return JSONResponse([_serialize_cli_token(record) for record in records], headers=_private_headers())
+
+
+@app_router.post("/api/app/profile/cli-tokens")
+async def create_profile_cli_token(request: Request, payload: CLITokenCreatePayload):
+    """Create a CLI token and return the raw token exactly once."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    label = str(payload.label or "").strip()
+    if not label:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_label"}, status_code=400, headers=_private_headers())
+    try:
+        created = _cli_token_store().create_token(
+            user_sub=str(user.get("sub") or ""),
+            label=label,
+            scopes=[str(scope) for scope in payload.scopes],
+            ttl_seconds=int(payload.ttl_days) * 24 * 60 * 60,
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400, headers=_private_headers())
+    return JSONResponse(
+        {"token": created.raw_token, "record": _serialize_cli_token(created.record)},
+        status_code=201,
+        headers=_private_headers(),
+    )
+
+
+@app_router.delete("/api/app/profile/cli-tokens/{token_id}")
+async def revoke_profile_cli_token(request: Request, token_id: str):
+    """Revoke one CLI token owned by the current user."""
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    ok = _cli_token_store().revoke_token(user_sub=str(user.get("sub") or ""), token_id=token_id)
+    if not ok:
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
     return Response(status_code=204, headers=_private_headers())
 
 

@@ -35,6 +35,7 @@ import { access, mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import express from "express";
 import multer from "multer";
+import { normalizeH5PAjaxBody } from "./lib/ajax_body.mjs";
 import { buildSessionCookieHeader } from "./lib/cookies.mjs";
 import { debugPagesEnabled, isProdLikeEnv } from "./lib/env.mjs";
 import { fetchWithTimeout } from "./lib/fetch_timeout.mjs";
@@ -1723,9 +1724,10 @@ async function main() {
     const libraryUploadFile = Array.isArray(req.files?.h5p) ? toH5pUpload(req.files.h5p[0]) : undefined;
 
     try {
+      const ajaxBody = normalizeH5PAjaxBody(req.body);
       const result = await h5pAjax.postAjax(
         action,
-        req.body,
+        ajaxBody,
         req.query.language ?? req.language,
         req.user,
         filesFile,

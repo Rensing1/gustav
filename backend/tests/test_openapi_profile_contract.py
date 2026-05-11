@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import yaml
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WEB_DIR = REPO_ROOT / "backend" / "web"
+sys.path.insert(0, str(WEB_DIR))
+import main  # type: ignore  # noqa: E402
 
 
 def test_openapi_documents_profile_endpoints() -> None:
@@ -119,3 +125,22 @@ def test_openapi_documents_cli_scopes_for_authoring_resources() -> None:
         assert {"cookieAuth": []} in op["security"], f"{method.upper()} {path}"
         assert {"cliTokenAuth": []} in op["security"], f"{method.upper()} {path}"
         assert op["x-required-cli-scopes"] == scopes, f"{method.upper()} {path}"
+
+
+def test_openapi_cli_surface_matches_runtime_capability_table() -> None:
+    spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
+    documented = set()
+    for path, methods in spec["paths"].items():
+        for method, op in methods.items():
+            if not isinstance(op, dict):
+                continue
+            if {"cliTokenAuth": []} not in op.get("security", []):
+                continue
+            documented.add((method.upper(), path, tuple(op["x-required-cli-scopes"])))
+
+    runtime = {
+        (capability.method, capability.path_template, (capability.required_scope,))
+        for capability in main.CLI_AUTHORING_CAPABILITIES
+    }
+
+    assert runtime == documented

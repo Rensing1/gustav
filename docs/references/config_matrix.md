@@ -21,6 +21,10 @@ Owner: Platform/App
 
 Hinweise:
 - Compose nutzt für DSNs Service‑Namen (z. B. `supabase_db_gustav-alpha2`) statt 127.0.0.1.
+- Der Webcontainer setzt `SERVICE_ROLE_DSN` bewusst auf den containerinternen
+  Supabase-DB-Host und lässt diesen Wert nicht aus der Host-`.env`
+  überschreiben. Host-DSNs wie `127.0.0.1:54322` sind für pytest auf dem Host
+  gültig, aber im Container falsch.
 - In Containern empfiehlt sich der interne Gateway-Dienst der Supabase-CLI
   (z. B. `http://supabase_kong_gustav-alpha2:8000`). Alternativ funktioniert
   weiterhin das Host-Gateway (`http://host.docker.internal:54321`), falls das

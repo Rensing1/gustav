@@ -174,6 +174,51 @@ async def test_cli_bearer_is_rejected_outside_teaching_authoring_paths(monkeypat
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("method", "path", "json_body"),
+    [
+        ("GET", "/api/teaching/units/not-a-uuid", None),
+        (
+            "POST",
+            "/api/teaching/units/not-a-uuid/sections/not-a-section/materials/upload-intents",
+            {"filename": "demo.pdf", "mime_type": "application/pdf", "size_bytes": 1},
+        ),
+        (
+            "GET",
+            "/api/teaching/units/not-a-uuid/sections/not-a-section/materials/not-a-material/download-url",
+            None,
+        ),
+        (
+            "POST",
+            "/api/teaching/units/not-a-uuid/sections/not-a-section/tasks/not-a-task/h5p/reset",
+            {},
+        ),
+    ],
+)
+async def test_cli_bearer_is_rejected_for_cookie_only_teaching_unit_prefix_paths(
+    monkeypatch,
+    method: str,
+    path: str,
+    json_body,
+):
+    _, created = _install_cli_token(
+        monkeypatch,
+        scopes=["read", "write", "delete"],
+        roles=["teacher"],
+    )
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.request(
+            method,
+            path,
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+            json=json_body,
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
 async def test_cli_bearer_cannot_manage_profile_cli_tokens(monkeypatch):
     store, created = _install_cli_token(
         monkeypatch,

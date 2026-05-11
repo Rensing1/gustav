@@ -32,6 +32,10 @@ def test_web_service_sets_container_service_role_dsn_for_storage_cleanup():
     assert service_role_lines, "web service must expose SERVICE_ROLE_DSN"
     assert "supabase_db_gustav-alpha2:5432" in service_role_lines[0]
     assert "127.0.0.1:54322" not in service_role_lines[0]
+    assert "${SERVICE_ROLE_DSN" not in service_role_lines[0], (
+        "web container SERVICE_ROLE_DSN must not be overridable by host .env "
+        "because host-local 127.0.0.1 DSNs are invalid inside the container"
+    )
 
 
 def test_keycloak_uses_postgres_service():

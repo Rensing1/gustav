@@ -7,6 +7,7 @@ import sys
 from typing import Any, TextIO
 from urllib import request as urllib_request
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 
 from .config import GustavCLIConfig, load_config, save_config
 
@@ -214,7 +215,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _configure(args: argparse.Namespace, *, stdin: TextIO, stdout: TextIO) -> int:
+def _configure(args: argparse.Namespace, *, stdin: TextIO, stdout: TextIO, stderr: TextIO) -> int:
+    parsed_base_url = urlparse(str(args.base_url or ""))
+    if parsed_base_url.scheme != "https" or not parsed_base_url.netloc:
+        stderr.write("Die Base-URL muss mit https:// beginnen.\n")
+        return 2
     token = stdin.readline().strip() if args.token_stdin else getpass.getpass("CLI-Token: ")
     save_config(GustavCLIConfig(base_url=args.base_url, token=token))
     stdout.write("GUSTAV CLI konfiguriert.\n")
@@ -696,7 +701,7 @@ def main(
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.group == "auth" and args.command == "configure":
-        return _configure(args, stdin=stdin, stdout=stdout)
+        return _configure(args, stdin=stdin, stdout=stdout, stderr=stderr)
     if args.group == "auth" and args.command == "status":
         return _status(stdout=stdout, stderr=stderr)
     if args.group == "units" and args.command == "list":

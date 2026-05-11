@@ -1,6 +1,7 @@
 "GUSTAV alpha-2"
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 import asyncio
 import hashlib
@@ -431,9 +432,14 @@ def _bearer_auth_context_from_request(request: Request) -> tuple[bool, dict[str,
     if not token:
         return False, None
     if token.startswith("gustav_cli_"):
-        if not _cli_bearer_allowed_for_path(request.url.path):
+        capability = _cli_capability_for_request(request.method, request.url.path)
+        if capability is None:
             return True, None
-        return True, _cli_bearer_auth_context_from_token(token, request=request)
+        return True, _cli_bearer_auth_context_from_token(
+            token,
+            request=request,
+            required_scope=capability.required_scope,
+        )
     try:
         claims = verify_bearer_token(token=token, cfg=OIDC_CFG)
     except BearerTokenVerificationError as exc:
@@ -444,17 +450,95 @@ def _bearer_auth_context_from_request(request: Request) -> tuple[bool, dict[str,
     return True, {"user": _user_context_from_claims(claims), "expires_at": expires_at, "id_token": None}
 
 
-def _cli_bearer_allowed_for_path(path: str) -> bool:
-    """Limit opaque CLI tokens to the authoring API surface they were built for."""
-    return path == "/api/teaching/units" or path.startswith("/api/teaching/units/")
+@dataclass(frozen=True)
+class CLIAuthoringCapability:
+    method: str
+    path_template: str
+    required_scope: str
 
 
-def _required_cli_scope_for_request(request: Request) -> str:
-    if request.method.upper() == "DELETE":
-        return "delete"
-    if request.method.upper() in {"POST", "PUT", "PATCH"}:
-        return "write"
-    return "read"
+CLI_AUTHORING_CAPABILITIES: tuple[CLIAuthoringCapability, ...] = (
+    CLIAuthoringCapability("GET", "/api/teaching/units", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/units", "write"),
+    CLIAuthoringCapability("PATCH", "/api/teaching/units/{unit_id}", "write"),
+    CLIAuthoringCapability("DELETE", "/api/teaching/units/{unit_id}", "delete"),
+    CLIAuthoringCapability("GET", "/api/teaching/units/{unit_id}/phases", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/phases", "write"),
+    CLIAuthoringCapability("PATCH", "/api/teaching/units/{unit_id}/phases/{phase_id}", "write"),
+    CLIAuthoringCapability("DELETE", "/api/teaching/units/{unit_id}/phases/{phase_id}", "delete"),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/phases/reorder", "write"),
+    CLIAuthoringCapability("GET", "/api/teaching/units/{unit_id}/modules/graph", "read"),
+    CLIAuthoringCapability("GET", "/api/teaching/units/{unit_id}/modules/{module_id}/content-target", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/modules", "write"),
+    CLIAuthoringCapability("PATCH", "/api/teaching/units/{unit_id}/modules/{module_id}", "write"),
+    CLIAuthoringCapability("DELETE", "/api/teaching/units/{unit_id}/modules/{module_id}", "delete"),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder", "write"),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/modules/edges", "write"),
+    CLIAuthoringCapability(
+        "DELETE",
+        "/api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}",
+        "delete",
+    ),
+    CLIAuthoringCapability("GET", "/api/teaching/units/{unit_id}/sections", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/sections", "write"),
+    CLIAuthoringCapability("PATCH", "/api/teaching/units/{unit_id}/sections/{section_id}", "write"),
+    CLIAuthoringCapability("DELETE", "/api/teaching/units/{unit_id}/sections/{section_id}", "delete"),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/sections/reorder", "write"),
+    CLIAuthoringCapability("GET", "/api/teaching/units/{unit_id}/sections/{section_id}/tasks", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/sections/{section_id}/tasks", "write"),
+    CLIAuthoringCapability(
+        "PATCH",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "DELETE",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}",
+        "delete",
+    ),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder", "write"),
+    CLIAuthoringCapability("GET", "/api/teaching/units/{unit_id}/sections/{section_id}/materials", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/sections/{section_id}/materials", "write"),
+    CLIAuthoringCapability(
+        "PATCH",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "DELETE",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}",
+        "delete",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder",
+        "write",
+    ),
+)
+
+
+def _path_matches_template(path_template: str, path: str) -> bool:
+    template_parts = path_template.strip("/").split("/")
+    path_parts = path.strip("/").split("/")
+    if len(template_parts) != len(path_parts):
+        return False
+    for template_part, path_part in zip(template_parts, path_parts):
+        if template_part.startswith("{") and template_part.endswith("}"):
+            if not path_part:
+                return False
+            continue
+        if template_part != path_part:
+            return False
+    return True
+
+
+def _cli_capability_for_request(method: str, path: str) -> CLIAuthoringCapability | None:
+    """Find the documented CLI authoring capability for this HTTP request."""
+    normalized_method = method.upper()
+    for capability in CLI_AUTHORING_CAPABILITIES:
+        if capability.method == normalized_method and _path_matches_template(capability.path_template, path):
+            return capability
+    return None
 
 
 def _roles_for_cli_sub(sub: str) -> list[str]:
@@ -473,8 +557,12 @@ def _roles_for_cli_sub(sub: str) -> list[str]:
     return [role for role in roles if role in ALLOWED_ROLES]
 
 
-def _cli_bearer_auth_context_from_token(token: str, *, request: Request) -> dict[str, object] | None:
-    required_scope = _required_cli_scope_for_request(request)
+def _cli_bearer_auth_context_from_token(
+    token: str,
+    *,
+    request: Request,
+    required_scope: str,
+) -> dict[str, object] | None:
     try:
         record = CLI_TOKEN_STORE.verify_token(token, required_scope=required_scope)
     except Exception as exc:

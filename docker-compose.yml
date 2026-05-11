@@ -99,7 +99,7 @@ services:
       # Sessions DSN (service role; app_sessions policies allow server-side access)
       - SESSION_DATABASE_URL=${SESSION_DATABASE_URL:-postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres}
       # Service-role DSN for server-side metadata cleanup; must use the container DB host in Compose.
-      - SERVICE_ROLE_DSN=${SERVICE_ROLE_DSN:-postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres}
+      - SERVICE_ROLE_DSN=postgresql://postgres:postgres@supabase_db_gustav-alpha2:5432/postgres
       # Share dev upload root with worker so Vision can read image bytes
       - STORAGE_VERIFY_ROOT=${STORAGE_VERIFY_ROOT:-/app/.tmp/dev_uploads}
       - REQUIRE_STORAGE_VERIFY=${REQUIRE_STORAGE_VERIFY:-true}

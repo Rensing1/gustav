@@ -6,7 +6,7 @@ GUSTAV still has a recurring classroom blocker around authentication
 continuity. Learners sometimes see missing modules, missing feedback, vanished
 submissions, generic error pages, or stale learning state. In many cases the
 problem disappears after a browser reload or a fresh visit to
-`gustav-lernplattform.de`. Often the user is asked to authenticate again but
+`gustav.example`. Often the user is asked to authenticate again but
 does not need to enter credentials, which means Keycloak SSO is still active and
 GUSTAV failed to preserve or recover its app/BFF session state.
 

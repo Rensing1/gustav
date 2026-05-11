@@ -252,3 +252,36 @@ async def test_profile_cli_token_lifecycle_returns_raw_token_only_once(monkeypat
     assert revoked.status_code == 204
     assert listed_after_revoke.status_code == 200
     assert listed_after_revoke.json()[0]["revoked_at"] is not None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"label": "", "scopes": ["read"], "ttl_days": 30},
+        {"label": "Laptop", "scopes": [], "ttl_days": 30},
+        {"label": "Laptop", "scopes": ["admin"], "ttl_days": 30},
+        {"label": "Laptop", "scopes": ["read"], "ttl_days": 0},
+        {"label": "Laptop", "scopes": ["read"], "ttl_days": 91},
+    ],
+)
+async def test_profile_cli_token_create_invalid_payload_returns_contract_400(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict[str, object],
+) -> None:
+    store = InMemoryCLITokenStore(now=lambda: 1_000)
+    monkeypatch.setattr(main, "CLI_TOKEN_STORE", store)
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-cli-profile", roles=["teacher"], name="Lena")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/app/profile/cli-tokens",
+            headers={**headers, "Origin": "http://test"},
+            json=payload,
+        )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "bad_request"
+    assert "detail" in body
+    assert store.list_tokens("teacher-cli-profile") == []

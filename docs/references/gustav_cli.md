@@ -38,6 +38,10 @@ Token konfigurieren:
 gustav auth configure --base-url https://app.localhost
 ```
 
+Die Base-URL muss mit `https://` beginnen. Auch lokal läuft GUSTAV über
+`https://app.localhost`, damit CLI-Tokens nicht versehentlich über Klartext-HTTP
+übertragen werden.
+
 Token aus stdin lesen, zum Beispiel für Skripte:
 
 ```bash
@@ -58,6 +62,9 @@ Sicherheitsregeln:
 - Scopes sind `read`, `write` und `delete`.
 - Ein Token kann keine neuen CLI-Tokens erstellen oder widerrufen.
 - Fachliche Rollen und Besitzrechte werden bei jedem API-Aufruf aktuell geprüft.
+- Die Runtime erlaubt CLI-Tokens nur für explizit dokumentierte Authoring-
+  Capabilities. Neue CLI-Endpunkte brauchen deshalb OpenAPI-`cliTokenAuth`,
+  einen Scope und einen Regressionstest.
 - Roh-Tokens sollten nicht als Shell-Argument übergeben werden.
 
 ## Ausgabeformat

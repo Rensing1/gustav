@@ -51,9 +51,11 @@ class ProfileNameUpdatePayload(BaseModel):
 
 
 class CLITokenCreatePayload(BaseModel):
-    label: str = Field(min_length=1, max_length=80)
-    scopes: list[str] = Field(min_length=1)
-    ttl_days: int = Field(default=30, ge=1, le=90)
+    # Keep validation handler-side so the API returns the documented 400 shape
+    # instead of FastAPI's framework-level 422 payload.
+    label: object | None = None
+    scopes: object | None = None
+    ttl_days: object | None = 30
 
 
 class BFFSessionSyncPayload(BaseModel):
@@ -1090,15 +1092,30 @@ async def create_profile_cli_token(request: Request, payload: CLITokenCreatePayl
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    label = str(payload.label or "").strip()
-    if not label:
+    label_value = payload.label
+    label = label_value.strip() if isinstance(label_value, str) else ""
+    if not label or len(label) > 80:
         return JSONResponse({"error": "bad_request", "detail": "invalid_label"}, status_code=400, headers=_private_headers())
+    scopes_value = payload.scopes
+    if not isinstance(scopes_value, list) or not scopes_value:
+        return JSONResponse(
+            {"error": "bad_request", "detail": "invalid_cli_token_scopes"},
+            status_code=400,
+            headers=_private_headers(),
+        )
+    ttl_days = payload.ttl_days
+    if isinstance(ttl_days, bool) or not isinstance(ttl_days, int) or ttl_days < 1 or ttl_days > 90:
+        return JSONResponse(
+            {"error": "bad_request", "detail": "invalid_ttl_days"},
+            status_code=400,
+            headers=_private_headers(),
+        )
     try:
         created = _cli_token_store().create_token(
             user_sub=str(user.get("sub") or ""),
             label=label,
-            scopes=[str(scope) for scope in payload.scopes],
-            ttl_seconds=int(payload.ttl_days) * 24 * 60 * 60,
+            scopes=[str(scope) for scope in scopes_value],
+            ttl_seconds=ttl_days * 24 * 60 * 60,
         )
     except ValueError as exc:
         return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400, headers=_private_headers())

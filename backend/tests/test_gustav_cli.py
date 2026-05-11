@@ -67,6 +67,25 @@ def test_auth_configure_reads_token_from_stdin_and_writes_0600_config(tmp_path, 
     }
 
 
+def test_auth_configure_rejects_non_https_base_url_without_writing_config(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("GUSTAV_CONFIG_HOME", str(tmp_path))
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    code = cli.main(
+        ["auth", "configure", "--base-url", "http://gustav.example", "--token-stdin"],
+        stdin=io.StringIO("gustav_cli_token_secret\n"),
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert code == 2
+    assert "https://" in stderr.getvalue()
+    assert "gustav_cli_token_secret" not in stdout.getvalue()
+    assert "gustav_cli_token_secret" not in stderr.getvalue()
+    assert not config.default_config_path().exists()
+
+
 def test_http_json_returns_structured_body_for_non_json_success(monkeypatch) -> None:
     monkeypatch.setattr(
         cli.urllib_request,

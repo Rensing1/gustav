@@ -12,12 +12,14 @@ function pageHref(url: URL): string {
 }
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "teaching");
 
   const catalog = await requireBackendJson<TeacherUnitsCatalogView>(
     fetch,
     cookies,
-    pageHref(url)
+    pageHref(url),
+    { authRedirectPath }
   );
 
   const breadcrumbs: BreadcrumbItem[] = [{ label: "Lerneinheiten" }];
@@ -33,7 +35,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
 };
 
 export const actions: Actions = {
-  default: async ({ fetch, cookies, request }) => {
+  default: async ({ fetch, cookies, request, url }) => {
     const form = await request.formData();
     const title = String(form.get("title") || "").trim();
     const summary = String(form.get("summary") || "").trim();
@@ -59,6 +61,7 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, "/api/teaching/units", {
       method: "POST",
+      authRedirectPath: currentPath(url),
       includeSameOrigin: true,
       headers: {
         "content-type": "application/json"

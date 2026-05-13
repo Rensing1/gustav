@@ -9,17 +9,20 @@ import type { BreadcrumbItem } from "$lib/types/navigation";
 
 export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
   try {
-    const bootstrap = await requireParentSpaceBootstrap(parent, currentPath(url), "learning");
+    const authRedirectPath = currentPath(url);
+    const bootstrap = await requireParentSpaceBootstrap(parent, authRedirectPath, "learning");
     const [units, home] = await Promise.all([
       requireBackendJson<LearningCourseUnit[]>(
         fetch,
         cookies,
-        `/api/learning/courses/${encodeURIComponent(params.courseId)}/units`
+        `/api/learning/courses/${encodeURIComponent(params.courseId)}/units`,
+        { authRedirectPath }
       ),
       requireBackendJson<LearnerHome>(
         fetch,
         cookies,
-        "/api/learning/views/learner-home"
+        "/api/learning/views/learner-home",
+        { authRedirectPath }
       )
     ]);
 

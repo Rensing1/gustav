@@ -23,12 +23,14 @@ function loadLivePollIntervalSeconds(): number {
 }
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "live");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "live");
 
   const courses = await requireBackendJson<LiveCourseListItem[]>(
     fetch,
     cookies,
-    "/api/teaching/courses?limit=25&offset=0"
+    "/api/teaching/courses?limit=25&offset=0",
+    { authRedirectPath }
   );
 
   const selectedCourseId = url.searchParams.get("course_id");
@@ -44,7 +46,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     courseUnits = await requireBackendJson<LiveCourseUnitsView>(
       fetch,
       cookies,
-      `/api/live/views/courses/${selectedCourseId}/units`
+      `/api/live/views/courses/${selectedCourseId}/units`,
+      { authRedirectPath }
     );
   }
 
@@ -52,7 +55,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     summary = await requireBackendJson<LiveSummaryPayload>(
       fetch,
       cookies,
-      `/api/teaching/courses/${selectedCourseId}/units/${selectedUnitId}/submissions/summary`
+      `/api/teaching/courses/${selectedCourseId}/units/${selectedUnitId}/submissions/summary`,
+      { authRedirectPath }
     );
 
     const normalizedSelection = normalizeLiveSelection(summary, {
@@ -80,7 +84,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
       detail = await requireBackendJson<LiveDetailSheetView>(
         fetch,
         cookies,
-        `/api/live/views/courses/${selectedCourseId}/units/${selectedUnitId}/detail-sheet?${query.toString()}`
+        `/api/live/views/courses/${selectedCourseId}/units/${selectedUnitId}/detail-sheet?${query.toString()}`,
+        { authRedirectPath }
       );
     }
   }

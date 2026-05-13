@@ -7,12 +7,14 @@ import type { LearnerConcernBoxView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "learning");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "learning");
 
   const concernBox = await requireBackendJson<LearnerConcernBoxView>(
     fetch,
     cookies,
-    "/api/learning/views/concern-box"
+    "/api/learning/views/concern-box",
+    { authRedirectPath }
   );
 
   const breadcrumbs: BreadcrumbItem[] = [
@@ -31,7 +33,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
 };
 
 export const actions: Actions = {
-  default: async ({ fetch, cookies, request }) => {
+  default: async ({ fetch, cookies, request, url }) => {
     const form = await request.formData();
     const courseId = String(form.get("course_id") ?? "").trim();
     const messageText = String(form.get("message_text") ?? "").trim();
@@ -57,6 +59,7 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, "/api/learning/concern-box/entries", {
       method: "POST",
+      authRedirectPath: currentPath(url),
       includeSameOrigin: true,
       headers: {
         "content-type": "application/json"

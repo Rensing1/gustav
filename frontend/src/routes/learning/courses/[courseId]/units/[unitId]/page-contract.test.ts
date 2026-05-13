@@ -124,6 +124,22 @@ describe("learning unit route contract", () => {
     expect(workspaceSource).not.toContain("{history}");
   });
 
+  it("keeps review history reloads recoverable instead of treating empty local state as missing feedback", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain('type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable"');
+    expect(routeSource).toContain("let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>({})");
+    expect(routeSource).toContain("function setTaskHistoryState(taskId: string, state: SubmissionHistoryLoadState)");
+    expect(routeSource).toContain("async function ensureSubmissionHistoryLoaded(taskId: string)");
+    expect(routeSource).toContain("handleRecoverableAuthResponse(response)");
+    expect(routeSource).toContain('window.location.assign(`/auth/continue?redirect=${encodeURIComponent(redirectPath)}`)');
+    expect(routeSource).toContain("feedbackStatusMessage = \"Die Abgabe wird geladen ...\";");
+    expect(routeSource).not.toContain("feedbackStatusMessage = \"Die Abgabe konnte nicht geladen werden.\";");
+    expect(routeSource).toContain("const currentHistoryTaskId = next.searchParams.get(\"history\")");
+    expect(routeSource).toContain("if (!currentHistoryTaskId)");
+  });
+
   it("reopens modular materials on restore and module reopen instead of persisting them closed", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

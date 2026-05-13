@@ -623,6 +623,14 @@ def _auth_context_from_request(request: Request) -> tuple[dict[str, object] | No
         return None, "missing_bearer"
     return _session_auth_context_from_request(request), "session"
 
+
+def _auth_failure_reason(auth_source: str) -> str:
+    if auth_source == "missing_bearer":
+        return "missing_bearer"
+    if auth_source == "bearer":
+        return "invalid_bearer"
+    return "bff_session_missing"
+
 @app.middleware("http")
 async def auth_enforcement(request: Request, call_next):
     path = request.url.path
@@ -635,6 +643,7 @@ async def auth_enforcement(request: Request, call_next):
 
     if not auth_context:
         if path.startswith("/api/") or path.startswith("/internal/") or path.startswith("/backend-internal/"):
+            logger.info("auth_failure reason=%s path=%s", _auth_failure_reason(auth_source), path)
             headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:

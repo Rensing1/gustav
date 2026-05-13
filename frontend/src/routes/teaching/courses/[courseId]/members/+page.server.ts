@@ -6,12 +6,14 @@ import type { TeacherCourseContextView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
 export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "teaching");
 
   const home = await requireBackendJson<TeacherCourseContextView>(
     fetch,
     cookies,
-    `/api/teaching/views/courses/${params.courseId}/context`
+    `/api/teaching/views/courses/${params.courseId}/context`,
+    { authRedirectPath }
   );
 
   const breadcrumbs: BreadcrumbItem[] = [

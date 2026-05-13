@@ -93,6 +93,7 @@
     url: string;
     headers?: Record<string, string>;
   };
+  type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -111,6 +112,7 @@
   let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences());
   let workspaceRoot = $state<HTMLDivElement | null>(null);
   let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({});
+  let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>({});
   let reviewFocusByPane = $state<ReviewFocusByPane>(emptyReviewFocus());
   let submissionMessageState = $state<string | null>(null);
   let clientSubmissionErrorTaskId = $state<string | null>(null);
@@ -514,6 +516,14 @@
       ...submissionHistoryByTask,
       [taskId]: entries
     };
+    setTaskHistoryState(taskId, entries.length ? "loaded" : "unavailable");
+  }
+
+  function setTaskHistoryState(taskId: string, state: SubmissionHistoryLoadState) {
+    submissionHistoryStateByTask = {
+      ...submissionHistoryStateByTask,
+      [taskId]: state
+    };
   }
 
   function syncModularWorkspaceUrl(view: LearningUnitViewState, moduleId: string | null) {
@@ -528,7 +538,10 @@
     } else {
       next.searchParams.delete("module");
     }
-    next.searchParams.delete("history");
+    const currentHistoryTaskId = next.searchParams.get("history");
+    if (!currentHistoryTaskId) {
+      next.searchParams.delete("history");
+    }
     next.searchParams.delete("submitted");
     next.searchParams.delete("message");
     const query = next.searchParams.toString();
@@ -1018,10 +1031,47 @@
         cache: "no-store"
       }
     );
+    if (handleRecoverableAuthResponse(response)) {
+      return [];
+    }
     if (!response.ok) {
       throw new Error(`history_failed_${response.status}`);
     }
     return (await response.json()) as LearningSubmission[];
+  }
+
+  function handleRecoverableAuthResponse(response: Response): boolean {
+    if (!browser || response.status !== 401) {
+      return false;
+    }
+    const redirectPath = `${window.location.pathname}${window.location.search}`;
+    window.location.assign(`/auth/continue?redirect=${encodeURIComponent(redirectPath)}`);
+    return true;
+  }
+
+  async function ensureSubmissionHistoryLoaded(taskId: string): Promise<LearningSubmission[]> {
+    const currentState = submissionHistoryStateByTask[taskId] ?? "not_loaded";
+    const currentEntries = historyForTask(taskId);
+    if (currentEntries.length && currentState !== "failed") {
+      return currentEntries;
+    }
+
+    setTaskHistoryState(taskId, "loading");
+    feedbackStatusTaskId = taskId;
+    feedbackStatusMessage = "Die Abgabe wird geladen ...";
+
+    try {
+      const entries = await loadSubmissionHistory(taskId);
+      setTaskHistory(taskId, entries);
+      feedbackStatusTaskId = entries.length ? null : taskId;
+      feedbackStatusMessage = entries.length ? null : "Für diese Aufgabe gibt es noch keine gespeicherte Abgabe.";
+      return entries;
+    } catch {
+      setTaskHistoryState(taskId, "failed");
+      feedbackStatusTaskId = taskId;
+      feedbackStatusMessage = "Der Verlauf konnte nicht geladen werden. Bitte versuche es erneut.";
+      return [];
+    }
   }
 
   async function pollFeedbackSubmission(
@@ -1226,15 +1276,9 @@
       return;
     }
 
-    if (!historyForTask(taskId).length) {
-      try {
-        const entries = await loadSubmissionHistory(taskId);
-        setTaskHistory(taskId, entries);
-      } catch {
-        feedbackStatusTaskId = taskId;
-        feedbackStatusMessage = "Die Abgabe konnte nicht geladen werden.";
-        return;
-      }
+    const entries = await ensureSubmissionHistoryLoaded(taskId);
+    if (!entries.length && submissionHistoryStateByTask[taskId] !== "loaded") {
+      return;
     }
 
     applyTaskDetailState(setPaneReviewFocus(submissionFocusState(), reviewFocusByPane, paneId, itemKey));

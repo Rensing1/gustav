@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import httpx
+import logging
 import pytest
 from httpx import ASGITransport
 from pathlib import Path
@@ -88,3 +89,23 @@ async def test_session_bootstrap_requires_bearer_even_with_cookie_session(monkey
     assert response.status_code == 401
     assert response.headers.get("Cache-Control") == "private, no-store"
     assert response.json() == {"error": "unauthenticated"}
+
+
+@pytest.mark.anyio
+async def test_session_bootstrap_logs_low_cardinality_auth_reason_without_sensitive_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="gustav.identity_access")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/app/session-bootstrap",
+            headers={"Authorization": "Bearer sensitive.jwt"},
+            cookies={"gustav_session": "sensitive-session"},
+        )
+
+    assert response.status_code == 401
+    logs = "\n".join(record.getMessage() for record in caplog.records)
+    assert "auth_failure reason=invalid_bearer path=/api/app/session-bootstrap" in logs
+    assert "sensitive.jwt" not in logs
+    assert "sensitive-session" not in logs

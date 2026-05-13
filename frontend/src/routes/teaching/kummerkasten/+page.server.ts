@@ -7,13 +7,15 @@ import type { TeacherConcernBoxView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "teaching");
 
   const scope = url.searchParams.get("scope") === "archived" ? "archived" : "open";
   const concernBox = await requireBackendJson<TeacherConcernBoxView>(
     fetch,
     cookies,
-    `/api/teaching/views/concern-box?scope=${encodeURIComponent(scope)}`
+    `/api/teaching/views/concern-box?scope=${encodeURIComponent(scope)}`,
+    { authRedirectPath }
   );
 
   const breadcrumbs: BreadcrumbItem[] = [
@@ -42,6 +44,7 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/concern-box/entries/${encodeURIComponent(entryId)}/archive`, {
       method: "POST",
+      authRedirectPath: currentPath(url),
       includeSameOrigin: true
     });
 
@@ -51,7 +54,7 @@ export const actions: Actions = {
 
     throw redirect(303, `/teaching/kummerkasten?scope=${encodeURIComponent(scope)}`);
   },
-  restore: async ({ fetch, cookies, request }) => {
+  restore: async ({ fetch, cookies, request, url }) => {
     const form = await request.formData();
     const entryId = String(form.get("entry_id") ?? "").trim();
 
@@ -61,6 +64,7 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/concern-box/entries/${encodeURIComponent(entryId)}/restore`, {
       method: "POST",
+      authRedirectPath: currentPath(url),
       includeSameOrigin: true
     });
 

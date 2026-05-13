@@ -7,12 +7,14 @@ import type { TeacherCourseListView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "teaching");
 
   const courseList = await requireBackendJson<TeacherCourseListView>(
     fetch,
     cookies,
-    "/api/teaching/views/courses?limit=25&offset=0"
+    "/api/teaching/views/courses?limit=25&offset=0",
+    { authRedirectPath }
   );
   const breadcrumbs: BreadcrumbItem[] = [{ label: "Kurse" }];
 
@@ -32,7 +34,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
 };
 
 export const actions: Actions = {
-  default: async ({ fetch, cookies, request }) => {
+  default: async ({ fetch, cookies, request, url }) => {
     const form = await request.formData();
     const title = String(form.get("title") || "").trim();
     const subject = String(form.get("subject") || "").trim();
@@ -55,6 +57,7 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, "/api/teaching/courses", {
       method: "POST",
+      authRedirectPath: currentPath(url),
       includeSameOrigin: true,
       headers: {
         "content-type": "application/json"

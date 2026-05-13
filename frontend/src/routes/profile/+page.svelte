@@ -3,6 +3,16 @@
   import ProfileEditor from "$lib/components/profile/ProfileEditor.svelte";
 
   let { data, form } = $props();
+
+  function createdCliToken(): string | null {
+    const result = form?.createCliToken;
+    return result && "token" in result ? result.token : null;
+  }
+
+  function createCliTokenError(): string | null {
+    const result = form?.createCliToken;
+    return result && "error" in result ? result.error : null;
+  }
 </script>
 
 <svelte:head>
@@ -15,10 +25,10 @@
   <ProfileEditor
     profile={data.profile}
     cliTokens={data.cliTokens}
-    createdCliToken={form?.createCliToken?.token ?? null}
+    createdCliToken={createdCliToken()}
     displayNameError={form?.displayName?.error ?? null}
     nameError={form?.name?.error ?? null}
-    cliTokenError={form?.createCliToken?.error ?? form?.revokeCliToken?.error ?? null}
+    cliTokenError={createCliTokenError() ?? form?.revokeCliToken?.error ?? null}
     saved={data.saved}
   />
 </div>

@@ -137,7 +137,10 @@ describe("learning unit route actions", () => {
     expect(requireBackendJsonMock).toHaveBeenCalledWith(
       expect.any(Function),
       expect.anything(),
-      "/api/learning/courses/course-1/units/unit-1/modules/module-7?include=materials,tasks"
+      "/api/learning/courses/course-1/units/unit-1/modules/module-7?include=materials,tasks",
+      expect.objectContaining({
+        authRedirectPath: "/learning/courses/course-1/units/unit-1"
+      })
     );
     expect(backendRequestMock).toHaveBeenCalledWith(
       expect.any(Function),
@@ -269,6 +272,47 @@ describe("learning unit route actions", () => {
       });
     }
   });
+
+  it("passes the current page path to final submissions so shared auth recovery can avoid generic failures", async () => {
+    mockModularLoad();
+    backendRequestMock.mockRejectedValueOnce(
+      redirectError(302, "/auth/continue?redirect=%2Flearning%2Fcourses%2Fcourse-1%2Funits%2Funit-1")
+    );
+
+    const form = new FormData();
+    form.set("task_id", "task-1");
+    form.set("task_kind", "native");
+    form.set("unit_type", "modular");
+    form.set("module_id", "module-7");
+    form.set("submission_intent", "submit");
+
+    try {
+      await actions.default({
+        fetch: vi.fn() as unknown as typeof fetch,
+        cookies: {} as Parameters<typeof actions.default>[0]["cookies"],
+        params: { courseId: "course-1", unitId: "unit-1" },
+        request: requestWithFormData(form),
+        url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
+      } as Parameters<typeof actions.default>[0]);
+      throw new Error("expected redirect");
+    } catch (caught) {
+      expect(isRedirect(caught)).toBe(true);
+      expect(caught).toMatchObject({
+        status: 302,
+        location: "/auth/continue?redirect=%2Flearning%2Fcourses%2Fcourse-1%2Funits%2Funit-1"
+      });
+    }
+
+    expect(backendRequestMock).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      "/api/learning/courses/course-1/tasks/task-1/submissions/finalize",
+      expect.objectContaining({
+        authRedirectPath: "/learning/courses/course-1/units/unit-1",
+        method: "POST"
+      })
+    );
+  });
 });
 
 describe("learning unit route load", () => {
@@ -318,9 +362,68 @@ describe("learning unit route load", () => {
     expect(requireBackendJsonMock).toHaveBeenCalledWith(
       expect.any(Function),
       expect.anything(),
-      "/api/learning/courses/course-1/units/unit-1/modules/module-7?include=materials,tasks"
+      "/api/learning/courses/course-1/units/unit-1/modules/module-7?include=materials,tasks",
+      expect.objectContaining({
+        authRedirectPath: "/learning/courses/course-1/units/unit-1"
+      })
     );
     expect(result.initialView).toBe("content");
     expect(result.activeModule?.module.id).toBe("module-7");
+  });
+
+  it("passes the current page path to protected read-model calls for silent auth continuation", async () => {
+    mockModularLoad();
+
+    await load({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof load>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      parent: vi.fn(async () => ({
+        bootstrap: null,
+        appSessionActive: false,
+        theme: "light"
+      })) as Parameters<typeof load>[0]["parent"],
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1?module=module-7")
+    } as Parameters<typeof load>[0]);
+
+    expect(requireBackendJsonMock).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      "/api/learning/courses/course-1/units",
+      expect.objectContaining({
+        authRedirectPath: "/learning/courses/course-1/units/unit-1"
+      })
+    );
+  });
+
+  it("rethrows continuation redirects from later loader requests instead of showing the generic learning error", async () => {
+    requireBackendJsonMock.mockRejectedValueOnce(
+      redirectError(302, "/auth/continue?redirect=%2Flearning%2Fcourses%2Fcourse-1%2Funits%2Funit-1")
+    );
+
+    try {
+      await load({
+        fetch: vi.fn() as unknown as typeof fetch,
+        cookies: {} as Parameters<typeof load>[0]["cookies"],
+        params: { courseId: "course-1", unitId: "unit-1" },
+        parent: vi.fn(async () => ({
+          bootstrap: {
+            user: { sub: "student-1", name: "Test", role: "student", roles: ["student"] },
+            start_target: "/learning",
+            spaces: ["learning"]
+          },
+          appSessionActive: true,
+          theme: "light"
+        })) as Parameters<typeof load>[0]["parent"],
+        url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
+      } as Parameters<typeof load>[0]);
+      throw new Error("expected redirect");
+    } catch (caught) {
+      expect(isRedirect(caught)).toBe(true);
+      expect(caught).toMatchObject({
+        status: 302,
+        location: "/auth/continue?redirect=%2Flearning%2Fcourses%2Fcourse-1%2Funits%2Funit-1"
+      });
+    }
   });
 });

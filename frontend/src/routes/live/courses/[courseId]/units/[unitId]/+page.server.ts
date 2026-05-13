@@ -6,12 +6,14 @@ import type { LiveDetailSheetView, LiveUnitMatrixView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
 export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "live");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "live");
 
   const matrix = await requireBackendJson<LiveUnitMatrixView>(
     fetch,
     cookies,
-    `/api/live/views/courses/${params.courseId}/units/${params.unitId}/matrix`
+    `/api/live/views/courses/${params.courseId}/units/${params.unitId}/matrix`,
+    { authRedirectPath }
   );
 
   const studentSub = url.searchParams.get("student_sub");
@@ -23,7 +25,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     detail = await requireBackendJson<LiveDetailSheetView>(
       fetch,
       cookies,
-      `/api/live/views/courses/${params.courseId}/units/${params.unitId}/detail-sheet?${query.toString()}`
+      `/api/live/views/courses/${params.courseId}/units/${params.unitId}/detail-sheet?${query.toString()}`,
+      { authRedirectPath }
     );
   }
 

@@ -8,17 +8,20 @@ import type { BreadcrumbItem } from "$lib/types/navigation";
 import type { AppProfileCliToken, AppProfileView } from "$lib/types/profile";
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
-  await requireParentSessionBootstrap(parent, currentPath(url));
+  const authRedirectPath = currentPath(url);
+  await requireParentSessionBootstrap(parent, authRedirectPath);
 
   const profile = await requireBackendJson<AppProfileView>(
     fetch,
     cookies,
-    "/api/app/profile"
+    "/api/app/profile",
+    { authRedirectPath }
   );
   const cliTokens = await requireBackendJson<AppProfileCliToken[]>(
     fetch,
     cookies,
-    "/api/app/profile/cli-tokens"
+    "/api/app/profile/cli-tokens",
+    { authRedirectPath }
   );
 
   const breadcrumbs: BreadcrumbItem[] = [{ label: "Profil" }];
@@ -35,7 +38,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
 };
 
 export const actions: Actions = {
-  displayName: async ({ fetch, cookies, request }) => {
+  displayName: async ({ fetch, cookies, request, url }) => {
     const form = await request.formData();
     const displayName = String(form.get("display_name") ?? "").trim();
 
@@ -49,6 +52,7 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, "/api/app/profile/display-name", {
       method: "PATCH",
+      authRedirectPath: currentPath(url),
       includeSameOrigin: true,
       headers: {
         "content-type": "application/json"
@@ -68,7 +72,7 @@ export const actions: Actions = {
     throw redirect(303, "/profile?saved=display-name");
   },
 
-  name: async ({ fetch, cookies, request }) => {
+  name: async ({ fetch, cookies, request, url }) => {
     const form = await request.formData();
     const firstName = String(form.get("first_name") ?? "").trim();
     const lastName = String(form.get("last_name") ?? "").trim();
@@ -83,6 +87,7 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, "/api/app/profile/name", {
       method: "PATCH",
+      authRedirectPath: currentPath(url),
       includeSameOrigin: true,
       headers: {
         "content-type": "application/json"
@@ -109,7 +114,7 @@ export const actions: Actions = {
     throw redirect(303, "/profile?saved=name");
   },
 
-  createCliToken: async ({ fetch, cookies, request }) => {
+  createCliToken: async ({ fetch, cookies, request, url }) => {
     const form = await request.formData();
     const label = String(form.get("label") ?? "").trim();
     const scopes = form.getAll("scopes").map((scope) => String(scope));
@@ -124,6 +129,7 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, "/api/app/profile/cli-tokens", {
       method: "POST",
+      authRedirectPath: currentPath(url),
       includeSameOrigin: true,
       headers: {
         "content-type": "application/json"
@@ -147,7 +153,7 @@ export const actions: Actions = {
     };
   },
 
-  revokeCliToken: async ({ fetch, cookies, request }) => {
+  revokeCliToken: async ({ fetch, cookies, request, url }) => {
     const form = await request.formData();
     const tokenId = String(form.get("token_id") ?? "").trim();
 
@@ -161,6 +167,7 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/app/profile/cli-tokens/${tokenId}`, {
       method: "DELETE",
+      authRedirectPath: currentPath(url),
       includeSameOrigin: true
     });
 

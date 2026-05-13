@@ -1,8 +1,10 @@
 import { env } from "$env/dynamic/private";
 import {
   buildBackendAuthorizationHeader,
-  readFreshTokenSession
+  readFreshTokenSession,
+  readFrontendSessionCookie
 } from "$lib/server/session";
+import { redirect } from "@sveltejs/kit";
 import type { Cookies } from "@sveltejs/kit";
 
 const DEFAULT_API_INTERNAL_BASE_URL = "http://gustav-alpha2:8000";
@@ -73,16 +75,43 @@ export class BackendRequestError extends Error {
   }
 }
 
+type BackendRequestOptions = {
+  method?: string;
+  body?: BodyInit | null;
+  headers?: HeadersInit;
+  includeSameOrigin?: boolean;
+  authRedirectPath?: string;
+};
+
+function loginHref(path: string): string {
+  return `/?redirect=${encodeURIComponent(path || "/")}`;
+}
+
+function continuationHref(path: string): string {
+  return `/auth/continue?redirect=${encodeURIComponent(path || "/")}`;
+}
+
+async function handleFinalUnauthorizedResponse(
+  fetchFn: typeof fetch,
+  cookies: Cookies,
+  response: Response,
+  authRedirectPath?: string
+): Promise<Response> {
+  if (!authRedirectPath) {
+    return response;
+  }
+
+  if (readFrontendSessionCookie(cookies) || await readAppSessionActive(fetchFn, cookies)) {
+    throw redirect(302, continuationHref(authRedirectPath));
+  }
+  throw redirect(302, loginHref(authRedirectPath));
+}
+
 export async function backendRequest(
   fetchFn: typeof fetch,
   cookies: Cookies,
   path: string,
-  options?: {
-    method?: string;
-    body?: BodyInit | null;
-    headers?: HeadersInit;
-    includeSameOrigin?: boolean;
-  }
+  options?: BackendRequestOptions
 ): Promise<Response> {
   const requestInit = {
     method: options?.method || "GET",
@@ -98,7 +127,7 @@ export async function backendRequest(
     return response;
   }
 
-  return await fetchFn(buildApiUrl(path), {
+  response = await fetchFn(buildApiUrl(path), {
     ...requestInit,
     headers: await createAuthHeaders(fetchFn, cookies, {
       forceRefresh: true,
@@ -106,18 +135,18 @@ export async function backendRequest(
       includeSameOrigin: options?.includeSameOrigin
     })
   });
+  if (response.status !== 401) {
+    return response;
+  }
+
+  return await handleFinalUnauthorizedResponse(fetchFn, cookies, response, options?.authRedirectPath);
 }
 
 export async function requireBackendJson<T>(
   fetchFn: typeof fetch,
   cookies: Cookies,
   path: string,
-  options?: {
-    method?: string;
-    body?: BodyInit | null;
-    headers?: HeadersInit;
-    includeSameOrigin?: boolean;
-  }
+  options?: BackendRequestOptions
 ): Promise<T> {
   const response = await backendRequest(fetchFn, cookies, path, options);
   if (!response.ok) {

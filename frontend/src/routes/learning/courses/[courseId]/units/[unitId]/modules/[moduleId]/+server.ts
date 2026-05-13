@@ -1,6 +1,7 @@
 import { error, json, type RequestHandler } from "@sveltejs/kit";
 
 import { BackendRequestError, requireBackendJson } from "$lib/server/api";
+import { currentPath } from "$lib/server/guards";
 import type { LearningModuleContent } from "$lib/types/learning";
 
 export const GET: RequestHandler = async ({ fetch, cookies, params, url }) => {
@@ -13,7 +14,8 @@ export const GET: RequestHandler = async ({ fetch, cookies, params, url }) => {
     const payload = await requireBackendJson<LearningModuleContent>(
       fetch,
       cookies,
-      `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(unitId)}/modules/${encodeURIComponent(moduleId)}?include=${encodeURIComponent(include)}`
+      `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(unitId)}/modules/${encodeURIComponent(moduleId)}?include=${encodeURIComponent(include)}`,
+      { authRedirectPath: currentPath(url) }
     );
 
     return json(payload, {

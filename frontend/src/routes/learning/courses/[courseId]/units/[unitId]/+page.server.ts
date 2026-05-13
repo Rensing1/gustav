@@ -60,17 +60,20 @@ async function loadPageData(
   moduleIdOverride: string | null = null,
   bootstrapOverride: SessionBootstrap | null = null
 ): Promise<LearningUnitPageData> {
-  const bootstrap = bootstrapOverride ?? await requireSpaceBootstrap(fetchFn, cookies, currentPath(url), "learning");
+  const authRedirectPath = currentPath(url);
+  const bootstrap = bootstrapOverride ?? await requireSpaceBootstrap(fetchFn, cookies, authRedirectPath, "learning");
   const [units, home] = await Promise.all([
     requireBackendJson<LearningCourseUnit[]>(
       fetchFn,
       cookies,
-      `/api/learning/courses/${encodeURIComponent(courseId)}/units`
+      `/api/learning/courses/${encodeURIComponent(courseId)}/units`,
+      { authRedirectPath }
     ),
     requireBackendJson<LearnerHome>(
       fetchFn,
       cookies,
-      "/api/learning/views/learner-home"
+      "/api/learning/views/learner-home",
+      { authRedirectPath }
     )
   ]);
   const selectedUnit = units.find((row) => row.unit.id === unitId) || null;
@@ -92,14 +95,16 @@ async function loadPageData(
     graph = await requireBackendJson<LearningUnitGraph>(
       fetchFn,
       cookies,
-      `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(unitId)}/modules/graph`
+      `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(unitId)}/modules/graph`,
+      { authRedirectPath }
     );
     if (moduleId && initialView === "content") {
       try {
         activeModule = await requireBackendJson<LearningModuleContent>(
           fetchFn,
           cookies,
-          `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(unitId)}/modules/${encodeURIComponent(moduleId)}?include=materials,tasks`
+          `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(unitId)}/modules/${encodeURIComponent(moduleId)}?include=materials,tasks`,
+          { authRedirectPath }
         );
       } catch (caught) {
         if (!(caught instanceof BackendRequestError) || caught.response.status !== 404) {
@@ -111,7 +116,8 @@ async function loadPageData(
     sections = await requireBackendJson<LearningSection[]>(
       fetchFn,
       cookies,
-      `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(unitId)}/sections?include=materials,tasks&limit=100&offset=0`
+      `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(unitId)}/sections?include=materials,tasks&limit=100&offset=0`,
+      { authRedirectPath }
     );
   }
 
@@ -121,7 +127,8 @@ async function loadPageData(
       history = await requireBackendJson<LearningSubmission[]>(
         fetchFn,
         cookies,
-        `/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(historyTaskId)}/submissions?limit=10&offset=0`
+        `/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(historyTaskId)}/submissions?limit=10&offset=0`,
+        { authRedirectPath }
       );
     } catch (caught) {
       if (!(caught instanceof BackendRequestError) || caught.response.status !== 404) {
@@ -222,6 +229,7 @@ export const actions: Actions = {
         `/api/learning/courses/${encodeURIComponent(params.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions/finalize`,
         {
           method: "POST",
+          authRedirectPath: currentPath(url),
           includeSameOrigin: true,
           headers: {
             "content-type": "application/json",
@@ -268,6 +276,7 @@ export const actions: Actions = {
       `/api/learning/courses/${encodeURIComponent(params.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions`,
       {
         method: "POST",
+        authRedirectPath: currentPath(url),
         includeSameOrigin: true,
         headers: {
           "content-type": "application/json",

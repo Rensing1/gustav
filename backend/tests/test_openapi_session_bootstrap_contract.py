@@ -11,6 +11,13 @@ def test_openapi_documents_session_bootstrap() -> None:
     assert "/api/app/session-bootstrap" in spec["paths"]
     operation = spec["paths"]["/api/app/session-bootstrap"]["get"]
     assert operation["summary"] == "Return shell bootstrap data for the current session"
+    assert operation["responses"]["401"]["x-gustav-auth-failure-reason-codes"] == [
+        "missing_bearer",
+        "invalid_bearer",
+        "bff_session_missing",
+        "token_refresh_failed",
+        "app_session_active_bff_bearer_unavailable",
+    ]
 
     schema = spec["components"]["schemas"]["SessionBootstrap"]
     assert schema["required"] == ["user", "start_target", "spaces"]

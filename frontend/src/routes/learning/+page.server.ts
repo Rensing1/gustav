@@ -6,12 +6,14 @@ import type { LearnerHome } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "learning");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "learning");
 
   const home = await requireBackendJson<LearnerHome>(
     fetch,
     cookies,
-    "/api/learning/views/learner-home"
+    "/api/learning/views/learner-home",
+    { authRedirectPath }
   );
 
   const breadcrumbs: BreadcrumbItem[] = [{ label: "Lernraum" }];

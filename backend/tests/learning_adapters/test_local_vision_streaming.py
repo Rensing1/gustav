@@ -34,6 +34,7 @@ from backend.learning.workers.process_learning_submission_jobs import (  # type:
     VisionPermanentError,
     VisionResult,
 )
+from backend.tests.utils.storage_fixtures import dummy_jpeg_bytes
 
 
 def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch, *, observed: dict) -> None:
@@ -98,7 +99,7 @@ def test_stream_happy_path_validates_and_sets_meta(monkeypatch: pytest.MonkeyPat
 
     # Prepare file content
     storage_key = "submissions/course/task/student/2025-11-04/img-1.jpg"
-    size, sha, _ = _write_file(tmp_path, storage_key, b"hello world\n")
+    size, sha, _ = _write_file(tmp_path, storage_key, dummy_jpeg_bytes())
 
     submission = {"id": "11111111-1111-1111-1111-111111111111", "kind": "file"}
     job_payload = {

@@ -22,6 +22,7 @@ import pytest
 from httpx import ASGITransport
 
 from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.storage_fixtures import dummy_png_bytes
 
 import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
@@ -147,3 +148,19 @@ async def test_visual_task_accepts_upload_submissions():
         assert body["kind"] == "image"
         assert body["analysis_status"] == "pending"
 
+
+@pytest.fixture(autouse=True)
+def _provide_submission_validation_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib
+    import routes.learning as learning  # noqa: E402
+
+    async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int) -> bytes:  # noqa: ARG001
+        return dummy_png_bytes()
+
+    monkeypatch.setattr(learning, "_load_storage_bytes_for_validation", _load_storage_bytes_for_validation)
+    backend_learning = importlib.import_module("backend.web.routes.learning")
+    monkeypatch.setattr(backend_learning, "_load_storage_bytes_for_validation", _load_storage_bytes_for_validation, raising=False)
+    for route in main.app.routes:
+        endpoint = getattr(route, "endpoint", None)
+        if getattr(endpoint, "__name__", "") == "create_submission":
+            monkeypatch.setitem(endpoint.__globals__, "_load_storage_bytes_for_validation", _load_storage_bytes_for_validation)

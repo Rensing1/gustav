@@ -68,10 +68,18 @@ async def test_pdf_submission_triggers_processing_in_dev(monkeypatch: pytest.Mon
     # Patch CreateSubmissionUseCase on both module aliases to avoid alias drift
     # in full-suite runs (router/global lookup stays consistent at call time).
     from backend.web.routes import learning as learning_routes
+    fake_repo = types.SimpleNamespace(get_task_kind_for_student=lambda **_: "native")
+    monkeypatch.setattr(learning_routes, "_get_repo", lambda: fake_repo)
     monkeypatch.setattr(learning_routes, "CreateSubmissionUseCase", _FakeUC)
+    for route in main.app.routes:
+        endpoint = getattr(route, "endpoint", None)
+        if getattr(endpoint, "__name__", "") == "create_submission":
+            monkeypatch.setitem(endpoint.__globals__, "_get_repo", lambda: fake_repo)
+            monkeypatch.setitem(endpoint.__globals__, "CreateSubmissionUseCase", _FakeUC)
     try:
         import importlib as _importlib
         lr_alias = _importlib.import_module("routes.learning")
+        monkeypatch.setattr(lr_alias, "_get_repo", lambda: fake_repo, raising=False)
         monkeypatch.setattr(lr_alias, "CreateSubmissionUseCase", _FakeUC, raising=False)
     except Exception:
         pass
@@ -149,10 +157,18 @@ async def test_pdf_submission_does_not_trigger_processing_in_prod(monkeypatch: p
             return {"id": str(uuid.uuid4()), "analysis_status": "pending"}
 
     from backend.web.routes import learning as learning_routes
+    fake_repo = types.SimpleNamespace(get_task_kind_for_student=lambda **_: "native")
+    monkeypatch.setattr(learning_routes, "_get_repo", lambda: fake_repo)
     monkeypatch.setattr(learning_routes, "CreateSubmissionUseCase", _FakeUC)
+    for route in main.app.routes:
+        endpoint = getattr(route, "endpoint", None)
+        if getattr(endpoint, "__name__", "") == "create_submission":
+            monkeypatch.setitem(endpoint.__globals__, "_get_repo", lambda: fake_repo)
+            monkeypatch.setitem(endpoint.__globals__, "CreateSubmissionUseCase", _FakeUC)
     try:
         import importlib as _importlib
         lr_alias = _importlib.import_module("routes.learning")
+        monkeypatch.setattr(lr_alias, "_get_repo", lambda: fake_repo, raising=False)
         monkeypatch.setattr(lr_alias, "CreateSubmissionUseCase", _FakeUC, raising=False)
     except Exception:
         pass

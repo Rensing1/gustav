@@ -15,6 +15,26 @@ only discovered the problem later in feedback processing.
 No learner names, user IDs, storage object paths, hashes, or other PII are
 included in this ticket.
 
+## Status
+
+Completed on 2026-05-14.
+
+- API submissions validate stored upload bytes before persistence and queueing.
+- Wrong-content uploads return `400 invalid_upload_content`; missing validation bytes fail closed with `503 submission_validation_unavailable`.
+- Worker-side image/PDF/file fallback treats deterministic signature mismatches as permanent `invalid_upload_content`, while storage fetch failures remain transient.
+- Learners see: „Die Datei passt nicht zum erwarteten Dateityp. Bitte wähle die richtige Datei aus.“
+- WebP remains out of scope for this ticket because the current Learning upload contract accepts only `image/png` and `image/jpeg` for image uploads.
+
+Verification commands:
+- `.venv/bin/pytest -q backend/tests/test_openapi_learning_upload_intents_contract.py`
+- `.venv/bin/pytest -q backend/tests/test_submission_content_signatures.py`
+- `.venv/bin/pytest -q backend/tests/test_learning_upload_content_signature_validation.py`
+- `.venv/bin/pytest -q backend/tests/learning_adapters/test_local_vision_pdf_remote_wrong_content.py backend/tests/learning_adapters/test_local_feedback_visual_pipeline.py`
+- `.venv/bin/pytest -q backend/tests/test_learning_submission_storage_verification.py backend/tests/test_learning_scratch_sb3_upload_only_api.py backend/tests/test_learning_calliope_hex_upload_only_api.py backend/tests/test_learning_filius_fls_submission_api.py`
+- `npm test -- --run src/routes/learning/courses/[courseId]/units/[unitId]/page-contract.test.ts`
+- `npm run check`
+- `make verify`
+
 ## Impact
 
 - Learners receive slow or generic feedback failures for files that should have

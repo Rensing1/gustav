@@ -18,9 +18,9 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 ---
 
 ## 2. Architecture Overview
-1. **HTTP Layer** validates request & permissions, calls the use case `IngestLearningSubmission`.
+1. **HTTP Layer** validates request, permissions, storage integrity, and upload byte signatures before it calls the use case. The API is the primary gate for wrong-content uploads.
 2. **Use Case** stores the submission with `analysis_status=pending` (for text/image/file) and enqueues a job via the queue port.
-3. **Worker** (`process_learning_submission_jobs`) leases jobs FIFO, runs OCR only when needed, otherwise routes directly into visual feedback analysis, persists results, and emits follow-up events.
+3. **Worker** (`process_learning_submission_jobs`) leases jobs FIFO, runs OCR only when needed, otherwise routes directly into visual feedback analysis, persists results, and emits follow-up events. Worker-side byte-signature checks are fallback protection for legacy or bypassed mismatches.
 4. **Persistence** is guarded by repository functions and RLS. Worker updates go through `SECURITY DEFINER` helpers to mutate `analysis_status`, `analysis_json`, `feedback_md`.
 5. **Observability**: Structured logs + counters/gauges.
 
@@ -60,6 +60,7 @@ Why this matters:
 - Avoids the “idle in transaction” worker stall pattern when an external LLM/VLM call hangs.
 - Keeps the optional one-shot analysis repair attempt inside the same leased job,
   without stretching DB transaction lifetimes.
+- Deterministic content-signature mismatches are permanent (`invalid_upload_content`) and do not consume retry budget. Missing bytes or storage fetch failures remain transient because the object may become reachable on a later attempt.
 
 ---
 

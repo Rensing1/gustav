@@ -27,10 +27,36 @@ def _generate_dummy_png_bytes() -> bytes:
     return buf.getvalue()
 
 
+def dummy_png_bytes() -> bytes:
+    """Return a small well-formed PNG as bytes."""
+    return _generate_dummy_png_bytes()
+
+
 def write_dummy_png(path: Path) -> None:
     """Write a minimal PNG file to the given path (parents created automatically)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(_generate_dummy_png_bytes())
+
+
+def _generate_dummy_jpeg_bytes() -> bytes:
+    """Produce a small well-formed JPEG for upload validation tests."""
+    img = Image.new("RGB", (8, 8), color=(240, 240, 240))
+    draw = ImageDraw.Draw(img)
+    draw.line([(1, 1), (6, 6)], fill=(20, 20, 20), width=1)
+    buf = BytesIO()
+    img.save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def dummy_jpeg_bytes() -> bytes:
+    """Return a small well-formed JPEG as bytes."""
+    return _generate_dummy_jpeg_bytes()
+
+
+def write_dummy_jpeg(path: Path) -> None:
+    """Write a minimal JPEG file to the given path (parents created automatically)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_generate_dummy_jpeg_bytes())
 
 
 def ensure_pdf_derivatives(
@@ -69,4 +95,4 @@ def ensure_pdf_derivatives(
     return keys
 
 
-__all__ = ["write_dummy_png", "ensure_pdf_derivatives"]
+__all__ = ["dummy_jpeg_bytes", "dummy_png_bytes", "write_dummy_jpeg", "write_dummy_png", "ensure_pdf_derivatives"]

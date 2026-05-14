@@ -89,6 +89,14 @@ describe("learning unit route contract", () => {
     expect(serverSource).not.toContain("throw redirect(303");
   });
 
+  it("shows a clear message when uploaded bytes do not match the expected content type", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain('reason === "invalid_upload_content"');
+    expect(routeSource).toContain("Die Datei passt nicht zum erwarteten Dateityp. Bitte wähle die richtige Datei aus.");
+  });
+
   it("tracks submission history per task instead of one global history payload for all cards", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

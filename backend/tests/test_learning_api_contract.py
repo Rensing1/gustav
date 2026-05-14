@@ -21,6 +21,7 @@ import httpx
 from httpx import ASGITransport
 
 from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.storage_fixtures import dummy_jpeg_bytes, dummy_png_bytes
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -59,6 +60,29 @@ async def _client() -> httpx.AsyncClient:
         base_url="http://test",
         headers={"Origin": "http://test"},
     )
+
+
+@pytest.fixture(autouse=True)
+def _provide_submission_validation_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep legacy contract tests focused on API behavior, not storage setup."""
+    import importlib
+    import routes.learning as learning  # noqa: E402
+
+    async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int) -> bytes:  # noqa: ARG001
+        key = str(storage_key or "").lower()
+        if key.endswith((".jpg", ".jpeg")):
+            return dummy_jpeg_bytes()
+        if key.endswith(".png"):
+            return dummy_png_bytes()
+        return b"%PDF-1.7\n%%EOF\n"
+
+    monkeypatch.setattr(learning, "_load_storage_bytes_for_validation", _load_storage_bytes_for_validation)
+    backend_learning = importlib.import_module("backend.web.routes.learning")
+    monkeypatch.setattr(backend_learning, "_load_storage_bytes_for_validation", _load_storage_bytes_for_validation, raising=False)
+    for route in main.app.routes:
+        endpoint = getattr(route, "endpoint", None)
+        if getattr(endpoint, "__name__", "") == "create_submission":
+            monkeypatch.setitem(endpoint.__globals__, "_load_storage_bytes_for_validation", _load_storage_bytes_for_validation)
 
 
 async def _create_course(client: httpx.AsyncClient, title: str) -> str:

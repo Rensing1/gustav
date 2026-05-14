@@ -32,6 +32,7 @@ from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.vision.pipeline import stitch_images_vertically, process_pdf_bytes
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
 from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
+from backend.storage.submission_content_signatures import validate_submission_content_signature
 
 LOG = logging.getLogger(__name__)
 
@@ -281,6 +282,13 @@ def _load_local_storage_bytes(
         raise VisionPermanentError("read_error")
 
 
+def _validate_loaded_submission_bytes(*, mime_type: str, data: bytes) -> None:
+    try:
+        validate_submission_content_signature(mime_type, data)
+    except ValueError as exc:
+        raise VisionPermanentError("invalid_upload_content") from exc
+
+
 def _resolve_submission_image_bytes(
     *,
     submission: Dict,
@@ -307,6 +315,7 @@ def _resolve_submission_image_bytes(
             sha256_hex=sha256_hex,
         )
         if data:
+            _validate_loaded_submission_bytes(mime_type=mime, data=data)
             meta["bytes_read"] = len(data)
             return base64.b64encode(data).decode("ascii")
     if storage_key:
@@ -322,6 +331,7 @@ def _resolve_submission_image_bytes(
                 success_action="fetch_remote_image",
             )
             if fetched:
+                _validate_loaded_submission_bytes(mime_type=mime, data=fetched)
                 meta["bytes_read"] = len(fetched)
                 return base64.b64encode(fetched).decode("ascii")
     return None
@@ -589,13 +599,7 @@ class _LocalVisionAdapter:
         if data is None:
             return None
         try:
-            if not data.startswith(b"%PDF-"):
-                LOG.warning(
-                    "learning.vision.pdf_ensure_stitched action=wrong_content_pre_render size=%s submission_id=%s",
-                    len(data),
-                    submission_id,
-                )
-                return None
+            _validate_loaded_submission_bytes(mime_type=PDF_MIME, data=data)
             pages, _meta = process_pdf_bytes(data)
             page_bytes = [p.data for p in pages if getattr(p, "data", None)]
             stitched_png = _stitch_or_none(page_bytes)
@@ -612,6 +616,8 @@ class _LocalVisionAdapter:
                 submission_id,
             )
             return stitched_png
+        except VisionPermanentError:
+            raise
         except Exception as exc:
             try:
                 err_type = type(exc).__name__
@@ -704,6 +710,7 @@ class _LocalVisionAdapter:
                     )
             if not data:
                 raise VisionTransientError("sb3_unavailable")
+            _validate_loaded_submission_bytes(mime_type=SCRATCH_SB3_MIME, data=data)
             meta["bytes_read"] = len(data)
             try:
                 project = load_project_json(data)
@@ -751,6 +758,7 @@ class _LocalVisionAdapter:
                     )
             if not data:
                 raise VisionTransientError("hex_unavailable")
+            _validate_loaded_submission_bytes(mime_type=MAKECODE_HEX_MIME, data=data)
             meta["bytes_read"] = len(data)
             try:
                 project = extract_makecode_project_from_hex(data)
@@ -799,6 +807,7 @@ class _LocalVisionAdapter:
                     )
             if not data:
                 raise VisionTransientError("filius_unavailable")
+            _validate_loaded_submission_bytes(mime_type=FILIUS_FLS_MIME, data=data)
             meta["bytes_read"] = len(data)
             try:
                 evidence_md = build_evidence_markdown_v1(data)
@@ -836,6 +845,7 @@ class _LocalVisionAdapter:
                     sha256_hex=sha256_hex,
                 )
                 if pdf_bytes:
+                    _validate_loaded_submission_bytes(mime_type=PDF_MIME, data=pdf_bytes)
                     meta["bytes_read"] = len(pdf_bytes)
             stitched_png = self._ensure_pdf_stitched_png(submission=submission, job_payload=job_payload)
             if not stitched_png:

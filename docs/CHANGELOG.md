@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### Security (dev = prod)
+- security(learning-upload): Learning submissions now validate stored bytes against the declared upload MIME before persistence and queueing. Wrong-content uploads fail closed with `invalid_upload_content`; worker fallback treats deterministic signature mismatches as permanent.
 - security(learning-upload): Internal upload proxy now enforces SUPABASE_URL scheme/port matching, allows HTTP only for localhost-style hosts, streams request bodies with early size checks, and forwards presign headers 1:1 to Supabase. The dev upload stub adopts the same cache headers for error paths.
 - security(vision): Remote Supabase fetches in the Vision adapter parse/whitelist hosts, stream-download with the central upload limit, and propagate `untrusted_host` / `remote_fetch_too_large` errors. PDF preprocessing sanitizes renderer/persist errors before persisting them.
 - security(cookies): Always set `Secure` + `SameSite=Strict` for session cookie (local = prod).

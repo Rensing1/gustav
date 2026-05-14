@@ -29,6 +29,7 @@ from backend.learning.workers.process_learning_submission_jobs import (  # type:
     VisionResult,
     VisionTransientError,
 )
+from backend.tests.utils.storage_fixtures import dummy_png_bytes, write_dummy_png
 
 def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
     class _FakeLM:
@@ -112,7 +113,7 @@ def test_remote_fetches_image_and_sends_to_model(monkeypatch: pytest.MonkeyPatch
     )
 
     # Prepare a tiny PNG payload returned by the fake httpx client
-    png = b"\x89PNG\r\n\x1a\n" + b"x" * 16
+    png = dummy_png_bytes()
     _install_fake_httpx(monkeypatch, png)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
@@ -452,7 +453,7 @@ def test_remote_fetch_logs_success_without_pii(monkeypatch: pytest.MonkeyPatch, 
         raising=False,
     )
 
-    png = b"\x89PNG\r\n\x1a\n" + b"y" * 32
+    png = dummy_png_bytes()
     _install_fake_httpx(monkeypatch, png)
 
     mod = importlib.import_module("backend.learning.adapters.local_vision")
@@ -529,8 +530,8 @@ def test_resolve_image_bytes_prefers_local_and_returns_meta(monkeypatch: pytest.
     storage_root.mkdir()
     data_path = storage_root / "submissions/course/task/student/image.png"
     data_path.parent.mkdir(parents=True, exist_ok=True)
-    data = b"\x89PNG\r\n\x1a\n" + b"a" * 8
-    data_path.write_bytes(data)
+    write_dummy_png(data_path)
+    data = data_path.read_bytes()
 
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(storage_root))
     submission = {"id": "sub-local", "course_id": "course", "task_id": "task", "student_sub": "student"}

@@ -11,13 +11,21 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+from io import BytesIO
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 pytest.importorskip("psycopg")
 
 from backend.learning.adapters.ports import FeedbackResult
+
+
+def _png_bytes() -> bytes:
+    out = BytesIO()
+    Image.new("RGB", (1, 1), (255, 0, 0)).save(out, format="PNG")
+    return out.getvalue()
 
 
 def test_local_feedback_analyze_visual_calls_visual_program(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -32,7 +40,7 @@ def test_local_feedback_analyze_visual_calls_visual_program(monkeypatch: pytest.
     monkeypatch.setenv("DSPY_CACHEDIR", str(dspy_cache))
 
     storage_key = "submissions/course/task/student/visual.png"
-    payload_bytes = b"\x89PNG\r\n\x1a\n" + b"x" * 64
+    payload_bytes = _png_bytes()
     target = tmp_path / storage_key
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(payload_bytes)
@@ -84,3 +92,52 @@ def test_local_feedback_analyze_visual_calls_visual_program(monkeypatch: pytest.
 
     assert res.feedback_md == "OK"
     assert captured["uri"].startswith("data:image/png;base64,")
+
+
+def test_local_feedback_analyze_visual_rejects_wrong_image_content(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example.test/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "text-model")
+    monkeypatch.setenv("AI_VISUAL_MODEL", "visual-model")
+    dspy_cache = tmp_path / "dspy_cache"
+    dspy_cache.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("DSPY_CACHEDIR", str(dspy_cache))
+
+    storage_key = "submissions/course/task/student/visual.png"
+    payload_bytes = b"PK\x03\x04not-a-png"
+    target = tmp_path / storage_key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload_bytes)
+    sha = hashlib.sha256(payload_bytes).hexdigest()
+
+    submission = {
+        "id": "sub-wrong",
+        "kind": "image",
+        "mime_type": "image/png",
+        "storage_key": storage_key,
+        "size_bytes": len(payload_bytes),
+        "sha256": sha,
+        "course_id": "c",
+        "task_id": "t",
+        "student_sub": "s",
+    }
+    job_payload = {
+        "mime_type": "image/png",
+        "storage_key": storage_key,
+        "size_bytes": len(payload_bytes),
+        "sha256": sha,
+    }
+
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    with pytest.raises(mod.FeedbackPermanentError) as exc:  # type: ignore[attr-defined]
+        adapter.analyze_visual(  # type: ignore[attr-defined]
+            submission=submission,
+            job_payload=job_payload,
+            criteria=["K1"],
+            instruction_md="Aufgabe",
+            teacher_context_md="Hinweis",
+        )
+
+    assert "invalid_upload_content" in str(exc.value)

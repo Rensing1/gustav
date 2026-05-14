@@ -3,7 +3,7 @@ Vision adapter — logging redacts PII.
 
 Expected:
   - Logs must NOT contain bucket names, object keys or student_sub values.
-  - Logs MAY include submission_id and generic hints (e.g., wrong_content).
+  - Deterministic wrong-content bytes are permanent and still PII-safe.
 """
 
 from __future__ import annotations
@@ -80,12 +80,10 @@ def test_redacts_pii_from_logs(tmp_path, monkeypatch: pytest.MonkeyPatch, caplog
     }
     job_payload = {"mime_type": "application/pdf", "storage_key": submission["storage_key"]}
 
-    with pytest.raises(mod.VisionTransientError):
+    with pytest.raises(mod.VisionPermanentError, match="invalid_upload_content"):
         adapter.extract(submission=submission, job_payload=job_payload)
 
     logs = "\n".join(r.getMessage() for r in caplog.records)
-    # Positive hint still present
-    assert "wrong_content" in logs or "wrong_content_pre_render" in logs
     # PII and object location details must be absent
     assert "studentPII" not in logs
     assert "courseX/taskY" not in logs

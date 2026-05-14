@@ -23,7 +23,7 @@ from fastapi import APIRouter, Request
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse, Response
 
-from backend.learning.repo_db import DBLearningRepo
+from backend.learning.repo_db import DBLearningRepo, _validate_task_submission_kind as _validate_task_submission_kind_for_route
 from .security import _is_same_origin
 from backend.learning.usecases.sections import (
     ListSectionsInput,
@@ -63,6 +63,7 @@ from backend.storage.learning_policy import (
 from backend.storage.verification import verify_storage_object_integrity
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes, get_materials_max_upload_bytes
 from backend.storage.keys import make_submission_key
+from backend.storage.submission_content_signatures import validate_submission_content_signature
 from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
 try:
@@ -1505,6 +1506,69 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
             detail = "invalid_image_payload" if kind == "image" else "invalid_file_payload"
             return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
 
+    validation_bytes: bytes | None = None
+    task_kind_for_submission = "native"
+    if kind in ("image", "file"):
+        repo = _get_repo()
+        task_kind_reader = getattr(repo, "get_task_kind_for_student", None)
+        if callable(task_kind_reader):
+            try:
+                task_kind_for_submission = str(
+                    task_kind_reader(
+                        student_sub=str(user.get("sub", "")),
+                        course_id=str(course_id),
+                        task_id=str(task_id),
+                    )
+                )
+            except PermissionError:
+                return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
+            except LookupError:
+                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+            except Exception:
+                return JSONResponse(
+                    {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
+                    status_code=503,
+                    headers=_cache_headers_error(),
+                )
+        try:
+            _validate_task_submission_kind_for_route(
+                task_kind=task_kind_for_submission,
+                submission_kind=kind,
+                mime_type=str(clean_payload.get("mime_type") or ""),
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                {"error": "bad_request", "detail": str(exc) or "invalid_input"},
+                status_code=400,
+                headers=_cache_headers_error(),
+            )
+        storage_key = str(clean_payload.get("storage_key") or "")
+        mime_type = str(clean_payload.get("mime_type") or "")
+        validation_bytes = await _load_storage_bytes_for_validation(storage_key=storage_key, max_bytes=_max_upload_bytes())
+        if not validation_bytes:
+            return JSONResponse(
+                {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
+                status_code=503,
+                headers=_cache_headers_error(),
+            )
+        try:
+            validate_submission_content_signature(mime_type, validation_bytes)
+        except ValueError:
+            logger.info(
+                "learning_upload_content_signature_mismatch",
+                extra={
+                    "reason": "invalid_upload_content",
+                    "mime_type": str(mime_type).strip().lower(),
+                    "task_kind": str(task_kind_for_submission or "native").strip().lower(),
+                    "byte_count": len(validation_bytes),
+                },
+            )
+            return JSONResponse(
+                {"error": "bad_request", "detail": "invalid_upload_content"},
+                status_code=400,
+                headers=_cache_headers_error(),
+            )
+
     # Scratch `.sb3` validation (fail early with stable detail codes).
     if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == SCRATCH_SB3_MIME:
         task_kind = "native"
@@ -1531,8 +1595,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                 )
 
         if str(task_kind or "").strip().lower() == "scratch":
-            storage_key = str(clean_payload.get("storage_key") or "")
-            sb3_bytes = await _load_storage_bytes_for_validation(storage_key=storage_key, max_bytes=_max_upload_bytes())
+            sb3_bytes = validation_bytes
             if not sb3_bytes:
                 return JSONResponse(
                     {"error": "service_unavailable", "detail": "sb3_validation_unavailable"},
@@ -1576,8 +1639,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                 )
 
         if str(task_kind or "").strip().lower() == "calliope":
-            storage_key = str(clean_payload.get("storage_key") or "")
-            hex_bytes = await _load_storage_bytes_for_validation(storage_key=storage_key, max_bytes=_max_upload_bytes())
+            hex_bytes = validation_bytes
             if not hex_bytes:
                 return JSONResponse(
                     {"error": "service_unavailable", "detail": "hex_validation_unavailable"},
@@ -1633,8 +1695,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                 headers=_cache_headers_error(),
             )
 
-        storage_key = str(clean_payload.get("storage_key") or "")
-        fls_bytes = await _load_storage_bytes_for_validation(storage_key=storage_key, max_bytes=_max_upload_bytes())
+        fls_bytes = validation_bytes
         if not fls_bytes:
             return JSONResponse(
                 {"error": "service_unavailable", "detail": "filius_validation_unavailable"},

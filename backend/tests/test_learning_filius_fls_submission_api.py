@@ -125,7 +125,7 @@ async def test_filius_submission_rejects_invalid_archive() -> None:
     r = await _post_submission(fls_bytes=b"not a zip")
 
     assert r.status_code == 400
-    assert r.json().get("detail") == "invalid_filius_archive"
+    assert r.json().get("detail") == "invalid_upload_content"
 
 
 @pytest.mark.anyio
@@ -133,7 +133,7 @@ async def test_filius_submission_reports_unavailable_storage_bytes() -> None:
     r = await _post_submission(fls_bytes=None)
 
     assert r.status_code == 503
-    assert r.json().get("detail") == "filius_validation_unavailable"
+    assert r.json().get("detail") == "submission_validation_unavailable"
 
 
 @pytest.mark.anyio

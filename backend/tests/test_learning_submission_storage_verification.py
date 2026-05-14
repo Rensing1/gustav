@@ -12,12 +12,14 @@ import sys
 import tempfile
 from contextlib import contextmanager
 from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import pytest
 import httpx
 from httpx import ASGITransport
+from PIL import Image
 
 import uuid
 
@@ -32,6 +34,7 @@ import main  # type: ignore  # noqa: E402
 from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
 import routes.learning as learning  # type: ignore  # noqa: E402
 from teaching.storage import StorageAdapterProtocol  # type: ignore  # noqa: E402
+from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
 
 
 class FakeStorageAdapter(StorageAdapterProtocol):
@@ -77,7 +80,14 @@ async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
+def _png_bytes() -> bytes:
+    out = BytesIO()
+    Image.new("RGB", (1, 1), (0, 0, 255)).save(out, format="PNG")
+    return out.getvalue()
+
+
 async def _prepare_fixture():
+    _require_db_or_skip()
     # Reuse teaching APIs to seed data
     main.SESSION_STORE = SessionStore()  # in-memory
     student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
@@ -116,13 +126,14 @@ async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
     student_sid, course_id, task_id = await _prepare_fixture()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        data = b"%PDF-1.7\n%%EOF\n"
         # Request an upload intent to get a storage_key
         with _use_storage_adapter(FakeStorageAdapter()):
             async with (await _client()) as c:
                 c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
                 r_intent = await c.post(
                     f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
-                    json={"kind": "file", "filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": 12},
+                    json={"kind": "file", "filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": len(data)},
                     headers={"Origin": "http://test"},
                 )
         assert r_intent.status_code == 200
@@ -132,7 +143,6 @@ async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
         # Create a file at STORAGE_VERIFY_ROOT/storage_key
         dest = (root / storage_key)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        data = b"hello world!"  # 12 bytes
         dest.write_bytes(data)
         size = len(data)
         # Mismatched sha256 (flip one byte)
@@ -164,12 +174,13 @@ async def test_submission_verification_detects_mismatch_even_when_optional(monke
     student_sid, course_id, task_id = await _prepare_fixture()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        payload = b"%PDF-1.7\n%%EOF\n"
         with _use_storage_adapter(FakeStorageAdapter()):
             async with (await _client()) as c:
                 c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
                 r_intent = await c.post(
                     f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
-                    json={"kind": "file", "filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": 12},
+                    json={"kind": "file", "filename": "doc.pdf", "mime_type": "application/pdf", "size_bytes": len(payload)},
                     headers={"Origin": "http://test"},
                 )
         assert r_intent.status_code == 200
@@ -177,7 +188,6 @@ async def test_submission_verification_detects_mismatch_even_when_optional(monke
 
         dest = Path(root) / storage_key
         dest.parent.mkdir(parents=True, exist_ok=True)
-        payload = b"hello world!"
         dest.write_bytes(payload)
         wrong_hash = sha256(b"hello world?").hexdigest()
 
@@ -205,19 +215,19 @@ async def test_submission_verification_accepts_correct_hash_and_size(monkeypatch
     student_sid, course_id, task_id = await _prepare_fixture()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        data = _png_bytes()
         with _use_storage_adapter(FakeStorageAdapter()):
             async with (await _client()) as c:
                 c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
                 r_intent = await c.post(
                     f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",
-                    json={"kind": "image", "filename": "img.png", "mime_type": "image/png", "size_bytes": 11},
+                    json={"kind": "image", "filename": "img.png", "mime_type": "image/png", "size_bytes": len(data)},
                     headers={"Origin": "http://test"},
                 )
         assert r_intent.status_code == 200
         storage_key = r_intent.json()["storage_key"]
         dest = (Path(root) / storage_key)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        data = b"hello world"  # 11 bytes
         dest.write_bytes(data)
         size = len(data)
         good_hash = sha256(data).hexdigest()

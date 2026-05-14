@@ -305,9 +305,9 @@ async def test_scratch_submission_rejects_invalid_zip(monkeypatch: pytest.Monkey
                     "size_bytes": len(sb3_bytes),
                     "sha256": digest,
                 },
-            )
+    )
     assert r.status_code == 400
-    assert r.json().get("detail") == "invalid_sb3_archive"
+    assert r.json().get("detail") == "invalid_upload_content"
 
 
 @pytest.mark.anyio

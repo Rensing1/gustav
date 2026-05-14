@@ -45,6 +45,13 @@ def test_openapi_submission_errors_include_invalid_file_payload():
     assert "invalid_file_payload" in yml
 
 
+def test_openapi_submission_errors_include_invalid_upload_content():
+    yml = _load_openapi()
+    # Wrong stored bytes for a declared upload MIME must be part of the public API contract.
+    assert "Create a new submission" in yml
+    assert "invalid_upload_content" in yml
+
+
 def test_openapi_upload_intents_includes_404_not_found():
     yml = _load_openapi()
     # Upload intents must document 404 when task not visible or not found

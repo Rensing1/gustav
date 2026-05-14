@@ -1177,6 +1177,11 @@
       pendingSubmissionIntent = null;
 
       const reason = caught instanceof Error ? caught.message : "upload_failed";
+      if (reason === "invalid_upload_content") {
+        feedbackStatusMessage = "Die Datei passt nicht zum erwarteten Dateityp. Bitte wähle die richtige Datei aus.";
+        setClientSubmissionError(taskId, "Die Datei passt nicht zum erwarteten Dateityp. Bitte wähle die richtige Datei aus.");
+        return;
+      }
       if (reason === "invalid_image_payload" || reason === "invalid_file_payload") {
         feedbackStatusMessage = "Die Datei ist für diese Aufgabe nicht zulässig.";
         setClientSubmissionError(taskId, "Die Datei ist für diese Aufgabe nicht zulässig.");

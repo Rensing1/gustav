@@ -5780,8 +5780,8 @@ paths:
                 $ref: '#/components/schemas/LearningSubmission'
         '400':
           description: >-
-            Bad request (invalid_input | invalid_image_payload | invalid_file_payload | invalid_h5p_payload |
-            invalid_sb3_archive | missing_project_json | makecode_source_too_large |
+            Bad request (invalid_input | invalid_image_payload | invalid_file_payload | invalid_upload_content |
+            invalid_h5p_payload | invalid_sb3_archive | missing_project_json | makecode_source_too_large |
             invalid_filius_archive | missing_filius_configuration |
             invalid_filius_configuration | filius_configuration_too_large |
             max_attempts_exceeded | invalid_uuid)

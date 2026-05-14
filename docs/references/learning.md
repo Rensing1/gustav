@@ -53,7 +53,7 @@ Hinweis (Breaking, 2025‑10‑28): `LearningSectionCore` verlangt jetzt das Fel
   - Sobald der Worker OCR/Feedback abgeschlossen hat, wird die Submission auf `analysis_status='completed'` aktualisiert (oder `failed` bei Fehlern). Client kann via `GET` pollend den Status abfragen.
 
 Fehlercodes (Beispiele):
-- 400: `invalid_input | invalid_image_payload | invalid_file_payload | invalid_uuid | max_attempts_exceeded`
+- 400: `invalid_input | invalid_image_payload | invalid_file_payload | invalid_upload_content | invalid_uuid | max_attempts_exceeded`
 - 403: `forbidden`
 - 404: `not_found`
 - 409: `conflict` (bei mehrfacher Idempotency-Verwendung mit nicht übereinstimmendem Payload)
@@ -114,8 +114,9 @@ Bezüge zu Unterrichten (bestehende Tabellen):
 - Fehlersemantik: 404 bei nicht freigegebenen/fremden Ressourcen, um keine Existenzinformationen zu leaken.
 - Materials & Tasks: Markdown wird serverseitig sanitisiert, `Cache-Control: private, no-store`.
 - Fehlerantworten: 400/401/403/404 der Learning‑Endpoints senden ebenfalls `Cache-Control: private, no-store`.
-- Submissions: Storage-Metadaten werden bei Bildabgaben geprüft; `storage_key` wird in API‑Antworten zurückgegeben (nur für `kind=image`). Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
-- Bild‑Uploads: MIME‑Typ‑Whitelist (`image/jpeg`, `image/png`) und strenges `storage_key`‑Pattern (pfadähnlich, keine Traversal‑Segmente).
+- Submissions: Storage-Metadaten werden bei Upload-Abgaben geprüft; `storage_key` wird in API‑Antworten zurückgegeben (nur für `kind=image`). Hash-Format (`sha256`) wird geprüft, bevor Daten persistiert werden.
+- Upload‑Bytes werden vor Persistence und Queueing gegen den deklarierten MIME-/Aufgabentyp validiert. Unterstützte Signaturen: PNG, JPEG, PDF, Scratch SB3 als ZIP-Container, Filius FLS als ZIP-Container und textartige MakeCode-HEX-Dateien. Mismatches enden fail-closed mit `400 invalid_upload_content`.
+- Bild‑Uploads: MIME‑Typ‑Whitelist (`image/jpeg`, `image/png`) und strenges `storage_key`‑Pattern (pfadähnlich, keine Traversal‑Segmente). WebP ist aktuell nicht Teil des Learning-Upload-Vertrags.
 - CSRF: Same‑Origin‑Prüfung nutzt `Origin`, fällt bei fehlendem `Origin` auf `Referer` zurück (nur Origin‑Teil, Pfad ignoriert). Nicht‑Browser‑Clients bleiben unverändert (keine Header).
   Reverse‑Proxy‑Header (`X‑Forwarded‑Proto`/`X‑Forwarded‑Host`/`X‑Forwarded‑Port`) werden nur berücksichtigt, wenn `GUSTAV_TRUST_PROXY=true` gesetzt ist (z. B. hinter Caddy/Nginx). Ohne diese Variable werden Forwarded‑Header ignoriert, um Header‑Spoofing zu vermeiden.
 - DB‑Funktionen (SECURITY DEFINER): Alle Helfer (`get_released_*`, `check_task_visible_to_student`, `next_attempt_nr`) verwenden gehärtete `search_path`‑Einstellungen (`pg_catalog, public`) und vollqualifizierte Tabellennamen, um Hijacking über fremde Schemas zu verhindern.

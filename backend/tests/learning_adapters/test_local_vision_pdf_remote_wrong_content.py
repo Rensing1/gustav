@@ -2,8 +2,8 @@
 Vision adapter — remote fetch returns non-PDF content (HTML or JSON).
 
 Expected:
-  - Adapter logs `wrong_content` and treats as transient (no model call).
-  - Extract raises VisionTransientError("pdf_images_unavailable").
+  - Adapter treats loaded non-PDF bytes as permanent `invalid_upload_content`.
+  - No model call or retry budget is consumed for deterministic mismatches.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import sys
 import pytest
 
 
-def test_pdf_remote_wrong_content_transient(tmp_path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+def test_pdf_remote_wrong_content_is_permanent(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
@@ -79,10 +79,6 @@ def test_pdf_remote_wrong_content_transient(tmp_path, monkeypatch: pytest.Monkey
     }
     job_payload = {"mime_type": "application/pdf", "storage_key": submission["storage_key"]}
 
-    with pytest.raises(mod.VisionTransientError) as exc:
+    with pytest.raises(mod.VisionPermanentError) as exc:
         adapter.extract(submission=submission, job_payload=job_payload)
-    assert "pdf_images_unavailable" in str(exc.value)
-
-    # Logging contains wrong_content hint
-    logs = "\n".join(r.getMessage() for r in caplog.records)
-    assert "wrong_content" in logs
+    assert "invalid_upload_content" in str(exc.value)

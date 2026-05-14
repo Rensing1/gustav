@@ -33,6 +33,7 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 - Buckets are private; the app uses signed URLs with short TTLs (upload: 3 min, download: 45 s).
 - Download URL responses include `Cache-Control: private, no-store` to avoid caching.
 - Filenames and path segments are sanitized in the service to avoid traversal and odd characters.
+- Learning uploads follow a closed validation chain: private bucket, presigned upload, storage integrity verification, byte-signature validation, then submission persistence and queueing. Signature mismatches fail with `invalid_upload_content`; logs for this gate must not include storage keys, hashes, user IDs, or object paths.
 - The learning upload proxy (`ENABLE_STORAGE_UPLOAD_PROXY=true`) now validates scheme/host/port against `SUPABASE_URL`, allows HTTP only for localhost/127.0.0.0/8/::1/host.docker.internal, streams request bodies with the central size limit, and forwards presign headers (e.g., `x-upsert`) 1:1 to Supabase to keep parity with direct PUT uploads.
 - Wenn signierte URLs auf `SUPABASE_PUBLIC_URL` umgeschrieben werden (Same-Origin-Workaround), akzeptieren Proxy und Storage-Verifikation sowohl den internen `SUPABASE_URL`-Host als auch den öffentlichen Host und behalten trotzdem die SSRF-Guards bei.
 - Remote Vision fetches reuse the same SUPABASE_URL allowlist and stream-download with `LEARNING_MAX_UPLOAD_BYTES`, aborting early on host mismatches or oversized responses.

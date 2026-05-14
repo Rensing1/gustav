@@ -28,7 +28,7 @@ from backend.learning.workers.process_learning_submission_jobs import (  # type:
     VisionTransientError,
 )
 from backend.storage.config import get_submissions_bucket
-from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives, write_dummy_png
+from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives, write_dummy_jpeg, write_dummy_png
 
 
 def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch, *, observed: dict) -> None:
@@ -103,7 +103,7 @@ def test_local_vision_happy_path_returns_markdown(
         file_path = storage_root / storage_key
         file_path.parent.mkdir(parents=True, exist_ok=True)
         if mime == "image/jpeg":
-            file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 16)
+            write_dummy_jpeg(file_path)
         else:
             write_dummy_png(file_path)
         job_payload = {
@@ -298,7 +298,7 @@ def test_local_vision_timeout_is_transient(monkeypatch: pytest.MonkeyPatch) -> N
     storage_key = f"{bucket}/course/task/student/img.jpg"
     file_path = root / storage_key
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 16)
+    write_dummy_jpeg(file_path)
     job_payload = {
         "mime_type": "image/jpeg",
         "storage_key": storage_key,
@@ -625,7 +625,7 @@ def test_local_vision_sanitizes_unexpected_errors(monkeypatch: pytest.MonkeyPatc
     storage_key = f"{bucket}/course/task/student/img.jpg"
     file_path = storage_root / storage_key
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 16)
+    write_dummy_jpeg(file_path)
 
     submission = {"id": "s", "kind": "file"}
     job_payload = {

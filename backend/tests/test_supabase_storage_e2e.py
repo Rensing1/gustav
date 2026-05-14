@@ -12,6 +12,8 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.tests.utils.storage_fixtures import dummy_png_bytes
+
 
 pytestmark = pytest.mark.supabase_integration
 
@@ -346,8 +348,8 @@ async def test_e2e_learning_submission_image_upload_finalize(monkeypatch):
         )
         assert r_member.status_code == 201, r_member.text
 
-    # Tiny PNG-like byte sequence (content isn't parsed server-side)
-    png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR...\x00\x00IEND\xaeB`\x82"
+    # Tiny but well-formed PNG; the submission API validates image bytes.
+    png_bytes = dummy_png_bytes()
     size = len(png_bytes)
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)

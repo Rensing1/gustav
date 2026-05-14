@@ -45,10 +45,27 @@ DEFAULT_POLICY = LearningUploadPolicy(
 )
 
 
+def resolve_local_verify_root_from_env() -> str | None:
+    """Return the local upload verification root for the active environment.
+
+    `STORAGE_VERIFY_ROOT` is the explicit prod-compatible setting. The
+    `.tmp/dev_uploads` fallback only exists for the guarded dev upload stub so
+    normal storage validation does not read local files accidentally.
+    """
+
+    root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+    if root:
+        return root
+    dev_stub_enabled = (os.getenv("ENABLE_DEV_UPLOAD_STUB", "false") or "").strip().lower() == "true"
+    if not dev_stub_enabled:
+        return None
+    return os.path.abspath(".tmp/dev_uploads")
+
+
 def verification_config_from_env() -> VerificationConfig:
     """Build verification configuration based on environment defaults."""
 
     bucket = get_submissions_bucket()
     require = (os.getenv("REQUIRE_STORAGE_VERIFY", "false") or "").lower() == "true"
-    root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip() or None
+    root = resolve_local_verify_root_from_env()
     return VerificationConfig(storage_bucket=bucket, require_remote=require, local_verify_root=root)

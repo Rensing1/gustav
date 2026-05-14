@@ -58,6 +58,7 @@ from backend.storage.learning_policy import (
     ALLOWED_FILE_MIME,
     ALLOWED_IMAGE_MIME,
     STORAGE_KEY_RE,
+    resolve_local_verify_root_from_env,
     verification_config_from_env,
 )
 from backend.storage.verification import verify_storage_object_integrity
@@ -2398,7 +2399,7 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
 
 async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int) -> bytes | None:
     """Fetch bytes for validation either from local verify root or via presigned download."""
-    root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+    root = resolve_local_verify_root_from_env() or ""
     local = _load_local_storage_bytes_for_validation(root=root, storage_key=storage_key, max_bytes=max_bytes)
     if local is not None:
         return local
@@ -2447,11 +2448,14 @@ async def internal_upload_stub(request: Request):
     if not storage_key or not STORAGE_KEY_RE.fullmatch(storage_key):
         return JSONResponse({"error": "bad_request", "detail": "invalid_storage_key"}, status_code=400, headers=_cache_headers_error())
 
-    # Resolve target path safely beneath STORAGE_VERIFY_ROOT
-    root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+    # Resolve target path safely beneath the configured local validation root.
+    root = resolve_local_verify_root_from_env()
     if not root:
-        # Default dev directory inside project workspace
-        root = os.path.abspath(".tmp/dev_uploads")
+        return JSONResponse(
+            {"error": "service_unavailable", "detail": "upload_stub_storage_unavailable"},
+            status_code=503,
+            headers=_cache_headers_error(),
+        )
     from pathlib import Path as _Path
     base = _Path(root).resolve()
     target = (base / storage_key).resolve()

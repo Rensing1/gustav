@@ -483,6 +483,21 @@ def test_info_template_uses_shared_primary_app_link_resolver_and_keeps_action_fa
     assert "actionUri" in text, "info.ftl should keep actionUri fallback behavior"
 
 
+def test_error_templates_normalize_optional_redirect_context_before_helper_call():
+    """Keycloak may omit pageRedirectUri in error/info/expired contexts; templates must normalize it locally."""
+    for name in ["error.ftl", "info.ftl", "login-page-expired.ftl", "logout-confirm.ftl"]:
+        tpl = _resolve_login_template(name)
+        text = tpl.read_text(encoding="utf-8")
+
+        assert '<#assign safe_page_redirect_uri = "">' in text, f"{name} should define a safe redirect default"
+        assert "pageRedirectUri?? && pageRedirectUri?has_content" in text, (
+            f"{name} should guard missing pageRedirectUri with ?? before reading it"
+        )
+        assert "pageRedirectUri=safe_page_redirect_uri" in text, (
+            f"{name} should pass the normalized redirect value into the shared helper"
+        )
+
+
 def test_info_template_enforces_exclusive_link_priority():
     """Info template should render one primary CTA with required-action safety priority."""
     tpl = _resolve_login_template("info.ftl")

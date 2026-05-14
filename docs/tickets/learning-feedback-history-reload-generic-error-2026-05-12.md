@@ -1,5 +1,20 @@
 # Ticket: Learner feedback history reload and generic error state
 
+## Status
+
+Closed on 2026-05-14. The learner workspace now forwards each task's
+submission-history load state into the task card. If task metadata says a
+submission exists but local history is still loading, failed, or unavailable,
+the review panel shows a state-specific loading/unavailable message instead of
+claiming that feedback or evaluation is missing. The centralized auth
+continuity path from the companion ticket also covers recoverable protected
+history/backend calls.
+
+Verified with:
+
+- `npm test -- --run src/routes/protected-page-bootstrap-contract.test.ts src/lib/components/learning-unit/LearningTaskCard.test.ts src/lib/server/api.test.ts src/lib/server/session.test.ts`
+- `npm run check`
+
 ## Summary
 
 On 2026-05-12, a learner reported that a Filius feedback submission showed the

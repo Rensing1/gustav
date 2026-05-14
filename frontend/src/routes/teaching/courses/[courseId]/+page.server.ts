@@ -51,26 +51,31 @@ async function loadCourseWorkspace(
   fetch: typeof globalThis.fetch,
   cookies: Cookies,
   courseId: string,
+  authRedirectPath: string
 ) {
   const course = await requireBackendJson<Course>(
     fetch,
     cookies,
-    `/api/teaching/courses/${courseId}`
+    `/api/teaching/courses/${courseId}`,
+    { authRedirectPath }
   );
   const members = await requireBackendJson<CourseMember[]>(
     fetch,
     cookies,
-    `/api/teaching/courses/${courseId}/members?limit=200&offset=0`
+    `/api/teaching/courses/${courseId}/members?limit=200&offset=0`,
+    { authRedirectPath }
   );
   const modules = await requireBackendJson<CourseModule[]>(
     fetch,
     cookies,
-    `/api/teaching/courses/${courseId}/modules`
+    `/api/teaching/courses/${courseId}/modules`,
+    { authRedirectPath }
   );
   const units = await requireBackendJson<TeachingUnitListItem[]>(
     fetch,
     cookies,
-    "/api/teaching/units?limit=100&offset=0"
+    "/api/teaching/units?limit=100&offset=0",
+    { authRedirectPath }
   );
 
   const unitsById = new Map(units.map((unit) => [unit.id, unit]));
@@ -98,9 +103,10 @@ async function loadCourseWorkspace(
 }
 
 export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "teaching");
 
-  const workspace = await loadCourseWorkspace(fetch, cookies, params.courseId);
+  const workspace = await loadCourseWorkspace(fetch, cookies, params.courseId, authRedirectPath);
   const memberSearchQuery = (url.searchParams.get("member-q") ?? "").trim();
   let memberSearchResults: DirectoryStudent[] = [];
 
@@ -108,7 +114,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     const candidates = await requireBackendJson<DirectoryStudent[]>(
       fetch,
       cookies,
-      `/api/users/search?role=student&limit=8&q=${encodeURIComponent(memberSearchQuery)}`
+      `/api/users/search?role=student&limit=8&q=${encodeURIComponent(memberSearchQuery)}`,
+      { authRedirectPath }
     );
     const attachedMemberSubs = new Set(workspace.members.map((member) => member.sub));
     memberSearchResults = candidates.filter((candidate) => !attachedMemberSubs.has(candidate.sub));
@@ -140,7 +147,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
 };
 
 export const actions: Actions = {
-  saveCourse: async ({ fetch, cookies, params, request }) => {
+  saveCourse: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
     const subject = String(formData.get("subject") ?? "").trim();
@@ -165,7 +172,8 @@ export const actions: Actions = {
         term: term || null
       }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -179,7 +187,7 @@ export const actions: Actions = {
 
     throw redirect(303, `/teaching/courses/${params.courseId}?members=1`);
   },
-  deleteCourse: async ({ fetch, cookies, params, request }) => {
+  deleteCourse: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const confirmation = String(formData.get("confirmation") ?? "").trim();
     const expectedTitle = String(formData.get("expected_title") ?? "").trim();
@@ -194,7 +202,8 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/courses/${params.courseId}`, {
       method: "DELETE",
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -207,7 +216,7 @@ export const actions: Actions = {
 
     throw redirect(303, "/teaching/courses");
   },
-  addMember: async ({ fetch, cookies, params, request }) => {
+  addMember: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const studentSub = String(formData.get("student_sub") ?? "").trim();
     const query = String(formData.get("member_q") ?? "").trim();
@@ -225,7 +234,8 @@ export const actions: Actions = {
       method: "POST",
       body: JSON.stringify({ student_sub: studentSub }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok && response.status != 204) {
@@ -239,7 +249,7 @@ export const actions: Actions = {
 
     throw redirect(303, `/teaching/courses/${params.courseId}?members=1`);
   },
-  removeMember: async ({ fetch, cookies, params, request }) => {
+  removeMember: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const studentSub = String(formData.get("student_sub") ?? "").trim();
 
@@ -253,7 +263,8 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/courses/${params.courseId}/members/${encodeURIComponent(studentSub)}`, {
       method: "DELETE",
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -266,7 +277,7 @@ export const actions: Actions = {
 
     throw redirect(303, `/teaching/courses/${params.courseId}`);
   },
-  addUnit: async ({ fetch, cookies, params, request }) => {
+  addUnit: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const unitId = String(formData.get("unit_id") ?? "").trim();
 
@@ -283,7 +294,8 @@ export const actions: Actions = {
       method: "POST",
       body: JSON.stringify({ unit_id: unitId }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -297,7 +309,7 @@ export const actions: Actions = {
 
     throw redirect(303, `/teaching/courses/${params.courseId}`);
   },
-  removeUnit: async ({ fetch, cookies, params, request }) => {
+  removeUnit: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const moduleId = String(formData.get("module_id") ?? "").trim();
 
@@ -311,7 +323,8 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/courses/${params.courseId}/modules/${moduleId}`, {
       method: "DELETE",
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -324,7 +337,7 @@ export const actions: Actions = {
 
     throw redirect(303, `/teaching/courses/${params.courseId}`);
   },
-  reorderModules: async ({ fetch, cookies, params, request }) => {
+  reorderModules: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const moduleIds = formData.getAll("module_ids").map((value) => String(value));
 
@@ -340,7 +353,8 @@ export const actions: Actions = {
       method: "POST",
       body: JSON.stringify({ module_ids: moduleIds }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {

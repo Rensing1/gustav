@@ -98,6 +98,7 @@ describe("backendRequest auth continuity", () => {
 
   it("uses the app session as a recoverable signal when the BFF bearer is unavailable", async () => {
     readFreshTokenSessionMock.mockResolvedValue(null);
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401 }))
@@ -117,6 +118,11 @@ describe("backendRequest auth continuity", () => {
         status: 302,
         location: "/auth/continue?redirect=%2Flearning"
       });
+      expect(infoSpy).toHaveBeenCalledWith("auth.continuity", {
+        reason: "app_session_active_without_bearer",
+        redirect: "/learning"
+      });
+      infoSpy.mockRestore();
     }
   });
 

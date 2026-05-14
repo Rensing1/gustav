@@ -110,6 +110,7 @@ describe("readFreshTokenSession", () => {
     const now = Math.floor(Date.now() / 1000);
     const cookies = new MemoryCookies();
     cookies.store.set("gustav_bff_session", "bff-session-race");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
     let bffReads = 0;
 
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
@@ -148,10 +149,16 @@ describe("readFreshTokenSession", () => {
     const session = await readFreshTokenSession(cookies as never, fetchMock, { forceRefresh: true });
 
     expect(session?.accessToken).toBe("fresh-access-token-from-other-request");
+    expect(infoSpy).toHaveBeenCalledWith("auth.session", {
+      reason: "token_refresh_failed",
+      status: 400,
+      recovered: "concurrent_session"
+    });
     expect(cookies.deleteCalls).toHaveLength(0);
     expect(fetchMock).not.toHaveBeenCalledWith(
       "http://backend.test/backend-internal/app/bff-session",
       expect.objectContaining({ method: "DELETE" })
     );
+    infoSpy.mockRestore();
   });
 });

@@ -1,5 +1,22 @@
 # Ticket: Auth-Session-Continuity classroom regression
 
+## Status
+
+Closed on 2026-05-14. The SvelteKit BFF now retries protected backend calls
+after a `401`, routes recoverable mixed session states through
+`/auth/continue`, keeps unrecoverable states on the normal login path, and
+passes the current page path through the protected teaching loaders/actions
+covered by the regression tests. Keycloak error, info, expired-login, and
+logout-confirm templates now normalize the optional `pageRedirectUri` before
+calling the shared recovery-link helper. Token-free diagnostic logs were added
+for failed token refreshes and app-session-only auth continuity.
+
+Verified with:
+
+- `.venv/bin/pytest -q backend/tests/test_keycloak_theme_files.py`
+- `npm test -- --run src/routes/protected-page-bootstrap-contract.test.ts src/lib/components/learning-unit/LearningTaskCard.test.ts src/lib/server/api.test.ts src/lib/server/session.test.ts`
+- `npm run check`
+
 ## Summary
 
 GUSTAV still has a recurring classroom blocker around authentication

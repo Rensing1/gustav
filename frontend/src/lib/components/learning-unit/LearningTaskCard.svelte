@@ -16,6 +16,7 @@
     unitType,
     moduleId = null,
     history = [],
+    historyState = "loaded",
     domId = undefined,
     expanded = true,
     submitted = false,
@@ -44,6 +45,7 @@
     unitType: "linear" | "modular";
     moduleId?: string | null;
     history?: LearningSubmission[];
+    historyState?: SubmissionHistoryLoadState;
     domId?: string;
     expanded?: boolean;
     submitted?: boolean;
@@ -73,6 +75,7 @@
 
   type SummaryTab = "submission" | "feedback" | "evaluation";
   type SubmissionMode = "text" | "upload";
+  type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
   type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
   type CompactTaskTone = "new" | "draft" | "pending" | "final" | "error";
   let activeSummaryTab = $state<SummaryTab>("submission");
@@ -330,6 +333,22 @@
       return pendingIntent === "submit" ? "Abgabe wird verarbeitet ..." : "Rückmeldung wird erstellt ...";
     }
     return feedbackStatusMessage;
+  }
+
+  function historyStateMessage(): string | null {
+    if (latestSubmission()) {
+      return null;
+    }
+    if (historyState === "loading") {
+      return "Die Abgabe wird geladen ...";
+    }
+    if (historyState === "failed") {
+      return "Die Abgabe konnte nicht geladen werden. Bitte versuche es erneut.";
+    }
+    if ((historyState === "not_loaded" || historyState === "unavailable") && hasSubmission()) {
+      return "Die gespeicherte Abgabe ist momentan nicht verfügbar.";
+    }
+    return null;
   }
 
   function renderEvaluationCriteria(submission: LearningSubmission): boolean {
@@ -826,6 +845,8 @@
                     <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
                   {:else if feedbackPending}
                     <p class="learning-task-submission-summary__plain">Die aktuelle Abgabe wird vorbereitet.</p>
+                  {:else if historyStateMessage()}
+                    <p class="learning-task-submission-summary__plain">{historyStateMessage()}</p>
                   {:else}
                     <p class="learning-task-submission-summary__plain">Es liegt noch keine Abgabe vor.</p>
                   {/if}
@@ -836,6 +857,8 @@
                     <div class="markdown-prose">
                       {@html renderMarkdown(latestSubmissionOrThrow().feedback_md)}
                     </div>
+                  {:else if historyStateMessage()}
+                    <p class="learning-task-submission-summary__plain">{historyStateMessage()}</p>
                   {:else}
                     <p class="learning-task-submission-summary__plain">Es liegt noch keine Rückmeldung vor.</p>
                   {/if}
@@ -860,6 +883,8 @@
                     <p class="learning-task-submission-summary__plain">{evaluationSummary(latestSubmissionOrThrow())}</p>
                   {:else if feedbackPendingMessage()}
                     <p class="workspace-note">{feedbackPendingMessage()}</p>
+                  {:else if historyStateMessage()}
+                    <p class="learning-task-submission-summary__plain">{historyStateMessage()}</p>
                   {:else}
                     <p class="learning-task-submission-summary__plain">Es liegt noch keine Auswertung vor.</p>
                   {/if}

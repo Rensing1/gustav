@@ -273,6 +273,38 @@ describe("LearningTaskCard", () => {
     expect(document.querySelector(".learning-task-submission-summary__panel .markdown-prose table")).not.toBeNull();
   });
 
+  it("keeps unloaded history from looking like missing feedback or evaluation", async () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          has_submission: true,
+          latest_submission_intent: "feedback",
+          latest_submission_analysis_status: "completed",
+          latest_submission_created_at: "2026-05-12T08:30:00+00:00"
+        },
+        taskTitle: "Filius-Auswertung",
+        unitType: "modular",
+        compactLayout: true,
+        expanded: true,
+        reviewPanelOpen: true,
+        history: [],
+        historyState: "loading"
+      }
+    });
+
+    expect(screen.getByText("Die Abgabe wird geladen ...")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "Rückmeldung" }));
+    expect(screen.getByText("Die Abgabe wird geladen ...")).toBeInTheDocument();
+    expect(screen.queryByText("Es liegt noch keine Rückmeldung vor.")).toBeNull();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "Auswertung" }));
+    expect(screen.getByText("Die Abgabe wird geladen ...")).toBeInTheDocument();
+    expect(screen.queryByText("Es liegt noch keine Auswertung vor.")).toBeNull();
+  });
+
   it("keeps the task header compact when expanded", () => {
     render(LearningTaskCard, {
       props: {

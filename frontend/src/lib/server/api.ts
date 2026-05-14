@@ -101,7 +101,15 @@ async function handleFinalUnauthorizedResponse(
     return response;
   }
 
-  if (readFrontendSessionCookie(cookies) || await readAppSessionActive(fetchFn, cookies)) {
+  const hasFrontendSession = Boolean(readFrontendSessionCookie(cookies));
+  const hasAppSession = await readAppSessionActive(fetchFn, cookies);
+  if (hasFrontendSession || hasAppSession) {
+    if (!hasFrontendSession && hasAppSession) {
+      console.info("auth.continuity", {
+        reason: "app_session_active_without_bearer",
+        redirect: authRedirectPath
+      });
+    }
     throw redirect(302, continuationHref(authRedirectPath));
   }
   throw redirect(302, loginHref(authRedirectPath));

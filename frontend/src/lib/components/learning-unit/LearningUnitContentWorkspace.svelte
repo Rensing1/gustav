@@ -26,6 +26,7 @@
     contentGroups,
     paneItems,
     historyByTask,
+    historyStateByTask = {},
     submittedTaskId = null,
     submissionMessage = null,
     submissionErrorTaskId = null,
@@ -82,6 +83,7 @@
     contentGroups: ContentGroup[];
     paneItems: Record<PaneId, Array<{ item: ContentGroup["items"][number]; expanded: boolean }>>;
     historyByTask: Record<string, LearningSubmission[]>;
+    historyStateByTask?: Record<string, SubmissionHistoryLoadState>;
     submittedTaskId?: string | null;
     submissionMessage?: string | null;
     submissionErrorTaskId?: string | null;
@@ -133,6 +135,8 @@
       | null;
     onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
+
+  type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
 
   function tocItemActive(itemKey: string): boolean {
     if (unitType === "modular") {
@@ -357,6 +361,7 @@
                               {unitType}
                               moduleId={entry.item.moduleId ?? moduleId}
                               history={historyByTask[task.id] ?? []}
+                              historyState={historyStateByTask[task.id] ?? "not_loaded"}
                               domId={itemDomId(paneId, entry.item.key)}
                               expanded={true}
                               compactLayout={true}
@@ -410,6 +415,7 @@
                       {unitType}
                       moduleId={entry.item.moduleId ?? moduleId}
                       history={historyByTask[task.id] ?? []}
+                      historyState={historyStateByTask[task.id] ?? "not_loaded"}
                       domId={itemDomId(paneId, entry.item.key)}
                       expanded={entry.expanded}
                       submitted={submittedTaskId === task.id}

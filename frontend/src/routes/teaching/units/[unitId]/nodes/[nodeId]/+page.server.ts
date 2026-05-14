@@ -10,6 +10,10 @@ function editorHref(unitId: string, nodeId: string): string {
   return `/api/teaching/views/units/${encodeURIComponent(unitId)}/nodes/${encodeURIComponent(nodeId)}/editor`;
 }
 
+function actionAuthRedirectPath(url: URL | undefined): string {
+  return url ? currentPath(url) : "/";
+}
+
 type EditorActionSuccess = {
   ok: true;
   message: string;
@@ -81,9 +85,12 @@ async function readEditor(
   fetchFn: typeof fetch,
   cookies: Parameters<PageServerLoad>[0]["cookies"],
   unitId: string,
-  nodeId: string
+  nodeId: string,
+  authRedirectPath: string
 ): Promise<TeacherUnitNodeEditorView> {
-  return await requireBackendJson<TeacherUnitNodeEditorView>(fetchFn, cookies, editorHref(unitId, nodeId));
+  return await requireBackendJson<TeacherUnitNodeEditorView>(fetchFn, cookies, editorHref(unitId, nodeId), {
+    authRedirectPath
+  });
 }
 
 async function success<K extends EditorActionName>(
@@ -92,6 +99,7 @@ async function success<K extends EditorActionName>(
   cookies: Parameters<PageServerLoad>[0]["cookies"],
   unitId: string,
   nodeId: string,
+  authRedirectPath: string,
   message: string,
   extra?: Partial<EditorActionSuccess>
 ): Promise<Record<K, EditorActionSuccess>> {
@@ -99,7 +107,7 @@ async function success<K extends EditorActionName>(
     [action]: {
       ok: true,
       message,
-      editor: await readEditor(fetchFn, cookies, unitId, nodeId),
+      editor: await readEditor(fetchFn, cookies, unitId, nodeId, authRedirectPath),
       ...extra
     }
   } as Record<K, EditorActionSuccess>;
@@ -169,6 +177,7 @@ async function finalizePreparedFileMaterial(
     altText: string | null;
     intentId: string;
     sha256: string;
+    authRedirectPath: string;
   }
 ): Promise<Response> {
   return await backendRequest(
@@ -179,6 +188,7 @@ async function finalizePreparedFileMaterial(
       method: "POST",
       includeSameOrigin: true,
       headers: { "content-type": "application/json" },
+      authRedirectPath: options.authRedirectPath,
       body: JSON.stringify({
         intent_id: options.intentId,
         title: options.title,
@@ -263,9 +273,10 @@ export const __testables = {
 };
 
 export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "teaching");
 
-  const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId);
+  const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId, authRedirectPath);
 
   const breadcrumbs: BreadcrumbItem[] = [
     { label: "Lerneinheiten", href: "/teaching/units" },
@@ -281,7 +292,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
 };
 
 export const actions: Actions = {
-  saveNode: async ({ fetch, cookies, params, request }) => {
+  saveNode: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const kind = asText(formData.get("kind"));
     const title = asText(formData.get("title"));
@@ -317,7 +329,8 @@ export const actions: Actions = {
       method: "PATCH",
       body: JSON.stringify(payload),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath
     });
 
     if (!response.ok) {
@@ -329,10 +342,11 @@ export const actions: Actions = {
       });
     }
 
-    return await success("saveNode", fetch, cookies, params.unitId, params.nodeId, "Knoten gespeichert.");
+    return await success("saveNode", fetch, cookies, params.unitId, params.nodeId, authRedirectPath, "Knoten gespeichert.");
   },
 
-  saveMaterial: async ({ fetch, cookies, params, request }) => {
+  saveMaterial: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const sectionId = asText(formData.get("section_id"));
     const materialId = asText(formData.get("material_id"));
@@ -366,7 +380,8 @@ export const actions: Actions = {
         method: "PATCH",
         body: JSON.stringify(payload),
         headers: { "content-type": "application/json" },
-        includeSameOrigin: true
+        includeSameOrigin: true,
+        authRedirectPath
       }
     );
 
@@ -380,12 +395,13 @@ export const actions: Actions = {
       });
     }
 
-    return await success("saveMaterial", fetch, cookies, params.unitId, params.nodeId, "Material gespeichert.", {
+    return await success("saveMaterial", fetch, cookies, params.unitId, params.nodeId, authRedirectPath, "Material gespeichert.", {
       material_id: materialId
     });
   },
 
-  createMaterial: async ({ fetch, cookies, params, request }) => {
+  createMaterial: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const sectionId = asText(formData.get("section_id"));
     const materialKind = asText(formData.get("material_kind")) || "markdown";
@@ -439,7 +455,8 @@ export const actions: Actions = {
         title,
         altText,
         intentId,
-        sha256
+        sha256,
+        authRedirectPath
       });
     } else {
       if (!bodyMd.trim()) {
@@ -459,7 +476,8 @@ export const actions: Actions = {
           method: "POST",
           body: JSON.stringify({ title, body_md: bodyMd }),
           headers: { "content-type": "application/json" },
-          includeSameOrigin: true
+          includeSameOrigin: true,
+          authRedirectPath
         }
       );
     }
@@ -515,7 +533,7 @@ export const actions: Actions = {
 
     const createdMaterial = await readCreatedMaterial(response);
     const editor = mergeCreatedMaterialIntoEditor(
-      await readEditor(fetch, cookies, params.unitId, params.nodeId),
+      await readEditor(fetch, cookies, params.unitId, params.nodeId, authRedirectPath),
       createdMaterial
     );
 
@@ -529,7 +547,8 @@ export const actions: Actions = {
     };
   },
 
-  deleteMaterial: async ({ fetch, cookies, params, request }) => {
+  deleteMaterial: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const sectionId = asText(formData.get("section_id"));
     const materialId = asText(formData.get("material_id"));
@@ -544,7 +563,8 @@ export const actions: Actions = {
       `/api/teaching/units/${params.unitId}/sections/${sectionId}/materials/${materialId}`,
       {
         method: "DELETE",
-        includeSameOrigin: true
+        includeSameOrigin: true,
+        authRedirectPath
       }
     );
 
@@ -554,14 +574,15 @@ export const actions: Actions = {
       });
     }
 
-    return await success("deleteMaterial", fetch, cookies, params.unitId, params.nodeId, "Material gelöscht.");
+    return await success("deleteMaterial", fetch, cookies, params.unitId, params.nodeId, authRedirectPath, "Material gelöscht.");
   },
 
-  reorderMaterial: async ({ fetch, cookies, params, request }) => {
+  reorderMaterial: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const materialId = asText(formData.get("material_id"));
     const direction = asText(formData.get("direction")) === "down" ? "down" : "up";
-    const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId);
+    const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId, authRedirectPath);
     const sectionId = sectionIdForEditor(editor);
     const orderedIds = editor.materials.map((item) => item.id);
     const nextIds = reorderIds(orderedIds, materialId, direction);
@@ -584,6 +605,7 @@ export const actions: Actions = {
       {
         method: "POST",
         includeSameOrigin: true,
+        authRedirectPath,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ material_ids: nextIds })
       }
@@ -595,12 +617,13 @@ export const actions: Actions = {
       });
     }
 
-    return await success("reorderMaterial", fetch, cookies, params.unitId, params.nodeId, "", {
+    return await success("reorderMaterial", fetch, cookies, params.unitId, params.nodeId, authRedirectPath, "", {
       material_id: materialId
     });
   },
 
-  saveTask: async ({ fetch, cookies, params, request }) => {
+  saveTask: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const sectionId = asText(formData.get("section_id"));
     const taskId = asText(formData.get("task_id"));
@@ -634,7 +657,8 @@ export const actions: Actions = {
         method: "PATCH",
         body: JSON.stringify(parsed.payload),
         headers: { "content-type": "application/json" },
-        includeSameOrigin: true
+        includeSameOrigin: true,
+        authRedirectPath
       }
     );
 
@@ -648,12 +672,13 @@ export const actions: Actions = {
       });
     }
 
-    return await success("saveTask", fetch, cookies, params.unitId, params.nodeId, "Aufgabe gespeichert.", {
+    return await success("saveTask", fetch, cookies, params.unitId, params.nodeId, authRedirectPath, "Aufgabe gespeichert.", {
       task_id: taskId
     });
   },
 
-  createTask: async ({ fetch, cookies, params, request }) => {
+  createTask: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const sectionId = asText(formData.get("section_id"));
     const parsed = taskPayloadFromForm(formData, { allowImplicitInstructionForH5P: true });
@@ -684,7 +709,8 @@ export const actions: Actions = {
         method: "POST",
         body: JSON.stringify(parsed.payload),
         headers: { "content-type": "application/json" },
-        includeSameOrigin: true
+        includeSameOrigin: true,
+        authRedirectPath
       }
     );
 
@@ -697,7 +723,7 @@ export const actions: Actions = {
       });
     }
 
-    const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId);
+    const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId, authRedirectPath);
     const createdTask = editor.tasks.at(-1);
     return {
       createTask: {
@@ -709,7 +735,8 @@ export const actions: Actions = {
     };
   },
 
-  deleteTask: async ({ fetch, cookies, params, request }) => {
+  deleteTask: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const sectionId = asText(formData.get("section_id"));
     const taskId = asText(formData.get("task_id"));
@@ -724,7 +751,8 @@ export const actions: Actions = {
       `/api/teaching/units/${params.unitId}/sections/${sectionId}/tasks/${taskId}`,
       {
         method: "DELETE",
-        includeSameOrigin: true
+        includeSameOrigin: true,
+        authRedirectPath
       }
     );
 
@@ -734,14 +762,15 @@ export const actions: Actions = {
       });
     }
 
-    return await success("deleteTask", fetch, cookies, params.unitId, params.nodeId, "Aufgabe gelöscht.");
+    return await success("deleteTask", fetch, cookies, params.unitId, params.nodeId, authRedirectPath, "Aufgabe gelöscht.");
   },
 
-  reorderTask: async ({ fetch, cookies, params, request }) => {
+  reorderTask: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const taskId = asText(formData.get("task_id"));
     const direction = asText(formData.get("direction")) === "down" ? "down" : "up";
-    const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId);
+    const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId, authRedirectPath);
     const sectionId = sectionIdForEditor(editor);
     const orderedIds = editor.tasks.map((item) => item.id);
     const nextIds = reorderIds(orderedIds, taskId, direction);
@@ -764,6 +793,7 @@ export const actions: Actions = {
       {
         method: "POST",
         includeSameOrigin: true,
+        authRedirectPath,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ task_ids: nextIds })
       }
@@ -775,7 +805,7 @@ export const actions: Actions = {
       });
     }
 
-    return await success("reorderTask", fetch, cookies, params.unitId, params.nodeId, "", {
+    return await success("reorderTask", fetch, cookies, params.unitId, params.nodeId, authRedirectPath, "", {
       task_id: taskId
     });
   }

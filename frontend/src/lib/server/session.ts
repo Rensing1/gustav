@@ -179,6 +179,14 @@ async function clearExpiredSessionUnlessRecovered(
   return null;
 }
 
+function logTokenRefreshFailure(status: number, recovered: string): void {
+  console.info("auth.session", {
+    reason: "token_refresh_failed",
+    status,
+    recovered
+  });
+}
+
 async function persistTokenSession(
   cookies: Cookies,
   fetchFn: typeof fetch,
@@ -244,8 +252,11 @@ async function refreshTokenSession(
 
   if (!response.ok) {
     if (isExpired(current)) {
-      return await clearExpiredSessionUnlessRecovered(cookies, fetchFn);
+      const recovered = await clearExpiredSessionUnlessRecovered(cookies, fetchFn);
+      logTokenRefreshFailure(response.status, recovered ? "concurrent_session" : "cleared_expired_session");
+      return recovered;
     }
+    logTokenRefreshFailure(response.status, "kept_unexpired_session");
     return current;
   }
 

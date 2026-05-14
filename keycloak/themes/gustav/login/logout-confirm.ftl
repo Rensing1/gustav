@@ -41,8 +41,12 @@
         <#if client?? && client.baseUrl?has_content>
           <#assign client_base_url = client.baseUrl>
         </#if>
+        <#assign safe_page_redirect_uri = "">
+        <#if pageRedirectUri?? && pageRedirectUri?has_content>
+          <#assign safe_page_redirect_uri = pageRedirectUri>
+        </#if>
         <#assign app_link = gustav_error.resolve_primary_app_link(
-          pageRedirectUri=(pageRedirectUri!""),
+          pageRedirectUri=safe_page_redirect_uri,
           clientBaseUrl=client_base_url
         )>
         <#if app_link?has_content>

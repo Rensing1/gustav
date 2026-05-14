@@ -51,4 +51,20 @@ describe("protected Svelte page bootstrap contract", () => {
     expect(layoutSource).toContain("readAppSessionActive");
     expect(layoutSource).toContain("appSessionActive");
   });
+
+  it("passes the current path to protected backend calls so late 401 responses can recover", () => {
+    for (const relativePath of [
+      "teaching/courses/[courseId]/+page.server.ts",
+      "teaching/units/[unitId]/+page.server.ts",
+      "teaching/units/[unitId]/nodes/[nodeId]/+page.server.ts"
+    ]) {
+      const source = readFileSync(path.resolve(routesDir, relativePath), "utf8");
+      const protectedCallCount =
+        (source.match(/requireBackendJson</g) ?? []).length + (source.match(/backendRequest\(/g) ?? []).length;
+      const authRedirectCount = (source.match(/authRedirectPath/g) ?? []).length;
+
+      expect(protectedCallCount, `${relativePath} should have protected backend calls`).toBeGreaterThan(0);
+      expect(authRedirectCount, relativePath).toBeGreaterThanOrEqual(protectedCallCount);
+    }
+  });
 });

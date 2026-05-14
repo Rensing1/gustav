@@ -1692,6 +1692,7 @@
                 contentGroups={contentGroups()}
                 paneItems={paneItemsById()}
                 historyByTask={submissionHistoryByTask}
+                historyStateByTask={submissionHistoryStateByTask}
                 submittedTaskId={data.submittedTaskId}
                 submissionMessage={submissionMessageState}
                 submissionErrorTaskId={activeSubmissionErrorTaskId()}
@@ -1758,6 +1759,7 @@
             contentGroups={contentGroups()}
             paneItems={paneItemsById()}
             historyByTask={submissionHistoryByTask}
+            historyStateByTask={submissionHistoryStateByTask}
             submittedTaskId={data.submittedTaskId}
             submissionMessage={submissionMessageState}
             submissionErrorTaskId={activeSubmissionErrorTaskId()}

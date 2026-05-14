@@ -55,12 +55,14 @@ function saveModuleError(detail: string): string {
 }
 
 export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url }) => {
-  await requireParentSpaceBootstrap(parent, currentPath(url), "teaching");
+  const authRedirectPath = currentPath(url);
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "teaching");
 
   const workspace = await requireBackendJson<TeacherUnitWorkspaceView>(
     fetch,
     cookies,
-    workspaceRequestPath(params.unitId, url.searchParams)
+    workspaceRequestPath(params.unitId, url.searchParams),
+    { authRedirectPath }
   );
 
   const breadcrumbs: BreadcrumbItem[] = [{ label: "Lerneinheiten", href: "/teaching/units" }];
@@ -79,7 +81,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
 };
 
 export const actions: Actions = {
-  saveUnit: async ({ fetch, cookies, params, request }) => {
+  saveUnit: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
     const summary = String(formData.get("summary") ?? "").trim();
@@ -97,7 +99,8 @@ export const actions: Actions = {
       method: "PATCH",
       body: JSON.stringify({ title, summary: summary || null }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -112,7 +115,7 @@ export const actions: Actions = {
     throw redirect(303, `/teaching/units/${params.unitId}`);
   },
 
-  deleteUnit: async ({ fetch, cookies, params, request }) => {
+  deleteUnit: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const confirmation = String(formData.get("confirmation") ?? "").trim();
     const expectedTitle = String(formData.get("expected_title") ?? "").trim();
@@ -123,7 +126,8 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/units/${params.unitId}`, {
       method: "DELETE",
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -133,7 +137,7 @@ export const actions: Actions = {
     throw redirect(303, "/teaching/units");
   },
 
-  saveSection: async ({ fetch, cookies, params, request }) => {
+  saveSection: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const sectionId = String(formData.get("section_id") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
@@ -146,7 +150,8 @@ export const actions: Actions = {
       method: "PATCH",
       body: JSON.stringify({ title }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -162,7 +167,7 @@ export const actions: Actions = {
     };
   },
 
-  createSection: async ({ fetch, cookies, params, request }) => {
+  createSection: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
 
@@ -174,7 +179,8 @@ export const actions: Actions = {
       method: "POST",
       body: JSON.stringify({ title }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -191,7 +197,7 @@ export const actions: Actions = {
     };
   },
 
-  deleteSection: async ({ fetch, cookies, params, request }) => {
+  deleteSection: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const sectionId = String(formData.get("section_id") ?? "").trim();
 
@@ -201,7 +207,8 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/units/${params.unitId}/sections/${sectionId}`, {
       method: "DELETE",
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -217,7 +224,7 @@ export const actions: Actions = {
     };
   },
 
-  savePhase: async ({ fetch, cookies, params, request }) => {
+  savePhase: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const phaseId = String(formData.get("phase_id") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
@@ -230,7 +237,8 @@ export const actions: Actions = {
       method: "PATCH",
       body: JSON.stringify({ title }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -246,7 +254,7 @@ export const actions: Actions = {
     };
   },
 
-  createPhase: async ({ fetch, cookies, params, request }) => {
+  createPhase: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
 
@@ -258,7 +266,8 @@ export const actions: Actions = {
       method: "POST",
       body: JSON.stringify({ title }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -277,7 +286,7 @@ export const actions: Actions = {
     };
   },
 
-  deletePhase: async ({ fetch, cookies, params, request }) => {
+  deletePhase: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const phaseId = String(formData.get("phase_id") ?? "").trim();
 
@@ -287,7 +296,8 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/units/${params.unitId}/phases/${phaseId}`, {
       method: "DELETE",
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -303,7 +313,8 @@ export const actions: Actions = {
     };
   },
 
-  saveModule: async ({ fetch, cookies, params, request }) => {
+  saveModule: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = currentPath(url);
     const formData = await request.formData();
     const moduleId = String(formData.get("module_id") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
@@ -325,7 +336,8 @@ export const actions: Actions = {
       const workspace = await requireBackendJson<TeacherUnitWorkspaceView>(
         fetch,
         cookies,
-        workspaceHref(params.unitId)
+        workspaceHref(params.unitId),
+        { authRedirectPath }
       );
 
       if (workspace.graph.kind !== "modular") {
@@ -358,7 +370,8 @@ export const actions: Actions = {
           method: "POST",
           body: JSON.stringify({ module_ids: targetModuleIds }),
           headers: { "content-type": "application/json" },
-          includeSameOrigin: true
+          includeSameOrigin: true,
+          authRedirectPath
         }
       );
 
@@ -376,7 +389,8 @@ export const actions: Actions = {
       method: "PATCH",
       body: JSON.stringify({ title, required_prereq_count: requiredPrereqCount }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath
     });
 
     if (!response.ok) {
@@ -397,7 +411,7 @@ export const actions: Actions = {
     };
   },
 
-  createModule: async ({ fetch, cookies, params, request }) => {
+  createModule: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
     const phaseId = String(formData.get("phase_id") ?? "").trim();
@@ -415,7 +429,8 @@ export const actions: Actions = {
       method: "POST",
       body: JSON.stringify({ title, phase_id: phaseId }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -437,7 +452,7 @@ export const actions: Actions = {
     };
   },
 
-  deleteModule: async ({ fetch, cookies, params, request }) => {
+  deleteModule: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const moduleId = String(formData.get("module_id") ?? "").trim();
 
@@ -447,7 +462,8 @@ export const actions: Actions = {
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/units/${params.unitId}/modules/${moduleId}`, {
       method: "DELETE",
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -463,7 +479,7 @@ export const actions: Actions = {
     };
   },
 
-  createEdge: async ({ fetch, cookies, params, request }) => {
+  createEdge: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const fromModuleId = String(formData.get("from_module_id") ?? "").trim();
     const toModuleId = String(formData.get("to_module_id") ?? "").trim();
@@ -476,7 +492,8 @@ export const actions: Actions = {
       method: "POST",
       body: JSON.stringify({ from_module_id: fromModuleId, to_module_id: toModuleId }),
       headers: { "content-type": "application/json" },
-      includeSameOrigin: true
+      includeSameOrigin: true,
+      authRedirectPath: currentPath(url)
     });
 
     if (!response.ok) {
@@ -492,7 +509,7 @@ export const actions: Actions = {
     };
   },
 
-  deleteEdge: async ({ fetch, cookies, params, request }) => {
+  deleteEdge: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const fromModuleId = String(formData.get("from_module_id") ?? "").trim();
     const toModuleId = String(formData.get("to_module_id") ?? "").trim();
@@ -505,7 +522,7 @@ export const actions: Actions = {
       fetch,
       cookies,
       `/api/teaching/units/${params.unitId}/modules/${fromModuleId}/edges/${toModuleId}`,
-      { method: "DELETE", includeSameOrigin: true }
+      { method: "DELETE", includeSameOrigin: true, authRedirectPath: currentPath(url) }
     );
 
     if (!response.ok) {

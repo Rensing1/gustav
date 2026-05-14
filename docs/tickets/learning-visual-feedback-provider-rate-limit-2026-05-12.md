@@ -16,6 +16,28 @@ chat-completions endpoint.
 No learner names, user IDs, storage object paths, hashes, provider request IDs,
 or other PII are included in this ticket.
 
+## Status
+
+Minimal reproduction fix implemented on 2026-05-14.
+
+- Large provider-bound PNG screenshots are converted to RGB JPEG and downscaled to a maximum edge length of 1280 px before the Visual Feedback provider call.
+- Direct high-pixel PNG uploads above 16 MP are rejected as `input_too_large` before full raster decoding, closing the review finding where a small-on-disk PNG could otherwise allocate a large in-memory image during normalization.
+- Transparent PNGs are composited onto white before JPEG conversion, closing the review finding where hidden RGB values in transparent pixels could turn a worksheet or drawing canvas background black.
+- Stitched PDF page images in direct Visual Feedback use the same provider-bound normalization as direct PNG uploads, with a separate 64 MP budget so normal multi-page A4 PDFs can downscale before provider submission.
+- Pillow `DecompressionBombWarning` exceptions are treated as `input_too_large` instead of falling back to the original PNG.
+- The original upload remains unchanged in storage; only the data URI sent to the provider is normalized.
+- Provider `RateLimitError` exceptions are now classified internally as `provider_rate_limited` and logged with token-free diagnostic fields.
+- No DB migration, public API error-code change, new ENV variable, or frontend behavior change was introduced in this minimal slice.
+
+The provider-side root cause is still not fully documented by Mistral. The known reproduction is avoided by no longer sending the original full-size PNG data URI directly to the provider.
+
+Verification commands:
+
+- `.venv/bin/pytest -q backend/tests/learning_adapters/test_local_feedback_visual_pipeline.py backend/tests/learning_adapters/test_local_feedback_dspy.py`
+- `.venv/bin/pytest -q backend/tests/test_learning_worker_feedback_error_mapping.py`
+- `.venv/bin/pytest -q backend/tests/test_learning_worker_jobs.py -k feedback`
+- `make verify`
+
 ## Impact
 
 - A valid image submission can end in a terminal feedback failure even though

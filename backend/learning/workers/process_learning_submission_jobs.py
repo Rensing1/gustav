@@ -94,6 +94,9 @@ LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "45"))
 MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", "3"))
 MAX_CONCURRENCY = 4  # hard cap to prevent overload from misconfigured WORKER_CONCURRENCY
 LEASE_MULTIPLIER = int(os.getenv("WORKER_LEASE_MULTIPLIER", "4"))
+_FEEDBACK_PERMANENT_INPUT_ERROR_CODES = frozenset(
+    {"input_corrupt", "input_unsupported", "input_too_large"}
+)
 
 
 # Error classes now live in ports and are imported above.
@@ -121,6 +124,16 @@ def _concurrency_limit() -> int:
     if value > MAX_CONCURRENCY:
         LOG.warning("WORKER_CONCURRENCY=%s capped to %s", value, MAX_CONCURRENCY)
     return max(1, min(value, MAX_CONCURRENCY))
+
+
+def _feedback_permanent_error_code(exc: FeedbackPermanentError) -> str:
+    """Return the stable worker error code for deterministic Feedback failures."""
+    if isinstance(exc, FeedbackInvalidAnalysisError):
+        return "feedback_invalid_analysis"
+    normalized = str(exc or "").strip()
+    if normalized in _FEEDBACK_PERMANENT_INPUT_ERROR_CODES:
+        return normalized
+    return "feedback_failed"
 
 
 def _lease_duration_seconds() -> int:
@@ -493,11 +506,7 @@ def _process_job(
                 submission_id=job.submission_id,
                 now=now,
                 message=str(exc),
-                error_code=(
-                    "feedback_invalid_analysis"
-                    if isinstance(exc, FeedbackInvalidAnalysisError)
-                    else "feedback_failed"
-                ),
+                error_code=_feedback_permanent_error_code(exc),
                 transient=False,
             )
             conn.commit()
@@ -662,11 +671,7 @@ def _process_job(
             submission_id=job.submission_id,
             now=now,
             message=str(exc),
-            error_code=(
-                "feedback_invalid_analysis"
-                if isinstance(exc, FeedbackInvalidAnalysisError)
-                else "feedback_failed"
-            ),
+            error_code=_feedback_permanent_error_code(exc),
             transient=False,
         )
         conn.commit()

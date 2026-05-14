@@ -13,6 +13,7 @@ import sys
 from contextlib import contextmanager
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from backend.learning.adapters.ports import (
@@ -551,6 +552,53 @@ def test_adapter_uses_analysis_and_synthesis_visual_env_overrides(monkeypatch: p
     assert synthesis_kwargs["temperature"] == 0.6
     assert analysis_kwargs.get("extra_body", {}).get("think") == "low"
     assert synthesis_kwargs.get("extra_body", {}).get("think") == "high"
+
+
+def test_visual_feedback_rate_limit_is_classified_as_provider_rate_limited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "text-model")
+    monkeypatch.setenv("AI_VISUAL_MODEL", "visual-model")
+
+    from backend.learning.adapters import local_vision
+    from backend.learning.adapters.dspy import visual_feedback_program
+
+    monkeypatch.setattr(local_vision, "_resolve_submission_image_bytes", lambda **_: "AA==")
+
+    def _raise_rate_limit(**_: object) -> None:
+        import litellm
+
+        response = httpx.Response(
+            429,
+            request=httpx.Request("POST", "https://provider.example/v1/chat/completions"),
+            headers={"retry-after": "17", "x-request-id": "req-123"},
+        )
+        raise litellm.RateLimitError(
+            "provider returned 429",
+            llm_provider="openai",
+            model="visual-model",
+            response=response,
+        )
+
+    monkeypatch.setattr(visual_feedback_program, "analyze_visual_feedback", _raise_rate_limit)
+
+    adapter = local_feedback.build()
+    with pytest.raises(FeedbackTransientError) as exc:
+        adapter.analyze_visual(  # type: ignore[attr-defined]
+            submission={"id": "s", "kind": "image", "mime_type": "image/png"},
+            job_payload={"mime_type": "image/png"},
+            criteria=["K1"],
+            instruction_md=None,
+            teacher_context_md=None,
+        )
+
+    assert str(exc.value) == "provider_rate_limited"
 
 
 def test_adapter_uses_magistral_reasoning_effort_overrides(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -108,18 +108,67 @@ meaning of provider error code `1300`, but it gives useful boundaries:
 - Mistral rate limits are documented as request-per-second, token-per-minute,
   and token-per-month limits. HTTP 429 maps to "Too Many Requests".
   - `https://docs.mistral.ai/admin/user-management-finops/tier`
+- Mistral's error glossary defines HTTP 429 as rate limiting and recommends exponential backoff. It does not document provider error code `1300`.
+  - `https://docs.mistral.ai/resources/error-glossary`
 - The API reference states that prompt tokens plus `max_tokens` must fit inside
   the model context length.
   - `https://docs.mistral.ai/api`
 - Mistral's own image-understanding cookbook converts local images to JPEG
   before base64 encoding them for requests.
   - `https://docs.mistral.ai/resources/cookbooks/mistral-image_understanding-batch_api_example`
+- The public `mistral-common` image-tokenization docs describe image handling in patch/grid terms with resizing behavior. This supports treating image content and dimensions as provider-admission inputs, not only raw byte size.
+  - `https://mistralai.github.io/mistral-common/usage/images/`
 
 The observed failing PNG is far below the documented 20 MB per-image limit, and
 the same API key/model can process minimal text, minimal image, full-size JPEG,
 and smaller PNG variants. Therefore the fix should not assume missing credit or
 an invalid API key. Treat this as an undocumented provider admission behavior
 for large PNG data-URI requests and normalize images before provider submission.
+
+## External Corroboration
+
+Research on 2026-05-15 found no official Mistral statement for error `code="1300"` or for a PNG-specific base64 threshold. The wider internet contains one recent public report with the same shape: Mistral Large 3 returns HTTP 429 for screenshot-like images with visible content, while black images of the same resolution do not fail. Treat this as anecdotal corroboration, not as a normative source:
+`https://www.reddit.com/r/MistralAI/comments/1sgip2m/429_error_with_pictures/`
+
+The externally visible pattern is consistent with content/dimension admission or image-tokenization pressure rather than ordinary account credit exhaustion.
+
+## OpenAI-Compatible Client Context
+
+The local dependency path uses DSPy through LiteLLM/OpenAI-compatible clients. The installed versions inspected in the production checkout were:
+
+- `dspy` import reports `3.0.4`
+- `openai` import reports `2.8.0`
+- `backend/web/requirements.txt` pins `dspy-ai==3.0.3`, `Pillow==10.4.0`
+
+Relevant implementation facts from installed packages:
+
+- `openai.RateLimitError` is an `APIStatusError` with `status_code`, `response`, `request_id`, `code`, `type`, `message`, and `body` attributes when the provider exposes them.
+- `litellm.RateLimitError` subclasses `openai.RateLimitError`, sets `status_code=429`, preserves response headers when available, and exposes `llm_provider`, `model`, `code`, and `type`.
+- LiteLLM maps OpenAI-compatible provider errors containing rate-limit markers to `RateLimitError`, including Mistral/OpenAI-compatible paths.
+
+This means a robust fix should classify by exception class/status code first, then enrich diagnostics from safe response fields. It should not depend only on string matching for `rate_limited` or `1300`.
+
+## Related OpenAI Documentation Context
+
+OpenAI is not the failing provider here, but its official API documentation is useful because the GUSTAV path intentionally uses an OpenAI-compatible chat completions interface:
+
+- OpenAI documents image inputs as token-consuming inputs; images count toward token-per-minute limits.
+  - `https://developers.openai.com/api/docs/guides/images-vision`
+- OpenAI documents HTTP 429 handling with exponential backoff and mentions rate-limit headers such as remaining/reset values.
+  - `https://developers.openai.com/api/docs/guides/rate-limits`
+
+This supports the interpretation that a single large image request can be admission-limited even when request count and account credit look normal.
+
+## Minimal Implementation Guidance
+
+Prefer a narrow upstream product-code change instead of broad worker or schema redesign:
+
+1. Add provider-bound image normalization where visual-feedback data URIs are built. Reuse Pillow, keep stored upload bytes unchanged, and convert large PNG screenshots to RGB JPEG at a conservative quality such as `85`; downscale only if the encoded payload still exceeds a configurable budget. Defaults should ensure the known 1920 x 1200 PNG is never sent unchanged to Mistral.
+2. Classify provider rate limits distinctly in the adapter. Detect `openai.RateLimitError`, `litellm.RateLimitError`, or any OpenAI-compatible exception with `status_code == 429`; preserve the public submission contract as `feedback_retrying` while recoverable and `feedback_failed` only after exhaustion; store/log the internal reason as `provider_rate_limited`.
+3. Use a separate long retry profile for provider rate limits. Keep the existing short retry path for generic transient feedback errors; for 429s, honor valid `Retry-After` or use a larger exponential backoff default such as 5 minutes capped at 1 hour with a higher retry budget.
+4. Emit structured, PII-free diagnostics: HTTP status, provider error type/code, selected rate-limit headers, request/correlation ID, base URL host, model, stage, modality, worker attempt, and a configured non-secret provider label. Do not log prompt text, student content, object keys, hashes, or API keys.
+
+Avoid adding a new public `provider_rate_limited` submission `error_code` in the first fix unless product/UI owners explicitly want a contract change. The current public enum is DB/OpenAPI constrained; adding a new value requires a public API migration, UI copy decision, and downstream compatibility review.
 
 ## Files Of Interest
 

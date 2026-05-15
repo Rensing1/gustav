@@ -144,8 +144,8 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain('window.location.assign(`/auth/continue?redirect=${encodeURIComponent(redirectPath)}`)');
     expect(routeSource).toContain("feedbackStatusMessage = \"Die Abgabe wird geladen ...\";");
     expect(routeSource).not.toContain("feedbackStatusMessage = \"Die Abgabe konnte nicht geladen werden.\";");
-    expect(routeSource).toContain("const currentHistoryTaskId = next.searchParams.get(\"history\")");
-    expect(routeSource).toContain("if (!currentHistoryTaskId)");
+    expect(routeSource).toContain("next.searchParams.delete(\"history\");");
+    expect(routeSource).not.toContain("const currentHistoryTaskId = next.searchParams.get(\"history\")");
   });
 
   it("reopens modular materials on restore and module reopen instead of persisting them closed", () => {

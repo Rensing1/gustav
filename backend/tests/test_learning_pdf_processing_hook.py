@@ -19,18 +19,30 @@ def _student_session():
 
 
 @pytest.mark.anyio
-async def test_pdf_submission_triggers_processing_in_dev(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+@pytest.mark.parametrize("use_explicit_root", [True, False])
+async def test_pdf_submission_triggers_processing_in_dev(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    use_explicit_root: bool,
+):
     student = _student_session()
     course_id = str(uuid.uuid4())
     task_id = str(uuid.uuid4())
 
-    # Arrange: enable dev upload stub and verification root
+    # Arrange: enable dev upload stub and choose the same local root the upload
+    # validation path will use.
     monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "true")
-    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+    if use_explicit_root:
+        monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+        upload_root = tmp_path
+    else:
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("STORAGE_VERIFY_ROOT", raising=False)
+        upload_root = tmp_path / ".tmp" / "dev_uploads"
 
     # Create a fake uploaded PDF file at the expected storage_key
     storage_key = f"learning/{course_id}/{task_id}/{student.sub}/test.pdf".lower()  # type: ignore[attr-defined]
-    target = tmp_path / storage_key
+    target = upload_root / storage_key
     target.parent.mkdir(parents=True, exist_ok=True)
     pdf_bytes = b"%PDF-1.4\n%fake\n"
     target.write_bytes(pdf_bytes)

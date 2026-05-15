@@ -49,6 +49,14 @@ def _safe_response_header(exc: Exception, name: str) -> str:
         return ""
 
 
+def _safe_exception_attr(exc: Exception, name: str) -> str:
+    """Read a provider exception attribute without risking secondary failures."""
+    try:
+        return str(getattr(exc, name, "") or "")
+    except Exception:
+        return ""
+
+
 def _is_provider_rate_limit_exception(exc: Exception) -> bool:
     """Return true for OpenAI/LiteLLM-style provider rate-limit failures."""
     if exc.__class__.__name__ == "RateLimitError":
@@ -73,23 +81,28 @@ def _raise_feedback_error_for_exception(
             LOG.warning(
                 "learning.feedback.visual_image_too_complex_for_provider mime=image/png "
                 "width=%s height=%s bytes=%s base64_chars=%s provider=%s model=%s "
-                "status_code=%s retry_after=%s request_id=%s",
+                "status_code=%s provider_error_type=%s provider_error_code=%s retry_after=%s request_id=%s",
                 provider_image_diagnostics.get("width", "") if provider_image_diagnostics else "",
                 provider_image_diagnostics.get("height", "") if provider_image_diagnostics else "",
                 provider_image_diagnostics.get("bytes", "") if provider_image_diagnostics else "",
                 provider_image_diagnostics.get("base64_chars", "") if provider_image_diagnostics else "",
-                str(getattr(exc, "llm_provider", "") or ""),
-                str(getattr(exc, "model", "") or ""),
-                str(getattr(exc, "status_code", "429") or "429"),
+                _safe_exception_attr(exc, "llm_provider"),
+                _safe_exception_attr(exc, "model"),
+                _safe_exception_attr(exc, "status_code") or "429",
+                _safe_exception_attr(exc, "type"),
+                _safe_exception_attr(exc, "code"),
                 _safe_response_header(exc, "retry-after"),
                 _safe_response_header(exc, "x-request-id"),
             )
             raise FeedbackPermanentError("image_too_complex_for_provider", usage_events=usage_events) from exc
         LOG.warning(
-            "learning.feedback.provider_rate_limited provider=%s model=%s status_code=%s retry_after=%s request_id=%s",
-            str(getattr(exc, "llm_provider", "") or ""),
-            str(getattr(exc, "model", "") or ""),
-            str(getattr(exc, "status_code", "429") or "429"),
+            "learning.feedback.provider_rate_limited provider=%s model=%s status_code=%s "
+            "provider_error_type=%s provider_error_code=%s retry_after=%s request_id=%s",
+            _safe_exception_attr(exc, "llm_provider"),
+            _safe_exception_attr(exc, "model"),
+            _safe_exception_attr(exc, "status_code") or "429",
+            _safe_exception_attr(exc, "type"),
+            _safe_exception_attr(exc, "code"),
             _safe_response_header(exc, "retry-after"),
             _safe_response_header(exc, "x-request-id"),
         )

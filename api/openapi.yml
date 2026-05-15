@@ -6614,8 +6614,6 @@ paths:
             - missing_bearer
             - invalid_bearer
             - bff_session_missing
-            - token_refresh_failed
-            - app_session_active_bff_bearer_unavailable
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

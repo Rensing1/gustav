@@ -54,6 +54,8 @@ class _ProviderRateLimitError(Exception):
     status_code = 429
     llm_provider = "provider.test"
     model = "visual-model"
+    type = "rate_limited"
+    code = "1300"
 
 
 def test_local_feedback_analyze_visual_calls_visual_program(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -189,9 +191,11 @@ def test_local_feedback_analyze_visual_keeps_large_png_unmodified_for_provider_d
 
 
 def test_local_feedback_analyze_visual_classifies_complex_png_rate_limit(
+    caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    caplog.set_level("WARNING", logger="backend.learning.adapters.local_feedback")
     monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
     monkeypatch.setenv("OPENAI_BASE_URL", "http://example.test/api/v1")
     monkeypatch.setenv("AI_TEXT_MODEL", "text-model")
@@ -245,6 +249,11 @@ def test_local_feedback_analyze_visual_classifies_complex_png_rate_limit(
         )
 
     assert str(exc.value) == "image_too_complex_for_provider"
+    logs = "\n".join(record.getMessage() for record in caplog.records)
+    assert "provider_error_type=rate_limited" in logs
+    assert "provider_error_code=1300" in logs
+    assert storage_key not in logs
+    assert sha not in logs
 
 
 def test_local_feedback_analyze_visual_keeps_small_png_rate_limit_transient(

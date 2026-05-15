@@ -15,8 +15,6 @@ def test_openapi_documents_session_bootstrap() -> None:
         "missing_bearer",
         "invalid_bearer",
         "bff_session_missing",
-        "token_refresh_failed",
-        "app_session_active_bff_bearer_unavailable",
     ]
 
     schema = spec["components"]["schemas"]["SessionBootstrap"]

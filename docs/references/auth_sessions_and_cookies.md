@@ -218,6 +218,14 @@ Typische Ursachen:
 - der Callback war in Wahrheit ein `502 session_setup_failed`
 - App-Session wurde nicht im Backend synchronisiert
 
+### `/api/app/session-bootstrap` liefert `401`
+
+Der öffentliche Backend-Vertrag kennt nur Backend-Ursachen: `missing_bearer`,
+`invalid_bearer` und `bff_session_missing`. Die BFF darf zusätzlich interne
+Observability-Gründe wie `token_refresh_failed` oder
+`app_session_active_bff_bearer_unavailable` loggen, aber diese Werte sind keine
+öffentlichen Backend-Response-Codes.
+
 ### Logout endet ohne Redirect zum IdP
 
 Typische Ursachen:

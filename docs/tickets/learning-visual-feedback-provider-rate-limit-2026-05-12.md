@@ -123,6 +123,8 @@ The observed failing PNG is far below the documented 20 MB per-image limit, and 
 
 Implementation note 2026-05-15: the local development setup does not use the same provider path as production, so the first product-code fix intentionally does not add automatic image rewriting that cannot be validated locally against the failing provider. Instead it records PII-free image diagnostics, classifies the deterministic large-PNG 429 case internally, and gives learners a concrete instruction to upload a smaller crop.
 
+Decision note 2026-05-15: the first product fix remains logging plus a clearer learner-facing error. Automatic normalization, downscaling, or transcoding stays a future provider-verified follow-up because changing uploaded image bytes without production-equivalent validation would hide provider behavior and add compatibility risk.
+
 ## External Corroboration
 
 Research on 2026-05-15 found no official Mistral statement for error `code="1300"` or for a PNG-specific base64 threshold. The wider internet contains one recent public report with the same shape: Mistral Large 3 returns HTTP 429 for screenshot-like images with visible content, while black images of the same resolution do not fail. Treat this as anecdotal corroboration, not as a normative source:

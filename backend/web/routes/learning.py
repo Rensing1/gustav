@@ -1712,12 +1712,12 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         )
 
     # Opportunistic dev processing for PDF submissions (synchronous, MVP):
-    # In dev environments where STORAGE_VERIFY_ROOT is configured, attempt to
+    # In dev environments where a local validation root exists, attempt to
     # read the uploaded PDF bytes directly and kick off the rendering pipeline.
     # This is best-effort and must not block or affect the API response.
     try:
         if kind == "file" and str(clean_payload.get("mime_type")) == PDF_MIME:
-            root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+            root = resolve_local_verify_root_from_env() or ""
             env = _current_environment()
             prod_like = env in {"prod", "production", "stage", "staging"}
             if root and (not prod_like):
@@ -1797,8 +1797,8 @@ def _dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, cou
 
     Intent:
         In lokalen Umgebungen, in denen Uploads auf das Dateisystem geschrieben
-        werden (STORAGE_VERIFY_ROOT), verarbeiten wir eingereichte PDFs sofort
-        und speichern abgeleitete Seitenbilder unter einem stabilen Pfad.
+        werden, verarbeiten wir eingereichte PDFs sofort und speichern
+        abgeleitete Seitenbilder unter einem stabilen Pfad.
 
     Permissions:
         Nur für Dev. Produktion soll einen Worker/Queue nutzen.

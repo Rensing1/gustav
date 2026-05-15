@@ -539,10 +539,7 @@
     } else {
       next.searchParams.delete("module");
     }
-    const currentHistoryTaskId = next.searchParams.get("history");
-    if (!currentHistoryTaskId) {
-      next.searchParams.delete("history");
-    }
+    next.searchParams.delete("history");
     next.searchParams.delete("submitted");
     next.searchParams.delete("message");
     const query = next.searchParams.toString();

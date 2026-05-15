@@ -631,6 +631,26 @@ def _auth_failure_reason(auth_source: str) -> str:
         return "invalid_bearer"
     return "bff_session_missing"
 
+
+def _auth_failure_path_class(path: str) -> str:
+    """Return a low-cardinality path class without route parameters or PII."""
+    if path.startswith("/api/app/"):
+        return "api.app"
+    if path.startswith("/api/learning/"):
+        return "api.learning"
+    if path.startswith("/api/teaching/"):
+        return "api.teaching"
+    if path.startswith("/api/diagnostics/"):
+        return "api.diagnostics"
+    if path.startswith("/api/"):
+        return "api.other"
+    if path.startswith("/internal/"):
+        return "internal"
+    if path.startswith("/backend-internal/"):
+        return "backend_internal"
+    return "other"
+
+
 @app.middleware("http")
 async def auth_enforcement(request: Request, call_next):
     path = request.url.path
@@ -643,7 +663,11 @@ async def auth_enforcement(request: Request, call_next):
 
     if not auth_context:
         if path.startswith("/api/") or path.startswith("/internal/") or path.startswith("/backend-internal/"):
-            logger.info("auth_failure reason=%s path=%s", _auth_failure_reason(auth_source), path)
+            logger.info(
+                "auth_failure reason=%s path_class=%s",
+                _auth_failure_reason(auth_source),
+                _auth_failure_path_class(path),
+            )
             headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
             return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=headers)
         if "HX-Request" in request.headers:

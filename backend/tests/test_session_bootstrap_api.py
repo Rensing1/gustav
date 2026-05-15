@@ -106,6 +106,30 @@ async def test_session_bootstrap_logs_low_cardinality_auth_reason_without_sensit
 
     assert response.status_code == 401
     logs = "\n".join(record.getMessage() for record in caplog.records)
-    assert "auth_failure reason=invalid_bearer path=/api/app/session-bootstrap" in logs
+    assert "auth_failure reason=invalid_bearer path_class=api.app" in logs
+    assert "path=/api/app/session-bootstrap" not in logs
+    assert "sensitive.jwt" not in logs
+    assert "sensitive-session" not in logs
+
+
+@pytest.mark.anyio
+async def test_auth_failure_logs_path_class_without_dynamic_identifiers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="gustav.identity_access")
+
+    dynamic_path = "/api/teaching/courses/course-1/units/unit-1/tasks/task-1/students/student@example.com/submissions/latest"
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            dynamic_path,
+            headers={"Authorization": "Bearer sensitive.jwt"},
+            cookies={"gustav_session": "sensitive-session"},
+        )
+
+    assert response.status_code == 401
+    logs = "\n".join(record.getMessage() for record in caplog.records)
+    assert "auth_failure reason=invalid_bearer path_class=api.teaching" in logs
+    assert dynamic_path not in logs
+    assert "student@example.com" not in logs
     assert "sensitive.jwt" not in logs
     assert "sensitive-session" not in logs

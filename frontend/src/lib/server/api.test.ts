@@ -119,8 +119,7 @@ describe("backendRequest auth continuity", () => {
         location: "/auth/continue?redirect=%2Flearning"
       });
       expect(infoSpy).toHaveBeenCalledWith("auth.continuity", {
-        reason: "app_session_active_without_bearer",
-        redirect: "/learning"
+        reason: "app_session_active_without_bearer"
       });
       infoSpy.mockRestore();
     }

@@ -1,16 +1,16 @@
 """
-Learning repo submission-kind guard.
+Learning submission-kind policy guard.
 
 Intent:
-    The DB repo must reject spoofed submission kinds at the persistence boundary
-    even if a web adapter misses a task-type rule.
+    The shared Learning policy must reject spoofed submission kinds before
+    adapters or repositories persist them.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from backend.learning.repo_db import _validate_task_submission_kind
+from backend.learning.submission_kind_policy import validate_task_submission_kind
 
 
 @pytest.mark.parametrize(
@@ -27,7 +27,7 @@ from backend.learning.repo_db import _validate_task_submission_kind
 )
 def test_submission_kind_guard_rejects_wrong_filius_payloads(task_kind: str, submission_kind: str, mime_type: str | None, error: str) -> None:
     with pytest.raises(ValueError) as exc:
-        _validate_task_submission_kind(
+        validate_task_submission_kind(
             task_kind=task_kind,
             submission_kind=submission_kind,
             mime_type=mime_type,
@@ -37,7 +37,7 @@ def test_submission_kind_guard_rejects_wrong_filius_payloads(task_kind: str, sub
 
 
 def test_submission_kind_guard_accepts_filius_fls() -> None:
-    _validate_task_submission_kind(
+    validate_task_submission_kind(
         task_kind="filius",
         submission_kind="file",
         mime_type="application/x.filius.fls",

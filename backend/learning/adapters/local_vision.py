@@ -31,6 +31,7 @@ from backend.learning.adapters.ports import (
 from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.vision.pipeline import stitch_images_vertically, process_pdf_bytes
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
+from backend.storage.learning_policy import resolve_local_verify_root_from_env
 from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
 from backend.storage.submission_content_signatures import validate_submission_content_signature
 
@@ -244,7 +245,7 @@ def _load_local_storage_bytes(
     size_bytes: object,
     sha256_hex: object,
 ) -> Optional[bytes]:
-    """Read bytes from STORAGE_VERIFY_ROOT after path, size and hash checks."""
+    """Read bytes from the configured local validation root after path, size and hash checks."""
     if not root or not storage_key:
         return None
     try:
@@ -302,7 +303,7 @@ def _resolve_submission_image_bytes(
     mime = str(mime or "").strip().lower()
     if mime not in {JPEG_MIME, PNG_MIME}:
         return None
-    root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+    root = resolve_local_verify_root_from_env() or ""
     storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
     size_bytes = (job_payload or {}).get("size_bytes") or (submission or {}).get("size_bytes")
     sha256_hex = (job_payload or {}).get("sha256") or (submission or {}).get("sha256") or ""
@@ -400,11 +401,11 @@ class _LocalVisionAdapter:
             4. Emit structured logs (action=...) without bucket/student details.
 
         Permissions:
-            Requires read/write access to STORAGE_VERIFY_ROOT (worker service
-            account) and service-role access to Supabase Storage for remote
+            Requires read/write access to the configured local validation root
+            (worker service account) and service-role access to Supabase Storage for remote
             fetches.
         """
-        root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+        root = resolve_local_verify_root_from_env() or ""
         if not root:
             return None
         bucket = _submissions_bucket()
@@ -646,7 +647,7 @@ class _LocalVisionAdapter:
         Behavior:
             - Validates MIME (except for text submissions).
             - Optionally verifies and reads a local file when
-              `STORAGE_VERIFY_ROOT` and `storage_key` are provided.
+              a local validation root and `storage_key` are provided.
             - Runs the DSPy OCR program against an OpenAI-compatible endpoint
               and returns Markdown text.
             - Classifies timeouts and empty outputs as transient (worker retries).
@@ -683,7 +684,7 @@ class _LocalVisionAdapter:
             from backend.scratch.sb3_evidence_v2 import EVIDENCE_SCHEMA_V2, build_evidence_markdown_v2
 
             meta = {"adapter": "local_vision", "backend": "sb3", "schema": EVIDENCE_SCHEMA_V2}
-            root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+            root = resolve_local_verify_root_from_env() or ""
             storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
             size_bytes = (job_payload or {}).get("size_bytes") or (submission or {}).get("size_bytes")
             sha256_hex = (job_payload or {}).get("sha256") or (submission or {}).get("sha256") or ""
@@ -731,7 +732,7 @@ class _LocalVisionAdapter:
             )
 
             meta = {"adapter": "local_vision", "backend": "makecode_hex", "schema": EVIDENCE_SCHEMA_V1}
-            root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+            root = resolve_local_verify_root_from_env() or ""
             storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
             size_bytes = (job_payload or {}).get("size_bytes") or (submission or {}).get("size_bytes")
             sha256_hex = (job_payload or {}).get("sha256") or (submission or {}).get("sha256") or ""
@@ -780,7 +781,7 @@ class _LocalVisionAdapter:
             from backend.filius.evidence_v1 import EVIDENCE_SCHEMA_V1, build_evidence_markdown_v1
 
             meta = {"adapter": "local_vision", "backend": "filius_fls", "schema": EVIDENCE_SCHEMA_V1}
-            root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+            root = resolve_local_verify_root_from_env() or ""
             storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
             size_bytes = (job_payload or {}).get("size_bytes") or (submission or {}).get("size_bytes")
             sha256_hex = (job_payload or {}).get("sha256") or (submission or {}).get("sha256") or ""
@@ -833,7 +834,7 @@ class _LocalVisionAdapter:
             # Validate local PDF bytes (size/hash) when a verify root is configured.
             # This must happen before derived-page stitching so tests and operators
             # get deterministic permanent errors for corrupt/mismatched uploads.
-            root = (os.getenv("STORAGE_VERIFY_ROOT") or "").strip()
+            root = resolve_local_verify_root_from_env() or ""
             storage_key = (job_payload or {}).get("storage_key") or (submission or {}).get("storage_key") or ""
             size_bytes = (job_payload or {}).get("size_bytes") or (submission or {}).get("size_bytes")
             sha256_hex = (job_payload or {}).get("sha256") or (submission or {}).get("sha256") or ""

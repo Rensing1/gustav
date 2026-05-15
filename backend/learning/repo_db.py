@@ -8,7 +8,7 @@ import json
 import os
 import re
 from uuid import UUID, uuid5
-from backend.storage.mime_types import FILIUS_FLS_MIME, MAKECODE_HEX_MIME, SCRATCH_SB3_MIME
+from backend.learning.submission_kind_policy import validate_task_submission_kind
 
 try:  # pragma: no cover -- optional dependency in some environments
     import psycopg
@@ -29,44 +29,12 @@ _FILESYSTEM_PATH_PATTERN = re.compile(r"(?:[A-Za-z]:\\[^\s]+|/[^\s]+)")
 
 
 def _validate_task_submission_kind(*, task_kind: str, submission_kind: str, mime_type: str | None) -> None:
-    """Enforce task-kind specific submission capabilities at the repo boundary."""
-    task_kind = str(task_kind or "native").strip().lower()
-    submission_kind = str(submission_kind or "").strip().lower()
-    mime = str(mime_type or "").strip().lower()
-
-    if task_kind == "h5p":
-        if submission_kind != "h5p":
-            raise ValueError("invalid_input")
-        return
-    if task_kind == "visual":
-        if submission_kind not in ("image", "file"):
-            raise ValueError("invalid_input")
-        if submission_kind == "file" and mime in {SCRATCH_SB3_MIME, MAKECODE_HEX_MIME, FILIUS_FLS_MIME}:
-            raise ValueError("invalid_file_payload")
-        return
-    if task_kind == "scratch":
-        if submission_kind != "file":
-            raise ValueError("invalid_input")
-        if mime != SCRATCH_SB3_MIME:
-            raise ValueError("invalid_file_payload")
-        return
-    if task_kind == "calliope":
-        if submission_kind != "file":
-            raise ValueError("invalid_input")
-        if mime != MAKECODE_HEX_MIME:
-            raise ValueError("invalid_file_payload")
-        return
-    if task_kind == "filius":
-        if submission_kind != "file":
-            raise ValueError("invalid_input")
-        if mime != FILIUS_FLS_MIME:
-            raise ValueError("invalid_file_payload")
-        return
-
-    if submission_kind == "h5p":
-        raise ValueError("invalid_h5p_payload")
-    if submission_kind == "file" and mime in {SCRATCH_SB3_MIME, MAKECODE_HEX_MIME, FILIUS_FLS_MIME}:
-        raise ValueError("invalid_file_payload")
+    """Backward-compatible wrapper for the shared Learning policy."""
+    validate_task_submission_kind(
+        task_kind=task_kind,
+        submission_kind=submission_kind,
+        mime_type=mime_type,
+    )
 
 
 def _sanitize_error_message(value: Optional[str]) -> Optional[str]:

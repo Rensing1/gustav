@@ -53,18 +53,21 @@ describe("protected Svelte page bootstrap contract", () => {
   });
 
   it("passes the current path to protected backend calls so late 401 responses can recover", () => {
-    for (const relativePath of [
-      "teaching/courses/[courseId]/+page.server.ts",
-      "teaching/units/[unitId]/+page.server.ts",
-      "teaching/units/[unitId]/nodes/[nodeId]/+page.server.ts"
-    ]) {
+    let checkedPages = 0;
+
+    for (const relativePath of protectedPages) {
       const source = readFileSync(path.resolve(routesDir, relativePath), "utf8");
       const protectedCallCount =
         (source.match(/requireBackendJson</g) ?? []).length + (source.match(/backendRequest\(/g) ?? []).length;
+      if (protectedCallCount === 0) {
+        continue;
+      }
       const authRedirectCount = (source.match(/authRedirectPath/g) ?? []).length;
 
-      expect(protectedCallCount, `${relativePath} should have protected backend calls`).toBeGreaterThan(0);
+      checkedPages += 1;
       expect(authRedirectCount, relativePath).toBeGreaterThanOrEqual(protectedCallCount);
     }
+
+    expect(checkedPages).toBeGreaterThan(3);
   });
 });

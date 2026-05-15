@@ -106,8 +106,7 @@ async function handleFinalUnauthorizedResponse(
   if (hasFrontendSession || hasAppSession) {
     if (!hasFrontendSession && hasAppSession) {
       console.info("auth.continuity", {
-        reason: "app_session_active_without_bearer",
-        redirect: authRedirectPath
+        reason: "app_session_active_without_bearer"
       });
     }
     throw redirect(302, continuationHref(authRedirectPath));

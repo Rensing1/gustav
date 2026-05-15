@@ -23,7 +23,8 @@ from fastapi import APIRouter, Request
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse, Response
 
-from backend.learning.repo_db import DBLearningRepo, _validate_task_submission_kind as _validate_task_submission_kind_for_route
+from backend.learning.repo_db import DBLearningRepo
+from backend.learning.submission_kind_policy import validate_task_submission_kind
 from .security import _is_same_origin
 from backend.learning.usecases.sections import (
     ListSectionsInput,
@@ -1509,6 +1510,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
 
     validation_bytes: bytes | None = None
     task_kind_for_submission = "native"
+    task_kind_for_submission_normalized = "native"
     if kind in ("image", "file"):
         repo = _get_repo()
         task_kind_reader = getattr(repo, "get_task_kind_for_student", None)
@@ -1531,9 +1533,10 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                     status_code=503,
                     headers=_cache_headers_error(),
                 )
+        task_kind_for_submission_normalized = str(task_kind_for_submission or "native").strip().lower()
         try:
-            _validate_task_submission_kind_for_route(
-                task_kind=task_kind_for_submission,
+            validate_task_submission_kind(
+                task_kind=task_kind_for_submission_normalized,
                 submission_kind=kind,
                 mime_type=str(clean_payload.get("mime_type") or ""),
             )
@@ -1560,7 +1563,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                 extra={
                     "reason": "invalid_upload_content",
                     "mime_type": str(mime_type).strip().lower(),
-                    "task_kind": str(task_kind_for_submission or "native").strip().lower(),
+                    "task_kind": task_kind_for_submission_normalized,
                     "byte_count": len(validation_bytes),
                 },
             )
@@ -1572,30 +1575,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
 
     # Scratch `.sb3` validation (fail early with stable detail codes).
     if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == SCRATCH_SB3_MIME:
-        task_kind = "native"
-        repo = _get_repo()
-        task_kind_reader = getattr(repo, "get_task_kind_for_student", None)
-        if callable(task_kind_reader):
-            try:
-                task_kind = str(
-                    task_kind_reader(
-                        student_sub=str(user.get("sub", "")),
-                        course_id=str(course_id),
-                        task_id=str(task_id),
-                    )
-                )
-            except PermissionError:
-                return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
-            except LookupError:
-                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-            except Exception:
-                return JSONResponse(
-                    {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
-                    status_code=503,
-                    headers=_cache_headers_error(),
-                )
-
-        if str(task_kind or "").strip().lower() == "scratch":
+        if task_kind_for_submission_normalized == "scratch":
             sb3_bytes = validation_bytes
             if not sb3_bytes:
                 return JSONResponse(
@@ -1616,30 +1596,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
 
     # MakeCode `.hex` validation for Calliope tasks.
     if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == MAKECODE_HEX_MIME:
-        task_kind = "native"
-        repo = _get_repo()
-        task_kind_reader = getattr(repo, "get_task_kind_for_student", None)
-        if callable(task_kind_reader):
-            try:
-                task_kind = str(
-                    task_kind_reader(
-                        student_sub=str(user.get("sub", "")),
-                        course_id=str(course_id),
-                        task_id=str(task_id),
-                    )
-                )
-            except PermissionError:
-                return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
-            except LookupError:
-                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-            except Exception:
-                return JSONResponse(
-                    {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
-                    status_code=503,
-                    headers=_cache_headers_error(),
-                )
-
-        if str(task_kind or "").strip().lower() == "calliope":
+        if task_kind_for_submission_normalized == "calliope":
             hex_bytes = validation_bytes
             if not hex_bytes:
                 return JSONResponse(
@@ -1666,30 +1623,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
 
     # Filius `.fls` validation for Filius tasks (fail early with stable detail codes).
     if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == FILIUS_FLS_MIME:
-        task_kind = "native"
-        repo = _get_repo()
-        task_kind_reader = getattr(repo, "get_task_kind_for_student", None)
-        if callable(task_kind_reader):
-            try:
-                task_kind = str(
-                    task_kind_reader(
-                        student_sub=str(user.get("sub", "")),
-                        course_id=str(course_id),
-                        task_id=str(task_id),
-                    )
-                )
-            except PermissionError:
-                return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
-            except LookupError:
-                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-            except Exception:
-                return JSONResponse(
-                    {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
-                    status_code=503,
-                    headers=_cache_headers_error(),
-                )
-
-        if str(task_kind or "").strip().lower() != "filius":
+        if task_kind_for_submission_normalized != "filius":
             return JSONResponse(
                 {"error": "bad_request", "detail": "invalid_file_payload"},
                 status_code=400,

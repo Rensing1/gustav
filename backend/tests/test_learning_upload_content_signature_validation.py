@@ -37,9 +37,11 @@ def restore_learning_route_state():
 class FakeLearningRepo:
     def __init__(self, *, task_kind: str = "visual") -> None:
         self.task_kind = task_kind
+        self.task_kind_reads = 0
         self.created_payload = None
 
     def get_task_kind_for_student(self, *, student_sub: str, course_id: str, task_id: str) -> str:
+        self.task_kind_reads += 1
         return self.task_kind
 
     def create_submission(self, data):  # noqa: ANN001
@@ -152,3 +154,20 @@ async def test_missing_validation_bytes_fails_closed_before_submission_creation(
     assert response.status_code == 503
     assert response.json().get("detail") == "submission_validation_unavailable"
     assert repo.created_payload is None
+
+
+async def test_specialized_file_validation_reuses_loaded_task_kind(monkeypatch: pytest.MonkeyPatch) -> None:
+    import backend.storage.filius_validation as filius_validation
+
+    monkeypatch.setattr(filius_validation, "extract_configuration_xml_bytes", lambda _data: b"<config/>")
+
+    response, repo = await _post_upload_submission(
+        kind="file",
+        mime_type="application/x.filius.fls",
+        stored_bytes=b"PK\x03\x04filius",
+        task_kind="filius",
+    )
+
+    assert response.status_code == 202
+    assert repo.created_payload is not None
+    assert repo.task_kind_reads == 1

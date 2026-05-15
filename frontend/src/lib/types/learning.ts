@@ -64,6 +64,9 @@ export type LearningSubmission = {
   kind: "text" | "image" | "file" | "h5p";
   created_at: string;
   analysis_status: "pending" | "extracted" | "completed" | "failed";
+  error_code?: string | null;
+  vision_last_error?: string | null;
+  feedback_last_error?: string | null;
   text_body?: string | null;
   mime_type?: string | null;
   score_raw?: number | null;

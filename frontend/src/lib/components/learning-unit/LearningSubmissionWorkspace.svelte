@@ -5,6 +5,7 @@
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
+  import { learningSubmissionFailureMessage } from "$lib/utils/learning-failures";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission, LearningTask } from "$lib/types/learning";
 
@@ -380,6 +381,13 @@
                   <div class="markdown-prose">
                     {@html renderMarkdown(submission.feedback_md)}
                   </div>
+                </section>
+              {/if}
+
+              {#if submission.analysis_status === "failed"}
+                <section class="learning-submission-history__section">
+                  <p class="workspace-label">Analyse fehlgeschlagen</p>
+                  <p>{learningSubmissionFailureMessage(submission)}</p>
                 </section>
               {/if}
 

@@ -39,7 +39,7 @@ Production adapters:
 - OCR: `backend/learning/adapters/local_vision.py` (DSPy-only, OpenAI-compatible endpoint).
 - Feedback: `backend/learning/adapters/local_feedback.py` (DSPy-only, OpenAI-compatible endpoint; visual tasks and native upload submissions via `analyze_visual`).
   - Note: Concrete adapters may accept additional optional kwargs (`instruction_md`, `teacher_context_md`). The worker passes them when supported.
-  - Visual Feedback may normalize provider-bound PNG representations from direct image uploads and stitched PDF pages to bounded RGB/JPEG. Originals remain unchanged in storage; oversized inputs fail as `input_too_large`.
+  - Visual Feedback sends direct JPEG/PNG uploads unchanged. If a screenshot-like PNG is rejected by the provider with HTTP 429, the adapter records PII-free image diagnostics and raises the internal reason `image_too_complex_for_provider`; the public submission code remains `feedback_failed`.
 
 ---
 

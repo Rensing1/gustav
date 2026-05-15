@@ -1518,6 +1518,20 @@ def _render_submission_result_container(record: Mapping[str, Any], *, submission
     return f'<div id="submission-result-{Component.escape(submission_id)}"{oob_attr}>{inner}</div>'
 
 
+_IMAGE_TOO_COMPLEX_FOR_PROVIDER_MESSAGE = (
+    "Das Bild ist wahrscheinlich zu groß oder zu komplex. Bitte lade einen kleineren Ausschnitt hoch, "
+    "zum Beispiel nur die Zeichnung statt des ganzen Bildschirms."
+)
+
+
+def _public_submission_failure_message(record: Mapping[str, Any]) -> str:
+    """Return a learner-facing failure message without exposing internal provider codes."""
+    detail = str(record.get("vision_last_error") or record.get("feedback_last_error") or "").strip()
+    if detail == "image_too_complex_for_provider":
+        return _IMAGE_TOO_COMPLEX_FOR_PROVIDER_MESSAGE
+    return detail
+
+
 def _render_submission_result_static_html(record: Mapping[str, Any], *, submission_id: str) -> str:
     """Render the final feedback/error content for a submission (non-pending)."""
     status = str(record.get("analysis_status") or "")
@@ -1540,7 +1554,7 @@ def _render_submission_result_static_html(record: Mapping[str, Any], *, submissi
         # why no feedback is available yet.
         code_raw = record.get("error_code") or "processing_failed"
         code_html = Component.escape(str(code_raw))
-        detail = record.get("vision_last_error") or record.get("feedback_last_error") or ""
+        detail = _public_submission_failure_message(record)
         detail_html = (
             Component.escape(str(detail)) if detail else '<span class="text-muted">Keine Details verfügbar.</span>'
         )

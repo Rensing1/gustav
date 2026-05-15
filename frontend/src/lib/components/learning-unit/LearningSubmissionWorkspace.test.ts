@@ -160,6 +160,35 @@ describe("LearningSubmissionWorkspace", () => {
     expect(screen.getByText(/Anschaulichkeit/)).toBeInTheDocument();
   });
 
+  it("explains complex image feedback failures with a concrete retry hint", () => {
+    render(LearningSubmissionWorkspace, {
+      props: {
+        courseId: "course-1",
+        task: nativeTask,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialTab: "history",
+        initialHistoryLoaded: true,
+        initialHistory: [
+          feedbackSubmission({
+            kind: "image",
+            text_body: null,
+            mime_type: "image/png",
+            files: [{ mime: "image/png", size: 372528, url: "https://example.com/upload.png" }],
+            feedback_md: null,
+            analysis_status: "failed",
+            error_code: "feedback_failed",
+            feedback_last_error: "image_too_complex_for_provider"
+          })
+        ]
+      }
+    });
+
+    expect(screen.getByText(/Das Bild ist wahrscheinlich zu groß oder zu komplex/i)).toBeInTheDocument();
+    expect(screen.getByText(/nur die Zeichnung statt des ganzen Bildschirms/i)).toBeInTheDocument();
+    expect(screen.queryByText("image_too_complex_for_provider")).toBeNull();
+  });
+
   it("renders makecode hex history entries as curated code plus a download action", () => {
     render(LearningSubmissionWorkspace, {
       props: {

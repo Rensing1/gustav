@@ -165,6 +165,22 @@ class _PermanentFeedbackAdapter:
         raise worker_module.FeedbackPermanentError(self.message)  # type: ignore[attr-defined]
 
 
+class _ImageTooComplexFeedbackAdapter:
+    """Raise the internal visual admission code used for complex screenshot PNGs."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.visual_calls = 0
+
+    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
+        self.calls += 1
+        raise worker_module.FeedbackPermanentError("image_too_complex_for_provider")  # type: ignore[attr-defined]
+
+    def analyze_visual(self, *, submission: dict, job_payload: dict, criteria: Sequence[str], **_: object) -> FeedbackResult:
+        self.visual_calls += 1
+        raise worker_module.FeedbackPermanentError("image_too_complex_for_provider")  # type: ignore[attr-defined]
+
+
 class _InvalidAnalysisFeedbackAdapter:
     """Raise a deterministic invalid-analysis error that must not be retried."""
 
@@ -938,7 +954,8 @@ async def test_worker_marks_failed_after_max_retries(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_worker_retries_feedback_transient_error(monkeypatch):
+@pytest.mark.parametrize("feedback_error_message", ["temporary feedback issue", "provider_rate_limited"])
+async def test_worker_retries_feedback_transient_error(monkeypatch, feedback_error_message: str):
     """Transient feedback errors should keep submission pending and record retry metadata."""
 
     _require_db_or_skip()
@@ -954,7 +971,7 @@ async def test_worker_retries_feedback_transient_error(monkeypatch):
     processed = run_once(
         dsn=worker_dsn,
         vision_adapter=_StubVisionAdapter(text_md="## Student answer\n\nContent."),
-        feedback_adapter=_TransientFeedbackAdapter(),
+        feedback_adapter=_TransientFeedbackAdapter(message=feedback_error_message),
         now=tick,
         test_run_id=current_test_run_id(),
     )
@@ -999,11 +1016,12 @@ async def test_worker_retries_feedback_transient_error(monkeypatch):
     assert retry_count == 1
     assert visible_at.tzinfo is not None
     assert visible_at >= tick + timedelta(seconds=3)
+    assert visible_at < tick + timedelta(seconds=30)
 
     assert submission_status == "pending"
     assert submission_error == "feedback_retrying"
     assert feedback_last_error is not None
-    assert "temporary feedback issue" in feedback_last_error
+    assert feedback_error_message in feedback_last_error
     assert feedback_last_attempt_at is not None
     assert vision_attempts == 0
 
@@ -1068,6 +1086,79 @@ async def test_worker_marks_feedback_failure_records_job_error(monkeypatch: pyte
     assert submission_error == "feedback_failed"
     assert feedback_last_error is not None
     assert "permanent feedback failure" in feedback_last_error
+
+
+@pytest.mark.anyio
+async def test_worker_marks_complex_image_provider_admission_as_feedback_failed(monkeypatch: pytest.MonkeyPatch):
+    """Complex-image provider admission failures stay internal but do not retry."""
+
+    _require_db_or_skip()
+    monkeypatch.setenv("SERVICE_ROLE_DSN", _dsn())
+    fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
+        idempotency_key="worker-complex-image-provider-admission"
+    )
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.learning_submission_jobs
+                   set payload = payload || '{"analysis_mode": "visual_direct"}'::jsonb
+                 where id = %s::uuid
+                """,
+                (job_id,),
+            )
+        conn.commit()
+
+    tick = datetime.now(tz=timezone.utc)
+    feedback_adapter = _ImageTooComplexFeedbackAdapter()
+    processed = run_once(
+        dsn=worker_dsn,
+        vision_adapter=_StubVisionAdapter(text_md="## Answer\n\nContent."),
+        feedback_adapter=feedback_adapter,
+        now=tick,
+        test_run_id=current_test_run_id(),
+    )
+
+    assert processed is True
+    assert feedback_adapter.calls == 0
+    assert feedback_adapter.visual_calls == 1
+
+    with psycopg.connect(worker_dsn) as conn:  # type: ignore[arg-type]
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select status,
+                       retry_count,
+                       error_code
+                  from public.learning_submission_jobs
+                 where id = %s::uuid
+                """,
+                (job_id,),
+            )
+            status, retry_count, job_error_code = cur.fetchone()
+
+            cur.execute(
+                "select set_config('app.current_sub', %s, true)",
+                (fixture.student_sub,),
+            )
+            cur.execute(
+                """
+                select analysis_status,
+                       error_code,
+                       feedback_last_error
+                  from public.learning_submissions
+                 where id = %s::uuid
+                """,
+                (submission_id,),
+            )
+            submission_status, submission_error, feedback_last_error = cur.fetchone()
+
+    assert status == "failed"
+    assert retry_count == 0
+    assert job_error_code == "feedback_failed"
+    assert submission_status == "failed"
+    assert submission_error == "feedback_failed"
+    assert feedback_last_error == "image_too_complex_for_provider"
 
 
 @pytest.mark.anyio

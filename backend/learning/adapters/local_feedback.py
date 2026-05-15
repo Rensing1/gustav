@@ -22,7 +22,7 @@ import base64
 from io import BytesIO
 import logging
 import os
-from typing import Any, Sequence
+from typing import Sequence
 
 from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.learning.adapters.ports import (
@@ -34,11 +34,8 @@ from backend.learning.adapters.ports import (
 
 LOG = logging.getLogger(__name__)
 
-_VISUAL_PROVIDER_IMAGE_MAX_EDGE = 1280
-_VISUAL_PROVIDER_IMAGE_MAX_PIXELS = 16_000_000
-_VISUAL_PROVIDER_STITCHED_PDF_MAX_PIXELS = 64_000_000
-_VISUAL_PROVIDER_IMAGE_JPEG_QUALITY = 85
-_VISUAL_PROVIDER_PNG_NORMALIZE_MIN_BASE64_CHARS = 300_000
+_VISUAL_PROVIDER_COMPLEX_PNG_MIN_EDGE = 1280
+_VISUAL_PROVIDER_COMPLEX_PNG_MIN_BASE64_CHARS = 300_000
 
 
 def _safe_response_header(exc: Exception, name: str) -> str:
@@ -62,11 +59,32 @@ def _is_provider_rate_limit_exception(exc: Exception) -> bool:
         return False
 
 
-def _raise_feedback_error_for_exception(exc: Exception, *, default_transient_code: str) -> None:
+def _raise_feedback_error_for_exception(
+    exc: Exception,
+    *,
+    default_transient_code: str,
+    provider_image_diagnostics: dict[str, object] | None = None,
+) -> None:
     """Classify adapter exceptions into stable transient/permanent error codes."""
     normalized = str(exc or "").strip().lower()
     usage_events = list(getattr(exc, "usage_events", []) or [])
     if _is_provider_rate_limit_exception(exc):
+        if _is_complex_provider_png_diagnostic(provider_image_diagnostics):
+            LOG.warning(
+                "learning.feedback.visual_image_too_complex_for_provider mime=image/png "
+                "width=%s height=%s bytes=%s base64_chars=%s provider=%s model=%s "
+                "status_code=%s retry_after=%s request_id=%s",
+                provider_image_diagnostics.get("width", "") if provider_image_diagnostics else "",
+                provider_image_diagnostics.get("height", "") if provider_image_diagnostics else "",
+                provider_image_diagnostics.get("bytes", "") if provider_image_diagnostics else "",
+                provider_image_diagnostics.get("base64_chars", "") if provider_image_diagnostics else "",
+                str(getattr(exc, "llm_provider", "") or ""),
+                str(getattr(exc, "model", "") or ""),
+                str(getattr(exc, "status_code", "429") or "429"),
+                _safe_response_header(exc, "retry-after"),
+                _safe_response_header(exc, "x-request-id"),
+            )
+            raise FeedbackPermanentError("image_too_complex_for_provider", usage_events=usage_events) from exc
         LOG.warning(
             "learning.feedback.provider_rate_limited provider=%s model=%s status_code=%s retry_after=%s request_id=%s",
             str(getattr(exc, "llm_provider", "") or ""),
@@ -87,119 +105,56 @@ def _provider_image_data_uri(
     *,
     mime: str,
     image_b64: str,
-    max_pixels: int = _VISUAL_PROVIDER_IMAGE_MAX_PIXELS,
 ) -> str:
-    """Return the data URI sent to the visual provider, normalizing large PNGs."""
-    normalized_mime, normalized_b64 = _normalize_png_for_provider(
-        mime=mime,
-        image_b64=image_b64,
-        max_pixels=max_pixels,
-    )
-    return f"data:{normalized_mime};base64,{normalized_b64}"
+    """Return the original data URI sent to the visual provider."""
+    return f"data:{mime};base64,{image_b64}"
 
 
-def _png_as_rgb_on_white(image: Any) -> Any:
-    """Return an RGB image, preserving transparent drawings on a white canvas."""
-    has_alpha = getattr(image, "mode", "") in {"RGBA", "LA"} or "transparency" in getattr(image, "info", {})
-    if not has_alpha:
-        return image.convert("RGB")
-
-    from PIL import Image
-
-    rgba = image.convert("RGBA")
-    white = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
-    white.alpha_composite(rgba)
-    return white.convert("RGB")
-
-
-def _normalize_png_for_provider(
-    *,
-    mime: str,
-    image_b64: str,
-    max_pixels: int = _VISUAL_PROVIDER_IMAGE_MAX_PIXELS,
-) -> tuple[str, str]:
-    """
-    Convert large PNG screenshots to JPEG before provider submission.
-
-    Why:
-        The original file remains unchanged in storage. Only the provider-bound
-        representation is normalized to avoid oversized PNG data URIs that can
-        trigger provider-side admission/rate-limit behavior.
-    """
-    if mime != "image/png":
-        return mime, image_b64
-
-    try:
-        from PIL import Image
-    except Exception as exc:
-        LOG.warning(
-            "learning.feedback.visual_image_normalization_skipped reason=%s",
-            exc.__class__.__name__,
-        )
-        return mime, image_b64
-
+def _provider_image_diagnostics(*, mime: str, image_b64: str) -> dict[str, object]:
+    """Return PII-free image metadata used only for provider-failure diagnostics."""
+    diagnostics: dict[str, object] = {"mime": mime, "base64_chars": len(image_b64)}
     try:
         raw = base64.b64decode(image_b64, validate=True)
+        diagnostics["bytes"] = len(raw)
+    except Exception:
+        return diagnostics
+
+    if mime != "image/png":
+        return diagnostics
+    try:
+        from PIL import Image
 
         with Image.open(BytesIO(raw)) as image:
             width, height = image.size
-            pixel_count = width * height
-            if pixel_count > max_pixels:
-                LOG.warning(
-                    "learning.feedback.visual_image_rejected reason=input_too_large mime=image/png "
-                    "width=%s height=%s pixels=%s max_pixels=%s bytes=%s",
-                    width,
-                    height,
-                    pixel_count,
-                    max_pixels,
-                    len(raw),
-                )
-                raise FeedbackPermanentError("input_too_large")
-
-            should_normalize = (
-                max(width, height) > _VISUAL_PROVIDER_IMAGE_MAX_EDGE
-                or len(image_b64) >= _VISUAL_PROVIDER_PNG_NORMALIZE_MIN_BASE64_CHARS
-            )
-            if not should_normalize:
-                return mime, image_b64
-
-            normalized = _png_as_rgb_on_white(image)
-            normalized.thumbnail(
-                (_VISUAL_PROVIDER_IMAGE_MAX_EDGE, _VISUAL_PROVIDER_IMAGE_MAX_EDGE),
-                Image.Resampling.LANCZOS,
-            )
-            out = BytesIO()
-            normalized.save(
-                out,
-                format="JPEG",
-                quality=_VISUAL_PROVIDER_IMAGE_JPEG_QUALITY,
-                optimize=True,
-            )
-            normalized_bytes = out.getvalue()
-            LOG.info(
-                "learning.feedback.visual_image_normalized original_mime=image/png original_bytes=%s "
-                "original_width=%s original_height=%s normalized_mime=image/jpeg normalized_bytes=%s "
-                "normalized_width=%s normalized_height=%s",
-                len(raw),
-                width,
-                height,
-                len(normalized_bytes),
-                normalized.width,
-                normalized.height,
-            )
-            return "image/jpeg", base64.b64encode(normalized_bytes).decode("ascii")
-    except FeedbackPermanentError:
-        raise
-    except Image.DecompressionBombError as exc:
-        raise FeedbackPermanentError("input_too_large") from exc
-    except Image.DecompressionBombWarning as exc:
-        raise FeedbackPermanentError("input_too_large") from exc
+            diagnostics["width"] = width
+            diagnostics["height"] = height
+            diagnostics["pixels"] = width * height
     except Exception as exc:
         LOG.warning(
-            "learning.feedback.visual_image_normalization_skipped reason=%s",
+            "learning.feedback.visual_image_diagnostics_unavailable reason=%s",
             exc.__class__.__name__,
         )
-        return mime, image_b64
+    return diagnostics
+
+
+def _is_complex_provider_png_diagnostic(diagnostics: dict[str, object] | None) -> bool:
+    """Return true for screenshot-like PNG payloads that should not be retried."""
+    if not diagnostics or diagnostics.get("mime") != "image/png":
+        return False
+    try:
+        width = int(diagnostics.get("width") or 0)
+        height = int(diagnostics.get("height") or 0)
+    except Exception:
+        width = 0
+        height = 0
+    try:
+        base64_chars = int(diagnostics.get("base64_chars") or 0)
+    except Exception:
+        base64_chars = 0
+    return (
+        max(width, height) >= _VISUAL_PROVIDER_COMPLEX_PNG_MIN_EDGE
+        or base64_chars >= _VISUAL_PROVIDER_COMPLEX_PNG_MIN_BASE64_CHARS
+    )
 
 
 def _require_secure_openai_base_url(base_url: str) -> None:
@@ -450,6 +405,7 @@ class _LocalFeedbackAdapter:
         max_download_bytes = get_learning_max_upload_bytes()
 
         image_data_uri: str | None = None
+        provider_image_diagnostics: dict[str, object] | None = None
         try:
             if mime in {"image/jpeg", "image/png"}:
                 meta: dict = {}
@@ -462,6 +418,7 @@ class _LocalFeedbackAdapter:
                 )
                 if not image_b64:
                     raise FeedbackTransientError("image_unavailable")
+                provider_image_diagnostics = _provider_image_diagnostics(mime=mime, image_b64=image_b64)
                 image_data_uri = _provider_image_data_uri(mime=mime, image_b64=image_b64)
             elif mime == "application/pdf":
                 stitched = _LocalVisionAdapter()._ensure_pdf_stitched_png(  # noqa: SLF001
@@ -473,11 +430,7 @@ class _LocalFeedbackAdapter:
                 import base64 as _b64
 
                 stitched_b64 = _b64.b64encode(stitched).decode("ascii")
-                image_data_uri = _provider_image_data_uri(
-                    mime="image/png",
-                    image_b64=stitched_b64,
-                    max_pixels=_VISUAL_PROVIDER_STITCHED_PDF_MAX_PIXELS,
-                )
+                image_data_uri = f"data:image/png;base64,{stitched_b64}"
             else:
                 raise FeedbackPermanentError("unsupported_mime")
         except VisionPermanentError as exc:
@@ -506,7 +459,11 @@ class _LocalFeedbackAdapter:
         except ImportError as exc:
             raise FeedbackTransientError("dspy_unavailable") from exc
         except Exception as exc:
-            _raise_feedback_error_for_exception(exc, default_transient_code="visual_feedback_failed")
+            _raise_feedback_error_for_exception(
+                exc,
+                default_transient_code="visual_feedback_failed",
+                provider_image_diagnostics=provider_image_diagnostics,
+            )
 
 
 def build() -> _LocalFeedbackAdapter:

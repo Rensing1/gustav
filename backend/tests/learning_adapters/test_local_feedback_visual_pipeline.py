@@ -10,15 +10,11 @@ Intent:
 from __future__ import annotations
 
 import base64
-import binascii
 import hashlib
 import importlib
 from io import BytesIO
 from pathlib import Path
 import random
-import struct
-import warnings
-import zlib
 
 import pytest
 from PIL import Image
@@ -42,52 +38,22 @@ def _large_png_bytes() -> bytes:
     return out.getvalue()
 
 
-def _large_transparent_png_bytes() -> bytes:
-    out = BytesIO()
-    image = Image.new("RGBA", (1400, 900), (0, 0, 0, 0))
-    for x in range(600, 800):
-        for y in range(400, 500):
-            image.putpixel((x, y), (20, 20, 20, 255))
-    image.save(out, format="PNG")
-    return out.getvalue()
-
-
 def _stitched_pdf_png_bytes(*, width: int = 2480, height: int = 7016) -> bytes:
     out = BytesIO()
     Image.new("L", (width, height), 255).save(out, format="PNG")
     return out.getvalue()
 
 
-def _high_pixel_png_bytes(*, width: int = 5000, height: int = 4000) -> bytes:
-    """Build a valid, tiny-on-disk PNG whose dimensions exceed the pixel budget."""
-
-    def _chunk(kind: bytes, data: bytes) -> bytes:
-        crc = binascii.crc32(kind + data) & 0xFFFFFFFF
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", crc)
-
-    # 1-bit grayscale keeps the compressed payload tiny while still expanding
-    # to many pixels if a decoder loads the full raster.
-    row = b"\x00" + (b"\x00" * ((width + 7) // 8))
-    compressor = zlib.compressobj(level=9)
-    compressed = BytesIO()
-    for _ in range(height):
-        compressed.write(compressor.compress(row))
-    compressed.write(compressor.flush())
-
-    return b"".join(
-        [
-            b"\x89PNG\r\n\x1a\n",
-            _chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 1, 0, 0, 0, 0)),
-            _chunk(b"IDAT", compressed.getvalue()),
-            _chunk(b"IEND", b""),
-        ]
-    )
-
-
 def _jpeg_bytes() -> bytes:
     out = BytesIO()
     Image.new("RGB", (1200, 800), (240, 240, 240)).save(out, format="JPEG")
     return out.getvalue()
+
+
+class _ProviderRateLimitError(Exception):
+    status_code = 429
+    llm_provider = "provider.test"
+    model = "visual-model"
 
 
 def test_local_feedback_analyze_visual_calls_visual_program(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -156,7 +122,7 @@ def test_local_feedback_analyze_visual_calls_visual_program(monkeypatch: pytest.
     assert captured["uri"].startswith("data:image/png;base64,")
 
 
-def test_local_feedback_analyze_visual_normalizes_large_png_for_provider(
+def test_local_feedback_analyze_visual_keeps_large_png_unmodified_for_provider_diagnosis(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -217,19 +183,130 @@ def test_local_feedback_analyze_visual_normalizes_large_png_for_provider(
         teacher_context_md="Hinweis",
     )
 
-    original_uri_length = len("data:image/png;base64," + base64.b64encode(payload_bytes).decode("ascii"))
     assert res.feedback_md == "OK"
-    assert captured["uri"].startswith("data:image/jpeg;base64,")
-    assert len(captured["uri"]) < original_uri_length
-
-    normalized = base64.b64decode(captured["uri"].split(",", 1)[1])
-    with Image.open(BytesIO(normalized)) as image:
-        assert image.format == "JPEG"
-        assert image.mode == "RGB"
-        assert max(image.size) <= 1280
+    assert captured["uri"].startswith("data:image/png;base64,")
+    assert base64.b64decode(captured["uri"].split(",", 1)[1]) == payload_bytes
 
 
-def test_local_feedback_analyze_visual_normalizes_stitched_pdf_png_for_provider(
+def test_local_feedback_analyze_visual_classifies_complex_png_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example.test/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "text-model")
+    monkeypatch.setenv("AI_VISUAL_MODEL", "visual-model")
+    dspy_cache = tmp_path / "dspy_cache"
+    dspy_cache.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("DSPY_CACHEDIR", str(dspy_cache))
+
+    storage_key = "submissions/course/task/student/desktop-screenshot.png"
+    payload_bytes = _large_png_bytes()
+    target = tmp_path / storage_key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload_bytes)
+    sha = hashlib.sha256(payload_bytes).hexdigest()
+
+    submission = {
+        "id": "sub-complex-png",
+        "kind": "image",
+        "mime_type": "image/png",
+        "storage_key": storage_key,
+        "size_bytes": len(payload_bytes),
+        "sha256": sha,
+        "course_id": "c",
+        "task_id": "t",
+        "student_sub": "s",
+    }
+    job_payload = {
+        "mime_type": "image/png",
+        "storage_key": storage_key,
+        "size_bytes": len(payload_bytes),
+        "sha256": sha,
+    }
+
+    prog = importlib.import_module("backend.learning.adapters.dspy.visual_feedback_program")
+
+    def _fake_analyze_visual_feedback(**_: object) -> FeedbackResult:
+        raise _ProviderRateLimitError("rate_limited")
+
+    monkeypatch.setattr(prog, "analyze_visual_feedback", _fake_analyze_visual_feedback)
+
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    with pytest.raises(mod.FeedbackPermanentError) as exc:  # type: ignore[attr-defined]
+        adapter.analyze_visual(  # type: ignore[attr-defined]
+            submission=submission,
+            job_payload=job_payload,
+            criteria=["K1"],
+            instruction_md="Aufgabe",
+            teacher_context_md="Hinweis",
+        )
+
+    assert str(exc.value) == "image_too_complex_for_provider"
+
+
+def test_local_feedback_analyze_visual_keeps_small_png_rate_limit_transient(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("STORAGE_VERIFY_ROOT", str(tmp_path))
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example.test/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "text-model")
+    monkeypatch.setenv("AI_VISUAL_MODEL", "visual-model")
+    dspy_cache = tmp_path / "dspy_cache"
+    dspy_cache.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("DSPY_CACHEDIR", str(dspy_cache))
+
+    storage_key = "submissions/course/task/student/small.png"
+    payload_bytes = _png_bytes()
+    target = tmp_path / storage_key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload_bytes)
+    sha = hashlib.sha256(payload_bytes).hexdigest()
+
+    submission = {
+        "id": "sub-small-png",
+        "kind": "image",
+        "mime_type": "image/png",
+        "storage_key": storage_key,
+        "size_bytes": len(payload_bytes),
+        "sha256": sha,
+        "course_id": "c",
+        "task_id": "t",
+        "student_sub": "s",
+    }
+    job_payload = {
+        "mime_type": "image/png",
+        "storage_key": storage_key,
+        "size_bytes": len(payload_bytes),
+        "sha256": sha,
+    }
+
+    prog = importlib.import_module("backend.learning.adapters.dspy.visual_feedback_program")
+
+    def _fake_analyze_visual_feedback(**_: object) -> FeedbackResult:
+        raise _ProviderRateLimitError("rate_limited")
+
+    monkeypatch.setattr(prog, "analyze_visual_feedback", _fake_analyze_visual_feedback)
+
+    mod = importlib.import_module("backend.learning.adapters.local_feedback")
+    adapter = mod.build()  # type: ignore[attr-defined]
+
+    with pytest.raises(mod.FeedbackTransientError) as exc:  # type: ignore[attr-defined]
+        adapter.analyze_visual(  # type: ignore[attr-defined]
+            submission=submission,
+            job_payload=job_payload,
+            criteria=["K1"],
+            instruction_md="Aufgabe",
+            teacher_context_md="Hinweis",
+        )
+
+    assert str(exc.value) == "provider_rate_limited"
+
+
+def test_local_feedback_analyze_visual_keeps_stitched_pdf_png_out_of_rate_limit_normalization(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -291,77 +368,8 @@ def test_local_feedback_analyze_visual_normalizes_stitched_pdf_png_for_provider(
     )
 
     assert res.feedback_md == "OK"
-    assert captured["uri"].startswith("data:image/jpeg;base64,")
-
-    normalized = base64.b64decode(captured["uri"].split(",", 1)[1])
-    with Image.open(BytesIO(normalized)) as image:
-        assert image.format == "JPEG"
-        assert image.mode == "RGB"
-        assert max(image.size) <= 1280
-
-
-def test_local_feedback_rejects_extreme_stitched_pdf_png_before_provider_normalization() -> None:
-    """Extremely large PDF stitches stay bounded even though normal stitches can downscale."""
-
-    mod = importlib.import_module("backend.learning.adapters.local_feedback")
-    payload_b64 = base64.b64encode(_stitched_pdf_png_bytes(width=8000, height=9000)).decode("ascii")
-
-    with pytest.raises(mod.FeedbackPermanentError) as exc:  # type: ignore[attr-defined]
-        mod._normalize_png_for_provider(  # type: ignore[attr-defined]
-            mime="image/png",
-            image_b64=payload_b64,
-            max_pixels=64_000_000,
-        )
-
-    assert str(exc.value) == "input_too_large"
-
-
-def test_local_feedback_rejects_high_pixel_png_before_provider_normalization() -> None:
-    """High-pixel PNGs must be rejected before full raster decoding can happen."""
-
-    mod = importlib.import_module("backend.learning.adapters.local_feedback")
-    payload_b64 = base64.b64encode(_high_pixel_png_bytes()).decode("ascii")
-
-    with pytest.raises(mod.FeedbackPermanentError) as exc:  # type: ignore[attr-defined]
-        mod._normalize_png_for_provider(mime="image/png", image_b64=payload_b64)  # type: ignore[attr-defined]
-
-    assert str(exc.value) == "input_too_large"
-
-
-def test_local_feedback_treats_decompression_bomb_warning_as_input_too_large() -> None:
-    """Pillow decompression warnings promoted to errors must not bypass the size guard."""
-
-    mod = importlib.import_module("backend.learning.adapters.local_feedback")
-    payload_b64 = base64.b64encode(_high_pixel_png_bytes(width=12000, height=8000)).decode("ascii")
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", Image.DecompressionBombWarning)
-        with pytest.raises(mod.FeedbackPermanentError) as exc:  # type: ignore[attr-defined]
-            mod._normalize_png_for_provider(mime="image/png", image_b64=payload_b64)  # type: ignore[attr-defined]
-
-    assert str(exc.value) == "input_too_large"
-
-
-def test_local_feedback_composites_transparent_png_on_white_before_jpeg() -> None:
-    """Transparent PNG backgrounds should stay readable after JPEG normalization."""
-
-    mod = importlib.import_module("backend.learning.adapters.local_feedback")
-    payload_b64 = base64.b64encode(_large_transparent_png_bytes()).decode("ascii")
-
-    normalized_mime, normalized_b64 = mod._normalize_png_for_provider(  # type: ignore[attr-defined]
-        mime="image/png",
-        image_b64=payload_b64,
-    )
-
-    assert normalized_mime == "image/jpeg"
-    normalized = base64.b64decode(normalized_b64)
-    with Image.open(BytesIO(normalized)) as image:
-        assert image.mode == "RGB"
-        background = image.getpixel((10, 10))
-        writing = image.getpixel((image.width // 2, image.height // 2))
-
-    assert min(background) >= 240
-    assert max(writing) <= 40
+    assert captured["uri"].startswith("data:image/png;base64,")
+    assert base64.b64decode(captured["uri"].split(",", 1)[1]) == stitched_png
 
 
 def test_local_feedback_analyze_visual_keeps_jpeg_for_provider(

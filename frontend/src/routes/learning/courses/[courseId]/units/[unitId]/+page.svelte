@@ -18,6 +18,7 @@
     PDF_MIME,
     SCRATCH_SB3_MIME
   } from "$lib/utils/submission-mime-types";
+  import { learningSubmissionFailureMessage } from "$lib/utils/learning-failures";
   import {
     contentGroupsForModules,
     contentGroupsForSections,
@@ -1116,10 +1117,12 @@
           feedbackPendingTaskId = null;
           feedbackStatusTaskId = taskId;
           pendingSubmissionIntent = null;
-          feedbackStatusMessage =
+          feedbackStatusMessage = learningSubmissionFailureMessage(
+            matchingSubmission,
             intent === "submit"
               ? "Die Auswertung konnte nicht erstellt werden."
-              : "Die Rückmeldung konnte nicht erstellt werden.";
+              : "Die Rückmeldung konnte nicht erstellt werden."
+          );
           return;
         }
       } catch {

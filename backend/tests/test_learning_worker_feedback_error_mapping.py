@@ -21,6 +21,14 @@ def test_feedback_invalid_analysis_keeps_specific_error_code() -> None:
     assert worker._feedback_permanent_error_code(exc) == "feedback_invalid_analysis"  # type: ignore[attr-defined]
 
 
+def test_complex_image_provider_admission_maps_to_feedback_failed() -> None:
+    """Provider-specific image admission reasons stay behind the public code."""
+
+    exc = worker.FeedbackPermanentError("image_too_complex_for_provider")
+
+    assert worker._feedback_permanent_error_code(exc) == "feedback_failed"  # type: ignore[attr-defined]
+
+
 def test_unknown_feedback_permanent_error_maps_to_feedback_failed() -> None:
     """Unexpected permanent Feedback errors keep the established generic code."""
 

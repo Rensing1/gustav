@@ -161,16 +161,11 @@ test-supabase:
 
 .PHONY: test-openai
 test-openai:
-	# Smoke-test a real OpenAI-compatible endpoint (default: local Ollama on :11434).
-	# Default model is `ministral-3:3b` for all variants; override via OPENAI_E2E_MODEL.
+	# Smoke-test the OpenAI-compatible endpoint configured via OPENAI_BASE_URL.
+	# Model comes from OPENAI_E2E_MODEL or AI_TEXT_MODEL in .env.
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	. ./.venv/bin/activate && \
 	RUN_OPENAI_E2E=1 \
-	OPENAI_E2E_ROOT=$${OPENAI_E2E_ROOT:-http://localhost:11434} \
-	OPENAI_E2E_MODEL=$${OPENAI_E2E_MODEL:-ministral-3:3b} \
-	AI_TEXT_MODEL=$${OPENAI_E2E_MODEL} \
-	AI_OCR_MODEL=$${OPENAI_E2E_MODEL} \
-	AI_VISUAL_MODEL=$${OPENAI_E2E_MODEL} \
 	pytest -q -m openai_integration
 
 .PHONY: verify

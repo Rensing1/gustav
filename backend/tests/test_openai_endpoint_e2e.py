@@ -14,9 +14,9 @@ How to run:
         make test-openai
 
 Defaults:
-    - Endpoint root: http://localhost:11434 (Ollama default)
-    - OpenAI base URL: <root>/v1 (override via OPENAI_E2E_BASE_URL)
-    - Model: ministral-3:3b (override via OPENAI_E2E_MODEL or AI_TEXT_MODEL)
+    - OpenAI base URL: OPENAI_BASE_URL from `.env`
+      (override via OPENAI_E2E_BASE_URL)
+    - Model: OPENAI_E2E_MODEL or AI_TEXT_MODEL from `.env`
 """
 
 from __future__ import annotations
@@ -39,18 +39,15 @@ def _openai_base_url() -> str:
 
     Contract:
         - Prefer OPENAI_E2E_BASE_URL (explicit override for these tests).
-        - Otherwise, assume a local Ollama daemon and use <root>/v1.
-
-    Note:
-        We intentionally do NOT default to `OPENAI_BASE_URL` from `.env`.
-        That variable is used by the application/worker and may point to a
-        remote host; using it here would make `make verify` unexpectedly
-        depend on external network availability.
+        - Otherwise, use OPENAI_BASE_URL, matching the application runtime.
+        - OPENAI_E2E_ROOT remains a legacy fallback and receives `/v1`.
     """
-    raw = (os.getenv("OPENAI_E2E_BASE_URL") or "").strip()
+    raw = (os.getenv("OPENAI_E2E_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "").strip()
     if raw:
         return raw.rstrip("/")
-    root = (os.getenv("OPENAI_E2E_ROOT") or "http://localhost:11434").strip().rstrip("/")
+    root = (os.getenv("OPENAI_E2E_ROOT") or "").strip().rstrip("/")
+    if not root:
+        raise AssertionError("OPENAI_BASE_URL or OPENAI_E2E_BASE_URL must be set for OpenAI endpoint E2E tests.")
     if root.endswith("/v1"):
         return root
     return f"{root}/v1"

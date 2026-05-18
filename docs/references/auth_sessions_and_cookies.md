@@ -220,11 +220,18 @@ Typische Ursachen:
 
 ### `/api/app/session-bootstrap` liefert `401`
 
-Der öffentliche Backend-Vertrag kennt nur Backend-Ursachen: `missing_bearer`,
-`invalid_bearer` und `bff_session_missing`. Die BFF darf zusätzlich interne
-Observability-Gründe wie `token_refresh_failed` oder
-`app_session_active_bff_bearer_unavailable` loggen, aber diese Werte sind keine
-öffentlichen Backend-Response-Codes.
+Der öffentliche Backend-Vertrag bleibt beim Response-Body `{"error":
+"unauthenticated"}`. Für die Diagnose werden niedrig-kardinale Gründe ohne
+Token, Cookies, Session-IDs oder personenbezogene Daten dokumentiert:
+`session_bootstrap_missing_bearer`, `session_bootstrap_invalid_bearer`,
+`bff_session_missing`, `bff_session_read_empty`,
+`bff_session_token_refresh_failed` und `continuation_loop_guard_triggered`.
+Browser-Recovery ist nur erlaubt, wenn der Redirect ein lokaler In-App-Pfad aus
+dem aktuellen Pfad oder einem geprüften same-origin Referer ist. H5P-,
+Maschinen- und interne Routen ohne sicheren Browser-Kontext behalten ihre
+API-artige `401`-Semantik. Wenn `/auth/continue` für denselben Redirect erneut
+gestartet würde, greift der Loop-Guard und fällt kontrolliert zum sichtbaren
+Login zurück.
 
 ### Logout endet ohne Redirect zum IdP
 

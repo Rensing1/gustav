@@ -626,9 +626,9 @@ def _auth_context_from_request(request: Request) -> tuple[dict[str, object] | No
 
 def _auth_failure_reason(auth_source: str) -> str:
     if auth_source == "missing_bearer":
-        return "missing_bearer"
+        return "session_bootstrap_missing_bearer"
     if auth_source == "bearer":
-        return "invalid_bearer"
+        return "session_bootstrap_invalid_bearer"
     return "bff_session_missing"
 
 

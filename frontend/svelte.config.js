@@ -6,6 +6,9 @@ const config = {
   preprocess: vitePreprocess(),
   kit: {
     adapter: adapter(),
+    paths: {
+      relative: false
+    },
     alias: {
       $lib: "src/lib"
     }
@@ -13,4 +16,3 @@ const config = {
 };
 
 export default config;
-

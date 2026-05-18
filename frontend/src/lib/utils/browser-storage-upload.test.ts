@@ -91,4 +91,24 @@ describe("prepareBrowserStorageUpload", () => {
       })
     ).rejects.toThrow("mime_not_allowed");
   });
+
+  it("starts browser auth recovery for intent 401 responses without uploading the file", async () => {
+    const file = new File(["png"], "bild.png", { type: "image/png" });
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 401 }));
+    const onAuthRecovery = vi.fn(() => true);
+
+    await expect(
+      prepareBrowserStorageUpload({
+        fetchFn,
+        intentUrl: "/api/test/upload-intents",
+        intentPayload: {},
+        file,
+        fallbackMimeType: "image/png",
+        onAuthRecovery
+      })
+    ).rejects.toThrow("auth_recovery_started");
+
+    expect(onAuthRecovery).toHaveBeenCalledWith(expect.objectContaining({ status: 401 }));
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
 });

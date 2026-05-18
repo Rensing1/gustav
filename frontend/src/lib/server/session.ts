@@ -144,6 +144,9 @@ async function fetchStoredTokenSession(
     }
   });
   if (response.status === 204 || response.status === 401) {
+    console.info("auth.session", {
+      reason: response.status === 204 ? "bff_session_read_empty" : "bff_session_missing"
+    });
     if (options?.clearMissing === false) {
       return null;
     }
@@ -181,7 +184,7 @@ async function clearExpiredSessionUnlessRecovered(
 
 function logTokenRefreshFailure(status: number, recovered: string): void {
   console.info("auth.session", {
-    reason: "token_refresh_failed",
+    reason: "bff_session_token_refresh_failed",
     status,
     recovered
   });

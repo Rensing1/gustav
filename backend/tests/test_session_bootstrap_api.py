@@ -77,7 +77,11 @@ async def test_session_bootstrap_returns_teacher_spaces(monkeypatch: pytest.Monk
 
 
 @pytest.mark.anyio
-async def test_session_bootstrap_requires_bearer_even_with_cookie_session(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_session_bootstrap_requires_bearer_even_with_cookie_session(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="gustav.identity_access")
     store = SessionStore()
     monkeypatch.setattr(main, "SESSION_STORE", store)
     rec = store.create(sub="student-cookie", roles=["student"], name="Lena", ttl_seconds=60)
@@ -89,6 +93,8 @@ async def test_session_bootstrap_requires_bearer_even_with_cookie_session(monkey
     assert response.status_code == 401
     assert response.headers.get("Cache-Control") == "private, no-store"
     assert response.json() == {"error": "unauthenticated"}
+    logs = "\n".join(record.getMessage() for record in caplog.records)
+    assert "auth_failure reason=session_bootstrap_missing_bearer path_class=api.app" in logs
 
 
 @pytest.mark.anyio
@@ -106,7 +112,7 @@ async def test_session_bootstrap_logs_low_cardinality_auth_reason_without_sensit
 
     assert response.status_code == 401
     logs = "\n".join(record.getMessage() for record in caplog.records)
-    assert "auth_failure reason=invalid_bearer path_class=api.app" in logs
+    assert "auth_failure reason=session_bootstrap_invalid_bearer path_class=api.app" in logs
     assert "path=/api/app/session-bootstrap" not in logs
     assert "sensitive.jwt" not in logs
     assert "sensitive-session" not in logs
@@ -128,7 +134,7 @@ async def test_auth_failure_logs_path_class_without_dynamic_identifiers(
 
     assert response.status_code == 401
     logs = "\n".join(record.getMessage() for record in caplog.records)
-    assert "auth_failure reason=invalid_bearer path_class=api.teaching" in logs
+    assert "auth_failure reason=session_bootstrap_invalid_bearer path_class=api.teaching" in logs
     assert dynamic_path not in logs
     assert "student@example.com" not in logs
     assert "sensitive.jwt" not in logs

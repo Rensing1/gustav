@@ -111,6 +111,16 @@ describe("teacher unit graph route contract", () => {
     expect(graphEdgeSource).toContain("use:enhance={data.enhanceGraphForm}");
   });
 
+  it("keeps browser graph 401 responses recoverable instead of mapping them to graph errors", () => {
+    const source = routeSource();
+
+    expect(source).toContain('import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";');
+    expect(source).toContain("if (handleBrowserAuthRecovery(response))");
+    expect(source).toContain('throw new Error("auth_recovery_started");');
+    expect(source).toContain('if (detail === "auth_recovery_started")');
+    expect(source).toContain("return;");
+  });
+
   it("handles action success URL patches exactly once through the enhance pipeline", () => {
     const source = routeSource();
     const syncUrlPatchCalls = source.match(/syncUrlPatch\(success\.next\)/g) ?? [];

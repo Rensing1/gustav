@@ -81,7 +81,9 @@ describe("learning unit route contract", () => {
     expect(serverSource).toContain("/submissions/finalize");
     expect(serverSource).toContain('message: "submitted"');
     expect(routeSource).toContain('import { prepareBrowserStorageUpload } from "$lib/utils/browser-storage-upload";');
+    expect(routeSource).toContain('import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";');
     expect(routeSource).toContain("prepareBrowserStorageUpload({");
+    expect(routeSource).toContain("onAuthRecovery: handleBrowserAuthRecovery");
     expect(routeSource).toContain("/upload-intents");
     expect(routeSource).toContain("async function submitUploadFeedback");
     expect(serverSource).not.toContain("const uploadResponse = await fetch(uploadUrl");
@@ -141,11 +143,22 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain("function setTaskHistoryState(taskId: string, state: SubmissionHistoryLoadState)");
     expect(routeSource).toContain("async function ensureSubmissionHistoryLoaded(taskId: string)");
     expect(routeSource).toContain("handleRecoverableAuthResponse(response)");
-    expect(routeSource).toContain('window.location.assign(`/auth/continue?redirect=${encodeURIComponent(redirectPath)}`)');
+    expect(routeSource).toContain("return handleBrowserAuthRecovery(response)");
+    expect(routeSource).not.toContain('window.location.assign(`/auth/continue?redirect=${encodeURIComponent(redirectPath)}`)');
     expect(routeSource).toContain("feedbackStatusMessage = \"Die Abgabe wird geladen ...\";");
     expect(routeSource).not.toContain("feedbackStatusMessage = \"Die Abgabe konnte nicht geladen werden.\";");
     expect(routeSource).toContain("next.searchParams.delete(\"history\");");
     expect(routeSource).not.toContain("const currentHistoryTaskId = next.searchParams.get(\"history\")");
+  });
+
+  it("handles direct browser fetch 401 responses through shared auth recovery before domain errors", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    const recoveryChecks = routeSource.match(/handleRecoverableAuthResponse\(response\)/g) ?? [];
+    expect(recoveryChecks.length).toBeGreaterThanOrEqual(4);
+    expect(routeSource).toContain('throw new Error("auth_recovery_started")');
+    expect(routeSource).toContain('if (reason === "auth_recovery_started")');
   });
 
   it("reopens modular materials on restore and module reopen instead of persisting them closed", () => {

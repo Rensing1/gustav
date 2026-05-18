@@ -1,4 +1,5 @@
 import { buildStorageUploadHeaders } from "./storage-upload-headers";
+import { handleBrowserAuthRecovery } from "./browser-auth-recovery";
 
 export type StorageUploadIntent = {
   intent_id: string;
@@ -19,8 +20,10 @@ export async function prepareBrowserStorageUpload(options: {
   intentPayload: Record<string, unknown>;
   file: File;
   fallbackMimeType: string;
+  onAuthRecovery?: (response: Response) => boolean;
 }): Promise<{ intent: StorageUploadIntent; sha256: string; mimeType: string }> {
   const fetchFn = options.fetchFn ?? fetch;
+  const onAuthRecovery = options.onAuthRecovery ?? handleBrowserAuthRecovery;
   const response = await fetchFn(options.intentUrl, {
     method: "POST",
     credentials: "include",
@@ -31,6 +34,9 @@ export async function prepareBrowserStorageUpload(options: {
   });
 
   if (!response.ok) {
+    if (onAuthRecovery(response)) {
+      throw new Error("auth_recovery_started");
+    }
     const payload = (await response.json().catch(() => ({}))) as { detail?: string; error?: string };
     throw new Error(payload.detail || payload.error || `intent_failed_${response.status}`);
   }

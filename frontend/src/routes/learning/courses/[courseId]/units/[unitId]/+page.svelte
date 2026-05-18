@@ -11,6 +11,7 @@
     buildLearningUnitFlow,
     type LearningFlowNode
   } from "$lib/graph/learning-unit-flow";
+  import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";
   import { prepareBrowserStorageUpload } from "$lib/utils/browser-storage-upload";
   import {
     FILIUS_FLS_MIME,
@@ -569,6 +570,9 @@
         cache: "no-store"
       }
     );
+    if (handleRecoverableAuthResponse(response)) {
+      throw new Error("auth_recovery_started");
+    }
     if (!response.ok) {
       throw new Error(`graph_fetch_failed_${response.status}`);
     }
@@ -638,6 +642,9 @@
       }
     );
 
+    if (handleRecoverableAuthResponse(response)) {
+      throw new Error("auth_recovery_started");
+    }
     if (!response.ok) {
       throw new Error(`module_fetch_failed_${response.status}`);
     }
@@ -1013,6 +1020,9 @@
       }
     );
 
+    if (handleRecoverableAuthResponse(response)) {
+      throw new Error("auth_recovery_started");
+    }
     if (!response.ok) {
       const payload = (await response.json().catch(() => ({}))) as { detail?: string; error?: string };
       throw new Error(payload.detail || payload.error || "submission_failed");
@@ -1039,12 +1049,10 @@
   }
 
   function handleRecoverableAuthResponse(response: Response): boolean {
-    if (!browser || response.status !== 401) {
+    if (!browser) {
       return false;
     }
-    const redirectPath = `${window.location.pathname}${window.location.search}`;
-    window.location.assign(`/auth/continue?redirect=${encodeURIComponent(redirectPath)}`);
-    return true;
+    return handleBrowserAuthRecovery(response);
   }
 
   async function ensureSubmissionHistoryLoaded(taskId: string): Promise<LearningSubmission[]> {
@@ -1166,7 +1174,8 @@
           size_bytes: file.size
         },
         file,
-        fallbackMimeType: mimeType
+        fallbackMimeType: mimeType,
+        onAuthRecovery: handleBrowserAuthRecovery
       });
       const submission = await createUploadSubmission(taskId, taskKind, file, prepared.intent as UploadIntent, prepared.sha256);
       await refreshModularGraph().catch(() => undefined);
@@ -1195,6 +1204,11 @@
       if (reason === "upload_failed") {
         feedbackStatusMessage = "Die Datei konnte nicht hochgeladen werden.";
         setClientSubmissionError(taskId, "Die Datei konnte nicht hochgeladen werden.");
+        return;
+      }
+      if (reason === "auth_recovery_started") {
+        feedbackStatusMessage = null;
+        setClientSubmissionError(taskId, null);
         return;
       }
       feedbackStatusMessage = "Die Rückmeldung konnte nicht angefordert werden.";

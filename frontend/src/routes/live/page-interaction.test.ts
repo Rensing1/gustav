@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import type { LiveSummaryPayload } from "$lib/types/home";
 
@@ -85,6 +88,18 @@ function summary(studentName = "Anna"): LiveSummaryPayload {
 }
 
 describe("live workspace controller", () => {
+  it("routes browser fetch 401 responses through shared auth recovery before live errors", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain('import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";');
+    expect(routeSource.match(/handleBrowserAuthRecovery\(response\)/g)?.length).toBe(3);
+    expect(routeSource).toContain('throw new Error("auth_recovery_started")');
+    expect(routeSource).not.toContain("live_summary_fetch_failed_401");
+    expect(routeSource).not.toContain("live_detail_fetch_failed_401");
+    expect(routeSource).not.toContain("live_delta_fetch_failed_401");
+  });
+
   it("derives row and task links locally from the current live selection", () => {
     const dashboard = buildDashboardViewModel({
       summary: summary(),
@@ -516,6 +531,20 @@ describe("live workspace controller", () => {
         replaceState: true
       }
     );
+  });
+
+  it("keeps browser auth recovery navigation instead of falling back to live navigation", async () => {
+    const goto = vi.fn().mockResolvedValue(undefined);
+    const trySelect = vi.fn().mockRejectedValue(new Error("auth_recovery_started"));
+
+    const mode = await navigateWithLiveSelectionFallback({
+      href: "/live?course_id=course-1&unit_id=unit-1&student_sub=student-1&task_id=task-1",
+      trySelect,
+      goto
+    });
+
+    expect(mode).toBe("auth-recovery");
+    expect(goto).not.toHaveBeenCalled();
   });
 
   it("falls back to canonical navigation when local task selection fails", async () => {

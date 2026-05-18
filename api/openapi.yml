@@ -6611,9 +6611,12 @@ paths:
         '401':
           description: Unauthenticated
           x-gustav-auth-failure-reason-codes:
-            - missing_bearer
-            - invalid_bearer
+            - session_bootstrap_missing_bearer
+            - session_bootstrap_invalid_bearer
             - bff_session_missing
+            - bff_session_read_empty
+            - bff_session_token_refresh_failed
+            - continuation_loop_guard_triggered
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.

@@ -352,8 +352,23 @@ export function startLoginFlow(event: RequestEvent): Response {
 }
 
 export function startContinuationFlow(event: RequestEvent): Response {
+  const redirectPath = safeRedirectPath(event.url.searchParams.get("redirect"));
+  const now = Math.floor(Date.now() / 1000);
+  const activeContinuation = parseFlowCookie(event.cookies.get(FRONTEND_FLOW_COOKIE_NAME)).find(
+    (candidate) =>
+      candidate.expiresAt > now &&
+      candidate.mode === "silent-continuity" &&
+      candidate.redirectPath === redirectPath
+  );
+  if (activeContinuation) {
+    console.info("auth.continuity", {
+      reason: "continuation_loop_guard_triggered"
+    });
+    clearFlowCookie(event);
+    return createRedirectResponse(loginEntryHref(redirectPath));
+  }
   const flow: AuthFlowRecord = {
-    ...createFlow(event.url, safeRedirectPath(event.url.searchParams.get("redirect"))),
+    ...createFlow(event.url, redirectPath),
     mode: "silent-continuity"
   };
   addFlowCookie(event, flow);

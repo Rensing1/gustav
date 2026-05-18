@@ -72,6 +72,15 @@ def test_frontend_contains_sveltekit_basics() -> None:
     assert '/h5p/webcomponents/' in vite_config_src
 
 
+def test_sveltekit_assets_are_root_relative_for_auth_recovery() -> None:
+    """SvelteKit must not emit nested relative asset paths on protected routes."""
+    svelte_config_path = REPO_ROOT / "frontend" / "svelte.config.js"
+    svelte_config_src = svelte_config_path.read_text(encoding="utf-8")
+
+    assert "paths:" in svelte_config_src
+    assert "relative: false" in svelte_config_src
+
+
 def test_compose_and_caddy_route_app_to_frontend_and_api_to_fastapi() -> None:
     compose_path = REPO_ROOT / "docker-compose.yml"
     caddyfile_path = REPO_ROOT / "reverse-proxy" / "Caddyfile"

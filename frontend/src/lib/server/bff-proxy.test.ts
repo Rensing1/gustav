@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { backendRequestMock } = vi.hoisted(() => ({
   backendRequestMock: vi.fn()
@@ -10,6 +10,10 @@ vi.mock("$lib/server/api", () => ({
 
 import { proxyBackendWrite } from "./bff-proxy";
 import { proxyBackendRead } from "./bff-proxy";
+
+beforeEach(() => {
+  backendRequestMock.mockReset();
+});
 
 describe("proxyBackendWrite", () => {
   it("preserves security headers from backend write responses", async () => {
@@ -37,6 +41,33 @@ describe("proxyBackendWrite", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("vary")).toBe("Origin");
     await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it("keeps final browser write 401 responses observable instead of redirecting inside fetch", async () => {
+    backendRequestMock.mockResolvedValue(new Response(null, { status: 401 }));
+
+    const fetchFn = vi.fn() as never;
+    const cookies = {} as never;
+
+    await proxyBackendWrite({
+      fetchFn,
+      cookies,
+      path: "/api/teaching/units/unit-1/sections/reorder",
+      method: "POST",
+      body: { section_ids: ["section-1"] }
+    });
+
+    expect(backendRequestMock).toHaveBeenCalledTimes(1);
+    expect(backendRequestMock).toHaveBeenCalledWith(
+      fetchFn,
+      cookies,
+      "/api/teaching/units/unit-1/sections/reorder",
+      expect.objectContaining({
+        method: "POST",
+        includeSameOrigin: true
+      })
+    );
+    expect(backendRequestMock.mock.calls[0]?.[3]).not.toHaveProperty("authRedirectPath");
   });
 });
 
@@ -71,6 +102,30 @@ describe("proxyBackendRead", () => {
         includeSameOrigin: true
       }
     );
+  });
+
+  it("keeps final browser read 401 responses observable instead of redirecting inside fetch", async () => {
+    backendRequestMock.mockResolvedValue(new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401 }));
+
+    const fetchFn = vi.fn() as never;
+    const cookies = {} as never;
+
+    await proxyBackendRead({
+      fetchFn,
+      cookies,
+      path: "/api/teaching/courses/course-1/units/unit-1/submissions/summary"
+    });
+
+    expect(backendRequestMock).toHaveBeenCalledWith(
+      fetchFn,
+      cookies,
+      "/api/teaching/courses/course-1/units/unit-1/submissions/summary",
+      {
+        method: "GET",
+        includeSameOrigin: true
+      }
+    );
+    expect(backendRequestMock.mock.calls[0]?.[3]).not.toHaveProperty("authRedirectPath");
   });
 
   it("preserves security headers from backend read responses", async () => {

@@ -354,6 +354,23 @@ describe("startContinuationFlow", () => {
 
     expect(flow.redirectPath).toBeNull();
   });
+
+  it("falls back to visible login when a continuation flow loops for the same redirect", () => {
+    const cookies = new MemoryCookies();
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    startContinuationFlow(createEvent("https://app.localhost/auth/continue?redirect=/learning", cookies, vi.fn() as never));
+    const response = startContinuationFlow(
+      createEvent("https://app.localhost/auth/continue?redirect=/learning", cookies, vi.fn() as never)
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/?redirect=%2Flearning&reason=session_expired");
+    expect(infoSpy).toHaveBeenCalledWith("auth.continuity", {
+      reason: "continuation_loop_guard_triggered"
+    });
+    infoSpy.mockRestore();
+  });
 });
 
 describe("assertSecureFrontendSessionConfig", () => {

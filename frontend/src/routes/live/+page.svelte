@@ -5,6 +5,7 @@
   import type { LearningSubmission } from "$lib/types/learning";
   import type { LiveDetailSubmission, LiveSummaryPayload, LiveUnitDashboardRow, LiveUnitDashboardView } from "$lib/types/home";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
+  import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";
   import { renderMarkdown } from "$lib/utils/markdown";
   import {
     buildDashboardViewModel,
@@ -201,6 +202,9 @@
       cache: "no-store",
       credentials: "include",
     });
+    if (handleBrowserAuthRecovery(response)) {
+      throw new Error("auth_recovery_started");
+    }
     if (!response.ok) {
       throw new Error(`live_summary_fetch_failed_${response.status}`);
     }
@@ -228,6 +232,9 @@
         credentials: "include",
       }
     );
+    if (handleBrowserAuthRecovery(response)) {
+      throw new Error("auth_recovery_started");
+    }
     if (!response.ok) {
       throw new Error(`live_detail_fetch_failed_${response.status}`);
     }
@@ -242,6 +249,9 @@
     });
     if (response.status === 204) {
       return { status: 204 as const };
+    }
+    if (handleBrowserAuthRecovery(response)) {
+      throw new Error("auth_recovery_started");
     }
     if (!response.ok) {
       throw new Error(`live_delta_fetch_failed_${response.status}`);

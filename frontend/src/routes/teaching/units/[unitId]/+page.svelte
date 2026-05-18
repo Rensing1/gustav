@@ -17,6 +17,7 @@
   import GraphUnitNode from "$lib/components/teacher-unit-graph/GraphUnitNode.svelte";
   import GraphInspectorPanel from "$lib/components/ui/GraphInspectorPanel.svelte";
   import TeacherGraphWorkspaceFrame from "$lib/components/ui/TeacherGraphWorkspaceFrame.svelte";
+  import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";
   import {
     buildTeacherUnitFlow,
     type TeacherFlowEdge,
@@ -453,6 +454,9 @@
       body: body ? JSON.stringify(body) : undefined
     });
 
+    if (handleBrowserAuthRecovery(response)) {
+      throw new Error("auth_recovery_started");
+    }
     if (!response.ok) {
       let errorPayload: { detail?: string; error?: string } = {};
       try {
@@ -673,6 +677,10 @@
       setGraphMessage("Abschnitte gespeichert.", "success");
       await reloadWorkspace({ section: localSelection.kind === "section" ? localSelection.section.id : null });
     } catch (error) {
+      const detail = error instanceof Error ? error.message : "";
+      if (detail === "auth_recovery_started") {
+        return;
+      }
       setGraphMessage("Abschnitte konnten nicht neu geordnet werden.", "error");
       await rebuildFlow(localSelection);
     }
@@ -786,6 +794,9 @@
       await reloadWorkspace({ module: nodeId, phase: targetPhaseId });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "";
+      if (detail === "auth_recovery_started") {
+        return;
+      }
       console.warn("Module reorder failed", {
         detail,
         nodeId,
@@ -823,6 +834,9 @@
       await reloadWorkspace({ phase: localSelection.phase.id });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "";
+      if (detail === "auth_recovery_started") {
+        return;
+      }
       setGraphMessage(phaseReorderMessage(detail), "error");
       await rebuildFlow(localSelection);
     }
@@ -885,6 +899,10 @@
         edgeTo: connection.target
       });
     } catch (error) {
+      const detail = error instanceof Error ? error.message : "";
+      if (detail === "auth_recovery_started") {
+        return;
+      }
       setGraphMessage("Die Kante konnte nicht angelegt werden.", "error");
       await rebuildFlow(localSelection);
     }

@@ -162,3 +162,11 @@ Abschluss:
 - Non-idempotente POSTs werden nach finalem `401` nicht automatisch erneut abgespielt.
 - Falls ein geplanter Reason-Code im bestehenden Code bereits gleichwertig vorhanden ist, wird er wiederverwendet statt umbenannt.
 - Falls sich beim Testdesign zeigt, dass ein Arbeitspaket nur Dokumentation ohne Verhaltensänderung erzeugen würde, wird es nicht umgesetzt.
+
+## Ergebnis
+
+- SvelteKit erzeugt Assets root-relativ (`paths.relative = false`), damit geschützte Routen keine verschachtelten `_app`-Pfade mehr erhalten.
+- Browser-facing BFF-Proxies reichen einen sicheren lokalen Redirect-Kontext an `backendRequest()` weiter; H5P-/Maschinenrouten bleiben API-artig.
+- Direkte Browser-`fetch()`-Aufrufe in Learning und Live nutzen eine gemeinsame 401-Recovery nach `/auth/continue`.
+- Auth-Diagnosecodes sind konsolidiert, tokenfrei dokumentiert und durch Tests abgesichert; der Continuation-Loop-Guard fällt kontrolliert zum sichtbaren Login zurück.
+- Verifikation: fokussierte Frontend-/Backend-Tests grün, `npm run check` grün, `make verify` grün mit `OPENAI_E2E_ROOT=http://100.80.221.81:11434/api/v1 OPENAI_E2E_MODEL=Ministral-3-3B-Instruct-2512-GGUF`.

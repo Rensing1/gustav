@@ -77,11 +77,14 @@ export async function navigateWithLiveSelectionFallback(args: {
   href: string;
   trySelect: () => Promise<void>;
   goto: LiveWorkspaceFallbackNavigate;
-}): Promise<"local" | "fallback"> {
+}): Promise<"local" | "fallback" | "auth-recovery"> {
   try {
     await args.trySelect();
     return "local";
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "auth_recovery_started") {
+      return "auth-recovery";
+    }
     await args.goto(args.href, {
       keepFocus: true,
       noScroll: true,

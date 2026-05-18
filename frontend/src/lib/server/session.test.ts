@@ -150,7 +150,7 @@ describe("readFreshTokenSession", () => {
 
     expect(session?.accessToken).toBe("fresh-access-token-from-other-request");
     expect(infoSpy).toHaveBeenCalledWith("auth.session", {
-      reason: "token_refresh_failed",
+      reason: "bff_session_token_refresh_failed",
       status: 400,
       recovered: "concurrent_session"
     });
@@ -159,6 +159,22 @@ describe("readFreshTokenSession", () => {
       "http://backend.test/backend-internal/app/bff-session",
       expect.objectContaining({ method: "DELETE" })
     );
+    infoSpy.mockRestore();
+  });
+
+  it("logs an empty BFF session read without exposing the session id", async () => {
+    const cookies = new MemoryCookies();
+    cookies.store.set("gustav_bff_session", "bff-session-empty");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+
+    const session = await readFreshTokenSession(cookies as never, fetchMock);
+
+    expect(session).toBeNull();
+    expect(infoSpy).toHaveBeenCalledWith("auth.session", {
+      reason: "bff_session_read_empty"
+    });
+    expect(JSON.stringify(infoSpy.mock.calls)).not.toContain("bff-session-empty");
     infoSpy.mockRestore();
   });
 });

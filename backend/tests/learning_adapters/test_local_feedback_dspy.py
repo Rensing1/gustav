@@ -554,7 +554,45 @@ def test_adapter_uses_analysis_and_synthesis_visual_env_overrides(monkeypatch: p
     assert synthesis_kwargs.get("extra_body", {}).get("think") == "high"
 
 
-def test_visual_feedback_rate_limit_is_classified_as_provider_rate_limited(
+def test_adapter_disables_internal_retries_for_visual_lms(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.learning.adapters import local_feedback
+
+    observed: dict = {}
+    _install_fake_dspy(monkeypatch, observed=observed)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://example/api/v1")
+    monkeypatch.setenv("AI_TEXT_MODEL", "text-model")
+    monkeypatch.setenv("AI_VISUAL_MODEL", "visual-model")
+
+    from backend.learning.adapters import local_vision
+    from backend.learning.adapters.dspy import visual_feedback_program
+
+    monkeypatch.setattr(local_vision, "_resolve_submission_image_bytes", lambda **_: "AA==")
+    monkeypatch.setattr(
+        visual_feedback_program,
+        "analyze_visual_feedback",
+        lambda **_: FeedbackResult(
+            feedback_md="OK",
+            analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
+            parse_status="parsed_structured",
+        ),
+    )
+
+    adapter = local_feedback.build()
+    adapter.analyze_visual(  # type: ignore[attr-defined]
+        submission={"id": "s", "kind": "image", "mime_type": "image/png"},
+        job_payload={"mime_type": "image/png"},
+        criteria=["K1"],
+        instruction_md=None,
+        teacher_context_md=None,
+    )
+
+    lm_calls = observed.get("lm_calls") or []
+    assert len(lm_calls) == 2
+    assert all(call["kwargs"].get("num_retries") == 0 for call in lm_calls)
+
+
+def test_visual_feedback_rate_limit_after_fallback_is_classified_as_complex_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from backend.learning.adapters import local_feedback
@@ -569,7 +607,8 @@ def test_visual_feedback_rate_limit_is_classified_as_provider_rate_limited(
     from backend.learning.adapters import local_vision
     from backend.learning.adapters.dspy import visual_feedback_program
 
-    monkeypatch.setattr(local_vision, "_resolve_submission_image_bytes", lambda **_: "AA==")
+    valid_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+    monkeypatch.setattr(local_vision, "_resolve_submission_image_bytes", lambda **_: valid_png_b64)
 
     def _raise_rate_limit(**_: object) -> None:
         import litellm
@@ -589,7 +628,7 @@ def test_visual_feedback_rate_limit_is_classified_as_provider_rate_limited(
     monkeypatch.setattr(visual_feedback_program, "analyze_visual_feedback", _raise_rate_limit)
 
     adapter = local_feedback.build()
-    with pytest.raises(FeedbackTransientError) as exc:
+    with pytest.raises(FeedbackPermanentError) as exc:
         adapter.analyze_visual(  # type: ignore[attr-defined]
             submission={"id": "s", "kind": "image", "mime_type": "image/png"},
             job_payload={"mime_type": "image/png"},
@@ -598,7 +637,7 @@ def test_visual_feedback_rate_limit_is_classified_as_provider_rate_limited(
             teacher_context_md=None,
         )
 
-    assert str(exc.value) == "provider_rate_limited"
+    assert str(exc.value) == "image_too_complex_for_provider"
 
 
 def test_adapter_uses_magistral_reasoning_effort_overrides(monkeypatch: pytest.MonkeyPatch) -> None:

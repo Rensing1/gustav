@@ -36,6 +36,9 @@ LOG = logging.getLogger(__name__)
 
 _VISUAL_PROVIDER_COMPLEX_PNG_MIN_EDGE = 1280
 _VISUAL_PROVIDER_COMPLEX_PNG_MIN_BASE64_CHARS = 300_000
+_VISUAL_PROVIDER_RENDITION_MAX_EDGE = 1280
+_VISUAL_PROVIDER_RENDITION_MAX_PIXELS = 16_777_216
+_VISUAL_PROVIDER_RENDITION_JPEG_QUALITY = 85
 
 
 def _safe_response_header(exc: Exception, name: str) -> str:
@@ -123,6 +126,64 @@ def _provider_image_data_uri(
     return f"data:{mime};base64,{image_b64}"
 
 
+def _decode_provider_image_b64(image_b64: str) -> bytes:
+    try:
+        return base64.b64decode(image_b64, validate=True)
+    except Exception as exc:
+        raise FeedbackPermanentError("invalid_upload_content") from exc
+
+
+def _provider_safe_jpeg_rendition_b64(*, image_b64: str) -> str:
+    """Return a provider-bound JPEG rendition without mutating the stored upload."""
+    raw = _decode_provider_image_b64(image_b64)
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(BytesIO(raw)) as image:
+            width, height = image.size
+            pixels = int(width) * int(height)
+            if pixels > _VISUAL_PROVIDER_RENDITION_MAX_PIXELS:
+                LOG.warning(
+                    "learning.feedback.visual_image_rendition_pixel_limit_exceeded "
+                    "width=%s height=%s pixels=%s max_pixels=%s bytes=%s base64_chars=%s",
+                    width,
+                    height,
+                    pixels,
+                    _VISUAL_PROVIDER_RENDITION_MAX_PIXELS,
+                    len(raw),
+                    len(image_b64),
+                )
+                raise FeedbackPermanentError("image_too_complex_for_provider")
+            image = ImageOps.exif_transpose(image)
+            has_alpha = image.mode in {"RGBA", "LA"} or (
+                image.mode == "P" and "transparency" in getattr(image, "info", {})
+            )
+            if has_alpha:
+                rgba = image.convert("RGBA")
+                background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+                background.alpha_composite(rgba)
+                image = background.convert("RGB")
+            else:
+                image = image.convert("RGB")
+            image.thumbnail(
+                (_VISUAL_PROVIDER_RENDITION_MAX_EDGE, _VISUAL_PROVIDER_RENDITION_MAX_EDGE),
+                Image.Resampling.LANCZOS,
+            )
+            out = BytesIO()
+            image.save(
+                out,
+                format="JPEG",
+                quality=_VISUAL_PROVIDER_RENDITION_JPEG_QUALITY,
+                optimize=True,
+                progressive=False,
+            )
+    except FeedbackPermanentError:
+        raise
+    except Exception as exc:
+        raise FeedbackPermanentError("provider_image_rendition_failed") from exc
+    return base64.b64encode(out.getvalue()).decode("ascii")
+
+
 def _provider_image_diagnostics(*, mime: str, image_b64: str) -> dict[str, object]:
     """Return PII-free image metadata used only for provider-failure diagnostics."""
     diagnostics: dict[str, object] = {"mime": mime, "base64_chars": len(image_b64)}
@@ -132,7 +193,7 @@ def _provider_image_diagnostics(*, mime: str, image_b64: str) -> dict[str, objec
     except Exception:
         return diagnostics
 
-    if mime != "image/png":
+    if mime not in {"image/png", "image/jpeg"}:
         return diagnostics
     try:
         from PIL import Image
@@ -148,6 +209,27 @@ def _provider_image_diagnostics(*, mime: str, image_b64: str) -> dict[str, objec
             exc.__class__.__name__,
         )
     return diagnostics
+
+
+def _call_visual_feedback_program(
+    *,
+    image_data_uri: str,
+    criteria: Sequence[str],
+    instruction_md: str | None,
+    teacher_context_md: str | None,
+    analysis_lm,
+    synthesis_lm,
+) -> FeedbackResult:
+    from backend.learning.adapters.dspy import visual_feedback_program
+
+    return visual_feedback_program.analyze_visual_feedback(
+        image_data_uri=image_data_uri,
+        criteria=criteria,
+        teacher_instructions_md=instruction_md,
+        teacher_context_md=teacher_context_md,
+        analysis_lm=analysis_lm,
+        synthesis_lm=synthesis_lm,
+    )
 
 
 def _is_complex_provider_png_diagnostic(diagnostics: dict[str, object] | None) -> bool:
@@ -288,6 +370,7 @@ class _LocalFeedbackAdapter:
         temperature: float,
         think_level: str | None,
         reasoning_effort: str | None,
+        num_retries: int | None = None,
     ):
         self._require_common_config()
         try:
@@ -306,6 +389,8 @@ class _LocalFeedbackAdapter:
         maybe_reasoning_effort = dspy_helpers.resolve_reasoning_effort(model, reasoning_effort)
         if maybe_reasoning_effort:
             lm_kwargs["reasoning_effort"] = maybe_reasoning_effort
+        if num_retries is not None:
+            lm_kwargs["num_retries"] = num_retries
         return dspy.LM(model, **lm_kwargs)  # type: ignore[attr-defined]
 
     def _get_text_analysis_lm(self):  # type: ignore[no-untyped-def]
@@ -339,6 +424,7 @@ class _LocalFeedbackAdapter:
             temperature=self._visual_analysis_temperature,
             think_level=self._visual_analysis_think_level,
             reasoning_effort=self._visual_analysis_reasoning_effort,
+            num_retries=0,
         )
         return self._visual_analysis_lm
 
@@ -353,6 +439,7 @@ class _LocalFeedbackAdapter:
             temperature=self._visual_synthesis_temperature,
             think_level=self._visual_synthesis_think_level,
             reasoning_effort=self._visual_synthesis_reasoning_effort,
+            num_retries=0,
         )
         return self._visual_synthesis_lm
 
@@ -418,6 +505,7 @@ class _LocalFeedbackAdapter:
         max_download_bytes = get_learning_max_upload_bytes()
 
         image_data_uri: str | None = None
+        image_b64: str | None = None
         provider_image_diagnostics: dict[str, object] | None = None
         try:
             if mime in {"image/jpeg", "image/png"}:
@@ -454,11 +542,10 @@ class _LocalFeedbackAdapter:
         if not image_data_uri:
             raise FeedbackTransientError("image_unavailable")
         try:
-            from backend.learning.adapters.dspy import visual_feedback_program
-            return visual_feedback_program.analyze_visual_feedback(
+            return _call_visual_feedback_program(
                 image_data_uri=image_data_uri,
                 criteria=criteria,
-                teacher_instructions_md=instruction_md,
+                instruction_md=instruction_md,
                 teacher_context_md=teacher_context_md,
                 analysis_lm=analysis_lm,
                 synthesis_lm=synthesis_lm,
@@ -472,6 +559,65 @@ class _LocalFeedbackAdapter:
         except ImportError as exc:
             raise FeedbackTransientError("dspy_unavailable") from exc
         except Exception as exc:
+            if image_b64 and mime in {"image/jpeg", "image/png"} and _is_provider_rate_limit_exception(exc):
+                original_usage_events = list(getattr(exc, "usage_events", []) or [])
+                try:
+                    fallback_b64 = _provider_safe_jpeg_rendition_b64(image_b64=image_b64)
+                except FeedbackPermanentError as rendition_exc:
+                    raise FeedbackPermanentError(
+                        str(rendition_exc),
+                        usage_events=[
+                            *original_usage_events,
+                            *list(getattr(rendition_exc, "usage_events", []) or []),
+                        ],
+                    ) from rendition_exc
+                fallback_uri = _provider_image_data_uri(mime="image/jpeg", image_b64=fallback_b64)
+                try:
+                    fallback_result = _call_visual_feedback_program(
+                        image_data_uri=fallback_uri,
+                        criteria=criteria,
+                        instruction_md=instruction_md,
+                        teacher_context_md=teacher_context_md,
+                        analysis_lm=analysis_lm,
+                        synthesis_lm=synthesis_lm,
+                    )
+                    fallback_result.usage_events = [
+                        *original_usage_events,
+                        *list(getattr(fallback_result, "usage_events", []) or []),
+                    ]
+                    return fallback_result
+                except Exception as fallback_exc:
+                    fallback_usage_events = list(getattr(fallback_exc, "usage_events", []) or [])
+                    combined_usage_events = [*original_usage_events, *fallback_usage_events]
+                    if _is_provider_rate_limit_exception(fallback_exc):
+                        fallback_diagnostics = _provider_image_diagnostics(mime="image/jpeg", image_b64=fallback_b64)
+                        LOG.warning(
+                            "learning.feedback.visual_image_too_complex_for_provider mime=image/jpeg "
+                            "width=%s height=%s bytes=%s base64_chars=%s provider=%s model=%s "
+                            "status_code=%s provider_error_type=%s provider_error_code=%s retry_after=%s request_id=%s",
+                            fallback_diagnostics.get("width", ""),
+                            fallback_diagnostics.get("height", ""),
+                            fallback_diagnostics.get("bytes", ""),
+                            fallback_diagnostics.get("base64_chars", ""),
+                            _safe_exception_attr(fallback_exc, "llm_provider"),
+                            _safe_exception_attr(fallback_exc, "model"),
+                            _safe_exception_attr(fallback_exc, "status_code") or "429",
+                            _safe_exception_attr(fallback_exc, "type"),
+                            _safe_exception_attr(fallback_exc, "code"),
+                            _safe_response_header(fallback_exc, "retry-after"),
+                            _safe_response_header(fallback_exc, "x-request-id"),
+                        )
+                        raise FeedbackPermanentError(
+                            "image_too_complex_for_provider",
+                            usage_events=combined_usage_events,
+                        ) from fallback_exc
+                    if combined_usage_events:
+                        setattr(fallback_exc, "usage_events", combined_usage_events)
+                    _raise_feedback_error_for_exception(
+                        fallback_exc,
+                        default_transient_code="visual_feedback_failed",
+                        provider_image_diagnostics=_provider_image_diagnostics(mime="image/jpeg", image_b64=fallback_b64),
+                    )
             _raise_feedback_error_for_exception(
                 exc,
                 default_transient_code="visual_feedback_failed",

@@ -607,6 +607,23 @@ Prüfpunkte vor Abschluss:
 - Performance: Rendition dekodiert das Bild höchstens im Fehlerfall nach Original-429; keine zusätzliche Arbeit auf erfolgreichen Originalpfaden.
 - Robustheit: `provider_image_rendition_failed` wird nicht still durch das fragile Original ersetzt.
 
+## Review-Nachtrag 2026-05-19: P2 Pixelbudget vor Rendition-Dekodierung
+
+Der externe Review-Hinweis P2 ist berechtigt: `LEARNING_MAX_UPLOAD_BYTES` begrenzt nur die komprimierte Upload-Datei, nicht die entpackten Pixel im Worker. Ein stark komprimiertes großes Bild könnte im JPEG-Fallback vor dem Downscale sehr viel RAM belegen.
+
+Umsetzung:
+
+- `_provider_safe_jpeg_rendition_b64(...)` prüft direkt nach `Image.open(...)` die Bildmaße und bricht vor `ImageOps.exif_transpose(...)`, `convert(...)`, Alpha-Compositing und `thumbnail(...)` ab, wenn `width * height > 16_777_216`.
+- Der Abbruch nutzt intern `FeedbackPermanentError("image_too_complex_for_provider")`, damit die öffentliche Fehlermeldung die bestehende, dateiformatunabhängige Schüler-Handlungsanweisung verwendet.
+- Das Log bleibt PII-frei und enthält nur Breite, Höhe, Pixelzahl, Limit, Bytezahl und Base64-Länge.
+- Wenn der Pixelbudget-Abbruch nach einem ursprünglichen Provider-429 passiert, übernimmt der Adapter die `usage_events` dieses ersten Provider-Calls in den permanenten Fehler.
+- P1 bleibt ausdrücklich außerhalb dieses Nachtrags; die Klassifikation eines doppelten Provider-429 wird hier nicht verändert.
+
+Zusätzliche Tests:
+
+- Ein künstliches großes PNG wird vor EXIF-Transpose und Dekodierung als `image_too_complex_for_provider` abgelehnt.
+- Nach ursprünglichem Provider-429 plus Pixelbudget-Abbruch erfolgt kein zweiter Provider-Call, und die Usage-Events des ersten Calls bleiben erhalten.
+
 ## Annahmen
 
 - Der erste 429 auf einem direkten PNG/JPG-Bild ist hinreichend bildbezogen, um genau einen JPEG-1280-Fallback zu rechtfertigen.

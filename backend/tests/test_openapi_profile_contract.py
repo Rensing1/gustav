@@ -119,12 +119,77 @@ def test_openapi_documents_cli_scopes_for_authoring_resources() -> None:
         ("/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}", "patch", ["write"]),
         ("/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}", "delete", ["delete"]),
         ("/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url", "get", ["read"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}", "patch", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}", "delete", ["delete"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/reorder", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/upload-intents", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/finalize", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}", "patch", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}", "delete", ["delete"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/reorder", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export", "get", ["read"]),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/import", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/reset", "post", ["write"]),
     ]
     for path, method, scopes in expectations:
         op = spec["paths"][path][method]
         assert {"cookieAuth": []} in op["security"], f"{method.upper()} {path}"
         assert {"cliTokenAuth": []} in op["security"], f"{method.upper()} {path}"
         assert op["x-required-cli-scopes"] == scopes, f"{method.upper()} {path}"
+
+
+def test_h5p_editor_json_endpoints_remain_cookie_only_for_cli_package_workflow() -> None:
+    spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
+
+    for path, method in (
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/editor-model", "get"),
+        ("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/save", "post"),
+    ):
+        op = spec["paths"][path][method]
+        assert op["security"] == [{"cookieAuth": []}]
+        assert "x-required-cli-scopes" not in op
+
+
+def test_openapi_documents_h5p_import_upload_limit_response() -> None:
+    spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
+
+    for path in (
+        "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/import",
+    ):
+        responses = spec["paths"][path]["post"]["responses"]
+        assert "413" in responses, path
+        assert "H5P_MAX_UPLOAD_BYTES" in responses["413"]["description"], path
+
+
+def test_openapi_documents_module_authoring_repo_unavailable_responses() -> None:
+    spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
+
+    expectations = [
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks", "post"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}", "patch"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}", "delete"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/reorder", "post"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/import", "post"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/reset", "post"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials", "post"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}", "patch"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}", "delete"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/reorder", "post"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/upload-intents", "post"),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/finalize", "post"),
+    ]
+    for path, method in expectations:
+        responses = spec["paths"][path][method]["responses"]
+        assert "503" in responses, f"{method.upper()} {path}"
+        assert "Service unavailable" in responses["503"]["description"], f"{method.upper()} {path}"
 
 
 def test_openapi_cli_surface_matches_runtime_capability_table() -> None:

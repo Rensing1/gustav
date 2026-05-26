@@ -105,6 +105,8 @@ services:
       - REQUIRE_STORAGE_VERIFY=${REQUIRE_STORAGE_VERIFY:-true}
       # Teacher-only H5P review capability tokens (must match h5p service).
       - H5P_REVIEW_TOKEN_SECRET=${H5P_REVIEW_TOKEN_SECRET:-CHANGE_ME_DEV}
+      # Web-to-H5P service auth for CLI package workflows (must match h5p service).
+      - H5P_INTERNAL_SHARED_SECRET=${H5P_INTERNAL_SHARED_SECRET:-CHANGE_ME_DEV}
     restart: unless-stopped
     # All Supabase services reachable via shared external network
     networks:
@@ -166,6 +168,8 @@ services:
       - H5P_MAX_UPLOAD_BYTES=104857600
       # Must match the web service secret (used to validate review tokens).
       - H5P_REVIEW_TOKEN_SECRET=${H5P_REVIEW_TOKEN_SECRET:-CHANGE_ME_DEV}
+      # Must match the web service secret (used for internal Web→H5P CLI calls).
+      - H5P_INTERNAL_SHARED_SECRET=${H5P_INTERNAL_SHARED_SECRET:-CHANGE_ME_DEV}
     healthcheck:
       test:
         - CMD

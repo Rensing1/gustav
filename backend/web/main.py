@@ -514,6 +514,88 @@ CLI_AUTHORING_CAPABILITIES: tuple[CLIAuthoringCapability, ...] = (
         "/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder",
         "write",
     ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "GET",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url",
+        "read",
+    ),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/modules/{module_id}/materials", "write"),
+    CLIAuthoringCapability(
+        "PATCH",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "DELETE",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}",
+        "delete",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/materials/reorder",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/materials/upload-intents",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/materials/finalize",
+        "write",
+    ),
+    CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/modules/{module_id}/tasks", "write"),
+    CLIAuthoringCapability(
+        "PATCH",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "DELETE",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}",
+        "delete",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/tasks/reorder",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "GET",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export",
+        "read",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/import",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/reset",
+        "write",
+    ),
 )
 
 

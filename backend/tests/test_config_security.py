@@ -20,6 +20,7 @@ def _set_minimal_prod_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_NON_DUMMY")
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "real-bff-secret")
     monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
+    monkeypatch.setenv("H5P_INTERNAL_SHARED_SECRET", "real-internal-h5p-secret")
     monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
     monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
@@ -70,6 +71,7 @@ async def test_dsn_user_guard_prod_raises_if_limited_user(monkeypatch: pytest.Mo
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
     monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_NON_DUMMY")
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "real-bff-secret")
+    monkeypatch.setenv("H5P_INTERNAL_SHARED_SECRET", "real-internal-h5p-secret")
     # Ensure Keycloak URLs are https to satisfy production guards
     monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
@@ -97,6 +99,7 @@ async def test_dsn_user_guard_prod_allows_nonlimited_user(monkeypatch: pytest.Mo
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
     monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_NON_DUMMY")
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "real-bff-secret")
+    monkeypatch.setenv("H5P_INTERNAL_SHARED_SECRET", "real-internal-h5p-secret")
     # Ensure Keycloak URLs are https to satisfy production guards
     monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
@@ -224,6 +227,7 @@ async def test_prod_requires_storage_verify_and_disables_proxy(monkeypatch: pyte
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
     monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_SECRET")
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "real-bff-secret")
+    monkeypatch.setenv("H5P_INTERNAL_SHARED_SECRET", "real-internal-h5p-secret")
     monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
@@ -270,6 +274,7 @@ async def test_prod_forbids_auto_create_storage_buckets(monkeypatch: pytest.Monk
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
     monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_SECRET")
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "real-bff-secret")
+    monkeypatch.setenv("H5P_INTERNAL_SHARED_SECRET", "real-internal-h5p-secret")
     monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
@@ -323,6 +328,7 @@ async def test_h5p_review_token_secret_guard_prod_allows_real_secret(monkeypatch
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
     monkeypatch.setenv("KC_ADMIN_CLIENT_SECRET", "REAL_SECRET")
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "real-bff-secret")
+    monkeypatch.setenv("H5P_INTERNAL_SHARED_SECRET", "real-internal-h5p-secret")
     monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
@@ -338,6 +344,32 @@ async def test_h5p_review_token_secret_guard_prod_allows_real_secret(monkeypatch
 
     importlib.reload(cfg)
     cfg.ensure_secure_config_on_startup()
+
+
+@pytest.mark.anyio
+async def test_h5p_internal_shared_secret_guard_prod_raises_when_missing(monkeypatch: pytest.MonkeyPatch):
+    """In prod-like env, the Web service must fail fast without the H5P internal shared secret."""
+    _set_minimal_prod_env(monkeypatch)
+    monkeypatch.delenv("H5P_INTERNAL_SHARED_SECRET", raising=False)
+
+    from backend.web import config as cfg  # type: ignore
+
+    importlib.reload(cfg)
+    with pytest.raises(SystemExit, match="H5P_INTERNAL_SHARED_SECRET"):
+        cfg.ensure_secure_config_on_startup()
+
+
+@pytest.mark.anyio
+async def test_h5p_internal_shared_secret_guard_prod_rejects_placeholder(monkeypatch: pytest.MonkeyPatch):
+    """In prod-like env, placeholder H5P internal shared secrets must be rejected."""
+    _set_minimal_prod_env(monkeypatch)
+    monkeypatch.setenv("H5P_INTERNAL_SHARED_SECRET", "CHANGE_ME_DEV")
+
+    from backend.web import config as cfg  # type: ignore
+
+    importlib.reload(cfg)
+    with pytest.raises(SystemExit, match="H5P_INTERNAL_SHARED_SECRET"):
+        cfg.ensure_secure_config_on_startup()
 
 
 @pytest.mark.anyio

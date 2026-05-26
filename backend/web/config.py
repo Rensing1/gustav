@@ -65,7 +65,14 @@ def ensure_secure_config_on_startup() -> None:
             "Refusing to start: H5P_REVIEW_TOKEN_SECRET is unset or a placeholder in production."
         )
 
-    # 1e) SSR/browser CSRF token secret must be independent from H5P secrets.
+    # 1e) Internal Web-to-H5P shared secret must be configured for CLI package workflows.
+    h5p_internal_secret = (os.getenv("H5P_INTERNAL_SHARED_SECRET", "") or "").strip()
+    if not h5p_internal_secret or h5p_internal_secret.upper().startswith("CHANGE_ME"):
+        raise SystemExit(
+            "Refusing to start: H5P_INTERNAL_SHARED_SECRET is unset or a placeholder in production."
+        )
+
+    # 1f) SSR/browser CSRF token secret must be independent from H5P secrets.
     # Keep secrets separated so rotation/leak blast radius stays minimal.
     csrf_secret = (os.getenv("APP_CSRF_TOKEN_SECRET", "") or "").strip()
     if (

@@ -47,6 +47,8 @@ from .security import _is_same_origin
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
 H5P_INTERNAL_BASE = (os.getenv("H5P_INTERNAL_BASE") or "http://h5p:3000").rstrip("/")
+H5P_DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+H5P_UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 
 def _unit_delete_storage_metadata_dsn(repo: object) -> str | None:
@@ -1608,6 +1610,82 @@ def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False
     return JSONResponse(content=payload, status_code=status_code, headers=headers)
 
 
+def _safe_header_value(value: object) -> str:
+    """Return a conservative HTTP header value without control characters."""
+
+    return str(value or "").replace("\r", "").replace("\n", "").strip()
+
+
+def _h5p_max_upload_bytes() -> int:
+    """Return the shared H5P package upload limit used before Web→H5P forwarding."""
+
+    try:
+        configured = int(str(os.getenv("H5P_MAX_UPLOAD_BYTES") or H5P_DEFAULT_MAX_UPLOAD_BYTES).strip())
+    except (TypeError, ValueError):
+        return H5P_DEFAULT_MAX_UPLOAD_BYTES
+    return configured if configured > 0 else H5P_DEFAULT_MAX_UPLOAD_BYTES
+
+
+async def _read_h5p_upload_file(file: UploadFile) -> tuple[bytes | None, JSONResponse | None]:
+    """Read an H5P upload with a hard Web-side byte limit.
+
+    The H5P sidecar also enforces this limit, but the Web process must count
+    bytes first so a teacher or CLI token cannot force a full oversized package
+    into Web memory before forwarding.
+    """
+
+    max_bytes = _h5p_max_upload_bytes()
+    total = 0
+    chunks: list[bytes] = []
+    while True:
+        read_size = min(H5P_UPLOAD_CHUNK_BYTES, max_bytes + 1 - total)
+        if read_size <= 0:
+            return None, _private_error(
+                {"error": "payload_too_large", "detail": "h5p_upload_too_large"},
+                status_code=413,
+            )
+        chunk = await file.read(read_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            return None, _private_error(
+                {"error": "payload_too_large", "detail": "h5p_upload_too_large"},
+                status_code=413,
+            )
+        chunks.append(chunk)
+    return b"".join(chunks), None
+
+
+def _h5p_internal_auth_headers(request: Request | None) -> dict[str, str]:
+    """Build the trusted Web→H5P teacher context for CLI-authenticated calls."""
+
+    if request is None or not getattr(request.state, "cli_token_id", None):
+        return {}
+    secret = (os.getenv("H5P_INTERNAL_SHARED_SECRET") or "").strip()
+    if not secret:
+        return {}
+    user = getattr(request.state, "user", None)
+    if not isinstance(user, dict):
+        return {}
+    sub = _safe_header_value(user.get("sub"))
+    if not sub:
+        return {}
+    raw_roles = user.get("roles")
+    if isinstance(raw_roles, list):
+        roles = [_safe_header_value(role) for role in raw_roles if _safe_header_value(role)]
+    else:
+        roles = [_safe_header_value(user.get("role"))] if _safe_header_value(user.get("role")) else []
+    if not roles:
+        return {}
+    return {
+        "x-gustav-h5p-internal-secret": secret,
+        "x-gustav-user-sub": sub,
+        "x-gustav-user-name": _safe_header_value(user.get("name")) or sub,
+        "x-gustav-user-roles": ",".join(roles),
+    }
+
+
 async def _request_h5p_service(
     method: str,
     path: str,
@@ -1637,6 +1715,7 @@ async def _request_h5p_service(
         referer = str(request.headers.get("referer") or "").strip()
         if referer:
             headers["referer"] = referer
+        headers.update(_h5p_internal_auth_headers(request))
 
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         return await client.request(
@@ -3275,6 +3354,30 @@ async def get_unit_modules_graph(request: Request, unit_id: str):
     return _json_private(payload, status_code=200)
 
 
+def _get_unit_module_section_id_for_author(repo, *, unit_id: str, module_id: str, author_id: str) -> str | None:
+    """Return the backing section id for an owned module.
+
+    The section id is an internal storage detail. Module-scoped write routes use
+    this helper so CLI clients do not need an extra read-scoped lookup.
+    """
+
+    try:
+        try:
+            module = repo.get_unit_module_for_author(unit_id=unit_id, module_id=module_id, author_id=author_id)
+        except TypeError as exc:
+            if not _is_signature_compat_type_error(exc):
+                raise
+            module = repo.get_unit_module_for_author(unit_id, module_id, author_id)
+    except LookupError:
+        raise
+    except PermissionError:
+        raise
+    if not module:
+        return None
+    section_id = module.get("section_id") if isinstance(module, dict) else getattr(module, "section_id", None)
+    return str(section_id) if section_id else None
+
+
 @teaching_router.get("/api/teaching/units/{unit_id}/modules/{module_id}/content-target")
 async def get_unit_module_content_target(request: Request, unit_id: str, module_id: str):
     """Return the backing section id for a modular unit module.
@@ -3300,19 +3403,11 @@ async def get_unit_module_content_target(request: Request, unit_id: str, module_
     if not hasattr(repo, "get_unit_module_for_author"):
         return _private_error({"error": "service_unavailable", "detail": "modular_repo_unavailable"}, status_code=503)
     try:
-        try:
-            module = repo.get_unit_module_for_author(unit_id=unit_id, module_id=module_id, author_id=sub)
-        except TypeError as exc:
-            if not _is_signature_compat_type_error(exc):
-                raise
-            module = repo.get_unit_module_for_author(unit_id, module_id, sub)
+        section_id = _get_unit_module_section_id_for_author(repo, unit_id=unit_id, module_id=module_id, author_id=sub)
     except LookupError:
         return _private_error({"error": "not_found"}, status_code=404)
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
-    if not module:
-        return _private_error({"error": "not_found"}, status_code=404)
-    section_id = module.get("section_id") if isinstance(module, dict) else getattr(module, "section_id", None)
     if not section_id:
         return _private_error({"error": "not_found"}, status_code=404)
     return _json_private({"module_id": str(module_id), "section_id": str(section_id)}, status_code=200)
@@ -4051,6 +4146,112 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
+def _resolve_module_section_for_authoring_mutation(
+    request: Request,
+    *,
+    unit_id: str,
+    module_id: str,
+    task_id: str | None = None,
+) -> tuple[str | None, Response | JSONResponse | None]:
+    """Resolve a module-backed write/delete without requiring client read scope.
+
+    The API keeps module-to-section mapping server-side so least-privilege CLI
+    tokens can mutate module content with only write or delete scope. H5P task
+    writes pass `task_id` so path validation stays close to the shared resolver.
+    """
+
+    repo = _get_repo()
+    user, error = _require_teacher(request)
+    if error:
+        return None, error
+    csrf = _csrf_guard(request)
+    if csrf:
+        return None, csrf
+    if not _is_uuid_like(unit_id):
+        return None, _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
+    if not _is_uuid_like(module_id):
+        return None, _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
+    if task_id is not None and not _is_uuid_like(task_id):
+        return None, _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
+    sub = _current_sub(user)
+    guard = _guard_unit_author(unit_id, sub)
+    if guard:
+        return None, guard
+    if not hasattr(repo, "get_unit_module_for_author"):
+        return None, _private_error({"error": "service_unavailable", "detail": "modular_repo_unavailable"}, status_code=503)
+    try:
+        section_id = _get_unit_module_section_id_for_author(repo, unit_id=unit_id, module_id=module_id, author_id=sub)
+    except LookupError:
+        return None, _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return None, _private_error({"error": "forbidden"}, status_code=403)
+    if not section_id:
+        return None, _private_error({"error": "not_found"}, status_code=404)
+    return section_id, None
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks")
+async def create_module_task(request: Request, unit_id: str, module_id: str, payload: TaskCreatePayload):
+    """Create a task in a module-backed section with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await create_section_task(request, unit_id, str(section_id), payload)
+
+
+@teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}")
+async def update_module_task(
+    request: Request,
+    unit_id: str,
+    module_id: str,
+    task_id: str,
+    payload: TaskUpdatePayload,
+):
+    """Update a task in a module-backed section with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await update_section_task(request, unit_id, str(section_id), task_id, payload)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}")
+async def delete_module_task(request: Request, unit_id: str, module_id: str, task_id: str):
+    """Delete a task in a module-backed section with delete scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await delete_section_task(request, unit_id, str(section_id), task_id)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/reorder")
+async def reorder_module_tasks(request: Request, unit_id: str, module_id: str, payload: TaskReorderPayload):
+    """Reorder tasks in a module-backed section with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await reorder_section_tasks(request, unit_id, str(section_id), payload)
+
+
 @teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/editor-model")
 async def get_task_h5p_editor_model(request: Request, unit_id: str, section_id: str, task_id: str):
     """Return the H5P editor model for an owned H5P task."""
@@ -4197,7 +4398,9 @@ async def import_task_h5p_content(
     task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
     if task_error:
         return task_error
-    file_bytes = await file.read()
+    file_bytes, upload_error = await _read_h5p_upload_file(file)
+    if upload_error:
+        return upload_error
     if not file_bytes:
         return _private_error({"error": "bad_request", "detail": "invalid_h5p_file"}, status_code=400)
 
@@ -4318,6 +4521,42 @@ async def reset_task_h5p_content(request: Request, unit_id: str, section_id: str
         h5p={"content_id": None, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
     )
     return _json_private(_serialize_task(updated), status_code=200)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/import")
+async def import_module_task_h5p_content(
+    request: Request,
+    unit_id: str,
+    module_id: str,
+    task_id: str,
+    file: UploadFile = File(...),
+):
+    """Import H5P content for a module-backed task with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+        task_id=task_id,
+    )
+    if error:
+        return error
+    return await import_task_h5p_content(request, unit_id, str(section_id), task_id, file)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/reset")
+async def reset_module_task_h5p_content(request: Request, unit_id: str, module_id: str, task_id: str):
+    """Unlink H5P content for a module-backed task with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+        task_id=task_id,
+    )
+    if error:
+        return error
+    return await reset_task_h5p_content(request, unit_id, str(section_id), task_id)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder")
@@ -4776,6 +5015,116 @@ async def finalize_section_material_upload(
         raise
     status_code = 201 if created else 200
     return JSONResponse(content=_serialize_material(material), status_code=status_code)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/materials")
+async def create_module_material(
+    request: Request,
+    unit_id: str,
+    module_id: str,
+    payload: MaterialCreatePayload,
+):
+    """Create a material in a module-backed section with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await create_section_material(request, unit_id, str(section_id), payload)
+
+
+@teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}")
+async def update_module_material(
+    request: Request,
+    unit_id: str,
+    module_id: str,
+    material_id: str,
+    payload: MaterialUpdatePayload,
+):
+    """Update a material in a module-backed section with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await update_section_material(request, unit_id, str(section_id), material_id, payload)
+
+
+@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}")
+async def delete_module_material(request: Request, unit_id: str, module_id: str, material_id: str):
+    """Delete a material in a module-backed section with delete scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await delete_section_material(request, unit_id, str(section_id), material_id)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/materials/reorder")
+async def reorder_module_materials(
+    request: Request,
+    unit_id: str,
+    module_id: str,
+    payload: MaterialReorderPayload,
+):
+    """Reorder materials in a module-backed section with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await reorder_section_materials(request, unit_id, str(section_id), payload)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/materials/upload-intents")
+async def create_module_material_upload_intent(
+    request: Request,
+    unit_id: str,
+    module_id: str,
+    payload: MaterialUploadIntentPayload,
+):
+    """Create a file-material upload intent in a module with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await create_section_material_upload_intent(request, unit_id, str(section_id), payload)
+
+
+@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/materials/finalize")
+async def finalize_module_material_upload(
+    request: Request,
+    unit_id: str,
+    module_id: str,
+    payload: MaterialFinalizePayload,
+):
+    """Finalize a file-material upload in a module with write scope only."""
+
+    section_id, error = _resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+    )
+    if error:
+        return error
+    return await finalize_section_material_upload(request, unit_id, str(section_id), payload)
 
 
 @teaching_router.get(

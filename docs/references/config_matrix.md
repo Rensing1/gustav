@@ -18,6 +18,7 @@ Owner: Platform/App
 | KC | KC_REALM | gustav | gustav | env/.env | Realm |
 | Supabase | SUPABASE_URL | http://127.0.0.1:54321 | FQDN | env/.env | Storage/API |
 | Supabase | SUPABASE_SERVICE_ROLE_KEY | DUMMY_DO_NOT_USE | Secret | env/.env | Backend Storage |
+| Web/H5P | H5P_INTERNAL_SHARED_SECRET | CHANGE_ME_DEV | Secret | env/.env | Interne Web→H5P-Authentifizierung für CLI-Paket-Workflows |
 
 Hinweise:
 - Compose nutzt für DSNs Service‑Namen (z. B. `supabase_db_gustav-alpha2`) statt 127.0.0.1.

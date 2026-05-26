@@ -13,6 +13,7 @@ import httpx
 from httpx import ASGITransport
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -178,21 +179,6 @@ async def test_cli_bearer_is_rejected_outside_teaching_authoring_paths(monkeypat
     ("method", "path", "json_body"),
     [
         ("GET", "/api/teaching/units/not-a-uuid", None),
-        (
-            "POST",
-            "/api/teaching/units/not-a-uuid/sections/not-a-section/materials/upload-intents",
-            {"filename": "demo.pdf", "mime_type": "application/pdf", "size_bytes": 1},
-        ),
-        (
-            "GET",
-            "/api/teaching/units/not-a-uuid/sections/not-a-section/materials/not-a-material/download-url",
-            None,
-        ),
-        (
-            "POST",
-            "/api/teaching/units/not-a-uuid/sections/not-a-section/tasks/not-a-task/h5p/reset",
-            {},
-        ),
     ],
 )
 async def test_cli_bearer_is_rejected_for_cookie_only_teaching_unit_prefix_paths(
@@ -216,6 +202,84 @@ async def test_cli_bearer_is_rejected_for_cookie_only_teaching_unit_prefix_paths
         )
 
     assert response.status_code == 401
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("method", "path", "json_body", "expected_status"),
+    [
+        (
+            "POST",
+            "/api/teaching/units/not-a-uuid/sections/not-a-section/materials/upload-intents",
+            {"filename": "demo.pdf", "mime_type": "application/pdf", "size_bytes": 1},
+            400,
+        ),
+        (
+            "GET",
+            "/api/teaching/units/not-a-uuid/sections/not-a-section/materials/not-a-material/download-url",
+            None,
+            400,
+        ),
+        (
+            "POST",
+            "/api/teaching/units/not-a-uuid/sections/not-a-section/tasks/not-a-task/h5p/reset",
+            {},
+            400,
+        ),
+        (
+            "POST",
+            "/api/teaching/units/not-a-uuid/modules/not-a-module/tasks/not-a-task/h5p/import",
+            {},
+            422,
+        ),
+        (
+            "POST",
+            "/api/teaching/units/not-a-uuid/modules/not-a-module/tasks/not-a-task/h5p/reset",
+            {},
+            400,
+        ),
+        (
+            "POST",
+            "/api/teaching/units/not-a-uuid/modules/not-a-module/materials/upload-intents",
+            {"filename": "demo.pdf", "mime_type": "application/pdf", "size_bytes": 1},
+            400,
+        ),
+        (
+            "POST",
+            "/api/teaching/units/not-a-uuid/modules/not-a-module/materials/finalize",
+            {"intent_id": "not-a-uuid", "title": "Demo", "sha256": "0" * 64},
+            400,
+        ),
+        (
+            "POST",
+            "/api/teaching/units/not-a-uuid/modules/not-a-module/tasks",
+            {"instruction_md": "Demo"},
+            400,
+        ),
+    ],
+)
+async def test_cli_bearer_reaches_cli_enabled_file_and_h5p_routes(
+    monkeypatch,
+    method: str,
+    path: str,
+    json_body,
+    expected_status: int,
+):
+    _, created = _install_cli_token(
+        monkeypatch,
+        scopes=["read", "write", "delete"],
+        roles=["teacher"],
+    )
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.request(
+            method,
+            path,
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+            json=json_body,
+        )
+
+    assert response.status_code == expected_status
 
 
 @pytest.mark.anyio
@@ -270,6 +334,118 @@ async def test_cli_bearer_write_bypasses_browser_csrf_after_scope_and_role_check
 
 
 @pytest.mark.anyio
+async def test_cli_bearer_can_export_h5p_package_without_browser_csrf(monkeypatch):
+    _, created = _install_cli_token(
+        monkeypatch,
+        scopes=["read", "write"],
+        roles=["teacher"],
+        user_sub="teacher-cli-h5p",
+    )
+
+    async def fake_h5p_request(method: str, path: str, **_kwargs):
+        assert (method, path) == ("GET", "/contents/123/export")
+        return httpx.Response(200, content=b"PK\x03\x04h5p", headers={"content-type": "application/zip"})
+
+    monkeypatch.setattr(teaching_routes, "_request_h5p_service", fake_h5p_request)
+
+    headers = {"Authorization": f"Bearer {created.raw_token}"}
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        unit_response = await client.post("/api/teaching/units", headers=headers, json={"title": "CLI H5P"})
+        assert unit_response.status_code == 201
+        unit_id = unit_response.json()["id"]
+        section_response = await client.post(
+            f"/api/teaching/units/{unit_id}/sections",
+            headers=headers,
+            json={"title": "Abschnitt"},
+        )
+        assert section_response.status_code == 201
+        section_id = section_response.json()["id"]
+        task_response = await client.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+            headers=headers,
+            json={"instruction_md": "Bearbeite das Quiz.", "h5p": {"content_id": "123", "display_options": {}}},
+        )
+        assert task_response.status_code == 201
+        task_id = task_response.json()["id"]
+
+        response = await client.get(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert response.content == b"PK\x03\x04h5p"
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_h5p_import_rejects_upload_larger_than_web_limit(monkeypatch):
+    monkeypatch.setenv("H5P_MAX_UPLOAD_BYTES", "4")
+    _, created = _install_cli_token(
+        monkeypatch,
+        scopes=["read", "write"],
+        roles=["teacher"],
+        user_sub="teacher-cli-h5p-limit",
+    )
+    h5p_calls: list[tuple[str, str]] = []
+
+    async def fake_h5p_request(method: str, path: str, **_kwargs):
+        h5p_calls.append((method, path))
+        return httpx.Response(200, json={"content_id": "too-late"})
+
+    monkeypatch.setattr(teaching_routes, "_request_h5p_service", fake_h5p_request)
+
+    headers = {"Authorization": f"Bearer {created.raw_token}"}
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        unit_response = await client.post("/api/teaching/units", headers=headers, json={"title": "CLI H5P limit"})
+        assert unit_response.status_code == 201
+        unit_id = unit_response.json()["id"]
+        section_response = await client.post(
+            f"/api/teaching/units/{unit_id}/sections",
+            headers=headers,
+            json={"title": "Abschnitt"},
+        )
+        assert section_response.status_code == 201
+        section_id = section_response.json()["id"]
+        task_response = await client.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+            headers=headers,
+            json={"instruction_md": "Bearbeite das Quiz.", "h5p": {"content_id": None, "display_options": {}}},
+        )
+        assert task_response.status_code == 201
+        task_id = task_response.json()["id"]
+
+        response = await client.post(
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import",
+            headers=headers,
+            files={"file": ("large.h5p", b"12345", "application/zip")},
+        )
+
+    assert response.status_code == 413
+    assert response.json() == {"error": "payload_too_large", "detail": "h5p_upload_too_large"}
+    assert h5p_calls == []
+
+
+def test_cli_h5p_service_calls_forward_internal_teacher_context(monkeypatch):
+    monkeypatch.setenv("H5P_INTERNAL_SHARED_SECRET", "internal-h5p-secret")
+    request = SimpleNamespace(
+        headers={},
+        state=SimpleNamespace(
+            cli_token_id="cli-token-id",
+            user={"sub": "teacher-sub", "name": "CLI Teacher", "roles": ["teacher"]},
+        ),
+    )
+
+    headers = teaching_routes._h5p_internal_auth_headers(request)
+
+    assert headers == {
+        "x-gustav-h5p-internal-secret": "internal-h5p-secret",
+        "x-gustav-user-sub": "teacher-sub",
+        "x-gustav-user-name": "CLI Teacher",
+        "x-gustav-user-roles": "teacher",
+    }
+
+
+@pytest.mark.anyio
 async def test_cli_bearer_read_token_cannot_write_teaching_units(monkeypatch):
     _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
 
@@ -284,6 +460,46 @@ async def test_cli_bearer_read_token_cannot_write_teaching_units(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_cli_bearer_read_token_cannot_write_module_h5p(monkeypatch):
+    _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/teaching/units/00000000-0000-4000-8000-000000000001/modules/00000000-0000-4000-8000-000000000002/tasks/00000000-0000-4000-8000-000000000003/h5p/reset",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_read_token_cannot_write_module_material_or_task(monkeypatch):
+    _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
+    headers = {"Authorization": f"Bearer {created.raw_token}"}
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        material_response = await client.post(
+            "/api/teaching/units/00000000-0000-4000-8000-000000000001/modules/00000000-0000-4000-8000-000000000002/materials",
+            headers=headers,
+            json={"title": "Demo", "body_md": "Text"},
+        )
+        upload_response = await client.post(
+            "/api/teaching/units/00000000-0000-4000-8000-000000000001/modules/00000000-0000-4000-8000-000000000002/materials/upload-intents",
+            headers=headers,
+            json={"filename": "demo.pdf", "mime_type": "application/pdf", "size_bytes": 1},
+        )
+        task_response = await client.post(
+            "/api/teaching/units/00000000-0000-4000-8000-000000000001/modules/00000000-0000-4000-8000-000000000002/tasks",
+            headers=headers,
+            json={"instruction_md": "Demo"},
+        )
+
+    assert material_response.status_code == 401
+    assert upload_response.status_code == 401
+    assert task_response.status_code == 401
+
+
+@pytest.mark.anyio
 async def test_cli_bearer_write_token_cannot_delete_teaching_units(monkeypatch):
     _, created = _install_cli_token(monkeypatch, scopes=["write"], roles=["teacher"])
 
@@ -294,6 +510,25 @@ async def test_cli_bearer_write_token_cannot_delete_teaching_units(monkeypatch):
         )
 
     assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_write_token_cannot_delete_module_material_or_task(monkeypatch):
+    _, created = _install_cli_token(monkeypatch, scopes=["write"], roles=["teacher"])
+    headers = {"Authorization": f"Bearer {created.raw_token}"}
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        material_response = await client.delete(
+            "/api/teaching/units/00000000-0000-4000-8000-000000000001/modules/00000000-0000-4000-8000-000000000002/materials/00000000-0000-4000-8000-000000000003",
+            headers=headers,
+        )
+        task_response = await client.delete(
+            "/api/teaching/units/00000000-0000-4000-8000-000000000001/modules/00000000-0000-4000-8000-000000000002/tasks/00000000-0000-4000-8000-000000000003",
+            headers=headers,
+        )
+
+    assert material_response.status_code == 401
+    assert task_response.status_code == 401
 
 
 @pytest.mark.anyio

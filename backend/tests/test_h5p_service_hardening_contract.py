@@ -79,3 +79,29 @@ def test_h5p_upload_default_max_bytes_is_reduced() -> None:
     # Regression guard: avoid a huge default (512 MiB).
     assert "512 * 1024 * 1024" not in js
     assert "100 * 1024 * 1024" in js
+
+
+def test_h5p_internal_teacher_auth_is_secret_bound_and_skips_browser_csrf() -> None:
+    """CLI package workflows reach H5P through FastAPI, not browser cookies."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    server_path = repo_root / "h5p-service" / "server.mjs"
+    helper_path = repo_root / "h5p-service" / "lib" / "internal_auth.mjs"
+    assert server_path.is_file(), f"Missing H5P service file: {server_path}"
+    assert helper_path.is_file(), f"Missing H5P internal auth helper: {helper_path}"
+    js = server_path.read_text(encoding="utf-8")
+    helper_js = helper_path.read_text(encoding="utf-8")
+
+    assert "h5pInternalSharedSecret" in js
+    assert "authenticateInternalTeacher(req, h5pInternalSharedSecret)" in js
+    assert "x-gustav-h5p-internal-secret" in helper_js
+    assert "x-gustav-user-sub" in helper_js
+    assert "x-gustav-user-roles" in helper_js
+    assert "req.gustavInternalAuth = true" in helper_js
+
+    same_origin = _extract_block(
+        js,
+        start_token="function requireSameOrigin(req, res, next) {",
+        end_token="async function probeStorage()",
+    )
+    assert "isInternalAuth(req)" in same_origin

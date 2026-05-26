@@ -10427,8 +10427,12 @@ paths:
       operationId: importTaskH5PContent
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -10473,6 +10477,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '413': { description: H5P upload exceeds H5P_MAX_UPLOAD_BYTES, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -10484,6 +10489,9 @@ paths:
       operationId: exportTaskH5PContent
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -10528,8 +10536,12 @@ paths:
       operationId: resetTaskH5PContent
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -10565,6 +10577,267 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Task not found or not an H5P task, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/import:
+    post:
+      tags: [Teaching, H5P]
+      summary: Import an H5P package for a module-backed task (author only)
+      operationId: importModuleTaskH5PContent
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Imported and linked task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: |
+            Invalid path or upload. detail codes:
+              - invalid_unit_id
+              - invalid_module_id
+              - invalid_task_id
+              - invalid_h5p_file
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '413': { description: H5P upload exceeds H5P_MAX_UPLOAD_BYTES, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module, task, or H5P task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/reset:
+    post:
+      tags: [Teaching, H5P]
+      summary: Unlink H5P content from a module-backed task (author only)
+      operationId: resetModuleTaskH5PContent
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Updated task without linked H5P content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: |
+            Invalid path. detail codes:
+              - invalid_unit_id
+              - invalid_module_id
+              - invalid_task_id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module, task, or H5P task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/tasks:
+    post:
+      tags: [Teaching]
+      summary: Create a task in a module-backed section (author only)
+      operationId: createModuleTask
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskCreate' }
+      responses:
+        '201': { description: Task created, content: { application/json: { schema: { $ref: '#/components/schemas/Task' } } } }
+        '400': { description: Invalid path or payload, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}:
+    patch:
+      tags: [Teaching]
+      summary: Update a task in a module-backed section (author only)
+      operationId: updateModuleTask
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskUpdate' }
+      responses:
+        '200': { description: Task updated, content: { application/json: { schema: { $ref: '#/components/schemas/Task' } } } }
+        '400': { description: Invalid path or payload, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module, task, or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [Teaching]
+      summary: Delete a task in a module-backed section (author only)
+      operationId: deleteModuleTask
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [delete]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the delete scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Deleted (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+        '400': { description: Invalid path, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module, task, or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/tasks/reorder:
+    post:
+      tags: [Teaching]
+      summary: Reorder tasks in a module-backed section (author only)
+      operationId: reorderModuleTasks
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskReorder' }
+      responses:
+        '200': { description: Tasks reordered, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Task' } } } } }
+        '400': { description: Invalid path or payload, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder:
     post:
@@ -11024,8 +11297,12 @@ paths:
       operationId: createSectionMaterialUploadIntent
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -11091,8 +11368,12 @@ paths:
       operationId: finalizeSectionMaterialUpload
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - write
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -11183,6 +11464,9 @@ paths:
       operationId: getSectionMaterialDownloadUrl
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       x-permissions:
         requiredRole: teacher
         authorOnly: true
@@ -11245,6 +11529,225 @@ paths:
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: Service unavailable (storage not configured), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/materials:
+    post:
+      tags: [Teaching]
+      summary: Create a material in a module-backed section (author only)
+      operationId: createModuleMaterial
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaterialCreate' }
+      responses:
+        '201': { description: Material created, content: { application/json: { schema: { $ref: '#/components/schemas/Material' } } } }
+        '400': { description: Invalid path or payload, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}:
+    patch:
+      tags: [Teaching]
+      summary: Update a material in a module-backed section (author only)
+      operationId: updateModuleMaterial
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: material_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaterialUpdate' }
+      responses:
+        '200': { description: Material updated, content: { application/json: { schema: { $ref: '#/components/schemas/Material' } } } }
+        '400': { description: Invalid path or payload, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module, material, or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [Teaching]
+      summary: Delete a material in a module-backed section (author only)
+      operationId: deleteModuleMaterial
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [delete]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the delete scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: material_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Deleted (no content)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
+                example: private, no-store
+        '400': { description: Invalid path, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module, material, or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/materials/reorder:
+    post:
+      tags: [Teaching]
+      summary: Reorder materials in a module-backed section (author only)
+      operationId: reorderModuleMaterials
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaterialReorder' }
+      responses:
+        '200': { description: Materials reordered, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Material' } } } } }
+        '400': { description: Invalid path or payload, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/materials/upload-intents:
+    post:
+      tags: [Teaching]
+      summary: Create upload intent for a module-backed file material (author only)
+      operationId: createModuleMaterialUploadIntent
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaterialUploadIntentRequest' }
+      responses:
+        '200': { description: Upload intent created, content: { application/json: { schema: { $ref: '#/components/schemas/MaterialUploadIntentResponse' } } } }
+        '400': { description: Invalid path or payload, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/modules/{module_id}/materials/finalize:
+    post:
+      tags: [Teaching]
+      summary: Finalize upload intent for a module-backed file material (author only)
+      operationId: finalizeModuleMaterialUpload
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "CLI: Bearer CLI tokens are not CSRF-cookie-bound and require the write scope."
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaterialFileFinalizeRequest' }
+      responses:
+        '201': { description: File material created, content: { application/json: { schema: { $ref: '#/components/schemas/Material' } } } }
+        '200': { description: Upload intent already finalized, content: { application/json: { schema: { $ref: '#/components/schemas/Material' } } } }
+        '400': { description: Invalid path or payload, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module, unit, or intent not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/courses/{course_id}/modules:
     get:

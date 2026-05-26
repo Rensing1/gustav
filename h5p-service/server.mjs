@@ -40,6 +40,13 @@ import { buildSessionCookieHeader } from "./lib/cookies.mjs";
 import { debugPagesEnabled, isProdLikeEnv } from "./lib/env.mjs";
 import { fetchWithTimeout } from "./lib/fetch_timeout.mjs";
 import { createFinishedForwardingMetrics, forwardLearningSubmission } from "./lib/finished_forwarding.mjs";
+import {
+  authenticateInternalTeacher,
+  isInternalAuth,
+  rolesAllowAdmin,
+  rolesAllowStudentOrTeacher,
+  rolesAllowTeacher,
+} from "./lib/internal_auth.mjs";
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const gustavWebInternalBase = process.env.GUSTAV_WEB_INTERNAL_BASE || "http://web:8000";
@@ -56,6 +63,7 @@ const uploadMaxBytes = Number.parseInt(
 );
 const themeStylesheetPath = "/h5p/theme/h5p-gustav.css";
 const reviewTokenSecret = String(process.env.H5P_REVIEW_TOKEN_SECRET || "").trim();
+const h5pInternalSharedSecret = String(process.env.H5P_INTERNAL_SHARED_SECRET || "").trim();
 const gustavEnv = String(process.env.GUSTAV_ENV || "dev").trim().toLowerCase();
 const isProdLike = isProdLikeEnv(gustavEnv);
 const upstreamFetchTimeoutMsRaw = Number.parseInt(process.env.H5P_UPSTREAM_FETCH_TIMEOUT_MS || "5000", 10);
@@ -69,6 +77,13 @@ if (isProdLike && (!reviewTokenSecret || reviewTokenSecret.toUpperCase().startsW
   // eslint-disable-next-line no-console
   console.error(
     "Refusing to start: H5P_REVIEW_TOKEN_SECRET is unset or a placeholder in production/staging.",
+  );
+  process.exit(1);
+}
+if (isProdLike && (!h5pInternalSharedSecret || h5pInternalSharedSecret.toUpperCase().startsWith("CHANGE_ME"))) {
+  // eslint-disable-next-line no-console
+  console.error(
+    "Refusing to start: H5P_INTERNAL_SHARED_SECRET is unset or a placeholder in production/staging.",
   );
   process.exit(1);
 }
@@ -314,21 +329,6 @@ function parseReviewToken(token) {
   return { teacherSub, studentSub, courseId, taskId, contentId, exp };
 }
 
-function rolesAllowTeacher(roles) {
-  if (!Array.isArray(roles)) return false;
-  return roles.includes("admin") || roles.includes("teacher");
-}
-
-function rolesAllowAdmin(roles) {
-  if (!Array.isArray(roles)) return false;
-  return roles.includes("admin");
-}
-
-function rolesAllowStudentOrTeacher(roles) {
-  if (!Array.isArray(roles)) return false;
-  return roles.includes("admin") || roles.includes("teacher") || roles.includes("student");
-}
-
 function parseOriginForForwarding(req) {
   // We need a stable public origin for forwarding requests back into the GUSTAV
   // web service, because the Learning API enforces strict same-origin CSRF checks.
@@ -412,6 +412,10 @@ function getPublicOrigin(req) {
 }
 
 function requireSameOrigin(req, res, next) {
+  if (isInternalAuth(req)) {
+    next();
+    return;
+  }
   const expected = getPublicOrigin(req);
   const origin = String(req.get("origin") || "");
   const referer = String(req.get("referer") || "");
@@ -559,6 +563,11 @@ async function checkLearningH5PContentAccess(courseId, contentId, cookieHeader) 
 }
 
 async function requireAuth(req, res, next) {
+  if (authenticateInternalTeacher(req, h5pInternalSharedSecret)) {
+    next();
+    return;
+  }
+
   const cookieHeader = req.get("cookie") || "";
   const cookies = parseCookies(cookieHeader);
   const legacySessionId = cookies[sessionCookieName];

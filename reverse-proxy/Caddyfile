@@ -39,7 +39,11 @@ localhost:443 {
 
 id.localhost:443 {
   tls internal
-  reverse_proxy keycloak:8080
+  reverse_proxy keycloak:8080 {
+    # Keycloak 24 does not add all cookie flags on detached error flows.
+    # The IdP is always served over HTTPS here, so enforce the GUSTAV cookie floor at the proxy boundary.
+    header_down Set-Cookie "^(.*)$" "$1; Secure; SameSite=Lax"
+  }
 }
 
 # Public Supabase gateway for browser access to Storage API (dev = prod)

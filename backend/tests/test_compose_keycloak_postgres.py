@@ -86,6 +86,28 @@ def test_keycloak_configures_postgres_connection():
     )
 
 
+def test_keycloak_uses_explicit_xforwarded_proxy_headers():
+    """Keycloak must trust Caddy's forwarded HTTPS headers in local=prod deployments."""
+    compose = load_compose()
+    keycloak = compose.get("services", {}).get("keycloak")
+    assert keycloak, "Keycloak service is missing in compose file"
+
+    environment = keycloak.get("environment", {})
+
+    assert "KC_PROXY" not in environment, "Deprecated KC_PROXY must not hide the effective proxy contract"
+    assert environment.get("KC_PROXY_HEADERS") == "xforwarded"
+    assert environment.get("KC_HTTP_ENABLED") == "true"
+
+
+def test_caddy_hardens_keycloak_set_cookie_headers():
+    """The IdP reverse proxy should enforce the same cookie flags as the app stack."""
+    caddyfile = Path("reverse-proxy/Caddyfile").read_text(encoding="utf-8")
+
+    assert "id.localhost:443" in caddyfile
+    assert "header_down Set-Cookie" in caddyfile
+    assert "Secure; SameSite=Lax" in caddyfile
+
+
 def test_keycloak_configures_smtp_via_env_vars():
     """Keycloak must be wired for SMTP via explicit env vars.
 

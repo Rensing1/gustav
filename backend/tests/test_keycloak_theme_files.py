@@ -465,6 +465,20 @@ def test_error_template_helper_guards_idp_account_target_edge_shapes():
         assert marker in text, f"_gustav_error_components.ftl should guard edge shape {marker}"
 
 
+def test_error_template_helper_suppresses_login_action_recovery_loops():
+    """Cookie-less error pages must not link back to login-actions URLs that recreate the same error."""
+    helper = THEME_ROOT / "_gustav_error_components.ftl"
+    text = helper.read_text(encoding="utf-8")
+
+    for marker in [
+        "<#function is_login_action_link",
+        'normalized?contains("/login-actions/")',
+        "!is_login_action_link(login_url)",
+        "!is_login_action_link(registration_url)",
+    ]:
+        assert marker in text, f"_gustav_error_components.ftl should include loop guard marker {marker}"
+
+
 def test_error_templates_use_shared_primary_app_link_resolver():
     """Error templates should use shared resolver instead of duplicated inline fallback chains."""
     for name in ["error.ftl", "login-page-expired.ftl"]:
@@ -489,12 +503,17 @@ def test_error_templates_normalize_optional_redirect_context_before_helper_call(
         tpl = _resolve_login_template(name)
         text = tpl.read_text(encoding="utf-8")
 
-        assert '<#assign safe_page_redirect_uri = "">' in text, f"{name} should define a safe redirect default"
-        assert "pageRedirectUri?? && pageRedirectUri?has_content" in text, (
-            f"{name} should guard missing pageRedirectUri with ?? before reading it"
+        assert '<#assign safe_page_redirect_uri = (pageRedirectUri)!""' in text, (
+            f"{name} should define a safe redirect default with a parenthesized missing-value guard"
         )
-        assert "pageRedirectUri=safe_page_redirect_uri" in text, (
-            f"{name} should pass the normalized redirect value into the shared helper"
+        assert "pageRedirectUri=safe_page_redirect_uri" not in text, (
+            f"{name} must not use name=value inside a FreeMarker function call"
+        )
+        assert "clientBaseUrl=client_base_url" not in text, (
+            f"{name} must not use name=value inside a FreeMarker function call"
+        )
+        assert "resolve_primary_app_link(\n" in text and "safe_page_redirect_uri,\n" in text, (
+            f"{name} should pass the normalized redirect value as a positional function argument"
         )
 
 
@@ -503,18 +522,47 @@ def test_info_template_enforces_exclusive_link_priority():
     tpl = _resolve_login_template("info.ftl")
     text = tpl.read_text(encoding="utf-8")
     for marker in [
-        "<#assign has_required_actions = requiredActions?? && requiredActions?size gt 0>",
-        "<#if has_required_actions && actionUri?has_content>",
+        "<#assign safe_required_actions = (requiredActions)![]>",
+        "<#assign has_required_actions = safe_required_actions?size gt 0>",
+        '<#assign safe_action_uri = (actionUri)!""',
+        '<#assign safe_login_url = (url.loginUrl)!""',
+        "<#if has_required_actions && safe_action_uri?has_content>",
         "<#elseif app_link?has_content>",
-        "<#elseif actionUri?has_content>",
-        "<#elseif url.loginUrl?has_content>",
+        "<#elseif safe_action_uri?has_content>",
+        "<#elseif safe_login_url?has_content>",
     ]:
         assert marker in text, f"info.ftl should include exclusive priority marker {marker}"
     assert (
-        text.index("<#if has_required_actions && actionUri?has_content>")
+        text.index("<#if has_required_actions && safe_action_uri?has_content>")
         < text.index("<#elseif app_link?has_content>")
     ), "required-action branch must precede app-link branch"
     assert "has_link" not in text, "info.ftl should not rely on multi-link accumulator state"
+
+
+def test_german_error_theme_messages_use_real_umlauts():
+    """Visible German recovery texts should use correct German characters, not ASCII fallbacks."""
+    msgs = THEME_ROOT / "messages" / "messages_de.properties"
+    visible_lines = [
+        line
+        for line in msgs.read_text(encoding="utf-8").splitlines()
+        if line.startswith("gustavAuth")
+        or line.startswith("gustavLogout")
+        or line.startswith("gustavBackToApp")
+    ]
+    visible_text = "\n".join(visible_lines)
+
+    for ascii_fallback in ["ueber", "Pruefe", "zusaetzlich", "oeffne", "ungueltig", "bestaetigen", "zurueck", "Rueckweg", "Zurueck"]:
+        assert ascii_fallback not in visible_text, f"German visible text should use umlauts instead of {ascii_fallback}"
+
+
+def test_global_footer_template_guards_optional_locale_context():
+    """Latent Keycloak pages may render footer.ftl without realm or locale objects."""
+    footer = THEME_ROOT / "footer.ftl"
+    text = footer.read_text(encoding="utf-8")
+
+    assert "<#local locale_supported = (locale.supported)![]>" in text
+    assert "(realm.internationalizationEnabled)!false" in text
+    assert "locale_supported?has_content" in text
 
 
 def test_messages_en_present_and_has_email_label():

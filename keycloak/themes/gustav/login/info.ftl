@@ -34,39 +34,36 @@
         <div class="kc-message kc-${message.type}">${message.summary}</div>
       </#if>
 
-      <#assign has_required_actions = requiredActions?? && requiredActions?size gt 0>
+      <#assign safe_required_actions = (requiredActions)![]>
+      <#assign has_required_actions = safe_required_actions?size gt 0>
       <#if has_required_actions>
         <p class="kc-hint">
-          <#list requiredActions as reqActionItem>
+          <#list safe_required_actions as reqActionItem>
             ${msg("requiredAction.${reqActionItem}")}<#if reqActionItem_has_next>, </#if>
           </#list>
         </p>
       </#if>
 
       <#import "_gustav_error_components.ftl" as gustav_error>
-      <#assign client_base_url = "">
-      <#if client?? && client.baseUrl?has_content>
-        <#assign client_base_url = client.baseUrl>
-      </#if>
-      <#assign safe_page_redirect_uri = "">
-      <#if pageRedirectUri?? && pageRedirectUri?has_content>
-        <#assign safe_page_redirect_uri = pageRedirectUri>
-      </#if>
+      <#assign client_base_url = (client.baseUrl)!"">
+      <#assign safe_page_redirect_uri = (pageRedirectUri)!"">
+      <#assign safe_action_uri = (actionUri)!"">
+      <#assign safe_login_url = (url.loginUrl)!"">
       <#assign app_link = gustav_error.resolve_primary_app_link(
-        pageRedirectUri=safe_page_redirect_uri,
-        clientBaseUrl=client_base_url
+        safe_page_redirect_uri,
+        client_base_url
       )>
 
       <#if !(skipLink??)>
         <div class="kc-links">
-          <#if has_required_actions && actionUri?has_content>
-            <a href="${actionUri}">${msg("proceedWithAction")}</a>
+          <#if has_required_actions && safe_action_uri?has_content>
+            <a href="${safe_action_uri}">${msg("proceedWithAction")}</a>
           <#elseif app_link?has_content>
             <a href="${app_link}">${msg("backToApplication")}</a>
-          <#elseif actionUri?has_content>
-            <a href="${actionUri}">${msg("proceedWithAction")}</a>
-          <#elseif url.loginUrl?has_content>
-            <a href="${url.loginUrl}">${msg("doLogIn")}</a>
+          <#elseif safe_action_uri?has_content>
+            <a href="${safe_action_uri}">${msg("proceedWithAction")}</a>
+          <#elseif safe_login_url?has_content>
+            <a href="${safe_login_url}">${msg("doLogIn")}</a>
           </#if>
         </div>
       </#if>

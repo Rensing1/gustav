@@ -15,6 +15,14 @@
   <#return has_realm_segment && has_account_target>
 </#function>
 
+<#function is_login_action_link link="">
+  <#if !(link?has_content)>
+    <#return false>
+  </#if>
+  <#local normalized = link?trim?lower_case>
+  <#return normalized?contains("/login-actions/") || normalized?starts_with("login-actions/")>
+</#function>
+
 <#function is_allowed_app_link link="" trustedBaseUrl="">
   <#if !(link?has_content)>
     <#return false>
@@ -57,27 +65,31 @@
 <#macro render_recovery_links appLink="">
   <div class="kc-links">
     <#assign has_item = false>
+    <#local login_url = (url.loginUrl)!"">
+    <#local registration_url = (url.registrationUrl)!"">
+    <#local registration_allowed = (realm.registrationAllowed)!false>
     <#if appLink?has_content>
       <a href="${appLink}">${msg("gustavBackToApp")}</a>
       <#assign has_item = true>
     </#if>
-    <#if url?? && url.loginUrl?has_content>
+    <#if login_url?has_content && !is_login_action_link(login_url)>
       <#if has_item><span> · </span></#if>
-      <a href="${url.loginUrl}">${msg("gustavTryLoginAgain")}</a>
+      <a href="${login_url}">${msg("gustavTryLoginAgain")}</a>
       <#assign has_item = true>
     </#if>
-    <#if realm?? && realm.registrationAllowed && url?? && url.registrationUrl?has_content>
+    <#if registration_allowed && registration_url?has_content && !is_login_action_link(registration_url)>
       <#if has_item><span> · </span></#if>
-      <a href="${url.registrationUrl}">${msg("doRegister")}</a>
+      <a href="${registration_url}">${msg("doRegister")}</a>
       <#assign has_item = true>
     </#if>
   </div>
 </#macro>
 
 <#macro render_locale_links>
-  <#if realm?? && realm.internationalizationEnabled && locale?? && locale.supported?has_content && (locale.supported?size > 1)>
+  <#local locale_supported = (locale.supported)![]>
+  <#if (realm.internationalizationEnabled)!false && locale_supported?has_content && (locale_supported?size > 1)>
     <div class="kc-locale-links" aria-label="${msg("gustavLanguageLabel")}">
-      <#list locale.supported as l>
+      <#list locale_supported as l>
         <a href="${l.url}" lang="${l.languageTag}">${l.label}</a><#if l_has_next><span> · </span></#if>
       </#list>
     </div>

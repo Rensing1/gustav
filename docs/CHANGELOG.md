@@ -2,6 +2,10 @@
 
 ## Unreleased
 ### Security (dev = prod)
+- security(cli): Teaching-Datei-Uploads, Datei-Downloads und H5P-Paket-Import/-Export/-Reset sind jetzt explizite `cliTokenAuth`-Capabilities mit getrennten `read`/`write`-Scopes; Browser-CSRF bleibt für Cookie-Flows unverändert aktiv.
+- security(cli): `gustav h5p import/reset --module-id` nutzt direkte Modul-Endpunkte, damit write-only CLI-Tokens ohne read-scoped `content-target`-Lookup funktionieren.
+- security(cli): Moduladressierte Material- und Aufgabenmutationen nutzen direkte Modul-Endpunkte, damit `write`-/`delete`-only CLI-Tokens keinen zusätzlichen read-scoped `content-target`-Lookup brauchen.
+- security(h5p): CLI-authentifizierte H5P-Paket-Workflows nutzen für den internen Web→H5P-Hop einen `H5P_INTERNAL_SHARED_SECRET`-gebundenen Lehrer-Kontext statt Browser-Cookies.
 - fix(learning-upload): Content-signature validation now reads the guarded dev upload stub fallback root (`./.tmp/dev_uploads`) when `ENABLE_DEV_UPLOAD_STUB=true` and `STORAGE_VERIFY_ROOT` is unset.
 - security(learning-upload): Learning submissions now validate stored bytes against the declared upload MIME before persistence and queueing. Wrong-content uploads fail closed with `invalid_upload_content`; worker fallback treats deterministic signature mismatches as permanent.
 - security(learning-upload): Internal upload proxy now enforces SUPABASE_URL scheme/port matching, allows HTTP only for localhost-style hosts, streams request bodies with early size checks, and forwards presign headers 1:1 to Supabase. The dev upload stub adopts the same cache headers for error paths.
@@ -31,6 +35,8 @@
 - ai(vision): `_call_model` kapselt nun alle Ollama-Aufrufe (Timeouts, Markdown-Unwrap, Images-Handling), sodass `extract()` nur noch orchestriert und Tests den Helper gezielt prüfen können.
 
 ### Docs (updates)
+- docs(cli): `docs/references/gustav_cli.md` dokumentiert Datei-Material-Upload/-Download, H5P-Paketbefehle und Task-Kinds für `native|h5p|visual|scratch|calliope|filius`.
+- docs(config): `.env.example` und `docs/references/config_matrix.md` dokumentieren `H5P_INTERNAL_SHARED_SECRET` für interne Web→H5P-CLI-Aufrufe.
 - docs(reference): Neue Referenz `docs/references/gustav_cli.md` dokumentiert die Teaching-Authoring-CLI, CLI-Tokens, Scopes, aktuelle Befehle, Beispiele und Grenzen.
 - docs(storage): Document that the learning upload proxy enforces SUPABASE_URL scheme/port, streams uploads with the central limit, and replays presign headers for proxy calls; highlight that `*_MAX_UPLOAD_BYTES` overrides are clamped to the published contract.
 - docs(plan): Neu `2025-11-05_vision-images-param.md` (Vision-Bilder an Modell) und Update in `2025-11-04-ollama-client-compat.md` (Hinweis auf `images`).
@@ -42,6 +48,7 @@
 - docs(env): `.env.example` referenziert jetzt die passenden Doku-Seiten statt langer Inline-Kommentare (Config-Matrix, Identity, Storage, Learning-AI).
 
 ### Tests (updates)
+- tests(cli): CLI-Regressionen sichern Task-Kind-Marker, Material-Upload-Flow und H5P-Paket-Import.
 - tests(learning-adapters): Neu `test_local_vision_images_param.py` stellt sicher, dass der Vision-Adapter `images=[<b64>]` übergibt.
 - tests(learning-adapters): Neu `test_local_vision_model_helper.py` beschreibt `_call_model` (Timeouts, Markdown-Unwrap, Images-Verhalten) und hält die Helper-Refactorierung grün.
 - tests(learning-ui): HTMX-Submit-, Auto-Refresh- und HTML5-Required-Regressionstests ergänzt.

@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
 import json
+import mimetypes
 import sys
+from pathlib import Path
 from typing import Any, TextIO
 from urllib import request as urllib_request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from .config import GustavCLIConfig, load_config, save_config
 
@@ -56,6 +60,72 @@ def _http_json(
         return exc.code, body
     except URLError as exc:
         return 0, {"error": "network_error", "detail": str(exc.reason)}
+
+
+def _http_bytes(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    data: bytes | None = None,
+) -> tuple[int, bytes]:
+    req = urllib_request.Request(url, data=data, method=method, headers=dict(headers or {}))
+    try:
+        with urllib_request.urlopen(req, timeout=60) as response:  # noqa: S310 - URL comes from API/config.
+            return response.status, response.read()
+    except HTTPError as exc:
+        return exc.code, exc.read()
+    except URLError as exc:
+        return 0, str(exc.reason).encode("utf-8", errors="replace")
+
+
+def _safe_multipart_parameter(value: str) -> str:
+    """Return a quoted multipart parameter value without header-breaking characters."""
+
+    safe = (
+        str(value or "")
+        .replace("\r\n", "_")
+        .replace("\r", "_")
+        .replace("\n", "_")
+        .replace("\\", "_")
+        .replace('"', "_")
+    )
+    return safe.strip() or "upload"
+
+
+def _http_multipart(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    field_name: str,
+    filename: str,
+    content: bytes,
+    content_type: str,
+) -> tuple[int, Any]:
+    boundary = f"gustav-{uuid4().hex}"
+    safe_field_name = _safe_multipart_parameter(field_name)
+    safe_filename = _safe_multipart_parameter(filename)
+    body = b"".join(
+        [
+            f"--{boundary}\r\n".encode("utf-8"),
+            (
+                f'Content-Disposition: form-data; name="{safe_field_name}"; '
+                f'filename="{safe_filename}"\r\n'
+            ).encode("utf-8"),
+            f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"),
+            content,
+            f"\r\n--{boundary}--\r\n".encode("utf-8"),
+        ]
+    )
+    merged_headers = dict(headers or {})
+    merged_headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+    status, raw = _http_bytes(method, url, headers=merged_headers, data=body)
+    parsed = _parse_json_response(
+        raw.decode("utf-8", errors="replace"),
+        non_json_body={"raw": _body_preview(raw.decode("utf-8", errors="replace"))},
+    )
+    return status, parsed
 
 
 def _redact_token(token: str) -> str:
@@ -165,21 +235,30 @@ def _build_parser() -> argparse.ArgumentParser:
 
     materials = sub.add_parser("materials")
     materials_sub = materials.add_subparsers(dest="command", required=True)
-    for name in ("list", "create", "edit", "delete", "reorder"):
+    for name in ("list", "create", "edit", "delete", "reorder", "upload", "download"):
         material_cmd = materials_sub.add_parser(name)
         material_cmd.add_argument("--unit-id", required=True)
         target = material_cmd.add_mutually_exclusive_group(required=True)
         target.add_argument("--section-id")
         target.add_argument("--module-id")
-        if name in {"edit", "delete"}:
+        if name in {"edit", "delete", "download"}:
             material_cmd.add_argument("material_id")
         if name == "create":
             material_cmd.add_argument("--title", required=True)
             material_cmd.add_argument("--body-md", required=True)
+        if name == "upload":
+            material_cmd.add_argument("--file", required=True)
+            material_cmd.add_argument("--title", required=True)
+            material_cmd.add_argument("--mime-type")
+            material_cmd.add_argument("--alt-text")
+            material_cmd.add_argument("--json", action="store_true")
         if name == "edit":
             material_cmd.add_argument("--title")
             material_cmd.add_argument("--body-md")
             material_cmd.add_argument("--alt-text")
+        if name == "download":
+            material_cmd.add_argument("--output", required=True)
+            material_cmd.add_argument("--force", action="store_true")
         if name == "delete":
             material_cmd.add_argument("--yes", action="store_true")
         if name == "reorder":
@@ -206,12 +285,35 @@ def _build_parser() -> argparse.ArgumentParser:
             task_cmd.add_argument("--teacher-context-md")
             task_cmd.add_argument("--due-at")
             task_cmd.add_argument("--max-attempts", type=int)
+            task_cmd.add_argument(
+                "--kind",
+                choices=["native", "h5p", "visual", "scratch", "calliope", "filius"],
+                default="native" if name == "create" else None,
+            )
         if name == "delete":
             task_cmd.add_argument("--yes", action="store_true")
         if name == "reorder":
             task_cmd.add_argument("--ids", nargs="+", required=True)
         if name == "list":
             task_cmd.add_argument("--json", action="store_true")
+
+    h5p = sub.add_parser("h5p")
+    h5p_sub = h5p.add_subparsers(dest="command", required=True)
+    for name in ("import", "export", "reset"):
+        h5p_cmd = h5p_sub.add_parser(name)
+        h5p_cmd.add_argument("--unit-id", required=True)
+        target = h5p_cmd.add_mutually_exclusive_group(required=True)
+        target.add_argument("--section-id")
+        target.add_argument("--module-id")
+        h5p_cmd.add_argument("--task-id", required=True)
+        if name == "import":
+            h5p_cmd.add_argument("--file", required=True)
+            h5p_cmd.add_argument("--json", action="store_true")
+        if name == "export":
+            h5p_cmd.add_argument("--output", required=True)
+            h5p_cmd.add_argument("--force", action="store_true")
+        if name == "reset":
+            h5p_cmd.add_argument("--yes", action="store_true")
     return parser
 
 
@@ -527,6 +629,24 @@ def _content_base(resource: str, args: argparse.Namespace, *, stderr: TextIO) ->
     return cfg, f"/api/teaching/units/{args.unit_id}/sections/{section_id}/{resource}"
 
 
+def _authoring_resource_base(
+    resource: str,
+    args: argparse.Namespace,
+    *,
+    module_direct_commands: set[str],
+    stderr: TextIO,
+) -> tuple[GustavCLIConfig, str] | None:
+    cfg = _load_config_or_error(stderr)
+    if cfg is None:
+        return None
+    if args.module_id and args.command in module_direct_commands:
+        return cfg, f"/api/teaching/units/{args.unit_id}/modules/{args.module_id}/{resource}"
+    section_id = _resolve_section_id(cfg, args, stderr=stderr)
+    if section_id is None:
+        return None
+    return cfg, f"/api/teaching/units/{args.unit_id}/sections/{section_id}/{resource}"
+
+
 def _request_with_config(
     cfg: GustavCLIConfig,
     *,
@@ -555,7 +675,17 @@ def _request_with_config(
 
 
 def _materials(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
-    resolved = _content_base("materials", args, stderr=stderr)
+    if args.command == "download":
+        output = Path(args.output)
+        if output.exists() and not args.force:
+            stderr.write("Zieldatei existiert bereits; Überschreiben erfordert --force.\n")
+            return 1
+    resolved = _authoring_resource_base(
+        "materials",
+        args,
+        module_direct_commands={"create", "upload", "edit", "delete", "reorder"},
+        stderr=stderr,
+    )
     if resolved is None:
         return 1
     cfg, base = resolved
@@ -570,6 +700,49 @@ def _materials(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> i
             success={201},
             stdout=stdout,
             stderr=stderr,
+        )
+    if args.command == "upload":
+        source = Path(args.file)
+        if not source.is_file():
+            stderr.write("Die angegebene Datei existiert nicht.\n")
+            return 1
+        content = source.read_bytes()
+        mime_type = args.mime_type or mimetypes.guess_type(str(source))[0] or "application/octet-stream"
+        status, intent = _http_json(
+            "POST",
+            f"{cfg.base_url}{base}/upload-intents",
+            headers=_auth_headers(cfg),
+            json_body={
+                "filename": source.name,
+                "mime_type": mime_type,
+                "size_bytes": len(content),
+            },
+        )
+        if status != 200 or not isinstance(intent, dict):
+            stderr.write(f"API-Fehler ({status}): {intent}\n")
+            return 1
+        upload_headers = {str(k): str(v) for k, v in dict(intent.get("headers") or {}).items()}
+        upload_url = str(intent.get("url") or "")
+        upload_status, upload_body = _http_bytes("PUT", upload_url, headers=upload_headers, data=content)
+        if upload_status < 200 or upload_status >= 300:
+            stderr.write(f"Upload-Fehler ({upload_status}): {_body_preview(upload_body.decode('utf-8', errors='replace'))}\n")
+            return 1
+        finalize_payload: dict[str, object] = {
+            "intent_id": str(intent.get("intent_id") or ""),
+            "title": args.title,
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+        if args.alt_text is not None:
+            finalize_payload["alt_text"] = args.alt_text
+        return _request_with_config(
+            cfg,
+            method="POST",
+            path=f"{base}/finalize",
+            json_body=finalize_payload,
+            success={200, 201},
+            stdout=stdout,
+            stderr=stderr,
+            as_json=args.json,
         )
     if args.command == "edit":
         payload: dict[str, object | None] = {}
@@ -614,7 +787,38 @@ def _materials(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> i
             stdout=stdout,
             stderr=stderr,
         )
+    if args.command == "download":
+        status, body = _http_json(
+            "GET",
+            f"{cfg.base_url}{base}/{args.material_id}/download-url?disposition=attachment",
+            headers=_auth_headers(cfg),
+        )
+        if status != 200 or not isinstance(body, dict):
+            stderr.write(f"API-Fehler ({status}): {body}\n")
+            return 1
+        download_status, content = _http_bytes("GET", str(body.get("url") or ""))
+        if download_status < 200 or download_status >= 300:
+            stderr.write(f"Download-Fehler ({download_status}): {_body_preview(content.decode('utf-8', errors='replace'))}\n")
+            return 1
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(content)
+        stdout.write(f"Gespeichert: {output}\n")
+        return 0
     return 2
+
+
+def _apply_task_kind_payload(payload: dict[str, object], kind: str | None, *, partial: bool) -> None:
+    if kind is None:
+        return
+    if kind == "native":
+        if partial:
+            payload["h5p"] = None
+        return
+    if kind == "h5p":
+        payload["h5p"] = {"content_id": None, "display_options": {}}
+        return
+    payload[kind] = {}
 
 
 def _task_payload(args: argparse.Namespace, *, partial: bool) -> dict[str, object]:
@@ -629,13 +833,19 @@ def _task_payload(args: argparse.Namespace, *, partial: bool) -> dict[str, objec
         payload["due_at"] = args.due_at
     if getattr(args, "max_attempts", None) is not None:
         payload["max_attempts"] = args.max_attempts
+    _apply_task_kind_payload(payload, getattr(args, "kind", None), partial=partial)
     if not partial and "instruction_md" not in payload:
         payload["instruction_md"] = args.instruction_md
     return payload
 
 
 def _tasks(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
-    resolved = _content_base("tasks", args, stderr=stderr)
+    resolved = _authoring_resource_base(
+        "tasks",
+        args,
+        module_direct_commands={"create", "edit", "delete", "reorder"},
+        stderr=stderr,
+    )
     if resolved is None:
         return 1
     cfg, base = resolved
@@ -691,6 +901,72 @@ def _tasks(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
     return 2
 
 
+def _h5p(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
+    if args.command == "export":
+        output = Path(args.output)
+        if output.exists() and not args.force:
+            stderr.write("Zieldatei existiert bereits; Überschreiben erfordert --force.\n")
+            return 1
+    if args.command == "reset" and not args.yes:
+        stderr.write("Zurücksetzen erfordert --yes.\n")
+        return 1
+    cfg = _load_config_or_error(stderr)
+    if cfg is None:
+        return 1
+    if args.module_id and args.command in {"import", "reset"}:
+        base = f"/api/teaching/units/{args.unit_id}/modules/{args.module_id}/tasks"
+    else:
+        section_id = _resolve_section_id(cfg, args, stderr=stderr)
+        if section_id is None:
+            return 1
+        base = f"/api/teaching/units/{args.unit_id}/sections/{section_id}/tasks"
+    h5p_base = f"{base}/{args.task_id}/h5p"
+    if args.command == "import":
+        source = Path(args.file)
+        if not source.is_file():
+            stderr.write("Die angegebene H5P-Datei existiert nicht.\n")
+            return 1
+        status, body = _http_multipart(
+            "POST",
+            f"{cfg.base_url}{h5p_base}/import",
+            headers=_auth_headers(cfg),
+            field_name="file",
+            filename=source.name,
+            content=source.read_bytes(),
+            content_type="application/zip",
+        )
+        if status != 200:
+            stderr.write(f"API-Fehler ({status}): {body}\n")
+            return 1
+        _print_body(body, as_json=args.json, stdout=stdout)
+        return 0
+    if args.command == "export":
+        status, content = _http_bytes(
+            "GET",
+            f"{cfg.base_url}{h5p_base}/export",
+            headers=_auth_headers(cfg),
+        )
+        if status != 200:
+            stderr.write(f"API-Fehler ({status}): {_body_preview(content.decode('utf-8', errors='replace'))}\n")
+            return 1
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(content)
+        stdout.write(f"Gespeichert: {output}\n")
+        return 0
+    if args.command == "reset":
+        return _request_with_config(
+            cfg,
+            method="POST",
+            path=f"{h5p_base}/reset",
+            json_body=None,
+            success={200},
+            stdout=stdout,
+            stderr=stderr,
+        )
+    return 2
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -724,6 +1000,8 @@ def main(
         return _materials(args, stdout=stdout, stderr=stderr)
     if args.group == "tasks":
         return _tasks(args, stdout=stdout, stderr=stderr)
+    if args.group == "h5p":
+        return _h5p(args, stdout=stdout, stderr=stderr)
     parser.error("unknown command")
     return 2
 

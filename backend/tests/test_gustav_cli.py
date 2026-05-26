@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import stat
+import hashlib
 from urllib.error import HTTPError
 
 from backend.tools.gustav_cli import cli, config
@@ -122,6 +123,35 @@ def test_http_json_returns_structured_body_for_non_json_http_error(monkeypatch) 
     assert body["detail"] == "Bad Gateway"
     assert body["body_preview"] == "<html>proxy error</html>"
     assert "gustav_cli_secret_token" not in str(body)
+
+
+def test_http_multipart_sanitizes_content_disposition_parameters(monkeypatch) -> None:
+    captured: dict[str, bytes | str | dict[str, str] | None] = {}
+
+    def fake_http_bytes(method: str, url: str, *, headers: dict[str, str] | None = None, data: bytes | None = None):
+        captured["method"] = method
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["data"] = data
+        return 200, b'{"ok": true}'
+
+    monkeypatch.setattr(cli, "_http_bytes", fake_http_bytes)
+
+    status, body = cli._http_multipart(
+        "POST",
+        "https://gustav.example/api/upload",
+        field_name='fi\r\neld"',
+        filename='quiz"\r\nX-Injected: 1\\demo.h5p',
+        content=b"PK\x03\x04",
+        content_type="application/zip",
+    )
+
+    multipart_body = bytes(captured["data"]).decode("utf-8")
+    assert status == 200
+    assert body == {"ok": True}
+    assert '\r\nX-Injected: 1' not in multipart_body
+    assert 'name="fi_eld_"' in multipart_body
+    assert 'filename="quiz__X-Injected: 1_demo.h5p"' in multipart_body
 
 
 def test_auth_status_redacts_configured_token(tmp_path, monkeypatch) -> None:
@@ -356,7 +386,7 @@ def test_modules_reorder_sends_module_ids(tmp_path, monkeypatch) -> None:
     )
 
 
-def test_materials_create_with_module_id_resolves_section_target(tmp_path, monkeypatch) -> None:
+def test_materials_create_with_module_id_uses_module_write_endpoint(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("GUSTAV_CONFIG_HOME", str(tmp_path))
     config.save_config(config.GustavCLIConfig(base_url="https://gustav.example", token="gustav_cli_token_secret"))
     calls: list[tuple[str, str, dict[str, str] | None, object | None]] = []
@@ -389,18 +419,167 @@ def test_materials_create_with_module_id_resolves_section_target(tmp_path, monke
     assert code == 0
     assert calls == [
         (
-            "GET",
-            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/content-target",
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/materials",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"title": "Hinweis", "body_md": "Text"},
+        ),
+    ]
+
+
+def test_materials_mutations_with_module_id_use_module_endpoints_without_read_resolver(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    calls = _capture_http(monkeypatch, [(201, {}), (200, {}), (204, None), (200, [])])
+
+    assert cli.main(
+        [
+            "materials",
+            "create",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--title",
+            "Hinweis",
+            "--body-md",
+            "Text",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    ) == 0
+    assert cli.main(
+        [
+            "materials",
+            "edit",
+            "material-1",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--title",
+            "Neu",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    ) == 0
+    assert cli.main(
+        [
+            "materials",
+            "delete",
+            "material-1",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--yes",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    ) == 0
+    assert cli.main(
+        [
+            "materials",
+            "reorder",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--ids",
+            "material-2",
+            "material-1",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    ) == 0
+
+    assert calls == [
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/materials",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"title": "Hinweis", "body_md": "Text"},
+        ),
+        (
+            "PATCH",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/materials/material-1",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"title": "Neu"},
+        ),
+        (
+            "DELETE",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/materials/material-1",
             {"Authorization": "Bearer gustav_cli_token_secret"},
             None,
         ),
         (
             "POST",
-            "https://gustav.example/api/teaching/units/unit-1/sections/section-hidden/materials",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/materials/reorder",
             {"Authorization": "Bearer gustav_cli_token_secret"},
-            {"title": "Hinweis", "body_md": "Text"},
+            {"material_ids": ["material-2", "material-1"]},
         ),
     ]
+
+
+def test_materials_upload_with_module_id_uses_module_write_endpoints_without_read_resolver(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    source = tmp_path / "diagramm.pdf"
+    payload_bytes = b"%PDF-1.4\nGUSTAV\n"
+    source.write_bytes(payload_bytes)
+    sha256 = hashlib.sha256(payload_bytes).hexdigest()
+    calls: list[tuple[str, str, dict[str, str] | None, object | None]] = []
+    byte_calls: list[tuple[str, str, dict[str, str] | None, bytes | None]] = []
+
+    def fake_json(method: str, url: str, *, headers: dict[str, str] | None = None, json_body=None):
+        calls.append((method, url, headers, json_body))
+        if url.endswith("/materials/upload-intents"):
+            return 200, {
+                "intent_id": "intent-1",
+                "url": "https://storage.example/upload",
+                "headers": {"content-type": "application/pdf"},
+            }
+        return 201, {"id": "material-1", "title": "Diagramm", "kind": "file"}
+
+    def fake_bytes(method: str, url: str, *, headers: dict[str, str] | None = None, data: bytes | None = None):
+        byte_calls.append((method, url, headers, data))
+        return 200, b""
+
+    monkeypatch.setattr(cli, "_http_json", fake_json)
+    monkeypatch.setattr(cli, "_http_bytes", fake_bytes, raising=False)
+
+    code = cli.main(
+        [
+            "materials",
+            "upload",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--file",
+            str(source),
+            "--title",
+            "Diagramm",
+            "--json",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert calls == [
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/materials/upload-intents",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"filename": "diagramm.pdf", "mime_type": "application/pdf", "size_bytes": len(payload_bytes)},
+        ),
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/materials/finalize",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"intent_id": "intent-1", "title": "Diagramm", "sha256": sha256},
+        ),
+    ]
+    assert byte_calls == [("PUT", "https://storage.example/upload", {"content-type": "application/pdf"}, payload_bytes)]
 
 
 def test_tasks_create_sends_instruction_and_criteria(tmp_path, monkeypatch) -> None:
@@ -439,6 +618,420 @@ def test_tasks_create_sends_instruction_and_criteria(tmp_path, monkeypatch) -> N
         {"Authorization": "Bearer gustav_cli_token_secret"},
         {"instruction_md": "Erkläre den Algorithmus.", "criteria": ["nennt Eingabe", "nennt Ausgabe"]},
     )
+
+
+def test_tasks_mutations_with_module_id_use_module_endpoints_without_read_resolver(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    calls = _capture_http(monkeypatch, [(201, {}), (200, {}), (204, None), (200, [])])
+
+    assert cli.main(
+        [
+            "tasks",
+            "create",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--instruction-md",
+            "Bearbeite die Aufgabe.",
+            "--kind",
+            "h5p",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    ) == 0
+    assert cli.main(
+        [
+            "tasks",
+            "edit",
+            "task-1",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--instruction-md",
+            "Neu",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    ) == 0
+    assert cli.main(
+        [
+            "tasks",
+            "delete",
+            "task-1",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--yes",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    ) == 0
+    assert cli.main(
+        [
+            "tasks",
+            "reorder",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--ids",
+            "task-2",
+            "task-1",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    ) == 0
+
+    assert calls == [
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/tasks",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"instruction_md": "Bearbeite die Aufgabe.", "h5p": {"content_id": None, "display_options": {}}},
+        ),
+        (
+            "PATCH",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/tasks/task-1",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"instruction_md": "Neu"},
+        ),
+        (
+            "DELETE",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/tasks/task-1",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            None,
+        ),
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/tasks/reorder",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"task_ids": ["task-2", "task-1"]},
+        ),
+    ]
+
+
+def test_tasks_create_visual_kind_sends_marker_config(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    calls = _capture_http(monkeypatch, [(201, {"id": "task-1", "kind": "visual"})])
+
+    code = cli.main(
+        [
+            "tasks",
+            "create",
+            "--unit-id",
+            "unit-1",
+            "--section-id",
+            "section-1",
+            "--instruction-md",
+            "Analysiere das Bild.",
+            "--kind",
+            "visual",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert calls == [
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/sections/section-1/tasks",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"instruction_md": "Analysiere das Bild.", "visual": {}},
+        )
+    ]
+
+
+def test_materials_upload_uses_intent_put_and_finalize(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    source = tmp_path / "diagramm.pdf"
+    payload_bytes = b"%PDF-1.4\nGUSTAV\n"
+    source.write_bytes(payload_bytes)
+    sha256 = hashlib.sha256(payload_bytes).hexdigest()
+    calls: list[tuple[str, str, dict[str, str] | None, object | None]] = []
+    byte_calls: list[tuple[str, str, dict[str, str] | None, bytes | None]] = []
+
+    def fake_json(method: str, url: str, *, headers: dict[str, str] | None = None, json_body=None):
+        calls.append((method, url, headers, json_body))
+        if url.endswith("/materials/upload-intents"):
+            return 200, {
+                "intent_id": "intent-1",
+                "material_id": "material-1",
+                "storage_key": "materials/diagramm.pdf",
+                "url": "https://storage.example/upload",
+                "headers": {"content-type": "application/pdf", "x-upsert": "false"},
+                "accepted_mime_types": ["application/pdf", "image/png", "image/jpeg"],
+                "max_size_bytes": 20971520,
+                "expires_at": "2026-05-26T10:00:00Z",
+            }
+        return 201, {"id": "material-1", "title": "Diagramm", "kind": "file"}
+
+    def fake_bytes(method: str, url: str, *, headers: dict[str, str] | None = None, data: bytes | None = None):
+        byte_calls.append((method, url, headers, data))
+        return 200, b""
+
+    monkeypatch.setattr(cli, "_http_json", fake_json)
+    monkeypatch.setattr(cli, "_http_bytes", fake_bytes, raising=False)
+
+    stdout = io.StringIO()
+    code = cli.main(
+        [
+            "materials",
+            "upload",
+            "--unit-id",
+            "unit-1",
+            "--section-id",
+            "section-1",
+            "--file",
+            str(source),
+            "--title",
+            "Diagramm",
+            "--alt-text",
+            "Ablaufdiagramm",
+            "--json",
+        ],
+        stdout=stdout,
+        stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert json.loads(stdout.getvalue())["id"] == "material-1"
+    assert calls == [
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/sections/section-1/materials/upload-intents",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"filename": "diagramm.pdf", "mime_type": "application/pdf", "size_bytes": len(payload_bytes)},
+        ),
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/sections/section-1/materials/finalize",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            {"intent_id": "intent-1", "title": "Diagramm", "sha256": sha256, "alt_text": "Ablaufdiagramm"},
+        ),
+    ]
+    assert byte_calls == [
+        (
+            "PUT",
+            "https://storage.example/upload",
+            {"content-type": "application/pdf", "x-upsert": "false"},
+            payload_bytes,
+        )
+    ]
+
+
+def test_materials_download_refuses_overwrite_without_force(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    target = tmp_path / "material.pdf"
+    target.write_bytes(b"existing")
+    calls = _capture_http(monkeypatch)
+    monkeypatch.setattr(cli, "_http_bytes", lambda *args, **kwargs: (200, b"new"), raising=False)
+
+    stderr = io.StringIO()
+    code = cli.main(
+        [
+            "materials",
+            "download",
+            "material-1",
+            "--unit-id",
+            "unit-1",
+            "--section-id",
+            "section-1",
+            "--output",
+            str(target),
+        ],
+        stdout=io.StringIO(),
+        stderr=stderr,
+    )
+
+    assert code == 1
+    assert "--force" in stderr.getvalue()
+    assert target.read_bytes() == b"existing"
+    assert calls == []
+
+
+def test_h5p_import_uses_task_scoped_multipart_endpoint(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    h5p_file = tmp_path / "quiz.h5p"
+    h5p_file.write_bytes(b"PK\x03\x04demo")
+    multipart_calls: list[tuple[str, str, dict[str, str] | None, str, bytes, str]] = []
+
+    def fake_multipart(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        field_name: str,
+        filename: str,
+        content: bytes,
+        content_type: str,
+    ):
+        multipart_calls.append((method, url, headers, filename, content, content_type))
+        return 200, {"id": "task-1", "kind": "h5p"}
+
+    monkeypatch.setattr(cli, "_http_multipart", fake_multipart, raising=False)
+
+    code = cli.main(
+        [
+            "h5p",
+            "import",
+            "--unit-id",
+            "unit-1",
+            "--section-id",
+            "section-1",
+            "--task-id",
+            "task-1",
+            "--file",
+            str(h5p_file),
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert multipart_calls == [
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/sections/section-1/tasks/task-1/h5p/import",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            "quiz.h5p",
+            b"PK\x03\x04demo",
+            "application/zip",
+        )
+    ]
+
+
+def test_h5p_import_with_module_id_uses_module_write_endpoint_without_read_resolver(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    h5p_file = tmp_path / "quiz.h5p"
+    h5p_file.write_bytes(b"PK\x03\x04demo")
+    json_calls: list[tuple[str, str]] = []
+    multipart_calls: list[tuple[str, str, dict[str, str] | None, str, bytes, str]] = []
+
+    def fake_json(method: str, url: str, *, headers: dict[str, str] | None = None, json_body=None):
+        json_calls.append((method, url))
+        return 500, {"error": "unexpected_read_resolver"}
+
+    def fake_multipart(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        field_name: str,
+        filename: str,
+        content: bytes,
+        content_type: str,
+    ):
+        multipart_calls.append((method, url, headers, filename, content, content_type))
+        return 200, {"id": "task-1", "kind": "h5p"}
+
+    monkeypatch.setattr(cli, "_http_json", fake_json)
+    monkeypatch.setattr(cli, "_http_multipart", fake_multipart, raising=False)
+
+    code = cli.main(
+        [
+            "h5p",
+            "import",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--task-id",
+            "task-1",
+            "--file",
+            str(h5p_file),
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert json_calls == []
+    assert multipart_calls == [
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/tasks/task-1/h5p/import",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            "quiz.h5p",
+            b"PK\x03\x04demo",
+            "application/zip",
+        )
+    ]
+
+
+def test_h5p_reset_with_module_id_uses_module_write_endpoint_without_read_resolver(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    calls = _capture_http(monkeypatch, [(200, {"id": "task-1", "kind": "h5p"})])
+
+    code = cli.main(
+        [
+            "h5p",
+            "reset",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--task-id",
+            "task-1",
+            "--yes",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert calls == [
+        (
+            "POST",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/tasks/task-1/h5p/reset",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            None,
+        )
+    ]
+
+
+def test_h5p_export_with_module_id_still_resolves_section_target(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    output = tmp_path / "quiz.h5p"
+    json_calls: list[tuple[str, str, dict[str, str] | None, object | None]] = []
+
+    def fake_json(method: str, url: str, *, headers: dict[str, str] | None = None, json_body=None):
+        json_calls.append((method, url, headers, json_body))
+        return 200, {"module_id": "module-1", "section_id": "section-hidden"}
+
+    monkeypatch.setattr(cli, "_http_json", fake_json)
+    monkeypatch.setattr(cli, "_http_bytes", lambda method, url, *, headers=None, data=None: (200, b"PK\x03\x04demo"))
+
+    code = cli.main(
+        [
+            "h5p",
+            "export",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+            "--task-id",
+            "task-1",
+            "--output",
+            str(output),
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert json_calls == [
+        (
+            "GET",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/content-target",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            None,
+        )
+    ]
+    assert output.read_bytes() == b"PK\x03\x04demo"
 
 
 def test_units_edit_sends_only_changed_fields(tmp_path, monkeypatch) -> None:
@@ -587,7 +1180,7 @@ def test_delete_commands_require_yes_before_http_call(tmp_path, monkeypatch) -> 
     assert calls == []
 
 
-def test_module_target_failure_stops_material_create_before_write(tmp_path, monkeypatch) -> None:
+def test_module_material_create_reports_write_endpoint_error(tmp_path, monkeypatch) -> None:
     _configure_test_cli(tmp_path, monkeypatch)
     calls = _capture_http(monkeypatch, [(404, {"error": "not_found"})])
 
@@ -601,7 +1194,7 @@ def test_module_target_failure_stops_material_create_before_write(tmp_path, monk
     assert code == 1
     assert "API-Fehler (404)" in stderr.getvalue()
     assert len(calls) == 1
-    assert calls[0][0] == "GET"
+    assert calls[0][0] == "POST"
 
 
 def test_api_errors_do_not_leak_configured_token(tmp_path, monkeypatch) -> None:

@@ -135,28 +135,50 @@ Materialien können über einen linearen Abschnitt oder über ein Modul adressie
 ```bash
 gustav materials list --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--json]
 gustav materials create --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --title <titel> --body-md <markdown>
+gustav materials upload --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --file <pfad> --title <titel> [--mime-type <mime>] [--alt-text <text>] [--json]
+gustav materials download <material-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --output <pfad> [--force]
 gustav materials edit <material-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--title <titel>] [--body-md <markdown>] [--alt-text <text>]
 gustav materials delete <material-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --yes
 gustav materials reorder --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --ids <material-id>...
 ```
 
-Bei `--module-id` löst die CLI intern das versteckte Inhaltsziel des Moduls auf:
+`upload` nutzt den bestehenden sicheren Datei-Flow der Teaching-API: Upload-Intent erstellen, Datei per Presigned `PUT` hochladen, lokalen SHA-256 berechnen und anschließend finalisieren. Unterstützt werden die MIME-Typen des API-Vertrags: `application/pdf`, `image/png` und `image/jpeg` bis 20 MiB. `download` schreibt nur mit `--force` über eine bestehende lokale Datei.
+
+Bei lesenden Materialbefehlen mit `--module-id` löst die CLI intern das versteckte Inhaltsziel des Moduls auf:
 
 ```text
 GET /api/teaching/units/{unit_id}/modules/{module_id}/content-target
 ```
 
+Mutierende Materialbefehle mit `--module-id` verwenden direkte Modul-Endpunkte. `create`, `upload`, `edit` und `reorder` benötigen nur `write`; `delete` benötigt nur `delete`. Sie brauchen keinen zusätzlichen `read`-Scope.
+
 ### Aufgaben
 
 ```bash
 gustav tasks list --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--json]
-gustav tasks create --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --instruction-md <markdown> [--criterion <text>]...
-gustav tasks edit <task-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--instruction-md <markdown>] [--criterion <text>]... [--teacher-context-md <markdown>] [--due-at <iso>] [--max-attempts <n>]
+gustav tasks create --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --instruction-md <markdown> [--criterion <text>]... [--kind native|h5p|visual|scratch|calliope|filius]
+gustav tasks edit <task-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--instruction-md <markdown>] [--criterion <text>]... [--teacher-context-md <markdown>] [--due-at <iso>] [--max-attempts <n>] [--kind native|h5p|visual|scratch|calliope|filius]
 gustav tasks delete <task-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --yes
 gustav tasks reorder --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --ids <task-id>...
 ```
 
-Mehrere Kriterien werden durch wiederholtes `--criterion` übergeben.
+Mehrere Kriterien werden durch wiederholtes `--criterion` übergeben. Die CLI sendet kein read-only `kind`-Feld, sondern die im API-Vertrag vorgesehenen Konfigurationsblöcke. Für `visual`, `scratch`, `calliope` und `filius` sind das aktuell leere Marker-Konfigurationen. Für `h5p` wird zunächst eine H5P-Aufgabe ohne verknüpften Inhalt erstellt; das Paket wird anschließend über `gustav h5p import` verknüpft.
+
+Mutierende Aufgabenbefehle mit `--module-id` verwenden direkte Modul-Endpunkte. `create`, `edit` und `reorder` benötigen nur `write`; `delete` benötigt nur `delete`. `list --module-id` bleibt eine Leseoperation und nutzt weiterhin den Content-Target-Resolver.
+
+### H5P-Pakete
+
+```bash
+gustav h5p import --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --task-id <task-id> --file <pfad> [--json]
+gustav h5p export --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --task-id <task-id> --output <pfad> [--force]
+gustav h5p reset --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --task-id <task-id> --yes
+```
+
+Die H5P-CLI unterstützt bewusst den robusten Paket-Workflow mit `.h5p`-Dateien. Der H5P-Editor-JSON-Workflow (`editor-model`/`save`) bleibt browsergebunden, weil komplexe H5P-Editorparameter je Content-Type stark variieren und nicht zuverlässig von Codex synthetisiert werden sollen.
+
+Bei modularen H5P-Aufgaben rufen `import` und `reset` direkte Modul-Endpunkte auf. Dafür reicht ein CLI-Token mit `write`-Scope; die CLI löst das Modul nicht vorher über den read-scoped `content-target` auf. `export --module-id` bleibt eine Leseoperation und nutzt weiterhin den Content-Target-Resolver, benötigt also `read`.
+
+Technisch authentifiziert die Teaching-API zuerst das CLI-Token und ruft den H5P-Sidecar anschließend über einen internen, `H5P_INTERNAL_SHARED_SECRET`-gebundenen Lehrer-Kontext auf. Dadurch brauchen CLI-Workflows keine Browser-Cookies; Cookie-Flows behalten ihren Same-Origin-/CSRF-Schutz.
 
 ## Beispiel-Workflow
 
@@ -185,14 +207,14 @@ gustav tasks create \
 
 - Es gibt keinen `units reorder`-Befehl, weil Lerneinheiten im Authoring-Modell keine globale Reihenfolge haben.
 - `move`-Wrapper wie `--before`, `--after` oder `--to-index` sind noch nicht umgesetzt. Nutze `reorder --ids`.
-- Datei-Material-Uploads sind noch nicht über die CLI implementiert.
-- H5P-Authoring ist nicht Teil dieser CLI-Version.
-- Spezialkonfigurationen für `visual`, `scratch`, `calliope` und `filius` sind noch keine CLI-Komfortoptionen.
+- H5P-Authoring aus Editor-JSON ist nicht Teil der CLI; unterstützter Weg ist Import/Export bestehender `.h5p`-Pakete.
+- Spezialaufgaben `visual`, `scratch`, `calliope` und `filius` nutzen die bestehenden Marker-Konfigurationen, aber keine zusätzlichen Lehrer-Starterdateien.
 
 ## Technische Referenzen
 
 - API-Vertrag: `api/openapi.yml`
 - Implementierungsplan: `docs/plan/2026-05-11-gustav-cli-authoring-api.md`
+- Ausbauplan Datei/H5P: `docs/plan/2026-05-26-gustav-cli-upload-h5p.md`
 - CLI-Code: `backend/tools/gustav_cli/`
 - CLI-Tests: `backend/tests/test_gustav_cli.py`
 - Token-Tests: `backend/tests/test_cli_tokens.py`

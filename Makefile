@@ -51,9 +51,11 @@ ps:
 reset-local:
 	# Reset Supabase DB (non-interactive), then restore required local invariants:
 	# - app login role IN ROLE gustav_limited
+	# - worker login role IN ROLE gustav_worker
 	# - recreate services that consume env_file (.env)
 	supabase db reset --yes
 	$(MAKE) db-login-user
+	$(MAKE) learning-worker-db-login-user
 	@echo "Note: Supabase keys rotate on db reset. Update SUPABASE_SERVICE_ROLE_KEY in .env from: supabase status"
 	mkdir -p .tmp/dev_uploads
 	mkdir -p .tmp

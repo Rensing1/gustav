@@ -39,8 +39,9 @@
     const EditorCtor = module.default;
     const instance = new EditorCtor({
       el: host,
-      height: "28rem",
-      minHeight: "22rem",
+      // Toast UI parses these values as pixel numbers internally, so keep them in px.
+      height: "448px",
+      minHeight: "352px",
       initialValue: currentValue,
       initialEditType: "wysiwyg",
       hideModeSwitch: true,

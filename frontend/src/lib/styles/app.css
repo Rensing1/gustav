@@ -3368,7 +3368,7 @@ select {
 }
 
 .learning-markdown-editor .toastui-editor-main {
-  min-height: 40rem;
+  min-height: 0;
 }
 
 .learning-markdown-editor .toastui-editor-ww-container .toastui-editor {
@@ -3377,6 +3377,8 @@ select {
 
 .learning-markdown-editor .toastui-editor-ww-container .toastui-editor-contents,
 .learning-markdown-editor .toastui-editor-ww-container .ProseMirror {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   font-family: inherit;
   font-size: 1.02rem;
   line-height: 1.72;

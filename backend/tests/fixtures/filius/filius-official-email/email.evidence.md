@@ -17,6 +17,7 @@
 - firewalls: 0
 - email_clients: 4
 - email_servers: 2
+- documentation_items: 0
 - email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0

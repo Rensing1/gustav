@@ -43,6 +43,8 @@ class FiliusNode:
     name: str
     label_type: str
     interfaces: tuple[FiliusInterface, ...]
+    ssid: str = "unknown"
+    rip_enabled: str = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +93,8 @@ class FiliusApplication:
     installed: str
     active: str
     active_source: str
+    port: str = "unknown"
+    target_ip: str = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +110,19 @@ class FiliusFilesystemFile:
     sha256: str
     content: str
     truncated: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class FiliusDocumentationItem:
+    """A Filius canvas documentation item with passive layout metadata."""
+
+    id: str
+    item_type: str
+    text: str
+    x: str
+    y: str
+    width: str
+    height: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +201,7 @@ class FiliusTopology:
     firewalls: tuple[FiliusFirewall, ...] = ()
     email_clients: tuple[FiliusEmailClient, ...] = ()
     email_servers: tuple[FiliusEmailServer, ...] = ()
+    documentation_items: tuple[FiliusDocumentationItem, ...] = ()
     email_clients_without_accounts: int = 0
     unresolved_links: int = 0
     invalid_interfaces: int = 0
@@ -276,6 +294,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
                 _email_servers(hardware, node_id=node_id, start_index=len(email_servers) + 1)
             )
 
+        system_software = _find_direct_property_element(hardware, "systemSoftware")
         nodes.append(
             FiliusNode(
                 id=node_id,
@@ -285,6 +304,8 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
                 name=name,
                 label_type=label_type,
                 interfaces=tuple(interfaces),
+                ssid=_normalize_optional(_property_text(system_software, "SSID")),
+                rip_enabled=_normalize_boolean(_property_text(system_software, "ripEnabled")),
             )
         )
 
@@ -315,6 +336,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
         for (cidr, netmask), interface_ids in sorted(networks.items(), key=lambda item: item[0][0])
     )
     manual_routes = _resolve_manual_routes(route_rows, nodes)
+    documentation_items = _documentation_items(root)
 
     return FiliusTopology(
         nodes=tuple(nodes),
@@ -326,6 +348,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
         firewalls=tuple(firewalls),
         email_clients=tuple(email_clients),
         email_servers=tuple(email_servers),
+        documentation_items=documentation_items,
         email_clients_without_accounts=sum(1 for client in email_clients if not client.accounts),
         unresolved_links=unresolved_links,
         invalid_interfaces=invalid_interfaces,
@@ -415,6 +438,8 @@ def _installed_applications(hardware: ET.Element, *, node_id: str, start_index: 
                 installed="true",
                 active=active or "unknown",
                 active_source="persisted" if active is not None else "not_persisted",
+                port=_normalize_optional(_property_text(value_source, "port")),
+                target_ip=_normalize_optional(_property_text(value_source, "zielIPAdresse")),
             )
         )
     return applications
@@ -439,6 +464,12 @@ def _application_kind(class_name: str) -> str:
         return "email_client"
     if class_name == "filius.software.email.EmailServer":
         return "email_server"
+    if class_name == "filius.software.clientserver.ClientBaustein":
+        return "client_server_client"
+    if class_name == "filius.software.clientserver.ServerBaustein":
+        return "client_server_server"
+    if class_name == "filius.software.lokal.Terminal":
+        return "terminal"
     return "unknown"
 
 
@@ -516,7 +547,7 @@ def _build_filesystem_file(file_object: ET.Element, *, node_id: str, file_id: st
     content_kind = "text" if _is_text_file(path, file_type) else "binary"
     shown_content = ""
     truncated = False
-    if content_kind == "text":
+    if content_kind == "text" and not _is_metadata_only_filesystem_path(path):
         shown_content = content
         if len(shown_content) > _MAX_EXTRACTED_FILE_CHARS:
             shown_content = shown_content[:_MAX_EXTRACTED_FILE_CHARS]
@@ -762,6 +793,26 @@ def _email_server_accounts(app_object: ET.Element, *, owner_id: str, mail_domain
     return accounts
 
 
+def _documentation_items(root: ET.Element) -> tuple[FiliusDocumentationItem, ...]:
+    items: list[FiliusDocumentationItem] = []
+    for item_index, item_object in enumerate(
+        (obj for obj in root.iter("object") if obj.attrib.get("class") == "filius.gui.netzwerksicht.GUIDocuItem"),
+        start=1,
+    ):
+        items.append(
+            FiliusDocumentationItem(
+                id=f"doc{item_index}",
+                item_type=_normalize_optional(_property_text(item_object, "type")),
+                text=_normalize_optional(_property_text(item_object, "text")),
+                x=_normalize_optional(_property_text(item_object, "x")),
+                y=_normalize_optional(_property_text(item_object, "y")),
+                width=_normalize_optional(_property_text(item_object, "width")),
+                height=_normalize_optional(_property_text(item_object, "height")),
+            )
+        )
+    return tuple(items)
+
+
 def _email_client_accounts_from_konten_file(hardware: ET.Element, *, owner_id: str) -> list[FiliusEmailAccount]:
     accounts: list[FiliusEmailAccount] = []
     for path, content in _filesystem_text_files(hardware):
@@ -858,7 +909,17 @@ def _build_email_account(
 
 
 def _is_allowed_filesystem_path(path: str) -> bool:
-    return path == "/dns/hosts" or path == "/www.conf/vhosts" or path.startswith("/webserver/")
+    return (
+        path == "/dns/hosts"
+        or path == "/www.conf/vhosts"
+        or path.startswith("/webserver/")
+        or _is_metadata_only_filesystem_path(path)
+    )
+
+
+def _is_metadata_only_filesystem_path(path: str) -> bool:
+    normalized = path.casefold()
+    return normalized.startswith("/peer2peer/") and normalized.count("/") == 2 and normalized.endswith(".txt")
 
 
 def _is_text_file(path: str, file_type: str) -> bool:

@@ -12,11 +12,12 @@
 - links: 2
 - derived_networks: 0
 - manual_routes: 0
-- applications: 1
+- applications: 2
 - filesystem_files: 4
 - firewalls: 0
 - email_clients: 0
 - email_servers: 0
+- documentation_items: 0
 - email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
@@ -105,4 +106,5 @@ none
 none
 
 ## Custom Applications
-none
+- applications:
+  - id: "app3"; node: "n2"; class: "filius.software.lokal.Terminal"; name: "Thread-40"; installed: "true"; active: "unknown"; active_source: "not_persisted"

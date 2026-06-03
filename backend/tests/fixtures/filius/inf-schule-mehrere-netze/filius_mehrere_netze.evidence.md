@@ -12,11 +12,12 @@
 - links: 9
 - derived_networks: 6
 - manual_routes: 4
-- applications: 3
+- applications: 5
 - filesystem_files: 0
 - firewalls: 3
 - email_clients: 0
 - email_servers: 0
+- documentation_items: 0
 - email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
@@ -159,9 +160,9 @@ none
 
 ## Web
 - applications:
-  - id: "app1"; node: "n2"; class: "filius.software.www.WebServer"; name: "Thread-95"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app2"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-105"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app3"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-110"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app2"; node: "n2"; class: "filius.software.www.WebServer"; name: "Thread-95"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app3"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-105"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app4"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-110"; installed: "true"; active: "true"; active_source: "persisted"
 
 ## Email
 none
@@ -170,4 +171,6 @@ none
 none
 
 ## Custom Applications
-none
+- applications:
+  - id: "app1"; node: "n1"; class: "filius.software.lokal.Terminal"; name: "Thread-561"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app5"; node: "n5"; class: "filius.software.lokal.Terminal"; name: "Thread-562"; installed: "true"; active: "unknown"; active_source: "not_persisted"

@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 from backend.storage.filius_validation import extract_configuration_xml_bytes
 from backend.filius.topology import (
     FiliusApplication,
+    FiliusDocumentationItem,
     FiliusEmailAccount,
     FiliusEmailClient,
     FiliusEmailServer,
@@ -106,6 +107,7 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             lines.append(f"- firewalls: {len(topology.firewalls)}")
             lines.append(f"- email_clients: {len(topology.email_clients)}")
             lines.append(f"- email_servers: {len(topology.email_servers)}")
+            lines.append(f"- documentation_items: {len(topology.documentation_items)}")
             lines.append(f"- email_clients_without_accounts: {topology.email_clients_without_accounts}")
             truncated_files = sum(1 for file in topology.filesystem_files if file.truncated)
             lines.append(f"- truncated_files: {truncated_files}")
@@ -125,6 +127,10 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             _render_web(lines, topology)
         elif heading == "Email":
             _render_email(lines, topology)
+        elif heading == "Documentation":
+            _render_documentation(lines, topology)
+        elif heading == "Custom Applications":
+            _render_custom_applications(lines, topology)
         else:
             lines.append("none")
         lines.append("")
@@ -142,6 +148,10 @@ def _render_nodes(lines: list[str], topology: FiliusTopology) -> None:
         lines.append(f'- type: "{_safe_text(node.device_type)}"')
         lines.append(f'- name: "{_safe_text(node.name)}"')
         lines.append(f'- label_type: "{_safe_text(node.label_type)}"')
+        if node.ssid != "unknown":
+            lines.append(f'- ssid: "{_safe_text(node.ssid)}"')
+        if node.rip_enabled != "unknown":
+            lines.append(f'- rip_enabled: "{_safe_text(node.rip_enabled)}"')
         if not node.interfaces:
             lines.append("- interfaces: none")
             lines.append("")
@@ -341,12 +351,48 @@ def _format_email_account(account: FiliusEmailAccount) -> str:
     return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
 
 
+def _render_documentation(lines: list[str], topology: FiliusTopology) -> None:
+    if not topology.documentation_items:
+        lines.append("none")
+        return
+    lines.append("- documentation_items:")
+    for item in topology.documentation_items:
+        lines.append(f"  - {_format_documentation_item(item)}")
+
+
+def _format_documentation_item(item: FiliusDocumentationItem) -> str:
+    fields = (
+        ("id", item.id),
+        ("type", item.item_type),
+        ("text", item.text),
+        ("x", item.x),
+        ("y", item.y),
+        ("width", item.width),
+        ("height", item.height),
+    )
+    return "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
+
+
+def _render_custom_applications(lines: list[str], topology: FiliusTopology) -> None:
+    apps = [
+        app
+        for app in topology.applications
+        if app.kind in {"client_server_client", "client_server_server", "terminal"}
+    ]
+    files = [file for file in topology.filesystem_files if file.path.casefold().startswith("/peer2peer/")]
+    if not apps and not files:
+        lines.append("none")
+        return
+    _render_applications(lines, apps)
+    _render_files(lines, files)
+
+
 def _render_applications(lines: list[str], applications: list[FiliusApplication]) -> None:
     if not applications:
         return
     lines.append("- applications:")
     for app in applications:
-        fields = (
+        fields: list[tuple[str, str]] = [
             ("id", app.id),
             ("node", app.node_id),
             ("class", app.class_name),
@@ -354,7 +400,11 @@ def _render_applications(lines: list[str], applications: list[FiliusApplication]
             ("installed", app.installed),
             ("active", app.active),
             ("active_source", app.active_source),
-        )
+        ]
+        if app.port != "unknown":
+            fields.append(("port", app.port))
+        if app.target_ip != "unknown":
+            fields.append(("target_ip", app.target_ip))
         rendered_fields = "; ".join(f'{key}: "{_safe_text(value)}"' for key, value in fields)
         lines.append(f"  - {rendered_fields}")
 
@@ -374,7 +424,7 @@ def _render_files(lines: list[str], files: list[FiliusFilesystemFile]) -> None:
             ("sha256", file.sha256),
         )
         parts = [f'{key}: "{_safe_text(value)}"' for key, value in fields]
-        if file.content_kind == "text":
+        if file.content_kind == "text" and file.content:
             content = file.content
             if file.truncated:
                 content = f"{content} [truncated: shown_chars={len(file.content)}]"

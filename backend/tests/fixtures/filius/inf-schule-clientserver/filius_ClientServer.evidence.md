@@ -13,10 +13,11 @@
 - derived_networks: 1
 - manual_routes: 0
 - applications: 0
-- filesystem_files: 0
+- filesystem_files: 1
 - firewalls: 0
 - email_clients: 0
 - email_servers: 0
+- documentation_items: 0
 - email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
@@ -65,6 +66,7 @@
 - type: "switch"
 - name: "Switch / WLAN"
 - label_type: "Switch / WLAN"
+- ssid: "cb2fae"
 - interfaces: none
 
 ### n6
@@ -82,6 +84,7 @@
 - type: "switch"
 - name: "Switch / WLAN"
 - label_type: "Switch / WLAN"
+- ssid: "4c7987"
 - interfaces: none
 
 ### n8
@@ -153,6 +156,7 @@
 - type: "switch"
 - name: "Switch / WLAN"
 - label_type: "Switch / WLAN"
+- ssid: "b51eba"
 - interfaces: none
 
 ### n16
@@ -230,4 +234,5 @@ none
 none
 
 ## Custom Applications
-none
+- files:
+  - id: "file1"; node: "n10"; path: "/peer2peer/Nachricht.txt"; type: "text"; content_kind: "text"; size_bytes: "678"; sha256: "5968e4f05868e5cd9034f9687c9c52ad28e71e6534f7d53e2027c749f0186f9c"

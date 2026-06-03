@@ -13,10 +13,11 @@
 - derived_networks: 1
 - manual_routes: 0
 - applications: 2
-- filesystem_files: 3
+- filesystem_files: 4
 - firewalls: 0
 - email_clients: 0
 - email_servers: 0
+- documentation_items: 0
 - email_clients_without_accounts: 0
 - truncated_files: 0
 - unresolved_links: 0
@@ -63,4 +64,5 @@ none
 none
 
 ## Custom Applications
-none
+- files:
+  - id: "file4"; node: "n1"; path: "/peer2peer/Nachricht.txt"; type: "text"; content_kind: "text"; size_bytes: "13"; sha256: "89c4417d27c579a4b8b373acf3b8daa46f9cbbade6e39863d23924f91c2abd26"

@@ -98,6 +98,148 @@ DNS-Server: 172.16.1.1&lt;/pre&gt;&lt;/html&gt;</string>
 </java>
 """
 
+ENRICHED_APPLICATIONS_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<java version="17" class="java.beans.XMLDecoder">
+  <string>2.5</string>
+  <object class="filius.gui.netzwerksicht.GUIKnotenItem" id="GUIKnotenItem0">
+    <void property="imageLabel">
+      <object class="filius.gui.netzwerksicht.JSidebarButton">
+        <void property="text"><string>WLAN-Switch</string></void>
+        <void property="typ"><string>Switch / WLAN</string></void>
+      </object>
+    </void>
+    <void property="knoten">
+      <object class="filius.hardware.knoten.Switch" id="Switch0">
+        <void property="systemSoftware">
+          <void property="SSID"><string>classroom-wifi</string></void>
+        </void>
+      </object>
+    </void>
+  </object>
+  <object class="filius.gui.netzwerksicht.GUIKnotenItem" id="GUIKnotenItem1">
+    <void property="imageLabel">
+      <object class="filius.gui.netzwerksicht.JSidebarButton">
+        <void property="text"><string>Router</string></void>
+        <void property="typ"><string>Vermittlungsrechner</string></void>
+      </object>
+    </void>
+    <void property="knoten">
+      <object class="filius.hardware.knoten.Vermittlungsrechner" id="Router0">
+        <void property="systemSoftware">
+          <void property="installierteAnwendungen">
+            <void method="put">
+              <string>filius.software.www.WebServer</string>
+              <object class="filius.software.www.WebServer">
+                <void property="aktiv"><boolean>true</boolean></void>
+                <void property="name"><string>ClassWeb</string></void>
+                <void property="port"><int>8080</int></void>
+              </object>
+            </void>
+          </void>
+          <void property="ripEnabled"><boolean>true</boolean></void>
+        </void>
+      </object>
+    </void>
+  </object>
+  <object class="filius.gui.netzwerksicht.GUIKnotenItem" id="GUIKnotenItem2">
+    <void property="imageLabel">
+      <object class="filius.gui.netzwerksicht.JSidebarButton">
+        <void property="text"><string>Client</string></void>
+        <void property="typ"><string>Rechner</string></void>
+      </object>
+    </void>
+    <void property="knoten">
+      <object class="filius.hardware.knoten.Rechner" id="Rechner0">
+        <void property="systemSoftware">
+          <void property="installierteAnwendungen">
+            <void method="put">
+              <string>filius.software.clientserver.ClientBaustein</string>
+              <object class="filius.software.clientserver.ClientBaustein">
+                <void property="name"><string>Client-App</string></void>
+                <void property="zielIPAdresse"><string>192.168.1.4</string></void>
+              </object>
+            </void>
+          </void>
+        </void>
+      </object>
+    </void>
+  </object>
+  <object class="filius.gui.netzwerksicht.GUIKnotenItem" id="GUIKnotenItem3">
+    <void property="imageLabel">
+      <object class="filius.gui.netzwerksicht.JSidebarButton">
+        <void property="text"><string>Server</string></void>
+        <void property="typ"><string>Rechner</string></void>
+      </object>
+    </void>
+    <void property="knoten">
+      <object class="filius.hardware.knoten.Rechner" id="Rechner1">
+        <void property="systemSoftware">
+          <void property="installierteAnwendungen">
+            <void method="put">
+              <string>filius.software.clientserver.ServerBaustein</string>
+              <object class="filius.software.clientserver.ServerBaustein">
+                <void property="aktiv"><boolean>true</boolean></void>
+                <void property="name"><string>Server-App</string></void>
+              </object>
+            </void>
+          </void>
+        </void>
+      </object>
+    </void>
+  </object>
+  <object class="filius.gui.netzwerksicht.GUIDocuItem">
+    <void property="text"><string>Verwaltung</string></void>
+    <void property="type"><int>2</int></void>
+    <void property="x"><int>751</int></void>
+    <void property="y"><int>247</int></void>
+    <void property="width"><int>120</int></void>
+    <void property="height"><int>40</int></void>
+  </object>
+</java>
+"""
+
+PEER2PEER_FILE_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<java version="17" class="java.beans.XMLDecoder">
+  <string>2.5</string>
+  <object class="filius.gui.netzwerksicht.GUIKnotenItem" id="GUIKnotenItem0">
+    <void property="imageLabel">
+      <object class="filius.gui.netzwerksicht.JSidebarButton">
+        <void property="text"><string>Alice</string></void>
+        <void property="typ"><string>Rechner</string></void>
+      </object>
+    </void>
+    <void property="knoten">
+      <object class="filius.hardware.knoten.Rechner" id="Rechner0">
+        <void property="systemSoftware">
+          <void property="dateisystem">
+            <void property="arbeitsVerzeichnis">
+              <void method="add">
+                <object class="javax.swing.tree.DefaultMutableTreeNode">
+                  <void property="userObject"><string>peer2peer</string></void>
+                  <void method="add">
+                    <object class="javax.swing.tree.DefaultMutableTreeNode">
+                      <void property="userObject">
+                        <object class="filius.software.system.Datei">
+                          <void property="dateiInhalt">
+                            <string>Private Aufgabenbeschreibung mit Namen</string>
+                          </void>
+                          <void property="dateiTyp"><string>text</string></void>
+                          <void property="name"><string>Nachricht.txt</string></void>
+                        </object>
+                      </void>
+                    </object>
+                  </void>
+                </object>
+              </void>
+            </void>
+          </void>
+        </void>
+      </object>
+    </void>
+  </object>
+</java>
+"""
+
 
 def _fls_with_config(config: bytes = MINIMAL_XML) -> bytes:
     buf = io.BytesIO()
@@ -195,7 +337,7 @@ def test_filius_mehrere_netze_fixture_keeps_source_attribution() -> None:
 
 
 def test_filius_synthetic_dns_web_fixture_renders_safe_dns_and_web_evidence() -> None:
-    """DNS/Web evidence should include allowlisted files and hide unrelated paths."""
+    """DNS/Web evidence should include safe files and hide unrelated file contents."""
     from backend.filius.evidence_v1 import build_evidence_markdown_v1
 
     fixture_dir = Path("backend/tests/fixtures/filius/synthetic-dns-web")
@@ -216,7 +358,8 @@ def test_filius_synthetic_dns_web_fixture_renders_safe_dns_and_web_evidence() ->
     assert 'path: "/webserver/logo.png"' in md
     assert 'content: "' not in md.split('path: "/webserver/logo.png"', maxsplit=1)[1].split("\n", maxsplit=1)[0]
     assert "must not leak" not in md
-    assert "/peer2peer" not in md
+    assert 'path: "/peer2peer/Nachricht.txt"' in md
+    assert 'content: "' not in md.split('path: "/peer2peer/Nachricht.txt"', maxsplit=1)[1].split("\n", maxsplit=1)[0]
     assert "<java" not in md
     assert "<object" not in md
     assert "idref" not in md
@@ -245,6 +388,61 @@ def test_filius_legacy_email_client_konten_file_renders_metadata_without_secrets
     assert "vorname" not in md.lower()
     assert "nachname" not in md.lower()
     assert "konten.txt" not in md
+    assert "<java" not in md
+    assert "<object" not in md
+
+
+def test_filius_evidence_renders_app_ports_client_server_apps_node_flags_and_documentation() -> None:
+    """Core Filius simulation facts should survive extraction into evidence."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    md = build_evidence_markdown_v1(_fls_with_config(ENRICHED_APPLICATIONS_XML))
+
+    assert 'ssid: "classroom-wifi"' in md
+    assert 'rip_enabled: "true"' in md
+    assert 'class: "filius.software.www.WebServer"' in md
+    assert 'port: "8080"' in md
+    assert 'class: "filius.software.clientserver.ClientBaustein"' in md
+    assert 'target_ip: "192.168.1.4"' in md
+    assert 'class: "filius.software.clientserver.ServerBaustein"' in md
+    assert 'text: "Verwaltung"' in md
+    assert 'type: "2"' in md
+    assert 'x: "751"' in md
+    assert 'y: "247"' in md
+    assert "<java" not in md
+    assert "<object" not in md
+    assert "idref" not in md
+
+
+def test_filius_evidence_renders_peer2peer_file_metadata_without_content() -> None:
+    """Peer-to-peer text files may be relevant, but contents stay out of evidence."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    md = build_evidence_markdown_v1(_fls_with_config(PEER2PEER_FILE_XML))
+
+    assert 'path: "/peer2peer/Nachricht.txt"' in md
+    assert 'content_kind: "text"' in md
+    assert 'sha256: "' in md
+    assert "Private Aufgabenbeschreibung" not in md
+    assert 'content: "' not in md
+    assert "<java" not in md
+    assert "<object" not in md
+
+
+def test_filius_evidence_renders_peer2peer_file_metadata_case_insensitively() -> None:
+    """Peer-to-peer metadata should render with the same case rules as extraction."""
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    xml = PEER2PEER_FILE_XML.replace(b"peer2peer", b"Peer2Peer").replace(
+        b"Nachricht.txt", b"Nachricht.TXT"
+    )
+
+    md = build_evidence_markdown_v1(_fls_with_config(xml))
+
+    assert 'path: "/Peer2Peer/Nachricht.TXT"' in md
+    assert 'content_kind: "text"' in md
+    assert "Private Aufgabenbeschreibung" not in md
+    assert 'content: "' not in md
     assert "<java" not in md
     assert "<object" not in md
 

@@ -83,10 +83,6 @@ type BackendRequestOptions = {
   authRedirectPath?: string;
 };
 
-function loginHref(path: string): string {
-  return `/?redirect=${encodeURIComponent(path || "/")}`;
-}
-
 function continuationHref(path: string): string {
   return `/auth/continue?redirect=${encodeURIComponent(path || "/")}`;
 }
@@ -102,16 +98,13 @@ async function handleFinalUnauthorizedResponse(
   }
 
   const hasFrontendSession = Boolean(readFrontendSessionCookie(cookies));
-  const hasAppSession = await readAppSessionActive(fetchFn, cookies);
-  if (hasFrontendSession || hasAppSession) {
-    if (!hasFrontendSession && hasAppSession) {
-      console.info("auth.continuity", {
-        reason: "app_session_active_without_bearer"
-      });
-    }
-    throw redirect(302, continuationHref(authRedirectPath));
+  const hasAppSession = hasFrontendSession ? false : await readAppSessionActive(fetchFn, cookies);
+  if (!hasFrontendSession && hasAppSession) {
+    console.info("auth.continuity", {
+      reason: "app_session_active_without_bearer"
+    });
   }
-  throw redirect(302, loginHref(authRedirectPath));
+  throw redirect(302, continuationHref(authRedirectPath));
 }
 
 export async function backendRequest(

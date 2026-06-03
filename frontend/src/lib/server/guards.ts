@@ -1,7 +1,7 @@
 import { redirect } from "@sveltejs/kit";
 import type { Cookies } from "@sveltejs/kit";
 
-import { readAppSessionActive, readTypedJsonOrNull } from "$lib/server/api";
+import { readTypedJsonOrNull } from "$lib/server/api";
 import type { SessionBootstrap } from "$lib/types/session-bootstrap";
 
 export type AppSpace = "learning" | "teaching" | "diagnostics" | "live";
@@ -9,10 +9,6 @@ export type AppSpace = "learning" | "teaching" | "diagnostics" | "live";
 export function currentPath(url: URL): string {
   const path = `${url.pathname}${url.search}`;
   return path || "/";
-}
-
-function loginHref(path: string): string {
-  return `/?redirect=${encodeURIComponent(path || "/")}`;
 }
 
 function continuationHref(path: string): string {
@@ -30,10 +26,7 @@ export async function requireSessionBootstrap(
     "/api/app/session-bootstrap"
   );
   if (!bootstrap) {
-    if (await readAppSessionActive(fetchFn, cookies)) {
-      throw redirect(302, continuationHref(path));
-    }
-    throw redirect(302, loginHref(path));
+    throw redirect(302, continuationHref(path));
   }
   return bootstrap;
 }
@@ -42,12 +35,9 @@ export async function requireParentSessionBootstrap(
   parent: () => Promise<{ bootstrap?: SessionBootstrap | null; appSessionActive?: boolean }>,
   path: string
 ): Promise<SessionBootstrap> {
-  const { bootstrap, appSessionActive } = await parent();
+  const { bootstrap } = await parent();
   if (!bootstrap) {
-    if (appSessionActive) {
-      throw redirect(302, continuationHref(path));
-    }
-    throw redirect(302, loginHref(path));
+    throw redirect(302, continuationHref(path));
   }
   return bootstrap;
 }

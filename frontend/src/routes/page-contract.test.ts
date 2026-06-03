@@ -12,6 +12,9 @@ describe("root auth route contract", () => {
     expect(serverSource).toContain("hidePageHeading: true");
     expect(serverSource).toContain("authLayout: true");
     expect(routeSource).toContain('title="Anmelden"');
+    expect(routeSource).toContain('data.reason === "session-expired"');
+    expect(routeSource).toContain('data.reason === "session_expired"');
+    expect(routeSource).toContain("Sitzung abgelaufen. Nach der Anmeldung geht es direkt zurück.");
     expect(routeSource).not.toContain("Eine Oberfläche. Klare Anmeldung.");
     expect(routeSource).not.toContain("Der Einstieg bleibt in der App ruhig und präzise.");
   });

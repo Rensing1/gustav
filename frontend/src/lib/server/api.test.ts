@@ -125,7 +125,7 @@ describe("backendRequest auth continuity", () => {
     }
   });
 
-  it("redirects final unrecoverable 401 responses to the visible login entry", async () => {
+  it("tries silent continuation before showing login for final browser 401 responses", async () => {
     readFreshTokenSessionMock.mockResolvedValue(null);
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401 })
@@ -140,7 +140,7 @@ describe("backendRequest auth continuity", () => {
       expect(isRedirect(caught)).toBe(true);
       expect(caught).toMatchObject({
         status: 302,
-        location: "/?redirect=%2Flearning"
+        location: "/auth/continue?redirect=%2Flearning"
       });
     }
   });

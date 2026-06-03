@@ -86,6 +86,15 @@ function createEvent(url: string, cookies: MemoryCookies, fetchMock: typeof fetc
   } as never;
 }
 
+function startContinuationFlowSilently(event: Parameters<typeof startContinuationFlow>[0]): Response {
+  const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+  try {
+    return startContinuationFlow(event);
+  } finally {
+    infoSpy.mockRestore();
+  }
+}
+
 function tokenResponse(): Response {
   return new Response(
     JSON.stringify({
@@ -276,7 +285,7 @@ describe("handleAuthCallback", () => {
       })
     );
 
-    startContinuationFlow(createEvent("https://app.localhost/auth/continue?redirect=/learning", cookies, eventFetch));
+    startContinuationFlowSilently(createEvent("https://app.localhost/auth/continue?redirect=/learning", cookies, eventFetch));
     const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
     jwtVerifyMock.mockResolvedValue({ payload: { nonce: flow.nonce } });
 
@@ -292,7 +301,7 @@ describe("handleAuthCallback", () => {
 
   it("returns to the normal login entry when silent continuity cannot use the active SSO session", async () => {
     const cookies = new MemoryCookies();
-    startContinuationFlow(createEvent("https://app.localhost/auth/continue?redirect=/teaching", cookies, vi.fn() as never));
+    startContinuationFlowSilently(createEvent("https://app.localhost/auth/continue?redirect=/teaching", cookies, vi.fn() as never));
     const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
 
     const response = await handleAuthCallback(
@@ -304,7 +313,7 @@ describe("handleAuthCallback", () => {
     );
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/?redirect=%2Fteaching&reason=session_expired");
+    expect(response.headers.get("location")).toBe("/?redirect=%2Fteaching&reason=session-expired");
     expect(cookies.get("gustav_bff_oidc_flow")).toBeUndefined();
   });
 });
@@ -316,6 +325,7 @@ describe("startContinuationFlow", () => {
 
   it("starts a prompt=none OIDC flow for safe in-app redirects", () => {
     const cookies = new MemoryCookies();
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const response = startContinuationFlow(
       createEvent("https://app.localhost/auth/continue?redirect=/learning/courses/course-1", cookies, vi.fn() as never)
     );
@@ -327,11 +337,16 @@ describe("startContinuationFlow", () => {
     expect(location.searchParams.get("state")).toBe(flow.state);
     expect(flow.mode).toBe("silent-continuity");
     expect(flow.redirectPath).toBe("/learning/courses/course-1");
+    expect(infoSpy).toHaveBeenCalledWith("auth.continuity", {
+      reason: "continuation_started"
+    });
+    expect(JSON.stringify(infoSpy.mock.calls)).not.toContain("/learning/courses/course-1");
+    infoSpy.mockRestore();
   });
 
   it("keeps safe query strings on continuation redirects", () => {
     const cookies = new MemoryCookies();
-    startContinuationFlow(
+    startContinuationFlowSilently(
       createEvent(
         "https://app.localhost/auth/continue?redirect=/learning/courses/course-1?module=module-7",
         cookies,
@@ -346,7 +361,7 @@ describe("startContinuationFlow", () => {
 
   it("ignores unsafe continuation redirects", () => {
     const cookies = new MemoryCookies();
-    startContinuationFlow(
+    startContinuationFlowSilently(
       createEvent("https://app.localhost/auth/continue?redirect=https://evil.example", cookies, vi.fn() as never)
     );
 
@@ -365,7 +380,7 @@ describe("startContinuationFlow", () => {
     );
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/?redirect=%2Flearning&reason=session_expired");
+    expect(response.headers.get("location")).toBe("/?redirect=%2Flearning&reason=session-expired");
     expect(infoSpy).toHaveBeenCalledWith("auth.continuity", {
       reason: "continuation_loop_guard_triggered"
     });

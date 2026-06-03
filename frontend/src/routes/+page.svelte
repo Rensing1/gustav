@@ -32,7 +32,7 @@
   actions={entryActions}
 >
   {#snippet children()}
-    {#if data.reason === "session-expired"}
+    {#if data.reason === "session-expired" || data.reason === "session_expired"}
       <p class="auth-note">Sitzung abgelaufen. Nach der Anmeldung geht es direkt zurück.</p>
     {:else if data.redirectPath}
       <p class="auth-note">Rücksprung: <code>{data.redirectPath}</code></p>

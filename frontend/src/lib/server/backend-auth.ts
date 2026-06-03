@@ -84,7 +84,7 @@ function createJsonError(status: number, error: string): Response {
 
 function loginEntryHref(path: string | null): string {
   const safe = safeRedirectPath(path) || "/";
-  return `/?redirect=${encodeURIComponent(safe)}&reason=session_expired`;
+  return `/?redirect=${encodeURIComponent(safe)}&reason=session-expired`;
 }
 
 async function syncAppSession(event: RequestEvent, accessToken: string, idToken: string): Promise<string | null> {
@@ -372,6 +372,9 @@ export function startContinuationFlow(event: RequestEvent): Response {
     mode: "silent-continuity"
   };
   addFlowCookie(event, flow);
+  console.info("auth.continuity", {
+    reason: "continuation_started"
+  });
   return createRedirectResponse(buildAuthorizationUrl(flow, { prompt: "none" }));
 }
 

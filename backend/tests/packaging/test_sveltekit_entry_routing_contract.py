@@ -53,7 +53,7 @@ def test_root_route_is_public_but_redirects_authenticated_users() -> None:
     assert "requireParentSessionBootstrap" in guard_src
     assert "requireParentSpaceBootstrap" in guard_src
     assert '"/api/app/session-bootstrap"' in guard_src
-    assert "/?redirect=" in guard_src
+    assert "/auth/continue?redirect=" in guard_src
     assert "redirect" in guard_src
 
 

@@ -37,7 +37,7 @@ describe("session bootstrap guards", () => {
     }
   });
 
-  it("uses the login entry when no parent app session is active", async () => {
+  it("continues silently before showing login when no parent app session is active", async () => {
     try {
       await requireParentSessionBootstrap(
         async () => ({ bootstrap: null, appSessionActive: false }),
@@ -48,7 +48,7 @@ describe("session bootstrap guards", () => {
       expect(isRedirect(caught)).toBe(true);
       expect(caught).toMatchObject({
         status: 302,
-        location: "/?redirect=%2Fteaching"
+        location: "/auth/continue?redirect=%2Fteaching"
       });
     }
   });
@@ -70,10 +70,10 @@ describe("session bootstrap guards", () => {
       });
     }
 
-    expect(readAppSessionActiveMock).toHaveBeenCalledWith(fetchMock, cookies);
+    expect(readAppSessionActiveMock).not.toHaveBeenCalled();
   });
 
-  it("keeps the login fallback from direct guards when no app session is active", async () => {
+  it("continues silently from direct guards before showing login when no app session is active", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     const cookies = {} as Parameters<typeof requireSessionBootstrap>[1];
     readTypedJsonOrNullMock.mockResolvedValueOnce(null);
@@ -86,7 +86,7 @@ describe("session bootstrap guards", () => {
       expect(isRedirect(caught)).toBe(true);
       expect(caught).toMatchObject({
         status: 302,
-        location: "/?redirect=%2Fprofile"
+        location: "/auth/continue?redirect=%2Fprofile"
       });
     }
   });

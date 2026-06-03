@@ -17,7 +17,7 @@ except Exception:  # pragma: no cover - exercised when tests inject stub
     dspy = None  # type: ignore[assignment]
 
 
-from backend.learning.adapters.dspy.types import CriteriaAnalysis, LeanCriterionResult
+from backend.learning.adapters.dspy.types import LeanCriterionResult
 
 if dspy is not None and hasattr(dspy, "Signature"):
 
@@ -123,7 +123,7 @@ if dspy is not None and hasattr(dspy, "Signature"):
         student_text_md: str = dspy.InputField(  # type: ignore[attr-defined]
             desc="Schülerabgabe in derselben Form wie in der Analyse-Stufe."
         )
-        analysis_json: CriteriaAnalysis = dspy.InputField(  # type: ignore[attr-defined]
+        analysis_json: dict[str, Any] = dspy.InputField(  # type: ignore[attr-defined]
             desc="criteria.v2 JSON-Analyse, erzeugt durch die vorherige Stufe."
         )
         teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]
@@ -241,7 +241,7 @@ if dspy is not None and hasattr(dspy, "Signature"):
         student_image: dspy.Image = dspy.InputField(  # type: ignore[attr-defined]
             desc="Schülerabgabe als Bild (data-URI oder URL via dspy.Image)."
         )
-        analysis_json: CriteriaAnalysis = dspy.InputField(  # type: ignore[attr-defined]
+        analysis_json: dict[str, Any] = dspy.InputField(  # type: ignore[attr-defined]
             desc="criteria.v2 Analyse, erzeugt durch die vorherige Stufe."
         )
         teacher_instructions_md: str | None = dspy.InputField(  # type: ignore[attr-defined]

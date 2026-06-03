@@ -6,6 +6,10 @@
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { learningSubmissionFailureMessage } from "$lib/utils/learning-failures";
+  import {
+    buildLearningSubmissionHistoryUrl,
+    MISSING_SUBMISSION_HISTORY_CONTEXT_MESSAGE
+  } from "$lib/utils/learning-submission-history-url";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission, LearningTask } from "$lib/types/learning";
 
@@ -72,13 +76,15 @@
     historyLoading = true;
     historyError = null;
     try {
-      const response = await fetch(
-        `/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(task.id)}/submissions?limit=10&offset=0`,
-        {
-          credentials: "include",
-          cache: "no-store"
-        }
-      );
+      const historyUrl = buildLearningSubmissionHistoryUrl(courseId, task.id);
+      if (!historyUrl) {
+        historyError = MISSING_SUBMISSION_HISTORY_CONTEXT_MESSAGE;
+        return;
+      }
+      const response = await fetch(historyUrl, {
+        credentials: "include",
+        cache: "no-store"
+      });
       if (!response.ok) {
         throw new Error(`history_failed_${response.status}`);
       }

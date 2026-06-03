@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/svelte";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import LearningSubmissionWorkspace from "./LearningSubmissionWorkspace.svelte";
 import type { LearningSubmission, LearningTask } from "$lib/types/learning";
@@ -27,6 +27,10 @@ function feedbackSubmission(overrides: Partial<LearningSubmission> = {}): Learni
 }
 
 describe("LearningSubmissionWorkspace", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("renders separate feedback and final submit actions in upload mode", () => {
     render(LearningSubmissionWorkspace, {
       props: {
@@ -88,6 +92,24 @@ describe("LearningSubmissionWorkspace", () => {
     expect(historyEntries).toHaveLength(2);
     expect(within(historyEntries[0] as HTMLElement).getAllByText("Rückmeldung").length).toBeGreaterThan(0);
     expect(within(historyEntries[1] as HTMLElement).getAllByText("Abgabe").length).toBeGreaterThan(0);
+  });
+
+  it("does not fetch submission history when the course context is missing", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(LearningSubmissionWorkspace, {
+      props: {
+        courseId: "undefined",
+        task: nativeTask,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialTab: "history"
+      }
+    });
+
+    expect(await screen.findByText("Der Verlauf konnte nicht geladen werden. Bitte öffne die Lerneinheit erneut.")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("renders markdown for submission, feedback and evaluation history in the learner workspace", () => {

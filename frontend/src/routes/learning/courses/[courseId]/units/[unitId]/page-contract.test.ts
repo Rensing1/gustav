@@ -151,6 +151,18 @@ describe("learning unit route contract", () => {
     expect(routeSource).not.toContain("const currentHistoryTaskId = next.searchParams.get(\"history\")");
   });
 
+  it("guards submission-history requests before building course and task URLs", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain('import { buildLearningSubmissionHistoryUrl, MISSING_SUBMISSION_HISTORY_CONTEXT_MESSAGE } from "$lib/utils/learning-submission-history-url";');
+    expect(routeSource).toContain("const historyUrl = buildLearningSubmissionHistoryUrl(data.courseId, taskId);");
+    expect(routeSource).toContain('throw new Error("history_missing_context");');
+    expect(routeSource).toContain('if (reason === "history_missing_context")');
+    expect(routeSource).toContain("feedbackStatusMessage = MISSING_SUBMISSION_HISTORY_CONTEXT_MESSAGE;");
+    expect(routeSource).not.toContain("`/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions?limit=10&offset=0`");
+  });
+
   it("handles direct browser fetch 401 responses through shared auth recovery before domain errors", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

@@ -19,6 +19,7 @@
     PDF_MIME,
     SCRATCH_SB3_MIME
   } from "$lib/utils/submission-mime-types";
+  import { buildLearningSubmissionHistoryUrl, MISSING_SUBMISSION_HISTORY_CONTEXT_MESSAGE } from "$lib/utils/learning-submission-history-url";
   import { learningSubmissionFailureMessage } from "$lib/utils/learning-failures";
   import {
     contentGroupsForModules,
@@ -1032,13 +1033,14 @@
   }
 
   async function loadSubmissionHistory(taskId: string): Promise<LearningSubmission[]> {
-    const response = await fetch(
-      `/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions?limit=10&offset=0`,
-      {
-        credentials: "include",
-        cache: "no-store"
-      }
-    );
+    const historyUrl = buildLearningSubmissionHistoryUrl(data.courseId, taskId);
+    if (!historyUrl) {
+      throw new Error("history_missing_context");
+    }
+    const response = await fetch(historyUrl, {
+      credentials: "include",
+      cache: "no-store"
+    });
     if (handleRecoverableAuthResponse(response)) {
       return [];
     }
@@ -1072,9 +1074,14 @@
       feedbackStatusTaskId = entries.length ? null : taskId;
       feedbackStatusMessage = entries.length ? null : "Für diese Aufgabe gibt es noch keine gespeicherte Abgabe.";
       return entries;
-    } catch {
+    } catch (caught) {
+      const reason = caught instanceof Error ? caught.message : "history_failed";
       setTaskHistoryState(taskId, "failed");
       feedbackStatusTaskId = taskId;
+      if (reason === "history_missing_context") {
+        feedbackStatusMessage = MISSING_SUBMISSION_HISTORY_CONTEXT_MESSAGE;
+        return [];
+      }
       feedbackStatusMessage = "Der Verlauf konnte nicht geladen werden. Bitte versuche es erneut.";
       return [];
     }
@@ -1130,8 +1137,17 @@
           );
           return;
         }
-      } catch {
+      } catch (caught) {
         if (pollToken !== feedbackPollToken) {
+          return;
+        }
+        const reason = caught instanceof Error ? caught.message : "history_failed";
+        if (reason === "history_missing_context") {
+          setTaskHistoryState(taskId, "failed");
+          feedbackPendingTaskId = null;
+          feedbackStatusTaskId = taskId;
+          pendingSubmissionIntent = null;
+          feedbackStatusMessage = MISSING_SUBMISSION_HISTORY_CONTEXT_MESSAGE;
           return;
         }
       }

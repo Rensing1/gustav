@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { fireEvent, render, screen, within } from "@testing-library/svelte";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import LearningTaskCard from "./LearningTaskCard.svelte";
 import type { LearningTask } from "$lib/types/learning";
@@ -25,6 +25,11 @@ const task: LearningTask = {
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 describe("LearningTaskCard", () => {
+  afterEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+
   it("binds the inline markdown editor to local draft state instead of a constant empty string", () => {
     const source = readFileSync(path.resolve(currentDir, "LearningTaskCard.svelte"), "utf8");
 
@@ -34,6 +39,62 @@ describe("LearningTaskCard", () => {
     expect(source).toContain("onInput={updateDraft}");
     expect(source).not.toContain("value=\"\"");
     expect(source).not.toContain("onInput={() => {}}");
+  });
+
+  it("restores and persists inline text drafts scoped to the learner", async () => {
+    const legacyKey = "gustav.learning.submission-draft:course-1:task-1:text";
+    const scopedKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";
+    window.localStorage.setItem(legacyKey, "Alter Inline-Entwurf");
+    window.sessionStorage.setItem(legacyKey, "Fremder Inline-Entwurf");
+    window.sessionStorage.setItem(scopedKey, "Inline Sitzungsentwurf");
+
+    render(LearningTaskCard, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task,
+        taskTitle: "Begriffe definieren",
+        unitType: "linear",
+        submissionFocused: true,
+        initialSubmissionMode: "text"
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement | null;
+    expect(editor).not.toBeNull();
+    await waitFor(() => expect(editor!.value).toBe("Inline Sitzungsentwurf"));
+
+    await fireEvent.input(editor!, { target: { value: "Inline neu" } });
+
+    expect(window.sessionStorage.getItem(scopedKey)).toBe("Inline neu");
+    expect(window.sessionStorage.getItem(legacyKey)).toBeNull();
+    expect(window.localStorage.getItem(legacyKey)).toBeNull();
+  });
+
+  it("clears legacy inline drafts and skips persistence when the learner is unknown", async () => {
+    const legacyKey = "gustav.learning.submission-draft:course-1:task-1:text";
+    window.sessionStorage.setItem(legacyKey, "Fremder Inline-Entwurf");
+
+    render(LearningTaskCard, {
+      props: {
+        learnerSub: null,
+        courseId: "course-1",
+        task,
+        taskTitle: "Begriffe definieren",
+        unitType: "linear",
+        submissionFocused: true,
+        initialSubmissionMode: "text"
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement | null;
+    expect(editor).not.toBeNull();
+    await waitFor(() => expect(editor!.value).toBe(""));
+
+    await fireEvent.input(editor!, { target: { value: "Nicht persistieren" } });
+
+    expect(window.sessionStorage.getItem(legacyKey)).toBeNull();
+    expect(Array.from({ length: window.sessionStorage.length }, (_value, index) => window.sessionStorage.key(index))).toEqual([]);
   });
 
   it("opens inline editing controls inside the task flow instead of a separate workspace", () => {

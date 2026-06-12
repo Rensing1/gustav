@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import LearningSubmissionWorkspace from "./LearningSubmissionWorkspace.svelte";
@@ -28,6 +28,8 @@ function feedbackSubmission(overrides: Partial<LearningSubmission> = {}): Learni
 
 describe("LearningSubmissionWorkspace", () => {
   afterEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
     vi.unstubAllGlobals();
   });
 
@@ -45,6 +47,62 @@ describe("LearningSubmissionWorkspace", () => {
     expect(screen.getByRole("button", { name: "Rückmeldung einholen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeInTheDocument();
     expect(screen.getByText("Datei auswählen")).toBeInTheDocument();
+  });
+
+  it("restores and persists text drafts scoped to the learner", async () => {
+    const legacyKey = "gustav.learning.submission-draft:course-1:task-1:text";
+    const scopedKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";
+    window.localStorage.setItem(legacyKey, "Alter lokaler Entwurf");
+    window.sessionStorage.setItem(legacyKey, "Fremder Sitzungsentwurf");
+    window.sessionStorage.setItem(scopedKey, "Sitzungsentwurf");
+
+    render(LearningSubmissionWorkspace, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task: nativeTask,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialMode: "text"
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement | null;
+    expect(editor).not.toBeNull();
+    await waitFor(() => expect(editor!.value).toBe("Sitzungsentwurf"));
+
+    await fireEvent.input(editor!, { target: { value: "Neuer Sitzungsentwurf" } });
+
+    expect(window.sessionStorage.getItem("gustav.learning.submission-draft:course-1:task-1:text")).toBe(
+      null
+    );
+    expect(window.sessionStorage.getItem(scopedKey)).toBe("Neuer Sitzungsentwurf");
+    expect(window.localStorage.getItem(legacyKey)).toBeNull();
+  });
+
+  it("clears legacy text drafts and skips persistence when the learner is unknown", async () => {
+    const legacyKey = "gustav.learning.submission-draft:course-1:task-1:text";
+    window.sessionStorage.setItem(legacyKey, "Fremder Sitzungsentwurf");
+
+    render(LearningSubmissionWorkspace, {
+      props: {
+        learnerSub: null,
+        courseId: "course-1",
+        task: nativeTask,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialMode: "text"
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement | null;
+    expect(editor).not.toBeNull();
+    await waitFor(() => expect(editor!.value).toBe(""));
+
+    await fireEvent.input(editor!, { target: { value: "Nicht persistieren" } });
+
+    expect(window.sessionStorage.getItem(legacyKey)).toBeNull();
+    expect(Array.from({ length: window.sessionStorage.length }, (_value, index) => window.sessionStorage.key(index))).toEqual([]);
   });
 
   it("renders inline feedback when a feedback request has just completed", () => {

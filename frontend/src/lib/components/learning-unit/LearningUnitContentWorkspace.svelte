@@ -16,6 +16,7 @@
     titleLabel,
     title,
     meta = null,
+    learnerSub = null,
     courseId,
     unitType,
     moduleId = null,
@@ -73,6 +74,7 @@
     titleLabel: string;
     title: string;
     meta?: string | null;
+    learnerSub?: string | null;
     courseId: string;
     unitType: "linear" | "modular";
     moduleId?: string | null;
@@ -354,6 +356,7 @@
                           {#if entry.item.task}
                             {@const task = entry.item.task}
                             <LearningTaskCard
+                              {learnerSub}
                               {courseId}
                               {task}
                               taskTitle={entry.item.title}
@@ -408,6 +411,7 @@
                   {:else if entry.item.kind === "task" && entry.item.task}
                     {@const task = entry.item.task}
                     <LearningTaskCard
+                      {learnerSub}
                       {courseId}
                       {task}
                       taskTitle={entry.item.title}

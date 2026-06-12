@@ -62,6 +62,24 @@ describe("learning unit route contract", () => {
     expect(routeSource).not.toContain("focus.right.itemKey ? rightEntries.filter");
   });
 
+  it("passes the authenticated learner id to inline task draft persistence", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const workspaceSource = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningUnitContentWorkspace.svelte"),
+      "utf8"
+    );
+    const taskCardSource = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningTaskCard.svelte"),
+      "utf8"
+    );
+
+    expect(routeSource).toContain("learnerSub={data.user?.sub ?? null}");
+    expect(workspaceSource).toContain("learnerSub");
+    expect(workspaceSource).toContain("{learnerSub}");
+    expect(taskCardSource).toContain("learnerSub");
+  });
+
   it("keeps feedback requests inline with local polling instead of a redirect-only flow", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

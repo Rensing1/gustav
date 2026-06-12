@@ -17,6 +17,7 @@
   type SubmissionMode = "text" | "upload";
 
   let {
+    learnerSub = null,
     courseId,
     task,
     taskTitle = "Aufgabe",
@@ -31,6 +32,7 @@
     errorMessage = null,
     onClose = null
   }: {
+    learnerSub?: string | null;
     courseId: string;
     task: LearningTask;
     taskTitle?: string;
@@ -59,14 +61,36 @@
   }
 
   function storageKey(): string {
+    return `gustav.learning.submission-draft:${encodeURIComponent(String(learnerSub))}:${courseId}:${task.id}:${mode}`;
+  }
+
+  function legacyStorageKey(): string {
     return `gustav.learning.submission-draft:${courseId}:${task.id}:${mode}`;
+  }
+
+  function scopedStorageKey(): string | null {
+    if (!learnerSub) {
+      return null;
+    }
+    return storageKey();
+  }
+
+  function removeLegacyDraft() {
+    const key = legacyStorageKey();
+    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
   }
 
   function restoreDraft() {
     if (!browser || uploadOnly() || mode !== "text") {
       return;
     }
-    draftText = window.localStorage.getItem(storageKey()) ?? "";
+    removeLegacyDraft();
+    const key = scopedStorageKey();
+    if (key) {
+      window.localStorage.removeItem(key);
+    }
+    draftText = key ? window.sessionStorage.getItem(key) ?? "" : "";
   }
 
   async function loadHistory() {
@@ -116,7 +140,13 @@
     if (!browser || uploadOnly() || mode !== "text") {
       return;
     }
-    window.localStorage.setItem(storageKey(), value);
+    removeLegacyDraft();
+    const key = scopedStorageKey();
+    if (!key) {
+      return;
+    }
+    window.localStorage.removeItem(key);
+    window.sessionStorage.setItem(key, value);
   }
 
   function humanStatus(submission: LearningSubmission): string {

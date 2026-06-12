@@ -9,6 +9,39 @@ const editorSourcePath = path.resolve(currentDir, "MarkdownWysiwygEditor.svelte"
 const appCssPath = path.resolve(currentDir, "../../styles/app.css");
 
 describe("MarkdownWysiwygEditor", () => {
+  it("exposes table editing but keeps image upload out of the learner toolbar", () => {
+    const source = readFileSync(editorSourcePath, "utf8");
+
+    expect(source).toContain('"table"');
+    expect(source).not.toContain('"image"');
+  });
+
+  it("renders a textarea fallback for failed editor initialization and no-JS form submission", () => {
+    const source = readFileSync(editorSourcePath, "utf8");
+
+    expect(source).toContain("<textarea");
+    expect(source).toContain("{name}");
+    expect(source).toContain("editorReady");
+  });
+
+  it("initializes the no-JS fallback value before client effects run", () => {
+    const source = readFileSync(editorSourcePath, "utf8");
+
+    expect(source).toContain("let fallbackValue = $derived");
+    expect(source).toContain('String(value || "")');
+    expect(source).toContain("value={fallbackValue}");
+  });
+
+  it("synchronizes the Toast UI markdown into the form immediately before submission", () => {
+    const source = readFileSync(editorSourcePath, "utf8");
+
+    expect(source).toContain('addEventListener("submit"');
+    expect(source).toContain('addEventListener("formdata"');
+    expect(source).toContain("syncEditorValue");
+    expect(source).toContain("const nextValue = syncEditorValue();");
+    expect(source).toContain("formData?.set(name, nextValue);");
+  });
+
   it("initializes Toast UI with pixel heights because the editor parses height values numerically", () => {
     const source = readFileSync(editorSourcePath, "utf8");
 

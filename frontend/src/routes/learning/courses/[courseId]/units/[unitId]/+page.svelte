@@ -1717,6 +1717,7 @@
                 titleLabel=""
                 title=""
                 meta={null}
+                learnerSub={data.user?.sub ?? null}
                 courseId={data.courseId}
                 unitType="modular"
                 moduleId={modularWorkspace.activeTab}
@@ -1784,6 +1785,7 @@
             titleLabel="Lerneinheit"
             title={data.selectedUnit?.unit.title ?? "Lerneinheit"}
             meta={null}
+            learnerSub={data.user?.sub ?? null}
             courseId={data.courseId}
             unitType="linear"
             moduleId={null}

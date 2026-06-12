@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
   import { enhance } from "$app/forms";
   import H5PTaskPlayer from "$lib/components/H5PTaskPlayer.svelte";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
@@ -9,6 +10,7 @@
   import type { SubmitFunction } from "@sveltejs/kit";
 
   let {
+    learnerSub = null,
     courseId,
     task,
     taskTitle = "Aufgabe",
@@ -38,6 +40,7 @@
     onSubmitUploadFeedback = null,
     onProgressPersisted = null
   }: {
+    learnerSub?: string | null;
     courseId: string;
     task: LearningTask;
     taskTitle?: string;
@@ -203,8 +206,44 @@
     return isUploadSubmission(latestSubmission()) ? "upload" : "text";
   }
 
+  function draftStorageKey(mode: SubmissionMode = editorMode): string {
+    return `gustav.learning.submission-draft:${encodeURIComponent(String(learnerSub))}:${courseId}:${task.id}:${mode}`;
+  }
+
+  function legacyDraftStorageKey(mode: SubmissionMode = editorMode): string {
+    return `gustav.learning.submission-draft:${courseId}:${task.id}:${mode}`;
+  }
+
+  function scopedDraftStorageKey(mode: SubmissionMode = editorMode): string | null {
+    if (!learnerSub) {
+      return null;
+    }
+    return draftStorageKey(mode);
+  }
+
+  function removeLegacyDraft(mode: SubmissionMode = editorMode) {
+    const key = legacyDraftStorageKey(mode);
+    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
+  }
+
+  function restoreDraft(mode: SubmissionMode = editorMode) {
+    if (!browser || uploadOnly() || mode !== "text") {
+      return;
+    }
+    removeLegacyDraft(mode);
+    const key = scopedDraftStorageKey(mode);
+    if (key) {
+      window.localStorage.removeItem(key);
+    }
+    draftText = key ? window.sessionStorage.getItem(key) ?? "" : "";
+  }
+
   function setEditorMode(next: SubmissionMode) {
     editorMode = next;
+    if (next === "text") {
+      restoreDraft(next);
+    }
   }
 
   function editorModeIs(next: SubmissionMode): boolean {
@@ -385,6 +424,16 @@
 
   function updateDraft(value: string) {
     draftText = value;
+    if (!browser || uploadOnly() || editorMode !== "text") {
+      return;
+    }
+    removeLegacyDraft("text");
+    const key = scopedDraftStorageKey("text");
+    if (!key) {
+      return;
+    }
+    window.localStorage.removeItem(key);
+    window.sessionStorage.setItem(key, value);
   }
 
   function compactTaskTone(): CompactTaskTone {
@@ -415,7 +464,11 @@
 
   $effect(() => {
     if (submissionFocused && !lastSubmissionFocused) {
-      editorMode = preferredEditorMode();
+      const nextMode = preferredEditorMode();
+      editorMode = nextMode;
+      if (nextMode === "text") {
+        restoreDraft(nextMode);
+      }
       selectedUploadFile = null;
       hideExistingUpload = false;
       if (uploadInput) {

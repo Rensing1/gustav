@@ -1,5 +1,8 @@
 # Auth-Session-Continuity Reopened Fix Implementation Plan
 
+Status: umgesetzt
+Datum: 2026-05-18
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:test-driven-development` and either `superpowers:subagent-driven-development` or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** GUSTAV stellt geschützte Browser-Sessions nach Reloads, Token-Ablauf und kurzzeitig fehlender BFF-Session wieder konsistent her, ohne Fachfehler anzuzeigen oder unsichere Auth-Fallbacks einzubauen.

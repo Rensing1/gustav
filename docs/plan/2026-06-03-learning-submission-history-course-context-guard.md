@@ -1,5 +1,8 @@
 # Learning Submission-History Course-Context Guard
 
+Status: umgesetzt
+Datum: 2026-06-03
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:test-driven-development` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Der Lernraum setzt keine Submission-History-Requests mehr mit fehlendem Kurs- oder Aufgabenkontext ab.
@@ -55,3 +58,8 @@ Als Lernende möchte ich meine Abgabe und Rückmeldung öffnen können, ohne das
 - Der Fix bleibt bewusst clientseitig eng auf Submission-History beschränkt.
 - Das Frontend prüft nicht auf UUID-Format, weil die Backend-Validierung die Quelle der Wahrheit bleibt und bestehende Frontend-Tests teilweise lesbare Fixture-IDs verwenden.
 - OpenAPI und Datenbank bleiben unverändert.
+
+## Umsetzungsergebnis
+
+- Der gemeinsame Submission-History-URL-Helper, die Guard-Nutzung in der aktuellen Learning-Seite und die Absicherung der Altkomponente sind umgesetzt.
+- Keine OpenAPI- oder Datenbankänderung.

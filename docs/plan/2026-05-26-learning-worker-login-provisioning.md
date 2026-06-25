@@ -1,5 +1,8 @@
 # Learning-Worker-Login-Provisionierung bei lokalem Reset
 
+Status: umgesetzt
+Datum: 2026-05-26
+
 ## Ausgangslage
 Der lokale `learning-worker` hing im Restart-Loop, weil er sich mit `gustav_worker` und dem Compose-Fallback-Passwort anmelden wollte. Die Migration legt `gustav_worker` aus Sicherheitsgründen ohne Login und ohne Passwort an; der lokale Login muss danach separat provisioniert werden.
 

@@ -1,5 +1,8 @@
 # Keycloak Error-Template Runtime-Härtung
 
+Status: umgesetzt
+Datum: 2026-05-26
+
 ## User Story
 
 Als Nutzerin oder Nutzer möchte ich bei abgelaufenen, ungültigen oder cookie-losen Keycloak-Flows immer eine gethemte GUSTAV-Recovery-Seite sehen, damit der Wiederanmelde- oder Rückkehrpfad verständlich bleibt und nicht durch einen Keycloak-HTTP-500-Fehler verdeckt wird.
@@ -33,3 +36,8 @@ Als Nutzerin oder Nutzer möchte ich bei abgelaufenen, ungültigen oder cookie-l
 - `backend/tests/test_compose_keycloak_postgres.py` sichert die Keycloak-Proxy-Konfiguration (`KC_PROXY_HEADERS=xforwarded`, `KC_HTTP_ENABLED=true`) und die Caddy-Cookie-Härtung statisch ab.
 - `backend/tests_e2e/test_keycloak_error_pages_e2e.py` reproduziert die Produktionsfehler mit echtem Keycloak: cookie-loser `login-actions/authenticate` und ungültiger `login-actions/action-token` müssen gethemtes GUSTAV-HTML ohne HTTP 500, ohne FreeMarker-Ausgabe, ohne `login-actions`-Loop-Links und mit gehärtetem `KC_STATE_CHECKER`-Cookie liefern.
 - Verifikation: `.venv/bin/pytest -q backend/tests/test_keycloak_theme_files.py backend/tests/test_compose_keycloak_postgres.py`, danach `docker compose up -d --build keycloak caddy`, danach `RUN_E2E=1 .venv/bin/pytest -q -m e2e backend/tests_e2e/test_keycloak_error_pages_e2e.py`.
+
+## Umsetzungsergebnis
+
+- Die FreeMarker-Runtime-Härtung, Recovery-Link-Härtung, Keycloak-Proxy-Konfiguration und Caddy-Cookie-Härtung sind umgesetzt.
+- Detaillierte Review-, Reparatur- und Verifikationshistorie steht in `docs/plan/2026-05-26-PR-fix.md`.

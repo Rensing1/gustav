@@ -1,5 +1,8 @@
 # GUSTAV CLI: Datei-Materialien, H5P-Pakete und Task-Kinds
 
+Status: umgesetzt
+Datum: 2026-05-26
+
 ## Ziel
 
 Codex soll Lerneinheiten über die GUSTAV-CLI vollständig authoren können, ohne Browser-Cookies oder manuelle Browser-Flows zu verwenden. Der Fokus liegt auf Datei-Materialien, H5P-Paket-Import/-Export und allen bestehenden Aufgabenarten.
@@ -51,3 +54,9 @@ Als Lehrkraft möchte ich Datei-Materialien, H5P-Aufgaben und Spezialaufgaben ü
 - Auth-Middleware akzeptiert CLI-Bearer für neue Datei-/H5P-Paket-Endpunkte und lehnt unpassende Scopes ab.
 - CLI-Unit-Tests sichern Request-Payloads, Multipart-Upload, Presigned-Upload, Download-Überschreibschutz und Token-Redaktion.
 - Bestehende Teaching-API-Tests sichern weiterhin Browser-CSRF und fachliche Autorisierung.
+
+## Umsetzungsergebnis
+
+- Die CLI-Fläche für Datei-Materialien, H5P-Import/-Export/-Reset und Task-Kinds ist umgesetzt und durch OpenAPI-, Auth-, CLI- und H5P-Tests abgesichert.
+- Die PR-Fix-Historie vom 2026-05-26 dokumentiert geschlossene Security-, API-, Test-, Bug- und Konsistenz-Findings sowie die Verifikation.
+- Referenz: `docs/plan/2026-05-26-PR-fix.md`.

@@ -2,22 +2,26 @@
 
 ## Status
 - Date: 2026-05-02
-- Last updated: 2026-05-15
-- Status: Draft v0.6, expanded with agentic harness research and PR-1 product decisions
+- Last updated: 2026-06-25
+- Status: Draft v0.8; implementation not started, PR 1 "Harness Minimum" still open; updated with deeper AI harness contract, repo-governed skill sources, and manual skill forward-testing
 - Time horizon: 3 months
 - Strategy: harness first, then refactor in small PRs
 - Gate strategy: security, public-repo hygiene, and initial CI gates are hard immediately; structural and workflow gates start as warnings and become hard later
 - Scope decision: broad quality refactor with staged, test-protected removal of legacy FastAPI HTML/HTMX product paths
 - Agentic harness decision: agent-first execution with human review; PR 1 delivers orientation and minimum gates; safety gates block immediately, structure gates start as warnings
+- Current check: planned `docs/harness/*` artifacts, `docs/plan/INDEX.md`, `make harness-minimum`, and `make harness-signals` are not present in the repository yet.
 
 ## Summary
 GUSTAV should not merely be "cleaned up"; it should become reliably refactorable. The first step is therefore a repository-local harness made of rules, tests, quality gates, architecture boundaries, planning artifacts, and agent workflows so that Codex and human developers work from the same expectations.
 
-This follows the OpenAI harness-engineering framing: the harness is not one tool or one CI job, but the environment that lets agents work productively. For GUSTAV, that means:
+This follows the AI harness-engineering framing: the harness is not one tool, one prompt, or one CI job, but the environment that lets agents work productively. For GUSTAV, that means:
 - a short entry map for agents instead of long tribal-knowledge documents,
 - versioned project memory that is easy to search and update,
+- project-specific skills for repeated agent workflows, loaded only when needed,
+- a dedicated AI harness specification that connects agent roles, autonomy, evidence, skill lifecycle, and human review,
 - executable checks that encode architecture, security, and product constraints,
 - readable feedback loops from tests, logs, route maps, and CI,
+- evidence packages for agent runs, including context used, commands, failures, verification, and residual risk,
 - periodic garbage collection for stale rules, plans, dead paths, and accepted debt.
 
 The most important current findings are:
@@ -55,7 +59,14 @@ Priority order:
 - DB performance work is part of the refactor scope: introduce a small shared connection/transaction boundary before replacing scattered direct DB calls.
 - CSP and CSRF hardening should become stricter as legacy HTMX and inline-style dependencies are removed.
 - `AGENTS.md` should become a concise map, not the full handbook. Detailed, versioned agent rules live under `docs/harness/`.
+- Project-specific agent skills are part of the harness, but they are narrow workflow tools, not product-governance authority.
+- Every project skill needs a purpose, trigger, allowed actions, prohibited actions, stop criteria, verification requirements, and a review/eval path.
+- Repo-governed project skills live under `docs/harness/skills/<skill>/SKILL.md`; personal or local skills may help an agent, but they are not repo-authoritative until they are listed in `docs/harness/SKILLS.md` and reviewable in the repository.
+- Skills with broad tool permissions, external-network access, secrets handling, data deletion, migrations, or production-impacting behavior require human review before use.
+- All initial GUSTAV skills may be active from PR 1, but "active" only means "allowed to use inside the autonomy matrix"; it never grants extra authority over TDD, contract-first work, security review, migrations, or human merge decisions.
+- Agent runs should produce enough evidence to reconstruct what context was used, which commands ran, which failures occurred, how failures were attributed, and what remains unverified.
 - Agent-first does not mean agent-autonomous product governance. Felix keeps authority over product direction, role model, pedagogy, privacy/retention, and breaking API decisions.
+- Level 3 autonomy is an initial target only for documentation, review, and tech-debt PR preparation; product code, API, security, DB, migration, privacy, and pedagogy decisions remain lower-autonomy and human-reviewed.
 - PR 1 optimizes agent orientation and feedback quality, not full autonomy.
 - The first harness must answer three questions for a new agent within five minutes:
   - Where are the current rules and plans?
@@ -67,6 +78,7 @@ The harness consists of documents and executable checks. Documentation is valuab
 
 Planned harness artifacts:
 - `docs/harness/INDEX.md`: entry point, check order, links to rules.
+- `docs/harness/AI_HARNESS.md`: central AI harness specification for agent roles, autonomy, evidence, skill lifecycle, manual evals, escalation, and human review.
 - `docs/harness/AGENT_PLAYBOOK.md`: Codex workflow, TDD, contract-first development, security checks, common pitfalls.
 - `docs/harness/ARCHITECTURE_RULES.md`: allowed dependency directions, import rules, boundaries between routes, use cases, repositories, adapters, and serialization.
 - `docs/harness/QUALITY_GATES.md`: warning and hard gates with deadlines.
@@ -77,6 +89,9 @@ Planned harness artifacts:
 - `docs/harness/ROUTE_MAP.md`: web/API routes with surface classification, role, data access, response model, tests, risk, and retirement/removal decision.
 - `docs/harness/HOTSPOTS.md`: baseline file sizes, owner area, growth budget, split target, and exception policy for backend, frontend, and H5P hotspots.
 - `docs/harness/TECH_DEBT.md`: consciously accepted deviations with risk, review date, and exit criterion.
+- `docs/harness/SKILLS.md`: project-skill inventory, trigger rules, allowed actions, verification duties, eval requirements, and supply-chain rules.
+- `docs/harness/SKILL_EVALS.md`: manual forward-test ledger for project skills, with scenario, result, gaps, activation status, and next review date.
+- `docs/harness/skills/<skill>/SKILL.md`: reviewable repo source for each approved GUSTAV project skill.
 - `docs/plan/INDEX.md`: searchable index of planning documents.
 - `docs/plan/MILESTONES.md`: 3-month roadmap with PR order.
 - `docs/plan/DECISIONS.md`: key architecture decisions until a dedicated ADR system exists.
@@ -84,6 +99,7 @@ Planned harness artifacts:
 Minimum document contract for PR 1:
 - Every harness document starts with purpose, owner, status, local checks, CI status, related plans, and review cadence.
 - `INDEX.md` is the five-minute start page for agents.
+- `AI_HARNESS.md` defines the AI-harness contract: agent roles, autonomy boundaries, skill lifecycle, evidence duties, failure attribution, stop/escalation rules, and the relationship between personal tools and repo-governed project skills.
 - `AGENT_PLAYBOOK.md` defines repo bootstrap, planning rules, escalation rules, verification ladder, and final-response expectations.
 - `AUTONOMY_MATRIX.md` maps autonomy by file category and risk level, not by agent identity.
 - `QUALITY_GATES.md` lists each gate with status (`hard`, `warning`, `advisory`), local command, CI command, false-positive policy, and hardening date.
@@ -98,7 +114,20 @@ Minimum document contract for PR 1:
   - retired legacy UI.
 - `HOTSPOTS.md` records the initial hotspot baseline and explains which files may not grow without a debt entry.
 - `TECH_DEBT.md` records accepted deviations with risk, owner, review date, and exit criterion.
+- `SKILLS.md` lists approved GUSTAV skills, their source location under `docs/harness/skills/`, trigger phrases, allowed tools/actions, prohibited actions, stop/escalation rules, verification commands, eval status, activation status, and review cadence.
+- `SKILL_EVALS.md` records manual forward-tests for each active skill: scenario prompt, pressure condition, expected artifact, observed result, gaps found, reviewer, activation decision, and next review date.
 - `docs/plan/INDEX.md`, `MILESTONES.md`, and `DECISIONS.md` become the searchable planning memory for agents.
+
+Initial project-skill candidates:
+- `gustav-plan-status`: inspect `docs/plan/` documents, find stale or missing status blocks, and propose or apply documentation-only status updates.
+- `gustav-pr-review`: review a GUSTAV branch against `master` and persist prioritized findings in `docs/plan/YYYY-MM-DD-PR-fix.md`.
+- `gustav-pr-fix`: read an existing PR-fix plan, verify open findings, design tests first, implement minimal fixes, and update the plan.
+- `gustav-api-contract`: enforce OpenAPI-first changes, route-surface classification, contract tests, and breaking-change decision entries.
+- `gustav-security-review`: focus on authn/authz, RLS, CSRF, uploads, privacy logging, unsafe defaults, and PII/secrets.
+- `gustav-route-map`: classify web/API routes, identify retired legacy UI paths, and update `docs/harness/ROUTE_MAP.md`.
+- `gustav-harness-gardener`: find stale harness, roadmap, tech-debt, source, and skill documents, then prepare small correction PRs.
+
+Project skills live first as reviewable repo sources under `docs/harness/skills/<skill>/SKILL.md`. A later installation or sync step may copy them into a tool-compatible local skill directory, but PR 1 should not depend on local personal skill paths. A skill is accepted only when its behavior is narrower than the general agent instructions, its risks are explicit, and its verification path is documented. Personal skills outside the repository may be used as optional helper context, but they are not official GUSTAV harness behavior.
 
 ## Agent Workflow
 Harness engineering includes more than tests and documentation. It also includes a controlled agent workflow. Agents should read code, find risks, create repair plans, make targeted changes, and verify their own work. For GUSTAV, agents may accelerate the work, but they must not merge unchecked changes.
@@ -165,12 +194,48 @@ Every repair requires:
 - renewed verification,
 - short risk documentation.
 
+Before a second repair attempt, the agent must classify the failure:
+- wrong or missing context,
+- tool/environment failure,
+- flaky or incorrect test,
+- real product regression,
+- security or contract regression,
+- incomplete verification,
+- model reasoning error.
+
+This classification belongs in the final report or the PR-fix document. It prevents random patching and gives the verifier a concrete failure hypothesis to challenge.
+
+### Episode Evidence
+Each non-trivial agent run should leave enough evidence for human review:
+- goal and scope,
+- plans, harness documents, and source files read,
+- commands executed and their relevant results,
+- failed tests or gates and failure attribution,
+- files changed,
+- verification completed,
+- verification intentionally skipped with residual risk.
+
+For small documentation-only updates, the final response can serve as the evidence package. For code, security, API, DB, or migration work, the evidence should also be persisted in the relevant plan or PR-fix document.
+
+Evidence should stay close to the work instead of creating a separate run-log archive by default:
+- documentation-only maintenance: final response or the edited plan status is enough,
+- PR review/fix work: write the evidence into the matching `docs/plan/*PR-fix*.md`,
+- planned feature/refactor work: write the evidence into the relevant `docs/plan/*.md`,
+- skill/harness work: write skill-specific test evidence into `docs/harness/SKILL_EVALS.md`,
+- high-risk work: duplicate the key residual risks in the PR description so reviewers do not need to hunt through long logs.
+
 ### Autonomy Levels
 - Level 0: agent writes a plan, human decides.
 - Level 1: agent implements small tasks, human reviews every PR.
 - Level 2: agent repairs gate failures within a PR, human reviews the final result.
 - Level 3: agent creates review, documentation, and tech-debt PRs automatically, human merges after review.
 - Level 4: agents may auto-merge only low-risk documentation or harness updates after green CI. This is not an initial target for GUSTAV.
+
+Initial autonomy target:
+- Level 1-2 is allowed for code, tests, API, security, DB, migration, frontend, and H5P work, with the review rules below.
+- Level 3 is allowed only for documentation, review, plan-status, harness-gardening, and tech-debt PR preparation.
+- Level 4 is out of scope for the first three months.
+- No autonomy level allows an agent to decide product direction, privacy/retention policy, role semantics, breaking API behavior, or pedagogical assessment meaning.
 
 ### Autonomy Matrix
 Autonomy levels are assigned by risk and file category, not globally.
@@ -199,6 +264,21 @@ Autonomy levels are assigned by risk and file category, not globally.
 - Retention/deletion/export:
   - agent may prepare and test,
   - GDPR/privacy decisions remain human decisions.
+
+### Project Skills and Autonomy
+Skills improve repeatability and reduce context load, but they do not increase autonomy by themselves. A skill may only automate decisions that are already allowed by the autonomy matrix for the affected file category and risk level.
+
+Project-skill rules:
+- Skills are loaded only when their trigger matches the task.
+- Skills must be small enough to review and update.
+- Skills may reference helper scripts, but the script purpose and verification command must be documented.
+- Skills may not silently broaden tool access or network access.
+- Skills may not encode product, privacy, role-model, or breaking API decisions without a linked decision entry.
+- Third-party skills are treated as supply-chain inputs and need review before adoption.
+- Repo-governed GUSTAV skills are sourced from `docs/harness/skills/<skill>/SKILL.md` and inventoried in `docs/harness/SKILLS.md`.
+- A skill can be `active` in PR 1 only if it has a manual forward-test entry in `docs/harness/SKILL_EVALS.md`; the entry may document gaps, but the gaps must have an owner, risk, and review date.
+- Active skills still obey the autonomy matrix. For example, `gustav-security-review` may guide review and planning, but security code changes still require negative and positive tests plus human review.
+- Personal/local skills can inform an agent's work, but official GUSTAV behavior must be traceable to repo-governed skill files.
 
 ## Quality Gates
 These gates are mandatory planning targets. The concrete implementation may use `make` targets, Python scripts, shell checks, CI jobs, or a combination, but every gate needs a clear local command and a clear pass/fail rule.
@@ -257,6 +337,13 @@ These gates are mandatory planning targets. The concrete implementation may use 
   - app import works via `backend.web.main:app`,
   - no duplicate module instances from mixed flat/package imports,
   - Docker image startup uses the same package layout as tests.
+- Skill Governance Signal:
+  - approved project skills are listed in `docs/harness/SKILLS.md`,
+  - repo-governed skill sources exist under `docs/harness/skills/<skill>/SKILL.md`,
+  - every skill has purpose, trigger, allowed actions, stop criteria, verification, eval status, and review date,
+  - every active skill has a manual forward-test entry in `docs/harness/SKILL_EVALS.md`,
+  - examples contain no secrets, PII, school identifiers, or proprietary teaching material,
+  - broad tool or network access is visible as risk, not hidden in the skill body.
 
 ### Hard From Month 2
 - API Contract Gate:
@@ -286,6 +373,11 @@ These gates are mandatory planning targets. The concrete implementation may use 
 - Tech Debt Visibility Gate:
   - accepted deviations are listed in `TECH_DEBT.md`,
   - every entry has risk, review date, and exit criterion.
+- Skill Safety Gate:
+  - no new project skill without review metadata in `docs/harness/SKILLS.md`,
+  - no skill with unsafe tool permissions, network access, production mutation, migration execution, or secrets handling unless explicitly reviewed,
+  - every active skill has at least one realistic manual forward-test scenario with expected artifact, observed result, activation decision, and review date,
+  - scripted skill evals are intentionally out of scope for PR 1 and may be introduced later only after the manual scenarios prove stable.
 
 ## 3-Month Roadmap
 
@@ -296,6 +388,7 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
 - Create the first concrete agentic harness layer, focused on orientation and safety feedback, not full autonomy.
 - Create minimal but usable harness documents:
   - `docs/harness/INDEX.md`: five-minute agent entry point with read order, current milestone, critical gates, and stop/escalate rules.
+  - `docs/harness/AI_HARNESS.md`: central AI harness contract for agent roles, autonomy levels, evidence packages, skill lifecycle, manual forward-tests, stop rules, and human review.
   - `docs/harness/AGENT_PLAYBOOK.md`: planning workflow, Red-Green-Refactor rule, API contract-first rule, verification ladder, git/worktree safety, final report format.
   - `docs/harness/AUTONOMY_MATRIX.md`: risk levels by file category; which changes agents may plan, implement, repair, or must escalate.
   - `docs/harness/QUALITY_GATES.md`: gate table with status, local command, CI command, owner, false-positive handling, and date when warning becomes hard.
@@ -303,6 +396,22 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
   - `docs/harness/API_CONTRACTS.md`: OpenAPI source-of-truth rule, route-surface taxonomy, and staged plan for live-vs-static contract diff.
   - `docs/harness/HOTSPOTS.md`: initial baseline for backend, frontend, H5P, CSS, OpenAPI, and DB-access hotspots.
   - `docs/harness/TECH_DEBT.md`: exception template with owner, risk, review date, and exit criterion.
+  - `docs/harness/SKILLS.md`: project-skill inventory, governance rules, initial skill candidates, eval expectations, and supply-chain policy.
+  - `docs/harness/SKILL_EVALS.md`: manual forward-test ledger for active skills, with scenario, expected artifact, observed result, known gaps, activation decision, and next review date.
+- Create reviewable skill source drafts under `docs/harness/skills/<skill>/SKILL.md`:
+  - documentation and harness maintenance: `gustav-plan-status`, `gustav-harness-gardener`,
+  - PR work: `gustav-pr-review`, `gustav-pr-fix`,
+  - contract and security work: `gustav-api-contract`, `gustav-security-review`,
+  - route and legacy surface work: `gustav-route-map`.
+- Organize the initial skill drafting with parallel subagents by risk group:
+  - one pass for documentation/harness skills,
+  - one pass for PR review/fix skills,
+  - one pass for API/security skills,
+  - one pass for route/legacy skills.
+- Mark all initial skills as active only inside the autonomy matrix:
+  - documentation/harness skills may support Level 3 PR preparation,
+  - review/fix skills may support Level 1-2 code work with human review,
+  - API/security/route skills may guide analysis, tests, and plans but cannot authorize breaking API, migration, privacy, or security decisions.
 - Create planning memory:
   - `docs/plan/INDEX.md`: curated index of active/refactor/security plans instead of a raw file dump.
   - `docs/plan/MILESTONES.md`: current 3-month PR sequence with status and next action.
@@ -328,6 +437,8 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
   - import-discipline inventory,
   - route-surface inventory,
   - direct DB-access inventory,
+  - skill-governance inventory,
+  - skill manual-forward-test inventory,
   - Docker image-only smoke as a visible but initially non-blocking signal.
 - Introduce a first GitHub Actions workflow in the implementation PR:
   - run the same `make harness-minimum` entry point as local development,
@@ -337,9 +448,13 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
 - Acceptance:
   - A new agent can find working rules, critical gates, and known debt within 5 minutes.
   - Every harness document links to concrete checks or PR rules.
+  - `AI_HARNESS.md` explains how agent roles, autonomy, evidence, skills, evals, stop rules, and human review fit together.
+  - Project skills are documented as a controlled harness layer, not as unreviewed automation.
+  - All initial project skills have repo-visible `SKILL.md` sources, `SKILLS.md` inventory entries, and at least one manual forward-test entry in `SKILL_EVALS.md`.
+  - "Active skill" means allowed workflow guidance inside the autonomy matrix, not extra authority to make product, API, DB, security, privacy, or merge decisions.
   - `AGENTS.md` can later be shortened because `docs/harness/INDEX.md` points to the durable rules.
   - Security/PII/secrets/API-security-contract failures are specified as hard blockers.
-  - Structure, hotspot, import, route-surface, frontend, H5P, and image-only findings are visible as warning signals with an escalation path.
+  - Structure, hotspot, import, route-surface, frontend, H5P, skill-governance, and image-only findings are visible as warning signals with an escalation path.
   - CI is planned to run the same `make harness-minimum` entry point as local development.
 
 #### PR 2: Security Baseline for CSRF and Session
@@ -540,6 +655,7 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
   - contract diff status,
   - frontend/backend verification status,
   - open `TECH_DEBT` entries,
+  - skill inventory and skill-eval status,
   - Docker/image parity status.
 - Acceptance:
   - Progress is public, measurable, and auditable.
@@ -622,6 +738,19 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - No real personal data in fixtures, screenshots, or demos.
 - No proprietary or unclear-license teaching material in the repository.
 - Clear contributor rules for privacy, tests, and security disclosure.
+- Project skills are part of the supply chain: their instructions, helper scripts, examples, and tool permissions need review because they can steer agent behavior.
+
+## Research Sources
+The 2026-06-25 update is based on these sources:
+- [AI Harness Engineering: Formalizing Effective Runtime Substrates for LLM Agents](https://arxiv.org/abs/2605.13357): treats a harness as a runtime substrate for context, tools, project memory, verification, permissions, observability, failure attribution, and human intervention.
+- [Agent Skills specification](https://agentskills.io/specification): defines skills as directories with `SKILL.md`, optional scripts, references, and assets that are loaded only when relevant.
+- [Agent Skills evaluation guide](https://agentskills.io/skill-creation/evaluating-skills): recommends realistic eval prompts, assertions, comparison with and without the skill, and human review before trusting a skill.
+- [Anthropic: Building effective agents](https://www.anthropic.com/engineering/building-effective-agents): recommends simple, composable agent workflows, transparent tool use, strong grounding in the environment, and clear human oversight.
+- [OpenAI Agents SDK documentation](https://openai.github.io/openai-agents-python/): documents guardrails, tool guardrails, handoffs, and tracing as practical building blocks for controlled agent runs.
+- [OpenAI Agents SDK tracing documentation](https://openai.github.io/openai-agents-python/tracing/): describes traces for agent workflows, tool calls, guardrails, handoffs, and custom events.
+- [Repo-level instruction study for `AGENTS.md`](https://arxiv.org/abs/2601.20404): suggests repository-level instructions can reduce runtime and output tokens without reducing task success.
+- [Skill-utility study](https://arxiv.org/abs/2604.04323): shows that skill usefulness is not automatic under realistic selection conditions and should be measured.
+- [Skill supply-chain risk paper](https://arxiv.org/abs/2605.11418): highlights that skill files are operational instructions and should be governed like a supply-chain input.
 
 ## Verification
 Before implementation of this plan, no product files are changed. After plan approval, implementation proceeds PR by PR.
@@ -640,6 +769,7 @@ Additional verification by risk:
 - Frontend PRs: `npm run check` and relevant frontend tests.
 - H5P PRs: H5P service tests and unchanged public H5P API behavior.
 - DB/RLS PRs: migrations against the local Supabase structure, no special local-only paths.
+- Skill/harness PRs: skill inventory check, repo-visible `SKILL.md` source check, no unsafe tool permissions, no PII/secrets in examples, and at least one realistic manual forward-test entry in `SKILL_EVALS.md` for each active skill.
 
 ## Open Decisions
 - Exact technical implementation of gates:
@@ -649,6 +779,8 @@ Additional verification by risk:
   - or a combination.
 - Deadline and thresholds for hotspot LOC.
 - Whether `TECH_DEBT.md` stays under `docs/harness/` or later moves into ADR/governance documents.
+- Later installation path for tool-specific local copies of repo-governed project skills.
+- When scripted skill evals should be introduced after the manual forward-test format stabilizes.
 
 Recommended defaults:
 - Gate implementation starts locally via `make`; CI runs the same entry point from PR 1 onward.
@@ -658,6 +790,12 @@ Recommended defaults:
 - `backend/web/main.py` gets its own PR before deeper route splits.
 - Frontend and H5P hotspots are included in the same quality scorecard as backend hotspots.
 - `TECH_DEBT.md` initially stays under `docs/harness/` because that is easiest for agents to find.
+- `docs/harness/AI_HARNESS.md` is introduced in PR 1 as the central AI harness specification.
+- `docs/harness/SKILLS.md`, `docs/harness/SKILL_EVALS.md`, and `docs/harness/skills/<skill>/SKILL.md` are introduced in PR 1 before any tool-specific local installation path is treated as official.
+- Initial active skills are `gustav-plan-status`, `gustav-pr-review`, `gustav-pr-fix`, `gustav-api-contract`, `gustav-security-review`, `gustav-route-map`, and `gustav-harness-gardener`.
+- PR 1 uses manual skill forward-tests, not scripted evals.
+- Level 3 autonomy is allowed only for documentation, review, plan-status, harness-gardening, and tech-debt PR preparation during the first three months.
+- Executable project skills require realistic manual forward-test evidence before they become hard workflow dependencies.
 - GitHub Actions are introduced with PR 1, at least for security baseline, public-repo hygiene, and Docker/image smoke.
 
 ## Next Step After Plan Approval

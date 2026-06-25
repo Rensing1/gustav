@@ -1,5 +1,8 @@
 # Auth Silent Continuation Login-Bounce Implementation Plan
 
+Status: technisch umgesetzt; manuelle prod-like QA offen
+Datum: 2026-06-03
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Recover aktive Keycloak-SSO-Sitzungen automatisch über `/auth/continue`, bevor GUSTAV Nutzer auf die sichtbare Login-Seite mit Rücksprunglink schickt.

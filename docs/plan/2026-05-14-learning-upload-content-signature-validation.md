@@ -1,5 +1,8 @@
 # Learning Upload Content Signature Validation Implementation Plan
 
+Status: umgesetzt
+Datum: 2026-05-14
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Reject wrong-content learning uploads before persistence and feedback processing.
@@ -9,6 +12,12 @@
 **Tech Stack:** FastAPI route layer, Python storage validators, OpenAPI contract, pytest, SvelteKit/Vitest contract tests.
 
 ---
+
+## Umsetzungsergebnis
+
+- Die Upload-Content-Signaturprüfung ist umgesetzt: API, Worker-Fallback, OpenAPI-Vertrag, Frontend-Fehlermeldung, Referenzdokumentation, Changelog und Ticketstatus sind aktualisiert.
+- Die alte Task-Checkbox-Liste unten bleibt als historischer TDD-Plan erhalten; sie ist nicht mehr der aktuelle Bearbeitungsstand.
+- Verifikation ist im Ticket `docs/tickets/learning-upload-content-signature-validation-2026-05-12.md` und in den Review-Plänen vom 2026-05-14/15 dokumentiert.
 
 ## Summary
 

@@ -1,6 +1,12 @@
 # iPad-Scroll im Schüler-Markdown-Editor beheben
 
-Status: geplant
+Status: umgesetzt; manuelle iPad-/WebKit-QA offen
+
+## Umsetzungsergebnis
+
+- Toast UI wird mit Pixelwerten initialisiert (`448px`/`352px`), damit die interne Höhenberechnung keine negativen Min-Höhen erzeugt.
+- Der CSS-Override für `.toastui-editor-main` ist auf eine schrumpfbare Flex-Fläche ausgerichtet, und der editierbare Scrollcontainer hat Touch-Scroll-Regeln.
+- Die Änderung betrifft nur den Svelte-Schülereditor und erfordert keine API-, OpenAPI-, Datenbank- oder Migrationsänderung.
 
 ## Zusammenfassung
 

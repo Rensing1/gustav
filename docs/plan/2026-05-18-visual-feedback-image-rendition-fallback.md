@@ -1,5 +1,8 @@
 # Visual Feedback Image-Rendition Fallback Implementation Plan
 
+Status: umgesetzt
+Datum: 2026-05-18
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** GUSTAV soll gültige PNG/JPG-Bildabgaben robuster an Mistral senden, indem nach einer bildbezogenen Provider-429 genau einmal eine JPEG-1280-Rendition versucht wird, ohne das gespeicherte Original zu verändern.
@@ -9,6 +12,13 @@
 **Tech Stack:** Python 3.13, Pillow, DSPy/LiteLLM/OpenAI-compatible Chat Completions, pytest, Supabase/PostgreSQL nur als bestehende Persistenz- und Testumgebung.
 
 ---
+
+## Umsetzungsergebnis
+
+- Der Visual-Feedback-Adapter erzeugt nach einem bildbezogenen Provider-429 genau einmal eine providergebundene JPEG-1280-q85-Rendition, ohne das gespeicherte Original zu verändern.
+- Die Rendition ist mit Pixelbudget-Härtung, PII-freier Diagnose, doppelter-429-Klassifikation und UI-Mapping für `image_too_complex_for_provider` abgesichert.
+- Die alte Task-Checkbox-Liste unten bleibt als historischer TDD-Plan erhalten; sie ist nicht mehr der aktuelle Bearbeitungsstand.
+- Code- und Testspuren liegen unter anderem in `backend/learning/adapters/local_feedback.py`, `backend/tests/learning_adapters/test_local_feedback_visual_pipeline.py`, `backend/tests/learning_adapters/test_local_feedback_dspy.py`, `backend/tests/test_learning_worker_feedback_error_mapping.py` und `backend/tests/test_learning_ui_feedback_failure_messages.py`.
 
 ## Referenzen und Befund
 

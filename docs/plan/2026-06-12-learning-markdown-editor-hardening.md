@@ -1,5 +1,6 @@
 # Plan: Schülereditor für Tabellen und robuste Textabgaben härten
 
+Status: umgesetzt
 Stand: 2026-06-12
 
 ## Kontext
@@ -81,3 +82,8 @@ Es gibt keine OpenAPI-Änderung, keine Supabase/PostgreSQL-Migration und keine g
 - Entwürfe werden innerhalb der Sitzung nach Lernendem getrennt.
 - Alte dauerhaft gespeicherte `localStorage`-Entwürfe werden entfernt.
 - Bestehende Markdown-Ausgabe bleibt sanitizt und rendert Tabellen als Tabelle.
+
+## Umsetzungsergebnis
+
+- Tabellen-Toolbar, No-JS-/Mount-Fallback, Submit-Synchronisierung, sitzungsbezogene Drafts, lernendenbezogene Draft-Trennung und Markdown-Tabellen-Rendering sind umgesetzt.
+- Keine OpenAPI-, Backend- oder Datenbankänderung.

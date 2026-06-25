@@ -1,5 +1,8 @@
 # DSPy-Synthesis analysis_json Type-Mismatch Implementation Plan
 
+Status: umgesetzt
+Datum: 2026-06-03
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Behebe die DSPy-Warnungen `Type mismatch for field 'analysis_json'`, ohne den öffentlichen `criteria.v2`-JSON-Vertrag oder die Persistenz in `learning_submissions.analysis_json` zu ändern.

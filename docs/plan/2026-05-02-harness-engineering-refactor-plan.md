@@ -82,7 +82,9 @@ Planned harness artifacts:
 - `docs/harness/AGENT_PLAYBOOK.md`: Codex workflow, TDD, contract-first development, security checks, common pitfalls.
 - `docs/harness/ARCHITECTURE_RULES.md`: allowed dependency directions, import rules, boundaries between routes, use cases, repositories, adapters, and serialization.
 - `docs/harness/QUALITY_GATES.md`: warning and hard gates with deadlines.
+- `docs/harness/TEST_STRATEGY.md`: test layers, marker rules, gate profiles, and cleanup rules for the large existing test portfolio.
 - `docs/harness/SECURITY_BASELINE.md`: CSRF, authz/RLS, uploads, secrets, logging, admin/teacher flows.
+- `docs/harness/TEST_PORTFOLIO.md`: grouped inventory of existing tests with purpose, dependencies, marker/gate assignment, risk, and keep/merge/rewrite/retire decisions.
 - `docs/harness/API_CONTRACTS.md`: OpenAPI as source of truth, contract diff, public/internal endpoints.
 - `docs/harness/DATA_INVENTORY.yml`: personal data by entity, purpose, access, retention, deletion, export, and LLM usage.
 - `docs/harness/AUTONOMY_MATRIX.md`: allowed agent actions by risk and file category.
@@ -103,7 +105,9 @@ Minimum document contract for PR 1:
 - `AGENT_PLAYBOOK.md` defines repo bootstrap, planning rules, escalation rules, verification ladder, and final-response expectations.
 - `AUTONOMY_MATRIX.md` maps autonomy by file category and risk level, not by agent identity.
 - `QUALITY_GATES.md` lists each gate with status (`hard`, `warning`, `advisory`), local command, CI command, false-positive policy, and hardening date.
+- `TEST_STRATEGY.md` defines the intended test pyramid for GUSTAV: domain/use-case, adapter, OpenAPI/API contract, API integration, DB/RLS/migration, frontend, H5P, and E2E smoke tests.
 - `SECURITY_BASELINE.md` links concrete tests for secrets/PII, authn/authz, CSRF, RLS, uploads, privacy logging, and unsafe production defaults.
+- `TEST_PORTFOLIO.md` records the first grouped test inventory and classifies test groups as `keep`, `merge`, `rewrite`, or `retire-later`.
 - `API_CONTRACTS.md` defines route-surface categories before enforcing strict OpenAPI parity:
   - public API,
   - BFF/internal,
@@ -392,7 +396,9 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
   - `docs/harness/AGENT_PLAYBOOK.md`: planning workflow, Red-Green-Refactor rule, API contract-first rule, verification ladder, git/worktree safety, final report format.
   - `docs/harness/AUTONOMY_MATRIX.md`: risk levels by file category; which changes agents may plan, implement, repair, or must escalate.
   - `docs/harness/QUALITY_GATES.md`: gate table with status, local command, CI command, owner, false-positive handling, and date when warning becomes hard.
+  - `docs/harness/TEST_STRATEGY.md`: explicit test strategy for the large existing suite, including layers, marker policy, gate profiles, E2E limits, and cleanup rules.
   - `docs/harness/SECURITY_BASELINE.md`: selected hard tests and policy notes for secrets, PII, authn/authz, CSRF, RLS, uploads, logging, and prod-safe config.
+  - `docs/harness/TEST_PORTFOLIO.md`: grouped baseline of existing backend, frontend, H5P, DB, security, contract, E2E, and legacy tests with first keep/merge/rewrite/retire decisions.
   - `docs/harness/API_CONTRACTS.md`: OpenAPI source-of-truth rule, route-surface taxonomy, and staged plan for live-vs-static contract diff.
   - `docs/harness/HOTSPOTS.md`: initial baseline for backend, frontend, H5P, CSS, OpenAPI, and DB-access hotspots.
   - `docs/harness/TECH_DEBT.md`: exception template with owner, risk, review date, and exit criterion.
@@ -419,6 +425,10 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
 - Define the planned local entry points:
   - `make harness-minimum`: hard PR-1 safety gate.
   - `make harness-signals`: warning-only signals for structure, frontend, H5P, imports, and image parity.
+  - `make test-fast`: planned fast profile for in-process, domain, adapter, and contract tests.
+  - `make test-db-security`: planned profile for DB, RLS, migration, Authz, and CSRF tests.
+  - `make test-frontend-h5p`: planned profile for Svelte check, Vitest, and H5P Node tests.
+  - `make test-full-prod-like`: planned profile for Supabase, OpenAI-compatible endpoint, Docker/Compose, and E2E smoke tests.
   - `make verify`: remains the full local/prod-like verification gate.
 - Planned `harness-minimum` hard checks:
   - public repo safety and PII/secret hygiene,

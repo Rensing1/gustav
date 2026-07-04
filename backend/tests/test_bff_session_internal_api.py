@@ -8,8 +8,7 @@ Why:
 
 from __future__ import annotations
 
-from pathlib import Path
-import sys
+import importlib
 
 import httpx
 import pytest
@@ -17,13 +16,8 @@ from httpx import ASGITransport
 from types import SimpleNamespace
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore
-from identity_access.bff_sessions import BFFSessionStore  # type: ignore
+main = importlib.import_module("backend.web.main")
+from backend.identity_access.bff_sessions import BFFSessionStore
 
 
 pytestmark = pytest.mark.anyio("asyncio")

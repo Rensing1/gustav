@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import base64
+import importlib
 import time
 import types
-from pathlib import Path
-import sys
 
 import httpx
 import pytest
@@ -16,14 +15,9 @@ from httpx import ASGITransport
 from jose import jwt
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore
-from identity_access.oidc import OIDCConfig  # type: ignore
-from runtime_auth_helpers import install_oidc_config
+main = importlib.import_module("backend.web.main")
+from backend.identity_access.oidc import OIDCConfig
+from backend.tests.runtime_auth_helpers import install_oidc_config
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -91,7 +85,7 @@ def _configure_jwks(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     install_oidc_config(monkeypatch, main, cfg)
 
-    from identity_access import tokens as tokens_module  # type: ignore
+    from backend.identity_access import tokens as tokens_module
 
     monkeypatch.setattr(tokens_module, "JWKS_CACHE", tokens_module.JWKSCache(ttl_seconds=0))
     monkeypatch.setattr(

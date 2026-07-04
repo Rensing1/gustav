@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 
-from components.markdown import render_markdown_safe
+from backend.web.components.markdown import render_markdown_safe
 
 
 def _is_scratch_evidence_markdown(text: str) -> bool:
@@ -156,4 +156,3 @@ def render_submission_text_html(*, text_src: str) -> str:
 
 
 __all__ = ["render_submission_text_html"]
-

@@ -2,7 +2,7 @@
 Section Creation Form Component
 """
 from typing import Optional
-from components.base import Component
+from backend.web.components.base import Component
 from .fields import TextInputField
 from .submit import SubmitButton
 

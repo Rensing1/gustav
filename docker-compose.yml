@@ -31,25 +31,8 @@ services:
       - "host.docker.internal:host-gateway"
     # behind proxy; no direct host port mapping
     volumes:
-      # Live-Reload: Web-Code (SSR) wird eingebunden
-      - ./backend/web:/app:z
-      # Identity Access layer must be mounted as well for imports
-      - ./backend/identity_access:/app/identity_access:z
-      # Teaching bounded context (use cases/repos)
-      - ./backend/teaching:/app/teaching:z
-      # Learning bounded context
-      - ./backend/learning:/app/backend/learning:z
-      # Vision utilities (PDF rendering, preprocessing, stitching)
-      - ./backend/vision:/app/backend/vision:z
-      # Shared storage helpers (learning upload policy, verification)
-      - ./backend/storage:/app/backend/storage:z
-      # Scratch SB3 extraction helpers
-      - ./backend/scratch:/app/backend/scratch:z
-      # MakeCode HEX evidence extraction helpers (Calliope)
-      - ./backend/makecode:/app/backend/makecode:z
-      # Filius FLS evidence extraction helpers
-      - ./backend/filius:/app/backend/filius:z
-      - ./backend/__init__.py:/app/backend/__init__.py:z
+      # Live-Reload: mount backend as a package, matching the image layout.
+      - ./backend:/app/backend:z
       # Shared dev uploads directory for vision to access uploaded files
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z
       # Trust Caddy's local CA inside the container for prod-like HTTPS calls.
@@ -192,13 +175,8 @@ services:
       - "host.docker.internal:host-gateway"
     command: ["python", "-m", "backend.learning.workers.process_learning_submission_jobs"]
     volumes:
-      - ./backend/learning:/app/backend/learning:z
-      - ./backend/vision:/app/backend/vision:z
-      - ./backend/storage:/app/backend/storage:z
-      - ./backend/scratch:/app/backend/scratch:z
-      - ./backend/makecode:/app/backend/makecode:z
-      - ./backend/filius:/app/backend/filius:z
-      - ./backend/__init__.py:/app/backend/__init__.py:z
+      # Live-Reload: mount backend as one package, matching the image layout.
+      - ./backend:/app/backend:z
       # Shared dev uploads directory (same path as in web)
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z
     env_file:

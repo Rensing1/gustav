@@ -14,24 +14,12 @@ COPY backend/web/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
   && apt-get purge -y --auto-remove gcc || true
 
-# Copy web app source (SSR/HTMX)
-# Copy web layer first so reload still works as expected
-COPY backend/web/ .
-# Identity Access domain layer is located outside web package; copy it explicitly
-# Clean Architecture layout: we ship the web layer plus domain packages.
-# Identity/Teaching live as top-level packages; Learning stays under backend/ to
-# keep imports stable (existing code uses `from backend.learning...`).
-COPY backend/identity_access ./identity_access
-COPY backend/teaching ./teaching
-COPY backend/learning ./backend/learning
-COPY backend/vision ./backend/vision
-COPY backend/storage ./backend/storage
-COPY backend/scratch ./backend/scratch
-COPY backend/makecode ./backend/makecode
-COPY backend/filius ./backend/filius
-COPY backend/__init__.py ./backend/__init__.py
+# Copy the backend as a Python package. The runtime entry point is
+# `backend.web.main:app`, so the image must preserve the repository package
+# layout instead of flattening `backend/web` into `/app`.
+COPY backend ./backend
 
-ENV PYTHONPATH=/app:/app/backend
+ENV PYTHONPATH=/app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
@@ -43,7 +31,7 @@ USER app
 EXPOSE 8000
 
 # Start server (no reload to keep in-memory state stable during E2E tests)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.web.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # Lightweight healthcheck hitting the app's health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \

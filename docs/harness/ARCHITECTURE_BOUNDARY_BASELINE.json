@@ -1,0 +1,8 @@
+{
+  "categories": {
+    "service_fastapi_imports": 0,
+    "usecase_fastapi_imports": 0,
+    "web_direct_db_connects": 9,
+    "web_direct_supabase_client_creates": 1
+  }
+}

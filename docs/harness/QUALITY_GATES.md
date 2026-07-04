@@ -1,9 +1,9 @@
 # Quality Gates
 
 Status: Draft
-Owner: Felix
+Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_test_strategy_docs_contract.py`
-CI status: geplant
+CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; weitere Profile werden schrittweise ergänzt.
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich während des Harness-Refactors
 
@@ -23,10 +23,7 @@ Geplanter Inhalt:
 - Harness-Dokumentationsverträge
 
 Initialer lokaler Befehl:
-- `.venv/bin/pytest -q backend/tests/test_harness_test_strategy_docs_contract.py`
-
-Zielzustand:
-- Ein eigener Make-Target wie `make test-fast`.
+- `make test-fast`
 
 ### db-security
 Zweck: Datenbank-, RLS-, Authz-, CSRF- und Migration-Sicherheit sichtbar machen.
@@ -38,9 +35,123 @@ Geplanter Inhalt:
 - Authz-negative Tests für Schüler, Lehrer und Admin-Funktionen
 - DB-DSN- und Mutationssicherheitsguards
 
-Zielzustand:
-- Ein eigener Make-Target wie `make test-db-security`.
-- Tests mit echter DB-Abhängigkeit sind markiert oder anderweitig eindeutig inventarisiert.
+Initialer lokaler Befehl:
+- `make test-db-security`
+
+Aktueller harter Inhalt:
+- Config-, Privacy-, Test-Environment- und DB-required Guards.
+- CSRF-Baseline für Learning-Submission- und Teaching-Write-Flows.
+- Cookie-Policy-Baseline für Auth-Callback und BFF-Session-Sync.
+- Authz/Authn-Baseline für unauthentifizierte API-Zugriffe, Bearer-JWT-Fehler, BFF-Session-Bootstrap und cookie-only Missbrauch.
+- Fokussierte Teaching-Live-Detail-Node-IDs und Relation-Guard-Regressionen; breite Detail-, Feedback-, Datei- und H5P-Integrationen gehören nicht in dieses harte Authz/RLS-Gate.
+- Learning- und Teaching-RLS-Regressionen inklusive Membership-Delete-Policies, SECURITY-DEFINER-Owner-Binding und Helper-EXECUTE-Privilegien.
+- Das Profil setzt `REQUIRE_DB_TESTS=1`; fehlende lokale Supabase-DB oder fehlende App-Rollen führen zu einem Gate-Fehler statt zu stillen Skips.
+
+Offen:
+- Tests mit echter DB-Abhängigkeit sind noch nicht vollständig markiert oder anderweitig eindeutig inventarisiert.
+
+### upload-llm-boundaries
+Zweck: technische Upload-Grenzen und LLM-Datengrenzen sichtbar machen, ohne Schüler-Submissions inhaltlich vorzuprüfen oder umzuschreiben.
+
+Geplanter Inhalt:
+- Upload-Intent- und Proxy-Grenzen für Größe, MIME, erlaubte Hosts, Pfade und Header.
+- Storage-Key-, Storage-Verifikations- und Content-Signatur-Contracts.
+- Submission-Kind- und MIME-Casing-Contracts.
+- Feedback-/DSPy-/Vision-Verträge, die Fehlerabbildung, Prompt-Struktur und Logging schützen.
+- Privacy-Logging-Contracts.
+
+Initialer lokaler Befehl:
+- `make test-upload-llm-boundaries`
+
+Aktueller harter Inhalt:
+- Servicefreie Upload-, Storage-, Signatur-, Proxy-, Feedback- und Privacy-Tests.
+- Die LLM-Produktentscheidung ist ein Harness-Contract: Schüler-Submissions werden vor dem LLM nicht inhaltlich geprüft, nicht gefiltert, nicht normalisiert, nicht moderiert und nicht umgeschrieben.
+- Technische Verpackung ist erlaubt, solange das gespeicherte Original unverändert bleibt.
+
+Offen:
+- Supabase-Storage-, H5P-E2E- und OpenAI/Ollama-Smokes bleiben opt-in und werden nicht in dieses schnelle Boundary-Profil gemischt.
+
+### docker-image-smoke
+Zweck: Docker-Image-Parität sichtbar machen, damit Compose-Bind-Mounts fehlende Image-Inhalte nicht verdecken.
+
+Geplanter Inhalt:
+- Root-Web-Image bauen.
+- Kritische Python-Imports im Image ohne Volume-Mounts prüfen.
+- Container kurz starten und `/health` abfragen.
+- Package-orientierten Start `backend.web.main:app` prüfen.
+
+Initialer lokaler Befehl:
+- `make test-docker-image-smoke`
+
+Aktueller Status:
+- Als hartes Gate in `make verify` enthalten.
+- In `harness-signals` warning-only sichtbar.
+- In `harness-minimum` nur als schneller Source-Contract enthalten, nicht als Docker-Build.
+- Packaging-Contracts prüfen zusätzlich, dass Web und Learning-Worker das Backend lokal als ein Package unter `/app/backend` mounten und keine einzelnen Backend-Subpackages als zweite Wurzeln einhängen.
+
+### import-boundaries
+Zweck: Import-Schulden sichtbar machen und verhindern, dass flache Runtime-Imports oder verstreute Test-Import-Crutches weiter wachsen.
+
+Geplanter Inhalt:
+- Flat-Import-Baseline für `routes.*` und `components`.
+- Mixed-Import-Baseline für `backend.web.routes.*` außerhalb des Web-Adapters.
+- Baseline für verstreute `sys.path`-/`os.sys.path`-Manipulationen.
+- Zielbild für `backend.web.main:app`, Dockerfile und Compose ohne doppelte Package-Kopien.
+
+Initialer lokaler Befehl:
+- `make test-import-boundaries`
+
+Aktueller Status:
+- Als hartes Baseline-Gate in `make verify` enthalten.
+- In `harness-signals` warning-only sichtbar.
+- In `harness-minimum` nur als schneller Scanner-Contract enthalten.
+
+### api-contract-baseline
+Zweck: `api/openapi.yml` als ausführbare Baseline für Runtime-`/api/*`-Routen schützen und Route-Surfaces sichtbar machen.
+
+Geplanter Inhalt:
+- Runtime-`/api/*`-Operationen der FastAPI-App gegen `api/openapi.yml` vergleichen.
+- Stale `/api/*`-OpenAPI-Einträge als Gate-Fehler melden.
+- Route-Surface-Klassifikation für public API, BFF/internal, H5P service, auth bridge, health/ops, active legacy UI und retired legacy UI prüfen.
+
+Initialer lokaler Befehl:
+- `make test-api-contract-baseline`
+
+Aktueller Status:
+- Als hartes Gate in `make verify` enthalten.
+- In `harness-minimum` als schneller Contract enthalten.
+- Der PR16-Contract prüft zusätzlich, dass die ersten entfernten Legacy-HTML/HTMX-Einstiegspfade nicht mehr als `APIRoute` registriert sind, während direkte Backend-Zugriffe weiterhin intentional 410 oder Rollen-Redirect liefern.
+
+### architecture-boundaries
+Zweck: ausgewählte Clean-Architecture-Grenzen mechanisch prüfen, ohne bestehende Altlasten zu verstecken.
+
+Geplanter Inhalt:
+- FastAPI-Imports in Use Cases und Services blockieren.
+- Direkte DB-Zugriffe aus Web-Adaptern gegen eine Baseline zählen.
+- Direkte Supabase-Client-Erzeugung aus Web-Adaptern gegen eine Baseline zählen.
+- Zielbild für Security Guards und Serialisierung dokumentieren.
+
+Initialer lokaler Befehl:
+- `make test-architecture-boundaries`
+
+Aktueller Status:
+- Als hartes Gate in `make verify` enthalten.
+- In `harness-minimum` als schneller Contract enthalten.
+
+### route-map
+Zweck: Route-Surfaces und Legacy-Status vor Monolith-Strangulation und Legacy-Removal reviewbar machen.
+
+Geplanter Inhalt:
+- Runtime- und OpenAPI-Operationen als Route-für-Route-Inventur in `docs/harness/ROUTE_MAP.md` führen.
+- Pflichtfelder für Surface, Rolle, Datenzugriff, Response-Modell, Tests, Risiko, Legacy-Status, Entscheidung und Zielschicht prüfen.
+- Bereits registrierte 410-Legacy-Routen von aktiver Legacy-UI unterscheiden.
+
+Initialer lokaler Befehl:
+- `make test-route-map`
+
+Aktueller Status:
+- Als hartes Gate in `make verify` enthalten.
+- In `harness-minimum` als schneller Contract enthalten.
 
 ### frontend-h5p
 Zweck: Frontend- und H5P-Qualität als First-Class-Gate behandeln.
@@ -51,9 +162,17 @@ Geplanter Inhalt:
 - Node-Tests im H5P-Service
 - H5P-Verträge, soweit sie ohne Compose laufen
 
-Zielzustand:
-- Ein eigener Make-Target wie `make test-frontend-h5p`.
-- Spätestens vor größeren Backend/API-Refactors ist dieses Profil Teil von `make verify`.
+Initialer lokaler Befehl:
+- `make test-frontend-h5p`
+
+Aktueller harter Inhalt:
+- `npm run check` im Frontend.
+- Frontend-Vitest.
+- H5P-Node-Tests.
+- `make verify` ruft dieses Profil auf.
+
+Offen:
+- Browser-E2E und visuelle Regressionen bleiben im `full-prod-like`-Profil.
 
 ### full-prod-like
 Zweck: produktionsnahe Integrationen prüfen.
@@ -65,17 +184,20 @@ Geplanter Inhalt:
 - Keycloak/Caddy/Web/H5P-E2E
 - wenige Playwright- oder pytest-E2E-Kernreisen
 
-Zielzustand:
-- Ein eigener Make-Target wie `make test-full-prod-like`.
+Initialer lokaler Befehl:
+- `make test-full-prod-like`
+
+Regel:
 - Dieses Profil bleibt teuer und bewusst opt-in oder CI-staged.
 
 ## Harte Regeln
 - Sicherheits-, Privacy-, Secret- und API-Security-Contract-Fehler blockieren sofort.
 - Struktur-, Hotspot-, Route-Surface-, Import- und Skill-Governance-Signale dürfen anfangs Warnungen sein, müssen aber einen Härtungstermin haben.
+- Grüne harte Gates sollen warning-clean sein. Wenn ein grüner Lauf eine Warnung ausgibt, wird sie als aufzuräumende technische Schuld behandelt oder mit Owner und Härtungspfad dokumentiert.
 - Externe Suites brauchen explizite Marker und ENV-Flags.
 - Kein Gate darf lokale Sonderpfade nutzen, die in Produktion nicht gelten.
 
 ## Offene Umsetzung
-- Exakte Make-Targets werden in einem separaten PR eingeführt, nachdem das Testportfolio inventarisiert ist.
+- Die PR-1-Make-Targets existieren; ihre Inhalte werden nach Testportfolio- und DB-Marker-Inventar weiter geschärft.
 - `db_read` und `db_write` werden erst dann harte Marker, wenn ihr Einsatz im Portfolio überprüft wurde.
 - CI startet mit dem kleinsten verlässlichen Profil und erweitert die Matrix schrittweise.

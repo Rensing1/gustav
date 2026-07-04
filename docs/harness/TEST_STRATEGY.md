@@ -1,9 +1,9 @@
 # Teststrategie
 
 Status: Draft
-Owner: Felix
+Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_test_strategy_docs_contract.py`
-CI status: geplant
+CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; weitere Profile werden schrittweise ergänzt.
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich während des Harness-Refactors
 
@@ -57,6 +57,7 @@ Zweck: `api/openapi.yml` als öffentliche Wahrheit schützen.
 Typische Inhalte:
 - OpenAPI-Datei ist valide.
 - Kritische Pfade, Methoden, Security-Schemes, Statuscodes und Cache-Header sind dokumentiert.
+- `make test-api-contract-baseline` vergleicht Runtime-`/api/*`-Operationen mit `api/openapi.yml`.
 - Runtime-Routen sind klassifiziert: public API, BFF/internal, H5P service, auth bridge, health/ops, active UI oder retired legacy UI.
 - Breaking Changes brauchen einen Eintrag in `docs/plan/DECISIONS.md`.
 
@@ -123,7 +124,10 @@ Regel: E2E-Smokes sind teuer und fragil. Sie schützen Vertrauen in die Integrat
 ## Testprofile
 - `fast`: In-Process-, Domain-, Adapter- und Contract-Tests ohne externe Dienste.
 - `db-security`: echte DB-, RLS-, Migration-, Authz- und CSRF-relevante Tests.
-- `frontend-h5p`: `npm run check`, Vitest und H5P Node tests.
+- `upload-llm-boundaries`: servicefreie Upload-, Storage-, Signatur-, Feedback-/DSPy- und Privacy-Contracts; keine inhaltliche Vorprüfung oder Veränderung von Schüler-Submissions.
+- `docker-image-smoke`: Web-Image ohne Compose-Bind-Mounts bauen, package-orientierten Start `backend.web.main:app` prüfen, kritische Imports prüfen und `/health` abfragen; Bestandteil von `make verify`.
+- `import-boundaries`: AST-basierter Baseline-Scan für flache Web-Imports, gemischte `backend.web.routes.*`-Imports und verstreute `sys.path`-Manipulationen.
+- `frontend-h5p`: `npm run check`, Vitest und H5P Node tests; Bestandteil von `make verify`.
 - `full-prod-like`: Supabase, OpenAI-kompatibler Endpunkt, Docker/Compose und E2E-Smokes.
 
 ## Marker-Regeln

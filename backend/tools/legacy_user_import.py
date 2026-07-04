@@ -36,7 +36,7 @@ logger = logging.getLogger("gustav.tools.legacy_import")
 
 try:
     # Prefer absolute import path used by the web layer during tests
-    from identity_access.domain import ALLOWED_ROLES
+    from backend.identity_access.domain import ALLOWED_ROLES
 except Exception:  # pragma: no cover - fallback when executed as a package module
     from backend.identity_access.domain import ALLOWED_ROLES  # type: ignore
 

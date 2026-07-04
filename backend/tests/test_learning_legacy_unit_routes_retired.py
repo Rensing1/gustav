@@ -15,16 +15,15 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
 @pytest.fixture()
-def student_session() -> str:
-    store = SessionStore()
-    main.SESSION_STORE = store
+def student_session(monkeypatch: pytest.MonkeyPatch) -> str:
+    store = install_session_store(monkeypatch, main)
     rec = store.create(sub="student-learning-retired", roles=["student"], name="Lena", ttl_seconds=60)
     return rec.session_id
 

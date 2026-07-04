@@ -15,16 +15,15 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
 @pytest.mark.anyio
-async def test_learning_legacy_entry_returns_gone_for_student() -> None:
-    store = SessionStore()
-    main.SESSION_STORE = store
+async def test_learning_legacy_entry_returns_gone_for_student(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
     rec = store.create(sub="student-legacy-learning", roles=["student"], name="Lena", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -37,9 +36,8 @@ async def test_learning_legacy_entry_returns_gone_for_student() -> None:
 
 
 @pytest.mark.anyio
-async def test_learning_legacy_entry_keeps_teacher_redirect() -> None:
-    store = SessionStore()
-    main.SESSION_STORE = store
+async def test_learning_legacy_entry_keeps_teacher_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
     rec = store.create(sub="teacher-legacy-learning", roles=["teacher"], name="Ada", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:

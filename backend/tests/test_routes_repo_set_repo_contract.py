@@ -11,9 +11,11 @@ Why:
 
 from __future__ import annotations
 
+import importlib
+
 
 def test_teaching_set_repo_updates_public_repo_alias():
-    import routes.teaching as teaching  # type: ignore
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     original = teaching._get_repo()  # type: ignore[attr-defined]
     replacement = teaching._Repo()  # type: ignore[attr-defined]
@@ -26,7 +28,7 @@ def test_teaching_set_repo_updates_public_repo_alias():
 
 
 def test_learning_set_repo_updates_public_repo_alias():
-    import routes.learning as learning  # type: ignore
+    learning = importlib.import_module("backend.web.routes.learning")
 
     class _StubRepo:
         def list_released_sections(self, **kwargs):
@@ -51,7 +53,6 @@ def test_learning_set_repo_updates_public_repo_alias():
 def test_learning_set_repo_updates_existing_route_get_repo_after_reload():
     """Reloaded Learning modules must retarget old route globals to the current repo accessor."""
 
-    import importlib
     import sys
     from fastapi.routing import APIRoute
     main = importlib.import_module("backend.web.main")
@@ -90,11 +91,10 @@ def test_learning_set_repo_updates_existing_route_get_repo_after_reload():
 def test_teaching_set_storage_adapter_updates_existing_route_globals_after_reload():
     """Reloaded Teaching modules must still retarget already-registered route globals."""
 
-    import importlib
     import sys
     from fastapi.routing import APIRoute
-    import main  # type: ignore
-    import routes.teaching as original_teaching  # type: ignore
+    main = importlib.import_module("backend.web.main")
+    original_teaching = importlib.import_module("backend.web.routes.teaching")
 
     def _find_upload_intent_endpoint():
         for route in main.app.routes:
@@ -133,7 +133,6 @@ def test_teaching_set_storage_adapter_updates_existing_route_globals_after_reloa
 def test_teaching_route_guard_uses_endpoint_repo_accessor_after_reload():
     """Teaching guard adapters must honor the repo accessor installed on route globals."""
 
-    import importlib
     import uuid
     from fastapi.routing import APIRoute
 

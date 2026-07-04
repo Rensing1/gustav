@@ -8,13 +8,16 @@ Why:
 
 from __future__ import annotations
 
+import importlib
+
 import httpx
 import pytest
 from httpx import ASGITransport
 
-import main  # type: ignore
-import routes.teaching as teaching  # type: ignore
 from backend.tests.runtime_auth_helpers import install_session_store
+
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

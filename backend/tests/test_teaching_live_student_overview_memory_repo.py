@@ -2,15 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-import os
+import importlib
 
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import routes.teaching as teaching  # type: ignore  # noqa: E402
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 def test_memory_repo_keeps_section_order_when_course_unit_tasks_are_flattened() -> None:

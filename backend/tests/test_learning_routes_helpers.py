@@ -15,7 +15,7 @@ import types
 
 import pytest
 
-import routes.learning as learning  # type: ignore
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 def test_encode_proxy_headers_none_and_empty():
@@ -93,7 +93,7 @@ def test_decode_proxy_headers_ignores_non_string_values():
 
 
 def test_current_environment_prefers_settings_over_env(monkeypatch: pytest.MonkeyPatch):
-    import main  # type: ignore
+    main = importlib.import_module("backend.web.main")
 
     # Ensure app settings override the environment variable.
     main.RUNTIME.settings.override_environment("prod")  # type: ignore[attr-defined]

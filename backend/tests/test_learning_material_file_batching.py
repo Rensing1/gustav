@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -46,7 +47,7 @@ class _FakeConnection:
 
 
 def test_attach_section_material_files_batches_storage_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
-    import routes.learning as learning  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")
 
     cursor = _FakeCursor(
         fetchall_results=[
@@ -112,7 +113,7 @@ def test_attach_section_material_files_batches_storage_lookup(monkeypatch: pytes
 
 
 def test_attach_modular_material_files_batches_storage_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
-    import routes.learning as learning  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")
 
     cursor = _FakeCursor(
         fetchall_results=[

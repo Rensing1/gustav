@@ -12,23 +12,20 @@ Security:
 
 from __future__ import annotations
 
+import importlib
 import os
 import sys
 import time
 import types
-from pathlib import Path
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
+from backend.tests.runtime_auth_helpers import install_session_store
 
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
+operations = importlib.import_module("backend.web.routes.operations")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -53,7 +50,6 @@ class _FakeProbe:
 async def test_openai_health_requires_authentication(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unauthenticated callers must receive 401 and the probe must not run."""
     install_session_store(monkeypatch, main)
-    import routes.operations as operations  # type: ignore  # noqa: E402
 
     fake = _FakeProbe({"status": "healthy"}, 200)
     monkeypatch.setattr(operations, "_probe_openai_health", fake, raising=False)
@@ -72,7 +68,6 @@ async def test_openai_health_requires_teacher_or_operator(monkeypatch: pytest.Mo
     """Students must not see internal diagnostics."""
     store = install_session_store(monkeypatch, main)
     student = store.create(sub="s-openai", roles=["student"], name="S")
-    import routes.operations as operations  # type: ignore  # noqa: E402
 
     fake = _FakeProbe({"status": "healthy"}, 200)
     monkeypatch.setattr(operations, "_probe_openai_health", fake, raising=False)
@@ -91,7 +86,6 @@ async def test_openai_health_requires_teacher_or_operator(monkeypatch: pytest.Mo
 async def test_openai_health_returns_healthy_payload_for_teachers(monkeypatch: pytest.MonkeyPatch) -> None:
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-openai", roles=["teacher"], name="T")
-    import routes.operations as operations  # type: ignore  # noqa: E402
 
     body = {
         "status": "healthy",
@@ -119,7 +113,6 @@ async def test_openai_health_returns_healthy_payload_for_teachers(monkeypatch: p
 async def test_openai_health_returns_503_for_degraded(monkeypatch: pytest.MonkeyPatch) -> None:
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-openai-degraded", roles=["teacher"], name="T")
-    import routes.operations as operations  # type: ignore  # noqa: E402
 
     body = {
         "status": "degraded",
@@ -151,7 +144,6 @@ async def test_openai_health_caches_probe_result_for_short_ttl(monkeypatch: pyte
     """
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-openai-cache", roles=["teacher"], name="T")
-    import routes.operations as operations  # type: ignore  # noqa: E402
 
     fake = _FakeProbe({"status": "healthy", "configured": True, "reachable": True, "modelsLoaded": True, "modelsCount": 1, "detail": None}, 200)
     monkeypatch.setattr(operations, "_probe_openai_health", fake, raising=False)
@@ -173,7 +165,6 @@ async def test_openai_health_ignores_stale_cache_from_previous_probe_callable(
     """A cache row from another probe callable must never bleed into this request."""
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-openai-cache-isolation", roles=["teacher"], name="T")
-    import routes.operations as operations  # type: ignore  # noqa: E402
 
     base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
     stale_body = {
@@ -215,7 +206,6 @@ async def test_openai_health_ignores_stale_cache_from_previous_probe_callable(
 async def test_probe_openai_health_disables_trust_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Probe should not inherit proxy settings from the environment."""
     install_session_store(monkeypatch, main)
-    import routes.operations as operations  # type: ignore  # noqa: E402
 
     observed: dict = {}
 

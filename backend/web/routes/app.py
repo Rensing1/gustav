@@ -11,28 +11,33 @@ from __future__ import annotations
 import asyncio
 import json
 import inspect
+import sys
 from datetime import datetime, timedelta, timezone
 import hmac
 import os
+
+# Temporary compatibility while legacy tests still import `routes.app`.
+if __name__ == "backend.web.routes.app":
+    sys.modules.setdefault("routes.app", sys.modules[__name__])
+elif __name__ == "routes.app":
+    sys.modules.setdefault("backend.web.routes.app", sys.modules[__name__])
 
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.learning.usecases.courses import ListCoursesInput, ListCoursesUseCase
-from identity_access.admin_client import AdminClient
-from identity_access.cli_tokens import CLITokenRecord, InMemoryCLITokenStore
+from backend.identity_access.admin_client import AdminClient
+from backend.identity_access.cli_tokens import CLITokenRecord
+from backend.identity_access.tokens import verify_bearer_token
+from backend.web.auth_session import SESSION_COOKIE_NAME, app_session_ttl_seconds, set_session_cookie
+from backend.web.security.guards import has_any_role, has_role
 
-try:
-    from . import learning as learning_routes
-    from . import teaching as teaching_routes
-except ImportError:  # pragma: no cover - flat import fallback
-    from routes import learning as learning_routes  # type: ignore
-    from routes import teaching as teaching_routes  # type: ignore
+from backend.web.routes import learning as learning_routes
+from backend.web.routes import teaching as teaching_routes
 
 
 app_router = APIRouter(tags=["App"])
-CLI_TOKEN_STORE = InMemoryCLITokenStore()
 
 
 class ConcernBoxEntryCreatePayload(BaseModel):
@@ -73,13 +78,51 @@ class ProfileNameLockedError(RuntimeError):
     """Raised when Vorname/Nachname are currently locked."""
 
 
-def _resolve_main_module():
-    """Return the active FastAPI main module for shared auth/session helpers."""
+def _runtime_from_request(request: Request) -> object | None:
+    """Return the explicit app runtime when the ASGI app provides one."""
+
     try:
-        from backend.web import main as mod  # type: ignore
+        runtime = getattr(getattr(request, "app", None).state, "runtime", None)
     except Exception:
-        import main as mod  # type: ignore
-    return mod
+        return None
+    return runtime
+
+
+def _bff_session_store(request: Request):
+    """Return the Browser-BFF session store from the explicit app runtime."""
+
+    runtime = _runtime_from_request(request)
+    if runtime is not None and hasattr(runtime, "bff_session_store"):
+        return runtime.bff_session_store
+    raise RuntimeError("app runtime bff_session_store is not configured")
+
+
+def _session_store(request: Request):
+    """Return the app session store from the explicit app runtime."""
+
+    runtime = _runtime_from_request(request)
+    if runtime is not None and hasattr(runtime, "session_store"):
+        return runtime.session_store
+    raise RuntimeError("app runtime session_store is not configured")
+
+
+def _runtime_settings(request: Request):
+    """Return settings from the explicit app runtime."""
+
+    runtime = _runtime_from_request(request)
+    if runtime is not None and hasattr(runtime, "settings"):
+        return runtime.settings
+    raise RuntimeError("app runtime settings are not configured")
+
+
+def _oidc_config(request: Request | None = None):
+    """Return OIDC configuration from the explicit app runtime."""
+
+    if request is not None:
+        runtime = _runtime_from_request(request)
+        if runtime is not None and hasattr(runtime, "oidc_config"):
+            return runtime.oidc_config
+    raise RuntimeError("app runtime oidc_config is not configured")
 
 
 def _spaces_for_role(role: str) -> list[str]:
@@ -98,12 +141,12 @@ def _private_headers() -> dict[str, str]:
     return {"Cache-Control": "private, no-store"}
 
 
-def _cli_token_store():
-    try:
-        mod = _resolve_main_module()
-        return getattr(mod, "CLI_TOKEN_STORE")
-    except Exception:
-        return CLI_TOKEN_STORE
+def _cli_token_store(request: Request | None = None):
+    if request is not None:
+        runtime = _runtime_from_request(request)
+        if runtime is not None and hasattr(runtime, "cli_token_store"):
+            return runtime.cli_token_store
+    raise RuntimeError("app runtime cli_token_store is not configured")
 
 
 def _epoch_to_iso(value: int | None) -> str | None:
@@ -150,17 +193,6 @@ def _current_user(request: Request) -> dict | None:
     return user if isinstance(user, dict) else None
 
 
-def _user_has_role(user: dict | None, role: str) -> bool:
-    if not isinstance(user, dict):
-        return False
-    roles = user.get("roles")
-    if isinstance(roles, list):
-        normalized = {str(item).lower() for item in roles if isinstance(item, str)}
-        if role.lower() in normalized:
-            return True
-    return str(user.get("role") or "").lower() == role.lower()
-
-
 def _user_payload(user: dict) -> dict[str, object]:
     primary_role = str(user.get("role") or "student")
     return {
@@ -179,9 +211,8 @@ def _current_claims(request: Request) -> dict[str, object]:
     token = auth_header.split(" ", 1)[1].strip()
     if not token:
         return {}
-    mod = _resolve_main_module()
     try:
-        claims = mod.verify_bearer_token(token=token, cfg=mod.OIDC_CFG)
+        claims = verify_bearer_token(token=token, cfg=_oidc_config(request))
     except Exception:
         return {}
     return claims if isinstance(claims, dict) else {}
@@ -203,7 +234,7 @@ def _parse_lock_timestamp(value: object) -> datetime | None:
 
 def _split_name_suggestion(identifier: str) -> tuple[str, str]:
     try:
-        from identity_access import directory  # type: ignore
+        from backend.identity_access import directory  # type: ignore
 
         humanized = str(directory.humanize_identifier(identifier) or "").strip()
     except Exception:
@@ -244,10 +275,9 @@ def _normalized_attributes(payload: object) -> dict[str, list[str]]:
     return out
 
 
-def _load_profile_identity(sub: str, claims: dict[str, object]) -> dict[str, object]:
+def _load_profile_identity(sub: str, claims: dict[str, object], request: Request | None = None) -> dict[str, object]:
     defaults = _profile_identity_defaults(claims)
-    mod = _resolve_main_module()
-    client = AdminClient(mod.OIDC_CFG)
+    client = AdminClient(_oidc_config(request))
     try:
         user = client.get_user(user_id=sub)
     except Exception:
@@ -277,7 +307,7 @@ def _load_profile_identity(sub: str, claims: dict[str, object]) -> dict[str, obj
     }
 
 
-def _update_profile_display_name(sub: str, display_name: str) -> None:
+def _update_profile_display_name(sub: str, display_name: str, request: Request | None = None) -> None:
     """Persist only the mutable display-name attribute for one profile.
 
     Why:
@@ -285,8 +315,7 @@ def _update_profile_display_name(sub: str, display_name: str) -> None:
         read-only. This update therefore sends only the attribute delta that is
         actually needed and keeps the existing attribute bag intact.
     """
-    mod = _resolve_main_module()
-    client = AdminClient(mod.OIDC_CFG)
+    client = AdminClient(_oidc_config(request))
     user = client.get_user(user_id=sub)
     attributes = _normalized_attributes(user.get("attributes"))
     attributes["display_name"] = [str(display_name).strip()]
@@ -299,7 +328,7 @@ def _update_profile_display_name(sub: str, display_name: str) -> None:
     )
 
 
-def _update_profile_name(sub: str, first_name: str, last_name: str) -> None:
+def _update_profile_name(sub: str, first_name: str, last_name: str, request: Request | None = None) -> None:
     """Persist only Vorname, Nachname and the lock attribute for one profile.
 
     Why:
@@ -307,8 +336,7 @@ def _update_profile_name(sub: str, first_name: str, last_name: str) -> None:
         We update only the profile fields that belong to this use case so the
         request also works for brokered or restricted accounts.
     """
-    mod = _resolve_main_module()
-    client = AdminClient(mod.OIDC_CFG)
+    client = AdminClient(_oidc_config(request))
     user = client.get_user(user_id=sub)
     attributes = _normalized_attributes(user.get("attributes"))
     locked_until = _parse_lock_timestamp((attributes.get("name_locked_until") or [None])[0])
@@ -503,7 +531,7 @@ def _list_teacher_course_cards(owner_sub: str, limit: int, offset: int) -> list[
 def _list_teacher_course_members(course_id: str, owner_sub: str, limit: int, offset: int) -> list[dict]:
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         if isinstance(repo, DBTeachingRepo):
             pairs = repo.list_members_for_owner(course_id, owner_sub, limit=limit, offset=offset)
@@ -656,7 +684,7 @@ def _list_teacher_course_ai_usage_events(
 def _get_teacher_course(course_id: str, owner_sub: str):
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         if isinstance(repo, DBTeachingRepo):
             return repo.get_course_for_owner(course_id, owner_sub)
@@ -699,7 +727,7 @@ def _list_unit_task_ids(unit_id: str, owner_sub: str) -> list[str]:
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     task_ids: list[str] = []
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         if isinstance(repo, DBTeachingRepo):
             sections = repo.list_sections_for_author(unit_id, owner_sub)
@@ -736,7 +764,7 @@ def _list_submission_pairs_for_students(
 
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         import psycopg  # type: ignore
 
         if isinstance(repo, DBTeachingRepo):
@@ -929,24 +957,24 @@ async def post_session_sync(request: Request, payload: AppSessionSyncPayload | N
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
 
-    mod = _resolve_main_module()
+    store = _session_store(request)
 
-    stale_session_id = request.cookies.get(mod.SESSION_COOKIE_NAME)
+    stale_session_id = request.cookies.get(SESSION_COOKIE_NAME)
     if stale_session_id:
         try:
-            mod.SESSION_STORE.delete(stale_session_id)
+            store.delete(stale_session_id)
         except Exception:
             pass
 
-    session = mod.SESSION_STORE.create(
+    session = store.create(
         sub=str(user.get("sub") or ""),
         roles=[str(role) for role in (user.get("roles") or []) if isinstance(role, str)] or ["student"],
         name=str(user.get("name") or ""),
-        ttl_seconds=mod._app_session_ttl_seconds(),
+        ttl_seconds=app_session_ttl_seconds(),
         id_token=(payload.id_token if payload is not None else None) or getattr(request.state, "id_token", None),
     )
     response = Response(status_code=204, headers=_private_headers())
-    mod._set_session_cookie(response, session.session_id, request=request)
+    set_session_cookie(response, session.session_id, environment=_runtime_settings(request).environment)
     return response
 
 
@@ -955,8 +983,7 @@ async def put_bff_session(request: Request, payload: BFFSessionSyncPayload):
     """Persist or update the opaque Browser-BFF token session."""
     if not _require_internal_bff_secret(request):
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    mod = _resolve_main_module()
-    store = getattr(mod, "BFF_SESSION_STORE")
+    store = _bff_session_store(request)
     session = store.create(
         access_token=payload.access_token,
         refresh_token=payload.refresh_token,
@@ -974,8 +1001,7 @@ async def get_bff_session(request: Request):
     session_id = str(request.headers.get("x-gustav-bff-session") or "").strip()
     if not session_id:
         return Response(status_code=204, headers=_private_headers())
-    mod = _resolve_main_module()
-    store = getattr(mod, "BFF_SESSION_STORE")
+    store = _bff_session_store(request)
     session = store.get(session_id)
     if session is None:
         return Response(status_code=204, headers=_private_headers())
@@ -990,8 +1016,7 @@ async def patch_bff_session(request: Request, payload: BFFSessionSyncPayload):
     session_id = str(request.headers.get("x-gustav-bff-session") or "").strip()
     if not session_id:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    mod = _resolve_main_module()
-    store = getattr(mod, "BFF_SESSION_STORE")
+    store = _bff_session_store(request)
     session = store.update(
         session_id,
         access_token=payload.access_token,
@@ -1011,8 +1036,7 @@ async def delete_bff_session(request: Request):
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     session_id = str(request.headers.get("x-gustav-bff-session") or "").strip()
     if session_id:
-        mod = _resolve_main_module()
-        getattr(mod, "BFF_SESSION_STORE").delete(session_id)
+        _bff_session_store(request).delete(session_id)
     return Response(status_code=204, headers=_private_headers())
 
 
@@ -1024,7 +1048,7 @@ async def get_app_profile(request: Request):
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
 
     claims = _current_claims(request)
-    profile = _load_profile_identity(str(user.get("sub") or ""), claims)
+    profile = _load_profile_identity(str(user.get("sub") or ""), claims, request)
     body = {
         "user": _user_payload(user),
         "display_name": str(profile.get("display_name") or ""),
@@ -1049,7 +1073,7 @@ async def patch_profile_display_name(request: Request, payload: ProfileDisplayNa
     if not display_name:
         return JSONResponse({"error": "bad_request", "detail": "invalid_display_name"}, status_code=400, headers=_private_headers())
 
-    _update_profile_display_name(str(user.get("sub") or ""), display_name)
+    _update_profile_display_name(str(user.get("sub") or ""), display_name, request)
     return Response(status_code=204, headers=_private_headers())
 
 
@@ -1066,7 +1090,7 @@ async def patch_profile_name(request: Request, payload: ProfileNameUpdatePayload
         return JSONResponse({"error": "bad_request", "detail": "invalid_name"}, status_code=400, headers=_private_headers())
 
     try:
-        _update_profile_name(str(user.get("sub") or ""), first_name, last_name)
+        _update_profile_name(str(user.get("sub") or ""), first_name, last_name, request)
     except ProfileNameLockedError as exc:
         return JSONResponse(
             {"error": "name_locked", "detail": str(exc)},
@@ -1082,7 +1106,7 @@ async def list_profile_cli_tokens(request: Request):
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    records = _cli_token_store().list_tokens(str(user.get("sub") or ""))
+    records = _cli_token_store(request).list_tokens(str(user.get("sub") or ""))
     return JSONResponse([_serialize_cli_token(record) for record in records], headers=_private_headers())
 
 
@@ -1111,7 +1135,7 @@ async def create_profile_cli_token(request: Request, payload: CLITokenCreatePayl
             headers=_private_headers(),
         )
     try:
-        created = _cli_token_store().create_token(
+        created = _cli_token_store(request).create_token(
             user_sub=str(user.get("sub") or ""),
             label=label,
             scopes=[str(scope) for scope in scopes_value],
@@ -1132,7 +1156,7 @@ async def revoke_profile_cli_token(request: Request, token_id: str):
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    ok = _cli_token_store().revoke_token(user_sub=str(user.get("sub") or ""), token_id=token_id)
+    ok = _cli_token_store(request).revoke_token(user_sub=str(user.get("sub") or ""), token_id=token_id)
     if not ok:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
     return Response(status_code=204, headers=_private_headers())
@@ -1144,7 +1168,7 @@ async def get_learner_home(request: Request, limit: int = 12, offset: int = 0):
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not _user_has_role(user, "student"):
+    if not has_role(user, "student"):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     items = _list_learner_courses(str(user.get("sub") or ""), limit=int(limit or 12), offset=int(offset or 0))
@@ -1169,7 +1193,7 @@ async def get_learner_concern_box(request: Request, limit: int = 50, offset: int
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not _user_has_role(user, "student"):
+    if not has_role(user, "student"):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     courses = _list_concern_box_courses_for_student(
@@ -1188,7 +1212,7 @@ async def create_learner_concern_box_entry(request: Request, payload: ConcernBox
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not _user_has_role(user, "student"):
+    if not has_role(user, "student"):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
     csrf = teaching_routes._csrf_guard(request)  # type: ignore[attr-defined]
     if csrf:
@@ -1222,7 +1246,7 @@ async def get_teacher_home(request: Request):
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     return JSONResponse(
@@ -1237,7 +1261,7 @@ async def get_teacher_concern_box(request: Request, scope: str = "open"):
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     normalized_scope = "archived" if scope == "archived" else "open"
@@ -1282,7 +1306,7 @@ async def archive_teacher_concern_box_entry(request: Request, entry_id: str):
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
     if not teaching_routes._is_uuid_like(entry_id):  # type: ignore[attr-defined]
         return JSONResponse({"error": "bad_request", "detail": "invalid_entry_id"}, status_code=400, headers=_private_headers())
@@ -1303,7 +1327,7 @@ async def restore_teacher_concern_box_entry(request: Request, entry_id: str):
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
     if not teaching_routes._is_uuid_like(entry_id):  # type: ignore[attr-defined]
         return JSONResponse({"error": "bad_request", "detail": "invalid_entry_id"}, status_code=400, headers=_private_headers())
@@ -1324,7 +1348,7 @@ async def get_teacher_course_list(request: Request, limit: int = 25, offset: int
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     body = {
@@ -1353,7 +1377,7 @@ async def get_teacher_units_catalog(
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
@@ -1464,7 +1488,7 @@ async def get_teacher_unit_workspace(
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
     if not teaching_routes._is_uuid_like(unit_id):  # type: ignore[attr-defined]
         return JSONResponse(
@@ -1689,7 +1713,7 @@ async def get_teacher_unit_node_editor(request: Request, unit_id: str, node_id: 
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
     if not teaching_routes._is_uuid_like(unit_id):  # type: ignore[attr-defined]
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400, headers=_private_headers())
@@ -1801,7 +1825,7 @@ async def get_teacher_course_context(request: Request, course_id: str, limit: in
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
@@ -1868,7 +1892,7 @@ async def get_teacher_course_ai_usage(
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not _user_has_role(user, "teacher"):
+    if not has_role(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
@@ -1946,7 +1970,7 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
@@ -1993,7 +2017,7 @@ async def get_live_unit_matrix(request: Request, course_id: str, unit_id: str, l
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
@@ -2089,7 +2113,7 @@ async def get_live_course_units(request: Request, course_id: str):
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
@@ -2162,7 +2186,7 @@ def _live_dashboard_localpart_identifier(*values: object) -> str:
         if not raw:
             continue
         try:
-            from identity_access import directory  # type: ignore
+            from backend.identity_access import directory  # type: ignore
 
             extractor = getattr(directory, "localpart_identifier", None)
             if callable(extractor):
@@ -2191,7 +2215,7 @@ async def get_live_unit_dashboard(
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
@@ -2361,7 +2385,7 @@ async def get_live_detail_sheet(request: Request, course_id: str, unit_id: str, 
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
@@ -2390,7 +2414,8 @@ async def get_live_detail_sheet(request: Request, course_id: str, unit_id: str, 
         return detail_response
 
     submission = _decode_json_response_body(detail_response) if status_code == 200 else None
-    learner_names = await asyncio.to_thread(teaching_routes.resolve_live_student_names_by_sub, [student_sub])
+    names_result = teaching_routes.resolve_live_student_names_by_sub([student_sub])
+    learner_names = await names_result if inspect.isawaitable(names_result) else names_result
     learner_name = str(learner_names.get(student_sub, student_sub))
 
     body = {
@@ -2426,7 +2451,7 @@ async def get_diagnostics_learner_profile(request: Request, student_sub: str, li
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not (_user_has_role(user, "teacher") or _user_has_role(user, "admin")):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")

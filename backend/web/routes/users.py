@@ -8,10 +8,18 @@ Why:
 """
 from __future__ import annotations
 
+import sys
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from typing import Dict
-from identity_access.domain import ALLOWED_ROLES
+from backend.identity_access.domain import ALLOWED_ROLES
+from backend.web.security.guards import has_any_role
+
+# Temporary compatibility while legacy tests still import `routes.users`.
+if __name__ == "backend.web.routes.users":
+    sys.modules.setdefault("routes.users", sys.modules[__name__])
+elif __name__ == "routes.users":
+    sys.modules.setdefault("backend.web.routes.users", sys.modules[__name__])
 
 
 users_router = APIRouter(tags=["Users"])  # explicit path below
@@ -20,7 +28,7 @@ users_router = APIRouter(tags=["Users"])  # explicit path below
 def search_users_by_name(*, role: str, q: str, limit: int) -> list[dict]:
     """Directory lookup wrapper for tests; delegates to identity_access.directory in prod."""
     try:
-        from identity_access import directory  # type: ignore
+        from backend.identity_access import directory  # type: ignore
         return directory.search_users_by_name(role=role, q=q, limit=limit)
     except Exception:
         return []
@@ -32,7 +40,7 @@ def list_users_by_role(*, role: str, limit: int, offset: int) -> list[dict]:
     Returns: [{ sub, name }]
     """
     try:
-        from identity_access import directory  # type: ignore
+        from backend.identity_access import directory  # type: ignore
         if hasattr(directory, "list_users_by_role"):
             return directory.list_users_by_role(role=role, limit=limit, offset=offset)  # type: ignore
         # Fallback: approximate by over-fetching search and slicing (no q)
@@ -40,11 +48,6 @@ def list_users_by_role(*, role: str, limit: int, offset: int) -> list[dict]:
         return data[offset: offset + limit]
     except Exception:
         return []
-
-
-def _is_teacher_or_admin(user: dict | None) -> bool:
-    roles = (user or {}).get("roles") or []
-    return isinstance(roles, list) and any(r in ("teacher", "admin") for r in roles)
 
 
 def _private_no_store() -> dict:
@@ -67,7 +70,7 @@ async def users_search(request: Request, q: str, role: str, limit: int = 20):
         Caller must have role `teacher` or `admin`.
     """
     user = getattr(request.state, "user", None)
-    if not _is_teacher_or_admin(user):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_no_store())
     q = (q or "").strip()
     if len(q) < 2:
@@ -94,7 +97,7 @@ async def users_list(request: Request, role: str, limit: int = 50, offset: int =
         Caller must have role `teacher` or `admin`.
     """
     user = getattr(request.state, "user", None)
-    if not _is_teacher_or_admin(user):
+    if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_no_store())
     if role not in ALLOWED_ROLES:
         return JSONResponse({"error": "bad_request", "detail": "invalid_role"}, status_code=400, headers=_private_no_store())

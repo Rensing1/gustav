@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import os
+import sys
 import time
 from urllib.parse import urljoin
+
+# Temporary compatibility while legacy tests still import `routes.operations`.
+if __name__ == "backend.web.routes.operations":
+    sys.modules.setdefault("routes.operations", sys.modules[__name__])
+elif __name__ == "routes.operations":
+    sys.modules.setdefault("backend.web.routes.operations", sys.modules[__name__])
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from backend.learning.workers import health as worker_health
+from backend.web.security.guards import has_any_role
 
 operations_router = APIRouter(tags=["Operations"])
 
@@ -44,8 +52,7 @@ def _require_teacher_or_operator(request: Request):
     user = getattr(request.state, "user", None)
     if not user:
         return None, _private_response({"error": "unauthenticated"}, status_code=401)
-    roles = user.get("roles")
-    if not isinstance(roles, list) or not any(role in ("teacher", "operator") for role in roles):
+    if not has_any_role(user, {"teacher", "operator"}):
         return None, _private_response({"error": "forbidden"}, status_code=403)
     return user, None
 

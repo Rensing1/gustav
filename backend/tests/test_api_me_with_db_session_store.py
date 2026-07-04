@@ -7,22 +7,16 @@ requiring a real Postgres/Supabase during unit/contract test runs.
 
 from __future__ import annotations
 
+import importlib
 import os
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import sys
 
 from backend.tests.utils.fake_psycopg import install_fake_psycopg
 from backend.tests.runtime_auth_helpers import install_session_store
 
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -32,7 +26,7 @@ SESSION_TEST_DSN = os.getenv("SESSION_TEST_DSN")
 
 
 def _prepare_store(monkeypatch: pytest.MonkeyPatch):
-    from identity_access import stores_db as mod
+    from backend.identity_access import stores_db as mod
     if SESSION_TEST_DSN:
         # Real database path (requires psycopg and migration applied)
         store = mod.DBSessionStore(dsn=SESSION_TEST_DSN)

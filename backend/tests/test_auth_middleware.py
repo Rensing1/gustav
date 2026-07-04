@@ -13,20 +13,15 @@ import httpx
 import importlib
 from httpx import ASGITransport
 from urllib.parse import urlparse, parse_qs
-from pathlib import Path
 from types import SimpleNamespace
-import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
-from runtime_auth_helpers import install_cli_token_store
+from backend.tests.runtime_auth_helpers import install_cli_token_store
 from backend.web.auth_middleware import is_public_path
 from backend.web.auth_runtime import build_cli_token_store
-from identity_access.cli_tokens import InMemoryCLITokenStore  # type: ignore
-from routes import teaching as teaching_routes  # type: ignore
+from backend.identity_access.cli_tokens import InMemoryCLITokenStore
 
+main = importlib.import_module("backend.web.main")
+teaching_routes = importlib.import_module("backend.web.routes.teaching")
 teaching_h5p_routes = importlib.import_module("backend.web.routes.teaching_h5p")
 
 

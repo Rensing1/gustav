@@ -9,23 +9,19 @@ Covers:
 - Logout includes id_token_hint when available
 """
 
-import sys
-from pathlib import Path
+import importlib
 from urllib.parse import urlparse, parse_qs
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
-from identity_access.oidc import OIDCConfig  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore, SessionRecord, StateStore  # type: ignore  # noqa: E402
+from backend.identity_access.oidc import OIDCConfig
+from backend.identity_access.stores import SessionStore, SessionRecord, StateStore
 from backend.web.auth_runtime import AuthSettings
+from backend.tests.runtime_auth_helpers import install_oidc_client, install_session_store
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
-from runtime_auth_helpers import install_oidc_client, install_session_store
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

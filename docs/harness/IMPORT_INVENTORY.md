@@ -15,9 +15,9 @@ Die maschinenlesbare Baseline liegt in `docs/harness/IMPORT_BOUNDARY_BASELINE.js
 
 | Kategorie | Anzahl | Bedeutung |
 | --- | ---: | --- |
-| `flat_routes_imports` | 307 | Flache `routes.*`-Imports, derzeit noch in Tests. Produktiver Web-Code startet package-orientiert. |
+| `flat_routes_imports` | 302 | Flache `routes.*`-Imports, derzeit noch in Tests. Produktiver Web-Code startet package-orientiert. |
 | `flat_components_imports` | 0 | Flache `components`-Imports wurden aus produktivem Web-Code entfernt. |
-| `backend_web_routes_imports` | 22 | `backend.web.routes.*`-Imports außerhalb des Web-Adapters, vor allem Tests; innerhalb des Web-Adapters ist dieser Stil nach PR 8 Zielzustand. |
+| `backend_web_routes_imports` | 17 | `backend.web.routes.*`-Imports außerhalb des Web-Adapters, vor allem Tests; innerhalb des Web-Adapters ist dieser Stil nach PR 8 Zielzustand. |
 | `sys_path_mutations` | 50 | Verstreute `sys.path`-/`os.sys.path`-Manipulationen, vor allem in Tests. |
 
 ## Gate

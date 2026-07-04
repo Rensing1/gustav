@@ -22,8 +22,15 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 
 async def _client():
-    import main  # noqa
+    main = importlib.import_module("backend.web.main")
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+
+
+def _reload_learning_route():
+    module_name = "backend.web.routes.learning"
+    if module_name in importlib.sys.modules:
+        return importlib.reload(importlib.import_module(module_name))
+    return importlib.import_module(module_name)
 
 
 @pytest.mark.anyio
@@ -32,16 +39,9 @@ async def test_upload_proxy_raises_502_on_exception(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    # Reload modules to pick up env
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:  # type: ignore[attr-defined]
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except ImportError:  # pragma: no cover - alias may not exist outside app package
-        learning_backend = None  # type: ignore
+    # Reload module to pick up env
+    main = importlib.import_module("backend.web.main")
+    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
     student = store.create(sub="s-proxy-err", name="S", roles=["student"])
@@ -51,8 +51,6 @@ async def test_upload_proxy_raises_502_on_exception(monkeypatch: pytest.MonkeyPa
         raise RuntimeError("upstream down")
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
 
 
@@ -61,15 +59,8 @@ async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:  # type: ignore[attr-defined]
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except ImportError:  # pragma: no cover
-        learning_backend = None  # type: ignore
+    main = importlib.import_module("backend.web.main")
+    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
     student = store.create(sub="s-proxy-500", name="S", roles=["student"])
@@ -81,8 +72,6 @@ async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatc
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
 
 @pytest.mark.anyio
@@ -90,15 +79,8 @@ async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:  # type: ignore[attr-defined]
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except ImportError:  # pragma: no cover
-        learning_backend = None  # type: ignore
+    main = importlib.import_module("backend.web.main")
+    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
     student = store.create(sub="s-proxy-await", name="S", roles=["student"])
@@ -114,8 +96,6 @@ async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPat
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
@@ -134,15 +114,8 @@ async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.Monkey
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:  # type: ignore[attr-defined]
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except ImportError:  # pragma: no cover
-        learning_backend = None  # type: ignore
+    main = importlib.import_module("backend.web.main")
+    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
     student = store.create(sub="s-proxy-parallel", name="S", roles=["student"])
@@ -162,8 +135,6 @@ async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.Monkey
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
@@ -188,15 +159,8 @@ async def test_upload_proxy_enforces_https_scheme(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:  # type: ignore[attr-defined]
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except ImportError:  # pragma: no cover
-        learning_backend = None  # type: ignore
+    main = importlib.import_module("backend.web.main")
+    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
     student = store.create(sub="s-proxy-http", name="S", roles=["student"])
@@ -205,8 +169,6 @@ async def test_upload_proxy_enforces_https_scheme(monkeypatch: pytest.MonkeyPatc
         raise AssertionError("insecure URL must be rejected before forwarding")
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)

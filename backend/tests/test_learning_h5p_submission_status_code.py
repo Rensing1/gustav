@@ -13,14 +13,16 @@ Note:
 
 from __future__ import annotations
 
+import importlib
 import uuid
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store
+
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -58,16 +60,9 @@ async def test_learning_create_submission_returns_201_for_h5p(monkeypatch: pytes
                 "completed_at": "2026-01-11T00:00:00+00:00",
             }
 
-    from backend.web.routes import learning as learning_routes
+    learning_routes = importlib.import_module("backend.web.routes.learning")
 
     monkeypatch.setattr(learning_routes, "CreateSubmissionUseCase", _OKUC)
-    try:
-        import importlib as _importlib
-
-        lr_alias = _importlib.import_module("routes.learning")
-        monkeypatch.setattr(lr_alias, "CreateSubmissionUseCase", _OKUC, raising=False)
-    except Exception:
-        pass
     # Patch the actual FastAPI route endpoint (ground truth) to avoid module aliasing issues.
     for route in getattr(main.app, "routes", []):
         if getattr(route, "path", None) != "/api/learning/courses/{course_id}/tasks/{task_id}/submissions":

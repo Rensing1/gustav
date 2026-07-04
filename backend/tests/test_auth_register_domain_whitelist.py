@@ -14,16 +14,14 @@ Scope:
 
 from __future__ import annotations
 
-from pathlib import Path
+import importlib
 from urllib.parse import urlparse, parse_qs
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -32,11 +30,6 @@ pytestmark = pytest.mark.anyio("asyncio")
 @pytest.mark.anyio
 async def test_register_allows_allowed_domain_when_env_configured(monkeypatch: pytest.MonkeyPatch):
     """Given a whitelisted domain, /auth/register should still redirect."""
-    import sys
-
-    sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
-
     # Configure allow-list and ensure no stray value from the host leaks in.
     monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
 
@@ -54,11 +47,6 @@ async def test_register_allows_allowed_domain_when_env_configured(monkeypatch: p
 @pytest.mark.anyio
 async def test_register_allows_mixed_case_and_whitespace(monkeypatch: pytest.MonkeyPatch):
     """Domains and login_hint should be handled case-insensitively and trimmed."""
-    import sys
-
-    sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
-
     # Leading/trailing whitespace and mixed case in env variable
     monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "  @School.Example  ")
 
@@ -75,11 +63,6 @@ async def test_register_allows_mixed_case_and_whitespace(monkeypatch: pytest.Mon
 @pytest.mark.anyio
 async def test_register_without_login_hint_behaves_as_before(monkeypatch: pytest.MonkeyPatch):
     """Missing login_hint should not trigger domain validation."""
-    import sys
-
-    sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
-
     # Even with an allow-list configured, missing login_hint should pass through.
     monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
 
@@ -93,11 +76,6 @@ async def test_register_without_login_hint_behaves_as_before(monkeypatch: pytest
 @pytest.mark.anyio
 async def test_register_rejects_disallowed_domain(monkeypatch: pytest.MonkeyPatch):
     """Disallowed domain in login_hint should produce 400 with config-based error."""
-    import sys
-
-    sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
-
     monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -116,11 +94,6 @@ async def test_register_rejects_disallowed_domain(monkeypatch: pytest.MonkeyPatc
 @pytest.mark.anyio
 async def test_register_rejects_invalid_email(monkeypatch: pytest.MonkeyPatch):
     """Clearly invalid email in login_hint should be treated like a disallowed domain."""
-    import sys
-
-    sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
-
     monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:

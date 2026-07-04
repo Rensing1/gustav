@@ -2,14 +2,14 @@
 
 ## Status
 - Date: 2026-05-02
-- Last updated: 2026-06-25
-- Status: Draft v0.8; implementation not started, PR 1 "Harness Minimum" still open; updated with deeper AI harness contract, repo-governed skill sources, and manual skill forward-testing
+- Last updated: 2026-07-04
+- Status: Draft v1.0; PR 1 "Harness Minimum", PR 2 "CSRF and Session Baseline", PR 3 "Authz and RLS Baseline", PR 4 "Uploads and LLM Data Boundaries", PR 5 "Docker Image-Only Smoke", PR 6 "Import Inventory and Blocking Rules", PR 7 "Make Frontend Check Visible", PR 8 "Package-Oriented App Start", the first PR 9 slices "Centralize Test Imports" and "Teaching Test Import Cleanup Batch 1", the first PR 10 slice "API Contract Baseline", PR 11 "Make Frontend Verification Hard", the first PR 12 slice "Architecture Boundary Rules", the first PR 13 slice "Route Surface Map", the first PR 14 slice "Security Guard Extraction", PR 15 "Shrink backend/web/main.py to App Composition", the first PR 16 slice "Legacy HTML/HTMX Exit Wave 1", the first PR 17 slices "Task-Centric H5P Teaching Route Split", "H5P Authoring Helper Extraction", "Teaching Shared Response/Identity Helpers", "Teaching Task-Service Provider Boundary", "Teaching Guard/CSRF Boundary", and "Teaching Module Authoring Boundary", and the first PR 18 slices "Task Serializer Extraction" and "Modular Graph Serializer Extraction" implemented in the working tree; follow-up PRs for further test-import cleanup, H5P service runtime parity, broader guard extraction, additional Teaching route splits/use-case wiring, further serialization/response model extraction, repository/DB boundary cleanup, frontend/H5P hotspot splitting, and further legacy route cleanup remain open
 - Time horizon: 3 months
 - Strategy: harness first, then refactor in small PRs
 - Gate strategy: security, public-repo hygiene, and initial CI gates are hard immediately; structural and workflow gates start as warnings and become hard later
 - Scope decision: broad quality refactor with staged, test-protected removal of legacy FastAPI HTML/HTMX product paths
 - Agentic harness decision: agent-first execution with human review; PR 1 delivers orientation and minimum gates; safety gates block immediately, structure gates start as warnings
-- Current check: planned `docs/harness/*` artifacts, `docs/plan/INDEX.md`, `make harness-minimum`, and `make harness-signals` are not present in the repository yet.
+- Current check: PR-1 harness artifacts, repo-governed skill sources, `docs/plan/INDEX.md`, `docs/plan/MILESTONES.md`, `docs/plan/DECISIONS.md`, `make harness-minimum`, `make harness-signals`, `make test-import-boundaries`, `make test-frontend-h5p`, `make test-docker-image-smoke`, `make test-route-map`, `make verify`, `make test-full-prod-like`, and the GitHub Actions harness workflow are present in the working tree.
 
 ## Summary
 GUSTAV should not merely be "cleaned up"; it should become reliably refactorable. The first step is therefore a repository-local harness made of rules, tests, quality gates, architecture boundaries, planning artifacts, and agent workflows so that Codex and human developers work from the same expectations.
@@ -27,7 +27,7 @@ This follows the AI harness-engineering framing: the harness is not one tool, on
 The most important current findings are:
 - The backend web adapter is partly monolithic (`backend/web/main.py`, `backend/web/routes/teaching.py`, `backend/web/routes/learning.py`, `backend/web/routes/app.py`, large `repo_db.py` files).
 - Docker and import behavior are fragile: flat copies, `PYTHONPATH` as a crutch, mixed import styles, and Compose bind mounts that can hide image problems.
-- Frontend verification is not part of `make verify`; `npm run check` was green during the 2026-05-15 survey and should now be wired into the main harness instead of being treated as unknown.
+- Frontend verification is part of `make verify`; `npm run check`, Frontend-Vitest, and H5P Node tests now run in the hard deterministic gate.
 - API contract-first exists as a principle, but it is not yet strong enough as an automated refactor safeguard.
 - FastAPI still contains legacy product HTML/HTMX paths, retired route handlers, and unreachable code behind retirement responses. These paths should be removed in stages after SvelteKit parity is covered by tests.
 - Runtime route surfaces are not yet clearly separated: public API, BFF-internal, H5P service routes, retired HTML routes, health checks, and auth bridge routes need an explicit map before strict contract gates can be enforced.
@@ -65,13 +65,13 @@ Priority order:
 - Skills with broad tool permissions, external-network access, secrets handling, data deletion, migrations, or production-impacting behavior require human review before use.
 - All initial GUSTAV skills may be active from PR 1, but "active" only means "allowed to use inside the autonomy matrix"; it never grants extra authority over TDD, contract-first work, security review, migrations, or human merge decisions.
 - Agent runs should produce enough evidence to reconstruct what context was used, which commands ran, which failures occurred, how failures were attributed, and what remains unverified.
-- Agent-first does not mean agent-autonomous product governance. Felix keeps authority over product direction, role model, pedagogy, privacy/retention, and breaking API decisions.
+- Agent-first does not mean agent-autonomous product governance. The product owner keeps authority over product direction, role model, pedagogy, privacy/retention, and breaking API decisions.
 - Level 3 autonomy is an initial target only for documentation, review, and tech-debt PR preparation; product code, API, security, DB, migration, privacy, and pedagogy decisions remain lower-autonomy and human-reviewed.
 - PR 1 optimizes agent orientation and feedback quality, not full autonomy.
 - The first harness must answer three questions for a new agent within five minutes:
   - Where are the current rules and plans?
   - Which checks prove this change is safe enough to review?
-  - Which decisions must be escalated to Felix?
+  - Which decisions must be escalated to the product owner?
 
 ## Target Harness
 The harness consists of documents and executable checks. Documentation is valuable only when it drives concrete agent rules, PR rules, or verification commands.
@@ -153,6 +153,7 @@ Product-owner decisions from 2026-05-15:
 - Target model: agent-first execution with human review.
 - PR-1 capability: orientation plus minimum executable gates.
 - Initial strictness: security, PII, secrets, and API/security-contract failures are hard; architecture, hotspot, import, route-surface, and frontend/H5P signals begin as warnings.
+- Warning hygiene: warning-only gates may exist as staged work, but green hard-gate commands should not emit incidental warnings. Any warning seen during a green gate is treated as cleanup work with evidence or a documented hardening follow-up.
 - Agentic runtime readability (start app, inspect logs, screenshots, metrics per worktree) is important, but follows after the first orientation and gate layer.
 
 ### Agent Roles
@@ -428,8 +429,8 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
   - `make test-fast`: planned fast profile for in-process, domain, adapter, and contract tests.
   - `make test-db-security`: planned profile for DB, RLS, migration, Authz, and CSRF tests.
   - `make test-frontend-h5p`: planned profile for Svelte check, Vitest, and H5P Node tests.
-  - `make test-full-prod-like`: planned profile for Supabase, OpenAI-compatible endpoint, Docker/Compose, and E2E smoke tests.
-  - `make verify`: remains the full local/prod-like verification gate.
+  - `make test-full-prod-like`: opt-in profile for Supabase, OpenAI-compatible endpoint, Docker/Compose, and E2E smoke tests.
+  - `make verify`: deterministic hard gate for local refactor work; external OpenAI and browser E2E smokes stay in `test-full-prod-like`.
 - Planned `harness-minimum` hard checks:
   - public repo safety and PII/secret hygiene,
   - unsafe production defaults and config security,
@@ -465,6 +466,7 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
   - `AGENTS.md` can later be shortened because `docs/harness/INDEX.md` points to the durable rules.
   - Security/PII/secrets/API-security-contract failures are specified as hard blockers.
   - Structure, hotspot, import, route-surface, frontend, H5P, skill-governance, and image-only findings are visible as warning signals with an escalation path.
+  - Green hard gates are warning-clean unless a transition note names the warning, owner, and hardening path.
   - CI is planned to run the same `make harness-minimum` entry point as local development.
 
 #### PR 2: Security Baseline for CSRF and Session
@@ -472,8 +474,9 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
 - Add negative and positive tests for CSRF-relevant write operations.
 - Check SameSite/session-cookie rules for critical mutations.
 - Acceptance:
-  - The known CSRF finding is either fixed or documented with justified residual risk.
-  - CSRF/session regressions run as a hard gate.
+  - Done in working tree: `docs/plan/2026-07-02-csrf-session-baseline.md` documents behavior and evidence.
+  - Done in working tree: `make test-db-security` runs CSRF/session regression tests.
+  - Done in working tree: BFF session-sync cookie flags are asserted directly.
 
 #### PR 3: Security Baseline for Authz and RLS
 - Define mandatory negative access tests:
@@ -483,23 +486,27 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
   - API filters do not replace RLS/database isolation.
 - Mark authz/RLS-critical tests as a required set for refactors.
 - Acceptance:
-  - Authz/RLS regressions are visible as a hard gate.
+  - Done in working tree: `docs/plan/2026-07-02-authz-rls-baseline.md` documents behavior and evidence.
+  - Done in working tree: `make test-db-security` sets `REQUIRE_DB_TESTS=1` and runs Authz/RLS/RLS-migration regression tests.
+  - Done in working tree: `make harness-minimum` runs `backend/tests/test_makefile_targets.py`, so CI catches accidental gate-composition regressions.
 
 #### PR 4: Security Baseline for Uploads and LLM Data Boundaries
 - Define minimal upload tests for MIME type, extension, size, and path manipulation.
 - Document which upload content may enter AI/LLM flows.
 - Add an initial prompt-injection/data-leak scenario as a regression test, or document it as an explicit open gate failure.
 - Acceptance:
-  - Upload and LLM data risks are testable or visible as gate gaps, not only prose.
+  - Done in working tree: `docs/plan/2026-07-02-upload-llm-boundaries.md` documents behavior, product decision, evidence, and residual risks.
+  - Done in working tree: `make test-upload-llm-boundaries` runs focused upload, storage, signature, feedback/DSPy, and privacy contracts.
+  - Done in working tree: `backend/tests/test_upload_llm_boundaries_contract.py` pins the rule that student submissions are not content-filtered, normalized, moderated, or rewritten before LLM use; technical packaging remains allowed.
 
 #### PR 5: Docker Image-Only Smoke
 - Build a smoke test that starts the image without Compose bind mounts.
 - Check critical imports from `backend.web`, `backend.learning`, `backend.scratch`, `backend.makecode`, or document explicit optional boundaries.
 - Make visible which files are currently available only through local mounts.
 - Acceptance:
-  - Image-only startup failures are reproducible.
-  - Compose can no longer hide packaging failures.
-  - The `local_vision`/`backend.scratch`/`backend.makecode` import issue is either fixed or documented as a hard production blocker.
+  - Done in working tree: `docs/plan/2026-07-02-docker-image-only-smoke.md` documents behavior, evidence, and residual import/startup risks.
+  - Done in working tree: `make test-docker-image-smoke` builds the web image, runs critical imports without volumes, starts the image, and checks `/health`.
+  - Done in working tree: `harness-signals` runs the image-only smoke as a warning signal while `harness-minimum` runs the fast source contract.
 
 #### PR 6: Import Inventory and Blocking Rules
 - Inventory flat imports (`routes.*`, `components`, mixed `backend.*` imports).
@@ -507,15 +514,20 @@ Goal: security baseline, minimal executable harness, visible Docker/import risks
 - Add a warning gate that makes new violations visible.
 - Document the target import scheme.
 - Acceptance:
-  - Existing debt is counted and findable.
-  - New violations are visible in verify.
+  - Done in working tree: `backend/tools/import_boundary_scan.py` counts flat `routes.*`, flat `components`, mixed `backend.web.routes.*`, and scattered `sys.path` mutation debt.
+  - Done in working tree: `docs/harness/IMPORT_BOUNDARY_BASELINE.json` stores the current baseline and `docs/harness/IMPORT_INVENTORY.md` makes the debt findable.
+  - Done in working tree: `make test-import-boundaries` and `make verify` fail if a category grows beyond the baseline; `make harness-signals` reports the same scan warning-only.
+  - Done in working tree: `docs/harness/ARCHITECTURE_RULES.md` documents the target scheme and keeps the `backend.web.main:app` migration scoped to PR 8.
 
 #### PR 7: Make Frontend Check Visible
 - Record the current green `npm run check` result as the baseline.
 - Add the frontend check as a required signal in the verify path.
 - Define: after the API baseline, no backend PR can be considered green without frontend contract compatibility.
 - Acceptance:
-  - Frontend quality is no longer outside the main harness.
+  - Done in working tree: `docs/plan/2026-07-02-frontend-check-visible.md` records the baseline and evidence.
+  - Done in working tree: `make test-frontend-h5p` runs `npm run check`, frontend Vitest, and H5P Node tests.
+  - Done in working tree: `make verify` runs `make test-frontend-h5p`, so Frontend/H5P quality is no longer outside the full harness.
+  - Done in working tree: `frontend/vitest.config.ts` uses `127.0.0.1` so frontend unit tests do not depend on `localhost` DNS resolution.
 
 ### Month 2: Enforce Parity and Contracts
 Goal: establish local=prod parity, freeze API baseline, and make frontend verification a hard gate.
@@ -526,25 +538,36 @@ Goal: establish local=prod parity, freeze API baseline, and make frontend verifi
 - Reduce `PYTHONPATH` dependency as an architecture crutch and prevent duplicate module instances from mixed import styles.
 - Make the Docker image-only smoke hard no later than this PR.
 - Acceptance:
-  - App startup no longer depends accidentally on working directory or bind mounts.
+  - Done in working tree: `docs/plan/2026-07-02-package-oriented-app-start.md` documents the implementation and evidence.
+  - Done in working tree: Dockerfile starts `uvicorn backend.web.main:app` and keeps only `/app` on `PYTHONPATH`.
+  - Done in working tree: Dockerfile copies `backend` once as `/app/backend`; Compose mounts `./backend` once as `/app/backend`.
+  - Done in working tree: productive Web-Adapter imports use `backend.web.*`, bounded-context imports use `backend.identity_access.*` and `backend.teaching.*`.
+  - Done in working tree: `make verify` runs `make test-docker-image-smoke`; the image-only smoke imports `backend.web.main` without bind mounts and reaches `/health`.
 
 #### PR 9: Centralize Test Imports
 - Introduce central test import configuration.
 - Gradually remove scattered `sys.path` manipulation.
 - Tighten the Import Discipline Gate.
 - Acceptance:
-  - Tests better mirror production imports.
-  - New tests may not introduce local import crutches.
+  - Done in working tree: `backend/tests/import_paths.py` is the central pytest import-path bootstrap.
+  - Done in working tree: `backend/tests/conftest.py` delegates import-path setup to `configure_test_import_paths()` and no longer mutates `sys.path` directly.
+  - Done in working tree: `backend/tests/packaging/test_test_import_paths_contract.py` blocks regressions in the central pytest bootstrap.
+  - Done in working tree: `make test-import-boundaries` remains the hard baseline gate that prevents new local import crutches.
+  - Done in working tree: Teaching test import cleanup batch 1 migrated five small tests away from `routes.teaching`/`from routes import teaching` and removed three local `sys.path` mutations by using the central test import configuration plus dynamic package-oriented imports.
+  - Done in working tree: `docs/harness/IMPORT_BOUNDARY_BASELINE.json` now pins `flat_routes_imports` at 348 and `sys_path_mutations` at 105; `backend_web_routes_imports` remains unchanged at 22.
+  - Done in working tree: RED verification failed before the migration with `flat_routes_imports` current 353 over baseline 348 and `sys_path_mutations` current 108 over baseline 105; after migration `python -m backend.tools.import_boundary_scan --baseline docs/harness/IMPORT_BOUNDARY_BASELINE.json` reports `import-boundary-scan-ok`.
+  - Done in working tree: focused verification for the migrated files reports 13 tests passed and 2 skipped, and `make verify` is green with 1898 backend tests passed/35 skipped, Svelte check 0 errors/0 warnings, 282 frontend Vitest tests passed, and 21 H5P Node tests passed.
+  - Open cleanup: continue migrating old tests away from `routes.*`, `identity_access.*`, `teaching.*`, and local `sys.path` blocks, then lower the baseline after each focused batch.
 
 #### PR 10: API Contract Baseline
 - Create an OpenAPI baseline with diff/snapshot check.
 - Mark public API, BFF/internal, H5P service, auth bridge, health/ops, active UI, and retired legacy UI surfaces.
 - Define:
-  - `api/openapi.yml` is the source of truth,
-  - generated or live app spec is compared against it,
-  - undocumented `/api/*` endpoints are gate failures,
-  - intentionally non-OpenAPI surfaces are listed in the route map instead of ignored,
-  - breaking changes require an entry in `docs/plan/DECISIONS.md`.
+  - Done in working tree: `api/openapi.yml` is documented as the source of truth in `docs/harness/API_CONTRACTS.md`.
+  - Done in working tree: `backend.tools.openapi_contract_check` compares live FastAPI Runtime-`/api/*` operations against `api/openapi.yml`.
+  - Done in working tree: undocumented `/api/*` endpoints and stale `/api/*` OpenAPI entries are gate failures.
+  - Done in working tree: intentionally non-OpenAPI surfaces are classified in `docs/harness/ROUTE_MAP.md` instead of ignored.
+  - Done in working tree: breaking changes require an entry in `docs/plan/DECISIONS.md`.
 - Define contract tests for critical flows:
   - login/auth,
   - courses,
@@ -556,14 +579,17 @@ Goal: establish local=prod parity, freeze API baseline, and make frontend verifi
   - uploads,
   - admin/role functions.
 - Acceptance:
-  - Refactors can make API breaks visible.
+  - Done in working tree: `make test-api-contract-baseline` is green and `make verify` runs it as a hard gate.
+  - Done in working tree: `make harness-minimum` includes `backend/tests/test_openapi_route_surface_baseline.py`.
+  - Open follow-up: H5P service runtime parity and full route-by-route route map remain for later PRs.
 
 #### PR 11: Make Frontend Verification Hard
 - Keep the current green Svelte check as the baseline.
 - Make `npm run check` a hard gate.
 - Add frontend verification to `make verify`.
 - Acceptance:
-  - Platform quality is no longer backend-only.
+  - Done in working tree as part of PR 7: `make test-frontend-h5p` runs `npm run check`, frontend Vitest, and H5P Node tests.
+  - Done in working tree as part of PR 7: `make verify` runs `make test-frontend-h5p`, so platform quality is no longer backend-only.
 
 #### PR 12: Architecture Boundary Rules
 - Make architecture rules mechanically checkable where possible.
@@ -571,33 +597,42 @@ Goal: establish local=prod parity, freeze API baseline, and make frontend verifi
 - Inventory DB access paths from web adapters.
 - Document the target structure for central security guards and serialization.
 - Acceptance:
-  - Clean Architecture is backed by checks and review rules, not only documentation.
+  - Done in working tree: `backend.tools.architecture_boundary_scan` checks FastAPI imports in Use Cases/Services and web-adapter DB/client debt against `docs/harness/ARCHITECTURE_BOUNDARY_BASELINE.json`.
+  - Done in working tree: `make test-architecture-boundaries` is green and `make verify` runs it as a hard gate.
+  - Done in working tree: `docs/harness/ARCHITECTURE_RULES.md` documents Security Guards and Serialisierung target rules.
+  - Open follow-up: existing web-adapter DB direct access remains inventoried debt to remove in later refactors.
 
 ### Month 3: Strangle the Monoliths Safely
 Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runtime boundaries without changing intended product behavior.
 
 #### PR 13: Route Surface Map and Refactor Order
 - Create `docs/harness/ROUTE_MAP.md` with:
-  - route/endpoint,
-  - surface classification,
-  - role,
-  - data access,
-  - response model,
-  - existing tests,
-  - risk,
-  - legacy status,
-  - removal or retention decision,
-  - planned target layer.
+  - Done in working tree: route/endpoint,
+  - Done in working tree: surface classification,
+  - Done in working tree: role,
+  - Done in working tree: data access,
+  - Done in working tree: response model,
+  - Done in working tree: existing tests,
+  - Done in working tree: risk,
+  - Done in working tree: legacy status,
+  - Done in working tree: removal or retention decision,
+  - Done in working tree: planned target layer.
 - Sort monolith strangulation and legacy removal by risk and usage, not by file shape.
 - Acceptance:
-  - Before the first functional split, it is clear which routes are security-critical, frequently used, retired, or owned by SvelteKit.
+  - Done in working tree: `backend.tools.route_map_inventory` generates `docs/harness/ROUTE_MAP.md` from Runtime/OpenAPI operations.
+  - Done in working tree: `make test-route-map` is green and `make verify` runs it as a hard gate.
+  - Done in working tree: removed 410 legacy paths no longer appear in the generated Runtime Route Map; remaining active legacy UI is still marked separately.
+  - Open follow-up: H5P asset/runtime patterns and concrete per-route test-file mapping remain to be refined.
 
 #### PR 14: Extract Security Guards
 - Add characterization tests for existing guard/authz flows.
 - Extract reusable security guards from hotspot files.
 - Preserve semantics unless already decided security fixes require deliberate behavior changes.
 - Acceptance:
-  - Security logic becomes more readable, centralized, and testable.
+  - Done in working tree: `backend/web/security/guards.py` centralizes reusable role checks.
+  - Done in working tree: `app.py`, `users.py`, and `operations.py` use shared role guards instead of local role-check duplicates.
+  - Done in working tree: `backend/tests/test_web_security_guards_contract.py` characterizes the shared role guard behavior.
+  - Open follow-up: larger Authz/CSRF guard extraction remains for later PR14 slices.
 
 #### PR 15: Shrink `backend/web/main.py` to App Composition
 - Add characterization tests for app startup, middleware order, security headers, router registration, error handling, static handling, and selected retired route behavior.
@@ -610,32 +645,113 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
   - legacy retirement decisions.
 - Keep `backend/web/main.py` as a small Uvicorn export and composition entry point.
 - Acceptance:
-  - `backend/web/main.py` shrinks measurably and no longer contains route implementation or large HTML/helper blocks.
-  - `backend.web.main:app` still imports and starts in tests and Docker image smoke.
+  - Done in working tree: `backend/tests/test_app_composition_contract.py` characterizes App-Shell metadata, Static-Mount and representative core route registration.
+  - Done in working tree: `backend/web/app_composition.py` owns shell creation, static mounting and core router inclusion.
+  - Done in working tree: `backend/web/main.py` exposes a `create_app()` factory for the package-oriented runtime export; it creates the app shell, sets `main_module`, mounts static assets, creates `RUNTIME`, initializes storage, builds `AUTH_WIRING`, installs middleware, and includes routers.
+  - Done in working tree: `backend/web/app_composition.py` owns Dotenv loading and deployment startup guards via `bootstrap_runtime_environment()`, so `backend/web/main.py` no longer defines local runtime-bootstrap helpers.
+  - Done in working tree: `backend/web/auth_flow.py` owns BFF-bearer surface detection and low-cardinality auth failure classification.
+  - Done in working tree: `backend/web/auth_claims.py` owns verified-claim role filtering, primary-role selection, display-name derivation and compact auth-user context construction.
+  - Done in working tree: `backend/web/auth_session.py` owns app-session TTL bounds, session-cookie flags and opaque app-session cookie writing.
+  - Done in working tree: `backend/web/auth_bridge.py` owns the `/auth/callback` and `/api/me` auth bridge routes with provider-based dependencies so existing main-module test monkeypatches remain effective.
+  - Done in working tree: `backend/web/auth_middleware.py` owns auth-context resolution and authentication middleware installation with provider-based dependencies so existing main-module test monkeypatches remain effective.
+  - Done in working tree: `backend/web/main_auth_wiring.py` owns the private auth dependency graph for the main app; `backend/web/main.py` exposes only `AUTH_WIRING` for auth composition and no longer exports `_auth_middleware_deps`, `_auth_context_from_request`, or `_roles_for_cli_sub`.
+  - Done in working tree: `backend/web/auth_runtime.py` owns Auth settings, OIDC config loading, session-store selection, BFF-session-store selection, CLI-token-store selection, and the explicit `AuthRuntime` object; `backend/web/main.py` creates one `RUNTIME` and exposes it on `app.state.runtime` instead of exporting auth dependency aliases.
+  - Done in working tree: the internal Browser-BFF session endpoints in `backend/web/routes/app.py` now read the BFF session store from `request.app.state.runtime.bff_session_store`, with a legacy main-alias fallback only for old import contexts.
+  - Done in working tree: `POST /api/app/session-sync` now reads the app session store and settings from `request.app.state.runtime`, with a legacy main-alias fallback only for old import contexts.
+  - Done in working tree: the profile routes in `backend/web/routes/app.py` now read OIDC configuration and CLI token storage from `request.app.state.runtime`, with legacy main-alias fallbacks only for old import contexts.
+  - Done in working tree: the profile route's second bearer-claims resolution now uses the route module's direct `verify_bearer_token` dependency instead of the `main.verify_bearer_token` compatibility alias.
+  - Done in working tree: `/auth/logout` now reads session store, OIDC configuration and settings from `request.app.state.runtime`; `/auth/forgot` reads OIDC configuration from the same runtime path; `/auth/password`, `/auth/login`, and `/auth/register` read PKCE state storage and OIDC configuration from `request.app.state.runtime`, with legacy main-alias fallbacks only for old import contexts.
+  - Done in working tree: `backend/web/layout_response.py` owns HTMX-aware Layout-to-HTMLResponse rendering for basic pages and retired legacy notices, so `backend/web/main.py` no longer defines a local Layout response helper.
+  - Done in working tree: `backend/web/main_router_wiring.py` owns concrete router composition for the remaining FastAPI shell; `backend/web/main.py` no longer imports each router or calls `include_core_routers()` directly.
+  - Done in working tree: `backend/web/main_middleware_wiring.py` owns main middleware installation order for Auth and Security Headers; `create_app()` calls only that focused wiring helper.
+  - Done in working tree: `backend/web/main_storage_wiring.py` owns startup storage adapter initialization; `create_app()` calls only that focused storage wiring helper and `backend/web/main.py` no longer imports or aliases the Supabase storage helper directly.
+  - Done in working tree: `backend/web/csrf_tokens.py` owns SSR CSRF token TTL bounds, secret resolution, signing and validation.
+  - Done in working tree: `backend/web/internal_api.py` owns SSR-internal base URL resolution and ASGI client `Origin` header policy.
+  - Done in working tree: `backend/web/ssr_helpers.py` owns small pure SSR helpers for URL encoding, delta cursor timestamp normalization, pagination clamps, HTMX attribute payload escaping, analysis-status checks, and task-submit idempotency tokens.
+  - Done in working tree: `backend/web/submission_history_rendering.py` owns Learning submission/history rendering helpers, including status telemetry, artifact previews, feedback failure text, and analysis-in-progress rendering; `backend/web/main.py` no longer imports the component helpers used only by that rendering path.
+  - Done in working tree: `backend/web/auth_only_app.py` owns the lightweight auth-only app factory used by auth smoke and contract tests; `backend/web/main.py` keeps only a compatibility export and no longer owns the stub routes.
+  - Done in working tree: `backend/storage/verification.py` owns local best-effort storage SHA-256 computation, so `backend/web/main.py` no longer defines Storage filesystem helpers.
+  - Done in working tree: removed retired Learning HTML dummy stores, task-submit form rendering, and the unused server-side upload fallback from `backend/web/main.py` after PR16 retired the corresponding legacy routes.
+  - Done in working tree: removed retired Teacher-Unit-/Course SSR render/fetch helpers, Teaching-Live matrix cell renderers and Course-Members SSR label/cache/rendering helpers from `backend/web/main.py`; active Teacher, Live and Course-Members surfaces stay covered by API/OpenAPI/Svelte contracts.
+  - Done in working tree: `backend/web/cli_authoring.py` owns CLI authoring capability routing and OpenAPI CLI-surface parity.
+  - Done in working tree: `backend/web/security/headers.py` owns the testable Security-Header policy via `build_security_header_defaults()` and installs the Security-Header middleware via `install_security_headers_middleware()`, while the existing middleware order remains unchanged.
+  - Done in working tree: `backend/web/runtime_config.py` owns the Teaching-Live polling interval parser and clamp behavior.
+  - Done in working tree: `backend/web/legacy_retirement.py` owns retired legacy product path decisions and the shared 410/role-redirect response rendering.
+  - Done in working tree: `backend/web/routes/basic_pages.py` owns the small `/`, `/about`, and `/health` routes while `backend/web/main.py` only includes the router.
+  - Done in working tree: `backend.web.main:app` still imports and starts in tests and Docker image smoke.
+  - Done in working tree: additional Runtime-Session-Fixture cleanup migrated Teaching module-section/cache tests, Learning upload-proxy/storage tests, Worker task-context setup, Legacy HTML exit contracts, and one Teaching-Live relation-guard test from direct `main.SESSION_STORE` writes to `install_session_store(monkeypatch, main)`; the focused verification batch reports 29 passed and 13 DB-dependent skipped tests.
+  - Done in working tree: the Runtime-Session-Fixture cleanup also migrated Learning internal upload-proxy security tests, modular unlock parity tests, and Teaching modular-edge/unit-phase error-mapping tests away from direct `main.SESSION_STORE` writes; the focused verification batch reports 22 passed and 2 DB-dependent skipped tests.
+  - Done in working tree: the Runtime-Session-Fixture cleanup also migrated Teaching units-catalog views, unit-workspace views, and member-semantics tests away from direct `SessionStore`/`main.SESSION_STORE` setup; the focused verification batch reports 6 passed and 14 DB- or repo-capability-dependent skipped tests.
+  - Done in working tree: the Runtime-Session-Fixture cleanup also migrated Teaching modular-editor CRUD, modular graph, and units/modules contract tests away from direct `SessionStore`/`main.SESSION_STORE` setup; the focused verification batch reports 2 passed and 31 DB-dependent skipped tests.
+  - Done in working tree: the Runtime-Session-Fixture cleanup also migrated Teaching file-material tests away from direct `SessionStore`/`main.SESSION_STORE` setup; the focused verification batch reports 4 passed and 15 DB-dependent skipped tests.
+  - Done in working tree: the Runtime-Session-Fixture cleanup also migrated Session-Sync API tests and Supabase storage E2E tests away from direct `SessionStore`/`main.SESSION_STORE` setup; the focused verification batch reports 4 passed and 5 opt-in E2E skipped tests.
+  - Done in working tree: the Runtime-Session-Fixture cleanup also migrated Learning modular-unit contract tests away from direct `SessionStore`/`main.SESSION_STORE` setup; the focused verification batch reports 5 passed and 10 DB-dependent skipped tests.
+  - Done in working tree: the Runtime-Session-Fixture cleanup also migrated Auth contract reads, Teaching Live detail/overview/delta/summary API tests, the global pytest session reset, and non-alias Auth hardening cases away from accidental `main.SESSION_STORE` use; focused verification reports 39 passed/32 skipped for the migrated Auth+Teaching Live batch and 43 passed for the remaining Auth helper/composition contracts.
+  - Done in working tree: the Runtime-Session-Fixture cleanup left no production or test setup dependency on `main.SESSION_STORE`; remaining hits of the old auth alias names are limited to absence contracts that assert they are not exported.
+  - Done in working tree: `backend/web/main.py` wires the Auth middleware/bridge session-store and state-store providers directly to `RUNTIME.session_store` and `RUNTIME.state_store`; focused Auth/API verification for the migration reported 88 passed tests before final alias removal.
+  - Done in working tree: `backend/web/main.py` wires the Auth middleware/bridge OIDC client and OIDC config providers directly to `RUNTIME.oidc_client` and `RUNTIME.oidc_config`; Runtime helper contracts cover OIDC client/config installation for tests, and the focused Auth/OIDC verification batch reported 117 passed tests before final alias removal.
+  - Done in working tree: `backend/web/main.py` wires the Auth middleware CLI-token provider directly to `RUNTIME.cli_token_store`; focused Middleware/Profile helper verification reported 51 passed tests before final alias removal.
+  - Done in working tree: `backend/web/main.py` wires Auth bridge, middleware, and auth-only environment providers directly to `RUNTIME.settings.environment`; focused Auth/Cookie/App Composition verification reported 92 passed tests before final alias removal.
+  - Done in working tree: `backend/web/auth_only_app.py` now installs an explicit minimal auth runtime for the lightweight auth test app, and `backend/web/routes/auth.py` no longer falls back to main-module service-locator aliases for session store, state store, OIDC config, or settings; the focused Auth route/Auth-only verification batch reports 91 passed tests.
+  - Done in working tree: `backend/web/routes/app.py` no longer falls back to main-module service-locator aliases for BFF session store, app session store, settings, OIDC config, or CLI token store, and the unused local CLI token fallback store was removed; the focused BFF/Profile/Session Bootstrap/Session Sync verification batch reports 29 passed tests.
+  - Done in working tree: `backend/web/main.py` no longer exports the temporary `SETTINGS`, `OIDC_CFG`, `OIDC`, `STATE_STORE`, `SESSION_STORE`, `BFF_SESSION_STORE`, or `CLI_TOKEN_STORE` compatibility aliases; route and test setup now use `RUNTIME` or explicit provider helpers, `backend/web/routes/learning.py` resolves environment from `RUNTIME.settings`, and alias-specific transition tests were replaced by runtime-only contracts.
+  - Done in working tree: focused verification for the alias-removal slice reports 194 passed tests, `make test-route-map` reports `route-map-inventory-ok`, and `make verify` is green with 1888 backend tests passed/35 skipped, Svelte check 0 errors/0 warnings, 282 frontend Vitest tests passed, and 21 H5P Node tests passed.
+  - Done in working tree: `backend/web/main.py` no longer exports `_roles_for_cli_sub` or `_auth_context_from_request`; middleware tests now replace `AUTH_WIRING.auth_middleware_dependencies.roles_for_cli_sub` explicitly, and `install_main_middlewares()` receives `AUTH_WIRING.auth_context_from_request` directly.
+  - Done in working tree: focused Auth/Composition verification for private Auth helper export removal reports 142 passed tests, `make test-route-map` reports `route-map-inventory-ok`, and `make verify` is green with 1888 backend tests passed/35 skipped, Svelte check 0 errors/0 warnings, 282 frontend Vitest tests passed, and 21 H5P Node tests passed.
+  - Done in working tree: `create_app()` now owns runtime, storage, auth-wiring, middleware, and router composition; module-level `RUNTIME` and `AUTH_WIRING` are references to `app.state.runtime` and `app.state.auth_wiring` instead of independently initialized globals.
+  - Done in working tree: focused App-Factory verification reports 16 App Composition tests passed, 127 Auth/Profile/BFF/Session tests passed, `make test-route-map` reports `route-map-inventory-ok`, and `make verify` is green with 1889 backend tests passed/35 skipped, Svelte check 0 errors/0 warnings, 282 frontend Vitest tests passed, and 21 H5P Node tests passed.
 
 #### PR 16: Legacy HTML/HTMX Exit Wave 1
 - Remove already-retired and unreachable FastAPI product HTML/HTMX code first.
 - Confirm SvelteKit ownership or intended 404/410 behavior with tests before deleting handlers.
 - Remove unused static assets, templates, and helper functions only after no route references them.
 - Acceptance:
-  - Direct backend access to removed retired product UI paths has an intentional tested result.
-  - No active `/api/*`, H5P, health, BFF/internal, or required auth bridge behavior is removed accidentally.
+  - Done in working tree: `/learning`, `/courses`, `/units`, `/teaching/live`, `/teaching/live/open` and `/teaching/live/units` are no longer registered as local `APIRoute` handlers.
+  - Done in working tree: direct backend access to these removed retired product UI paths has an intentional tested 410 or role-redirect result.
+  - Done in working tree: `make test-route-map` is green after the Runtime Route Map update.
+  - Done in working tree: `POST /courses`, `/courses/{course_id}/modules*`, and `/courses/{course_id}/members*` legacy handlers are no longer registered.
+  - Done in working tree: `POST /units`, `/units/{unit_id}`, `/units/{unit_id}/edit`, `/units/{unit_id}/modules`, and `/units/{unit_id}/phases*` legacy handlers are no longer registered.
+  - Done in working tree: `/units/{unit_id}/modules/{module_id}*` and `/units/{unit_id}/modular-editor*` legacy handlers are no longer registered.
+  - Done in working tree: `/units/{unit_id}/sections*`, material, and task legacy handlers are no longer registered.
+  - Done in working tree: retired Teacher-Unit-/Course SSR helper blocks for unit lists, section/material/task lists, module editor, phases, internal SSR API fetches and unit edit rendering were removed from `backend/web/main.py`.
+  - Done in working tree: `/learning/courses*` legacy HTML/HTMX handlers are no longer registered; direct backend access is still intentionally answered by the central retirement middleware.
+  - Done in working tree: deep Teaching-Live HTML/HTMX handlers (`/teaching/courses/{course_id}/students/{student_sub}/live`, `/teaching/courses/{course_id}/units/{unit_id}/live*`) and the old section-visibility POST helper are no longer registered; direct backend access is still intentionally answered by the central retirement middleware.
+  - Done in working tree: unused Teaching-Live SSR helper blocks for matrix, detail, section release panel, and student overview rendering were removed from `backend/web/main.py`.
+  - Done in working tree: `make test-route-map` is warning-clean; the contract now asserts no stderr output from the Route Map generator.
+  - Done in working tree: Learning submission/history renderer helpers were moved out of `backend/web/main.py` after the related retired Learning HTML routes left the runtime route surface; focused rendering tests now import the dedicated module.
+  - Open follow-up: decide the future of the remaining root/about FastAPI HTML pages and continue route-split PRs for the larger FastAPI route modules.
 
 #### PR 17: First Risk-Based Teaching Route Split
 - Split `backend/web/routes/teaching.py` according to the Route Map where risk and benefit justify the first cut.
 - Keep routes thin and move orchestration into use-case wiring.
 - Use contract diff to verify API neutrality.
 - Acceptance:
-  - The largest route hotspot shrinks measurably.
-  - No API regression occurs without an intentional contract change.
+  - Done in working tree: task-centric H5P authoring endpoints were moved from `backend/web/routes/teaching.py` into the dedicated `backend/web/routes/teaching_h5p.py` router and registered through `backend/web/main_router_wiring.py`.
+  - Done in working tree: `backend/tests/test_teaching_h5p_route_split_contract.py` asserts that the seven H5P task-authoring paths are still registered but now owned by `backend.web.routes.teaching_h5p`, and that those route decorators no longer live in `teaching.py`.
+  - Done in working tree: the same contract now asserts that H5P authoring helper ownership moved with the router: H5P upload limits, internal-auth headers, Web-to-H5P request proxying, rollback deletion, task-owned H5P resolution, upstream error mapping, and `H5PTaskSavePayload` live in `backend/web/routes/teaching_h5p.py`, not `backend/web/routes/teaching.py`.
+  - Done in working tree: `backend/web/routes/teaching_shared.py` now owns small shared Teaching response/identity helpers (`_role_in`, `_current_sub`, `_require_teacher`, `_is_uuid_like`, `_json_private`, `_private_error`), and `backend/web/routes/teaching_h5p.py` imports them explicitly instead of calling `teaching._...`.
+  - Done in working tree: `backend/web/routes/teaching_task_services.py` now owns the explicit `TasksService` provider boundary; `backend/web/routes/teaching_h5p.py` calls that provider instead of `teaching._get_tasks_service()`.
+  - Done in working tree: `backend/web/routes/teaching_guards.py` now owns the shared Teaching unit-author guard, CSRF guard, and strict same-origin helper; `backend/web/routes/teaching_h5p.py` calls that explicit guard module instead of `teaching._guard_unit_author()` or `teaching._csrf_guard()`.
+  - Done in working tree: `backend/tests/test_routes_repo_set_repo_contract.py` covers the temporary Teaching route-local guard adapters so legacy `routes.teaching` reload and monkeypatch tests still use the endpoint's active repository accessor while the actual guard logic stays in `teaching_guards.py`.
+  - Done in working tree: `backend/web/routes/teaching_authoring.py` now owns module-backed authoring section resolution and signature-compatible module-section lookup; `backend/web/routes/teaching_h5p.py` no longer imports `backend.web.routes.teaching` or calls any `teaching._...` helper.
+  - Done in working tree: the largest route hotspot shrank measurably from the prior 7569-line Teaching router to 6835 lines, with the extracted H5P router at 553 lines, the shared helper module at 71 lines, the serializer module at 89 lines, the task-service provider at 32 lines, the guard module at 81 lines, and the authoring boundary at 123 lines.
+  - Done in working tree: focused verification reports 25 H5P/authoring/guard tests passed, 4 modular API tests passed with 31 DB-dependent skips, 15 repo-reload/guard-regression tests passed, import-boundary and architecture-boundary scans ok, OpenAPI contract ok, and `make test-route-map` reports `route-map-inventory-ok`.
+  - Done in working tree: `make verify` is green with 1897 backend tests passed/35 skipped, Svelte check 0 errors/0 warnings, 282 frontend Vitest tests passed, and 21 H5P Node tests passed.
+  - Open follow-up: remove the temporary Teaching route-local guard and authoring adapters after legacy flat route imports are gone, and continue additional Teaching route splits/use-case wiring.
 
 #### PR 18: Separate Serialization and Response Models
 - Separate request/response shaping from business logic.
 - Stabilize API models for core flows.
 - Improve readability for new contributors and students.
 - Acceptance:
-  - Routes contain less shaping logic.
-  - Response behavior remains protected by contract tests.
+  - Done in working tree: `backend/web/routes/teaching_serialization.py` now owns `_serialize_task`, including task-kind normalization for native, H5P, visual, Scratch, Calliope, and Filius tasks.
+  - Done in working tree: `backend/tests/test_teaching_h5p_route_split_contract.py` asserts that `_serialize_task` no longer lives in `backend/web/routes/teaching.py`, that H5P imports the serializer explicitly, and that legacy flat H5P storage columns are not exposed in serialized task responses.
+  - Done in working tree: `backend/web/routes/teaching_serialization.py` also owns the modular graph response serializers (`_serialize_unit_phase`, `_serialize_unit_phase_public`, `_serialize_unit_module`, `_serialize_unit_graph_edge`), including the rule that module responses do not expose backing `section_id` and edges normalize repo keys to `{from, to}`.
+  - Done in working tree: `backend/tests/test_teaching_serialization_contract.py` asserts modular graph serializer ownership outside `backend/web/routes/teaching.py` and checks representative response shapes for phases, modules, and edges.
+  - Done in working tree: the Teaching route hotspot is now 6752 lines, with `backend/web/routes/teaching_serialization.py` at 142 lines.
+  - Done in working tree: focused verification reports the new serialization contract passed, 2 modular graph/editor/unit-phase tests passed with 38 DB-dependent skips, import-boundary and architecture-boundary scans ok, OpenAPI contract ok, and `make test-route-map` reports `route-map-inventory-ok`.
+  - Done in working tree: `make verify` is green with 1898 backend tests passed/35 skipped, Svelte check 0 errors/0 warnings, 282 frontend Vitest tests passed, and 21 H5P Node tests passed.
+  - Open follow-up: course, unit, course-module, section, material, live-dashboard, and latest-submission serializers still live in the large Teaching route module and should move in later PR18 slices.
 
 #### PR 19: Sharpen Repository/DB Boundaries and Connection Handling
 - Inventory the large `repo_db.py` files.

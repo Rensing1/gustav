@@ -1,4 +1,4 @@
-import os
+import importlib
 import types
 import uuid
 from pathlib import Path
@@ -7,13 +7,47 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
-from backend.web import main
 from backend.tests.runtime_auth_helpers import install_session_store
+
+main = importlib.import_module("backend.web.main")
 
 
 def _student_session(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     return store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+
+
+def _patch_create_submission_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    fake_repo: object,
+    fake_use_case: type,
+) -> None:
+    """Patch create-submission dependencies without leaking route globals.
+
+    FastAPI endpoints keep a reference to their module globals. In the common
+    case that dictionary is identical to `backend.web.routes.learning.__dict__`;
+    patching it twice with `monkeypatch.setattr` and `monkeypatch.setitem` can
+    restore the wrong intermediate value after the test. This helper patches
+    each distinct globals dictionary once.
+    """
+
+    fake_get_repo = lambda: fake_repo
+    learning_routes = importlib.import_module("backend.web.routes.learning")
+    patched_learning_module = False
+    for route in main.app.routes:
+        endpoint = getattr(route, "endpoint", None)
+        if getattr(endpoint, "__name__", "") != "create_submission":
+            continue
+        endpoint_globals = endpoint.__globals__
+        monkeypatch.setitem(endpoint_globals, "_get_repo", fake_get_repo)
+        monkeypatch.setitem(endpoint_globals, "CreateSubmissionUseCase", fake_use_case)
+        if endpoint_globals is learning_routes.__dict__:
+            patched_learning_module = True
+
+    if not patched_learning_module:
+        monkeypatch.setattr(learning_routes, "_get_repo", fake_get_repo)
+        monkeypatch.setattr(learning_routes, "CreateSubmissionUseCase", fake_use_case)
 
 
 @pytest.mark.anyio
@@ -75,24 +109,8 @@ async def test_pdf_submission_triggers_processing_in_dev(
         def execute(self, input_data):
             return {"id": str(uuid.uuid4()), "analysis_status": "pending"}
 
-    # Patch CreateSubmissionUseCase on both module aliases to avoid alias drift
-    # in full-suite runs (router/global lookup stays consistent at call time).
-    from backend.web.routes import learning as learning_routes
     fake_repo = types.SimpleNamespace(get_task_kind_for_student=lambda **_: "native")
-    monkeypatch.setattr(learning_routes, "_get_repo", lambda: fake_repo)
-    monkeypatch.setattr(learning_routes, "CreateSubmissionUseCase", _FakeUC)
-    for route in main.app.routes:
-        endpoint = getattr(route, "endpoint", None)
-        if getattr(endpoint, "__name__", "") == "create_submission":
-            monkeypatch.setitem(endpoint.__globals__, "_get_repo", lambda: fake_repo)
-            monkeypatch.setitem(endpoint.__globals__, "CreateSubmissionUseCase", _FakeUC)
-    try:
-        import importlib as _importlib
-        lr_alias = _importlib.import_module("routes.learning")
-        monkeypatch.setattr(lr_alias, "_get_repo", lambda: fake_repo, raising=False)
-        monkeypatch.setattr(lr_alias, "CreateSubmissionUseCase", _FakeUC, raising=False)
-    except Exception:
-        pass
+    _patch_create_submission_dependencies(monkeypatch, fake_repo=fake_repo, fake_use_case=_FakeUC)
     # Fallback: also patch the real UC class' execute method to a no-op
     # returning a minimal pending submission, so even if an alias drifts,
     # the call site will not raise PermissionError.
@@ -166,22 +184,8 @@ async def test_pdf_submission_does_not_trigger_processing_in_prod(monkeypatch: p
         def execute(self, input_data):
             return {"id": str(uuid.uuid4()), "analysis_status": "pending"}
 
-    from backend.web.routes import learning as learning_routes
     fake_repo = types.SimpleNamespace(get_task_kind_for_student=lambda **_: "native")
-    monkeypatch.setattr(learning_routes, "_get_repo", lambda: fake_repo)
-    monkeypatch.setattr(learning_routes, "CreateSubmissionUseCase", _FakeUC)
-    for route in main.app.routes:
-        endpoint = getattr(route, "endpoint", None)
-        if getattr(endpoint, "__name__", "") == "create_submission":
-            monkeypatch.setitem(endpoint.__globals__, "_get_repo", lambda: fake_repo)
-            monkeypatch.setitem(endpoint.__globals__, "CreateSubmissionUseCase", _FakeUC)
-    try:
-        import importlib as _importlib
-        lr_alias = _importlib.import_module("routes.learning")
-        monkeypatch.setattr(lr_alias, "_get_repo", lambda: fake_repo, raising=False)
-        monkeypatch.setattr(lr_alias, "CreateSubmissionUseCase", _FakeUC, raising=False)
-    except Exception:
-        pass
+    _patch_create_submission_dependencies(monkeypatch, fake_repo=fake_repo, fake_use_case=_FakeUC)
     try:
         import backend.learning.usecases.submissions as _uc_mod  # type: ignore
         monkeypatch.setattr(

@@ -9,9 +9,8 @@ Why:
 """
 from __future__ import annotations
 
-import os
+import importlib
 import uuid
-from uuid import UUID
 
 import httpx
 import pytest
@@ -21,9 +20,11 @@ from fastapi.routing import APIRoute
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-import main  # type: ignore  # noqa: E402
-import routes.learning as learning  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+from backend.tests.learning_route_helpers import VisibleLearningRepo
+from backend.tests.runtime_auth_helpers import install_session_store
+
+main = importlib.import_module("backend.web.main")
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 class _FakeAdapter:
@@ -56,6 +57,7 @@ async def test_upload_proxy_flow(monkeypatch):
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "http://127.0.0.1:54321")
     learning.set_storage_adapter(_FakeAdapter())
+    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
 
     # Seed minimal course/task via teaching API
     store = install_session_store(monkeypatch, main)
@@ -103,14 +105,7 @@ async def test_upload_proxy_flow(monkeypatch):
         body_sent["headers"] = proxy_headers
         return _Resp()
 
-    import routes.learning as lr  # type: ignore
-    try:  # type: ignore[attr-defined]
-        import backend.web.routes.learning as lr_backend  # type: ignore
-    except ImportError:  # pragma: no cover
-        lr_backend = None  # type: ignore
-    monkeypatch.setattr(lr, "_async_forward_upload", fake_forward)
-    if lr_backend is not None:
-        monkeypatch.setattr(lr_backend, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
     # Some suites reload routes.learning. Patch the actual FastAPI endpoint globals as well.
     for route in main.app.routes:
         if isinstance(route, APIRoute) and route.path == "/api/learning/internal/upload-proxy":

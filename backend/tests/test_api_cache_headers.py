@@ -26,20 +26,22 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-# Ensure in-memory session store for tests
-if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defensive
-    main.SESSION_STORE = SessionStore()
+@pytest.fixture
+def session_store(monkeypatch: pytest.MonkeyPatch):
+    """Install an isolated in-memory app session store for one cache-header test."""
+
+    return install_session_store(monkeypatch, main)
 
 
 @pytest.mark.anyio
-async def test_courses_list_includes_private_no_store_cache_header():
-    sess = main.SESSION_STORE.create(sub="t-cache-1", name="Teacher", roles=["teacher"])  # type: ignore
+async def test_courses_list_includes_private_no_store_cache_header(session_store):
+    sess = session_store.create(sub="t-cache-1", name="Teacher", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r = await c.get("/api/teaching/courses", params={"limit": 1, "offset": 0})
@@ -52,7 +54,7 @@ async def test_courses_list_includes_private_no_store_cache_header():
 @pytest.mark.anyio
 async def test_prod_csp_omits_unsafe_inline_and_sets_hsts():
     # Switch to prod and assert CSP keeps scripts strict.
-    main.SETTINGS.override_environment("prod")
+    main.RUNTIME.settings.override_environment("prod")
     try:
         async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
             r = await c.get("/health")
@@ -75,17 +77,17 @@ async def test_prod_csp_omits_unsafe_inline_and_sets_hsts():
         # HSTS should be set in prod (covered elsewhere, re-assert here for completeness)
         assert "Strict-Transport-Security" in r.headers
     finally:
-        main.SETTINGS.override_environment(None)
+        main.RUNTIME.settings.override_environment(None)
 
 
 @pytest.mark.anyio
-async def test_teaching_task_create_sets_private_no_store_cache_header():
+async def test_teaching_task_create_sets_private_no_store_cache_header(session_store):
     import routes.teaching as teaching  # type: ignore
 
     # Force in-memory repo to avoid DB dependencies for this header contract.
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
 
-    sess = main.SESSION_STORE.create(sub="t-task-cache-create", name="Teacher", roles=["teacher"])  # type: ignore
+    sess = session_store.create(sub="t-task-cache-create", name="Teacher", roles=["teacher"])
     async with httpx.AsyncClient(
         transport=ASGITransport(app=main.app),
         base_url="http://test",
@@ -106,12 +108,12 @@ async def test_teaching_task_create_sets_private_no_store_cache_header():
 
 
 @pytest.mark.anyio
-async def test_teaching_task_update_sets_private_no_store_cache_header():
+async def test_teaching_task_update_sets_private_no_store_cache_header(session_store):
     import routes.teaching as teaching  # type: ignore
 
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
 
-    sess = main.SESSION_STORE.create(sub="t-task-cache-update", name="Teacher", roles=["teacher"])  # type: ignore
+    sess = session_store.create(sub="t-task-cache-update", name="Teacher", roles=["teacher"])
     async with httpx.AsyncClient(
         transport=ASGITransport(app=main.app),
         base_url="http://test",

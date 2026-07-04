@@ -9,6 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
+from backend.web.cli_authoring import CLI_AUTHORING_CAPABILITIES  # noqa: E402
 
 
 def test_openapi_documents_profile_endpoints() -> None:
@@ -205,7 +206,7 @@ def test_openapi_cli_surface_matches_runtime_capability_table() -> None:
 
     runtime = {
         (capability.method, capability.path_template, (capability.required_scope,))
-        for capability in main.CLI_AUTHORING_CAPABILITIES
+        for capability in CLI_AUTHORING_CAPABILITIES
     }
 
     assert runtime == documented

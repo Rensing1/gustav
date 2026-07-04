@@ -17,7 +17,7 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from runtime_auth_helpers import install_session_store
 from routes import teaching as teaching_routes  # type: ignore
 
 
@@ -61,8 +61,7 @@ async def _seed_course_for_teacher(client: httpx.AsyncClient, title: str = "Math
 
 @pytest.mark.anyio
 async def test_learner_concern_box_view_returns_current_courses(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     teacher_sub = _unique_sub("teacher-concern")
     student_sub = _unique_sub("student-concern")
     teacher = store.create(sub=teacher_sub, roles=["teacher"], name="Ada", ttl_seconds=60)
@@ -95,8 +94,7 @@ async def test_learner_concern_box_view_returns_current_courses(monkeypatch: pyt
 
 @pytest.mark.anyio
 async def test_learner_can_create_anonymous_concern_box_entry(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     teacher_sub = _unique_sub("teacher-concern-write")
     student_sub = _unique_sub("student-concern-write")
     teacher = store.create(sub=teacher_sub, roles=["teacher"], name="Ada", ttl_seconds=60)
@@ -132,8 +130,7 @@ async def test_learner_can_create_anonymous_concern_box_entry(monkeypatch: pytes
 
 @pytest.mark.anyio
 async def test_learner_concern_box_rejects_course_without_membership(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     teacher = store.create(sub=_unique_sub("teacher-concern-forbidden"), roles=["teacher"], name="Ada", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -161,8 +158,7 @@ async def test_learner_concern_box_rejects_course_without_membership(monkeypatch
 async def test_learner_concern_box_write_requires_bearer_even_with_cookie_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     student = store.create(sub="student-cookie-only", roles=["student"], name="Lena", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -186,8 +182,7 @@ async def test_learner_concern_box_write_requires_bearer_even_with_cookie_sessio
 async def test_learner_concern_box_rejects_invalid_course_id_as_bad_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     learner_headers = _mock_bearer_auth(
         monkeypatch, sub="student-invalid-course", roles=["student"], name="Lena"
     )
@@ -211,8 +206,7 @@ async def test_learner_concern_box_rejects_invalid_course_id_as_bad_request(
 async def test_teacher_concern_box_view_masks_anonymous_entries_and_shows_named_entries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     student_sub = _unique_sub("student-concern-reader")
     monkeypatch.setattr(
         teaching_routes,
@@ -269,8 +263,7 @@ async def test_teacher_concern_box_view_masks_anonymous_entries_and_shows_named_
 
 @pytest.mark.anyio
 async def test_teacher_can_archive_and_restore_concern_box_entry(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     teacher_sub = _unique_sub("teacher-concern-archive")
     student_sub = _unique_sub("student-concern-archive")
     teacher = store.create(sub=teacher_sub, roles=["teacher"], name="Ada", ttl_seconds=60)
@@ -334,8 +327,7 @@ async def test_teacher_concern_box_mutations_reject_invalid_entry_id(
     path_suffix: str,
     detail: str,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     teacher = store.create(sub=_unique_sub("teacher-concern-bad-entry"), roles=["teacher"], name="Ada", ttl_seconds=60)
     teacher_headers = _mock_bearer_auth(monkeypatch, sub=teacher.sub, roles=["teacher"], name="Ada")
 

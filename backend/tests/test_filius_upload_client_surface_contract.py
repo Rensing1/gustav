@@ -20,12 +20,14 @@ def test_svelte_learning_page_maps_filius_uploads_to_fls_mime() -> None:
     assert 'FILIUS_FLS_MIME = "application/x.filius.fls"' in constants
 
 
-def test_legacy_ssr_upload_surface_maps_filius_uploads_to_fls_mime() -> None:
-    source = Path("backend/web/main.py").read_text(encoding="utf-8")
+def test_learning_api_upload_surface_maps_filius_uploads_to_fls_mime() -> None:
+    source = Path("backend/web/routes/learning.py").read_text(encoding="utf-8")
+    main_source = Path("backend/web/main.py").read_text(encoding="utf-8")
 
-    assert '"filius"' in source
+    assert 'task_kind == "filius"' in source
     assert "FILIUS_FLS_MIME" in source
-    assert "filename.lower().endswith(\".fls\")" in source
+    assert 'ext = ".fls"' in source
+    assert "def _server_side_prepare_submission_upload" not in main_source
 
 
 def test_legacy_browser_upload_script_maps_filius_extension_and_error_copy() -> None:

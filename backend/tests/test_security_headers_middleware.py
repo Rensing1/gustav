@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
-from identity_access.stores import SessionStore
+from runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -35,11 +35,10 @@ def _assert_base_headers(hdrs: dict[str, str]) -> None:
 
 
 @pytest.mark.anyio
-async def test_html_route_includes_security_headers():
+async def test_html_route_includes_security_headers(monkeypatch: pytest.MonkeyPatch):
     # Arrange: ensure in-memory sessions and authenticated user
-    if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover
-        main.SESSION_STORE = SessionStore()
-    sess = main.SESSION_STORE.create(sub="t-sec-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    sess = store.create(sub="t-sec-1", name="Lehrkraft", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://app.localhost:8100") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r = await c.get("/")
@@ -58,7 +57,7 @@ async def test_api_route_includes_security_headers_and_hsts_always(monkeypatch: 
     assert "Strict-Transport-Security" in r.headers
 
     # Prod: HSTS also present
-    main.SETTINGS.override_environment("prod")
+    main.RUNTIME.settings.override_environment("prod")
     try:
         async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://app.localhost:8100") as c:
             r2 = await c.get("/health")
@@ -66,4 +65,4 @@ async def test_api_route_includes_security_headers_and_hsts_always(monkeypatch: 
         _assert_base_headers(r2.headers)
         assert "Strict-Transport-Security" in r2.headers
     finally:
-        main.SETTINGS.override_environment(None)
+        main.RUNTIME.settings.override_environment(None)

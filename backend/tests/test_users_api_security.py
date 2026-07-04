@@ -11,7 +11,7 @@ import httpx
 from httpx import ASGITransport
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -21,16 +21,16 @@ async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
-def _setup_sessions() -> tuple[str, str]:
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="u-teacher-users", name="Teacher", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="u-student-users", name="Student", roles=["student"])  # type: ignore
+def _setup_sessions(monkeypatch: pytest.MonkeyPatch) -> tuple[str, str]:
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="u-teacher-users", name="Teacher", roles=["teacher"])
+    student = store.create(sub="u-student-users", name="Student", roles=["student"])
     return teacher.session_id, student.session_id
 
 
 @pytest.mark.anyio
-async def test_users_search_forbidden_for_non_teacher():
-    t_sid, s_sid = _setup_sessions()
+async def test_users_search_forbidden_for_non_teacher(monkeypatch: pytest.MonkeyPatch):
+    t_sid, s_sid = _setup_sessions(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, s_sid)
         r = await c.get("/api/users/search", params={"q": "ab", "role": "student"})
@@ -39,8 +39,8 @@ async def test_users_search_forbidden_for_non_teacher():
 
 
 @pytest.mark.anyio
-async def test_users_search_400_has_private_no_store_header():
-    t_sid, _ = _setup_sessions()
+async def test_users_search_400_has_private_no_store_header(monkeypatch: pytest.MonkeyPatch):
+    t_sid, _ = _setup_sessions(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, t_sid)
         # q too short
@@ -54,8 +54,8 @@ async def test_users_search_400_has_private_no_store_header():
 
 
 @pytest.mark.anyio
-async def test_users_list_headers_and_authz():
-    t_sid, s_sid = _setup_sessions()
+async def test_users_list_headers_and_authz(monkeypatch: pytest.MonkeyPatch):
+    t_sid, s_sid = _setup_sessions(monkeypatch)
     async with (await _client()) as c:
         # forbidden for student
         c.cookies.set(main.SESSION_COOKIE_NAME, s_sid)
@@ -68,4 +68,3 @@ async def test_users_list_headers_and_authz():
         r_bad = await c.get("/api/users/list", params={"role": "invalid"})
         assert r_bad.status_code == 400
         assert r_bad.headers.get("Cache-Control") == "private, no-store"
-

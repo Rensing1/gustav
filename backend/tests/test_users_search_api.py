@@ -18,7 +18,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from runtime_auth_helpers import install_session_store
 
 
 async def _client():
@@ -27,9 +27,9 @@ async def _client():
 
 @pytest.mark.anyio
 async def test_search_requires_teacher_and_min_query(monkeypatch: pytest.MonkeyPatch):
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="teacher-S", name="Teach", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="student-S", name="Stud", roles=["student"])
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="teacher-S", name="Teach", roles=["teacher"])
+    student = store.create(sub="student-S", name="Stud", roles=["student"])
 
     import routes.users as users
 
@@ -63,8 +63,8 @@ async def test_search_requires_teacher_and_min_query(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.anyio
 async def test_search_invalid_role_returns_400(monkeypatch: pytest.MonkeyPatch):
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="teacher-S2", name="Teach", roles=["teacher"])
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="teacher-S2", name="Teach", roles=["teacher"])
 
     import routes.users as users
 

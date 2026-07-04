@@ -26,7 +26,7 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
 import routes.teaching as teaching  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -34,11 +34,11 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_create_unit_201_has_private_no_store():
+async def test_create_unit_201_has_private_no_store(monkeypatch: pytest.MonkeyPatch):
     # Use in-memory repo to stay DB-independent
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-cache-write-1", name="Teach", roles=["teacher"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    teacher = session_store.create(sub="t-cache-write-1", name="Teach", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -50,10 +50,10 @@ async def test_create_unit_201_has_private_no_store():
 
 
 @pytest.mark.anyio
-async def test_update_unit_200_has_private_no_store():
+async def test_update_unit_200_has_private_no_store(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-cache-write-2", name="Teach", roles=["teacher"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    teacher = session_store.create(sub="t-cache-write-2", name="Teach", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -67,11 +67,11 @@ async def test_update_unit_200_has_private_no_store():
 
 
 @pytest.mark.anyio
-async def test_create_course_201_has_private_no_store():
+async def test_create_course_201_has_private_no_store(monkeypatch: pytest.MonkeyPatch):
     # Use in-memory repo to stay DB-independent
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-cache-write-3", name="Teach", roles=["teacher"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    teacher = session_store.create(sub="t-cache-write-3", name="Teach", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

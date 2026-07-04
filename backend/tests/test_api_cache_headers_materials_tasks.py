@@ -22,7 +22,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 from utils.db import require_db_or_skip as _require_db_or_skip
 
@@ -37,8 +37,8 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_materials_and_tasks_list_include_private_no_store():
-    main.SESSION_STORE = SessionStore()
+async def test_materials_and_tasks_list_include_private_no_store(monkeypatch: pytest.MonkeyPatch):
+    session_store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
 
     # Ensure DB-backed repo is in use; otherwise this test is not meaningful
@@ -49,7 +49,7 @@ async def test_materials_and_tasks_list_include_private_no_store():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required")
 
-    teacher = main.SESSION_STORE.create(sub="t-cache-mat-task", name="Autor", roles=["teacher"])  # type: ignore
+    teacher = session_store.create(sub="t-cache-mat-task", name="Autor", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

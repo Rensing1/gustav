@@ -5,7 +5,7 @@ Goals:
 - Unit/in-process pytest runs must not auto-load `.env`.
 - Integration suites may load `.env`, but only when explicitly enabled via
   RUN_* flags *and* marker selection (e.g. `pytest -m e2e`).
-- Global OIDC state store (main.STATE_STORE) needs a clean instance per test.
+- Global OIDC state store (main.RUNTIME.state_store) needs a clean instance per test.
 """
 
 from __future__ import annotations
@@ -348,16 +348,16 @@ def test_service_dsn_falls_back_to_postgres_when_supabase_admin_unreachable(monk
 
 
 def test_state_store_reset_fixture_creates_session_state():
-    # Sanity: a test can create login state via STATE_STORE.
+    # Sanity: a test can create login state via Runtime state storage.
     import backend.web.main as main
 
-    rec = main.STATE_STORE.create(code_verifier="verifier")
-    assert rec.state, "STATE_STORE should allow creating records inside a test"
+    rec = main.RUNTIME.state_store.create(code_verifier="verifier")
+    assert rec.state, "Runtime state store should allow creating records inside a test"
 
 
 def test_state_store_reset_fixture_provides_fresh_store():
     import backend.web.main as main
 
     # The autouse fixture should ensure the store has no leftover data.
-    data = getattr(main.STATE_STORE, "_data", {})
-    assert not data, "STATE_STORE must be cleared between tests to avoid 400 callbacks"
+    data = getattr(main.RUNTIME.state_store, "_data", {})
+    assert not data, "Runtime state store must be cleared between tests to avoid 400 callbacks"

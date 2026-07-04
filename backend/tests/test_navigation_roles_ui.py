@@ -17,17 +17,19 @@ from httpx import ASGITransport
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
-from identity_access.stores import SessionStore
+from backend.tests.runtime_auth_helpers import install_session_store
 import main  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-# Ensure tests use the in-memory session store – avoids DB dependency when
-# running unit/contract tests locally.
-if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defensive
-    main.SESSION_STORE = SessionStore()
+@pytest.fixture
+def session_store(monkeypatch: pytest.MonkeyPatch):
+    """Install an isolated in-memory app session store for one navigation test."""
+
+    return install_session_store(monkeypatch, main)
+
 
 def _pos(html: str, label: str) -> int:
     """Return the index of a sidebar label within nav-text span.
@@ -39,9 +41,9 @@ def _pos(html: str, label: str) -> int:
 
 
 @pytest.mark.anyio
-async def test_sidebar_for_student_contains_expected_items_in_order():
+async def test_sidebar_for_student_contains_expected_items_in_order(session_store):
     # Arrange: authenticated session with student role
-    sess = main.SESSION_STORE.create(sub="s-1", name="Schülerin A", roles=["student"])
+    sess = session_store.create(sub="s-1", name="Schülerin A", roles=["student"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r = await c.get("/")
@@ -72,9 +74,9 @@ async def test_sidebar_for_student_contains_expected_items_in_order():
 
 
 @pytest.mark.anyio
-async def test_sidebar_for_teacher_contains_expected_items_in_order():
+async def test_sidebar_for_teacher_contains_expected_items_in_order(session_store):
     # Arrange: authenticated session with teacher role
-    sess = main.SESSION_STORE.create(sub="t-1", name="Lehrer B", roles=["teacher"])
+    sess = session_store.create(sub="t-1", name="Lehrer B", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r = await c.get("/")
@@ -99,9 +101,9 @@ async def test_sidebar_for_teacher_contains_expected_items_in_order():
 
 
 @pytest.mark.anyio
-async def test_sidebar_unknown_role_falls_back_to_minimal_menu():
+async def test_sidebar_unknown_role_falls_back_to_minimal_menu(session_store):
     # Arrange: unknown/unsupported role -> minimal: Startseite, Über GUSTAV
-    sess = main.SESSION_STORE.create(sub="u-1", name="User C", roles=["guest"])
+    sess = session_store.create(sub="u-1", name="User C", roles=["guest"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r = await c.get("/")
@@ -117,8 +119,8 @@ async def test_sidebar_unknown_role_falls_back_to_minimal_menu():
 
 
 @pytest.mark.anyio
-async def test_htmx_request_includes_sidebar_oob_update():
-    sess = main.SESSION_STORE.create(sub="s-2", name="Schüler D", roles=["student"])
+async def test_htmx_request_includes_sidebar_oob_update(session_store):
+    sess = session_store.create(sub="s-2", name="Schüler D", roles=["student"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r = await c.get("/", headers={"HX-Request": "true"})
@@ -128,9 +130,9 @@ async def test_htmx_request_includes_sidebar_oob_update():
 
 
 @pytest.mark.anyio
-async def test_about_page_exists_and_units_page_is_retired():
+async def test_about_page_exists_and_units_page_is_retired(session_store):
     # `/about` stays as a small SSR info page; `/units` is now a retired legacy entry.
-    sess = main.SESSION_STORE.create(sub="t-2", name="Lehrer E", roles=["teacher"])
+    sess = session_store.create(sub="t-2", name="Lehrer E", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
         r_about = await c.get("/about")

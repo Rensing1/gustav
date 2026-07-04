@@ -20,28 +20,30 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
-from identity_access.stores import SessionStore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 import main  # type: ignore  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-# Ensure we are using the in-memory session store so test isolation holds.
-if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defensive
-    main.SESSION_STORE = SessionStore()
+@pytest.fixture
+def session_store(monkeypatch: pytest.MonkeyPatch):
+    """Install an isolated in-memory app session store for one sidebar test."""
+
+    return install_session_store(monkeypatch, main)
 
 
-async def _create_teacher_session() -> str:
+async def _create_teacher_session(session_store) -> str:
     """Create a teacher session and return the session id."""
-    record = main.SESSION_STORE.create(sub="teacher-1", name="LehrerIn", roles=["teacher"])
+    record = session_store.create(sub="teacher-1", name="LehrerIn", roles=["teacher"])
     return record.session_id
 
 
 @pytest.mark.anyio
-async def test_htmx_home_response_returns_fragment_without_duplicate_sidebar():
+async def test_htmx_home_response_returns_fragment_without_duplicate_sidebar(session_store):
     # Arrange: authenticated teacher with sidebar access.
-    session_id = await _create_teacher_session()
+    session_id = await _create_teacher_session(session_store)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, session_id)
@@ -62,8 +64,8 @@ async def test_htmx_home_response_returns_fragment_without_duplicate_sidebar():
 
 
 @pytest.mark.anyio
-async def test_full_page_load_still_includes_layout_and_single_sidebar():
-    session_id = await _create_teacher_session()
+async def test_full_page_load_still_includes_layout_and_single_sidebar(session_store):
+    session_id = await _create_teacher_session(session_store)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, session_id)
@@ -79,9 +81,9 @@ async def test_full_page_load_still_includes_layout_and_single_sidebar():
 
 
 @pytest.mark.anyio
-async def test_home_cache_control_private_no_store_by_default():
+async def test_home_cache_control_private_no_store_by_default(session_store):
     # Personalized SSR pages must not be cached by shared caches.
-    session_id = await _create_teacher_session()
+    session_id = await _create_teacher_session(session_store)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, session_id)

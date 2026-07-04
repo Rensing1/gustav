@@ -12,6 +12,7 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.storage_fixtures import dummy_png_bytes
 
 
@@ -100,11 +101,10 @@ async def test_e2e_supabase_upload_finalize_download_delete_flow(monkeypatch):
         if name in {"main", "routes.teaching", "backend.web.routes.teaching", "teaching.storage_supabase", "backend.teaching.storage_supabase"}:
             del sys.modules[name]
     import backend.web.main as main  # type: ignore
-    from identity_access.stores import SessionStore  # type: ignore
 
     # Create a teacher session
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
 
     async with (await _client(main.app)) as c:
         # Create a unit and a section
@@ -206,12 +206,11 @@ async def test_e2e_learning_submission_file_upload_finalize(monkeypatch):
             del sys.modules[name]
     import backend.web.main as main  # type: ignore
     import routes.learning as learning  # noqa: F401  # ensure module is loaded
-    from identity_access.stores import SessionStore  # type: ignore
 
     # Teacher and student sessions
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
 
     async with (await _client(main.app)) as c:
         # Create course/unit/section/task
@@ -314,11 +313,10 @@ async def test_e2e_learning_submission_image_upload_finalize(monkeypatch):
             del sys.modules[name]
     import backend.web.main as main  # type: ignore
     import routes.learning as learning  # noqa: F401
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -407,11 +405,10 @@ async def test_e2e_learning_submission_scratch_sb3_upload_finalize(monkeypatch):
             del sys.modules[name]
     import backend.web.main as main  # type: ignore
     import routes.learning as learning  # noqa: F401
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -484,11 +481,10 @@ async def test_e2e_learning_submission_calliope_hex_upload_finalize(monkeypatch)
             del sys.modules[name]
     import backend.web.main as main  # type: ignore
     import routes.learning as learning  # noqa: F401
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

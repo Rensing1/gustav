@@ -11,6 +11,9 @@ import sys
 from pathlib import Path
 import pytest
 
+from backend.tests.import_paths import configure_test_import_paths
+from backend.tests.import_paths import canonicalize_legacy_route_aliases
+from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import is_safe_db_test_dsn
 
 LEGACY_MIGRATION_MARKER = "legacy_migration"
@@ -258,19 +261,20 @@ def _ensure_db_env_defaults() -> None:
 
 _ensure_db_env_defaults()
 
-# Ensure modules in backend/ and backend/web are importable across tests
-REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND_DIR = REPO_ROOT / "backend"
-WEB_DIR = BACKEND_DIR / "web"
-TESTS_DIR = BACKEND_DIR / "tests"
-for p in (str(REPO_ROOT), str(BACKEND_DIR), str(WEB_DIR), str(TESTS_DIR)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
+configure_test_import_paths()
 
 
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def _canonicalize_legacy_route_aliases_between_tests():
+    """Repair legacy route aliases before tests can mutate route globals."""
+
+    canonicalize_legacy_route_aliases()
+    yield
 
 
 @pytest.fixture(autouse=True)
@@ -314,23 +318,125 @@ def _reset_teaching_repo_between_tests():
 
 
 @pytest.fixture(autouse=True)
+def _reset_learning_repo_between_tests():
+    """Reset Learning repo between tests when the local DB is reachable.
+
+    Why:
+        Several Learning tests temporarily replace `routes.learning.REPO`.
+        Without a symmetric reset, later DB-backed tests can accidentally use a
+        stale in-memory/stub repository and fail with misleading 503 responses.
+    """
+
+    try:
+        import os
+        import importlib
+        learning = importlib.import_module("backend.web.routes.learning")
+        try:
+            import psycopg  # type: ignore
+        except Exception:
+            yield
+            return
+
+        dsn = os.getenv("LEARNING_DATABASE_URL") or os.getenv("RLS_TEST_DSN") or os.getenv("DATABASE_URL")
+        if not dsn:
+            host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+            port = os.getenv("TEST_DB_PORT", "54322")
+            user = os.getenv("APP_DB_USER", "gustav_app")
+            password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+            dsn = f"postgresql://{user}:{password}@{host}:{port}/postgres"
+        ok = False
+        if dsn:
+            try:
+                with psycopg.connect(dsn, connect_timeout=3):  # type: ignore[arg-type]
+                    ok = True
+            except Exception:
+                ok = False
+        if ok:
+            learning.set_repo(learning.DBLearningRepo())  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_learning_route_globals_between_tests():
+    """Restore mutable Learning endpoint globals before each test."""
+
+    try:
+        from fastapi.routing import APIRoute
+        import importlib
+        learning = importlib.import_module("backend.web.routes.learning")
+
+        helper_names = (
+            "_get_repo",
+            "_download_storage_object_via_presign",
+            "_download_bytes_with_limit",
+            "_load_storage_bytes_for_validation",
+        )
+        for main_name in ("main", "backend.web.main"):
+            main = importlib.import_module(main_name)
+            for route in getattr(main.app, "routes", []):
+                if not isinstance(route, APIRoute):
+                    continue
+                if not str(getattr(route, "path", "")).startswith("/api/learning"):
+                    continue
+                route_globals = getattr(route.endpoint, "__globals__", None)
+                if not isinstance(route_globals, dict):
+                    continue
+                for helper_name in helper_names:
+                    if helper_name in route_globals and hasattr(learning, helper_name):
+                        route_globals[helper_name] = getattr(learning, helper_name)
+    except Exception:
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_teaching_route_globals_between_tests():
+    """Restore mutable Teaching endpoint globals before each test."""
+
+    try:
+        from fastapi.routing import APIRoute
+        import importlib
+        teaching = importlib.import_module("backend.web.routes.teaching")
+
+        helper_names = ("_get_repo", "_get_materials_service")
+        for main_name in ("main", "backend.web.main"):
+            main = importlib.import_module(main_name)
+            for route in getattr(main.app, "routes", []):
+                if not isinstance(route, APIRoute):
+                    continue
+                if not str(getattr(route, "path", "")).startswith("/api/teaching"):
+                    continue
+                route_globals = getattr(route.endpoint, "__globals__", None)
+                if not isinstance(route_globals, dict):
+                    continue
+                for helper_name in helper_names:
+                    if helper_name in route_globals and hasattr(teaching, helper_name):
+                        route_globals[helper_name] = getattr(teaching, helper_name)
+    except Exception:
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_auth_state_store():
     """
     Reset the global OIDC state store before each pytest case.
 
     Why:
-        Auth tests share the `main.STATE_STORE` singleton; without a reset,
+        Auth tests share the `main.RUNTIME.state_store` singleton; without a reset,
         PKCE state/nonce entries leak across tests and trigger 400 callbacks.
     Parameters:
         (autouse fixture) – no caller-supplied parameters; executes for every test.
     Behavior:
         - Re-imports `main` / `backend.web.main` if necessary.
-        - Replaces their `STATE_STORE` with a fresh in-memory `StateStore`.
+        - Replaces their Runtime state store with a fresh in-memory `StateStore`.
     Permissions:
         Internal test helper; no runtime permissions required.
     """
     try:
-        from identity_access.stores import StateStore  # type: ignore
+        from backend.identity_access.stores import StateStore
     except Exception:
         yield
         return
@@ -345,11 +451,12 @@ def _reset_auth_state_store():
                 continue
         modules.append(mod)
 
-    # Use a single shared instance for all main module aliases to avoid drift
+    # Use a single shared instance for both import names to avoid drift.
     shared_state = StateStore()
     for mod in modules:
-        if hasattr(mod, "STATE_STORE"):
-            mod.STATE_STORE = shared_state
+        runtime = getattr(mod, "RUNTIME", None)
+        if runtime is not None:
+            runtime.state_store = shared_state
     yield
 
 
@@ -390,7 +497,7 @@ def _force_prod_env_and_clear_feature_flags(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture(autouse=True)
 def _reset_session_store_and_oidc(monkeypatch: pytest.MonkeyPatch):
-    """Reset SESSION_STORE and OIDC client to defaults per test.
+    """Reset Runtime session store and OIDC client to defaults per test.
 
     Why:
         Some tests monkeypatch these and do not restore. Suite runs then fail
@@ -398,32 +505,41 @@ def _reset_session_store_and_oidc(monkeypatch: pytest.MonkeyPatch):
     """
     try:
         import main  # type: ignore
-        from identity_access.stores import SessionStore  # type: ignore
         from identity_access.oidc import OIDCClient  # type: ignore
     except Exception:
         yield
         return
 
-    # Reset session store on both module aliases to avoid drift between
-    # `main` and `backend.web.main` when different tests import different
-    # aliases.
-    shared_session = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", shared_session, raising=False)
+    shared_session = install_session_store(monkeypatch, main)
     try:
         bwm = importlib.import_module("backend.web.main")  # type: ignore
-        monkeypatch.setattr(bwm, "SESSION_STORE", shared_session, raising=False)
+        install_session_store(monkeypatch, bwm, shared_session)
     except Exception:
         pass
     try:
         # Recreate a fresh OIDC client bound to current config
         # Reset OIDC config to defaults to avoid cross-test pollution
         try:
-            cfg = main.load_oidc_config()  # type: ignore[attr-defined]
-            monkeypatch.setattr(main, "OIDC_CFG", cfg, raising=False)
+            from backend.web.auth_runtime import load_oidc_config
+
+            cfg = load_oidc_config()
+            runtime = getattr(main, "RUNTIME", None)
+            if runtime is not None:
+                runtime.oidc_config = cfg
         except Exception:
             pass
-        fresh = OIDCClient(main.OIDC_CFG)
-        monkeypatch.setattr(main, "OIDC", fresh, raising=False)
+        fresh = OIDCClient(main.RUNTIME.oidc_config)
+        runtime = getattr(main, "RUNTIME", None)
+        if runtime is not None:
+            runtime.oidc_client = fresh
+        try:
+            bwm = importlib.import_module("backend.web.main")  # type: ignore
+            runtime = getattr(bwm, "RUNTIME", None)
+            if runtime is not None:
+                runtime.oidc_config = main.RUNTIME.oidc_config
+                runtime.oidc_client = fresh
+        except Exception:
+            pass
     except Exception:
         pass
     yield
@@ -544,22 +660,24 @@ def _reset_learning_create_submission_uc(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture(autouse=True)
 def _reset_settings_environment_override():
-    """Reset main.SETTINGS.override_environment between tests.
+    """Reset runtime settings environment override between tests.
 
     Why:
         Some tests temporarily force `prod` semantics via
-        `main.SETTINGS.override_environment("prod")`. If a test aborts early
+        `main.RUNTIME.settings.override_environment("prod")`. If a test aborts early
         or misses cleanup, the override can leak into unrelated tests in a full
         run. This autouse fixture restores the default (env-driven) behavior
         before each test to keep CSRF/cookie decisions deterministic.
     """
     try:
         import importlib, sys as _sys
-        # Reset override on both aliases if present
+        # Reset override on both import names if present.
         for name in ("main", "backend.web.main"):
             mod = _sys.modules.get(name) or importlib.import_module(name)
-            if hasattr(mod, "SETTINGS") and hasattr(mod.SETTINGS, "override_environment"):
-                mod.SETTINGS.override_environment(None)
+            runtime = getattr(mod, "RUNTIME", None)
+            settings = getattr(runtime, "settings", None)
+            if hasattr(settings, "override_environment"):
+                settings.override_environment(None)
     except Exception:
         pass
     yield

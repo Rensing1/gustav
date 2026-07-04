@@ -1,27 +1,16 @@
-"""Import path contract tests (F11).
+"""Import path contract tests.
 
 Why:
-    The test suite adds both the repo root and `backend/web` to `sys.path`
-    (`backend/tests/conftest.py`). That makes the same module tree importable via
-    two different package prefixes:
-
-      - `routes.*` (when importing from the `backend/web` directory)
-      - `backend.web.routes.*` (when importing from the repo root)
-
-    Mixing both import styles creates duplicate module instances and was
-    previously "papered over" with fragile `sys.modules` aliasing.
-
-    In production, the Docker image runs `uvicorn main:app` from the copied
-    `backend/web` sources. Therefore `routes.*` is the canonical import path for
-    web routers.
-
-Contract:
-    - `backend/web/routes/teaching.py` must not perform `sys.modules` aliasing.
-    - Call sites must not import the teaching router via `backend.web.routes.*`.
+    PR 8 makes the package-oriented runtime entry point authoritative. The web
+    adapter should import itself through `backend.web.*`, because flat imports
+    such as `main`, `routes.*` and `components` create duplicate module names
+    between tests, Docker, and production-like startup.
 """
 
 from __future__ import annotations
 
+import ast
+import importlib
 from pathlib import Path
 
 
@@ -29,18 +18,146 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def test_teaching_route_has_no_sys_modules_alias() -> None:
-    src = (_repo_root() / "backend" / "web" / "routes" / "teaching.py").read_text(encoding="utf-8")
-    assert "sys.modules.setdefault(\"routes.teaching\"" not in src
-    assert "sys.modules.setdefault(\"backend.web.routes.teaching\"" not in src
+WEB_INTERNAL_ROOTS = {
+    "auth_utils",
+    "components",
+    "config",
+    "evidence_rendering",
+    "material_file_access",
+    "models",
+    "routes",
+    "storage_wiring",
+}
 
 
-def test_teaching_imports_use_routes_package_only() -> None:
-    repo_root = _repo_root()
-    for path in (
-        repo_root / "backend" / "web" / "main.py",
-        repo_root / "backend" / "web" / "routes" / "learning.py",
-        repo_root / "backend" / "tests" / "conftest.py",
+def _is_flat_web_module(name: str | None) -> bool:
+    if not name:
+        return False
+    root = name.split(".", 1)[0]
+    return root in WEB_INTERNAL_ROOTS
+
+
+def _flat_imports(path: Path) -> list[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    findings: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _is_flat_web_module(alias.name):
+                    findings.append(f"{path.relative_to(_repo_root())}:{node.lineno}: import {alias.name}")
+        elif isinstance(node, ast.ImportFrom) and _is_flat_web_module(node.module):
+            findings.append(f"{path.relative_to(_repo_root())}:{node.lineno}: from {node.module} import ...")
+    return findings
+
+
+def test_dockerfile_uses_package_oriented_web_entrypoint() -> None:
+    dockerfile = (_repo_root() / "Dockerfile").read_text(encoding="utf-8")
+
+    assert 'CMD ["uvicorn", "backend.web.main:app"' in dockerfile
+    assert 'CMD ["uvicorn", "main:app"' not in dockerfile
+    assert "COPY backend ./backend" in dockerfile
+    assert "COPY backend/web/ ." not in dockerfile
+    assert "COPY backend/identity_access ./identity_access" not in dockerfile
+    assert "COPY backend/teaching ./teaching" not in dockerfile
+    assert "ENV PYTHONPATH=/app\n" in dockerfile
+    assert "ENV PYTHONPATH=/app:/app/backend" not in dockerfile
+
+
+def test_compose_mounts_backend_once_without_package_duplicates() -> None:
+    compose = (_repo_root() / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "- ./backend:/app/backend:z" in compose
+    assert "/app/identity_access" not in compose
+    assert "/app/teaching" not in compose
+    assert "- ./backend/web:/app:z" not in compose
+
+
+def test_web_adapter_uses_package_imports_for_internal_modules() -> None:
+    web_root = _repo_root() / "backend" / "web"
+    offenders: list[str] = []
+    for path in sorted(web_root.rglob("*.py")):
+        if "backend/web/backend" in path.as_posix():
+            continue
+        offenders.extend(_flat_imports(path))
+
+    assert offenders == []
+
+
+def test_runtime_backend_code_uses_backend_namespace_for_bounded_contexts() -> None:
+    backend_root = _repo_root() / "backend"
+    offenders: list[str] = []
+    forbidden_roots = {"identity_access", "teaching"}
+    for path in sorted(backend_root.rglob("*.py")):
+        relative = path.relative_to(_repo_root())
+        if relative.parts[:2] == ("backend", "tests"):
+            continue
+        if relative.parts[:3] == ("backend", "web", "backend"):
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".", 1)[0] in forbidden_roots:
+                        offenders.append(f"{relative}:{node.lineno}: import {alias.name}")
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                if node.module.split(".", 1)[0] in forbidden_roots:
+                    offenders.append(f"{relative}:{node.lineno}: from {node.module} import ...")
+
+    assert offenders == []
+
+
+def test_main_module_keeps_legacy_alias_only_as_compatibility_bridge() -> None:
+    src = (_repo_root() / "backend" / "web" / "main.py").read_text(encoding="utf-8")
+
+    assert '__name__ == "backend.web.main"' in src
+    assert '_sys.modules.setdefault("main", _sys.modules[__name__])' in src
+    assert '__name__ == "main"' not in src
+
+
+def test_legacy_route_imports_share_package_module_instances() -> None:
+    """Legacy `routes.*` imports must not create a second router module instance."""
+
+    for module_name in ("app", "auth", "learning", "operations", "teaching", "users"):
+        package_module = importlib.import_module(f"backend.web.routes.{module_name}")
+        legacy_module = importlib.import_module(f"routes.{module_name}")
+
+        assert legacy_module is package_module
+
+
+def test_harness_repairs_legacy_route_aliases_after_partial_sys_modules_pruning() -> None:
+    """The pytest import harness must repair route aliases between tests."""
+
+    import sys
+
+    from backend.tests.import_paths import canonicalize_legacy_route_aliases
+
+    package_module = importlib.import_module("backend.web.routes.learning")
+    sys.modules.pop("routes.learning", None)
+
+    canonicalize_legacy_route_aliases()
+
+    assert importlib.import_module("routes.learning") is package_module
+
+
+def test_legacy_bounded_context_imports_share_package_module_instances() -> None:
+    """Legacy bounded-context imports must not duplicate shared classes."""
+
+    for package_name, module_name in (
+        ("identity_access", "cli_tokens"),
+        ("identity_access", "directory"),
+        ("identity_access", "oidc"),
+        ("identity_access", "stores"),
+        ("identity_access", "tokens"),
+        ("teaching", "repo_db"),
+        ("teaching", "storage"),
+        ("teaching", "storage_supabase"),
+        ("teaching.services", "live_student_overview"),
+        ("teaching.services", "materials"),
+        ("teaching.services", "tasks"),
     ):
-        src = path.read_text(encoding="utf-8")
-        assert "backend.web.routes.teaching" not in src, f"Unexpected teaching import alias reference in {path}"
+        package_module = importlib.import_module(f"backend.{package_name}.{module_name}")
+        legacy_module = importlib.import_module(f"{package_name}.{module_name}")
+
+        assert legacy_module is package_module
+        parent = importlib.import_module(package_name)
+        assert getattr(parent, module_name) is package_module

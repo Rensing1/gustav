@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import io
+import importlib
 import uuid
 import zipfile
 
@@ -17,9 +18,10 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-import main  # type: ignore
-import routes.learning as learning  # type: ignore
 from backend.tests.runtime_auth_helpers import install_session_store
+
+main = importlib.import_module("backend.web.main")
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

@@ -9,7 +9,9 @@ Intent:
 
 from __future__ import annotations
 
-import routes.learning as learning  # type: ignore
+import importlib
+
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 def test_validate_submission_payload_accepts_mixed_case_makecode_hex_mime() -> None:
@@ -25,4 +27,3 @@ def test_validate_submission_payload_accepts_mixed_case_makecode_hex_mime() -> N
 
     assert kind == "file"
     assert clean.get("mime_type") == "application/x.makecode.hex"
-

@@ -8,16 +8,18 @@ Intent:
 
 from __future__ import annotations
 
+import importlib
 import uuid
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
-import main  # type: ignore
-import routes.learning as learning  # type: ignore
 from backend.tests.runtime_auth_helpers import install_session_store
-from teaching.storage import StorageAdapterProtocol  # type: ignore
+from backend.teaching.storage import StorageAdapterProtocol
+
+main = importlib.import_module("backend.web.main")
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

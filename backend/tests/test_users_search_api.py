@@ -3,22 +3,17 @@ Users API — Search endpoint for student lookup by name.
 """
 from __future__ import annotations
 
+import importlib
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import sys
 
+from backend.tests.runtime_auth_helpers import install_session_store
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
-from runtime_auth_helpers import install_session_store
+main = importlib.import_module("backend.web.main")
+users_routes = importlib.import_module("backend.web.routes.users")
 
 
 async def _client():
@@ -31,12 +26,10 @@ async def test_search_requires_teacher_and_min_query(monkeypatch: pytest.MonkeyP
     teacher = store.create(sub="teacher-S", name="Teach", roles=["teacher"])
     student = store.create(sub="student-S", name="Stud", roles=["student"])
 
-    import routes.users as users
-
     def fake_search(*, role: str, q: str, limit: int):
         return [{"sub": "s-1", "name": "Max Musterschüler"}]
 
-    monkeypatch.setattr(users, "search_users_by_name", fake_search, raising=False)
+    monkeypatch.setattr(users_routes, "search_users_by_name", fake_search, raising=False)
 
     async with (await _client()) as client:
         # Student forbidden
@@ -66,12 +59,10 @@ async def test_search_invalid_role_returns_400(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="teacher-S2", name="Teach", roles=["teacher"])
 
-    import routes.users as users
-
     def fake_search(*, role: str, q: str, limit: int):
         return []
 
-    monkeypatch.setattr(users, "search_users_by_name", fake_search, raising=False)
+    monkeypatch.setattr(users_routes, "search_users_by_name", fake_search, raising=False)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)

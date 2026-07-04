@@ -18,18 +18,22 @@ import importlib
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
 
+learning = importlib.import_module("backend.web.routes.learning")
+
+
+def _main():
+    return importlib.import_module("backend.web.main")
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
 async def _client():
-    import main  # noqa
+    main = _main()
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
 async def _seed_course_with_task(monkeypatch: pytest.MonkeyPatch):
-    import main  # noqa
-
+    main = _main()
     store = install_session_store(monkeypatch, main)
     student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
@@ -92,12 +96,6 @@ async def test_learning_upload_intent_uses_config_limit_and_key_shape(monkeypatc
     # Reload config and route modules to pick up env
     if "backend.storage.config" in importlib.sys.modules:
         importlib.reload(importlib.import_module("backend.storage.config"))
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import routes.learning as learning  # noqa
-    import main  # noqa
-
     # Override adapter to record bucket/key
     recorder = _Recorder()
     learning.set_storage_adapter(recorder)  # type: ignore[arg-type]
@@ -105,6 +103,7 @@ async def test_learning_upload_intent_uses_config_limit_and_key_shape(monkeypatc
 
     sid, course_id, task_id = await _seed_course_with_task(monkeypatch)
     async with (await _client()) as c:
+        main = _main()
         c.cookies.set(main.SESSION_COOKIE_NAME, sid)
         r = await c.post(
             f"/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents",

@@ -6,31 +6,23 @@ Diese schlagen fehl, bis der Endpunkt implementiert ist (TDD: Red).
 """
 from __future__ import annotations
 
-import os
-import uuid
 import importlib
+import uuid
 from contextlib import contextmanager
-from pathlib import Path
 from uuid import UUID
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.tests.learning_route_helpers import VisibleLearningRepo
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-BACKEND_DIR = REPO_ROOT / "backend"
-for path in (WEB_DIR, BACKEND_DIR, REPO_ROOT):
-    if str(path) not in os.sys.path:
-        os.sys.path.insert(0, str(path))
-
-import routes.learning as learning  # type: ignore  # noqa: E402
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-from teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore  # noqa: E402
+learning = importlib.import_module("backend.web.routes.learning")
+main = importlib.import_module("backend.web.main")
 
 
 TEST_STORAGE_BASE_URL = "https://storage.example.com"
@@ -69,7 +61,7 @@ class FakeStorageAdapter(StorageAdapterProtocol):
 @contextmanager
 def _use_storage_adapter(adapter):
     """Temporarily override the learning storage adapter for a test."""
-    current_learning = importlib.import_module("routes.learning")
+    current_learning = importlib.import_module("backend.web.routes.learning")
     original = getattr(current_learning, "STORAGE_ADAPTER", None)
     current_learning.set_storage_adapter(adapter)
     try:
@@ -78,12 +70,25 @@ def _use_storage_adapter(adapter):
         current_learning.set_storage_adapter(original)
 
 
+@pytest.fixture(autouse=True)
+def restore_learning_route_state():
+    """Restore route-level test doubles after each upload-intent behavior test."""
+
+    repo = learning._get_repo()  # type: ignore[attr-defined]
+    adapter = learning.STORAGE_ADAPTER
+    adapter_override = learning._STORAGE_ADAPTER_OVERRIDE_ACTIVE
+    yield
+    learning.set_repo(repo)  # type: ignore[arg-type]
+    learning.set_storage_adapter(adapter, override=adapter_override)  # type: ignore[arg-type]
+
+
 async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
 async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     # Reuse existing teaching APIs to seed data quickly
+    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
     store = install_session_store(monkeypatch, main)
     student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
@@ -215,6 +220,13 @@ async def test_upload_intent_pdf_happy_path_includes_pdf_mime(monkeypatch):
 @pytest.mark.anyio
 async def test_upload_intent_requires_membership(monkeypatch: pytest.MonkeyPatch):
     """Student must be course member; otherwise 404 to avoid leaking existence."""
+
+    class _MembershipDeniedRepo(VisibleLearningRepo):
+        def list_submissions(self, **_kwargs):
+            raise PermissionError("not a course member")
+
+    learning.set_repo(_MembershipDeniedRepo())  # type: ignore[arg-type]
+
     # Prepare teacher-created resources without enrolling the student
     store = install_session_store(monkeypatch, main)
     student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
@@ -254,6 +266,13 @@ async def test_upload_intent_requires_membership(monkeypatch: pytest.MonkeyPatch
 @pytest.mark.anyio
 async def test_upload_intent_task_not_visible_returns_404(monkeypatch: pytest.MonkeyPatch):
     """If task not visible to student (section not released), respond 404."""
+
+    class _TaskHiddenRepo(VisibleLearningRepo):
+        def list_submissions(self, **_kwargs):
+            raise LookupError("task not visible")
+
+    learning.set_repo(_TaskHiddenRepo())  # type: ignore[arg-type]
+
     store = install_session_store(monkeypatch, main)
     student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])

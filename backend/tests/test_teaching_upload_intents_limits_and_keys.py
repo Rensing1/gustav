@@ -14,19 +14,24 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
+
+teaching = importlib.import_module("backend.web.routes.teaching")
+
+
+def _main():
+    return importlib.import_module("backend.web.main")
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
 async def _client():
-    import main  # noqa
+    main = _main()
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
 async def _seed_unit_section(monkeypatch: pytest.MonkeyPatch):
-    import main  # noqa
-    from backend.tests.runtime_auth_helpers import install_session_store
-
+    main = _main()
     session_store = install_session_store(monkeypatch, main)
     teacher = session_store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
@@ -64,17 +69,13 @@ async def test_teaching_upload_intent_uses_config_limit_and_key_shape(monkeypatc
     # Reload config and modules to pick up env
     if "backend.storage.config" in importlib.sys.modules:
         importlib.reload(importlib.import_module("backend.storage.config"))
-    if "routes.teaching" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.teaching"))
-
-    import routes.teaching as teaching  # noqa
-    import main  # noqa
-
+    teaching.MATERIAL_FILE_SETTINGS = teaching.MaterialFileSettings()
     recorder = _Recorder()
     teaching.set_storage_adapter(recorder)  # type: ignore[arg-type]
 
     sid, unit_id, section_id = await _seed_unit_section(monkeypatch)
     async with (await _client()) as c:
+        main = _main()
         c.cookies.set(main.SESSION_COOKIE_NAME, sid)
         r = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents",

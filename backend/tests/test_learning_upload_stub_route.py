@@ -9,6 +9,7 @@ Why:
 """
 from __future__ import annotations
 
+import importlib
 import os
 import uuid
 from hashlib import sha256
@@ -21,17 +22,11 @@ from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-if str(REPO_ROOT) not in os.sys.path:
-    os.sys.path.insert(0, str(REPO_ROOT))
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.storage_fixtures import dummy_png_bytes
 
-import main  # type: ignore  # noqa: E402
-import routes.learning as learning  # type: ignore  # noqa: E402
-from backend.tests.utils.storage_fixtures import dummy_png_bytes  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 @pytest.fixture(autouse=True)

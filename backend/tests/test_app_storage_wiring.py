@@ -16,7 +16,6 @@ Notes:
 """
 from __future__ import annotations
 
-import os
 import sys
 import types
 import importlib
@@ -61,11 +60,6 @@ def _install_fake_supabase_module() -> None:
 
 @pytest.mark.anyio
 async def test_learning_storage_adapter_wired_on_startup(monkeypatch):
-    # Ensure fresh imports for wiring logic
-    for name in list(sys.modules.keys()):
-        if name in {"main", "routes.learning", "backend.web.routes.learning"}:
-            del sys.modules[name]
-
     # Provide env vars that enable Supabase wiring in the app
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
@@ -73,12 +67,15 @@ async def test_learning_storage_adapter_wired_on_startup(monkeypatch):
     # Inject fake supabase module
     _install_fake_supabase_module()
 
-    # Import the app module (triggers startup wiring code)
-    import main  # noqa: F401  # type: ignore
+    # Reload in place so other already-imported test modules keep a valid main
+    # module reference while startup storage wiring runs with fresh state.
+    importlib.reload(importlib.import_module("backend.web.storage_wiring"))
+    importlib.reload(importlib.import_module("backend.web.main_storage_wiring"))
+    main_module = importlib.import_module("backend.web.main")
+    importlib.reload(main_module)
 
     # After import, learning router must have a non-null storage adapter
-    import routes.learning as learning  # type: ignore
-    from teaching.storage import NullStorageAdapter  # type: ignore
+    learning = importlib.import_module("backend.web.routes.learning")
+    from backend.teaching.storage import NullStorageAdapter
 
     assert not isinstance(learning.STORAGE_ADAPTER, NullStorageAdapter)
-

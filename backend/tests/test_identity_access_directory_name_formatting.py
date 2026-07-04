@@ -10,16 +10,7 @@ human-friendly name using the following precedence:
 """
 from __future__ import annotations
 
-from pathlib import Path
-import os
-import sys
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PKG_DIR = REPO_ROOT / "backend" / "identity_access"
-if str(PKG_DIR.parent) not in sys.path:
-    sys.path.insert(0, str(PKG_DIR.parent))
-
-from identity_access import directory  # type: ignore  # noqa: E402
+from backend.identity_access import directory
 
 
 def test_display_name_prefers_attribute_then_first_last():
@@ -44,4 +35,3 @@ def test_display_name_handles_single_word_and_fallback():
 
     u2 = {}
     assert directory._display_name(u2) == "Unbekannt"
-

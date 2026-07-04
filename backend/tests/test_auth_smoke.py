@@ -5,19 +5,11 @@ Uses the same async ASGI test path as the rest of the suite to avoid
 sync TestClient deadlocks under newer anyio/httpx combinations.
 """
 
-from pathlib import Path
-import sys
-
 import httpx
 import pytest
 from httpx import ASGITransport
 
-# Import the auth-only app factory directly to avoid broader imports
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-
-from main import create_app_auth_only  # type: ignore
+from backend.web.auth_only_app import create_app_auth_only
 
 
 pytestmark = pytest.mark.anyio("asyncio")

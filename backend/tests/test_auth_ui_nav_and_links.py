@@ -9,18 +9,14 @@ Goals:
   - Register page links back to Login
 """
 
-import sys
-from pathlib import Path
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")

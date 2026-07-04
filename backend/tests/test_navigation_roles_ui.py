@@ -6,19 +6,15 @@ Zusätzlich Smoke-Tests für neue Platzhalterseiten (/about, /units) und
 HTMX-OOB-Sidebar-Update.
 """
 
-from pathlib import Path
-import sys
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
 from backend.tests.runtime_auth_helpers import install_session_store
-import main  # type: ignore
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

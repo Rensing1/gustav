@@ -6,13 +6,15 @@ and rejects requests without either header.
 """
 from __future__ import annotations
 
+import importlib
 import uuid
 import pytest
 import httpx
 from httpx import ASGITransport
 
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store
+
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

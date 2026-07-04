@@ -7,8 +7,7 @@ Why:
 """
 from __future__ import annotations
 
-from pathlib import Path
-import os
+import importlib
 
 import pytest
 import httpx
@@ -17,13 +16,10 @@ from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
-import routes.teaching as teaching  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store
+
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:

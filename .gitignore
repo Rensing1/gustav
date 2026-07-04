@@ -22,6 +22,8 @@ legacy-code-alpha1/
 # Python bytecode cache
 __pycache__/
 *.pyc
+# Stale pre-PR8 local copy; backend must exist only as /backend, not under backend/web/.
+backend/web/backend/
 .venv/
 .env*
 .venv

@@ -9,9 +9,23 @@ Why:
 
 from __future__ import annotations
 
+import sys
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence
 from uuid import UUID
+
+# Temporary compatibility while legacy tests still import `teaching.services.live_student_overview`.
+if __name__ == "backend.teaching.services.live_student_overview":
+    sys.modules.setdefault("teaching.services.live_student_overview", sys.modules[__name__])
+elif __name__ == "teaching.services.live_student_overview":
+    sys.modules.setdefault("backend.teaching.services.live_student_overview", sys.modules[__name__])
+for _parent_name, _attribute_name in (
+    ("teaching.services", "live_student_overview"),
+    ("backend.teaching.services", "live_student_overview"),
+):
+    _parent = sys.modules.get(_parent_name)
+    if _parent is not None:
+        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 
 MAX_UNIT_IDS = 50

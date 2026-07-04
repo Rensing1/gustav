@@ -12,6 +12,7 @@ client does not manage persistence.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import Dict, Optional
 import hashlib
@@ -21,6 +22,16 @@ from urllib.parse import urlencode
 
 # Small indirection to ease monkeypatching in tests
 import requests as http
+
+# Temporary compatibility while legacy tests still import `identity_access.oidc`.
+if __name__ == "backend.identity_access.oidc":
+    sys.modules.setdefault("identity_access.oidc", sys.modules[__name__])
+elif __name__ == "identity_access.oidc":
+    sys.modules.setdefault("backend.identity_access.oidc", sys.modules[__name__])
+for _parent_name, _attribute_name in (("identity_access", "oidc"), ("backend.identity_access", "oidc")):
+    _parent = sys.modules.get(_parent_name)
+    if _parent is not None:
+        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 
 def http_post(url: str, data: Dict[str, str], headers: Dict[str, str]):

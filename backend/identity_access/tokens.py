@@ -10,6 +10,7 @@ for development; in production we may want to back the cache with Redis.
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import Dict, Tuple
 import time
@@ -23,6 +24,16 @@ from .oidc import OIDCConfig
 import logging
 
 logger = logging.getLogger("gustav.identity_access.tokens")
+
+# Temporary compatibility while legacy tests still import `identity_access.tokens`.
+if __name__ == "backend.identity_access.tokens":
+    sys.modules.setdefault("identity_access.tokens", sys.modules[__name__])
+elif __name__ == "identity_access.tokens":
+    sys.modules.setdefault("backend.identity_access.tokens", sys.modules[__name__])
+for _parent_name, _attribute_name in (("identity_access", "tokens"), ("backend.identity_access", "tokens")):
+    _parent = sys.modules.get(_parent_name)
+    if _parent is not None:
+        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 class IDTokenVerificationError(Exception):
     """Raised when the ID token fails verification."""

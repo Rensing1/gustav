@@ -8,10 +8,21 @@ Why:
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import re
 from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
+
+# Temporary compatibility while legacy tests still import `teaching.services.tasks`.
+if __name__ == "backend.teaching.services.tasks":
+    sys.modules.setdefault("teaching.services.tasks", sys.modules[__name__])
+elif __name__ == "teaching.services.tasks":
+    sys.modules.setdefault("backend.teaching.services.tasks", sys.modules[__name__])
+for _parent_name, _attribute_name in (("teaching.services", "tasks"), ("backend.teaching.services", "tasks")):
+    _parent = sys.modules.get(_parent_name)
+    if _parent is not None:
+        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 
 class TasksRepoProtocol(Protocol):

@@ -14,6 +14,7 @@ Security:
 """
 from __future__ import annotations
 
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, List
 import re
@@ -22,7 +23,17 @@ import logging
 import threading
 import time
 import requests
-from identity_access.domain import ALLOWED_ROLES
+from backend.identity_access.domain import ALLOWED_ROLES
+
+# Temporary compatibility while legacy tests still import `identity_access.directory`.
+if __name__ == "backend.identity_access.directory":
+    sys.modules.setdefault("identity_access.directory", sys.modules[__name__])
+elif __name__ == "identity_access.directory":
+    sys.modules.setdefault("backend.identity_access.directory", sys.modules[__name__])
+for _parent_name, _attribute_name in (("identity_access", "directory"), ("backend.identity_access", "directory")):
+    _parent = sys.modules.get(_parent_name)
+    if _parent is not None:
+        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 logger = logging.getLogger(__name__)
 _LIVE_STUDENT_NAME_CACHE_TTL_SECONDS = 30.0

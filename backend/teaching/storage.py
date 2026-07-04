@@ -1,7 +1,18 @@
 """Storage adapter interface for teaching materials."""
 from __future__ import annotations
 
+import sys
 from typing import Any, Dict, Protocol
+
+# Temporary compatibility while legacy tests still import `teaching.storage`.
+if __name__ == "backend.teaching.storage":
+    sys.modules.setdefault("teaching.storage", sys.modules[__name__])
+elif __name__ == "teaching.storage":
+    sys.modules.setdefault("backend.teaching.storage", sys.modules[__name__])
+for _parent_name, _attribute_name in (("teaching", "storage"), ("backend.teaching", "storage")):
+    _parent = sys.modules.get(_parent_name)
+    if _parent is not None:
+        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 
 class StorageAdapterProtocol(Protocol):

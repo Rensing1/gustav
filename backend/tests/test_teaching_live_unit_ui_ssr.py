@@ -18,7 +18,7 @@ if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -26,9 +26,9 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_live_unit_page_is_retired_for_teachers() -> None:
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="teacher-live-retired", name="Owner", roles=["teacher"])  # type: ignore
+async def test_live_unit_page_is_retired_for_teachers(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="teacher-live-retired", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
       client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -42,9 +42,9 @@ async def test_live_unit_page_is_retired_for_teachers() -> None:
 
 
 @pytest.mark.anyio
-async def test_live_unit_page_redirects_students() -> None:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="student-live-retired", name="Lena", roles=["student"])  # type: ignore
+async def test_live_unit_page_redirects_students(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="student-live-retired", name="Lena", roles=["student"])
 
     async with (await _client()) as client:
       client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
@@ -64,9 +64,9 @@ async def test_live_unit_page_redirects_students() -> None:
         "/teaching/courses/00000000-0000-0000-0000-000000000000/units/11111111-1111-1111-1111-111111111111/live/matrix/delta?updated_since=2026-03-23T10:00:00%2B00:00",
     ],
 )
-async def test_live_unit_fragments_are_retired(path: str) -> None:
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="teacher-live-fragment-retired", name="Owner", roles=["teacher"])  # type: ignore
+async def test_live_unit_fragments_are_retired(monkeypatch: pytest.MonkeyPatch, path: str) -> None:
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="teacher-live-fragment-retired", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
       client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)

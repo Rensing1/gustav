@@ -15,7 +15,7 @@ from httpx import ASGITransport
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -58,7 +58,7 @@ def _releases_path(course_id: str, module_id: str) -> str:
 
 
 @pytest.mark.anyio
-async def test_list_releases_owner_only_and_cache_header():
+async def test_list_releases_owner_only_and_cache_header(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     try:
@@ -67,9 +67,9 @@ async def test_list_releases_owner_only_and_cache_header():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-owner-rel", name="Owner", roles=["teacher"])  # type: ignore
-    other = main.SESSION_STORE.create(sub="t-other-rel", name="Other", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="t-owner-rel", name="Owner", roles=["teacher"])
+    other = store.create(sub="t-other-rel", name="Other", roles=["teacher"])
 
     async with (await _client()) as c:
         # Owner creates course/unit/module and releases a section
@@ -105,10 +105,10 @@ async def test_list_releases_owner_only_and_cache_header():
 
 
 @pytest.mark.anyio
-async def test_list_releases_invalid_uuids():
+async def test_list_releases_invalid_uuids(monkeypatch: pytest.MonkeyPatch):
     async with (await _client()) as c:
-        main.SESSION_STORE = SessionStore()
-        teacher = main.SESSION_STORE.create(sub="t-bad", name="T", roles=["teacher"])  # type: ignore
+        store = install_session_store(monkeypatch, main)
+        teacher = store.create(sub="t-bad", name="T", roles=["teacher"])
         c.cookies.set("gustav_session", teacher.session_id)
         r = await c.get("/api/teaching/courses/not-a-uuid/modules/not-a-uuid/sections/releases")
         assert r.status_code == 400

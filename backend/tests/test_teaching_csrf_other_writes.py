@@ -19,7 +19,7 @@ import uuid
 
 import main  # type: ignore  # noqa: E402
 import routes.teaching as teaching  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -54,8 +54,8 @@ async def _create_section_same_origin(c: httpx.AsyncClient, unit_id: str, *, tit
 @pytest.mark.anyio
 async def test_create_course_blocks_cross_origin_and_allows_same_origin(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-csrf-course", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-csrf-course", name="Teach", roles=["teacher"])
     csrf_calls = {"count": 0}
     original_guard = teaching._csrf_guard
 
@@ -82,10 +82,10 @@ async def test_create_course_blocks_cross_origin_and_allows_same_origin(monkeypa
 
 
 @pytest.mark.anyio
-async def test_update_course_blocks_missing_origin_and_sets_private_cache_headers():
+async def test_update_course_blocks_missing_origin_and_sets_private_cache_headers(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-csrf-course-patch", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-csrf-course-patch", name="Teach", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -109,10 +109,10 @@ async def test_update_course_blocks_missing_origin_and_sets_private_cache_header
 
 
 @pytest.mark.anyio
-async def test_add_member_blocks_missing_origin_and_sets_private_cache_headers():
+async def test_add_member_blocks_missing_origin_and_sets_private_cache_headers(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-csrf-member-post", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-csrf-member-post", name="Teach", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -149,8 +149,8 @@ async def test_add_member_blocks_missing_origin_and_sets_private_cache_headers()
 @pytest.mark.anyio
 async def test_create_unit_blocks_cross_origin_and_allows_same_origin(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-csrf-unit", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-csrf-unit", name="Teach", roles=["teacher"])
     csrf_calls = {"count": 0}
     original_guard = teaching._csrf_guard
 
@@ -190,14 +190,15 @@ async def test_create_unit_blocks_cross_origin_and_allows_same_origin(monkeypatc
     ],
 )
 async def test_modular_write_endpoints_reject_missing_origin_with_csrf_violation(
+    monkeypatch: pytest.MonkeyPatch,
     method: str,
     path_tpl: str,
     payload: dict,
 ):
     """New modular write endpoints must enforce strict same-origin CSRF checks."""
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-csrf-modular", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-csrf-modular", name="Teach", roles=["teacher"])
 
     unit_id = str(uuid.uuid4())
     phase_id = str(uuid.uuid4())
@@ -227,10 +228,10 @@ async def test_modular_write_endpoints_reject_missing_origin_with_csrf_violation
 
 
 @pytest.mark.anyio
-async def test_course_module_create_requires_same_origin_and_sets_private_cache_headers():
+async def test_course_module_create_requires_same_origin_and_sets_private_cache_headers(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-csrf-course-mod-create", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-csrf-course-mod-create", name="Teach", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -255,10 +256,10 @@ async def test_course_module_create_requires_same_origin_and_sets_private_cache_
 
 
 @pytest.mark.anyio
-async def test_course_module_reorder_requires_same_origin():
+async def test_course_module_reorder_requires_same_origin(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-csrf-course-mod-reorder", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-csrf-course-mod-reorder", name="Teach", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -282,10 +283,10 @@ async def test_course_module_reorder_requires_same_origin():
 
 
 @pytest.mark.anyio
-async def test_material_create_requires_same_origin_and_sets_private_cache_headers():
+async def test_material_create_requires_same_origin_and_sets_private_cache_headers(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-csrf-material-create", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-csrf-material-create", name="Teach", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -310,10 +311,10 @@ async def test_material_create_requires_same_origin_and_sets_private_cache_heade
 
 
 @pytest.mark.anyio
-async def test_material_reorder_requires_same_origin():
+async def test_material_reorder_requires_same_origin(monkeypatch: pytest.MonkeyPatch):
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-csrf-material-reorder", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-csrf-material-reorder", name="Teach", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

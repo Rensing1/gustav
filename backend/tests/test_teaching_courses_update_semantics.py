@@ -20,7 +20,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 from utils.db import require_db_or_skip as _require_db_or_skip
@@ -31,9 +31,9 @@ async def _client():
 
 
 @pytest.mark.anyio
-async def test_patch_unknown_course_returns_404_for_teacher():
+async def test_patch_unknown_course_returns_404_for_teacher(monkeypatch: pytest.MonkeyPatch):
     """Contract: Owner-only update returns 404 when course does not exist."""
-    main.SESSION_STORE = SessionStore()
+    session_store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -42,7 +42,7 @@ async def test_patch_unknown_course_returns_404_for_teacher():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-u-404", name="Owner", roles=["teacher"])
+    t_owner = session_store.create(sub="teacher-u-404", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)

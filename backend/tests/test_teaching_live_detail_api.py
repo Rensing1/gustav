@@ -22,8 +22,17 @@ if str(WEB_DIR) not in os.sys.path:
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 os.environ["H5P_REVIEW_TOKEN_SECRET"] = "test-secret"
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # type: ignore  # noqa: E402
 from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _fresh_session_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_session_store(monkeypatch, main)
+
+
+def _session_store():
+    return main.RUNTIME.session_store
 
 
 async def _client() -> httpx.AsyncClient:
@@ -79,7 +88,6 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 @pytest.mark.anyio
 async def test_latest_detail_requires_owner_and_valid_ids():
-    main.SESSION_STORE = SessionStore()
     async with (await _client()) as c:
         # unauthenticated
         r = await c.get(
@@ -87,7 +95,7 @@ async def test_latest_detail_requires_owner_and_valid_ids():
         )
         assert r.status_code == 401
 
-    student = main.SESSION_STORE.create(sub="s-detail", name="Schüler", roles=["student"])  # type: ignore
+    student = _session_store().create(sub="s-detail", name="Schüler", roles=["student"])  # type: ignore
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.get(
@@ -109,9 +117,8 @@ async def test_latest_detail_happy_path_and_no_content_cases():
     except Exception:
         pytest.skip("DB-backed repos required for detail tests")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-learner", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-learner", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -186,9 +193,8 @@ async def test_latest_detail_long_text_body_matches_learning():
     except Exception:
         pytest.skip("DB-backed repos required for detail tests")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-long-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-long-learner", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-long-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-long-learner", name="L", roles=["student"])  # type: ignore
 
     long_text = "x" * 2000
 
@@ -258,9 +264,8 @@ async def test_latest_detail_includes_text_and_files_for_pdf_submission():
         def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> dict[str, str]:
             return {"url": f"https://storage.test/{bucket}/{key}", "headers": {}, "method": "GET"}
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-file-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-file", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-file-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-file", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -374,9 +379,8 @@ async def test_teaching_submission_file_route_streams_owner_visible_bytes(monkey
 
     monkeypatch.setattr(teaching, "_download_bytes_with_limit", _fake_download)
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-file-stream-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-file-stream", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-file-stream-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-file-stream", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -483,9 +487,8 @@ async def test_latest_detail_includes_feedback_and_analysis():
             "DATABASE_URL"
         ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-feedback-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-feedback", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-feedback-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-feedback", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -600,9 +603,8 @@ async def test_latest_detail_logs_unhandled_analysis_shape(caplog: pytest.LogCap
             "DATABASE_URL"
         ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-log-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-log", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-log-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-log", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -704,9 +706,8 @@ async def test_latest_detail_includes_integer_file_size_for_pdf_submission():
         def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> dict[str, str]:
             return {"url": f"https://storage.test/{bucket}/{key}", "headers": {}, "method": "GET"}
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-file-size-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-file-size", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-file-size-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-file-size", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -820,9 +821,8 @@ async def test_latest_detail_omits_files_when_size_unknown():
         def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> dict[str, str]:
             return {"url": f"https://storage.test/{bucket}/{key}", "headers": {}, "method": "GET"}
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-file-size-missing-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-file-size-missing", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-file-size-missing-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-file-size-missing", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -931,9 +931,8 @@ async def test_latest_detail_falls_back_to_learning_submissions_when_primary_que
             "DATABASE_URL"
         ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-fallback-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-fallback", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-fallback-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-fallback", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -1056,9 +1055,8 @@ async def test_latest_detail_fallback_respects_unit_relation(monkeypatch: pytest
             "DATABASE_URL"
         ) or f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-fallback-rel-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-fallback-rel", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-fallback-rel-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-fallback-rel", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -1148,9 +1146,8 @@ async def test_latest_detail_h5p_includes_score_and_review_token():
     except Exception:
         pytest.skip("DB-backed repos required for H5P latest-detail test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-detail-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-detail-h5p", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-detail-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-h5p", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)

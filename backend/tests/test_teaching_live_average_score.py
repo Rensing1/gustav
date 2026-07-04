@@ -3,9 +3,11 @@ Teaching Live — Average score helper (unit tests).
 """
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
-import routes.teaching as teaching
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 def test_compute_average_score_from_analysis_normalises_max_scores():

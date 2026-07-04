@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-import sys
+import importlib
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
-from routes import teaching as teaching_routes  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
+
+teaching_routes = importlib.import_module("backend.web.routes.teaching")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -72,8 +67,7 @@ async def _create_course(client: httpx.AsyncClient, title: str) -> str:
 async def test_teacher_units_catalog_returns_recent_units_as_list(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     teaching_routes.set_repo(teaching_routes._Repo())
     session = store.create(sub="teacher-units", roles=["teacher"], name="Ada", ttl_seconds=60)
     headers = _mock_bearer_auth(monkeypatch, sub="teacher-units", roles=["teacher"], name="Ada")
@@ -124,8 +118,7 @@ async def test_teacher_units_catalog_returns_recent_units_as_list(
 async def test_teacher_units_catalog_filters_by_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     teaching_routes.set_repo(teaching_routes._Repo())
     session = store.create(sub="teacher-filter", roles=["teacher"], name="Ada", ttl_seconds=60)
     headers = _mock_bearer_auth(monkeypatch, sub="teacher-filter", roles=["teacher"], name="Ada")

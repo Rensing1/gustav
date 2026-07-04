@@ -21,7 +21,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 from utils.db import require_db_or_skip as _require_db_or_skip
@@ -39,15 +39,15 @@ async def _create_unit(client: httpx.AsyncClient, title: str = "Einheit") -> dic
 
 
 @pytest.mark.anyio
-async def test_sections_require_auth_and_author_role():
-    main.SESSION_STORE = SessionStore()
+async def test_sections_require_auth_and_author_role(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
 
     async with (await _client()) as client:
         resp = await client.get(f"/api/teaching/units/00000000-0000-0000-0000-000000000000/sections")
         assert resp.status_code == 401
 
     # Student must be forbidden
-    student = main.SESSION_STORE.create(sub="student-sections", name="Max", roles=["student"])
+    student = store.create(sub="student-sections", name="Max", roles=["student"])
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
         resp = await client.post(
@@ -58,8 +58,8 @@ async def test_sections_require_auth_and_author_role():
 
 
 @pytest.mark.anyio
-async def test_author_can_crud_sections_and_non_author_is_blocked():
-    main.SESSION_STORE = SessionStore()
+async def test_author_can_crud_sections_and_non_author_is_blocked(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -70,8 +70,8 @@ async def test_author_can_crud_sections_and_non_author_is_blocked():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-sections-A", name="Autor", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="teacher-sections-B", name="Fremd", roles=["teacher"])
+    author = store.create(sub="teacher-sections-A", name="Autor", roles=["teacher"])
+    other = store.create(sub="teacher-sections-B", name="Fremd", roles=["teacher"])
 
     async with (await _client()) as client:
         # Create unit as author
@@ -132,8 +132,8 @@ async def test_author_can_crud_sections_and_non_author_is_blocked():
 
 
 @pytest.mark.anyio
-async def test_section_validation_and_unknown_ids():
-    main.SESSION_STORE = SessionStore()
+async def test_section_validation_and_unknown_ids(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -144,7 +144,7 @@ async def test_section_validation_and_unknown_ids():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-sections-validate", name="Autor", roles=["teacher"])
+    author = store.create(sub="teacher-sections-validate", name="Autor", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -181,8 +181,8 @@ async def test_section_validation_and_unknown_ids():
 
 
 @pytest.mark.anyio
-async def test_non_author_list_sections_returns_404():
-    main.SESSION_STORE = SessionStore()
+async def test_non_author_list_sections_returns_404(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -193,8 +193,8 @@ async def test_non_author_list_sections_returns_404():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-sections-owner", name="Owner", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="teacher-sections-nonowner", name="Other", roles=["teacher"])
+    author = store.create(sub="teacher-sections-owner", name="Owner", roles=["teacher"])
+    other = store.create(sub="teacher-sections-nonowner", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -206,8 +206,8 @@ async def test_non_author_list_sections_returns_404():
 
 
 @pytest.mark.anyio
-async def test_invalid_unit_and_section_uuid_paths_return_400_and_patch_without_fields():
-    main.SESSION_STORE = SessionStore()
+async def test_invalid_unit_and_section_uuid_paths_return_400_and_patch_without_fields(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -218,7 +218,7 @@ async def test_invalid_unit_and_section_uuid_paths_return_400_and_patch_without_
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-sections-uuid", name="UUID", roles=["teacher"])
+    author = store.create(sub="teacher-sections-uuid", name="UUID", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -258,8 +258,8 @@ async def test_invalid_unit_and_section_uuid_paths_return_400_and_patch_without_
 
 
 @pytest.mark.anyio
-async def test_create_multiple_sections_positions_and_delete_middle_resequences():
-    main.SESSION_STORE = SessionStore()
+async def test_create_multiple_sections_positions_and_delete_middle_resequences(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -270,7 +270,7 @@ async def test_create_multiple_sections_positions_and_delete_middle_resequences(
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-sections-positions", name="Pos", roles=["teacher"])
+    author = store.create(sub="teacher-sections-positions", name="Pos", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -294,10 +294,10 @@ async def test_create_multiple_sections_positions_and_delete_middle_resequences(
 
 
 @pytest.mark.anyio
-async def test_title_boundaries_exact_and_concurrent_creates():
+async def test_title_boundaries_exact_and_concurrent_creates(monkeypatch: pytest.MonkeyPatch):
     import asyncio
 
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -308,7 +308,7 @@ async def test_title_boundaries_exact_and_concurrent_creates():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-sections-bounds", name="Bounds", roles=["teacher"])
+    author = store.create(sub="teacher-sections-bounds", name="Bounds", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)

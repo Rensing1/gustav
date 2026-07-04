@@ -19,7 +19,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 from utils.db import require_db_or_skip as _require_db_or_skip
 
@@ -56,8 +56,8 @@ async def _attach_unit_to_course(client: httpx.AsyncClient, course_id: str, unit
 
 
 @pytest.mark.anyio
-async def test_releases_list_headers_vary_origin_owner_and_errors():
-    main.SESSION_STORE = SessionStore()
+async def test_releases_list_headers_vary_origin_owner_and_errors(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -68,8 +68,8 @@ async def test_releases_list_headers_vary_origin_owner_and_errors():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    owner = main.SESSION_STORE.create(sub="teacher-releases-owner", name="Owner", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="teacher-releases-other", name="Other", roles=["teacher"])
+    owner = store.create(sub="teacher-releases-owner", name="Owner", roles=["teacher"])
+    other = store.create(sub="teacher-releases-other", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)

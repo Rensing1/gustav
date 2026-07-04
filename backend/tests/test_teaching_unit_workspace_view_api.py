@@ -3,22 +3,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-import sys
+import importlib
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
-from routes import teaching as teaching_routes  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
+
+teaching_routes = importlib.import_module("backend.web.routes.teaching")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -65,8 +60,7 @@ async def _create_unit(
 async def test_teacher_unit_workspace_returns_linear_graph_and_section_selection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     teaching_routes.set_repo(teaching_routes._Repo())
     session = store.create(sub="teacher-unit-workspace", roles=["teacher"], name="Ada", ttl_seconds=60)
     headers = _mock_bearer_auth(monkeypatch, sub="teacher-unit-workspace", roles=["teacher"], name="Ada")
@@ -116,8 +110,7 @@ async def test_teacher_unit_workspace_returns_linear_graph_and_section_selection
 async def test_teacher_unit_workspace_returns_modular_graph_and_edge_selection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     repo = teaching_routes._Repo()
     teaching_routes.set_repo(repo)
     required_methods = (
@@ -202,8 +195,7 @@ async def test_teacher_unit_workspace_returns_modular_graph_and_edge_selection(
 async def test_teacher_unit_node_editor_returns_linear_section_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     repo = teaching_routes._Repo()
     teaching_routes.set_repo(repo)
     session = store.create(sub="teacher-unit-node", roles=["teacher"], name="Ada", ttl_seconds=60)
@@ -326,8 +318,7 @@ async def test_teacher_unit_node_editor_returns_linear_section_content(
 async def test_teacher_unit_node_editor_returns_modular_module_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     repo = teaching_routes._Repo()
     teaching_routes.set_repo(repo)
     required_methods = (

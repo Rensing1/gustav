@@ -33,7 +33,7 @@ if str(WEB_DIR) not in os.sys.path:
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
 
 
@@ -58,7 +58,7 @@ async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str = 
 
 
 @pytest.mark.anyio
-async def test_create_h5p_task_sets_kind_and_returns_h5p_config():
+async def test_create_h5p_task_sets_kind_and_returns_h5p_config(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -69,8 +69,8 @@ async def test_create_h5p_task_sets_kind_and_returns_h5p_config():
     except Exception:
         pytest.skip("DB-backed teaching repo required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p", name="T", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -94,7 +94,7 @@ async def test_create_h5p_task_sets_kind_and_returns_h5p_config():
 
 
 @pytest.mark.anyio
-async def test_create_visual_task_sets_kind_and_returns_visual_config():
+async def test_create_visual_task_sets_kind_and_returns_visual_config(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -105,8 +105,8 @@ async def test_create_visual_task_sets_kind_and_returns_visual_config():
     except Exception:
         pytest.skip("DB-backed teaching repo required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-visual", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-visual", name="T", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -126,7 +126,7 @@ async def test_create_visual_task_sets_kind_and_returns_visual_config():
 
 
 @pytest.mark.anyio
-async def test_create_scratch_task_sets_kind_and_returns_scratch_config():
+async def test_create_scratch_task_sets_kind_and_returns_scratch_config(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -137,8 +137,8 @@ async def test_create_scratch_task_sets_kind_and_returns_scratch_config():
     except Exception:
         pytest.skip("DB-backed teaching repo required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-scratch", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-scratch", name="T", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -159,7 +159,7 @@ async def test_create_scratch_task_sets_kind_and_returns_scratch_config():
 
 
 @pytest.mark.anyio
-async def test_create_task_rejects_h5p_and_visual_together():
+async def test_create_task_rejects_h5p_and_visual_together(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -170,8 +170,8 @@ async def test_create_task_rejects_h5p_and_visual_together():
     except Exception:
         pytest.skip("DB-backed teaching repo required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-conflict", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-conflict", name="T", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -193,7 +193,7 @@ async def test_create_task_rejects_h5p_and_visual_together():
 
 
 @pytest.mark.anyio
-async def test_create_task_rejects_scratch_and_visual_together():
+async def test_create_task_rejects_scratch_and_visual_together(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -204,8 +204,8 @@ async def test_create_task_rejects_scratch_and_visual_together():
     except Exception:
         pytest.skip("DB-backed teaching repo required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-conflict-scratch-visual", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-conflict-scratch-visual", name="T", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -227,7 +227,7 @@ async def test_create_task_rejects_scratch_and_visual_together():
 
 
 @pytest.mark.anyio
-async def test_update_h5p_task_allows_setting_content_id():
+async def test_update_h5p_task_allows_setting_content_id(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -238,8 +238,8 @@ async def test_update_h5p_task_allows_setting_content_id():
     except Exception:
         pytest.skip("DB-backed teaching repo required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-update", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-update", name="T", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -265,7 +265,7 @@ async def test_update_h5p_task_allows_setting_content_id():
 
 
 @pytest.mark.anyio
-async def test_update_h5p_task_rejects_non_numeric_content_id():
+async def test_update_h5p_task_rejects_non_numeric_content_id(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -276,8 +276,8 @@ async def test_update_h5p_task_rejects_non_numeric_content_id():
     except Exception:
         pytest.skip("DB-backed teaching repo required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-bad-cid", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-bad-cid", name="T", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

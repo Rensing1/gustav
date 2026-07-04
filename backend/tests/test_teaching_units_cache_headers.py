@@ -22,7 +22,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 async def _client():
@@ -30,11 +30,10 @@ async def _client():
 
 
 @pytest.mark.anyio
-async def test_units_list_sets_private_no_store():
+async def test_units_list_sets_private_no_store(monkeypatch: pytest.MonkeyPatch):
     # Arrange: ensure memory session store
-    if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defensive
-        main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-cache-1", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-cache-1", name="Teach", roles=["teacher"])
     # Act
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -46,10 +45,9 @@ async def test_units_list_sets_private_no_store():
 
 
 @pytest.mark.anyio
-async def test_sections_list_sets_private_no_store():
-    if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defensive
-        main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-cache-2", name="Teach", roles=["teacher"])  # type: ignore
+async def test_sections_list_sets_private_no_store(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-cache-2", name="Teach", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         # Create a unit to get a UUID
@@ -63,11 +61,10 @@ async def test_sections_list_sets_private_no_store():
 
 
 @pytest.mark.anyio
-async def test_units_list_without_origin_header_still_returns_200():
+async def test_units_list_without_origin_header_still_returns_200(monkeypatch: pytest.MonkeyPatch):
     """GET list endpoint must not require CSRF Origin/Referer headers."""
-    if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defensive
-        main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-cache-no-origin", name="Teach", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-cache-no-origin", name="Teach", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r = await c.get("/api/teaching/units", params={"limit": 5, "offset": 0})

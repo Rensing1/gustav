@@ -23,7 +23,7 @@ if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
 import routes.teaching as teaching  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -35,13 +35,13 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_sections_crud_smoke_with_memory_repo():
-    main.SESSION_STORE = SessionStore()
+async def test_sections_crud_smoke_with_memory_repo(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     # Swap to in-memory repo explicitly
     mem = teaching._Repo()  # type: ignore[attr-defined]
     teaching.set_repo(mem)
 
-    teacher = main.SESSION_STORE.create(sub="teacher-mem-sections", name="Mem", roles=["teacher"])
+    teacher = store.create(sub="teacher-mem-sections", name="Mem", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)

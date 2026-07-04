@@ -21,7 +21,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 from utils.db import require_db_or_skip as _require_db_or_skip
@@ -44,8 +44,8 @@ async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str) -
 
 
 @pytest.mark.anyio
-async def test_sections_reorder_happy_and_get_reflects_order():
-    main.SESSION_STORE = SessionStore()
+async def test_sections_reorder_happy_and_get_reflects_order(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -56,7 +56,7 @@ async def test_sections_reorder_happy_and_get_reflects_order():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-sec-reorder", name="ReOrder", roles=["teacher"])
+    teacher = store.create(sub="teacher-sec-reorder", name="ReOrder", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -79,8 +79,8 @@ async def test_sections_reorder_happy_and_get_reflects_order():
 
 
 @pytest.mark.anyio
-async def test_sections_reorder_validation_rules():
-    main.SESSION_STORE = SessionStore()
+async def test_sections_reorder_validation_rules(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -91,7 +91,7 @@ async def test_sections_reorder_validation_rules():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-sec-reorder-validate", name="ValidSec", roles=["teacher"])
+    teacher = store.create(sub="teacher-sec-reorder-validate", name="ValidSec", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -134,8 +134,8 @@ async def test_sections_reorder_validation_rules():
 
 
 @pytest.mark.anyio
-async def test_sections_reorder_single_item_and_empty_list():
-    main.SESSION_STORE = SessionStore()
+async def test_sections_reorder_single_item_and_empty_list(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -146,7 +146,7 @@ async def test_sections_reorder_single_item_and_empty_list():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-sec-reorder-edge", name="Edge", roles=["teacher"])
+    teacher = store.create(sub="teacher-sec-reorder-edge", name="Edge", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -171,8 +171,8 @@ async def test_sections_reorder_single_item_and_empty_list():
 
 
 @pytest.mark.anyio
-async def test_non_author_reorder_forbidden_403():
-    main.SESSION_STORE = SessionStore()
+async def test_non_author_reorder_forbidden_403(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -183,8 +183,8 @@ async def test_non_author_reorder_forbidden_403():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-sec-reorder-owner", name="Owner", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="teacher-sec-reorder-other", name="Other", roles=["teacher"])
+    author = store.create(sub="teacher-sec-reorder-owner", name="Owner", roles=["teacher"])
+    other = store.create(sub="teacher-sec-reorder-other", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -201,8 +201,8 @@ async def test_non_author_reorder_forbidden_403():
 
 
 @pytest.mark.anyio
-async def test_reorder_idempotent_and_cross_unit_section_returns_404():
-    main.SESSION_STORE = SessionStore()
+async def test_reorder_idempotent_and_cross_unit_section_returns_404(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -213,7 +213,7 @@ async def test_reorder_idempotent_and_cross_unit_section_returns_404():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-sec-reorder-idem", name="Idem", roles=["teacher"])
+    teacher = store.create(sub="teacher-sec-reorder-idem", name="Idem", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -241,8 +241,8 @@ async def test_reorder_idempotent_and_cross_unit_section_returns_404():
 
 
 @pytest.mark.anyio
-async def test_reorder_invalid_json_type_returns_400():
-    main.SESSION_STORE = SessionStore()
+async def test_reorder_invalid_json_type_returns_400(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -253,7 +253,7 @@ async def test_reorder_invalid_json_type_returns_400():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-sec-reorder-json", name="Json", roles=["teacher"])
+    teacher = store.create(sub="teacher-sec-reorder-json", name="Json", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)

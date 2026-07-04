@@ -22,7 +22,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 from utils.db import require_db_or_skip as _require_db_or_skip
@@ -45,6 +45,10 @@ async def _client():
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
+def _session_store(monkeypatch: pytest.MonkeyPatch):
+    return install_session_store(monkeypatch, main)
+
+
 async def _create_course(client: httpx.AsyncClient) -> str:
     resp = await client.post("/api/teaching/courses", json={"title": "Physics", "subject": "phy"})
     assert resp.status_code == 201
@@ -57,8 +61,8 @@ async def _delete_course(client: httpx.AsyncClient, cid: str) -> None:
 
 
 @pytest.mark.anyio
-async def test_add_member_after_delete_returns_404_for_owner():
-    main.SESSION_STORE = SessionStore()
+async def test_add_member_after_delete_returns_404_for_owner(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -68,7 +72,7 @@ async def test_add_member_after_delete_returns_404_for_owner():
     _require_db_or_skip()
     _helpers_available_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-u-add-404", name="Owner", roles=["teacher"])
+    t_owner = store.create(sub="teacher-u-add-404", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
@@ -80,8 +84,8 @@ async def test_add_member_after_delete_returns_404_for_owner():
 
 
 @pytest.mark.anyio
-async def test_remove_member_after_delete_returns_404_for_owner():
-    main.SESSION_STORE = SessionStore()
+async def test_remove_member_after_delete_returns_404_for_owner(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -91,7 +95,7 @@ async def test_remove_member_after_delete_returns_404_for_owner():
     _require_db_or_skip()
     _helpers_available_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-u-rem-404", name="Owner", roles=["teacher"])
+    t_owner = store.create(sub="teacher-u-rem-404", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
@@ -103,8 +107,8 @@ async def test_remove_member_after_delete_returns_404_for_owner():
 
 
 @pytest.mark.anyio
-async def test_list_members_after_delete_returns_404_for_owner():
-    main.SESSION_STORE = SessionStore()
+async def test_list_members_after_delete_returns_404_for_owner(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -113,7 +117,7 @@ async def test_list_members_after_delete_returns_404_for_owner():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-u-list-404", name="Owner", roles=["teacher"])
+    t_owner = store.create(sub="teacher-u-list-404", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
@@ -125,9 +129,9 @@ async def test_list_members_after_delete_returns_404_for_owner():
 
 
 @pytest.mark.anyio
-async def test_non_owner_list_members_returns_403():
+async def test_non_owner_list_members_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A different teacher (non-owner) must receive 403 when listing members."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -136,8 +140,8 @@ async def test_non_owner_list_members_returns_403():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    owner = main.SESSION_STORE.create(sub="teacher-owner-members-403", name="Owner", roles=["teacher"])
-    intruder = main.SESSION_STORE.create(sub="teacher-intruder-members-403", name="Other", roles=["teacher"])
+    owner = store.create(sub="teacher-owner-members-403", name="Owner", roles=["teacher"])
+    intruder = store.create(sub="teacher-intruder-members-403", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         # Create course as owner
@@ -151,9 +155,9 @@ async def test_non_owner_list_members_returns_403():
 
 
 @pytest.mark.anyio
-async def test_non_owner_add_member_returns_403():
+async def test_non_owner_add_member_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A different teacher (non-owner) must receive 403 when adding a member."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -162,8 +166,8 @@ async def test_non_owner_add_member_returns_403():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    owner = main.SESSION_STORE.create(sub="teacher-owner-add-403", name="Owner", roles=["teacher"])
-    intruder = main.SESSION_STORE.create(sub="teacher-intruder-add-403", name="Other", roles=["teacher"])
+    owner = store.create(sub="teacher-owner-add-403", name="Owner", roles=["teacher"])
+    intruder = store.create(sub="teacher-intruder-add-403", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)
@@ -175,9 +179,9 @@ async def test_non_owner_add_member_returns_403():
 
 
 @pytest.mark.anyio
-async def test_non_owner_remove_member_returns_403():
+async def test_non_owner_remove_member_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A different teacher (non-owner) must receive 403 when removing a member."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -186,8 +190,8 @@ async def test_non_owner_remove_member_returns_403():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    owner = main.SESSION_STORE.create(sub="teacher-owner-rem-403", name="Owner", roles=["teacher"])
-    intruder = main.SESSION_STORE.create(sub="teacher-intruder-rem-403", name="Other", roles=["teacher"])
+    owner = store.create(sub="teacher-owner-rem-403", name="Owner", roles=["teacher"])
+    intruder = store.create(sub="teacher-intruder-rem-403", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)
@@ -199,9 +203,9 @@ async def test_non_owner_remove_member_returns_403():
 
 
 @pytest.mark.anyio
-async def test_student_cannot_list_members_returns_403():
+async def test_student_cannot_list_members_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A student must not access the roster (403)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -210,8 +214,8 @@ async def test_student_cannot_list_members_returns_403():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    teacher = main.SESSION_STORE.create(sub="teacher-owner-student-403", name="Owner", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="student-x-role", name="Student", roles=["student"])
+    teacher = store.create(sub="teacher-owner-student-403", name="Owner", roles=["teacher"])
+    student = store.create(sub="student-x-role", name="Student", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -223,9 +227,9 @@ async def test_student_cannot_list_members_returns_403():
 
 
 @pytest.mark.anyio
-async def test_student_cannot_add_member_returns_403():
+async def test_student_cannot_add_member_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A student must not add members (403)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -234,8 +238,8 @@ async def test_student_cannot_add_member_returns_403():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    teacher = main.SESSION_STORE.create(sub="teacher-owner-student-add-403", name="Owner", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="student-y-role", name="Student", roles=["student"])
+    teacher = store.create(sub="teacher-owner-student-add-403", name="Owner", roles=["teacher"])
+    student = store.create(sub="student-y-role", name="Student", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -247,9 +251,9 @@ async def test_student_cannot_add_member_returns_403():
 
 
 @pytest.mark.anyio
-async def test_student_cannot_remove_member_returns_403():
+async def test_student_cannot_remove_member_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A student must not remove members (403)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -258,8 +262,8 @@ async def test_student_cannot_remove_member_returns_403():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    teacher = main.SESSION_STORE.create(sub="teacher-owner-student-rem-403", name="Owner", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="student-z-role", name="Student", roles=["student"])
+    teacher = store.create(sub="teacher-owner-student-rem-403", name="Owner", roles=["teacher"])
+    student = store.create(sub="student-z-role", name="Student", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -271,9 +275,9 @@ async def test_student_cannot_remove_member_returns_403():
 
 
 @pytest.mark.anyio
-async def test_owner_unknown_course_list_returns_404():
+async def test_owner_unknown_course_list_returns_404(monkeypatch: pytest.MonkeyPatch):
     """Owner querying a non-existent course must receive 404 (not_found)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -282,7 +286,7 @@ async def test_owner_unknown_course_list_returns_404():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    owner = main.SESSION_STORE.create(sub="teacher-owner-unknown-list", name="Owner", roles=["teacher"])
+    owner = store.create(sub="teacher-owner-unknown-list", name="Owner", roles=["teacher"])
     unknown = "00000000-0000-0000-0000-000000000009"
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)
@@ -292,9 +296,9 @@ async def test_owner_unknown_course_list_returns_404():
 
 
 @pytest.mark.anyio
-async def test_owner_unknown_course_add_returns_404():
+async def test_owner_unknown_course_add_returns_404(monkeypatch: pytest.MonkeyPatch):
     """Owner adding to a non-existent course must receive 404 (not_found)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -303,7 +307,7 @@ async def test_owner_unknown_course_add_returns_404():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    owner = main.SESSION_STORE.create(sub="teacher-owner-unknown-add", name="Owner", roles=["teacher"])
+    owner = store.create(sub="teacher-owner-unknown-add", name="Owner", roles=["teacher"])
     unknown = "00000000-0000-0000-0000-00000000000a"
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)
@@ -313,9 +317,9 @@ async def test_owner_unknown_course_add_returns_404():
 
 
 @pytest.mark.anyio
-async def test_owner_unknown_course_remove_returns_404():
+async def test_owner_unknown_course_remove_returns_404(monkeypatch: pytest.MonkeyPatch):
     """Owner removing from a non-existent course must receive 404 (not_found)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -324,7 +328,7 @@ async def test_owner_unknown_course_remove_returns_404():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    owner = main.SESSION_STORE.create(sub="teacher-owner-unknown-rem", name="Owner", roles=["teacher"])
+    owner = store.create(sub="teacher-owner-unknown-rem", name="Owner", roles=["teacher"])
     unknown = "00000000-0000-0000-0000-00000000000b"
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)

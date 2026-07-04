@@ -18,7 +18,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from runtime_auth_helpers import install_session_store
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 
@@ -27,8 +27,8 @@ async def _client():
 
 
 @pytest.mark.anyio
-async def test_owner_can_patch_title_and_non_owner_forbidden():
-    main.SESSION_STORE = SessionStore()
+async def test_owner_can_patch_title_and_non_owner_forbidden(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -37,8 +37,8 @@ async def test_owner_can_patch_title_and_non_owner_forbidden():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-u-1", name="Owner", roles=["teacher"])
-    t_other = main.SESSION_STORE.create(sub="teacher-u-2", name="Other", roles=["teacher"])
+    t_owner = store.create(sub="teacher-u-1", name="Owner", roles=["teacher"])
+    t_other = store.create(sub="teacher-u-2", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
@@ -58,8 +58,8 @@ async def test_owner_can_patch_title_and_non_owner_forbidden():
 
 
 @pytest.mark.anyio
-async def test_owner_can_delete_course_and_memberships():
-    main.SESSION_STORE = SessionStore()
+async def test_owner_can_delete_course_and_memberships(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -68,7 +68,7 @@ async def test_owner_can_delete_course_and_memberships():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-d-1", name="Owner", roles=["teacher"])
+    t_owner = store.create(sub="teacher-d-1", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
@@ -89,8 +89,8 @@ async def test_owner_can_delete_course_and_memberships():
 
 
 @pytest.mark.anyio
-async def test_patch_validation_errors():
-    main.SESSION_STORE = SessionStore()
+async def test_patch_validation_errors(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -99,7 +99,7 @@ async def test_patch_validation_errors():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-v-1", name="Owner", roles=["teacher"])
+    t_owner = store.create(sub="teacher-v-1", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
@@ -118,8 +118,8 @@ async def test_patch_validation_errors():
 
 
 @pytest.mark.anyio
-async def test_patch_with_no_fields_returns_current_row():
-    main.SESSION_STORE = SessionStore()
+async def test_patch_with_no_fields_returns_current_row(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -128,7 +128,7 @@ async def test_patch_with_no_fields_returns_current_row():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-u-nofields", name="Owner", roles=["teacher"])
+    t_owner = store.create(sub="teacher-u-nofields", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
@@ -142,8 +142,8 @@ async def test_patch_with_no_fields_returns_current_row():
 
 
 @pytest.mark.anyio
-async def test_patch_can_clear_optional_fields():
-    main.SESSION_STORE = SessionStore()
+async def test_patch_can_clear_optional_fields(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -152,7 +152,7 @@ async def test_patch_can_clear_optional_fields():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-clear-1", name="Owner", roles=["teacher"])
+    t_owner = store.create(sub="teacher-clear-1", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
@@ -170,9 +170,9 @@ async def test_patch_can_clear_optional_fields():
         assert body["grade_level"] is None
         assert body["term"] is None
 @pytest.mark.anyio
-async def test_owner_delete_unknown_course_returns_404():
+async def test_owner_delete_unknown_course_returns_404(monkeypatch: pytest.MonkeyPatch):
     """Owner deleting a non-existent course should get 404 Not Found."""
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -181,7 +181,7 @@ async def test_owner_delete_unknown_course_returns_404():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-d-404", name="Owner404", roles=["teacher"])
+    t_owner = store.create(sub="teacher-d-404", name="Owner404", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
@@ -194,7 +194,7 @@ async def test_owner_delete_unknown_course_returns_404():
 
 @pytest.mark.anyio
 async def test_recently_deleted_marker_expires(monkeypatch: pytest.MonkeyPatch):
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -213,7 +213,7 @@ async def test_recently_deleted_marker_expires(monkeypatch: pytest.MonkeyPatch):
     fake_time = FakeTime(1_000_000.0)
     monkeypatch.setattr(teaching, "time", fake_time, raising=False)
 
-    t_owner = main.SESSION_STORE.create(sub="teacher-time", name="Owner", roles=["teacher"])
+    t_owner = store.create(sub="teacher-time", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)

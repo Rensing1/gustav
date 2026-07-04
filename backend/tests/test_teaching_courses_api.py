@@ -23,7 +23,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from runtime_auth_helpers import install_session_store
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 
@@ -32,9 +32,9 @@ async def _client():
 
 
 @pytest.mark.anyio
-async def test_teacher_can_create_and_list_own_courses():
+async def test_teacher_can_create_and_list_own_courses(monkeypatch: pytest.MonkeyPatch):
     # Ensure in-memory session store for this test run
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     # Require DB-backed repo
     import routes.teaching as teaching
     try:
@@ -44,7 +44,7 @@ async def test_teacher_can_create_and_list_own_courses():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
     # Arrange: teacher session
-    sess = main.SESSION_STORE.create(sub="teacher-1", name="Frau Lehrerin", roles=["teacher"])
+    sess = store.create(sub="teacher-1", name="Frau Lehrerin", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", sess.session_id)
@@ -71,14 +71,14 @@ async def test_teacher_can_create_and_list_own_courses():
 
 
 @pytest.mark.anyio
-async def test_create_course_invalid_title_returns_400():
+async def test_create_course_invalid_title_returns_400(monkeypatch: pytest.MonkeyPatch):
     """Contract: invalid title yields 400 (bad_request), not 500.
 
     Uses DB-backed repo to exercise ValueError from repo and verifies the web
     adapter maps it to a 400 response as specified in openapi.yml.
     """
     # Ensure in-memory session store
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     # Require DB-backed repo
     import routes.teaching as teaching
     try:
@@ -88,7 +88,7 @@ async def test_create_course_invalid_title_returns_400():
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    teacher = main.SESSION_STORE.create(sub="teacher-bad-title", name="Owner", roles=["teacher"])
+    teacher = store.create(sub="teacher-bad-title", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -103,7 +103,7 @@ async def test_create_course_invalid_title_returns_400():
 @pytest.mark.anyio
 async def test_create_course_invalid_title_in_memory_repo(monkeypatch: pytest.MonkeyPatch):
     """Ensure fallback repo mirrors DB validation for blank titles."""
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
 
     import routes.teaching as teaching
 
@@ -117,7 +117,7 @@ async def test_create_course_invalid_title_in_memory_repo(monkeypatch: pytest.Mo
         raising=False,
     )
 
-    teacher = main.SESSION_STORE.create(sub="teacher-memory", name="Owner", roles=["teacher"])
+    teacher = store.create(sub="teacher-memory", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -130,10 +130,10 @@ async def test_create_course_invalid_title_in_memory_repo(monkeypatch: pytest.Mo
 
 
 @pytest.mark.anyio
-async def test_student_cannot_create_course_forbidden():
-    main.SESSION_STORE = SessionStore()
+async def test_student_cannot_create_course_forbidden(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     # Arrange: student session
-    sess = main.SESSION_STORE.create(sub="student-1", name="Max Musterschüler", roles=["student"])
+    sess = store.create(sub="student-1", name="Max Musterschüler", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", sess.session_id)
@@ -146,7 +146,7 @@ async def test_student_cannot_create_course_forbidden():
 
 @pytest.mark.anyio
 async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pytest.MonkeyPatch):
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     # Require DB-backed repo
     import routes.teaching as teaching
     try:
@@ -156,8 +156,8 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
     # Arrange: two teachers and one student
-    t1 = main.SESSION_STORE.create(sub="teacher-A", name="Frau A", roles=["teacher"])
-    t2 = main.SESSION_STORE.create(sub="teacher-B", name="Herr B", roles=["teacher"])
+    t1 = store.create(sub="teacher-A", name="Frau A", roles=["teacher"])
+    t2 = store.create(sub="teacher-B", name="Herr B", roles=["teacher"])
 
     # Monkeypatch name resolver in teaching router to avoid external dependency
     import routes.teaching as teaching  # patch the module used by main
@@ -217,7 +217,7 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
 
 @pytest.mark.anyio
 async def test_add_member_missing_student_sub_returns_400(monkeypatch: pytest.MonkeyPatch):
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
     try:
         from teaching.repo_db import DBTeachingRepo  # type: ignore
@@ -226,7 +226,7 @@ async def test_add_member_missing_student_sub_returns_400(monkeypatch: pytest.Mo
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    owner = main.SESSION_STORE.create(sub="teacher-member-missing", name="Owner", roles=["teacher"])
+    owner = store.create(sub="teacher-member-missing", name="Owner", roles=["teacher"])
 
     def fake_resolver(ids: list[str]) -> dict[str, str]:
         return {sid: f"Name:{sid}" for sid in ids}
@@ -248,7 +248,7 @@ async def test_add_member_missing_student_sub_returns_400(monkeypatch: pytest.Mo
 
 @pytest.mark.anyio
 async def test_student_listing_includes_member_courses(monkeypatch: pytest.MonkeyPatch):
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     # Teacher creates course and adds student
     # Require DB-backed repo
     import routes.teaching as teaching
@@ -258,8 +258,8 @@ async def test_student_listing_includes_member_courses(monkeypatch: pytest.Monke
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
-    t = main.SESSION_STORE.create(sub="teacher-X", name="Lehrkraft X", roles=["teacher"])
-    s = main.SESSION_STORE.create(sub="student-X", name="Schüler X", roles=["student"])
+    t = store.create(sub="teacher-X", name="Lehrkraft X", roles=["teacher"])
+    s = store.create(sub="student-X", name="Schüler X", roles=["student"])
 
     # monkeypatch resolver for completeness (not used by listing)
     import routes.teaching as teaching
@@ -289,13 +289,13 @@ async def test_student_listing_includes_member_courses(monkeypatch: pytest.Monke
 @pytest.mark.anyio
 async def test_list_courses_default_limit_matches_contract_10(monkeypatch: pytest.MonkeyPatch):
     """GET /api/teaching/courses without `limit` must default to 10."""
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     import routes.teaching as teaching
 
     # Isolate behavior from DB state.
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
 
-    teacher = main.SESSION_STORE.create(sub="teacher-default-limit-10", name="T", roles=["teacher"])
+    teacher = store.create(sub="teacher-default-limit-10", name="T", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)

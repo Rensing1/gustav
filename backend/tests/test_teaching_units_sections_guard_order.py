@@ -26,7 +26,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 from utils.db import require_db_or_skip as _require_db_or_skip
@@ -53,8 +53,8 @@ async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str) -
 
 
 @pytest.mark.anyio
-async def test_non_author_unit_patch_empty_body_returns_403_or_404():
-    main.SESSION_STORE = SessionStore()
+async def test_non_author_unit_patch_empty_body_returns_403_or_404(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -65,8 +65,8 @@ async def test_non_author_unit_patch_empty_body_returns_403_or_404():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-guard-unit-author", name="A", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="teacher-guard-unit-other", name="B", roles=["teacher"])
+    author = store.create(sub="teacher-guard-unit-author", name="A", roles=["teacher"])
+    other = store.create(sub="teacher-guard-unit-other", name="B", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -79,8 +79,8 @@ async def test_non_author_unit_patch_empty_body_returns_403_or_404():
 
 
 @pytest.mark.anyio
-async def test_non_author_section_patch_empty_body_returns_403_or_404():
-    main.SESSION_STORE = SessionStore()
+async def test_non_author_section_patch_empty_body_returns_403_or_404(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -91,8 +91,8 @@ async def test_non_author_section_patch_empty_body_returns_403_or_404():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-guard-sec-author", name="A", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="teacher-guard-sec-other", name="B", roles=["teacher"])
+    author = store.create(sub="teacher-guard-sec-author", name="A", roles=["teacher"])
+    other = store.create(sub="teacher-guard-sec-other", name="B", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)

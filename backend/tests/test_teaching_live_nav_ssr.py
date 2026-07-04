@@ -21,7 +21,7 @@ if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -29,9 +29,9 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_sidebar_hides_live_link_for_teacher():
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-nav-live", name="Teacher", roles=["teacher"])  # type: ignore
+async def test_sidebar_hides_live_link_for_teacher(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-nav-live", name="Teacher", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -42,10 +42,10 @@ async def test_sidebar_hides_live_link_for_teacher():
 
 
 @pytest.mark.anyio
-async def test_teaching_live_legacy_entry_returns_gone_for_teacher() -> None:
-    main.SESSION_STORE = SessionStore()
+async def test_teaching_live_legacy_entry_returns_gone_for_teacher(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
 
-    teacher = main.SESSION_STORE.create(sub="t-nav-live2", name="Teacher", roles=["teacher"])  # type: ignore
+    teacher = store.create(sub="t-nav-live2", name="Teacher", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r = await c.get("/teaching/live")
@@ -56,9 +56,9 @@ async def test_teaching_live_legacy_entry_returns_gone_for_teacher() -> None:
 
 
 @pytest.mark.anyio
-async def test_teaching_live_legacy_helpers_are_retired_for_teacher() -> None:
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-nav-live3", name="Teacher", roles=["teacher"])  # type: ignore
+async def test_teaching_live_legacy_helpers_are_retired_for_teacher(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-nav-live3", name="Teacher", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -73,9 +73,9 @@ async def test_teaching_live_legacy_helpers_are_retired_for_teacher() -> None:
 
 
 @pytest.mark.anyio
-async def test_teaching_live_legacy_entry_keeps_student_redirect() -> None:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-nav-live", name="Student", roles=["student"])  # type: ignore
+async def test_teaching_live_legacy_entry_keeps_student_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-nav-live", name="Student", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)

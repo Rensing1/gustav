@@ -26,7 +26,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -37,8 +37,15 @@ async def _client() -> httpx.AsyncClient:
     )
 
 
+def _teacher_session(monkeypatch: pytest.MonkeyPatch, sub: str):
+    store = install_session_store(monkeypatch, main)
+    return store.create(sub=sub, name="Teacher", roles=["teacher"])
+
+
 @pytest.mark.anyio
-async def test_teaching_modular_unit_module_update_and_delete_remove_backing_content() -> None:
+async def test_teaching_modular_unit_module_update_and_delete_remove_backing_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -49,8 +56,7 @@ async def test_teaching_modular_unit_module_update_and_delete_remove_backing_con
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-1", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-1")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -97,7 +103,9 @@ async def test_teaching_modular_unit_module_update_and_delete_remove_backing_con
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_unit_phase_delete_cascades_to_modules_edges_and_content() -> None:
+async def test_teaching_modular_unit_phase_delete_cascades_to_modules_edges_and_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -108,8 +116,7 @@ async def test_teaching_modular_unit_phase_delete_cascades_to_modules_edges_and_
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-2", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-2")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -157,7 +164,9 @@ async def test_teaching_modular_unit_phase_delete_cascades_to_modules_edges_and_
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_create_section_after_deleting_last_phase_remains_available() -> None:
+async def test_teaching_modular_create_section_after_deleting_last_phase_remains_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Deleting the last phase must not break subsequent section creation."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -169,8 +178,7 @@ async def test_teaching_modular_create_section_after_deleting_last_phase_remains
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-last-phase", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-last-phase")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -199,7 +207,9 @@ async def test_teaching_modular_create_section_after_deleting_last_phase_remains
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_create_section_keeps_documented_section_to_module_bridge() -> None:
+async def test_teaching_modular_create_section_keeps_documented_section_to_module_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """`createSection` in modular units must still create the backing module entry."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -211,8 +221,7 @@ async def test_teaching_modular_create_section_keeps_documented_section_to_modul
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-3", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-3")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -235,7 +244,9 @@ async def test_teaching_modular_create_section_keeps_documented_section_to_modul
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_module_delete_clamps_required_prereq_count_after_edge_cascade() -> None:
+async def test_teaching_modular_module_delete_clamps_required_prereq_count_after_edge_cascade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Deleting a prerequisite module must clamp target k-of-n to remaining incoming edges."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -247,8 +258,7 @@ async def test_teaching_modular_module_delete_clamps_required_prereq_count_after
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-4", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-4")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -293,7 +303,9 @@ async def test_teaching_modular_module_delete_clamps_required_prereq_count_after
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_phase_delete_clamps_required_prereq_count_after_edge_cascade() -> None:
+async def test_teaching_modular_phase_delete_clamps_required_prereq_count_after_edge_cascade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Deleting a phase with prerequisite modules must clamp target k-of-n to zero."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -305,8 +317,7 @@ async def test_teaching_modular_phase_delete_clamps_required_prereq_count_after_
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-crud-5", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-5")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

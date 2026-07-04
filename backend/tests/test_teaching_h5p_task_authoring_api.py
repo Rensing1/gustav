@@ -10,6 +10,7 @@ Why:
 from __future__ import annotations
 
 import os
+import importlib
 from pathlib import Path
 
 import httpx
@@ -24,7 +25,10 @@ if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+
+teaching_h5p = importlib.import_module("backend.web.routes.teaching_h5p")
+teaching_task_services = importlib.import_module("backend.web.routes.teaching_task_services")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -60,8 +64,8 @@ async def _create_h5p_task(client: httpx.AsyncClient, unit_id: str, section_id: 
 async def test_task_h5p_editor_model_uses_task_linked_content_id(monkeypatch: pytest.MonkeyPatch) -> None:
     import routes.teaching as teaching  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-editor-model", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-editor-model", name="T", roles=["teacher"])
 
     seen: list[tuple[str, str, dict | None]] = []
 
@@ -72,7 +76,7 @@ async def test_task_h5p_editor_model_uses_task_linked_content_id(monkeypatch: py
             json={"contentId": "2689406715", "scripts": [], "styles": ["/h5p/theme/h5p-gustav.css"]},
         )
 
-    monkeypatch.setattr(teaching, "_request_h5p_service", fake_h5p_request)
+    monkeypatch.setattr(teaching_h5p, "_request_h5p_service", fake_h5p_request)
 
     async with (await _client()) as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -93,8 +97,8 @@ async def test_task_h5p_editor_model_uses_task_linked_content_id(monkeypatch: py
 async def test_task_h5p_import_links_uploaded_content_to_task(monkeypatch: pytest.MonkeyPatch) -> None:
     import routes.teaching as teaching  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-import", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-import", name="T", roles=["teacher"])
 
     seen: list[tuple[str, str, str | None]] = []
 
@@ -105,7 +109,7 @@ async def test_task_h5p_import_links_uploaded_content_to_task(monkeypatch: pytes
         seen.append((method, path, filename))
         return httpx.Response(200, json={"content_id": "314159"})
 
-    monkeypatch.setattr(teaching, "_request_h5p_service", fake_h5p_request)
+    monkeypatch.setattr(teaching_h5p, "_request_h5p_service", fake_h5p_request)
 
     async with (await _client()) as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -131,8 +135,8 @@ async def test_task_h5p_save_rolls_back_upstream_content_when_local_persist_fail
 ) -> None:
     import routes.teaching as teaching  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-save-rollback", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-save-rollback", name="T", roles=["teacher"])
 
     seen: list[tuple[str, str]] = []
 
@@ -144,14 +148,14 @@ async def test_task_h5p_save_rolls_back_upstream_content_when_local_persist_fail
             return httpx.Response(204)
         raise AssertionError(f"unexpected upstream call: {(method, path)}")
 
-    monkeypatch.setattr(teaching, "_request_h5p_service", fake_h5p_request)
+    monkeypatch.setattr(teaching_h5p, "_request_h5p_service", fake_h5p_request)
 
     async with (await _client()) as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         unit = await _create_unit(client)
         section = await _create_section(client, unit["id"])
         task = await _create_h5p_task(client, unit["id"], section["id"], content_id=None)
-        original_service = teaching._get_tasks_service()
+        original_service = teaching_task_services._get_tasks_service()
 
         class FailingTasksService:
             def list_tasks(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -160,7 +164,7 @@ async def test_task_h5p_save_rolls_back_upstream_content_when_local_persist_fail
             def update_task(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
                 raise RuntimeError("db_write_failed")
 
-        monkeypatch.setattr(teaching, "_get_tasks_service", lambda: FailingTasksService())
+        monkeypatch.setattr(teaching_task_services, "_get_tasks_service", lambda: FailingTasksService())
 
         response = await client.post(
             f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks/{task['id']}/h5p/save",
@@ -178,8 +182,8 @@ async def test_task_h5p_import_rolls_back_upstream_content_when_local_persist_fa
 ) -> None:
     import routes.teaching as teaching  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-import-rollback", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-import-rollback", name="T", roles=["teacher"])
 
     seen: list[tuple[str, str]] = []
 
@@ -191,14 +195,14 @@ async def test_task_h5p_import_rolls_back_upstream_content_when_local_persist_fa
             return httpx.Response(204)
         raise AssertionError(f"unexpected upstream call: {(method, path)}")
 
-    monkeypatch.setattr(teaching, "_request_h5p_service", fake_h5p_request)
+    monkeypatch.setattr(teaching_h5p, "_request_h5p_service", fake_h5p_request)
 
     async with (await _client()) as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         unit = await _create_unit(client)
         section = await _create_section(client, unit["id"])
         task = await _create_h5p_task(client, unit["id"], section["id"], content_id=None)
-        original_service = teaching._get_tasks_service()
+        original_service = teaching_task_services._get_tasks_service()
 
         class FailingTasksService:
             def list_tasks(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -207,7 +211,7 @@ async def test_task_h5p_import_rolls_back_upstream_content_when_local_persist_fa
             def update_task(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
                 raise RuntimeError("db_write_failed")
 
-        monkeypatch.setattr(teaching, "_get_tasks_service", lambda: FailingTasksService())
+        monkeypatch.setattr(teaching_task_services, "_get_tasks_service", lambda: FailingTasksService())
 
         response = await client.post(
             f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks/{task['id']}/h5p/import",
@@ -223,13 +227,13 @@ async def test_task_h5p_import_rolls_back_upstream_content_when_local_persist_fa
 async def test_task_h5p_reset_clears_linked_content_id_without_hitting_h5p_service(monkeypatch: pytest.MonkeyPatch) -> None:
     import routes.teaching as teaching  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-reset", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-reset", name="T", roles=["teacher"])
 
     async def fail_h5p_request(*_args, **_kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("reset must not call upstream h5p service")
 
-    monkeypatch.setattr(teaching, "_request_h5p_service", fail_h5p_request)
+    monkeypatch.setattr(teaching_h5p, "_request_h5p_service", fail_h5p_request)
 
     async with (await _client()) as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

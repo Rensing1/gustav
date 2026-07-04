@@ -21,7 +21,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 from utils.db import require_db_or_skip as _require_db_or_skip
@@ -36,11 +36,11 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_two_concurrent_creates_on_empty_unit_assign_contiguous_positions():
-    main.SESSION_STORE = SessionStore()
+async def test_two_concurrent_creates_on_empty_unit_assign_contiguous_positions(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
 
-    author = main.SESSION_STORE.create(sub="teacher-sec-empty-concurrency", name="Autor", roles=["teacher"])
+    author = store.create(sub="teacher-sec-empty-concurrency", name="Autor", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)

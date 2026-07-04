@@ -21,7 +21,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from runtime_auth_helpers import install_session_store
 
 
 def _probe_db_and_helpers() -> bool:
@@ -56,12 +56,12 @@ async def _client():
 
 
 @pytest.mark.anyio
-async def test_list_members_unknown_course_returns_404_when_helpers_present():
+async def test_list_members_unknown_course_returns_404_when_helpers_present(monkeypatch: pytest.MonkeyPatch):
     if not _probe_db_and_helpers():
         pytest.skip("DB or helper functions not available")
 
-    main.SESSION_STORE = SessionStore()
-    t_owner = main.SESSION_STORE.create(sub="teacher-helpers", name="Owner", roles=["teacher"])
+    store = install_session_store(monkeypatch, main)
+    t_owner = store.create(sub="teacher-helpers", name="Owner", roles=["teacher"])
 
     bad_id = "00000000-0000-0000-0000-000000000000"
     async with (await _client()) as client:
@@ -71,12 +71,12 @@ async def test_list_members_unknown_course_returns_404_when_helpers_present():
 
 
 @pytest.mark.anyio
-async def test_add_member_unknown_course_returns_404_when_helpers_present():
+async def test_add_member_unknown_course_returns_404_when_helpers_present(monkeypatch: pytest.MonkeyPatch):
     if not _probe_db_and_helpers():
         pytest.skip("DB or helper functions not available")
 
-    main.SESSION_STORE = SessionStore()
-    t_owner = main.SESSION_STORE.create(sub="teacher-helpers2", name="Owner", roles=["teacher"])
+    store = install_session_store(monkeypatch, main)
+    t_owner = store.create(sub="teacher-helpers2", name="Owner", roles=["teacher"])
 
     bad_id = "00000000-0000-0000-0000-000000000000"
     async with (await _client()) as client:

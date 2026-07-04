@@ -9,7 +9,9 @@ Intent:
 
 from __future__ import annotations
 
-import routes.teaching as teaching  # type: ignore
+import importlib
+
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 def test_task_create_payload_accepts_filius_marker_config() -> None:

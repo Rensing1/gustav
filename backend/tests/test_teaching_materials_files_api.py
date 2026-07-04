@@ -26,7 +26,7 @@ if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
 
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -54,6 +54,10 @@ def _reset_storage_adapter():
 
 async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
+
+
+def _session_store(monkeypatch: pytest.MonkeyPatch):
+    return install_session_store(monkeypatch, main)
 
 
 async def _create_unit(client: httpx.AsyncClient, title: str = "Physik") -> dict[str, Any]:
@@ -109,8 +113,8 @@ class FakeStorageAdapter:
 
 
 @pytest.mark.anyio
-async def test_upload_intent_flow_requires_teacher_and_returns_presign_payload(_reset_storage_adapter):
-    main.SESSION_STORE = SessionStore()
+async def test_upload_intent_flow_requires_teacher_and_returns_presign_payload(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     # Require DB-backed repo to hit real policies.
@@ -133,8 +137,8 @@ async def test_upload_intent_flow_requires_teacher_and_returns_presign_payload(_
         )
         assert resp.status_code == 401
 
-    teacher = main.SESSION_STORE.create(sub="teacher-files", name="Frau Müller", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="student-files", name="Max", roles=["student"])
+    teacher = store.create(sub="teacher-files", name="Frau Müller", roles=["teacher"])
+    student = store.create(sub="student-files", name="Max", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
@@ -175,8 +179,8 @@ async def test_upload_intent_flow_requires_teacher_and_returns_presign_payload(_
 
 
 @pytest.mark.anyio
-async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter):
-    main.SESSION_STORE = SessionStore()
+async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -189,8 +193,8 @@ async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-files", name="Frau Müller", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="other-teacher", name="Herr Schulz", roles=["teacher"])
+    teacher = store.create(sub="teacher-files", name="Frau Müller", roles=["teacher"])
+    other = store.create(sub="other-teacher", name="Herr Schulz", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -294,9 +298,9 @@ async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter
 
 
 @pytest.mark.anyio
-async def test_finalize_accepts_head_content_type_with_parameters(_reset_storage_adapter):
+async def test_finalize_accepts_head_content_type_with_parameters(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize should accept storage head content-type with parameters (e.g., charset)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -309,7 +313,7 @@ async def test_finalize_accepts_head_content_type_with_parameters(_reset_storage
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-mime-param", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-mime-param", name="Frau Müller", roles=["teacher"])
 
     # Configure fake storage to report a parameterized content-type for head_object
     def _head_with_params(**kwargs):
@@ -344,9 +348,9 @@ async def test_finalize_accepts_head_content_type_with_parameters(_reset_storage
 
 
 @pytest.mark.anyio
-async def test_finalize_rejects_invalid_sha256_pattern(_reset_storage_adapter):
+async def test_finalize_rejects_invalid_sha256_pattern(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Server-side validation rejects invalid sha256 (length/pattern) with 400 checksum_mismatch."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -359,7 +363,7 @@ async def test_finalize_rejects_invalid_sha256_pattern(_reset_storage_adapter):
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-bad-sha", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-bad-sha", name="Frau Müller", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -385,9 +389,9 @@ async def test_finalize_rejects_invalid_sha256_pattern(_reset_storage_adapter):
 
 
 @pytest.mark.anyio
-async def test_finalize_rejects_non_hex_sha256_with_length_64(_reset_storage_adapter):
+async def test_finalize_rejects_non_hex_sha256_with_length_64(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize must reject sha256 with non-hex chars (length 64) with 400 checksum_mismatch."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -400,7 +404,7 @@ async def test_finalize_rejects_non_hex_sha256_with_length_64(_reset_storage_ada
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-bad-sha-hex", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-bad-sha-hex", name="Frau Müller", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -427,9 +431,9 @@ async def test_finalize_rejects_non_hex_sha256_with_length_64(_reset_storage_ada
 
 
 @pytest.mark.anyio
-async def test_finalize_rejects_content_length_mismatch_and_deletes_object(_reset_storage_adapter):
+async def test_finalize_rejects_content_length_mismatch_and_deletes_object(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize must reject when storage HEAD content_length differs and delete the object."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -442,7 +446,7 @@ async def test_finalize_rejects_content_length_mismatch_and_deletes_object(_rese
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-len-mismatch", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-len-mismatch", name="Frau Müller", roles=["teacher"])
 
     # Override head_object to return a wrong content_length
     def _head_with_wrong_length(**kwargs):
@@ -477,8 +481,8 @@ async def test_finalize_rejects_content_length_mismatch_and_deletes_object(_rese
 
 
 @pytest.mark.anyio
-async def test_upload_intent_rejects_invalid_filename(_reset_storage_adapter):
-    main.SESSION_STORE = SessionStore()
+async def test_upload_intent_rejects_invalid_filename(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -491,7 +495,7 @@ async def test_upload_intent_rejects_invalid_filename(_reset_storage_adapter):
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-invalid-filename", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-invalid-filename", name="Frau Müller", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -507,8 +511,8 @@ async def test_upload_intent_rejects_invalid_filename(_reset_storage_adapter):
 
 
 @pytest.mark.anyio
-async def test_upload_intent_accepts_mime_with_uppercase(_reset_storage_adapter):
-    main.SESSION_STORE = SessionStore()
+async def test_upload_intent_accepts_mime_with_uppercase(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -521,7 +525,7 @@ async def test_upload_intent_accepts_mime_with_uppercase(_reset_storage_adapter)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-uppercase-mime", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-uppercase-mime", name="Frau Müller", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -539,8 +543,8 @@ async def test_upload_intent_accepts_mime_with_uppercase(_reset_storage_adapter)
 
 
 @pytest.mark.anyio
-async def test_upload_intent_rejects_size_exceeded(_reset_storage_adapter):
-    main.SESSION_STORE = SessionStore()
+async def test_upload_intent_rejects_size_exceeded(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -553,7 +557,7 @@ async def test_upload_intent_rejects_size_exceeded(_reset_storage_adapter):
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-size-exceeded", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-size-exceeded", name="Frau Müller", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -569,8 +573,8 @@ async def test_upload_intent_rejects_size_exceeded(_reset_storage_adapter):
 
 
 @pytest.mark.anyio
-async def test_finalize_rejects_expired_intent(_reset_storage_adapter):
-    main.SESSION_STORE = SessionStore()
+async def test_finalize_rejects_expired_intent(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -583,7 +587,7 @@ async def test_finalize_rejects_expired_intent(_reset_storage_adapter):
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-expired-intent", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-expired-intent", name="Frau Müller", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -627,8 +631,8 @@ async def test_finalize_rejects_expired_intent(_reset_storage_adapter):
 
 
 @pytest.mark.anyio
-async def test_patch_file_material_allows_alt_text_update(_reset_storage_adapter):
-    main.SESSION_STORE = SessionStore()
+async def test_patch_file_material_allows_alt_text_update(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -641,7 +645,7 @@ async def test_patch_file_material_allows_alt_text_update(_reset_storage_adapter
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-alt-text", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-alt-text", name="Frau Müller", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -675,9 +679,9 @@ async def test_patch_file_material_allows_alt_text_update(_reset_storage_adapter
 
 
 @pytest.mark.anyio
-async def test_upload_flow_works_with_in_memory_repo(_reset_storage_adapter):
+async def test_upload_flow_works_with_in_memory_repo(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Ensure dev fallback repo implements complete file workflow."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     original_repo = teaching.REPO
@@ -688,7 +692,7 @@ async def test_upload_flow_works_with_in_memory_repo(_reset_storage_adapter):
         storage = FakeStorageAdapter()
         teaching.set_storage_adapter(storage)
 
-        teacher = main.SESSION_STORE.create(sub="teacher-inmemory", name="Frau Müller", roles=["teacher"])
+        teacher = store.create(sub="teacher-inmemory", name="Frau Müller", roles=["teacher"])
 
         async with (await _client()) as client:
             client.cookies.set("gustav_session", teacher.session_id)
@@ -731,9 +735,9 @@ async def test_upload_flow_works_with_in_memory_repo(_reset_storage_adapter):
 
 
 @pytest.mark.anyio
-async def test_finalize_rejects_invalid_alt_text_too_long(_reset_storage_adapter):
+async def test_finalize_rejects_invalid_alt_text_too_long(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize should reject alt_text > 500 with 400 invalid_alt_text."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -746,7 +750,7 @@ async def test_finalize_rejects_invalid_alt_text_too_long(_reset_storage_adapter
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-bad-alt", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-bad-alt", name="Frau Müller", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -774,9 +778,9 @@ async def test_finalize_rejects_invalid_alt_text_too_long(_reset_storage_adapter
 
 
 @pytest.mark.anyio
-async def test_delete_file_material_storage_failure_returns_502_and_preserves_db(_reset_storage_adapter):
+async def test_delete_file_material_storage_failure_returns_502_and_preserves_db(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Deleting a file material should fail with 502 if storage delete fails and keep DB row intact."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -789,7 +793,7 @@ async def test_delete_file_material_storage_failure_returns_502_and_preserves_db
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-del-fail", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-del-fail", name="Frau Müller", roles=["teacher"])
 
     # Configure storage delete to raise an error
     def _delete_fail(**kwargs):
@@ -837,9 +841,9 @@ async def test_delete_file_material_storage_failure_returns_502_and_preserves_db
 
 
 @pytest.mark.anyio
-async def test_finalize_accepts_missing_head_content_type_uses_intent_mime(_reset_storage_adapter):
+async def test_finalize_accepts_missing_head_content_type_uses_intent_mime(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize should succeed when HEAD lacks content_type by falling back to intent mime_type."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     # Switch to in-memory repo to avoid DB requirements
@@ -865,7 +869,7 @@ async def test_finalize_accepts_missing_head_content_type_uses_intent_mime(_rese
 
         teaching.set_storage_adapter(_Adapter())
 
-        teacher = main.SESSION_STORE.create(sub="teacher-missing-ctype", name="Frau Müller", roles=["teacher"])
+        teacher = store.create(sub="teacher-missing-ctype", name="Frau Müller", roles=["teacher"])
         async with (await _client()) as client:
             client.cookies.set("gustav_session", teacher.session_id)
             unit = await _create_unit(client)
@@ -895,9 +899,9 @@ async def test_finalize_accepts_missing_head_content_type_uses_intent_mime(_rese
 
 
 @pytest.mark.anyio
-async def test_download_url_without_expires_at_returns_server_computed(_reset_storage_adapter):
+async def test_download_url_without_expires_at_returns_server_computed(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Download URL should include a fallback expires_at if adapter omits it."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     original_repo = teaching.REPO
@@ -920,7 +924,7 @@ async def test_download_url_without_expires_at_returns_server_computed(_reset_st
 
         teaching.set_storage_adapter(_Adapter())
 
-        teacher = main.SESSION_STORE.create(sub="teacher-dl-expiry", name="Frau Müller", roles=["teacher"])
+        teacher = store.create(sub="teacher-dl-expiry", name="Frau Müller", roles=["teacher"])
         async with (await _client()) as client:
             client.cookies.set("gustav_session", teacher.session_id)
             unit = await _create_unit(client)
@@ -958,9 +962,9 @@ async def test_download_url_without_expires_at_returns_server_computed(_reset_st
 
 
 @pytest.mark.anyio
-async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage_adapter):
+async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """When no storage adapter is configured, upload-intents must return 503."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -979,7 +983,7 @@ async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage
         from teaching.storage import NullStorageAdapter  # type: ignore
 
         teaching.set_storage_adapter(NullStorageAdapter())
-        teacher = main.SESSION_STORE.create(sub="teacher-no-storage", name="Lehrkraft", roles=["teacher"])
+        teacher = store.create(sub="teacher-no-storage", name="Lehrkraft", roles=["teacher"])
         async with (await _client()) as client:
             client.cookies.set("gustav_session", teacher.session_id)
             unit = await _create_unit(client)
@@ -995,9 +999,9 @@ async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage
 
 
 @pytest.mark.anyio
-async def test_download_url_sets_private_no_store_header(_reset_storage_adapter):
+async def test_download_url_sets_private_no_store_header(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Download URL responses must not be cacheable (Cache-Control: private, no-store)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     from utils.db import require_db_or_skip
@@ -1010,7 +1014,7 @@ async def test_download_url_sets_private_no_store_header(_reset_storage_adapter)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-dl-nostore", name="Frau Müller", roles=["teacher"])
+    teacher = store.create(sub="teacher-dl-nostore", name="Frau Müller", roles=["teacher"])
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
         unit = await _create_unit(client)
@@ -1036,9 +1040,9 @@ async def test_download_url_sets_private_no_store_header(_reset_storage_adapter)
 
 
 @pytest.mark.anyio
-async def test_delete_file_material_without_storage_adapter_returns_503(_reset_storage_adapter):
+async def test_delete_file_material_without_storage_adapter_returns_503(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """DELETE should return 503 when storage adapter is not configured (NullStorageAdapter)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     # Use in-memory repo to avoid DB dependency for this edge case
@@ -1064,7 +1068,7 @@ async def test_delete_file_material_without_storage_adapter_returns_503(_reset_s
 
         teaching.set_storage_adapter(_Adapter())
 
-        teacher = main.SESSION_STORE.create(sub="teacher-del-503", name="Frau Müller", roles=["teacher"])
+        teacher = store.create(sub="teacher-del-503", name="Frau Müller", roles=["teacher"])
         async with (await _client()) as client:
             client.cookies.set("gustav_session", teacher.session_id)
             unit = await _create_unit(client)

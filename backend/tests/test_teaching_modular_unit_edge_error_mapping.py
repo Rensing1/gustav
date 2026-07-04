@@ -16,18 +16,22 @@ from httpx import ASGITransport
 
 import main  # type: ignore
 import routes.teaching as teaching  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
+
+
+def _teacher_session(monkeypatch: pytest.MonkeyPatch, sub: str):
+    store = install_session_store(monkeypatch, main)
+    return store.create(sub=sub, name="Teacher", roles=["teacher"])
 
 
 @pytest.mark.anyio
 async def test_create_edge_unknown_module_returns_404_instead_of_constraint_400(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-edge-map-404", name="Teacher", roles=["teacher"])  # type: ignore
+    teacher = _teacher_session(monkeypatch, "t-edge-map-404")
     unit_id = str(uuid.uuid4())
     from_id = str(uuid.uuid4())
     to_unknown_id = str(uuid.uuid4())
@@ -70,9 +74,8 @@ async def test_create_edge_unknown_module_returns_404_instead_of_constraint_400(
 
 
 @pytest.mark.anyio
-async def test_modular_phases_with_in_memory_repo_returns_503_not_500():
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-fallback-503", name="Teacher", roles=["teacher"])  # type: ignore
+async def test_modular_phases_with_in_memory_repo_returns_503_not_500(monkeypatch: pytest.MonkeyPatch):
+    teacher = _teacher_session(monkeypatch, "t-mod-fallback-503")
 
     class _NoModularRepo:
         def unit_exists_for_author(self, _unit_id: str, _author_sub: str) -> bool:
@@ -97,9 +100,8 @@ async def test_modular_phases_with_in_memory_repo_returns_503_not_500():
 
 
 @pytest.mark.anyio
-async def test_create_modular_unit_with_in_memory_repo_returns_503_service_unavailable():
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-fallback-create-503", name="Teacher", roles=["teacher"])  # type: ignore
+async def test_create_modular_unit_with_in_memory_repo_returns_503_service_unavailable(monkeypatch: pytest.MonkeyPatch):
+    teacher = _teacher_session(monkeypatch, "t-mod-fallback-create-503")
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
 
     async with httpx.AsyncClient(
@@ -119,8 +121,7 @@ async def test_create_modular_unit_with_in_memory_repo_returns_503_service_unava
 async def test_legacy_edge_delete_sets_deprecation_headers_with_concrete_successor_link(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-legacy-edge-header", name="Teacher", roles=["teacher"])  # type: ignore
+    teacher = _teacher_session(monkeypatch, "t-legacy-edge-header")
     unit_id = str(uuid.uuid4())
     from_id = str(uuid.uuid4())
     to_id = str(uuid.uuid4())
@@ -162,8 +163,7 @@ async def test_legacy_edge_delete_error_does_not_emit_deprecation_headers(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Deprecation/Sunset/Link headers are only valid for successful legacy deletes."""
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-legacy-edge-header-error", name="Teacher", roles=["teacher"])  # type: ignore
+    teacher = _teacher_session(monkeypatch, "t-legacy-edge-header-error")
     unit_id = str(uuid.uuid4())
     from_id = str(uuid.uuid4())
     to_id = str(uuid.uuid4())
@@ -204,8 +204,7 @@ async def test_create_edge_does_not_mask_unexpected_typeerror_from_repo(
 ):
     """Unexpected TypeError inside repo code must not be treated as signature fallback."""
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-edge-typeerror", name="Teacher", roles=["teacher"])  # type: ignore
+    teacher = _teacher_session(monkeypatch, "t-edge-typeerror")
     unit_id = str(uuid.uuid4())
     from_id = str(uuid.uuid4())
     to_id = str(uuid.uuid4())
@@ -246,8 +245,7 @@ async def test_create_edge_does_not_mask_unexpected_typeerror_from_repo(
 async def test_create_edge_maps_invalid_unit_type_from_precheck_to_contract_400(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-edge-precheck-400", name="Teacher", roles=["teacher"])  # type: ignore
+    teacher = _teacher_session(monkeypatch, "t-edge-precheck-400")
     unit_id = str(uuid.uuid4())
     from_id = str(uuid.uuid4())
     to_id = str(uuid.uuid4())

@@ -17,7 +17,7 @@ if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
 
 
@@ -71,8 +71,8 @@ async def test_summary_prefers_person_names_and_uses_localpart_only_as_fallback(
     import identity_access.directory as dir_mod  # type: ignore
     monkeypatch.setattr(dir_mod, "resolve_live_student_names_by_sub", _fake_live_resolve)
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-humanize-owner", name="Owner", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="t-humanize-owner", name="Owner", roles=["teacher"])
     s1 = "sub-1"
     s2 = "sub-2"
 

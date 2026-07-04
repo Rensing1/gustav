@@ -17,7 +17,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -36,9 +36,13 @@ async def _client() -> httpx.AsyncClient:
         ("POST", "/teaching/courses/00000000-0000-0000-0000-000000000000/modules/22222222-2222-2222-2222-222222222222/sections/33333333-3333-3333-3333-333333333333/visibility"),
     ],
 )
-async def test_live_section_release_helpers_are_retired(method: str, path: str) -> None:
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="teacher-live-sections-retired", name="Owner", roles=["teacher"])  # type: ignore
+async def test_live_section_release_helpers_are_retired(
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+) -> None:
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="teacher-live-sections-retired", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
       client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)

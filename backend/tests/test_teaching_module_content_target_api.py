@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
+import importlib
 import json
-import sys
 
 import pytest
 from starlette.requests import Request
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-
-from routes import teaching as teaching_routes  # type: ignore
+teaching_routes = importlib.import_module("backend.web.routes.teaching")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

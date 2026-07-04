@@ -13,7 +13,7 @@ from httpx import ASGITransport
 import uuid
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # noqa: E402
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 
@@ -65,7 +65,7 @@ def _visibility_path(course_id: str, module_id: str, section_id: str) -> str:
 async def test_visibility_patch_requires_origin_or_referer(monkeypatch: pytest.MonkeyPatch):
     # Enforce strict CSRF policy for teaching writes in this test
     monkeypatch.setenv("STRICT_CSRF_TEACHING", "true")
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     try:
         from routes import teaching as teaching_routes  # noqa: F401  # type: ignore
@@ -74,7 +74,7 @@ async def test_visibility_patch_requires_origin_or_referer(monkeypatch: pytest.M
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    owner = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    owner = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
         cid = await _create_course(client)

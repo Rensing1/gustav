@@ -25,7 +25,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 from utils.db import require_db_or_skip as _require_db_or_skip
@@ -33,6 +33,10 @@ from utils.db import require_db_or_skip as _require_db_or_skip
 
 async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
+
+
+def _session_store(monkeypatch: pytest.MonkeyPatch):
+    return install_session_store(monkeypatch, main)
 
 
 def _endpoint_globals(path: str, method: str) -> dict:
@@ -98,8 +102,8 @@ class _RecordingDeleteStorage:
 
 
 @pytest.mark.anyio
-async def test_units_require_auth_and_teacher_role():
-    main.SESSION_STORE = SessionStore()
+async def test_units_require_auth_and_teacher_role(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
 
     async with (await _client()) as client:
         # Unauthenticated → 401
@@ -107,7 +111,7 @@ async def test_units_require_auth_and_teacher_role():
         assert resp_unauth.status_code == 401
 
     # Set up student session
-    student = main.SESSION_STORE.create(sub="student-101", name="Max", roles=["student"])
+    student = store.create(sub="student-101", name="Max", roles=["student"])
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
         resp_role = await client.post("/api/teaching/units", json={"title": "Forbidden"})
@@ -115,8 +119,8 @@ async def test_units_require_auth_and_teacher_role():
 
 
 @pytest.mark.anyio
-async def test_teacher_can_crud_units_and_ownership_is_enforced():
-    main.SESSION_STORE = SessionStore()
+async def test_teacher_can_crud_units_and_ownership_is_enforced(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -127,8 +131,8 @@ async def test_teacher_can_crud_units_and_ownership_is_enforced():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher_a = main.SESSION_STORE.create(sub="teacher-A", name="Frau A", roles=["teacher"])
-    teacher_b = main.SESSION_STORE.create(sub="teacher-B", name="Herr B", roles=["teacher"])
+    teacher_a = store.create(sub="teacher-A", name="Frau A", roles=["teacher"])
+    teacher_b = store.create(sub="teacher-B", name="Herr B", roles=["teacher"])
 
     async with (await _client()) as client:
         # Teacher A creates a unit
@@ -175,8 +179,8 @@ async def test_teacher_can_crud_units_and_ownership_is_enforced():
 
 
 @pytest.mark.anyio
-async def test_unit_validation_errors():
-    main.SESSION_STORE = SessionStore()
+async def test_unit_validation_errors(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -187,7 +191,7 @@ async def test_unit_validation_errors():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-validate", name="Frau V", roles=["teacher"])
+    teacher = store.create(sub="teacher-validate", name="Frau V", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -218,8 +222,8 @@ async def test_unit_validation_errors():
 
 
 @pytest.mark.anyio
-async def test_course_modules_owner_workflow_and_duplicates():
-    main.SESSION_STORE = SessionStore()
+async def test_course_modules_owner_workflow_and_duplicates(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -230,8 +234,8 @@ async def test_course_modules_owner_workflow_and_duplicates():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher_a = main.SESSION_STORE.create(sub="teacher-mod", name="Frau Module", roles=["teacher"])
-    teacher_b = main.SESSION_STORE.create(sub="teacher-other", name="Herr Fremd", roles=["teacher"])
+    teacher_a = store.create(sub="teacher-mod", name="Frau Module", roles=["teacher"])
+    teacher_b = store.create(sub="teacher-other", name="Herr Fremd", roles=["teacher"])
 
     async with (await _client()) as client:
         # Teacher A course + unit
@@ -276,8 +280,8 @@ async def test_course_modules_owner_workflow_and_duplicates():
 
 
 @pytest.mark.anyio
-async def test_course_modules_require_unit_author():
-    main.SESSION_STORE = SessionStore()
+async def test_course_modules_require_unit_author(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -288,8 +292,8 @@ async def test_course_modules_require_unit_author():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher_a = main.SESSION_STORE.create(sub="teacher-owner", name="Owner", roles=["teacher"])
-    teacher_b = main.SESSION_STORE.create(sub="teacher-author", name="Autor", roles=["teacher"])
+    teacher_a = store.create(sub="teacher-owner", name="Owner", roles=["teacher"])
+    teacher_b = store.create(sub="teacher-author", name="Autor", roles=["teacher"])
 
     async with (await _client()) as client:
         # Teacher B creates a unit
@@ -309,8 +313,8 @@ async def test_course_modules_require_unit_author():
 
 
 @pytest.mark.anyio
-async def test_course_modules_reorder_updates_positions():
-    main.SESSION_STORE = SessionStore()
+async def test_course_modules_reorder_updates_positions(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -321,7 +325,7 @@ async def test_course_modules_reorder_updates_positions():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-reorder", name="ReOrder", roles=["teacher"])
+    teacher = store.create(sub="teacher-reorder", name="ReOrder", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -350,8 +354,8 @@ async def test_course_modules_reorder_updates_positions():
 
 
 @pytest.mark.anyio
-async def test_course_modules_reorder_validation_rules():
-    main.SESSION_STORE = SessionStore()
+async def test_course_modules_reorder_validation_rules(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -362,7 +366,7 @@ async def test_course_modules_reorder_validation_rules():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-validate-mod", name="ValidMod", roles=["teacher"])
+    teacher = store.create(sub="teacher-validate-mod", name="ValidMod", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -410,8 +414,8 @@ async def test_course_modules_reorder_validation_rules():
 
 
 @pytest.mark.anyio
-async def test_deleting_unit_cascades_course_modules():
-    main.SESSION_STORE = SessionStore()
+async def test_deleting_unit_cascades_course_modules(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -422,7 +426,7 @@ async def test_deleting_unit_cascades_course_modules():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-delete", name="Delete", roles=["teacher"])
+    teacher = store.create(sub="teacher-delete", name="Delete", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -446,7 +450,7 @@ async def test_deleting_unit_cascades_course_modules():
 
 @pytest.mark.anyio
 async def test_deleting_unit_keeps_unit_when_storage_cleanup_fails(monkeypatch: pytest.MonkeyPatch):
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     import routes.teaching as teaching  # noqa: E402
 
     original_repo = teaching.REPO
@@ -465,7 +469,7 @@ async def test_deleting_unit_keeps_unit_when_storage_cleanup_fails(monkeypatch: 
         collect_storage_objects,
     )
 
-    teacher = main.SESSION_STORE.create(sub="teacher-storage-abort", name="Storage Abort", roles=["teacher"])
+    teacher = store.create(sub="teacher-storage-abort", name="Storage Abort", roles=["teacher"])
 
     try:
         async with (await _client()) as client:
@@ -484,8 +488,8 @@ async def test_deleting_unit_keeps_unit_when_storage_cleanup_fails(monkeypatch: 
 
 
 @pytest.mark.anyio
-async def test_deleting_unit_removes_material_and_submission_storage_objects():
-    main.SESSION_STORE = SessionStore()
+async def test_deleting_unit_removes_material_and_submission_storage_objects(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import psycopg  # type: ignore  # noqa: E402
@@ -500,8 +504,8 @@ async def test_deleting_unit_removes_material_and_submission_storage_objects():
     storage = _RecordingDeleteStorage()
     original_adapter = teaching.STORAGE_ADAPTER
     teaching.set_storage_adapter(storage)
-    teacher = main.SESSION_STORE.create(sub="teacher-unit-storage-delete", name="Storage Delete", roles=["teacher"])
-    learner = main.SESSION_STORE.create(sub="learner-unit-storage-delete", name="Learner", roles=["student"])
+    teacher = store.create(sub="teacher-unit-storage-delete", name="Storage Delete", roles=["teacher"])
+    learner = store.create(sub="learner-unit-storage-delete", name="Learner", roles=["student"])
 
     try:
         async with (await _client()) as client:
@@ -568,8 +572,8 @@ async def test_deleting_unit_removes_material_and_submission_storage_objects():
 
 
 @pytest.mark.anyio
-async def test_deleting_unit_aborts_when_storage_delete_fails():
-    main.SESSION_STORE = SessionStore()
+async def test_deleting_unit_aborts_when_storage_delete_fails(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import psycopg  # type: ignore  # noqa: E402
@@ -581,7 +585,7 @@ async def test_deleting_unit_aborts_when_storage_delete_fails():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-unit-storage-fail", name="Storage Fail", roles=["teacher"])
+    teacher = store.create(sub="teacher-unit-storage-fail", name="Storage Fail", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -621,8 +625,8 @@ async def test_deleting_unit_aborts_when_storage_delete_fails():
 
 
 @pytest.mark.anyio
-async def test_course_modules_reorder_with_invalid_uuid_returns_400():
-    main.SESSION_STORE = SessionStore()
+async def test_course_modules_reorder_with_invalid_uuid_returns_400(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -633,7 +637,7 @@ async def test_course_modules_reorder_with_invalid_uuid_returns_400():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-invalid-reorder", name="Invalid", roles=["teacher"])
+    teacher = store.create(sub="teacher-invalid-reorder", name="Invalid", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -653,8 +657,8 @@ async def test_course_modules_reorder_with_invalid_uuid_returns_400():
 
 
 @pytest.mark.anyio
-async def test_course_module_create_with_invalid_unit_uuid_returns_400():
-    main.SESSION_STORE = SessionStore()
+async def test_course_module_create_with_invalid_unit_uuid_returns_400(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -665,7 +669,7 @@ async def test_course_module_create_with_invalid_unit_uuid_returns_400():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-invalid-create", name="InvalidUnit", roles=["teacher"])
+    teacher = store.create(sub="teacher-invalid-create", name="InvalidUnit", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -682,8 +686,8 @@ async def test_course_module_create_with_invalid_unit_uuid_returns_400():
 
 
 @pytest.mark.anyio
-async def test_course_modules_reorder_empty_list_returns_400():
-    main.SESSION_STORE = SessionStore()
+async def test_course_modules_reorder_empty_list_returns_400(monkeypatch: pytest.MonkeyPatch):
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -694,7 +698,7 @@ async def test_course_modules_reorder_empty_list_returns_400():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-empty-reorder", name="Empty", roles=["teacher"])
+    teacher = store.create(sub="teacher-empty-reorder", name="Empty", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -715,9 +719,9 @@ async def test_course_modules_reorder_empty_list_returns_400():
 
 
 @pytest.mark.anyio
-async def test_course_modules_reorder_invalid_course_id_returns_400():
+async def test_course_modules_reorder_invalid_course_id_returns_400(monkeypatch: pytest.MonkeyPatch):
     """Invalid course_id (not UUID) must map to 400 invalid_course_id per contract."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -728,7 +732,7 @@ async def test_course_modules_reorder_invalid_course_id_returns_400():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-bad-course", name="BadCourse", roles=["teacher"])
+    teacher = store.create(sub="teacher-bad-course", name="BadCourse", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -744,9 +748,9 @@ async def test_course_modules_reorder_invalid_course_id_returns_400():
 
 
 @pytest.mark.anyio
-async def test_course_modules_reorder_non_owner_invalid_payload_is_403():
+async def test_course_modules_reorder_non_owner_invalid_payload_is_403(monkeypatch: pytest.MonkeyPatch):
     """Non-owner should get 403 even with invalid payload (security-first, avoid error oracle)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -757,8 +761,8 @@ async def test_course_modules_reorder_non_owner_invalid_payload_is_403():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    owner = main.SESSION_STORE.create(sub="owner-guard", name="Owner", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="other-guard", name="Other", roles=["teacher"])
+    owner = store.create(sub="owner-guard", name="Owner", roles=["teacher"])
+    other = store.create(sub="other-guard", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         # Owner creates a course
@@ -777,9 +781,9 @@ async def test_course_modules_reorder_non_owner_invalid_payload_is_403():
 
 
 @pytest.mark.anyio
-async def test_course_modules_delete_resequences_positions():
+async def test_course_modules_delete_resequences_positions(monkeypatch: pytest.MonkeyPatch):
     """Deleting a module resequences remaining positions to 1..n (owner only)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -790,7 +794,7 @@ async def test_course_modules_delete_resequences_positions():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-del-mod", name="Owner", roles=["teacher"])
+    teacher = store.create(sub="teacher-del-mod", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -817,9 +821,9 @@ async def test_course_modules_delete_resequences_positions():
 
 
 @pytest.mark.anyio
-async def test_course_modules_delete_invalid_ids_returns_400():
+async def test_course_modules_delete_invalid_ids_returns_400(monkeypatch: pytest.MonkeyPatch):
     """Invalid UUIDs map to 400 with invalid_* detail (contract)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -830,7 +834,7 @@ async def test_course_modules_delete_invalid_ids_returns_400():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-del-bad", name="Owner", roles=["teacher"])
+    teacher = store.create(sub="teacher-del-bad", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -850,9 +854,9 @@ async def test_course_modules_delete_invalid_ids_returns_400():
 
 
 @pytest.mark.anyio
-async def test_course_modules_delete_non_owner_is_403_or_404():
+async def test_course_modules_delete_non_owner_is_403_or_404(monkeypatch: pytest.MonkeyPatch):
     """Non-owner receives 403/404 for delete to avoid error oracle (not 400)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -863,8 +867,8 @@ async def test_course_modules_delete_non_owner_is_403_or_404():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    owner = main.SESSION_STORE.create(sub="owner-del", name="Owner", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="other-del", name="Other", roles=["teacher"])
+    owner = store.create(sub="owner-del", name="Owner", roles=["teacher"])
+    other = store.create(sub="other-del", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)
@@ -879,9 +883,9 @@ async def test_course_modules_delete_non_owner_is_403_or_404():
 
 
 @pytest.mark.anyio
-async def test_sections_reorder_non_author_invalid_payload_is_403():
+async def test_sections_reorder_non_author_invalid_payload_is_403(monkeypatch: pytest.MonkeyPatch):
     """Non-author should get 403/404 even with invalid payload (avoid error oracle for sections)."""
-    main.SESSION_STORE = SessionStore()
+    store = _session_store(monkeypatch)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -892,8 +896,8 @@ async def test_sections_reorder_non_author_invalid_payload_is_403():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="author-sec", name="Author", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="other-sec", name="Other", roles=["teacher"])
+    author = store.create(sub="author-sec", name="Author", roles=["teacher"])
+    other = store.create(sub="other-sec", name="Other", roles=["teacher"])
 
     async with (await _client()) as client:
         # Author creates a unit

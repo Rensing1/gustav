@@ -20,7 +20,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
 
 
@@ -62,7 +62,7 @@ async def _attach_unit(client: httpx.AsyncClient, course_id: str, unit_id: str) 
 
 
 @pytest.mark.anyio
-async def test_latest_detail_404_when_task_not_in_unit():
+async def test_latest_detail_404_when_task_not_in_unit(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     try:
@@ -71,8 +71,8 @@ async def test_latest_detail_404_when_task_not_in_unit():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-relation-owner", name="Owner", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="t-relation-owner", name="Owner", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)

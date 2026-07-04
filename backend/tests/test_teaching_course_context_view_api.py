@@ -15,7 +15,7 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from runtime_auth_helpers import install_session_store
 from routes import app as app_routes  # type: ignore
 
 
@@ -71,8 +71,7 @@ async def _seed_teacher_course_context(client: httpx.AsyncClient) -> tuple[str, 
 async def test_teacher_course_context_returns_course_members_and_units(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     monkeypatch.setattr(app_routes.teaching_routes, "resolve_student_names", lambda subs: {"student-context": "Lena"})
     teacher = store.create(sub="teacher-context", roles=["teacher"], name="Ada", ttl_seconds=60)
     student = store.create(sub="student-context", roles=["student"], name="Lena", ttl_seconds=60)
@@ -120,8 +119,7 @@ async def test_teacher_course_context_returns_course_members_and_units(
 
 @pytest.mark.anyio
 async def test_teacher_course_context_forbids_non_owner(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     owner = store.create(sub="teacher-owner", roles=["teacher"], name="Ada", ttl_seconds=60)
     outsider = store.create(sub="teacher-outsider", roles=["teacher"], name="Linus", ttl_seconds=60)
     outsider_headers = _mock_bearer_auth(monkeypatch, sub="teacher-outsider", roles=["teacher"], name="Linus")
@@ -154,8 +152,7 @@ async def test_teacher_course_context_forbids_student(monkeypatch: pytest.Monkey
 async def test_teacher_course_ai_usage_empty_course_returns_zero_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     monkeypatch.setattr(app_routes.teaching_routes, "resolve_student_names", lambda subs: {"student-usage": "Lena"})
     teacher = store.create(sub="teacher-usage", roles=["teacher"], name="Ada", ttl_seconds=60)
     student = store.create(sub="student-usage", roles=["student"], name="Lena", ttl_seconds=60)
@@ -192,8 +189,7 @@ async def test_teacher_course_ai_usage_empty_course_returns_zero_rows(
 async def test_teacher_course_ai_usage_missing_course_has_private_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="teacher-usage-missing", roles=["teacher"], name="Ada", ttl_seconds=60)
     headers = _mock_bearer_auth(monkeypatch, sub="teacher-usage-missing", roles=["teacher"], name="Ada")
 

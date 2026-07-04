@@ -27,7 +27,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 
@@ -36,13 +36,13 @@ async def _client():
 
 
 @pytest.mark.anyio
-async def test_members_api_default_limit_is_10():
+async def test_members_api_default_limit_is_10(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     # Fresh in-memory session store for isolation
-    main.SESSION_STORE = SessionStore()
+    session_store = install_session_store(monkeypatch, main)
 
     # Arrange: teacher owner and a course with >10 members
-    t = main.SESSION_STORE.create(sub="teacher-limit-10", name="Owner", roles=["teacher"])
+    t = session_store.create(sub="teacher-limit-10", name="Owner", roles=["teacher"])
     async with (await _client()) as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, t.session_id)
         # Create course

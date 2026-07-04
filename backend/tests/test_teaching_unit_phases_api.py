@@ -21,7 +21,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # noqa: E402
 
 from utils.db import require_db_or_skip as _require_db_or_skip
 
@@ -46,8 +46,8 @@ def _assert_phase_public_shape(phase: dict, *, unit_id: str) -> None:
 
 
 @pytest.mark.anyio
-async def test_unit_phases_list_create_rename_reorder_happy_path():
-    main.SESSION_STORE = SessionStore()
+async def test_unit_phases_list_create_rename_reorder_happy_path(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -58,7 +58,7 @@ async def test_unit_phases_list_create_rename_reorder_happy_path():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-phases-1", name="Phases", roles=["teacher"])
+    teacher = store.create(sub="teacher-phases-1", name="Phases", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -110,9 +110,9 @@ async def test_unit_phases_list_create_rename_reorder_happy_path():
 
 
 @pytest.mark.anyio
-async def test_unit_phases_requires_authentication_returns_401():
+async def test_unit_phases_requires_authentication_returns_401(monkeypatch: pytest.MonkeyPatch):
     """Phase endpoints must return 401 without an authenticated session."""
-    main.SESSION_STORE = SessionStore()
+    install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -133,9 +133,9 @@ async def test_unit_phases_requires_authentication_returns_401():
 
 
 @pytest.mark.anyio
-async def test_unit_phases_non_teacher_returns_403():
+async def test_unit_phases_non_teacher_returns_403(monkeypatch: pytest.MonkeyPatch):
     """Phase endpoints must return 403 for authenticated non-teacher callers."""
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -146,7 +146,7 @@ async def test_unit_phases_non_teacher_returns_403():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    student = main.SESSION_STORE.create(sub="student-phases-403", name="Student", roles=["student"])
+    student = store.create(sub="student-phases-403", name="Student", roles=["student"])
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
         unit_id = "00000000-0000-0000-0000-000000000000"
@@ -155,8 +155,8 @@ async def test_unit_phases_non_teacher_returns_403():
 
 
 @pytest.mark.anyio
-async def test_unit_phases_rejects_linear_unit_invalid_unit_type():
-    main.SESSION_STORE = SessionStore()
+async def test_unit_phases_rejects_linear_unit_invalid_unit_type(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -167,7 +167,7 @@ async def test_unit_phases_rejects_linear_unit_invalid_unit_type():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-phases-2", name="Linear", roles=["teacher"])
+    teacher = store.create(sub="teacher-phases-2", name="Linear", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -183,9 +183,9 @@ async def test_unit_phases_rejects_linear_unit_invalid_unit_type():
 
 
 @pytest.mark.anyio
-async def test_unit_phases_reorder_rejects_edge_constraint_violation():
+async def test_unit_phases_reorder_rejects_edge_constraint_violation(monkeypatch: pytest.MonkeyPatch):
     """Reordering phases must fail-closed when it would invalidate existing edges."""
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -196,7 +196,7 @@ async def test_unit_phases_reorder_rejects_edge_constraint_violation():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-phases-3", name="Edges", roles=["teacher"])
+    teacher = store.create(sub="teacher-phases-3", name="Edges", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -240,9 +240,9 @@ async def test_unit_phases_reorder_rejects_edge_constraint_violation():
 
 
 @pytest.mark.anyio
-async def test_unit_phases_reorder_rejects_non_string_ids_with_400():
+async def test_unit_phases_reorder_rejects_non_string_ids_with_400(monkeypatch: pytest.MonkeyPatch):
     """Reorder must not crash on unhashable items; return invalid_phase_ids."""
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -253,7 +253,7 @@ async def test_unit_phases_reorder_rejects_non_string_ids_with_400():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-phases-invalid-ids", name="InvalidIds", roles=["teacher"])
+    teacher = store.create(sub="teacher-phases-invalid-ids", name="InvalidIds", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -276,9 +276,9 @@ async def test_unit_phases_reorder_rejects_non_string_ids_with_400():
 
 
 @pytest.mark.anyio
-async def test_unit_phase_modules_reorder_rejects_non_string_ids_with_400():
+async def test_unit_phase_modules_reorder_rejects_non_string_ids_with_400(monkeypatch: pytest.MonkeyPatch):
     """Module reorder must not crash on unhashable items; return invalid_module_ids."""
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -289,7 +289,7 @@ async def test_unit_phase_modules_reorder_rejects_non_string_ids_with_400():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    teacher = main.SESSION_STORE.create(sub="teacher-modules-invalid-ids", name="InvalidIds", roles=["teacher"])
+    teacher = store.create(sub="teacher-modules-invalid-ids", name="InvalidIds", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)

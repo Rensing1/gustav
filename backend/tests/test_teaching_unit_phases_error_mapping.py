@@ -14,16 +14,20 @@ from httpx import ASGITransport
 
 import main  # type: ignore
 import routes.teaching as teaching  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
+def _teacher_session(monkeypatch: pytest.MonkeyPatch, sub: str):
+    store = install_session_store(monkeypatch, main)
+    return store.create(sub=sub, name="Teach", roles=["teacher"])
+
+
 @pytest.mark.anyio
 async def test_list_unit_phases_unexpected_repo_error_returns_500(monkeypatch: pytest.MonkeyPatch):
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-phases-boom", name="Teach", roles=["teacher"])  # type: ignore
+    teacher = _teacher_session(monkeypatch, "t-phases-boom")
 
     class _BoomRepo:
         def unit_exists_for_author(self, _unit_id: str, _author_sub: str) -> bool:
@@ -52,8 +56,7 @@ async def test_list_unit_phases_unexpected_repo_error_returns_500(monkeypatch: p
 async def test_update_unit_phase_maps_permission_error_to_403(monkeypatch: pytest.MonkeyPatch):
     """PATCH phase rename must not leak repo PermissionError as 500."""
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-phases-perm", name="Teach", roles=["teacher"])  # type: ignore
+    teacher = _teacher_session(monkeypatch, "t-phases-perm")
 
     class _StubRepo:
         def unit_exists_for_author(self, _unit_id: str, _author_sub: str) -> bool:

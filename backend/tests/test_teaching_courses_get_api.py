@@ -38,16 +38,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
 
-from identity_access.stores import SessionStore
 import main  # type: ignore
+from runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
-
-
-# Ensure tests use the in-memory session store – avoids DB dependency.
-if not isinstance(main.SESSION_STORE, SessionStore):  # pragma: no cover - defensive
-    main.SESSION_STORE = SessionStore()
 
 
 async def _create_course(client: httpx.AsyncClient, *, title: str, teacher_cookie: str) -> str:
@@ -60,8 +55,9 @@ async def _create_course(client: httpx.AsyncClient, *, title: str, teacher_cooki
 
 
 @pytest.mark.anyio
-async def test_get_course_by_id_owner_returns_200():
-    owner = main.SESSION_STORE.create(sub="t-owner-1", name="Owner", roles=["teacher"])
+async def test_get_course_by_id_owner_returns_200(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="t-owner-1", name="Owner", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         cid = await _create_course(c, title="Physik 10", teacher_cookie=owner.session_id)
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -73,9 +69,10 @@ async def test_get_course_by_id_owner_returns_200():
 
 
 @pytest.mark.anyio
-async def test_get_course_by_id_non_owner_returns_403():
-    owner = main.SESSION_STORE.create(sub="t-owner-2", name="Owner", roles=["teacher"])
-    intruder = main.SESSION_STORE.create(sub="t-other-2", name="Other", roles=["teacher"])
+async def test_get_course_by_id_non_owner_returns_403(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="t-owner-2", name="Owner", roles=["teacher"])
+    intruder = store.create(sub="t-other-2", name="Other", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         cid = await _create_course(c, title="Chemie 9", teacher_cookie=owner.session_id)
         c.cookies.set(main.SESSION_COOKIE_NAME, intruder.session_id)
@@ -84,8 +81,9 @@ async def test_get_course_by_id_non_owner_returns_403():
 
 
 @pytest.mark.anyio
-async def test_get_course_by_id_unknown_returns_404():
-    owner = main.SESSION_STORE.create(sub="t-owner-3", name="Owner", roles=["teacher"])
+async def test_get_course_by_id_unknown_returns_404(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="t-owner-3", name="Owner", roles=["teacher"])
     unknown = str(_uuid.uuid4())
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -94,8 +92,9 @@ async def test_get_course_by_id_unknown_returns_404():
 
 
 @pytest.mark.anyio
-async def test_get_course_invalid_id_returns_400():
-    owner = main.SESSION_STORE.create(sub="t-owner-4", name="Owner", roles=["teacher"])
+async def test_get_course_invalid_id_returns_400(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="t-owner-4", name="Owner", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"}) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
         r = await c.get("/api/teaching/courses/not-a-uuid")
@@ -105,9 +104,10 @@ async def test_get_course_invalid_id_returns_400():
 
 
 @pytest.mark.anyio
-async def test_get_course_by_id_owner_without_origin_header_still_returns_200():
+async def test_get_course_by_id_owner_without_origin_header_still_returns_200(monkeypatch: pytest.MonkeyPatch):
     """GET must not require CSRF Origin/Referer headers."""
-    owner = main.SESSION_STORE.create(sub="t-owner-no-origin", name="Owner", roles=["teacher"])
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="t-owner-no-origin", name="Owner", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
         cid = await _create_course(c, title="Physik 11", teacher_cookie=owner.session_id)
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)

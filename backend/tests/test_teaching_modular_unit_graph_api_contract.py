@@ -27,7 +27,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -47,8 +47,16 @@ async def _get_required_prereq_count(c: httpx.AsyncClient, *, unit_id: str, modu
     assert mod is not None, f"module_not_in_graph:{module_id}"
     return int(mod.get("required_prereq_count") or 0)
 
+
+def _teacher_session(monkeypatch: pytest.MonkeyPatch, sub: str):
+    store = install_session_store(monkeypatch, main)
+    return store.create(sub=sub, name="Teacher", roles=["teacher"])
+
+
 @pytest.mark.anyio
-async def test_teaching_modular_unit_graph_endpoints_support_visual_authoring() -> None:
+async def test_teaching_modular_unit_graph_endpoints_support_visual_authoring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -59,8 +67,7 @@ async def test_teaching_modular_unit_graph_endpoints_support_visual_authoring() 
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-1", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-1")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -140,7 +147,9 @@ async def test_teaching_modular_unit_graph_endpoints_support_visual_authoring() 
         assert moved["position_in_phase"] == 3
 
 @pytest.mark.anyio
-async def test_teaching_modular_unit_required_prereq_count_tracks_incoming_edges_until_manual_override() -> None:
+async def test_teaching_modular_unit_required_prereq_count_tracks_incoming_edges_until_manual_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Option 1: k defaults to n and keeps tracking while "auto" (k==n)."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -152,8 +161,7 @@ async def test_teaching_modular_unit_required_prereq_count_tracks_incoming_edges
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-k1", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-k1")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -222,7 +230,9 @@ async def test_teaching_modular_unit_required_prereq_count_tracks_incoming_edges
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_unit_required_prereq_count_decreases_when_auto_and_edge_removed() -> None:
+async def test_teaching_modular_unit_required_prereq_count_decreases_when_auto_and_edge_removed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """When k==n, removing an incoming edge should keep k in sync."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -234,8 +244,7 @@ async def test_teaching_modular_unit_required_prereq_count_decreases_when_auto_a
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-k2", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-k2")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -288,7 +297,9 @@ async def test_teaching_modular_unit_required_prereq_count_decreases_when_auto_a
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_unit_duplicate_edge_returns_conflict_instead_of_500() -> None:
+async def test_teaching_modular_unit_duplicate_edge_returns_conflict_instead_of_500(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Creating the same edge twice must return a stable API error, not 500."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -300,8 +311,7 @@ async def test_teaching_modular_unit_duplicate_edge_returns_conflict_instead_of_
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-dup-edge", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-dup-edge")
 
     async with httpx.AsyncClient(
         transport=ASGITransport(app=main.app, raise_app_exceptions=False),
@@ -340,7 +350,9 @@ async def test_teaching_modular_unit_duplicate_edge_returns_conflict_instead_of_
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_unit_edge_create_accepts_uppercase_module_ids() -> None:
+async def test_teaching_modular_unit_edge_create_accepts_uppercase_module_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Edge create must accept valid UUIDs regardless of letter casing."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -352,8 +364,7 @@ async def test_teaching_modular_unit_edge_create_accepts_uppercase_module_ids() 
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-upper-edge", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-upper-edge")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -375,7 +386,9 @@ async def test_teaching_modular_unit_edge_create_accepts_uppercase_module_ids() 
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_unit_edge_delete_rejects_linear_unit_invalid_unit_type() -> None:
+async def test_teaching_modular_unit_edge_delete_rejects_linear_unit_invalid_unit_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Edge delete endpoint must reject linear units with a typed 400 detail code."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -387,8 +400,7 @@ async def test_teaching_modular_unit_edge_delete_rejects_linear_unit_invalid_uni
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-del-linear", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-del-linear")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -409,7 +421,9 @@ async def test_teaching_modular_unit_edge_delete_rejects_linear_unit_invalid_uni
 
 
 @pytest.mark.anyio
-async def test_teaching_modular_unit_edge_delete_by_path_params_happy_path() -> None:
+async def test_teaching_modular_unit_edge_delete_by_path_params_happy_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Preferred edge delete endpoint should work without DELETE request body."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -421,8 +435,7 @@ async def test_teaching_modular_unit_edge_delete_by_path_params_happy_path() -> 
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-api-mod-editor-del-path", name="Teacher", roles=["teacher"])
+    teacher = _teacher_session(monkeypatch, "t-api-mod-editor-del-path")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

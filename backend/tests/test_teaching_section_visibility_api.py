@@ -21,7 +21,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 from utils.db import require_db_or_skip as _require_db_or_skip
@@ -69,8 +69,8 @@ def _visibility_path(course_id: str, module_id: str, section_id: str) -> str:
 
 
 @pytest.mark.anyio
-async def test_section_visibility_requires_teacher_owner():
-    main.SESSION_STORE = SessionStore()
+async def test_section_visibility_requires_teacher_owner(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -92,9 +92,9 @@ async def test_section_visibility_requires_teacher_owner():
         assert resp.status_code == 401
 
     owner_sub = "teacher-section-release-owner"
-    owner = main.SESSION_STORE.create(sub=owner_sub, name="Frau Owner", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="student-section-release", name="Max", roles=["student"])
-    other_teacher = main.SESSION_STORE.create(
+    owner = store.create(sub=owner_sub, name="Frau Owner", roles=["teacher"])
+    student = store.create(sub="student-section-release", name="Max", roles=["student"])
+    other_teacher = store.create(
         sub="teacher-section-release-other", name="Herr Fremd", roles=["teacher"]
     )
 
@@ -120,8 +120,8 @@ async def test_section_visibility_requires_teacher_owner():
 
 
 @pytest.mark.anyio
-async def test_section_visibility_toggle_and_error_conditions():
-    main.SESSION_STORE = SessionStore()
+async def test_section_visibility_toggle_and_error_conditions(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -133,7 +133,7 @@ async def test_section_visibility_toggle_and_error_conditions():
         pytest.skip("DB-backed TeachingRepo required for this test")
 
     owner_sub = "teacher-section-release-toggle"
-    owner = main.SESSION_STORE.create(sub=owner_sub, name="Frau Toggle", roles=["teacher"])
+    owner = store.create(sub=owner_sub, name="Frau Toggle", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)
@@ -193,9 +193,9 @@ async def test_section_visibility_toggle_and_error_conditions():
 
 
 @pytest.mark.anyio
-async def test_section_visibility_invalid_ids_and_not_found_details():
+async def test_section_visibility_invalid_ids_and_not_found_details(monkeypatch: pytest.MonkeyPatch):
     """Validate 400 for invalid UUIDs and 404 detail codes for missing module."""
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -206,7 +206,7 @@ async def test_section_visibility_invalid_ids_and_not_found_details():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    owner = main.SESSION_STORE.create(sub="teacher-section-release-ids", name="Ids", roles=["teacher"])
+    owner = store.create(sub="teacher-section-release-ids", name="Ids", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)

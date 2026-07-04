@@ -29,7 +29,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 from utils.db import require_db_or_skip as _require_db_or_skip
 
@@ -99,10 +99,10 @@ def _iso_in_future(minutes: int = 30) -> str:
 
 
 @pytest.mark.anyio
-async def test_tasks_require_auth_and_author_role():
+async def test_tasks_require_auth_and_author_role(monkeypatch: pytest.MonkeyPatch):
     """Endpoints require authentication and teacher author role."""
 
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
 
     async with (await _client()) as client:
         resp = await client.get(
@@ -111,7 +111,7 @@ async def test_tasks_require_auth_and_author_role():
         )
         assert resp.status_code == 401
 
-    student = main.SESSION_STORE.create(sub="student-tasks", name="Max", roles=["student"])
+    student = store.create(sub="student-tasks", name="Max", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
@@ -124,10 +124,10 @@ async def test_tasks_require_auth_and_author_role():
 
 
 @pytest.mark.anyio
-async def test_author_can_crud_tasks_and_non_author_is_blocked():
+async def test_author_can_crud_tasks_and_non_author_is_blocked(monkeypatch: pytest.MonkeyPatch):
     """Happy path for author + 403 for Lehrer ohne Autorenschaft."""
 
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
 
@@ -138,8 +138,8 @@ async def test_author_can_crud_tasks_and_non_author_is_blocked():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    author = main.SESSION_STORE.create(sub="teacher-tasks-A", name="Autor", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="teacher-tasks-B", name="Fremd", roles=["teacher"])
+    author = store.create(sub="teacher-tasks-A", name="Autor", roles=["teacher"])
+    other = store.create(sub="teacher-tasks-B", name="Fremd", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -221,13 +221,13 @@ async def test_author_can_crud_tasks_and_non_author_is_blocked():
 
 
 @pytest.mark.anyio
-async def test_task_creation_validation_errors():
+async def test_task_creation_validation_errors(monkeypatch: pytest.MonkeyPatch):
     """POST validations map to the documented detail codes."""
 
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
 
-    author = main.SESSION_STORE.create(sub="teacher-tasks-validation", name="Autor", roles=["teacher"])
+    author = store.create(sub="teacher-tasks-validation", name="Autor", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -285,13 +285,13 @@ async def test_task_creation_validation_errors():
 
 
 @pytest.mark.anyio
-async def test_tasks_invalid_uuid_path_params_return_400():
+async def test_tasks_invalid_uuid_path_params_return_400(monkeypatch: pytest.MonkeyPatch):
     """Invalid UUIDs in path must return 400 with specific detail codes."""
 
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
 
-    teacher = main.SESSION_STORE.create(sub="teacher-tasks-uuids", name="Autor", roles=["teacher"])
+    teacher = store.create(sub="teacher-tasks-uuids", name="Autor", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -327,13 +327,13 @@ async def test_tasks_invalid_uuid_path_params_return_400():
 
 
 @pytest.mark.anyio
-async def test_task_due_at_accepts_zulu():
+async def test_task_due_at_accepts_zulu(monkeypatch: pytest.MonkeyPatch):
     """Server accepts ISO timestamps with trailing 'Z' for UTC."""
 
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
 
-    teacher = main.SESSION_STORE.create(sub="teacher-tasks-zulu", name="Autor", roles=["teacher"])
+    teacher = store.create(sub="teacher-tasks-zulu", name="Autor", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -351,13 +351,13 @@ async def test_task_due_at_accepts_zulu():
 
 
 @pytest.mark.anyio
-async def test_task_update_validation_errors_and_empty_payload():
+async def test_task_update_validation_errors_and_empty_payload(monkeypatch: pytest.MonkeyPatch):
     """PATCH validations for empty payload and invalid fields."""
 
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
 
-    author = main.SESSION_STORE.create(sub="teacher-tasks-update", name="Autor", roles=["teacher"])
+    author = store.create(sub="teacher-tasks-update", name="Autor", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -395,13 +395,13 @@ async def test_task_update_validation_errors_and_empty_payload():
 
 
 @pytest.mark.anyio
-async def test_task_partial_patch_updates_only_sent_fields():
+async def test_task_partial_patch_updates_only_sent_fields(monkeypatch: pytest.MonkeyPatch):
     """PATCH with subset of fields should succeed and keep other values."""
 
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
 
-    author = main.SESSION_STORE.create(sub="teacher-tasks-partial", name="Autor", roles=["teacher"])
+    author = store.create(sub="teacher-tasks-partial", name="Autor", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)
@@ -430,14 +430,14 @@ async def test_task_partial_patch_updates_only_sent_fields():
 
 
 @pytest.mark.anyio
-async def test_task_reorder_happy_and_error_cases():
+async def test_task_reorder_happy_and_error_cases(monkeypatch: pytest.MonkeyPatch):
     """Permutation validation for reorder endpoint (200 + 400 detail codes)."""
 
-    main.SESSION_STORE = SessionStore()
+    store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
 
-    author = main.SESSION_STORE.create(sub="teacher-tasks-reorder", name="Autor", roles=["teacher"])
-    other = main.SESSION_STORE.create(sub="teacher-tasks-reorder-other", name="Fremd", roles=["teacher"])
+    author = store.create(sub="teacher-tasks-reorder", name="Autor", roles=["teacher"])
+    other = store.create(sub="teacher-tasks-reorder-other", name="Fremd", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", author.session_id)

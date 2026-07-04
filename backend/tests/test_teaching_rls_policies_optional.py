@@ -1,33 +1,33 @@
 """
-Optional RLS policy test (single-DSN): verifies that a limited role is
-constrained by app.current_sub. Uses only one DSN (limited) and seeds rows by
-acting as the owning teacher via `set_config('app.current_sub', ...)`.
+RLS policy test (single-DSN): verifies that a limited role is constrained by
+app.current_sub.
 
-Skips if no database is reachable via RLS_TEST_DSN or DATABASE_URL.
+Uses only one DSN (limited) and seeds rows by acting as the owning teacher via
+`set_config('app.current_sub', ...)`. In the hard DB-security gate,
+`require_db_or_skip()` turns a missing DB into a failure via REQUIRE_DB_TESTS=1.
 """
 from __future__ import annotations
 
 import os
 import pytest
 
+from utils.db import require_db_or_skip as _require_db_or_skip
 
-def _probe(dsn: str) -> bool:
-    try:
-        import psycopg  # type: ignore
-        with psycopg.connect(dsn, connect_timeout=5):
-            return True
-    except Exception:
-        return False
+
+def _limited_dsn() -> str:
+    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
+    port = os.getenv("TEST_DB_PORT", "54322")
+    user = os.getenv("APP_DB_USER", "gustav_app")
+    password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
+    return os.getenv("RLS_TEST_DSN") or os.getenv("DATABASE_URL") or f"postgresql://{user}:{password}@{host}:{port}/postgres"
 
 
 @pytest.mark.anyio
 async def test_rls_limited_role_sees_only_own_rows():
-    dsn = os.getenv("RLS_TEST_DSN") or os.getenv("DATABASE_URL") or ""
-    if not dsn or not _probe(dsn):
-        pytest.skip("RLS limited DSN not configured or DB unreachable")
-
+    _require_db_or_skip()
     import psycopg  # type: ignore
 
+    dsn = _limited_dsn()
     t1, t2 = "teacher-rls-1", "teacher-rls-2"
 
     # Cleanup any leftovers from previous runs for deterministic assertions

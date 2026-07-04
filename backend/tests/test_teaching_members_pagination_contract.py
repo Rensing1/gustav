@@ -13,6 +13,7 @@ BDD:
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 import sys
 
@@ -30,7 +31,9 @@ if str(WEB_DIR) not in sys.path:
 
 import main  # type: ignore
 import routes.teaching as teaching  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
+
+teaching_pkg = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -44,16 +47,20 @@ async def _client() -> httpx.AsyncClient:
 @pytest.mark.anyio
 async def test_members_limit_zero_uses_documented_default_10(monkeypatch: pytest.MonkeyPatch) -> None:
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-members-default-10", name="Teach", roles=["teacher"])  # type: ignore
+    if teaching_pkg is not teaching:
+        teaching_pkg.set_repo(teaching._Repo())  # type: ignore[attr-defined]
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-members-default-10", name="Teach", roles=["teacher"])
 
     # Keep this test deterministic and fully local (no Keycloak dependency).
-    monkeypatch.setattr(
-        teaching,
-        "resolve_student_names",
-        lambda subs: {sid: f"Name:{sid}" for sid in subs},
-        raising=False,
-    )
+    resolve_names = lambda subs: {sid: f"Name:{sid}" for sid in subs}
+    monkeypatch.setattr(teaching, "_resolve_student_names_runtime", resolve_names, raising=False)
+    monkeypatch.setattr(teaching_pkg, "_resolve_student_names_runtime", resolve_names, raising=False)
+
+    async def _inline_to_thread(func, /, *args, **kwargs):  # noqa: ANN001 - mirrors asyncio.to_thread
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(teaching.asyncio, "to_thread", _inline_to_thread, raising=True)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

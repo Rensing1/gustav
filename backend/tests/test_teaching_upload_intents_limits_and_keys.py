@@ -23,12 +23,12 @@ async def _client():
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test", headers={"Origin": "http://test"})
 
 
-async def _seed_unit_section():
+async def _seed_unit_section(monkeypatch: pytest.MonkeyPatch):
     import main  # noqa
-    from identity_access.stores import SessionStore  # type: ignore
+    from backend.tests.runtime_auth_helpers import install_session_store
 
-    main.SESSION_STORE = SessionStore()  # in-memory
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    teacher = session_store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"})
@@ -73,7 +73,7 @@ async def test_teaching_upload_intent_uses_config_limit_and_key_shape(monkeypatc
     recorder = _Recorder()
     teaching.set_storage_adapter(recorder)  # type: ignore[arg-type]
 
-    sid, unit_id, section_id = await _seed_unit_section()
+    sid, unit_id, section_id = await _seed_unit_section(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sid)
         r = await c.post(

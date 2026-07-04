@@ -19,8 +19,17 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # type: ignore  # noqa: E402
 from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _fresh_session_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_session_store(monkeypatch, main)
+
+
+def _session_store():
+    return main.RUNTIME.session_store
 
 
 async def _client() -> httpx.AsyncClient:
@@ -71,14 +80,13 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 @pytest.mark.anyio
 async def test_student_live_overview_requires_teacher_owner_and_valid_ids() -> None:
-    main.SESSION_STORE = SessionStore()
     async with (await _client()) as c:
         r = await c.get(
             f"/api/teaching/courses/{uuid.uuid4()}/students/some-student/submissions/overview"
         )
         assert r.status_code == 401
 
-    student = main.SESSION_STORE.create(sub="s-live-overview-unauth", name="S", roles=["student"])  # type: ignore
+    student = _session_store().create(sub="s-live-overview-unauth", name="S", roles=["student"])  # type: ignore
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.get(
@@ -101,9 +109,8 @@ async def test_student_live_overview_lists_all_units_and_supports_filtering() ->
     except Exception:
         pytest.skip("DB-backed repos required for student live overview")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-student-live-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-student-live-1", name="Anna", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-student-live-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-student-live-1", name="Anna", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -169,8 +176,7 @@ async def test_student_live_overview_rejects_foreign_unit_and_non_member() -> No
     except Exception:
         pytest.skip("DB-backed repos required for student live overview")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-student-live-owner-2", name="Owner", roles=["teacher"])  # type: ignore
+    owner = _session_store().create(sub="t-student-live-owner-2", name="Owner", roles=["teacher"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -190,8 +196,7 @@ async def test_student_live_overview_rejects_foreign_unit_and_non_member() -> No
 async def test_student_live_overview_deduplicates_unit_ids_case_insensitively(monkeypatch: pytest.MonkeyPatch) -> None:
     import routes.teaching as teaching  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-overview-casefold-owner", name="Owner", roles=["teacher"])  # type: ignore
+    owner = _session_store().create(sub="t-live-overview-casefold-owner", name="Owner", roles=["teacher"])  # type: ignore
     course_id = str(uuid.uuid4())
     unit_id = str(uuid.uuid4())
 
@@ -234,8 +239,7 @@ async def test_student_live_overview_deduplicates_unit_ids_case_insensitively(mo
 async def test_student_live_overview_accepts_path_encoded_student_sub_with_slash(monkeypatch: pytest.MonkeyPatch) -> None:
     import routes.teaching as teaching  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-overview-path-owner", name="Owner", roles=["teacher"])  # type: ignore
+    owner = _session_store().create(sub="t-live-overview-path-owner", name="Owner", roles=["teacher"])  # type: ignore
     course_id = str(uuid.uuid4())
     student_sub = "legacy/student"
 

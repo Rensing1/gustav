@@ -1,106 +1,35 @@
-"""
-SSR — Teaching Live matrix cell rendering (H5P)
+"""Contracts for retired Teaching-Live SSR matrix cell rendering.
 
-These unit tests validate the pure HTML rendering logic for the live matrix
-cells without requiring a running DB.
-
-Why:
-    H5P tasks are auto-scorable and should expose the latest raw score directly
-    in the Live-Unterrichts-Matrix:
-      - — no submission
-      - x/y latest score when a submission exists
+The old FastAPI HTML matrix routes are retired. H5P score fields are now
+protected by the Live API/OpenAPI contracts and rendered in the Svelte surface,
+so the backend entrypoint must not keep an unused HTML cell renderer.
 """
+
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 
-def _import_web_main():
-    repo_root = Path(__file__).resolve().parents[2]
-    web_dir = repo_root / "backend" / "web"
-    if str(web_dir) not in os.sys.path:
-        os.sys.path.insert(0, str(web_dir))
-    # Avoid requiring a working DB DSN during import of the web app module.
-    os.environ.setdefault("ALLOW_SERVICE_DSN_FOR_TESTING", "true")
-    import main  # type: ignore
-
-    return main
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_h5p_cell_renders_latest_score_x_y():
-    main = _import_web_main()
+def test_main_does_not_keep_retired_live_matrix_cell_renderers() -> None:
+    """Retired Teaching-Live SSR matrix helpers must not remain in main.py."""
 
-    # No submission
-    assert (
-        main._render_live_cell_content(  # type: ignore[attr-defined]
-            task_kind="h5p",
-            has_submission=False,
-            average_score=None,
-            score_raw=None,
-            score_max=None,
-            h5p_completed=None,
-        )
-        == "—"
-    )
+    source = (REPO_ROOT / "backend/web/main.py").read_text(encoding="utf-8")
 
-    # Latest scored attempt
-    attempted = main._render_live_cell_content(  # type: ignore[attr-defined]
-        task_kind="h5p",
-        has_submission=True,
-        average_score=None,
-        score_raw=7,
-        score_max=10,
-        h5p_completed=False,
-    )
-    assert "7/10" in attempted
-
-    # Unscored content still distinguishes submission from empty cell.
-    unscored = main._render_live_cell_content(  # type: ignore[attr-defined]
-        task_kind="h5p",
-        has_submission=True,
-        average_score=None,
-        score_raw=0,
-        score_max=0,
-        h5p_completed=True,
-    )
-    assert "0/0" in unscored
+    assert "def _live_score_badge_variant" not in source
+    assert "def _render_live_average_score_badge" not in source
+    assert "def _render_live_cell_content" not in source
 
 
-def test_non_h5p_cells_keep_existing_badge_and_checkmark_behavior():
-    main = _import_web_main()
+def test_active_live_surfaces_still_expose_h5p_score_fields() -> None:
+    """The active Live API and Svelte surface still carry H5P score fields."""
 
-    # Native/visual without analysis → ✅/—
-    assert (
-        main._render_live_cell_content(  # type: ignore[attr-defined]
-            task_kind="native",
-            has_submission=True,
-            average_score=None,
-            score_raw=None,
-            score_max=None,
-            h5p_completed=None,
-        )
-        == "✅"
-    )
-    assert (
-        main._render_live_cell_content(  # type: ignore[attr-defined]
-            task_kind="native",
-            has_submission=False,
-            average_score=None,
-            score_raw=None,
-            score_max=None,
-            h5p_completed=None,
-        )
-        == "—"
-    )
+    app_route = (REPO_ROOT / "backend/web/routes/app.py").read_text(encoding="utf-8")
+    live_page = (REPO_ROOT / "frontend/src/routes/live/+page.svelte").read_text(encoding="utf-8")
 
-    # Native/visual with analysis score → badge
-    badge = main._render_live_cell_content(  # type: ignore[attr-defined]
-        task_kind="native",
-        has_submission=True,
-        average_score=8.0,
-        score_raw=None,
-        score_max=None,
-        h5p_completed=None,
-    )
-    assert "badge" in badge
+    for field in ("score_raw", "score_max", "h5p_completed"):
+        assert field in app_route
+    assert "score_raw" in live_page
+    assert "score_max" in live_page

@@ -18,7 +18,7 @@ if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -30,9 +30,9 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_live_detail_fragment_is_retired_for_teachers() -> None:
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="teacher-live-detail-retired", name="Owner", roles=["teacher"])  # type: ignore
+async def test_live_detail_fragment_is_retired_for_teachers(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
+    owner = store.create(sub="teacher-live-detail-retired", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
       client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)

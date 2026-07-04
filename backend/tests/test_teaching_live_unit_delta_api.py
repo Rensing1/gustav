@@ -27,9 +27,18 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # type: ignore  # noqa: E402
 
 from utils.db import require_db_or_skip as _require_db_or_skip
+
+
+@pytest.fixture(autouse=True)
+def _fresh_session_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_session_store(monkeypatch, main)
+
+
+def _session_store():
+    return main.RUNTIME.session_store
 
 
 async def _client() -> httpx.AsyncClient:
@@ -76,8 +85,6 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 @pytest.mark.anyio
 async def test_delta_requires_auth_and_owner():
-    main.SESSION_STORE = SessionStore()
-
     async with (await _client()) as c:
         # Unauthenticated
         r = await c.get(
@@ -86,7 +93,7 @@ async def test_delta_requires_auth_and_owner():
         )
         assert r.status_code == 401
 
-    student = main.SESSION_STORE.create(sub="s-delta", name="S", roles=["student"])  # type: ignore
+    student = _session_store().create(sub="s-delta", name="S", roles=["student"])  # type: ignore
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.get(
@@ -104,8 +111,8 @@ async def test_delta_requires_auth_and_owner():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for delta tests")
 
-    owner = main.SESSION_STORE.create(sub="t-delta-owner", name="Owner", roles=["teacher"])  # type: ignore
-    other = main.SESSION_STORE.create(sub="t-delta-other", name="Other", roles=["teacher"])  # type: ignore
+    owner = _session_store().create(sub="t-delta-owner", name="Owner", roles=["teacher"])  # type: ignore
+    other = _session_store().create(sub="t-delta-other", name="Other", roles=["teacher"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -142,9 +149,8 @@ async def test_delta_returns_cells_after_submission():
     except Exception:
         pytest.skip("DB-backed repos required for delta tests")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-delta-owner2", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-delta-learner", name="Student", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-delta-owner2", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-delta-learner", name="Student", roles=["student"])  # type: ignore
 
     async with (await _client()) as owner_client, (await _client()) as student_client:
         owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -220,9 +226,8 @@ async def test_delta_falls_back_when_helper_score_columns_are_missing(monkeypatc
     except Exception:
         pytest.skip("DB-backed repos required for delta compatibility test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-delta-legacy-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-delta-legacy-learner", name="Legacy", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-delta-legacy-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-delta-legacy-learner", name="Legacy", roles=["student"])  # type: ignore
 
     async with (await _client()) as owner_client, (await _client()) as student_client:
         owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -339,9 +344,8 @@ async def test_delta_includes_average_score_for_completed_analysis():
     if not dsn:
         pytest.skip("SERVICE_ROLE_DSN required to emulate analysis completion")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-delta-score-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-delta-score-learner", name="Student", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-delta-score-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-delta-score-learner", name="Student", roles=["student"])  # type: ignore
 
     async with (await _client()) as owner_client, (await _client()) as student_client:
         owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -428,9 +432,8 @@ async def test_delta_includes_latest_h5p_score_x_y_and_completion_flag():
     except Exception:
         pytest.skip("DB-backed repos required for delta H5P test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-delta-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-delta-h5p-learner", name="Student", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-delta-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-delta-h5p-learner", name="Student", roles=["student"])  # type: ignore
 
     async with (await _client()) as owner_client, (await _client()) as student_client:
         owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)

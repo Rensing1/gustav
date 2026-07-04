@@ -2,23 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import importlib
 from types import SimpleNamespace
-import sys
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore
-from routes import app as app_routes  # type: ignore
-from identity_access.cli_tokens import InMemoryCLITokenStore  # type: ignore
+main = importlib.import_module("backend.web.main")
+app_routes = importlib.import_module("backend.web.routes.app")
+from backend.identity_access.cli_tokens import InMemoryCLITokenStore
 
 
 pytestmark = pytest.mark.anyio("asyncio")

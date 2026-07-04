@@ -31,7 +31,7 @@ from backend.learning.workers.process_learning_submission_jobs import (  # noqa:
 )
 from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
 from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -158,7 +158,7 @@ class _FeedbackCapturingAdapter:
         )
 
 
-async def _prepare_modular_learning_fixture() -> dict:
+async def _prepare_modular_learning_fixture(monkeypatch: pytest.MonkeyPatch) -> dict:
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -173,9 +173,9 @@ async def _prepare_modular_learning_fixture() -> dict:
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="teacher-worker-modular", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="student-worker-modular", name="Schüler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="teacher-worker-modular", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="student-worker-modular", name="Schüler", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -290,8 +290,10 @@ async def test_worker_passes_task_context_to_feedback_adapter():
 
 
 @pytest.mark.anyio
-async def test_modular_submission_job_payload_includes_instruction_but_not_teacher_context():
-    fixture = await _prepare_modular_learning_fixture()
+async def test_modular_submission_job_payload_includes_instruction_but_not_teacher_context(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    fixture = await _prepare_modular_learning_fixture(monkeypatch)
     dsn = _dsn()
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
 
@@ -337,7 +339,7 @@ async def test_modular_submission_job_payload_includes_instruction_but_not_teach
 
 @pytest.mark.anyio
 async def test_worker_passes_modular_visual_task_context_to_visual_feedback_adapter(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    fixture = await _prepare_modular_learning_fixture()
+    fixture = await _prepare_modular_learning_fixture(monkeypatch)
     dsn = _dsn()
     worker_dsn = os.getenv("SERVICE_ROLE_DSN") or dsn
     monkeypatch.setenv("SERVICE_ROLE_DSN", worker_dsn)

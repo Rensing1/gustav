@@ -20,18 +20,12 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 from backend.learning.workers import health as worker_health  # noqa: E402  # type: ignore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
-
-
-def _install_session_store() -> SessionStore:
-    store = SessionStore()
-    main.SESSION_STORE = store
-    return store
 
 
 async def _client() -> httpx.AsyncClient:
@@ -68,7 +62,7 @@ class _FakeHealthService:
 @pytest.mark.anyio
 async def test_learning_worker_health_returns_healthy(monkeypatch: pytest.MonkeyPatch):
     """Authorized teachers should receive the healthy payload when probe passes."""
-    store = _install_session_store()
+    store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="teacher-health", roles=["teacher"], name="Lehrkraft")
 
     fake_result = _probe_result(
@@ -104,7 +98,7 @@ async def test_learning_worker_health_returns_healthy(monkeypatch: pytest.Monkey
 @pytest.mark.anyio
 async def test_learning_worker_health_returns_503_when_role_missing(monkeypatch: pytest.MonkeyPatch):
     """If the worker role is missing, the probe must surface degraded status."""
-    store = _install_session_store()
+    store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="teacher-health-missing", roles=["teacher"], name="Lehrkraft")
 
     fake_result = _probe_result(
@@ -147,7 +141,7 @@ async def test_learning_worker_health_returns_503_on_db_failure(monkeypatch: pyt
     We simulate psycopg being available but raising on connect, to exercise the
     `db_connect_failed` branch in the health service.
     """
-    store = _install_session_store()
+    store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="teacher-health-db-fail", roles=["teacher"], name="Lehrkraft")
 
     # Force the service into the DB path and make connect() raise
@@ -191,7 +185,7 @@ async def test_learning_worker_health_returns_503_on_db_failure(monkeypatch: pyt
 @pytest.mark.anyio
 async def test_learning_worker_health_requires_authentication(monkeypatch: pytest.MonkeyPatch):
     """Unauthenticated callers must receive 401 without hitting the probe."""
-    _install_session_store()
+    install_session_store(monkeypatch, main)
     fake_service = _FakeHealthService(
         _probe_result(
             status="healthy",

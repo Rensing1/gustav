@@ -96,7 +96,7 @@ def test_current_environment_prefers_settings_over_env(monkeypatch: pytest.Monke
     import main  # type: ignore
 
     # Ensure app settings override the environment variable.
-    main.SETTINGS.override_environment("prod")  # type: ignore[attr-defined]
+    main.RUNTIME.settings.override_environment("prod")  # type: ignore[attr-defined]
     monkeypatch.setenv("GUSTAV_ENV", "dev")
 
     env = learning._current_environment()
@@ -121,7 +121,7 @@ def test_current_environment_prefers_loaded_module_when_imports_fail(monkeypatch
 
     dummy_settings = DummySettings()
     dummy_settings.override_environment("prod")
-    dummy_main = types.SimpleNamespace(SETTINGS=dummy_settings)
+    dummy_main = types.SimpleNamespace(RUNTIME=types.SimpleNamespace(settings=dummy_settings))
 
     monkeypatch.setitem(sys.modules, "backend.web.main", dummy_main)
     monkeypatch.setitem(sys.modules, "main", dummy_main)
@@ -140,15 +140,15 @@ def test_current_environment_prefers_loaded_module_when_imports_fail(monkeypatch
     assert env == "prod"
 
 
-def test_current_environment_falls_back_to_main_when_backend_import_fails(monkeypatch: pytest.MonkeyPatch):
-    """If backend.web.main import fails, use main.SETTINGS.environment."""
+def test_current_environment_falls_back_to_main_runtime_when_backend_import_fails(monkeypatch: pytest.MonkeyPatch):
+    """If backend.web.main import fails, use main.RUNTIME.settings.environment."""
     real_import_module = importlib.import_module
 
     class DummySettings:
         def __init__(self, env: str) -> None:
             self.environment = env
 
-    dummy_main = type("DummyMain", (), {"SETTINGS": DummySettings("stage")})
+    dummy_main = type("DummyMain", (), {"RUNTIME": types.SimpleNamespace(settings=DummySettings("stage"))})
 
     def fake_import_module(name: str):
         if name == "backend.web.main":

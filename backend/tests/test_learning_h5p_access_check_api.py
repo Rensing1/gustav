@@ -22,7 +22,7 @@ from uuid import UUID
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -36,7 +36,7 @@ async def _client() -> httpx.AsyncClient:
     )
 
 
-async def _prepare_released_h5p_task(*, content_id: str = "1") -> dict:
+async def _prepare_released_h5p_task(monkeypatch: pytest.MonkeyPatch, *, content_id: str = "1") -> dict:
     _require_db_or_skip()
 
     import routes.teaching as teaching  # noqa: E402
@@ -50,10 +50,10 @@ async def _prepare_released_h5p_task(*, content_id: str = "1") -> dict:
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-access", name="Teacher", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-h5p-access", name="Student", roles=["student"])  # type: ignore
-    outsider = main.SESSION_STORE.create(sub="s-h5p-outsider", name="Outsider", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-access", name="Teacher", roles=["teacher"])
+    student = store.create(sub="s-h5p-access", name="Student", roles=["student"])
+    outsider = store.create(sub="s-h5p-outsider", name="Outsider", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -100,7 +100,7 @@ async def _prepare_released_h5p_task(*, content_id: str = "1") -> dict:
     }
 
 
-async def _prepare_locked_modular_h5p_task(*, content_id: str = "42") -> dict:
+async def _prepare_locked_modular_h5p_task(monkeypatch: pytest.MonkeyPatch, *, content_id: str = "42") -> dict:
     """Create a modular unit where the H5P module is locked until prereq done."""
     _require_db_or_skip()
 
@@ -125,9 +125,9 @@ async def _prepare_locked_modular_h5p_task(*, content_id: str = "42") -> dict:
         f"@{os.getenv('TEST_DB_HOST','127.0.0.1')}:{os.getenv('TEST_DB_PORT','54322')}/postgres"
     )
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-modular", name="Teacher", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-h5p-modular", name="Student", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-modular", name="Teacher", roles=["teacher"])
+    student = store.create(sub="s-h5p-modular", name="Student", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -205,8 +205,8 @@ async def _prepare_locked_modular_h5p_task(*, content_id: str = "42") -> dict:
 
 
 @pytest.mark.anyio
-async def test_learning_h5p_access_204_for_enrolled_student_and_released_task() -> None:
-    fx = await _prepare_released_h5p_task()
+async def test_learning_h5p_access_204_for_enrolled_student_and_released_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    fx = await _prepare_released_h5p_task(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)
         r = await c.get(
@@ -218,8 +218,8 @@ async def test_learning_h5p_access_204_for_enrolled_student_and_released_task() 
 
 
 @pytest.mark.anyio
-async def test_learning_h5p_access_404_for_student_not_member() -> None:
-    fx = await _prepare_released_h5p_task()
+async def test_learning_h5p_access_404_for_student_not_member(monkeypatch: pytest.MonkeyPatch) -> None:
+    fx = await _prepare_released_h5p_task(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, fx["outsider"].session_id)
         r = await c.get(
@@ -231,9 +231,9 @@ async def test_learning_h5p_access_404_for_student_not_member() -> None:
 
 
 @pytest.mark.anyio
-async def test_learning_h5p_access_403_for_teacher() -> None:
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p-access-role", name="Teacher", roles=["teacher"])  # type: ignore
+async def test_learning_h5p_access_403_for_teacher(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p-access-role", name="Teacher", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r = await c.get(
@@ -256,9 +256,9 @@ async def test_learning_h5p_access_401_for_unauthenticated() -> None:
 
 
 @pytest.mark.anyio
-async def test_learning_h5p_access_400_for_invalid_course_uuid() -> None:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-h5p-access-bad-uuid", name="Student", roles=["student"])  # type: ignore
+async def test_learning_h5p_access_400_for_invalid_course_uuid(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-h5p-access-bad-uuid", name="Student", roles=["student"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.get("/api/learning/courses/not-a-uuid/h5p/contents/1/access")
@@ -270,9 +270,9 @@ async def test_learning_h5p_access_400_for_invalid_course_uuid() -> None:
 
 
 @pytest.mark.anyio
-async def test_learning_h5p_access_400_for_invalid_content_id() -> None:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-h5p-access-bad-cid", name="Student", roles=["student"])  # type: ignore
+async def test_learning_h5p_access_400_for_invalid_content_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-h5p-access-bad-cid", name="Student", roles=["student"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.get(
@@ -286,10 +286,10 @@ async def test_learning_h5p_access_400_for_invalid_content_id() -> None:
 
 
 @pytest.mark.anyio
-async def test_learning_h5p_access_400_for_non_ascii_digit_content_id() -> None:
+async def test_learning_h5p_access_400_for_non_ascii_digit_content_id(monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-ASCII digits must be rejected to match the OpenAPI `^[0-9]+$` pattern."""
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-h5p-access-nonascii", name="Student", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-h5p-access-nonascii", name="Student", roles=["student"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.get(
@@ -303,8 +303,8 @@ async def test_learning_h5p_access_400_for_non_ascii_digit_content_id() -> None:
 
 
 @pytest.mark.anyio
-async def test_learning_h5p_access_404_for_locked_modular_h5p_then_204_after_unlock() -> None:
-    fx = await _prepare_locked_modular_h5p_task(content_id="42")
+async def test_learning_h5p_access_404_for_locked_modular_h5p_then_204_after_unlock(monkeypatch: pytest.MonkeyPatch) -> None:
+    fx = await _prepare_locked_modular_h5p_task(monkeypatch, content_id="42")
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)

@@ -15,6 +15,8 @@ import pytest
 from httpx import ASGITransport
 import asyncio
 
+from backend.tests.runtime_auth_helpers import install_session_store
+
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -40,10 +42,9 @@ async def test_upload_proxy_raises_502_on_exception(monkeypatch: pytest.MonkeyPa
         import backend.web.routes.learning as learning_backend  # type: ignore
     except ImportError:  # pragma: no cover - alias may not exist outside app package
         learning_backend = None  # type: ignore
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-err", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-proxy-err", name="S", roles=["student"])
 
     # Monkeypatch async forwarder to raise
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
@@ -69,10 +70,9 @@ async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatc
         import backend.web.routes.learning as learning_backend  # type: ignore
     except ImportError:  # pragma: no cover
         learning_backend = None  # type: ignore
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-500", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-proxy-500", name="S", roles=["student"])
 
     class _Resp:
         status_code = 500
@@ -99,10 +99,9 @@ async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPat
         import backend.web.routes.learning as learning_backend  # type: ignore
     except ImportError:  # pragma: no cover
         learning_backend = None  # type: ignore
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-await", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-proxy-await", name="S", roles=["student"])
 
     invoked = asyncio.Event()
 
@@ -144,10 +143,9 @@ async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.Monkey
         import backend.web.routes.learning as learning_backend  # type: ignore
     except ImportError:  # pragma: no cover
         learning_backend = None  # type: ignore
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-parallel", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-proxy-parallel", name="S", roles=["student"])
 
     in_flight = 0
     peak = 0
@@ -199,10 +197,9 @@ async def test_upload_proxy_enforces_https_scheme(monkeypatch: pytest.MonkeyPatc
         import backend.web.routes.learning as learning_backend  # type: ignore
     except ImportError:  # pragma: no cover
         learning_backend = None  # type: ignore
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-http", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-proxy-http", name="S", roles=["student"])
 
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("insecure URL must be rejected before forwarding")

@@ -15,7 +15,7 @@ from httpx import ASGITransport
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -29,7 +29,7 @@ async def _client() -> httpx.AsyncClient:
     )
 
 
-async def _prepare_fixture():
+async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     """Create a course/unit/section/task and enroll a student; release the section."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -43,9 +43,9 @@ async def _prepare_fixture():
         pytest.skip("DB-backed repos required")
 
     # Sessions
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-idem", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-idem", name="Schüler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-idem", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-idem", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -82,8 +82,8 @@ async def _prepare_fixture():
 
 
 @pytest.mark.anyio
-async def test_rejects_invalid_idempotency_key_chars():
-    fx = await _prepare_fixture()
+async def test_rejects_invalid_idempotency_key_chars(monkeypatch: pytest.MonkeyPatch):
+    fx = await _prepare_fixture(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set("gustav_session", fx["student"].session_id)
         r = await c.post(
@@ -96,8 +96,8 @@ async def test_rejects_invalid_idempotency_key_chars():
 
 
 @pytest.mark.anyio
-async def test_rejects_idempotency_key_too_long():
-    fx = await _prepare_fixture()
+async def test_rejects_idempotency_key_too_long(monkeypatch: pytest.MonkeyPatch):
+    fx = await _prepare_fixture(monkeypatch)
     long_token = "a" * 65
     async with (await _client()) as c:
         c.cookies.set("gustav_session", fx["student"].session_id)
@@ -111,8 +111,8 @@ async def test_rejects_idempotency_key_too_long():
 
 
 @pytest.mark.anyio
-async def test_accepts_valid_idempotency_key_token():
-    fx = await _prepare_fixture()
+async def test_accepts_valid_idempotency_key_token(monkeypatch: pytest.MonkeyPatch):
+    fx = await _prepare_fixture(monkeypatch)
     token = "abc-DEF_123"
     async with (await _client()) as c:
         c.cookies.set("gustav_session", fx["student"].session_id)
@@ -128,8 +128,8 @@ async def test_accepts_valid_idempotency_key_token():
 
 
 @pytest.mark.anyio
-async def test_idempotent_retry_returns_existing_submission():
-    fx = await _prepare_fixture()
+async def test_idempotent_retry_returns_existing_submission(monkeypatch: pytest.MonkeyPatch):
+    fx = await _prepare_fixture(monkeypatch)
     token = "retry-token-1"
     payload = {"kind": "text", "text_body": "Dies ist meine Lösung"}
     async with (await _client()) as c:

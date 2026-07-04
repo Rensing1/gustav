@@ -29,7 +29,7 @@ for path in (WEB_DIR, BACKEND_DIR, REPO_ROOT):
 
 import routes.learning as learning  # type: ignore  # noqa: E402
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 from teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore  # noqa: E402
 
 
@@ -82,11 +82,11 @@ async def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
-async def _prepare_fixture():
+async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     # Reuse existing teaching APIs to seed data quickly
-    main.SESSION_STORE = SessionStore()  # in-memory
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         # Teacher creates course/unit/section/task and releases section
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -119,7 +119,7 @@ async def _prepare_fixture():
 
 @pytest.mark.anyio
 async def test_upload_intent_image_png_happy_path(monkeypatch):
-    student_sid, course_id, task_id = await _prepare_fixture()
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", "600")
     with _use_storage_adapter(FakeStorageAdapter()):
@@ -147,8 +147,8 @@ async def test_upload_intent_image_png_happy_path(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_upload_intent_rejects_gif_and_too_large():
-    student_sid, course_id, task_id = await _prepare_fixture()
+async def test_upload_intent_rejects_gif_and_too_large(monkeypatch: pytest.MonkeyPatch):
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
         r1 = await c.post(
@@ -179,10 +179,10 @@ async def test_upload_intent_requires_authentication():
 
 
 @pytest.mark.anyio
-async def test_upload_intent_forbidden_for_teacher():
+async def test_upload_intent_forbidden_for_teacher(monkeypatch: pytest.MonkeyPatch):
     # Teacher role is not allowed to create student upload intents
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r = await c.post(
@@ -195,7 +195,7 @@ async def test_upload_intent_forbidden_for_teacher():
 @pytest.mark.anyio
 async def test_upload_intent_pdf_happy_path_includes_pdf_mime(monkeypatch):
     """File kind (PDF) returns intent with accepted_mime_types including application/pdf."""
-    student_sid, course_id, task_id = await _prepare_fixture()
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", "600")
     with _use_storage_adapter(FakeStorageAdapter()):
@@ -213,12 +213,12 @@ async def test_upload_intent_pdf_happy_path_includes_pdf_mime(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_upload_intent_requires_membership():
+async def test_upload_intent_requires_membership(monkeypatch: pytest.MonkeyPatch):
     """Student must be course member; otherwise 404 to avoid leaking existence."""
     # Prepare teacher-created resources without enrolling the student
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
@@ -252,11 +252,11 @@ async def test_upload_intent_requires_membership():
 
 
 @pytest.mark.anyio
-async def test_upload_intent_task_not_visible_returns_404():
+async def test_upload_intent_task_not_visible_returns_404(monkeypatch: pytest.MonkeyPatch):
     """If task not visible to student (section not released), respond 404."""
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
@@ -284,8 +284,8 @@ async def test_upload_intent_task_not_visible_returns_404():
 
 
 @pytest.mark.anyio
-async def test_upload_intent_csrf_violation_sets_detail():
-    student_sid, course_id, task_id = await _prepare_fixture()
+async def test_upload_intent_csrf_violation_sets_detail(monkeypatch: pytest.MonkeyPatch):
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
         r = await c.post(
@@ -298,9 +298,9 @@ async def test_upload_intent_csrf_violation_sets_detail():
 
 
 @pytest.mark.anyio
-async def test_upload_intent_requires_origin_or_referer_header():
+async def test_upload_intent_requires_origin_or_referer_header(monkeypatch: pytest.MonkeyPatch):
     """POST without Origin/Referer must be rejected with 403 (strict CSRF)."""
-    student_sid, course_id, task_id = await _prepare_fixture()
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
         r = await c.post(
@@ -313,7 +313,7 @@ async def test_upload_intent_requires_origin_or_referer_header():
 
 @pytest.mark.anyio
 async def test_upload_intent_returns_503_when_storage_missing(monkeypatch):
-    student_sid, course_id, task_id = await _prepare_fixture()
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", "600")
     monkeypatch.delenv("SUPABASE_URL", raising=False)
@@ -334,7 +334,7 @@ async def test_upload_intent_returns_503_when_storage_missing(monkeypatch):
 @pytest.mark.anyio
 async def test_upload_intent_fail_closed_when_authorization_check_unavailable(monkeypatch):
     """Fail-closed: never return a presigned upload when visibility cannot be verified."""
-    student_sid, course_id, task_id = await _prepare_fixture()
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", "600")
     monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "false")

@@ -12,7 +12,7 @@ import httpx
 from httpx import ASGITransport
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -26,8 +26,8 @@ async def _client() -> httpx.AsyncClient:
 async def test_strict_csrf_requires_origin_or_referer(monkeypatch: pytest.MonkeyPatch):
     # Enable strict mode and create an in-memory session
     monkeypatch.setenv("STRICT_CSRF_SUBMISSIONS", "true")
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    student = session_store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
@@ -37,4 +37,3 @@ async def test_strict_csrf_requires_origin_or_referer(monkeypatch: pytest.Monkey
         )
     assert res.status_code == 403
     assert res.json().get("detail") == "csrf_violation"
-

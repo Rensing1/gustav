@@ -22,7 +22,7 @@ from utils.db import require_db_or_skip as _require_db_or_skip
 pytestmark = pytest.mark.anyio("asyncio")
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 @dataclass
@@ -68,15 +68,15 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
     assert r.status_code in (201, 204)
 
 
-def _setup_sessions() -> tuple[_Actor, _Actor]:
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="Student", roles=["student"])
+def _setup_sessions(monkeypatch: pytest.MonkeyPatch) -> tuple[_Actor, _Actor]:
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])
+    student = store.create(sub=f"s-{uuid4()}", name="Student", roles=["student"])
     return _Actor(teacher.session_id, teacher.sub), _Actor(student.session_id, student.sub)
 
 
 @pytest.mark.anyio
-async def test_list_student_courses_alphabetical_and_minimal_fields():
+async def test_list_student_courses_alphabetical_and_minimal_fields(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     # Ensure DB-backed repos are active
     import routes.teaching as teaching  # noqa: E402
@@ -89,7 +89,7 @@ async def test_list_student_courses_alphabetical_and_minimal_fields():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    teacher, student = _setup_sessions()
+    teacher, student = _setup_sessions(monkeypatch)
 
     async with (await _client()) as c:
         # Create two courses with titles that test alphabetical order
@@ -116,7 +116,7 @@ async def test_list_student_courses_alphabetical_and_minimal_fields():
 
 
 @pytest.mark.anyio
-async def test_list_units_for_course_returns_ordered_positions_and_404_when_not_member():
+async def test_list_units_for_course_returns_ordered_positions_and_404_when_not_member(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -128,7 +128,7 @@ async def test_list_units_for_course_returns_ordered_positions_and_404_when_not_
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    teacher, student = _setup_sessions()
+    teacher, student = _setup_sessions(monkeypatch)
 
     async with (await _client()) as c:
         # Teacher creates course and units, adds modules in a specific order
@@ -158,7 +158,7 @@ async def test_list_units_for_course_returns_ordered_positions_and_404_when_not_
         assert r_ok.headers.get("Cache-Control") == "private, no-store"
 
 @pytest.mark.anyio
-async def test_list_student_courses_empty_list():
+async def test_list_student_courses_empty_list(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     # DB-backed repos required
     import routes.teaching as teaching  # noqa: E402
@@ -172,8 +172,8 @@ async def test_list_student_courses_empty_list():
         pytest.skip("DB-backed repos required")
 
     # Student with no memberships should get an empty list
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="Student", roles=["student"])
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid4()}", name="Student", roles=["student"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.get("/api/learning/courses")
@@ -182,7 +182,7 @@ async def test_list_student_courses_empty_list():
         assert r.json() == []
 
 @pytest.mark.anyio
-async def test_courses_pagination_clamp_limit_and_offset():
+async def test_courses_pagination_clamp_limit_and_offset(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -194,7 +194,7 @@ async def test_courses_pagination_clamp_limit_and_offset():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    teacher, student = _setup_sessions()
+    teacher, student = _setup_sessions(monkeypatch)
     async with (await _client()) as c:
         # Create a few courses and add membership
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -219,7 +219,7 @@ async def test_courses_pagination_clamp_limit_and_offset():
 
 
 @pytest.mark.anyio
-async def test_learning_courses_auth_and_uuid_errors():
+async def test_learning_courses_auth_and_uuid_errors(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     # Anonymous → 401
     async with (await _client()) as c:
@@ -229,8 +229,8 @@ async def test_learning_courses_auth_and_uuid_errors():
         assert r.headers.get("Cache-Control") == "private, no-store"
 
     # Invalid UUID for units → 400
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="Student", roles=["student"])
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid4()}", name="Student", roles=["student"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.get("/api/learning/courses/not-a-uuid/units")
@@ -238,11 +238,11 @@ async def test_learning_courses_auth_and_uuid_errors():
 
 
 @pytest.mark.anyio
-async def test_non_student_forbidden_learning_courses():
+async def test_non_student_forbidden_learning_courses(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     # Teacher session should yield 403 on student-only endpoint
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r = await c.get("/api/learning/courses")
@@ -261,19 +261,19 @@ async def test_units_unauthenticated_401():
 
 
 @pytest.mark.anyio
-async def test_non_student_forbidden_units():
+async def test_non_student_forbidden_units(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     # Teacher session should yield 403 on student-only units endpoint
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r = await c.get(f"/api/learning/courses/{uuid4()}/units")
         assert r.status_code == 403 or r.status_code == 400  # UUID may be invalid; ensure 403 with valid UUID below
 
     # Use a valid UUID to assert 403 specifically
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid4()}", name="Teacher", roles=["teacher"])
     valid_course_id = str(uuid4())
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -283,7 +283,7 @@ async def test_non_student_forbidden_units():
 
 
 @pytest.mark.anyio
-async def test_courses_pagination_clamp_limit_upper_bound():
+async def test_courses_pagination_clamp_limit_upper_bound(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -295,7 +295,7 @@ async def test_courses_pagination_clamp_limit_upper_bound():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    teacher, student = _setup_sessions()
+    teacher, student = _setup_sessions(monkeypatch)
     async with (await _client()) as c:
         # Create a small number of courses; the check focuses on clamping behavior and non-error
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

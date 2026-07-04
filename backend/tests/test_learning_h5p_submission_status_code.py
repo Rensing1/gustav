@@ -20,7 +20,7 @@ import pytest
 from httpx import ASGITransport
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -36,8 +36,8 @@ async def _client() -> httpx.AsyncClient:
 
 @pytest.mark.anyio
 async def test_learning_create_submission_returns_201_for_h5p(monkeypatch: pytest.MonkeyPatch) -> None:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-h5p-201", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-h5p-201", name="S", roles=["student"])
 
     class _OKUC:
         def __init__(self, *a, **k):
@@ -94,4 +94,3 @@ async def test_learning_create_submission_returns_201_for_h5p(monkeypatch: pytes
 
     assert r.status_code == 201
     assert r.headers.get("Cache-Control") == "private, no-store"
-

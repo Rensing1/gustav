@@ -6,7 +6,6 @@ environment-driven limit from `backend.storage.config.get_learning_max_upload_by
 """
 from __future__ import annotations
 
-import os
 import uuid
 import httpx
 import pytest
@@ -14,7 +13,8 @@ from httpx import ASGITransport
 
 import main  # type: ignore
 import routes.learning as learning  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.learning_route_helpers import VisibleLearningRepo
+from backend.tests.runtime_auth_helpers import install_session_store
 from teaching.storage import StorageAdapterProtocol  # type: ignore
 
 
@@ -47,11 +47,12 @@ async def test_learning_upload_intent_uses_config_limit(monkeypatch: pytest.Monk
 
     # Wire the fake storage adapter
     learning.set_storage_adapter(_FakeAdapter())
+    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
 
     # Minimal course/task owned by teacher, visible to student
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    student = session_store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = session_store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -91,4 +92,3 @@ async def test_learning_upload_intent_uses_config_limit(monkeypatch: pytest.Monk
     assert r.status_code == 200
     body = r.json()
     assert int(body.get("max_size_bytes", 0)) == 3 * 1024 * 1024
-

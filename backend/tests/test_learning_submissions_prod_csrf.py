@@ -12,10 +12,8 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
-import os
-
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -30,13 +28,13 @@ async def test_prod_requires_origin_or_referer(monkeypatch: pytest.MonkeyPatch):
     # Force prod environment; ensure STRICT_CSRF_SUBMISSIONS is irrelevant here
     monkeypatch.setenv("GUSTAV_ENV", "prod")
     monkeypatch.delenv("STRICT_CSRF_SUBMISSIONS", raising=False)
-    main.SESSION_STORE = SessionStore()
+    session_store = install_session_store(monkeypatch, main)
     # Pin environment override as additional guard against import-order drift
     try:
-        main.SETTINGS.override_environment("prod")
+        main.RUNTIME.settings.override_environment("prod")
     except Exception:
         pass
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    student = session_store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         res = await c.post(

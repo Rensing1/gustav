@@ -19,7 +19,7 @@ from httpx import ASGITransport
 
 import main  # type: ignore
 import routes.learning as learning  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -74,9 +74,9 @@ async def _client() -> httpx.AsyncClient:
     )
 
 
-def _student_session() -> str:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-filius-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+def _student_session(monkeypatch: pytest.MonkeyPatch) -> str:
+    session_store = install_session_store(monkeypatch, main)
+    student = session_store.create(sub=f"s-filius-{uuid.uuid4()}", name="S", roles=["student"])
     return str(student.session_id)
 
 
@@ -87,7 +87,12 @@ def _fls_with_config(config: bytes = VALID_XML, *, name: str = "projekt/konfigur
     return buf.getvalue()
 
 
-async def _post_submission(*, fls_bytes: bytes | None, task_kind: str = "filius") -> httpx.Response:
+async def _post_submission(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    fls_bytes: bytes | None,
+    task_kind: str = "filius",
+) -> httpx.Response:
     repo = FakeLearningRepo(task_kind=task_kind)
     learning.set_repo(repo)  # type: ignore[arg-type]
     learning._verify_storage_object = lambda *args, **kwargs: (True, "ok")  # type: ignore[attr-defined]
@@ -98,7 +103,7 @@ async def _post_submission(*, fls_bytes: bytes | None, task_kind: str = "filius"
     learning._load_storage_bytes_for_validation = _load  # type: ignore[attr-defined]
     body = fls_bytes or b"x"
     async with (await _client()) as c:
-        c.cookies.set(main.SESSION_COOKIE_NAME, _student_session())
+        c.cookies.set(main.SESSION_COOKIE_NAME, _student_session(monkeypatch))
         return await c.post(
             f"/api/learning/courses/{uuid.uuid4()}/tasks/{uuid.uuid4()}/submissions",
             headers={"Idempotency-Key": f"filius-{uuid.uuid4().hex[:12]}"},
@@ -113,32 +118,32 @@ async def _post_submission(*, fls_bytes: bytes | None, task_kind: str = "filius"
 
 
 @pytest.mark.anyio
-async def test_filius_submission_accepts_valid_fls() -> None:
-    r = await _post_submission(fls_bytes=_fls_with_config())
+async def test_filius_submission_accepts_valid_fls(monkeypatch: pytest.MonkeyPatch) -> None:
+    r = await _post_submission(monkeypatch, fls_bytes=_fls_with_config())
 
     assert r.status_code == 202
     assert r.json().get("analysis_status") == "pending"
 
 
 @pytest.mark.anyio
-async def test_filius_submission_rejects_invalid_archive() -> None:
-    r = await _post_submission(fls_bytes=b"not a zip")
+async def test_filius_submission_rejects_invalid_archive(monkeypatch: pytest.MonkeyPatch) -> None:
+    r = await _post_submission(monkeypatch, fls_bytes=b"not a zip")
 
     assert r.status_code == 400
     assert r.json().get("detail") == "invalid_upload_content"
 
 
 @pytest.mark.anyio
-async def test_filius_submission_reports_unavailable_storage_bytes() -> None:
-    r = await _post_submission(fls_bytes=None)
+async def test_filius_submission_reports_unavailable_storage_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    r = await _post_submission(monkeypatch, fls_bytes=None)
 
     assert r.status_code == 503
     assert r.json().get("detail") == "submission_validation_unavailable"
 
 
 @pytest.mark.anyio
-async def test_non_filius_submission_rejects_fls_payload() -> None:
-    r = await _post_submission(fls_bytes=_fls_with_config(), task_kind="native")
+async def test_non_filius_submission_rejects_fls_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    r = await _post_submission(monkeypatch, fls_bytes=_fls_with_config(), task_kind="native")
 
     assert r.status_code == 400
     assert r.json().get("detail") == "invalid_file_payload"

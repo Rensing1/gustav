@@ -26,7 +26,7 @@ from httpx import ASGITransport
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 import routes.learning as learning  # type: ignore  # noqa: E402
 from teaching.storage import StorageAdapterProtocol  # type: ignore  # noqa: E402
 
@@ -94,7 +94,12 @@ def _make_zip_missing_project_json() -> bytes:
     return buf.read()
 
 
-async def _prepare_task_fixture(*, task_payload: dict[str, object], course_title: str) -> dict:
+async def _prepare_task_fixture(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    task_payload: dict[str, object],
+    course_title: str,
+) -> dict:
     """Create course/unit/section with one released task and one enrolled student."""
     _require_db_or_skip()
 
@@ -109,9 +114,9 @@ async def _prepare_task_fixture(*, task_payload: dict[str, object], course_title
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-scratch-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub=f"s-scratch-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    teacher = session_store.create(sub=f"t-scratch-{uuid.uuid4()}", name="T", roles=["teacher"])
+    student = session_store.create(sub=f"s-scratch-{uuid.uuid4()}", name="S", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -137,15 +142,17 @@ async def _prepare_task_fixture(*, task_payload: dict[str, object], course_title
     return {"teacher": teacher, "student": student, "course_id": course["id"], "task_id": task["id"]}
 
 
-async def _prepare_scratch_task_fixture() -> dict:
+async def _prepare_scratch_task_fixture(monkeypatch: pytest.MonkeyPatch) -> dict:
     return await _prepare_task_fixture(
+        monkeypatch,
         task_payload={"instruction_md": "### Scratch Aufgabe", "criteria": ["K1"], "scratch": {}},
         course_title="Kurs Scratch",
     )
 
 
-async def _prepare_native_task_fixture() -> dict:
+async def _prepare_native_task_fixture(monkeypatch: pytest.MonkeyPatch) -> dict:
     return await _prepare_task_fixture(
+        monkeypatch,
         task_payload={"instruction_md": "### Native Aufgabe", "criteria": ["K1"]},
         course_title="Kurs Native",
     )
@@ -153,7 +160,7 @@ async def _prepare_native_task_fixture() -> dict:
 
 @pytest.mark.anyio
 async def test_scratch_upload_intent_allows_only_sb3(monkeypatch: pytest.MonkeyPatch) -> None:
-    fx = await _prepare_scratch_task_fixture()
+    fx = await _prepare_scratch_task_fixture(monkeypatch)
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     with _UseStorageAdapter(FakeStorageAdapter()):
         async with (await _client()) as c:
@@ -169,7 +176,7 @@ async def test_scratch_upload_intent_allows_only_sb3(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.anyio
 async def test_non_scratch_upload_intent_rejects_sb3(monkeypatch: pytest.MonkeyPatch) -> None:
-    fx = await _prepare_native_task_fixture()
+    fx = await _prepare_native_task_fixture(monkeypatch)
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     with _UseStorageAdapter(FakeStorageAdapter()):
         async with (await _client()) as c:
@@ -183,8 +190,8 @@ async def test_non_scratch_upload_intent_rejects_sb3(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.anyio
-async def test_scratch_task_rejects_text_and_image_submissions() -> None:
-    fx = await _prepare_scratch_task_fixture()
+async def test_scratch_task_rejects_text_and_image_submissions(monkeypatch: pytest.MonkeyPatch) -> None:
+    fx = await _prepare_scratch_task_fixture(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)
         r_text = await c.post(
@@ -211,7 +218,7 @@ async def test_scratch_task_rejects_text_and_image_submissions() -> None:
 
 @pytest.mark.anyio
 async def test_non_scratch_submission_rejects_sb3_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    fx = await _prepare_native_task_fixture()
+    fx = await _prepare_native_task_fixture(monkeypatch)
     sb3_bytes = _make_valid_sb3_bytes()
     digest = sha256(sb3_bytes).hexdigest()
 
@@ -244,7 +251,7 @@ async def test_non_scratch_submission_rejects_sb3_payload(monkeypatch: pytest.Mo
 
 @pytest.mark.anyio
 async def test_scratch_task_accepts_valid_sb3_and_validates_archive(monkeypatch: pytest.MonkeyPatch) -> None:
-    fx = await _prepare_scratch_task_fixture()
+    fx = await _prepare_scratch_task_fixture(monkeypatch)
     sb3_bytes = _make_valid_sb3_bytes()
     digest = sha256(sb3_bytes).hexdigest()
 
@@ -279,7 +286,7 @@ async def test_scratch_task_accepts_valid_sb3_and_validates_archive(monkeypatch:
 
 @pytest.mark.anyio
 async def test_scratch_submission_rejects_invalid_zip(monkeypatch: pytest.MonkeyPatch) -> None:
-    fx = await _prepare_scratch_task_fixture()
+    fx = await _prepare_scratch_task_fixture(monkeypatch)
     sb3_bytes = b"not a zip"
     digest = sha256(sb3_bytes).hexdigest()
 
@@ -312,7 +319,7 @@ async def test_scratch_submission_rejects_invalid_zip(monkeypatch: pytest.Monkey
 
 @pytest.mark.anyio
 async def test_scratch_submission_rejects_missing_project_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    fx = await _prepare_scratch_task_fixture()
+    fx = await _prepare_scratch_task_fixture(monkeypatch)
     sb3_bytes = _make_zip_missing_project_json()
     digest = sha256(sb3_bytes).hexdigest()
 

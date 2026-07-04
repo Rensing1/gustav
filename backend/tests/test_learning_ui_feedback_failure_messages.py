@@ -1,4 +1,4 @@
-from backend.web.main import _render_submission_result_static_html
+from backend.web.submission_history_rendering import _render_submission_result_static_html
 
 
 def test_complex_image_provider_failure_renders_student_action_hint() -> None:

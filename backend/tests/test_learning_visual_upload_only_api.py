@@ -25,7 +25,8 @@ from utils.db import require_db_or_skip as _require_db_or_skip
 from backend.tests.utils.storage_fixtures import dummy_png_bytes
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+from backend.identity_access.stores import SessionStore  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -53,7 +54,7 @@ def _service_dsn() -> str:
     )
 
 
-async def _prepare_visual_task_fixture() -> dict:
+async def _prepare_visual_task_fixture(monkeypatch: pytest.MonkeyPatch | None = None) -> dict:
     """Create course/unit/section with one released visual task and one enrolled student."""
     _require_db_or_skip()
 
@@ -69,9 +70,13 @@ async def _prepare_visual_task_fixture() -> dict:
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub=f"t-visual-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub=f"s-visual-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    if monkeypatch is not None:
+        session_store = install_session_store(monkeypatch, main)
+    else:
+        session_store = SessionStore()
+        main.RUNTIME.session_store = session_store
+    teacher = session_store.create(sub=f"t-visual-{uuid.uuid4()}", name="T", roles=["teacher"])
+    student = session_store.create(sub=f"s-visual-{uuid.uuid4()}", name="S", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -114,8 +119,8 @@ async def _prepare_visual_task_fixture() -> dict:
 
 
 @pytest.mark.anyio
-async def test_visual_task_rejects_text_submissions():
-    fx = await _prepare_visual_task_fixture()
+async def test_visual_task_rejects_text_submissions(monkeypatch: pytest.MonkeyPatch):
+    fx = await _prepare_visual_task_fixture(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)
         r = await c.post(
@@ -128,8 +133,8 @@ async def test_visual_task_rejects_text_submissions():
 
 
 @pytest.mark.anyio
-async def test_visual_task_accepts_upload_submissions():
-    fx = await _prepare_visual_task_fixture()
+async def test_visual_task_accepts_upload_submissions(monkeypatch: pytest.MonkeyPatch):
+    fx = await _prepare_visual_task_fixture(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, fx["student"].session_id)
         r = await c.post(

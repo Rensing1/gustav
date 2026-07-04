@@ -15,10 +15,9 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from identity_access.stores import SessionStore  # type: ignore
-
 import main  # type: ignore
 import routes.learning as learning  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -47,8 +46,8 @@ async def _client() -> httpx.AsyncClient:
 
 @pytest.mark.anyio
 async def test_sb3_submission_does_not_require_task_kind_helper(monkeypatch: pytest.MonkeyPatch) -> None:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore[attr-defined]
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
 
     course_id = str(uuid.uuid4())
     task_id = str(uuid.uuid4())

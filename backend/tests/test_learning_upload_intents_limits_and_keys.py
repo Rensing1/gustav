@@ -15,6 +15,9 @@ from httpx import ASGITransport
 
 import importlib
 
+from backend.tests.learning_route_helpers import VisibleLearningRepo
+from backend.tests.runtime_auth_helpers import install_session_store
+
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -24,35 +27,41 @@ async def _client():
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
-async def _seed_course_with_task():
+async def _seed_course_with_task(monkeypatch: pytest.MonkeyPatch):
     import main  # noqa
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()  # in-memory
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
+        assert r_course.status_code == 201, r_course.text
         course_id = r_course.json()["id"]
         r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"}, headers={"Origin": "http://test"})
+        assert r_unit.status_code == 201, r_unit.text
         unit_id = r_unit.json()["id"]
         r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"}, headers={"Origin": "http://test"})
+        assert r_section.status_code == 201, r_section.text
         section_id = r_section.json()["id"]
         r_task = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
             json={"instruction_md": "Aufgabe", "criteria": ["Kriterium"], "max_attempts": 3},
             headers={"Origin": "http://test"},
         )
+        assert r_task.status_code == 201, r_task.text
         task_id = r_task.json()["id"]
         r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
+        assert r_module.status_code == 201, r_module.text
         module_id = r_module.json()["id"]
-        await c.patch(
+        r_vis = await c.patch(
             f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
             json={"visible": True},
             headers={"Origin": "http://test"},
         )
-        await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}, headers={"Origin": "http://test"})  # type: ignore
+        assert r_vis.status_code == 200, r_vis.text
+        r_member = await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}, headers={"Origin": "http://test"})  # type: ignore
+        assert r_member.status_code == 201, r_member.text
     return student.session_id, course_id, task_id
 
 
@@ -92,8 +101,9 @@ async def test_learning_upload_intent_uses_config_limit_and_key_shape(monkeypatc
     # Override adapter to record bucket/key
     recorder = _Recorder()
     learning.set_storage_adapter(recorder)  # type: ignore[arg-type]
+    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
 
-    sid, course_id, task_id = await _seed_course_with_task()
+    sid, course_id, task_id = await _seed_course_with_task(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sid)
         r = await c.post(

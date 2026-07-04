@@ -15,7 +15,7 @@ from httpx import ASGITransport
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -75,7 +75,7 @@ def _visibility_path(course_id: str, module_id: str, section_id: str) -> str:
 
 
 @pytest.mark.anyio
-async def test_unit_sections_returns_unit_id_for_released_section():
+async def test_unit_sections_returns_unit_id_for_released_section(monkeypatch: pytest.MonkeyPatch):
     """When a section is released, response section includes unit_id per contract."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -88,9 +88,9 @@ async def test_unit_sections_returns_unit_id_for_released_section():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-unit-unitid", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-unit-unitid", name="Schüler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-unit-unitid", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-unit-unitid", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -116,7 +116,7 @@ async def test_unit_sections_returns_unit_id_for_released_section():
         assert sec["unit_id"] == unit["id"]
 
 @pytest.mark.anyio
-async def test_unit_sections_returns_200_and_empty_list_when_none_released():
+async def test_unit_sections_returns_200_and_empty_list_when_none_released(monkeypatch: pytest.MonkeyPatch):
     """New endpoint returns 200 with [] when no sections are released for the unit."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -129,9 +129,9 @@ async def test_unit_sections_returns_200_and_empty_list_when_none_released():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-unit-empty", name="Lehrkraft", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="s-unit-empty", name="Schüler", roles=["student"])
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-unit-empty", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-unit-empty", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -155,7 +155,7 @@ async def test_unit_sections_returns_200_and_empty_list_when_none_released():
 
 
 @pytest.mark.anyio
-async def test_unit_sections_404_when_unit_not_in_course():
+async def test_unit_sections_404_when_unit_not_in_course(monkeypatch: pytest.MonkeyPatch):
     """404 when the requested unit does not belong to the course (no leak on existence)."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -168,9 +168,9 @@ async def test_unit_sections_404_when_unit_not_in_course():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-unit-404", name="Lehrkraft", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="s-unit-404", name="Schüler", roles=["student"])
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-unit-404", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-unit-404", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -192,10 +192,10 @@ async def test_unit_sections_404_when_unit_not_in_course():
 
 
 @pytest.mark.anyio
-async def test_unit_sections_invalid_uuid_uses_contract_detail_and_cache_header():
+async def test_unit_sections_invalid_uuid_uses_contract_detail_and_cache_header(monkeypatch: pytest.MonkeyPatch):
     """Invalid UUID in path returns 400 detail=invalid_uuid with private cache header."""
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-unit-uuid", name="Schüler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-unit-uuid", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", student.session_id)
@@ -210,7 +210,7 @@ async def test_unit_sections_invalid_uuid_uses_contract_detail_and_cache_header(
 
 
 @pytest.mark.anyio
-async def test_unit_sections_403_when_student_not_member():
+async def test_unit_sections_403_when_student_not_member(monkeypatch: pytest.MonkeyPatch):
     """403 when caller is not enrolled in the course."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -223,9 +223,9 @@ async def test_unit_sections_403_when_student_not_member():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-unit-403", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    stranger = main.SESSION_STORE.create(sub="s-unit-403", name="Schüler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-unit-403", name="Lehrkraft", roles=["teacher"])
+    stranger = store.create(sub="s-unit-403", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         # Prepare course/unit/section and release it but do not enroll the student
@@ -247,10 +247,10 @@ async def test_unit_sections_403_when_student_not_member():
 
 
 @pytest.mark.anyio
-async def test_unit_sections_400_on_invalid_include_param():
+async def test_unit_sections_400_on_invalid_include_param(monkeypatch: pytest.MonkeyPatch):
     """400 when include contains unsupported tokens."""
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-unit-inc", name="Schüler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub="s-unit-inc", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", student.session_id)
@@ -265,7 +265,7 @@ async def test_unit_sections_400_on_invalid_include_param():
 
 
 @pytest.mark.anyio
-async def test_unit_sections_materials_do_not_expose_internal_storage_metadata():
+async def test_unit_sections_materials_do_not_expose_internal_storage_metadata(monkeypatch: pytest.MonkeyPatch):
     """Learning materials must not expose storage_key/sha256 in student responses."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -278,9 +278,9 @@ async def test_unit_sections_materials_do_not_expose_internal_storage_metadata()
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-unit-material-contract", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-unit-material-contract", name="Schüler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-unit-material-contract", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-unit-material-contract", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)

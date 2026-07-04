@@ -11,9 +11,11 @@ Why:
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
-import routes.learning as learning  # type: ignore
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -111,9 +113,10 @@ async def test_download_bytes_rejects_invalid_public_port(monkeypatch: pytest.Mo
 
 @pytest.mark.anyio
 async def test_download_bytes_rejects_http_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    active_learning = importlib.import_module("backend.web.routes.learning")
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.internal:8000")
     monkeypatch.setenv("SUPABASE_PUBLIC_URL", "http://app.localhost")
-    monkeypatch.setattr(learning, "_current_environment", lambda: "production")
+    monkeypatch.setattr(active_learning, "_current_environment", lambda: "production")
 
     created: list[object] = []
 
@@ -121,10 +124,10 @@ async def test_download_bytes_rejects_http_in_production(monkeypatch: pytest.Mon
         def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003 - httpx compat
             created.append(self)
 
-    monkeypatch.setattr(learning.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(active_learning.httpx, "AsyncClient", _FakeAsyncClient)
 
     http_url = "http://app.localhost/storage/v1/object/sign/submissions/x/y/z/file.sb3?token=abc"
-    out = await learning._download_bytes_with_limit(url=http_url, max_bytes=1024, headers=None)
+    out = await active_learning._download_bytes_with_limit(url=http_url, max_bytes=1024, headers=None)
 
     assert out is None
     assert not created, "helper must fail closed for non-HTTPS validation downloads in production-like environments"

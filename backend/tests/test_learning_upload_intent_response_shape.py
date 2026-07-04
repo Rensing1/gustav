@@ -6,7 +6,6 @@ include adapter-specific extras like `method`.
 """
 from __future__ import annotations
 
-import importlib
 import uuid
 import httpx
 import pytest
@@ -14,7 +13,8 @@ from httpx import ASGITransport
 
 import main  # type: ignore
 import routes.learning as learning  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.learning_route_helpers import VisibleLearningRepo
+from backend.tests.runtime_auth_helpers import install_session_store
 from teaching.storage import StorageAdapterProtocol  # type: ignore
 
 
@@ -50,12 +50,13 @@ async def _client() -> httpx.AsyncClient:
 async def test_upload_intent_response_does_not_include_method(monkeypatch: pytest.MonkeyPatch) -> None:
     # Force adapter to a fake one; ensure proxy is disabled for stable URL shape
     learning.set_storage_adapter(_FakeAdapter())
+    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "false")
 
     # Prepare minimal course/task visible to a student
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    student = session_store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = session_store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})

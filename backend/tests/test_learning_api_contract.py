@@ -35,7 +35,8 @@ if str(REPO_ROOT) not in os.sys.path:
     os.sys.path.insert(0, str(REPO_ROOT))
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+from backend.identity_access.stores import SessionStore  # noqa: E402
 
 
 @dataclass
@@ -204,6 +205,7 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 
 async def _prepare_learning_fixture(
+    monkeypatch: pytest.MonkeyPatch | None = None,
     *,
     visible: bool = True,
     add_member: bool = True,
@@ -228,19 +230,23 @@ async def _prepare_learning_fixture(
     except Exception:
         pytest.skip("DB-backed LearningRepo required for Learning contract tests")
 
-    main.SESSION_STORE = SessionStore()
+    if monkeypatch is not None:
+        store = install_session_store(monkeypatch, main)
+    else:
+        store = SessionStore()
+        main.RUNTIME.session_store = store
     try:
         # Ensure dev-like policies for this fixture (cookies/CSRF), independent of global test env
-        main.SETTINGS.override_environment("dev")
+        main.RUNTIME.settings.override_environment("dev")
     except Exception:
         pass
 
-    teacher = main.SESSION_STORE.create(
+    teacher = store.create(
         sub=f"teacher-learning-{uuid4()}",
         name="Lehrkraft",
         roles=["teacher"],
     )
-    student = main.SESSION_STORE.create(
+    student = store.create(
         sub=f"student-learning-{uuid4()}",
         name="Schüler",
         roles=["student"],
@@ -312,10 +318,10 @@ async def _prepare_learning_fixture(
 
 
 @pytest.mark.anyio
-async def test_sections_requires_authentication():
+async def test_sections_requires_authentication(monkeypatch: pytest.MonkeyPatch):
     """Anonymous callers must receive 401 when requesting released sections."""
 
-    main.SESSION_STORE = SessionStore()
+    install_session_store(monkeypatch, main)
 
     async with (await _client()) as client:
         response = await client.get(
@@ -327,10 +333,10 @@ async def test_sections_requires_authentication():
 
 
 @pytest.mark.anyio
-async def test_sections_requires_authentication_cache_header():
+async def test_sections_requires_authentication_cache_header(monkeypatch: pytest.MonkeyPatch):
     """401 for unauthenticated API requests must use private cache header (contract)."""
 
-    main.SESSION_STORE = SessionStore()
+    install_session_store(monkeypatch, main)
 
     async with (await _client()) as client:
         response = await client.get(
@@ -343,10 +349,10 @@ async def test_sections_requires_authentication_cache_header():
 
 
 @pytest.mark.anyio
-async def test_sections_returns_released_items_for_enrolled_student():
+async def test_sections_returns_released_items_for_enrolled_student(monkeypatch: pytest.MonkeyPatch):
     """Released sections include materials and tasks for enrolled students."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -371,10 +377,10 @@ async def test_sections_returns_released_items_for_enrolled_student():
 
 
 @pytest.mark.anyio
-async def test_sections_includes_unit_id_in_section_core():
+async def test_sections_includes_unit_id_in_section_core(monkeypatch: pytest.MonkeyPatch):
     """Course-level sections response must include section.unit_id (contract)."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -394,7 +400,7 @@ async def test_sections_includes_unit_id_in_section_core():
 
 
 @pytest.mark.anyio
-async def test_sections_include_stable_file_url_for_released_file_materials():
+async def test_sections_include_stable_file_url_for_released_file_materials(monkeypatch: pytest.MonkeyPatch):
     """Released file materials expose a stable app URL for the student UI."""
     import routes.teaching as teaching  # noqa: E402
 
@@ -449,10 +455,10 @@ async def test_sections_include_stable_file_url_for_released_file_materials():
 
 
 @pytest.mark.anyio
-async def test_sections_forbidden_for_non_member():
+async def test_sections_forbidden_for_non_member(monkeypatch: pytest.MonkeyPatch):
     """Students without membership must receive 403 when accessing sections."""
 
-    fixture = await _prepare_learning_fixture(add_member=False)
+    fixture = await _prepare_learning_fixture(monkeypatch, add_member=False)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -465,10 +471,10 @@ async def test_sections_forbidden_for_non_member():
 
 
 @pytest.mark.anyio
-async def test_sections_not_released_returns_404():
+async def test_sections_not_released_returns_404(monkeypatch: pytest.MonkeyPatch):
     """Unreleased sections must not leak existence information."""
 
-    fixture = await _prepare_learning_fixture(visible=False)
+    fixture = await _prepare_learning_fixture(monkeypatch, visible=False)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -481,7 +487,7 @@ async def test_sections_not_released_returns_404():
 
 
 @pytest.mark.anyio
-async def test_create_text_submission_returns_pending_and_enqueues_job():
+async def test_create_text_submission_returns_pending_and_enqueues_job(monkeypatch: pytest.MonkeyPatch):
     """Text submissions enter the async analysis pipeline and enqueue a worker job."""
 
     fixture = await _prepare_learning_fixture()
@@ -573,10 +579,10 @@ async def test_create_submission_rejects_unknown_intent() -> None:
 
 
 @pytest.mark.anyio
-async def test_create_submission_respects_attempt_limit_and_idempotency():
+async def test_create_submission_respects_attempt_limit_and_idempotency(monkeypatch: pytest.MonkeyPatch):
     """Creating submissions enforces attempt limit and honours Idempotency-Key."""
 
-    fixture = await _prepare_learning_fixture(max_attempts=2)
+    fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -628,10 +634,10 @@ async def test_create_submission_respects_attempt_limit_and_idempotency():
 
 
 @pytest.mark.anyio
-async def test_feedback_requests_do_not_consume_final_attempt_limit():
+async def test_feedback_requests_do_not_consume_final_attempt_limit(monkeypatch: pytest.MonkeyPatch):
     """Feedback runs stay async, but only final submissions count against max_attempts."""
 
-    fixture = await _prepare_learning_fixture(max_attempts=1)
+    fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=1)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -663,10 +669,10 @@ async def test_feedback_requests_do_not_consume_final_attempt_limit():
 
 
 @pytest.mark.anyio
-async def test_feedback_request_reuses_matching_inflight_text_submission_even_with_new_idempotency_key():
+async def test_feedback_request_reuses_matching_inflight_text_submission_even_with_new_idempotency_key(monkeypatch: pytest.MonkeyPatch):
     """Identical in-flight feedback requests should not enqueue a second analysis run."""
 
-    fixture = await _prepare_learning_fixture(max_attempts=2)
+    fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -723,10 +729,10 @@ async def test_feedback_request_reuses_matching_inflight_text_submission_even_wi
 
 
 @pytest.mark.anyio
-async def test_feedback_request_reuses_matching_inflight_upload_submission_even_with_new_idempotency_key():
+async def test_feedback_request_reuses_matching_inflight_upload_submission_even_with_new_idempotency_key(monkeypatch: pytest.MonkeyPatch):
     """Identical upload feedback requests should reuse the existing pending submission."""
 
-    fixture = await _prepare_learning_fixture(max_attempts=2)
+    fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
 
     payload = {
         "intent": "feedback",
@@ -796,10 +802,10 @@ async def test_feedback_request_reuses_matching_inflight_upload_submission_even_
 
 
 @pytest.mark.anyio
-async def test_feedback_request_creates_new_submission_again_after_previous_feedback_completed():
+async def test_feedback_request_creates_new_submission_again_after_previous_feedback_completed(monkeypatch: pytest.MonkeyPatch):
     """A deliberate re-run after completed feedback must create a fresh submission."""
 
-    fixture = await _prepare_learning_fixture(max_attempts=2)
+    fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -870,10 +876,10 @@ async def test_feedback_request_creates_new_submission_again_after_previous_feed
 
 
 @pytest.mark.anyio
-async def test_finalize_latest_feedback_submission_creates_final_submission_without_worker_job():
+async def test_finalize_latest_feedback_submission_creates_final_submission_without_worker_job(monkeypatch: pytest.MonkeyPatch):
     """Finalizing the latest reviewed draft should not enqueue a new worker job."""
 
-    fixture = await _prepare_learning_fixture(max_attempts=2)
+    fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -933,10 +939,10 @@ async def test_finalize_latest_feedback_submission_creates_final_submission_with
 
 
 @pytest.mark.anyio
-async def test_finalize_latest_feedback_file_submission_returns_decorated_files():
+async def test_finalize_latest_feedback_file_submission_returns_decorated_files(monkeypatch: pytest.MonkeyPatch):
     """Finalizing an upload draft must return the same learner-visible file decoration as history."""
 
-    fixture = await _prepare_learning_fixture(max_attempts=2)
+    fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
     import routes.learning as learning  # noqa: E402
 
     original_adapter = learning.STORAGE_ADAPTER
@@ -1021,7 +1027,7 @@ async def test_finalize_latest_feedback_file_submission_returns_decorated_files(
 async def test_learning_submission_file_route_streams_owner_file(monkeypatch: pytest.MonkeyPatch):
     """Learners should open their own submission files through a stable app route."""
 
-    fixture = await _prepare_learning_fixture(max_attempts=2)
+    fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
     import routes.learning as learning  # noqa: E402
 
     original_adapter = learning.STORAGE_ADAPTER
@@ -1076,7 +1082,7 @@ async def test_learning_material_file_route_streams_released_material(monkeypatc
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
     original_adapter = teaching.STORAGE_ADAPTER
     original_learning_adapter = learning.STORAGE_ADAPTER
     try:
@@ -1139,7 +1145,7 @@ async def test_learning_material_file_legacy_alias_requires_matching_section(mon
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
 
-    fixture = await _prepare_learning_fixture(create_hidden_section=True)
+    fixture = await _prepare_learning_fixture(monkeypatch, create_hidden_section=True)
     assert fixture.hidden_section_id is not None
     original_adapter = teaching.STORAGE_ADAPTER
     original_learning_adapter = learning.STORAGE_ADAPTER
@@ -1205,7 +1211,7 @@ async def test_learning_material_file_routes_return_503_when_visibility_lookup_i
 
     import routes.learning as learning  # noqa: E402
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async def _unexpected_download(**kwargs):  # noqa: ANN001
         raise AssertionError(f"material download should not start when lookup is unavailable: {kwargs}")
@@ -1246,7 +1252,7 @@ async def test_learning_material_file_routes_return_503_when_visibility_lookup_i
 
 
 @pytest.mark.anyio
-async def test_set_storage_adapter_updates_existing_learning_route_globals_after_reload():
+async def test_set_storage_adapter_updates_existing_learning_route_globals_after_reload(monkeypatch: pytest.MonkeyPatch):
     """A fresh `routes.learning` import must still retarget already-registered route globals."""
 
     def _find_finalize_endpoint():
@@ -1284,10 +1290,10 @@ async def test_set_storage_adapter_updates_existing_learning_route_globals_after
 
 
 @pytest.mark.anyio
-async def test_finalize_requires_completed_feedback_draft():
+async def test_finalize_requires_completed_feedback_draft(monkeypatch: pytest.MonkeyPatch):
     """Final submit must be blocked until the latest draft has completed feedback."""
 
-    fixture = await _prepare_learning_fixture(max_attempts=2)
+    fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1308,10 +1314,10 @@ async def test_finalize_requires_completed_feedback_draft():
 
 
 @pytest.mark.anyio
-async def test_create_submission_uses_teacher_defined_criteria_names():
+async def test_create_submission_uses_teacher_defined_criteria_names(monkeypatch: pytest.MonkeyPatch):
     """Rubric scores should expose the criteria defined by the teacher."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1328,10 +1334,10 @@ async def test_create_submission_uses_teacher_defined_criteria_names():
 
 
 @pytest.mark.anyio
-async def test_create_submission_requires_membership():
+async def test_create_submission_requires_membership(monkeypatch: pytest.MonkeyPatch):
     """Students without memberships must receive 403 on submission creation."""
 
-    fixture = await _prepare_learning_fixture(add_member=False)
+    fixture = await _prepare_learning_fixture(monkeypatch, add_member=False)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1344,10 +1350,10 @@ async def test_create_submission_requires_membership():
 
 
 @pytest.mark.anyio
-async def test_create_submission_requires_released_section():
+async def test_create_submission_requires_released_section(monkeypatch: pytest.MonkeyPatch):
     """Creating submissions for unreleased sections must return 404."""
 
-    fixture = await _prepare_learning_fixture(visible=False)
+    fixture = await _prepare_learning_fixture(monkeypatch, visible=False)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1360,10 +1366,10 @@ async def test_create_submission_requires_released_section():
 
 
 @pytest.mark.anyio
-async def test_create_submission_image_requires_valid_sha256():
+async def test_create_submission_image_requires_valid_sha256(monkeypatch: pytest.MonkeyPatch):
     """Image submissions must validate hex-encoded SHA256 before touching the database."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1384,12 +1390,12 @@ async def test_create_submission_image_requires_valid_sha256():
 
 
 @pytest.mark.anyio
-async def test_create_submission_csrf_origin():
+async def test_create_submission_csrf_origin(monkeypatch: pytest.MonkeyPatch):
     """Same-origin is required: mismatched Origin must be rejected with 403."""
 
     # Use in-memory session store for unit-style test (no DB)
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid4()}", name="S", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
@@ -1404,11 +1410,11 @@ async def test_create_submission_csrf_origin():
 
 
 @pytest.mark.anyio
-async def test_create_submission_idempotency_key_length():
+async def test_create_submission_idempotency_key_length(monkeypatch: pytest.MonkeyPatch):
     """Idempotency-Key > 64 must return 400 invalid_input (pre-DB validation)."""
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid4()}", name="S", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
@@ -1421,10 +1427,10 @@ async def test_create_submission_idempotency_key_length():
     assert res.status_code == 400
     assert res.json().get("detail") == "invalid_input"
 @pytest.mark.anyio
-async def test_get_released_tasks_excludes_hidden_section():
+async def test_get_released_tasks_excludes_hidden_section(monkeypatch: pytest.MonkeyPatch):
     """RLS helpers must not leak tasks from unreleased sections."""
 
-    fixture = await _prepare_learning_fixture(create_hidden_section=True)
+    fixture = await _prepare_learning_fixture(monkeypatch, create_hidden_section=True)
 
     hidden_section_id = fixture.hidden_section_id
     assert hidden_section_id is not None, "Hidden section required for test"
@@ -1452,10 +1458,10 @@ async def test_get_released_tasks_excludes_hidden_section():
 
 
 @pytest.mark.anyio
-async def test_create_submission_image_mime_type_whitelist():
+async def test_create_submission_image_mime_type_whitelist(monkeypatch: pytest.MonkeyPatch):
     """Reject image uploads with non-whitelisted MIME type (spec alignment)."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1476,10 +1482,10 @@ async def test_create_submission_image_mime_type_whitelist():
 
 
 @pytest.mark.anyio
-async def test_create_submission_file_pdf_happy_path():
+async def test_create_submission_file_pdf_happy_path(monkeypatch: pytest.MonkeyPatch):
     """PDF submissions (kind=file, application/pdf) enter the async analysis pipeline."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1505,10 +1511,10 @@ async def test_create_submission_file_pdf_happy_path():
 
 
 @pytest.mark.anyio
-async def test_create_submission_file_mime_type_whitelist():
+async def test_create_submission_file_mime_type_whitelist(monkeypatch: pytest.MonkeyPatch):
     """Reject file uploads with non-whitelisted MIME type (only application/pdf)."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1529,10 +1535,10 @@ async def test_create_submission_file_mime_type_whitelist():
 
 
 @pytest.mark.anyio
-async def test_create_submission_file_size_limit_10mb():
+async def test_create_submission_file_size_limit_10mb(monkeypatch: pytest.MonkeyPatch):
     """Reject file uploads larger than 10 MiB."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1553,10 +1559,10 @@ async def test_create_submission_file_size_limit_10mb():
 
 
 @pytest.mark.anyio
-async def test_create_submission_text_body_blank_returns_invalid_input():
+async def test_create_submission_text_body_blank_returns_invalid_input(monkeypatch: pytest.MonkeyPatch):
     """Blank text submissions must yield 400 invalid_input with private cache header."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1572,10 +1578,10 @@ async def test_create_submission_text_body_blank_returns_invalid_input():
 
 
 @pytest.mark.anyio
-async def test_create_submission_text_body_too_long_returns_invalid_input():
+async def test_create_submission_text_body_too_long_returns_invalid_input(monkeypatch: pytest.MonkeyPatch):
     """Text submissions exceeding 64k chars must yield 400 invalid_input."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1592,10 +1598,10 @@ async def test_create_submission_text_body_too_long_returns_invalid_input():
 
 
 @pytest.mark.anyio
-async def test_create_submission_text_body_at_limit_accepted():
+async def test_create_submission_text_body_at_limit_accepted(monkeypatch: pytest.MonkeyPatch):
     """Text submissions up to 64k chars are accepted."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1608,10 +1614,10 @@ async def test_create_submission_text_body_at_limit_accepted():
     assert res.status_code in (200, 201, 202)
 
 @pytest.mark.anyio
-async def test_list_submissions_history_happy_path():
+async def test_list_submissions_history_happy_path(monkeypatch: pytest.MonkeyPatch):
     """GET submissions must return the student's attempts newest-first with pending status."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1672,11 +1678,11 @@ async def test_list_submissions_history_happy_path():
 
 
 @pytest.mark.anyio
-async def test_list_submissions_requires_authentication():
+async def test_list_submissions_requires_authentication(monkeypatch: pytest.MonkeyPatch):
     """Anonymous callers must receive 401 with private cache control."""
 
     # Fresh in-memory store without any session
-    main.SESSION_STORE = SessionStore()
+    install_session_store(monkeypatch, main)
 
     async with (await _client()) as client:
         resp = await client.get(
@@ -1689,10 +1695,10 @@ async def test_list_submissions_requires_authentication():
 
 
 @pytest.mark.anyio
-async def test_list_submissions_history_empty_returns_200_array():
+async def test_list_submissions_history_empty_returns_200_array(monkeypatch: pytest.MonkeyPatch):
     """Empty histories must still return HTTP 200 with an empty list."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1708,10 +1714,10 @@ async def test_list_submissions_history_empty_returns_200_array():
 
 
 @pytest.mark.anyio
-async def test_list_submissions_forbidden_non_member():
+async def test_list_submissions_forbidden_non_member(monkeypatch: pytest.MonkeyPatch):
     """Non-members must receive 403 without leaking payload."""
 
-    fixture = await _prepare_learning_fixture(add_member=False)
+    fixture = await _prepare_learning_fixture(monkeypatch, add_member=False)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1725,10 +1731,10 @@ async def test_list_submissions_forbidden_non_member():
 
 
 @pytest.mark.anyio
-async def test_submission_telemetry_is_sanitized_and_capped():
+async def test_submission_telemetry_is_sanitized_and_capped(monkeypatch: pytest.MonkeyPatch):
     """Telemetry fields must expose sanitized strings and ISO timestamps."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1786,10 +1792,10 @@ async def test_submission_telemetry_is_sanitized_and_capped():
 
 
 @pytest.mark.anyio
-async def test_list_submissions_404_when_not_released():
+async def test_list_submissions_404_when_not_released(monkeypatch: pytest.MonkeyPatch):
     """Unreleased tasks must look like they do not exist."""
 
-    fixture = await _prepare_learning_fixture(visible=False)
+    fixture = await _prepare_learning_fixture(monkeypatch, visible=False)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1803,10 +1809,10 @@ async def test_list_submissions_404_when_not_released():
 
 
 @pytest.mark.anyio
-async def test_list_submissions_invalid_uuid_returns_400_with_cache_header():
+async def test_list_submissions_invalid_uuid_returns_400_with_cache_header(monkeypatch: pytest.MonkeyPatch):
     """Malformed identifiers must yield 400 with private cache headers."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1820,10 +1826,10 @@ async def test_list_submissions_invalid_uuid_returns_400_with_cache_header():
 
 
 @pytest.mark.anyio
-async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc():
+async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc(monkeypatch: pytest.MonkeyPatch):
     """When timestamps match, ordering must fall back to attempt_nr DESC."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1874,10 +1880,10 @@ async def test_list_submissions_ordering_is_stable_by_created_then_attempt_desc(
 
 
 @pytest.mark.anyio
-async def test_create_submission_rejects_cross_site_via_referer_when_origin_missing():
+async def test_create_submission_rejects_cross_site_via_referer_when_origin_missing(monkeypatch: pytest.MonkeyPatch):
     """CSRF defense: POST with foreign Referer (no Origin) must be rejected."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     # Use a client without default Origin header to simulate missing Origin
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -1894,10 +1900,10 @@ async def test_create_submission_rejects_cross_site_via_referer_when_origin_miss
 
 
 @pytest.mark.anyio
-async def test_create_submission_allows_same_origin_via_forwarded_when_trust_proxy_true():
+async def test_create_submission_allows_same_origin_via_forwarded_when_trust_proxy_true(monkeypatch: pytest.MonkeyPatch):
     """CSRF: when proxy is trusted, X-Forwarded-* defines the server origin."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     prev = os.environ.get("GUSTAV_TRUST_PROXY")
     os.environ["GUSTAV_TRUST_PROXY"] = "true"
@@ -1923,10 +1929,10 @@ async def test_create_submission_allows_same_origin_via_forwarded_when_trust_pro
 
 
 @pytest.mark.anyio
-async def test_analysis_json_shape_has_expected_keys_only():
+async def test_analysis_json_shape_has_expected_keys_only(monkeypatch: pytest.MonkeyPatch):
     """Pending submissions must not expose analysis_json payloads."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1943,10 +1949,10 @@ async def test_analysis_json_shape_has_expected_keys_only():
 
 
 @pytest.mark.anyio
-async def test_create_submission_image_includes_text_and_scores_in_analysis_json():
+async def test_create_submission_image_includes_text_and_scores_in_analysis_json(monkeypatch: pytest.MonkeyPatch):
     """Image submissions should enqueue analysis jobs and stay pending until processed."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -1972,10 +1978,10 @@ async def test_create_submission_image_includes_text_and_scores_in_analysis_json
 
 
 @pytest.mark.anyio
-async def test_extracted_submission_response_hides_analysis_json_payload():
+async def test_extracted_submission_response_hides_analysis_json_payload(monkeypatch: pytest.MonkeyPatch):
     """Intermediate 'extracted' rows must not expose raw analysis payloads."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2031,10 +2037,10 @@ async def test_extracted_submission_response_hides_analysis_json_payload():
     assert extracted["analysis_status"] == "extracted"
     assert extracted.get("analysis_json") is None
 @pytest.mark.anyio
-async def test_create_submission_image_storage_key_sane_pattern():
+async def test_create_submission_image_storage_key_sane_pattern(monkeypatch: pytest.MonkeyPatch):
     """Reject image uploads with suspicious storage_key (defense-in-depth)."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2055,11 +2061,11 @@ async def test_create_submission_image_storage_key_sane_pattern():
 
 
 @pytest.mark.anyio
-async def test_sections_invalid_uuid_uses_contract_detail_and_cache_header():
+async def test_sections_invalid_uuid_uses_contract_detail_and_cache_header(monkeypatch: pytest.MonkeyPatch):
     """Invalid UUID returns 400 with detail=invalid_uuid and private cache header."""
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid4()}", name="S", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
@@ -2075,10 +2081,10 @@ async def test_sections_invalid_uuid_uses_contract_detail_and_cache_header():
 
 
 @pytest.mark.anyio
-async def test_create_submission_rejects_cross_origin_when_origin_header_present():
+async def test_create_submission_rejects_cross_origin_when_origin_header_present(monkeypatch: pytest.MonkeyPatch):
     """CSRF defense: POST with foreign Origin must be rejected with 403."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2094,10 +2100,10 @@ async def test_create_submission_rejects_cross_origin_when_origin_header_present
 
 
 @pytest.mark.anyio
-async def test_create_submission_rejects_mismatched_scheme():
+async def test_create_submission_rejects_mismatched_scheme(monkeypatch: pytest.MonkeyPatch):
     """CSRF: Origin https://... vs server http://... must be rejected."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2112,10 +2118,10 @@ async def test_create_submission_rejects_mismatched_scheme():
 
 
 @pytest.mark.anyio
-async def test_create_submission_rejects_mismatched_port():
+async def test_create_submission_rejects_mismatched_port(monkeypatch: pytest.MonkeyPatch):
     """CSRF: Origin with different port must be rejected."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2130,10 +2136,10 @@ async def test_create_submission_rejects_mismatched_port():
 
 
 @pytest.mark.anyio
-async def test_create_submission_allows_same_origin_header():
+async def test_create_submission_allows_same_origin_header(monkeypatch: pytest.MonkeyPatch):
     """CSRF: Same Origin header passes and allows submission."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2147,10 +2153,10 @@ async def test_create_submission_allows_same_origin_header():
 
 
 @pytest.mark.anyio
-async def test_create_submission_allows_missing_origin():
+async def test_create_submission_allows_missing_origin(monkeypatch: pytest.MonkeyPatch):
     """CSRF: No Origin header (non-browser clients) are allowed."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2163,11 +2169,11 @@ async def test_create_submission_allows_missing_origin():
 
 
 @pytest.mark.anyio
-async def test_sections_invalid_include_returns_400_with_cache_control():
+async def test_sections_invalid_include_returns_400_with_cache_control(monkeypatch: pytest.MonkeyPatch):
     """Invalid include parameter yields 400 invalid_include and private cache headers."""
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid4()}", name="S", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
@@ -2182,10 +2188,10 @@ async def test_sections_invalid_include_returns_400_with_cache_control():
 
 
 @pytest.mark.anyio
-async def test_create_submission_idempotency_key_too_long_returns_400_invalid_input():
+async def test_create_submission_idempotency_key_too_long_returns_400_invalid_input(monkeypatch: pytest.MonkeyPatch):
     """Idempotency-Key header longer than 64 must yield 400 invalid_input with private cache header."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     too_long_key = "x" * 65
     async with (await _client()) as client:
@@ -2203,10 +2209,10 @@ async def test_create_submission_idempotency_key_too_long_returns_400_invalid_in
 
 
 @pytest.mark.anyio
-async def test_sections_forbidden_has_private_cache_header():
+async def test_sections_forbidden_has_private_cache_header(monkeypatch: pytest.MonkeyPatch):
     """403 responses for sections include private Cache-Control header."""
 
-    fixture = await _prepare_learning_fixture(add_member=False)
+    fixture = await _prepare_learning_fixture(monkeypatch, add_member=False)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2220,10 +2226,10 @@ async def test_sections_forbidden_has_private_cache_header():
 
 
 @pytest.mark.anyio
-async def test_sections_not_found_has_private_cache_header():
+async def test_sections_not_found_has_private_cache_header(monkeypatch: pytest.MonkeyPatch):
     """404 responses for sections include private Cache-Control header."""
 
-    fixture = await _prepare_learning_fixture(visible=False)
+    fixture = await _prepare_learning_fixture(monkeypatch, visible=False)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2236,10 +2242,10 @@ async def test_sections_not_found_has_private_cache_header():
     assert res.headers.get("Cache-Control") == "private, no-store"
 
 @pytest.mark.anyio
-async def test_list_submissions_pagination_clamps_and_returns_expected_slice():
+async def test_list_submissions_pagination_clamps_and_returns_expected_slice(monkeypatch: pytest.MonkeyPatch):
     """Pagination clamps limit to <=100 and offset to >=0."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2274,10 +2280,10 @@ async def test_list_submissions_pagination_clamps_and_returns_expected_slice():
 
 
 @pytest.mark.anyio
-async def test_submission_created_at_is_rfc3339_and_present():
+async def test_submission_created_at_is_rfc3339_and_present(monkeypatch: pytest.MonkeyPatch):
     """History items must include RFC3339 UTC created_at (contract alignment)."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
@@ -2305,10 +2311,10 @@ async def test_submission_created_at_is_rfc3339_and_present():
 
 
 @pytest.mark.anyio
-async def test_create_submission_202_has_private_no_store_cache_header():
+async def test_create_submission_202_has_private_no_store_cache_header(monkeypatch: pytest.MonkeyPatch):
     """202 Create Submission must include Cache-Control: private, no-store (async)."""
 
-    fixture = await _prepare_learning_fixture()
+    fixture = await _prepare_learning_fixture(monkeypatch)
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)

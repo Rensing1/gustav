@@ -20,6 +20,9 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
+from backend.tests.learning_route_helpers import VisibleLearningRepo
+from backend.tests.runtime_auth_helpers import install_session_store
+
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -79,13 +82,11 @@ async def _client(app):
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-async def _prepare_fixture(main):
+async def _prepare_fixture(main, monkeypatch: pytest.MonkeyPatch):
     # Fresh in-memory session store
-    from identity_access.stores import SessionStore
-
-    main.SESSION_STORE = SessionStore()  # type: ignore
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -93,16 +94,20 @@ async def _prepare_fixture(main):
         assert r_course.status_code == 201
         course_id = r_course.json()["id"]
         r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"}, headers={"Origin": "http://test"})
+        assert r_unit.status_code == 201, r_unit.text
         unit_id = r_unit.json()["id"]
         r_section = await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "A"}, headers={"Origin": "http://test"})
+        assert r_section.status_code == 201, r_section.text
         section_id = r_section.json()["id"]
         r_task = await c.post(
             f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
             json={"instruction_md": "Aufgabe", "criteria": ["K"], "max_attempts": 3},
             headers={"Origin": "http://test"},
         )
+        assert r_task.status_code == 201, r_task.text
         task_id = r_task.json()["id"]
         r_module = await c.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_id}, headers={"Origin": "http://test"})
+        assert r_module.status_code == 201, r_module.text
         module_id = r_module.json()["id"]
         r_vis = await c.patch(
             f"/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
@@ -110,7 +115,8 @@ async def _prepare_fixture(main):
             headers={"Origin": "http://test"},
         )
         assert r_vis.status_code == 200
-        await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}, headers={"Origin": "http://test"})  # type: ignore
+        r_member = await c.post(f"/api/teaching/courses/{course_id}/members", json={"sub": student.sub, "name": student.name}, headers={"Origin": "http://test"})  # type: ignore
+        assert r_member.status_code == 201, r_member.text
     return student.session_id, course_id, task_id
 
 
@@ -138,9 +144,10 @@ async def test_upload_intent_lazy_rewire_on_first_request(monkeypatch):
 
     # Assert still Null after startup wiring failure
     assert isinstance(learning.STORAGE_ADAPTER, NullStorageAdapter)
+    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
 
     # Prepare course/task data
-    student_sid, course_id, task_id = await _prepare_fixture(main)  # type: ignore
+    student_sid, course_id, task_id = await _prepare_fixture(main, monkeypatch)  # type: ignore
 
     # First upload-intent should trigger lazy wiring and succeed
     async with (await _client(main.app)) as c:
@@ -184,6 +191,7 @@ async def test_upload_intent_uses_same_origin_proxy_when_enabled(monkeypatch):
 
     import main  # type: ignore  # noqa: F401
     import routes.learning as learning  # type: ignore
+    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
 
     class _FakeAdapter:
         def presign_upload(self, *, bucket: str, key: str, expires_in: int, headers: dict[str, str]):
@@ -198,7 +206,7 @@ async def test_upload_intent_uses_same_origin_proxy_when_enabled(monkeypatch):
     learning.set_storage_adapter(_FakeAdapter())  # type: ignore[attr-defined]
 
     # Prepare teacher/student/course/task via helpers
-    student_sid, course_id, task_id = await _prepare_fixture(main)  # type: ignore
+    student_sid, course_id, task_id = await _prepare_fixture(main, monkeypatch)  # type: ignore
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student_sid)
@@ -232,12 +240,11 @@ async def test_teaching_upload_intent_lazy_rewire_on_first_request(monkeypatch):
     import main  # type: ignore  # noqa: F401
     import routes.teaching as teaching  # type: ignore
     from teaching.storage import NullStorageAdapter  # type: ignore
-    from identity_access.stores import SessionStore
 
     assert isinstance(teaching.STORAGE_ADAPTER, NullStorageAdapter)
 
-    main.SESSION_STORE = SessionStore()  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

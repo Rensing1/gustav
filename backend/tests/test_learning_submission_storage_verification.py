@@ -31,7 +31,7 @@ for path in (WEB_DIR, BACKEND_DIR, REPO_ROOT):
         os.sys.path.insert(0, str(path))
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 import routes.learning as learning  # type: ignore  # noqa: E402
 from teaching.storage import StorageAdapterProtocol  # type: ignore  # noqa: E402
 from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
@@ -86,12 +86,12 @@ def _png_bytes() -> bytes:
     return out.getvalue()
 
 
-async def _prepare_fixture():
+async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     # Reuse teaching APIs to seed data
-    main.SESSION_STORE = SessionStore()  # in-memory
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         # Teacher creates course/unit/section/task and releases section
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -123,7 +123,7 @@ async def _prepare_fixture():
 
 @pytest.mark.anyio
 async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
-    student_sid, course_id, task_id = await _prepare_fixture()
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         data = b"%PDF-1.7\n%%EOF\n"
@@ -171,7 +171,7 @@ async def test_submission_verification_rejects_sha_mismatch(monkeypatch):
 @pytest.mark.anyio
 async def test_submission_verification_detects_mismatch_even_when_optional(monkeypatch):
     """Even when REQUIRE_STORAGE_VERIFY=false, detected mismatches must be rejected."""
-    student_sid, course_id, task_id = await _prepare_fixture()
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         payload = b"%PDF-1.7\n%%EOF\n"
@@ -212,7 +212,7 @@ async def test_submission_verification_detects_mismatch_even_when_optional(monke
 
 @pytest.mark.anyio
 async def test_submission_verification_accepts_correct_hash_and_size(monkeypatch):
-    student_sid, course_id, task_id = await _prepare_fixture()
+    student_sid, course_id, task_id = await _prepare_fixture(monkeypatch)
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         data = _png_bytes()

@@ -15,7 +15,7 @@ from httpx import ASGITransport
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -63,7 +63,7 @@ def _visibility_path(course_id: str, module_id: str, section_id: str) -> str:
 
 
 @pytest.mark.anyio
-async def test_sections_ordering_tie_break_by_section_id_across_units():
+async def test_sections_ordering_tie_break_by_section_id_across_units(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -75,9 +75,9 @@ async def test_sections_ordering_tie_break_by_section_id_across_units():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-sections-edge", name="Lehrkraft", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="s-sections-edge", name="Schüler", roles=["student"])
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-sections-edge", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-sections-edge", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         # Owner creates course, two units; each has one section at position 1
@@ -111,7 +111,7 @@ async def test_sections_ordering_tie_break_by_section_id_across_units():
 
 
 @pytest.mark.anyio
-async def test_sections_pagination_offset_beyond_total_returns_404():
+async def test_sections_pagination_offset_beyond_total_returns_404(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -123,9 +123,9 @@ async def test_sections_pagination_offset_beyond_total_returns_404():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-sections-page", name="Lehrkraft", roles=["teacher"])
-    student = main.SESSION_STORE.create(sub="s-sections-page", name="Schüler", roles=["student"])
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-sections-page", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-sections-page", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)

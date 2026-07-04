@@ -31,7 +31,7 @@ if str(REPO_ROOT) not in os.sys.path:
 import main  # type: ignore  # noqa: E402
 import routes.learning as learning  # type: ignore  # noqa: E402
 from backend.tests.utils.storage_fixtures import dummy_png_bytes  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -71,8 +71,8 @@ async def test_internal_upload_stub_writes_file_and_returns_sha(tmp_path: Path, 
     # Prepare session and path
     os.environ["STORAGE_VERIFY_ROOT"] = str(tmp_path)
     monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "true")
-    main.SESSION_STORE = SessionStore()  # in-memory sessions
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
 
     storage_key = f"submissions/test/{uuid.uuid4().hex}.png"
     url = f"/api/learning/internal/upload-stub?storage_key={storage_key}"
@@ -106,8 +106,8 @@ async def test_internal_upload_stub_default_root_is_read_by_submission_validatio
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", require_storage_verify)
     repo = StubSubmissionRepo()
     learning.set_repo(repo)  # type: ignore[arg-type]
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
 
     storage_key = f"submissions/test/{uuid.uuid4().hex}.png"
     payload = dummy_png_bytes()
@@ -162,8 +162,8 @@ async def test_default_stub_root_is_not_read_when_upload_stub_is_disabled(
 @pytest.mark.anyio
 async def test_internal_upload_stub_returns_404_when_disabled(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("ENABLE_DEV_UPLOAD_STUB", raising=False)
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         res = await c.put(

@@ -8,6 +8,8 @@ from httpx import ASGITransport
 import pytest
 from utils.db import require_db_or_skip as _require_db_or_skip
 
+from backend.tests.runtime_auth_helpers import install_session_store
+
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -22,15 +24,14 @@ def _set_session_cookie(client: httpx.AsyncClient, sid: str) -> None:
     client.cookies.set("gustav_session", sid)
 
 
-async def _prepare_fixture():
+async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     # Import app and helpers lazily to avoid circular imports
     import main  # type: ignore
-    from identity_access.stores import SessionStore  # type: ignore
 
     # Fresh session store per test
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-1", name="Teacher", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-1", name="Student", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-1", name="Teacher", roles=["teacher"])
+    student = store.create(sub="s-1", name="Student", roles=["student"])
 
     async with _client(main.app) as client:
         # Create course and learning items
@@ -61,9 +62,9 @@ async def _prepare_fixture():
 
 
 @pytest.mark.anyio
-async def test_csrf_origin_rejects_when_not_trusting_proxy_headers():
+async def test_csrf_origin_rejects_when_not_trusting_proxy_headers(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    course_id, task_id, sid, app = await _prepare_fixture()
+    course_id, task_id, sid, app = await _prepare_fixture(monkeypatch)
 
     # Ensure proxy headers are not trusted by default
     os.environ["GUSTAV_TRUST_PROXY"] = "false"
@@ -85,9 +86,9 @@ async def test_csrf_origin_rejects_when_not_trusting_proxy_headers():
 
 
 @pytest.mark.anyio
-async def test_csrf_origin_accepts_forwarded_headers_when_trust_proxy_true():
+async def test_csrf_origin_accepts_forwarded_headers_when_trust_proxy_true(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    course_id, task_id, sid, app = await _prepare_fixture()
+    course_id, task_id, sid, app = await _prepare_fixture(monkeypatch)
 
     os.environ["GUSTAV_TRUST_PROXY"] = "true"
 

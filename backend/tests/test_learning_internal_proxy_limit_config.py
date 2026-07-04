@@ -37,11 +37,11 @@ async def test_internal_upload_proxy_respects_central_limit(monkeypatch):
 
     import main  # noqa
     import routes.learning as learning  # noqa
-    from identity_access.stores import SessionStore  # type: ignore
+    from backend.tests.runtime_auth_helpers import install_session_store
 
     # Prepare a student session
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy", name="S", roles=["student"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    student = session_store.create(sub="s-proxy", name="S", roles=["student"])
 
     # Body larger than limit
     body = b"x" * 32

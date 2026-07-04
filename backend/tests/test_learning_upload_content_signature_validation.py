@@ -17,7 +17,7 @@ import pytest
 
 import main  # type: ignore
 import routes.learning as learning  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -66,9 +66,9 @@ async def _client() -> httpx.AsyncClient:
     )
 
 
-def _student_session() -> str:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-content-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+def _student_session(monkeypatch: pytest.MonkeyPatch) -> str:
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-content-{uuid.uuid4()}", name="S", roles=["student"])
     return str(student.session_id)
 
 
@@ -79,6 +79,7 @@ def _image_bytes(*, image_format: str) -> bytes:
 
 
 async def _post_upload_submission(
+    monkeypatch: pytest.MonkeyPatch,
     *,
     mime_type: str,
     stored_bytes: bytes | None,
@@ -96,7 +97,7 @@ async def _post_upload_submission(
 
     body = stored_bytes or b"x"
     async with (await _client()) as c:
-        c.cookies.set(main.SESSION_COOKIE_NAME, _student_session())
+        c.cookies.set(main.SESSION_COOKIE_NAME, _student_session(monkeypatch))
         response = await c.post(
             f"/api/learning/courses/{uuid.uuid4()}/tasks/{uuid.uuid4()}/submissions",
             headers={"Idempotency-Key": f"content-{uuid.uuid4().hex[:12]}"},
@@ -119,8 +120,14 @@ async def _post_upload_submission(
         ("file", "application/x.makecode.hex", "calliope"),
     ],
 )
-async def test_wrong_content_is_rejected_before_submission_creation(kind: str, mime_type: str, task_kind: str) -> None:
+async def test_wrong_content_is_rejected_before_submission_creation(
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    mime_type: str,
+    task_kind: str,
+) -> None:
     response, repo = await _post_upload_submission(
+        monkeypatch,
         kind=kind,
         mime_type=mime_type,
         stored_bytes=b"PK\x03\x04not-the-declared-type",
@@ -140,16 +147,33 @@ async def test_wrong_content_is_rejected_before_submission_creation(kind: str, m
         ("file", "application/pdf", b"%PDF-1.7\n%test\n"),
     ],
 )
-async def test_valid_image_and_pdf_content_is_accepted(kind: str, mime_type: str, payload: bytes) -> None:
-    response, repo = await _post_upload_submission(kind=kind, mime_type=mime_type, stored_bytes=payload, task_kind="visual")
+async def test_valid_image_and_pdf_content_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    mime_type: str,
+    payload: bytes,
+) -> None:
+    response, repo = await _post_upload_submission(
+        monkeypatch,
+        kind=kind,
+        mime_type=mime_type,
+        stored_bytes=payload,
+        task_kind="visual",
+    )
 
     assert response.status_code == 202
     assert response.json().get("analysis_status") == "pending"
     assert repo.created_payload is not None
 
 
-async def test_missing_validation_bytes_fails_closed_before_submission_creation() -> None:
-    response, repo = await _post_upload_submission(kind="image", mime_type="image/png", stored_bytes=None, task_kind="visual")
+async def test_missing_validation_bytes_fails_closed_before_submission_creation(monkeypatch: pytest.MonkeyPatch) -> None:
+    response, repo = await _post_upload_submission(
+        monkeypatch,
+        kind="image",
+        mime_type="image/png",
+        stored_bytes=None,
+        task_kind="visual",
+    )
 
     assert response.status_code == 503
     assert response.json().get("detail") == "submission_validation_unavailable"
@@ -162,6 +186,7 @@ async def test_specialized_file_validation_reuses_loaded_task_kind(monkeypatch: 
     monkeypatch.setattr(filius_validation, "extract_configuration_xml_bytes", lambda _data: b"<config/>")
 
     response, repo = await _post_upload_submission(
+        monkeypatch,
         kind="file",
         mime_type="application/x.filius.fls",
         stored_bytes=b"PK\x03\x04filius",

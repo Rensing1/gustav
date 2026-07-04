@@ -23,6 +23,7 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 import main  # type: ignore  # noqa: E402
 import routes.learning as learning  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 class _FakeAdapter:
@@ -57,11 +58,9 @@ async def test_upload_proxy_flow(monkeypatch):
     learning.set_storage_adapter(_FakeAdapter())
 
     # Seed minimal course/task via teaching API
-    from identity_access.stores import SessionStore  # type: ignore
-
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
         r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})

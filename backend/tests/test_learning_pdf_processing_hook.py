@@ -8,14 +8,12 @@ import httpx
 from httpx import ASGITransport
 
 from backend.web import main
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
-def _student_session():
-    from identity_access.stores import SessionStore  # type: ignore
-
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    return student
+def _student_session(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
+    return store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
 
 
 @pytest.mark.anyio
@@ -25,7 +23,7 @@ async def test_pdf_submission_triggers_processing_in_dev(
     tmp_path: Path,
     use_explicit_root: bool,
 ):
-    student = _student_session()
+    student = _student_session(monkeypatch)
     course_id = str(uuid.uuid4())
     task_id = str(uuid.uuid4())
 
@@ -111,7 +109,7 @@ async def test_pdf_submission_triggers_processing_in_dev(
 
     # Ensure we are evaluated under dev semantics for this request only
     # (guards against sporadic prod detection in a full suite sequence)
-    main.SETTINGS.override_environment("dev")
+    main.RUNTIME.settings.override_environment("dev")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]
@@ -129,7 +127,7 @@ async def test_pdf_submission_triggers_processing_in_dev(
 @pytest.mark.anyio
 async def test_pdf_submission_does_not_trigger_processing_in_prod(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Even with STORAGE_VERIFY_ROOT set, the PDF hook must not run in prod-like envs."""
-    student = _student_session()
+    student = _student_session(monkeypatch)
     course_id = str(uuid.uuid4())
     task_id = str(uuid.uuid4())
 
@@ -195,7 +193,7 @@ async def test_pdf_submission_does_not_trigger_processing_in_prod(monkeypatch: p
     except Exception:
         pass
 
-    main.SETTINGS.override_environment("prod")
+    main.RUNTIME.settings.override_environment("prod")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)  # type: ignore[attr-defined]

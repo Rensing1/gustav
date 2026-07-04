@@ -12,6 +12,8 @@ import pytest
 from httpx import ASGITransport
 from starlette.requests import Request as StarletteRequest
 
+from backend.tests.runtime_auth_helpers import install_session_store
+
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -19,6 +21,11 @@ pytestmark = pytest.mark.anyio("asyncio")
 async def _client():
     import main  # noqa
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+
+
+def _student_session(monkeypatch: pytest.MonkeyPatch, main_module, sub: str):
+    store = install_session_store(monkeypatch, main_module)
+    return store.create(sub=sub, name="S", roles=["student"])
 
 
 @pytest.mark.anyio
@@ -32,10 +39,8 @@ async def test_proxy_rejects_wrong_host(monkeypatch: pytest.MonkeyPatch) -> None
 
     import main  # noqa
     import routes.learning as learning  # noqa
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-host", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-host")
 
     # Ensure forwarding would fail if called (should not be called)
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
@@ -76,10 +81,8 @@ async def test_proxy_rejects_invalid_path(monkeypatch: pytest.MonkeyPatch) -> No
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-path", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-path")
 
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when path invalid")
@@ -126,10 +129,8 @@ async def test_proxy_rejects_path_traversal(monkeypatch: pytest.MonkeyPatch, bad
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-traversal", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-traversal")
 
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when path contains traversal")
@@ -165,10 +166,8 @@ async def test_proxy_rejects_disallowed_mime(monkeypatch: pytest.MonkeyPatch) ->
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-mime", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-mime")
 
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when MIME invalid")
@@ -206,10 +205,8 @@ async def test_proxy_filters_forward_headers(monkeypatch: pytest.MonkeyPatch) ->
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-headers", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-headers")
 
     captured: dict[str, object] = {}
 
@@ -267,10 +264,8 @@ async def test_proxy_rejects_port_mismatch(monkeypatch: pytest.MonkeyPatch) -> N
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-port", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-port")
 
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when port mismatched")
@@ -309,10 +304,8 @@ async def test_proxy_allows_supabase_public_host(monkeypatch: pytest.MonkeyPatch
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-public", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-public")
 
     class _Resp:
         status_code = 200
@@ -351,10 +344,8 @@ async def test_proxy_allows_host_docker_internal_http(monkeypatch: pytest.Monkey
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-docker", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-docker")
 
     class _Resp:
         status_code = 200
@@ -396,10 +387,8 @@ async def test_proxy_allows_double_slash_path(monkeypatch: pytest.MonkeyPatch) -
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-doubleslash", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-doubleslash")
 
     class _Resp:
         status_code = 200
@@ -440,10 +429,8 @@ async def test_proxy_streams_request_body_without_calling_body(monkeypatch: pyte
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-stream", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-stream")
 
     class _Resp:
         status_code = 200
@@ -488,10 +475,8 @@ async def test_proxy_emits_telemetry_for_successful_upload(monkeypatch: pytest.M
         import backend.web.routes.learning as learning_backend  # type: ignore
     except Exception:
         learning_backend = None
-    from identity_access.stores import SessionStore  # type: ignore
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-proxy-telemetry", name="S", roles=["student"])  # type: ignore
+    student = _student_session(monkeypatch, main, "s-proxy-telemetry")
 
     class _Resp:
         status_code = 200

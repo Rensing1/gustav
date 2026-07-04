@@ -16,7 +16,7 @@ from httpx import ASGITransport
 
 import main  # type: ignore
 import routes.learning as learning  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 from teaching.storage import StorageAdapterProtocol  # type: ignore
 
 
@@ -69,9 +69,9 @@ async def _client() -> httpx.AsyncClient:
     )
 
 
-def _student_session() -> str:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-filius-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+def _student_session(monkeypatch: pytest.MonkeyPatch) -> str:
+    session_store = install_session_store(monkeypatch, main)
+    student = session_store.create(sub=f"s-filius-{uuid.uuid4()}", name="S", roles=["student"])
     return str(student.session_id)
 
 
@@ -82,7 +82,7 @@ async def test_filius_upload_intent_allows_only_fls(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
 
     async with (await _client()) as c:
-        c.cookies.set(main.SESSION_COOKIE_NAME, _student_session())
+        c.cookies.set(main.SESSION_COOKIE_NAME, _student_session(monkeypatch))
         r = await c.post(
             f"/api/learning/courses/{uuid.uuid4()}/tasks/{uuid.uuid4()}/upload-intents",
             json={"kind": "file", "filename": "projekt.fls", "mime_type": FILIUS_MIME, "size_bytes": 1024},
@@ -102,7 +102,7 @@ async def test_non_filius_upload_intent_rejects_fls(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
 
     async with (await _client()) as c:
-        c.cookies.set(main.SESSION_COOKIE_NAME, _student_session())
+        c.cookies.set(main.SESSION_COOKIE_NAME, _student_session(monkeypatch))
         r = await c.post(
             f"/api/learning/courses/{uuid.uuid4()}/tasks/{uuid.uuid4()}/upload-intents",
             json={"kind": "file", "filename": "projekt.fls", "mime_type": FILIUS_MIME, "size_bytes": 1024},

@@ -25,7 +25,7 @@ if str(REPO_ROOT) not in os.sys.path:
     os.sys.path.insert(0, str(REPO_ROOT))
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 async def _client() -> httpx.AsyncClient:
@@ -33,10 +33,10 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_submission_rejects_invalid_idempotency_key_regex():
+async def test_submission_rejects_invalid_idempotency_key_regex(monkeypatch: pytest.MonkeyPatch):
     """Header with spaces/symbols must yield 400 invalid_input."""
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         # Missing Origin/Referer triggers CSRF block; include Origin to reach validation
@@ -50,10 +50,10 @@ async def test_submission_rejects_invalid_idempotency_key_regex():
 
 
 @pytest.mark.anyio
-async def test_submission_allows_valid_idempotency_key_pattern():
+async def test_submission_allows_valid_idempotency_key_pattern(monkeypatch: pytest.MonkeyPatch):
     """Valid token characters should pass header validation layer (task may 404)."""
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r = await c.post(

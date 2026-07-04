@@ -20,7 +20,7 @@ import os
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -33,6 +33,10 @@ async def _client() -> httpx.AsyncClient:
         base_url="http://test",
         headers={"Origin": "http://test"},
     )
+
+
+def _session_store(monkeypatch: pytest.MonkeyPatch):
+    return install_session_store(monkeypatch, main)
 
 
 async def _create_course(client: httpx.AsyncClient, title: str = "Kurs") -> str:
@@ -76,8 +80,8 @@ async def test_learning_modular_module_content_rejects_empty_include_query_value
 
     monkeypatch.setattr(learning, "_get_repo", lambda: _StubRepo(), raising=True)
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-mod-include-empty-1", name="Schueler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    student = store.create(sub="s-mod-include-empty-1", name="Schueler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", student.session_id)
@@ -107,8 +111,8 @@ async def test_learning_modular_module_content_rejects_trailing_comma_in_include
 
     monkeypatch.setattr(learning, "_get_repo", lambda: _StubRepo(), raising=True)
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-mod-include-trailing-1", name="Schueler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    student = store.create(sub="s-mod-include-trailing-1", name="Schueler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", student.session_id)
@@ -124,7 +128,7 @@ async def test_learning_modular_module_content_rejects_trailing_comma_in_include
 
 
 @pytest.mark.anyio
-async def test_learning_course_units_include_unit_type():
+async def test_learning_course_units_include_unit_type(monkeypatch: pytest.MonkeyPatch):
     """Units list must include `unit_type` so SSR can branch (linear/modular)."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -140,9 +144,9 @@ async def test_learning_course_units_include_unit_type():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-units-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-units-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-units-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-units-1", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -162,7 +166,7 @@ async def test_learning_course_units_include_unit_type():
 
 
 @pytest.mark.anyio
-async def test_learning_modular_graph_endpoint_rejects_linear_units():
+async def test_learning_modular_graph_endpoint_rejects_linear_units(monkeypatch: pytest.MonkeyPatch):
     """Modular graph endpoint must return 400 invalid_unit_type for linear units."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -178,9 +182,9 @@ async def test_learning_modular_graph_endpoint_rejects_linear_units():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-graph-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-graph-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-graph-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-graph-1", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -198,7 +202,7 @@ async def test_learning_modular_graph_endpoint_rejects_linear_units():
 
 
 @pytest.mark.anyio
-async def test_learning_modular_module_content_endpoint_rejects_linear_units():
+async def test_learning_modular_module_content_endpoint_rejects_linear_units(monkeypatch: pytest.MonkeyPatch):
     """Module content endpoint must return 400 invalid_unit_type for linear units."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -214,9 +218,9 @@ async def test_learning_modular_module_content_endpoint_rejects_linear_units():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-module-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-module-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-module-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-module-1", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -235,7 +239,7 @@ async def test_learning_modular_module_content_endpoint_rejects_linear_units():
 
 
 @pytest.mark.anyio
-async def test_learning_modular_module_content_happy_path_via_graph():
+async def test_learning_modular_module_content_happy_path_via_graph(monkeypatch: pytest.MonkeyPatch):
     """Student can fetch graph modules and then load module content (materials/tasks)."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -251,9 +255,9 @@ async def test_learning_modular_module_content_happy_path_via_graph():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-happy-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-happy-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-happy-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-happy-1", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -311,7 +315,7 @@ async def test_learning_modular_module_content_happy_path_via_graph():
 
 
 @pytest.mark.anyio
-async def test_learning_modular_module_content_includes_file_preview_url_for_file_materials():
+async def test_learning_modular_module_content_includes_file_preview_url_for_file_materials(monkeypatch: pytest.MonkeyPatch):
     """Modular module content exposes canonical file URLs for visible file materials."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -325,9 +329,9 @@ async def test_learning_modular_module_content_includes_file_preview_url_for_fil
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-file-preview-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-file-preview-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-file-preview-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-file-preview-1", name="Schüler", roles=["student"])  # type: ignore
     original_adapter = teaching.STORAGE_ADAPTER
     try:
         class _Adapter:
@@ -407,9 +411,9 @@ async def test_learning_modular_material_file_url_streams_visible_material(monke
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-file-stream-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-file-stream-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-file-stream-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-file-stream-1", name="Schüler", roles=["student"])  # type: ignore
     original_adapter = teaching.STORAGE_ADAPTER
     original_learning_adapter = learning.STORAGE_ADAPTER
     try:
@@ -487,7 +491,7 @@ async def test_learning_modular_material_file_url_streams_visible_material(monke
 
 
 @pytest.mark.anyio
-async def test_learning_modular_endpoints_accept_uppercase_unit_id():
+async def test_learning_modular_endpoints_accept_uppercase_unit_id(monkeypatch: pytest.MonkeyPatch):
     """Valid UUID casing in unit_id must not cause false 404 on modular endpoints."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -503,9 +507,9 @@ async def test_learning_modular_endpoints_accept_uppercase_unit_id():
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-uppercase-unit-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-uppercase-unit-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-uppercase-unit-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-uppercase-unit-1", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -549,7 +553,7 @@ async def test_learning_modular_endpoints_accept_uppercase_unit_id():
 
 
 @pytest.mark.anyio
-async def test_learning_modular_graph_includes_edges():
+async def test_learning_modular_graph_includes_edges(monkeypatch: pytest.MonkeyPatch):
     """Graph endpoint returns `edges` based on unit_module_edges (Option B module IDs)."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -572,9 +576,9 @@ async def test_learning_modular_graph_includes_edges():
 
     dsn = os.getenv("DATABASE_URL") or f"postgresql://{os.getenv('APP_DB_USER','gustav_app')}:{os.getenv('APP_DB_PASSWORD','CHANGE_ME_DEV')}@{os.getenv('TEST_DB_HOST','127.0.0.1')}:{os.getenv('TEST_DB_PORT','54322')}/postgres"
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-edges-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-edges-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-edges-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-edges-1", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -626,7 +630,7 @@ async def test_learning_modular_graph_includes_edges():
 
 
 @pytest.mark.anyio
-async def test_learning_modular_unlock_and_locked_module_returns_404_until_prereqs_done():
+async def test_learning_modular_unlock_and_locked_module_returns_404_until_prereqs_done(monkeypatch: pytest.MonkeyPatch):
     """Locked modules must be hidden (404) until prerequisites are done."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -652,9 +656,9 @@ async def test_learning_modular_unlock_and_locked_module_returns_404_until_prere
         f"@{os.getenv('TEST_DB_HOST','127.0.0.1')}:{os.getenv('TEST_DB_PORT','54322')}/postgres"
     )
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-lock-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-lock-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-lock-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-lock-1", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -765,7 +769,7 @@ async def test_learning_modular_unlock_and_locked_module_returns_404_until_prere
 
 
 @pytest.mark.anyio
-async def test_learning_modular_locked_task_is_hidden_in_sql_helpers():
+async def test_learning_modular_locked_task_is_hidden_in_sql_helpers(monkeypatch: pytest.MonkeyPatch):
     """Defense-in-depth: SQL helpers must hide locked modular tasks."""
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
@@ -791,9 +795,9 @@ async def test_learning_modular_locked_task_is_hidden_in_sql_helpers():
         f"@{os.getenv('TEST_DB_HOST','127.0.0.1')}:{os.getenv('TEST_DB_PORT','54322')}/postgres"
     )
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-sql-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-sql-1", name="Schüler", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    teacher = store.create(sub="t-mod-sql-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
+    student = store.create(sub="s-mod-sql-1", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -917,10 +921,9 @@ async def test_learning_modular_graph_returns_503_when_repo_lacks_graph_capabili
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from fastapi.routing import APIRoute  # noqa: E402
-    from identity_access.stores import SessionStore  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-mod-guard-graph", name="S", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    student = store.create(sub="s-mod-guard-graph", name="S", roles=["student"])  # type: ignore
 
     class _RepoWithoutGraph:
         pass
@@ -962,10 +965,9 @@ async def test_learning_modular_module_content_returns_503_when_repo_lacks_conte
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from fastapi.routing import APIRoute  # noqa: E402
-    from identity_access.stores import SessionStore  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-mod-guard-content", name="S", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    student = store.create(sub="s-mod-guard-content", name="S", roles=["student"])  # type: ignore
 
     class _RepoWithoutModuleContent:
         def get_modular_unit_graph(self, **_kwargs):  # pragma: no cover - defensive
@@ -1010,10 +1012,9 @@ async def test_learning_modular_module_content_defaults_include_to_materials_and
 ) -> None:
     """Missing include query must default to materials+tasks for deterministic clients."""
     from fastapi.routing import APIRoute  # noqa: E402
-    from identity_access.stores import SessionStore  # noqa: E402
 
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-mod-include-default", name="S", roles=["student"])  # type: ignore
+    store = _session_store(monkeypatch)
+    student = store.create(sub="s-mod-include-default", name="S", roles=["student"])  # type: ignore
     observed_flags: dict[str, bool] = {}
 
     class _RepoWithModuleContent:

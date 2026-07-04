@@ -6,8 +6,6 @@ instead of any internal container host.
 """
 from __future__ import annotations
 
-import importlib
-import os
 import uuid
 import httpx
 import pytest
@@ -15,7 +13,8 @@ from httpx import ASGITransport
 
 import main  # type: ignore
 import routes.learning as learning  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.learning_route_helpers import VisibleLearningRepo
+from backend.tests.runtime_auth_helpers import install_session_store
 from teaching.storage_supabase import SupabaseStorageAdapter  # type: ignore
 
 
@@ -51,11 +50,12 @@ async def test_upload_intent_uses_public_supabase_host(monkeypatch: pytest.Monke
 
     # Wire a SupabaseStorageAdapter with a stub client that yields internal URLs
     learning.set_storage_adapter(SupabaseStorageAdapter(_SupabaseClientStub()))
+    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
 
     # Minimal course/task owned by teacher, visible to student
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])  # type: ignore
-    teacher = main.SESSION_STORE.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    student = session_store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
+    teacher = session_store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

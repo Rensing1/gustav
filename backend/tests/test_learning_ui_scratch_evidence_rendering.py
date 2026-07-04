@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from backend.web.main import _render_submission_text_container
+from backend.web.submission_history_rendering import _render_submission_text_container
 
 
 def test_scratch_evidence_is_wrapped_for_scoped_css() -> None:

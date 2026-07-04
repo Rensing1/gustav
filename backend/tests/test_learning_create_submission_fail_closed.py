@@ -19,7 +19,7 @@ import httpx
 from httpx import ASGITransport
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -31,8 +31,8 @@ async def _client() -> httpx.AsyncClient:
 
 @pytest.mark.anyio
 async def test_create_submission_returns_503_when_persistence_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    main.SESSION_STORE = SessionStore()
-    student = main.SESSION_STORE.create(sub="s-fail-closed", name="S", roles=["student"])  # type: ignore
+    session_store = install_session_store(monkeypatch, main)
+    student = session_store.create(sub="s-fail-closed", name="S", roles=["student"])
 
     class _FailUC:
         def __init__(self, *a, **k):

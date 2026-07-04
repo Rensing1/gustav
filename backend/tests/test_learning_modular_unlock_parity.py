@@ -15,7 +15,7 @@ import pytest
 from httpx import ASGITransport
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 
@@ -39,7 +39,7 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_modular_unlock_status_matches_db_helper_for_each_module() -> None:
+async def test_modular_unlock_status_matches_db_helper_for_each_module(monkeypatch: pytest.MonkeyPatch) -> None:
     _require_db_or_skip()
     import routes.teaching as teaching  # noqa: E402
     import routes.learning as learning  # noqa: E402
@@ -54,9 +54,9 @@ async def test_modular_unlock_status_matches_db_helper_for_each_module() -> None
     except Exception:
         pytest.skip("DB-backed repos (and psycopg) are required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-parity-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-parity-1", name="Schueler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-mod-parity-1", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-mod-parity-1", name="Schueler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -127,7 +127,7 @@ async def test_modular_unlock_status_matches_db_helper_for_each_module() -> None
 
 
 @pytest.mark.anyio
-async def test_modular_unlock_done_transition_matches_db_helper_minimal() -> None:
+async def test_modular_unlock_done_transition_matches_db_helper_minimal(monkeypatch: pytest.MonkeyPatch) -> None:
     """Minimal parity guard for transition after completing the prerequisite module.
 
     Why:
@@ -149,9 +149,9 @@ async def test_modular_unlock_done_transition_matches_db_helper_minimal() -> Non
     except Exception:
         pytest.skip("DB-backed repos (and psycopg) are required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-mod-parity-2", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-mod-parity-2", name="Schueler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-mod-parity-2", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-mod-parity-2", name="Schueler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

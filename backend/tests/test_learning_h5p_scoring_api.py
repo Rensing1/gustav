@@ -23,7 +23,7 @@ from httpx import ASGITransport
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -37,7 +37,7 @@ async def _client() -> httpx.AsyncClient:
     )
 
 
-async def _prepare_h5p_task_fixture(*, max_attempts: int | None = None) -> dict:
+async def _prepare_h5p_task_fixture(monkeypatch: pytest.MonkeyPatch, *, max_attempts: int | None = None) -> dict:
     """Create course/unit/section with one released H5P task and one enrolled student."""
     _require_db_or_skip()
 
@@ -52,9 +52,9 @@ async def _prepare_h5p_task_fixture(*, max_attempts: int | None = None) -> dict:
     except Exception:
         pytest.skip("DB-backed repos required")
 
-    main.SESSION_STORE = SessionStore()
-    teacher = main.SESSION_STORE.create(sub="t-h5p", name="Lehrkraft", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-h5p", name="Schüler", roles=["student"])  # type: ignore
+    store = install_session_store(monkeypatch, main)
+    teacher = store.create(sub="t-h5p", name="Lehrkraft", roles=["teacher"])
+    student = store.create(sub="s-h5p", name="Schüler", roles=["student"])
 
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
@@ -101,8 +101,8 @@ async def _prepare_h5p_task_fixture(*, max_attempts: int | None = None) -> dict:
 
 
 @pytest.mark.anyio
-async def test_create_h5p_submission_persists_score_and_completes():
-    fx = await _prepare_h5p_task_fixture()
+async def test_create_h5p_submission_persists_score_and_completes(monkeypatch: pytest.MonkeyPatch):
+    fx = await _prepare_h5p_task_fixture(monkeypatch)
     statement_id = "123e4567-e89b-12d3-a456-426614174000"
     async with (await _client()) as c:
         c.cookies.set("gustav_session", fx["student"].session_id)
@@ -121,8 +121,8 @@ async def test_create_h5p_submission_persists_score_and_completes():
 
 
 @pytest.mark.anyio
-async def test_h5p_submissions_do_not_enforce_max_attempts():
-    fx = await _prepare_h5p_task_fixture(max_attempts=1)
+async def test_h5p_submissions_do_not_enforce_max_attempts(monkeypatch: pytest.MonkeyPatch):
+    fx = await _prepare_h5p_task_fixture(monkeypatch, max_attempts=1)
     async with (await _client()) as c:
         c.cookies.set("gustav_session", fx["student"].session_id)
         r1 = await c.post(
@@ -143,8 +143,8 @@ async def test_h5p_submissions_do_not_enforce_max_attempts():
 
 
 @pytest.mark.anyio
-async def test_learning_sections_include_h5p_task_kind_and_config():
-    fx = await _prepare_h5p_task_fixture()
+async def test_learning_sections_include_h5p_task_kind_and_config(monkeypatch: pytest.MonkeyPatch):
+    fx = await _prepare_h5p_task_fixture(monkeypatch)
     async with (await _client()) as c:
         c.cookies.set("gustav_session", fx["student"].session_id)
         r = await c.get(f"/api/learning/courses/{fx['course_id']}/sections?include=tasks&limit=50&offset=0")
@@ -158,4 +158,3 @@ async def test_learning_sections_include_h5p_task_kind_and_config():
         task = next(t for t in tasks if t.get("id") == fx["task_id"])
         assert task.get("kind") == "h5p"
         assert task.get("h5p", {}).get("content_id") == "1"
-

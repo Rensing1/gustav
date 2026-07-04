@@ -6,16 +6,18 @@ instead of any internal container host.
 """
 from __future__ import annotations
 
+import importlib
 import uuid
 import httpx
 import pytest
 from httpx import ASGITransport
 
-import main  # type: ignore
-import routes.learning as learning  # type: ignore
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
-from teaching.storage_supabase import SupabaseStorageAdapter  # type: ignore
+from backend.teaching.storage_supabase import SupabaseStorageAdapter
+
+main = importlib.import_module("backend.web.main")
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

@@ -18,7 +18,7 @@ Die maschinenlesbare Baseline liegt in `docs/harness/IMPORT_BOUNDARY_BASELINE.js
 | `flat_routes_imports` | 343 | Flache `routes.*`-Imports, derzeit noch in Tests. Produktiver Web-Code startet package-orientiert. |
 | `flat_components_imports` | 0 | Flache `components`-Imports wurden aus produktivem Web-Code entfernt. |
 | `backend_web_routes_imports` | 22 | `backend.web.routes.*`-Imports außerhalb des Web-Adapters, vor allem Tests; innerhalb des Web-Adapters ist dieser Stil nach PR 8 Zielzustand. |
-| `sys_path_mutations` | 89 | Verstreute `sys.path`-/`os.sys.path`-Manipulationen, vor allem in Tests. |
+| `sys_path_mutations` | 86 | Verstreute `sys.path`-/`os.sys.path`-Manipulationen, vor allem in Tests. |
 
 ## Gate
 `make test-import-boundaries` führt `backend.tools.import_boundary_scan` gegen die Baseline aus. Das Target schlägt fehl, wenn eine Kategorie über die Baseline wächst. In `harness-signals` ist derselbe Check warning-only sichtbar.

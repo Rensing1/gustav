@@ -11,6 +11,7 @@ Design:
 """
 from __future__ import annotations
 
+import sys
 from typing import Any, List, Tuple, Optional, Dict, Sequence
 import json
 import os
@@ -19,6 +20,16 @@ import logging
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from uuid import UUID
+
+# Temporary compatibility while legacy tests still import `teaching.repo_db`.
+if __name__ == "backend.teaching.repo_db":
+    sys.modules.setdefault("teaching.repo_db", sys.modules[__name__])
+elif __name__ == "teaching.repo_db":
+    sys.modules.setdefault("backend.teaching.repo_db", sys.modules[__name__])
+for _parent_name, _attribute_name in (("teaching", "repo_db"), ("backend.teaching", "repo_db")):
+    _parent = sys.modules.get(_parent_name)
+    if _parent is not None:
+        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 try:
     import psycopg
@@ -78,6 +89,20 @@ def _iso(ts) -> str:
     return str(ts)
 
 _UNSET = object()
+
+
+def _is_unset(value: object) -> bool:
+    """Return True for this module's sentinel or a reloaded materials sentinel."""
+
+    if value is _UNSET:
+        return True
+    if type(value) is object:
+        return True
+    for module_name in ("backend.teaching.services.materials", "teaching.services.materials"):
+        module = sys.modules.get(module_name)
+        if module is not None and value is getattr(module, "_UNSET", None):
+            return True
+    return False
 
 _MATERIAL_COLUMNS_SQL = """
     id::text,
@@ -2374,7 +2399,7 @@ class DBTeachingRepo:
         alt_text=_UNSET,
     ) -> Optional[dict]:
         """Update mutable fields (title, body_md, alt_text) for a material owned by the caller."""
-        if title is _UNSET and body_md is _UNSET and alt_text is _UNSET:
+        if _is_unset(title) and _is_unset(body_md) and _is_unset(alt_text):
             return self.get_material_owned(unit_id, section_id, material_id, author_id)
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
@@ -2395,20 +2420,20 @@ class DBTeachingRepo:
                     return None
                 material_kind = kind_row[0]
                 updates: List[tuple[str, object]] = []
-                if title is not _UNSET:
+                if not _is_unset(title):
                     if title is None:
                         raise ValueError("invalid_title")
                     t = (str(title) or "").strip()
                     if not t or len(t) > 200:
                         raise ValueError("invalid_title")
                     updates.append(("title", t))
-                if body_md is not _UNSET:
+                if not _is_unset(body_md):
                     if material_kind != "markdown":
                         raise ValueError("invalid_body_md")
                     if body_md is None or not isinstance(body_md, str):
                         raise ValueError("invalid_body_md")
                     updates.append(("body_md", body_md))
-                if alt_text is not _UNSET:
+                if not _is_unset(alt_text):
                     if alt_text is None:
                         updates.append(("alt_text", None))
                     elif not isinstance(alt_text, str):

@@ -32,23 +32,52 @@ import asyncio
 from uuid import uuid4, UUID
 
 import httpx
-from fastapi import APIRouter, File, Request, UploadFile
+from fastapi import APIRouter, Request
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 
-from teaching.services.materials import MaterialFileSettings, MaterialsService
-from teaching.services.live_student_overview import MAX_UNIT_IDS, StudentLiveOverviewService
-from teaching.services.tasks import TasksService
-from teaching.storage import NullStorageAdapter, StorageAdapterProtocol
+# Temporary compatibility while legacy tests still import `routes.teaching`.
+if __name__ == "backend.web.routes.teaching":
+    _sys.modules.setdefault("routes.teaching", _sys.modules[__name__])
+elif __name__ == "routes.teaching":
+    _sys.modules.setdefault("backend.web.routes.teaching", _sys.modules[__name__])
+
+from backend.teaching.services.materials import MaterialFileSettings, MaterialsService
+from backend.teaching.services.live_student_overview import MAX_UNIT_IDS, StudentLiveOverviewService
+from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 from backend.storage.config import get_submissions_bucket
-from .security import _is_same_origin
+from backend.web.routes.teaching_shared import (
+    _current_sub,
+    _is_uuid_like,
+    _json_private,
+    _private_error,
+    _require_teacher,
+    _role_in,
+)
+from backend.web.routes.teaching_serialization import (
+    _serialize_task,
+    _serialize_unit_graph_edge,
+    _serialize_unit_module,
+    _serialize_unit_phase,
+    _serialize_unit_phase_public,
+)
+from backend.web.routes.teaching_task_services import (
+    _get_tasks_service,
+    configure_task_service_repo_provider,
+)
+from backend.web.routes import teaching_authoring, teaching_guards
+from backend.web.routes.teaching_authoring import (
+    _get_unit_module_section_id_for_author,
+    _is_signature_compat_type_error,
+    configure_teaching_authoring_repo_provider,
+)
+from backend.web.routes.teaching_guards import (
+    configure_teaching_guard_repo_provider,
+)
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
-H5P_INTERNAL_BASE = (os.getenv("H5P_INTERNAL_BASE") or "http://h5p:3000").rstrip("/")
-H5P_DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
-H5P_UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 
 def _unit_delete_storage_metadata_dsn(repo: object) -> str | None:
@@ -205,15 +234,26 @@ def _teaching_submission_file_href(
 try:  # pragma: no cover - simple import guard
     from backend.web.storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover
-    try:
-        from storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
-    except ModuleNotFoundError:  # pragma: no cover
-        _wire_storage = None  # type: ignore
+    _wire_storage = None  # type: ignore
 
 
 # --- In-memory persistence (MVP) -------------------------------------------------
 
 _UNSET = object()
+
+
+def _is_unset(value: object) -> bool:
+    """Return True for this route sentinel or a reloaded materials sentinel."""
+
+    if value is _UNSET:
+        return True
+    if type(value) is object:
+        return True
+    for module_name in ("backend.teaching.services.materials", "teaching.services.materials"):
+        module = _sys.modules.get(module_name)
+        if module is not None and value is getattr(module, "_UNSET", None):
+            return True
+    return False
 
 
 @dataclass
@@ -459,7 +499,7 @@ class _Repo:
         c = self.courses.get(course_id)
         if not c:
             return None
-        if title is not _UNSET:
+        if not _is_unset(title):
             if title is None:
                 raise ValueError("invalid_title")
             t = title.strip()
@@ -850,13 +890,13 @@ class _Repo:
             if not t or len(t) > 200:
                 raise ValueError("invalid_title")
             mat.title = t
-        if body_md is not _UNSET:
+        if not _is_unset(body_md):
             if mat.kind != "markdown":
                 raise ValueError("invalid_body_md")
             if body_md is None or not isinstance(body_md, str):
                 raise ValueError("invalid_body_md")
             mat.body_md = body_md
-        if alt_text is not _UNSET:
+        if not _is_unset(alt_text):
             if alt_text is None:
                 mat.alt_text = None
             elif not isinstance(alt_text, str):
@@ -1332,7 +1372,7 @@ class _Repo:
 
 # Try to use DB-backed repo when available; fallback to in-memory for dev/tests
 try:  # late import to avoid hard dependency during unit tests
-    from teaching.repo_db import DBTeachingRepo  # type: ignore
+    from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 except Exception as exc:  # pragma: no cover - import failures in dev/test envs
     DBTeachingRepo = None  # type: ignore
     _DB_REPO_IMPORT_ERROR = exc
@@ -1380,8 +1420,44 @@ def _get_repo():  # pragma: no cover - simple accessor
     REPO = current_repo
     return current_repo
 
-# Back-compat symbol used in tests: expose the actual instance for isinstance checks
-REPO = _get_repo()
+
+def _get_current_teaching_repo_for_provider() -> Any:
+    """Resolve the active Teaching repository after legacy route-module reloads."""
+
+    module = _current_teaching_module()
+    getter = getattr(module, "_get_repo", None) if module is not None else None
+    if callable(getter):
+        return getter()
+    return _get_repo()
+
+
+configure_task_service_repo_provider(_get_current_teaching_repo_for_provider)
+configure_teaching_guard_repo_provider(_get_current_teaching_repo_for_provider)
+configure_teaching_authoring_repo_provider(_get_current_teaching_repo_for_provider)
+
+
+def _guard_unit_author(unit_id: str, author_sub: str) -> JSONResponse | None:
+    """Route-local adapter that keeps legacy endpoint repo monkeypatches working."""
+
+    return teaching_guards._guard_unit_author(unit_id, author_sub, repo_provider=_get_repo)
+
+
+def _csrf_guard(request: Request) -> JSONResponse | None:
+    """Route-local adapter for the shared Teaching CSRF guard."""
+
+    return teaching_guards._csrf_guard(request)
+
+
+def _require_strict_same_origin(request: Request) -> bool:
+    """Route-local adapter for strict same-origin checks."""
+
+    return teaching_guards._require_strict_same_origin(request)
+
+
+# Back-compat symbol used in tests: set_repo() and _get_repo() keep this public
+# alias in sync after the first real repository access. Keeping it empty at
+# import time avoids DB connection attempts during route inventory and imports.
+REPO = None
 
 # Allow overriding the storage bucket via environment for deployments
 _bucket = os.getenv("SUPABASE_STORAGE_BUCKET") or MaterialFileSettings().storage_bucket
@@ -1417,6 +1493,26 @@ def _sync_teaching_route_globals(*, adapter: StorageAdapterProtocol, override_ac
                 route_globals["STORAGE_ADAPTER"] = adapter
                 route_globals["_STORAGE_ADAPTER_OVERRIDE_ACTIVE"] = override_active
 
+
+def _sync_teaching_route_repo(repo: Any) -> None:
+    """Retarget already-registered Teaching route globals to the current repo."""
+
+    for module_name in ("main", "backend.web.main"):
+        main_module = _sys.modules.get(module_name)
+        app = getattr(main_module, "app", None) if main_module is not None else None
+        routes = getattr(app, "routes", None)
+        if not routes:
+            continue
+        for route in routes:
+            if not isinstance(route, APIRoute):
+                continue
+            if not str(getattr(route, "path", "")).startswith("/api/teaching"):
+                continue
+            route_globals = getattr(route.endpoint, "__globals__", None)
+            if isinstance(route_globals, dict) and "_REPO" in route_globals:
+                route_globals["_REPO"] = repo
+                route_globals["REPO"] = repo
+
 def _get_materials_service() -> MaterialsService:
     module = _current_teaching_module()
     factory = getattr(module, "_get_materials_service", None) if module is not None else None
@@ -1424,14 +1520,6 @@ def _get_materials_service() -> MaterialsService:
         return factory()
     settings = getattr(module, "MATERIAL_FILE_SETTINGS", MATERIAL_FILE_SETTINGS) if module is not None else MATERIAL_FILE_SETTINGS
     return MaterialsService(_get_repo(), settings=settings)
-
-def _get_tasks_service() -> TasksService:
-    module = _current_teaching_module()
-    factory = getattr(module, "_get_tasks_service", None) if module is not None else None
-    if callable(factory) and factory is not _get_tasks_service:
-        return factory()
-    return TasksService(_get_repo())
-
 
 def _get_student_live_overview_service() -> StudentLiveOverviewService:
     module = _current_teaching_module()
@@ -1454,10 +1542,13 @@ def set_repo(repo) -> None:
     global _REPO, REPO
     _REPO = repo
     REPO = repo
-    module = _current_teaching_module()
-    if module is not None:
+    for module_name in ("routes.teaching", "backend.web.routes.teaching"):
+        module = _sys.modules.get(module_name)
+        if module is None:
+            continue
         setattr(module, "_REPO", repo)
         setattr(module, "REPO", repo)
+    _sync_teaching_route_repo(repo)
 
 
 def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = True) -> None:
@@ -1465,6 +1556,12 @@ def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = Tru
     global STORAGE_ADAPTER, _STORAGE_ADAPTER_OVERRIDE_ACTIVE
     STORAGE_ADAPTER = adapter
     _STORAGE_ADAPTER_OVERRIDE_ACTIVE = bool(override)
+    for module_name in ("routes.teaching", "backend.web.routes.teaching"):
+        module = _sys.modules.get(module_name)
+        if module is None:
+            continue
+        setattr(module, "STORAGE_ADAPTER", adapter)
+        setattr(module, "_STORAGE_ADAPTER_OVERRIDE_ACTIVE", bool(override))
     _sync_teaching_route_globals(adapter=adapter, override_active=_STORAGE_ADAPTER_OVERRIDE_ACTIVE)
 
 
@@ -1483,39 +1580,6 @@ class CourseCreate(BaseModel):
             v = v.strip()
             return v if v else None
         return v
-
-
-def _role_in(user: dict | None, role: str) -> bool:
-    if not user:
-        return False
-    roles = user.get("roles") or []
-    if not isinstance(roles, list):
-        return False
-    return role in roles
-
-
-def _current_sub(user: dict | None) -> str:
-    if not user:
-        return ""
-    sub = user.get("sub")
-    return str(sub) if sub else ""
-
-
-def _require_teacher(request: Request):
-    """Return (user, error_response) ensuring caller has teacher role."""
-    user = getattr(request.state, "user", None)
-    if not _role_in(user, "teacher"):
-        return None, _private_error({"error": "forbidden"}, status_code=403)
-    return user, None
-
-
-def _is_uuid_like(value: str) -> bool:
-    """Best-effort UUID format check without coercing FastAPI to return 422."""
-    try:
-        UUID(str(value))
-    except (ValueError, TypeError):
-        return False
-    return True
 
 
 def _canonical_uuid(value: str) -> str:
@@ -1559,260 +1623,6 @@ def _validate_uuid_id_list(
     if len(ids) != len(set(ids)):
         return None, _private_error({"error": "bad_request", "detail": duplicate_detail}, status_code=400)
     return ids, None
-
-
-def _guard_unit_author(unit_id: str, author_sub: str):
-    """Validate unit ownership, returning an error response when access is denied."""
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
-        repo = _get_repo()
-        if isinstance(repo, DBTeachingRepo):
-            if repo.unit_exists_for_author(unit_id, author_sub):
-                return None
-            exists = repo.unit_exists(unit_id)
-            if exists is False:
-                return _private_error({"error": "not_found"}, status_code=404)
-            return _private_error({"error": "forbidden"}, status_code=403)
-    except Exception:
-        return _private_error({"error": "forbidden"}, status_code=403)
-    # Fallback for in-memory repo
-    repo = _get_repo()
-    if hasattr(repo, "unit_exists_for_author") and repo.unit_exists_for_author(unit_id, author_sub):
-        return None
-    if hasattr(repo, "unit_exists") and not repo.unit_exists(unit_id):
-        return _private_error({"error": "not_found"}, status_code=404)
-    return _private_error({"error": "forbidden"}, status_code=403)
-
-
-def _json_private(payload, *, status_code: int = 200, vary_origin: bool = False) -> JSONResponse:
-    """Return a JSONResponse with cache disabled for shared caches and browsers.
-
-    Rationale: Teaching endpoints expose user- and role-scoped data. To avoid
-    accidental caching in proxies or browsers, respond with "private, no-store".
-    """
-    headers = {"Cache-Control": "private, no-store"}
-    if vary_origin:
-        headers["Vary"] = "Origin"
-    return JSONResponse(content=payload, status_code=status_code, headers=headers)
-
-
-def _private_error(payload: dict, *, status_code: int, vary_origin: bool = False) -> JSONResponse:
-    """Return error JSON with private, no-store cache headers.
-
-    Keep error responses out of shared caches to avoid leaking owner-scoped
-    metadata via intermediary proxies or browser history.
-    """
-    headers = {"Cache-Control": "private, no-store"}
-    if vary_origin:
-        headers["Vary"] = "Origin"
-    return JSONResponse(content=payload, status_code=status_code, headers=headers)
-
-
-def _safe_header_value(value: object) -> str:
-    """Return a conservative HTTP header value without control characters."""
-
-    return str(value or "").replace("\r", "").replace("\n", "").strip()
-
-
-def _h5p_max_upload_bytes() -> int:
-    """Return the shared H5P package upload limit used before Web→H5P forwarding."""
-
-    try:
-        configured = int(str(os.getenv("H5P_MAX_UPLOAD_BYTES") or H5P_DEFAULT_MAX_UPLOAD_BYTES).strip())
-    except (TypeError, ValueError):
-        return H5P_DEFAULT_MAX_UPLOAD_BYTES
-    return configured if configured > 0 else H5P_DEFAULT_MAX_UPLOAD_BYTES
-
-
-async def _read_h5p_upload_file(file: UploadFile) -> tuple[bytes | None, JSONResponse | None]:
-    """Read an H5P upload with a hard Web-side byte limit.
-
-    The H5P sidecar also enforces this limit, but the Web process must count
-    bytes first so a teacher or CLI token cannot force a full oversized package
-    into Web memory before forwarding.
-    """
-
-    max_bytes = _h5p_max_upload_bytes()
-    total = 0
-    chunks: list[bytes] = []
-    while True:
-        read_size = min(H5P_UPLOAD_CHUNK_BYTES, max_bytes + 1 - total)
-        if read_size <= 0:
-            return None, _private_error(
-                {"error": "payload_too_large", "detail": "h5p_upload_too_large"},
-                status_code=413,
-            )
-        chunk = await file.read(read_size)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > max_bytes:
-            return None, _private_error(
-                {"error": "payload_too_large", "detail": "h5p_upload_too_large"},
-                status_code=413,
-            )
-        chunks.append(chunk)
-    return b"".join(chunks), None
-
-
-def _h5p_internal_auth_headers(request: Request | None) -> dict[str, str]:
-    """Build the trusted Web→H5P teacher context for CLI-authenticated calls."""
-
-    if request is None or not getattr(request.state, "cli_token_id", None):
-        return {}
-    secret = (os.getenv("H5P_INTERNAL_SHARED_SECRET") or "").strip()
-    if not secret:
-        return {}
-    user = getattr(request.state, "user", None)
-    if not isinstance(user, dict):
-        return {}
-    sub = _safe_header_value(user.get("sub"))
-    if not sub:
-        return {}
-    raw_roles = user.get("roles")
-    if isinstance(raw_roles, list):
-        roles = [_safe_header_value(role) for role in raw_roles if _safe_header_value(role)]
-    else:
-        roles = [_safe_header_value(user.get("role"))] if _safe_header_value(user.get("role")) else []
-    if not roles:
-        return {}
-    return {
-        "x-gustav-h5p-internal-secret": secret,
-        "x-gustav-user-sub": sub,
-        "x-gustav-user-name": _safe_header_value(user.get("name")) or sub,
-        "x-gustav-user-roles": ",".join(roles),
-    }
-
-
-async def _request_h5p_service(
-    method: str,
-    path: str,
-    *,
-    request: Request | None = None,
-    params: dict[str, Any] | None = None,
-    json_body: dict[str, Any] | None = None,
-    files: dict[str, tuple[str, bytes, str]] | None = None,
-    timeout: float = 30.0,
-) -> httpx.Response:
-    """Send a request to the internal H5P service while forwarding session cookies.
-
-    Why:
-        The teacher-facing API should stay task-centric, but the existing H5P
-        service still owns editor/player/import/export primitives. This helper
-        keeps the wrapper endpoints thin and testable.
-    """
-
-    headers: dict[str, str] = {}
-    if request is not None:
-        cookie_header = str(request.headers.get("cookie") or "").strip()
-        if cookie_header:
-            headers["cookie"] = cookie_header
-        origin = str(request.headers.get("origin") or "").strip()
-        if origin:
-            headers["origin"] = origin
-        referer = str(request.headers.get("referer") or "").strip()
-        if referer:
-            headers["referer"] = referer
-        headers.update(_h5p_internal_auth_headers(request))
-
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
-        return await client.request(
-            method=method,
-            url=f"{H5P_INTERNAL_BASE}{path}",
-            params=params,
-            json=json_body,
-            files=files,
-            headers=headers,
-        )
-
-
-async def _call_request_h5p_service(
-    method: str,
-    path: str,
-    *,
-    request: Request | None = None,
-    params: dict[str, Any] | None = None,
-    json_body: dict[str, Any] | None = None,
-    files: dict[str, tuple[str, bytes, str]] | None = None,
-) -> httpx.Response:
-    """Call the currently active H5P helper even after module reloads."""
-
-    module = _current_teaching_module()
-    handler = getattr(module, "_request_h5p_service", None) if module is not None else None
-    if not callable(handler) or handler is _call_request_h5p_service:
-        handler = _request_h5p_service
-    return await handler(
-        method,
-        path,
-        request=request,
-        params=params,
-        json_body=json_body,
-        files=files,
-    )
-
-
-def _get_owned_h5p_task(unit_id: str, section_id: str, task_id: str, author_sub: str) -> tuple[dict[str, Any] | None, JSONResponse | None]:
-    """Resolve an author-owned H5P task or return a fail-closed API error."""
-
-    try:
-        tasks = _get_tasks_service().list_tasks(unit_id, section_id, author_sub)
-    except PermissionError:
-        return None, _private_error({"error": "forbidden"}, status_code=403)
-    except LookupError:
-        return None, _private_error({"error": "not_found"}, status_code=404)
-
-    task = next((item for item in tasks if str(_serialize_task(item).get("id") or "") == task_id), None)
-    if task is None:
-        return None, _private_error({"error": "not_found"}, status_code=404)
-    serialized = _serialize_task(task)
-    if str(serialized.get("kind") or "") != "h5p":
-        return None, _private_error({"error": "not_found"}, status_code=404)
-    return serialized, None
-
-
-def _proxy_h5p_error_response(upstream: httpx.Response) -> JSONResponse:
-    """Map upstream H5P failures to private JSON responses."""
-
-    payload: dict[str, Any]
-    try:
-        candidate = upstream.json()
-        payload = candidate if isinstance(candidate, dict) else {"error": "bad_gateway"}
-    except Exception:
-        payload = {"error": "bad_gateway"}
-    status_code = int(upstream.status_code or 502)
-    if status_code < 400 or status_code >= 600:
-        status_code = 502
-    return _private_error(payload, status_code=status_code)
-
-
-async def _rollback_h5p_content(content_id: str, request: Request | None) -> None:
-    """Delete a just-created H5P content item after a local persist failure.
-
-    Why:
-        The task-centric teaching API must not leave orphaned H5P content behind
-        when the upstream create/import succeeded but the local task update
-        failed afterwards.
-    """
-
-    content_id = str(content_id or "").strip()
-    if not content_id:
-        return
-    try:
-        response = await _call_request_h5p_service("DELETE", f"/contents/{content_id}", request=request)
-        if int(response.status_code or 500) not in (204, 404):
-            logger.warning(
-                "H5P rollback delete failed content_id=%s status=%s",
-                content_id,
-                int(response.status_code or 500),
-            )
-    except Exception as exc:
-        logger.warning(
-            "H5P rollback delete failed content_id=%s reason=%s",
-            content_id,
-            exc.__class__.__name__,
-        )
 
 
 def _clamp_limit_offset(
@@ -1864,25 +1674,6 @@ _MODULAR_UNIT_CREATE_REQUIRED_METHODS: tuple[str, ...] = (
 )
 
 
-def _is_signature_compat_type_error(exc: TypeError) -> bool:
-    """Return True only for argument-signature mismatches in fallback repos.
-
-    Why:
-        Some older/in-memory test doubles still expose positional signatures.
-        We accept that compatibility case, but we must not mask arbitrary
-        TypeErrors raised *inside* repository code paths.
-    """
-    msg = (str(exc) or "").lower()
-    hints = (
-        "unexpected keyword argument",
-        "required positional argument",
-        "positional arguments but",
-        "takes",
-        "got multiple values for argument",
-    )
-    return any(hint in msg for hint in hints)
-
-
 def _list_unit_modules_for_author_compat(repo: object, *, unit_id: str, author_id: str):
     """Call module listing with keyword args and controlled signature fallback."""
     try:
@@ -1893,42 +1684,10 @@ def _list_unit_modules_for_author_compat(repo: object, *, unit_id: str, author_i
         return repo.list_unit_modules_for_author(unit_id, author_id)  # type: ignore[attr-defined]
 
 
-def _csrf_guard(request: Request) -> JSONResponse | None:
-    """Enforce strict same-origin for browser write requests (dev = prod).
-
-    Behavior:
-        - Require Origin or Referer AND exact same-origin (scheme/host/port).
-          Missing or foreign headers → 403 with detail=csrf_violation.
-    """
-    if getattr(request.state, "cli_token_id", None):
-        return None
-    origin_present = (request.headers.get("origin") or request.headers.get("referer"))
-    if not origin_present or (not _is_same_origin(request)):
-        return _private_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, vary_origin=True)
-    return None
-
-
-def _require_strict_same_origin(request: Request) -> bool:
-    """Return True only when a same-origin indicator is present and matches.
-
-    Why:
-        Owner-scoped write APIs must not accept cross-site browser requests.
-        Requiring Origin/Referer eliminates the "no-header" ambiguity that
-        `_is_same_origin` deliberately allows for non-browser clients.
-    """
-    origin_present = (request.headers.get("origin") or request.headers.get("referer"))
-    if not origin_present:
-        return False
-    return _is_same_origin(request)
-
-
-"""CSRF helper imported from .security"""
-
-
 def _guard_course_owner(course_id: str, owner_sub: str):
     """Ensure caller owns the course, mapping to 404/403 appropriately."""
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
         if isinstance(repo, DBTeachingRepo):
             if repo.course_exists_for_owner(course_id, owner_sub):
@@ -2180,7 +1939,7 @@ def resolve_student_names(subs: list[str]) -> dict[str, str]:
     """
     out: dict[str, str] = {}
     try:
-        from identity_access import directory  # type: ignore
+        from backend.identity_access import directory  # type: ignore
         raw = directory.resolve_student_names(subs)
         for sid in subs:
             val = str((raw or {}).get(sid, "")).strip()
@@ -2216,7 +1975,7 @@ def resolve_live_student_names_by_sub(subs: list[str]) -> dict[str, str]:
         learner lookup.
     """
     try:
-        from identity_access import directory  # type: ignore
+        from backend.identity_access import directory  # type: ignore
         return directory.resolve_live_student_names_by_sub(subs)  # type: ignore[attr-defined]
     except Exception:
         return _resolve_student_login_labels_runtime(subs)
@@ -2233,7 +1992,7 @@ def _summary_snapshot_cursor(repo: Any) -> str | None:
         clock fallback.
     """
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if not isinstance(repo, DBTeachingRepo):
             return None
         dsn = getattr(repo, "_dsn", None)
@@ -2326,7 +2085,7 @@ def resolve_student_login_labels_by_sub(subs: list[str]) -> dict[str, str]:
         return value
 
     try:
-        from identity_access import directory  # type: ignore
+        from backend.identity_access import directory  # type: ignore
 
         raw = directory.resolve_student_login_labels_by_sub(unique_subs)  # type: ignore[attr-defined]
         for sid in unique_subs:
@@ -2343,7 +2102,7 @@ def resolve_student_login_labels_by_sub(subs: list[str]) -> dict[str, str]:
         return out
     except Exception:
         try:
-            from identity_access import directory  # type: ignore
+            from backend.identity_access import directory  # type: ignore
 
             return {
                 sid: (directory.localpart_identifier(sid) or "Unbekannt")  # type: ignore[attr-defined]
@@ -2442,7 +2201,7 @@ async def get_course(request: Request, course_id: str):
         return guard
     # Owner confirmed; fetch course and return
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             # Use owner-scoped helper under RLS
             c = repo.get_course_for_owner(course_id, sub)
@@ -2811,11 +2570,6 @@ class TaskReorderPayload(BaseModel):
     task_ids: object | None = None
 
 
-class H5PTaskSavePayload(BaseModel):
-    library: str
-    params: dict[str, Any]
-
-
 @teaching_router.patch("/api/teaching/courses/{course_id}")
 async def update_course(request: Request, course_id: str, payload: CourseUpdate):
     """Update course fields — owner-only.
@@ -2841,7 +2595,7 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
         return csrf
     updates = payload.model_dump(mode="python", exclude_unset=True)
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             # Contract-aligned semantics: disambiguate 404 vs 403 prior to mutation
             if not repo.course_exists_for_owner(course_id, sub):
@@ -2898,7 +2652,7 @@ async def delete_course(request: Request, course_id: str):
     if csrf:
         return csrf
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             # Owner check with ability to disambiguate 404 vs 403
             if not repo.course_exists_for_owner(course_id, sub):
@@ -3026,7 +2780,7 @@ async def get_unit(request: Request, unit_id: str):
         return guard
     # Author confirmed; fetch the unit via repo (DB or in-memory)
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             u = repo.get_unit_for_author(unit_id, sub)
         else:
@@ -3352,30 +3106,6 @@ async def get_unit_modules_graph(request: Request, unit_id: str):
         "edges": [_serialize_unit_graph_edge(e) for e in edges],
     }
     return _json_private(payload, status_code=200)
-
-
-def _get_unit_module_section_id_for_author(repo, *, unit_id: str, module_id: str, author_id: str) -> str | None:
-    """Return the backing section id for an owned module.
-
-    The section id is an internal storage detail. Module-scoped write routes use
-    this helper so CLI clients do not need an extra read-scoped lookup.
-    """
-
-    try:
-        try:
-            module = repo.get_unit_module_for_author(unit_id=unit_id, module_id=module_id, author_id=author_id)
-        except TypeError as exc:
-            if not _is_signature_compat_type_error(exc):
-                raise
-            module = repo.get_unit_module_for_author(unit_id, module_id, author_id)
-    except LookupError:
-        raise
-    except PermissionError:
-        raise
-    if not module:
-        return None
-    section_id = module.get("section_id") if isinstance(module, dict) else getattr(module, "section_id", None)
-    return str(section_id) if section_id else None
 
 
 @teaching_router.get("/api/teaching/units/{unit_id}/modules/{module_id}/content-target")
@@ -4153,41 +3883,15 @@ def _resolve_module_section_for_authoring_mutation(
     module_id: str,
     task_id: str | None = None,
 ) -> tuple[str | None, Response | JSONResponse | None]:
-    """Resolve a module-backed write/delete without requiring client read scope.
+    """Route-local adapter for shared module-backed authoring resolution."""
 
-    The API keeps module-to-section mapping server-side so least-privilege CLI
-    tokens can mutate module content with only write or delete scope. H5P task
-    writes pass `task_id` so path validation stays close to the shared resolver.
-    """
-
-    repo = _get_repo()
-    user, error = _require_teacher(request)
-    if error:
-        return None, error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return None, csrf
-    if not _is_uuid_like(unit_id):
-        return None, _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(module_id):
-        return None, _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
-    if task_id is not None and not _is_uuid_like(task_id):
-        return None, _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
-    if guard:
-        return None, guard
-    if not hasattr(repo, "get_unit_module_for_author"):
-        return None, _private_error({"error": "service_unavailable", "detail": "modular_repo_unavailable"}, status_code=503)
-    try:
-        section_id = _get_unit_module_section_id_for_author(repo, unit_id=unit_id, module_id=module_id, author_id=sub)
-    except LookupError:
-        return None, _private_error({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        return None, _private_error({"error": "forbidden"}, status_code=403)
-    if not section_id:
-        return None, _private_error({"error": "not_found"}, status_code=404)
-    return section_id, None
+    return teaching_authoring._resolve_module_section_for_authoring_mutation(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+        task_id=task_id,
+        repo_provider=_get_repo,
+    )
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks")
@@ -4250,313 +3954,6 @@ async def reorder_module_tasks(request: Request, unit_id: str, module_id: str, p
     if error:
         return error
     return await reorder_section_tasks(request, unit_id, str(section_id), payload)
-
-
-@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/editor-model")
-async def get_task_h5p_editor_model(request: Request, unit_id: str, section_id: str, task_id: str):
-    """Return the H5P editor model for an owned H5P task."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(task_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
-    if guard:
-        return guard
-    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
-    if task_error:
-        return task_error
-
-    params: dict[str, Any] | None = None
-    content_id = str(((task or {}).get("h5p") or {}).get("content_id") or "").strip()
-    if content_id:
-        params = {"content_id": content_id}
-
-    try:
-        upstream = await _call_request_h5p_service("GET", "/editor/model", request=request, params=params)
-    except httpx.RequestError:
-        return _private_error({"error": "service_unavailable"}, status_code=503)
-    if not upstream.is_success:
-        return _proxy_h5p_error_response(upstream)
-    try:
-        return _json_private(upstream.json(), status_code=200)
-    except Exception:
-        return _private_error({"error": "bad_gateway"}, status_code=502)
-
-
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/save")
-async def save_task_h5p_content(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    task_id: str,
-    payload: H5PTaskSavePayload,
-):
-    """Create or update task-linked H5P content and persist the content id on the task."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(task_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
-    if guard:
-        return guard
-    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
-    if task_error:
-        return task_error
-
-    current_content_id = str(((task or {}).get("h5p") or {}).get("content_id") or "").strip()
-    path = f"/contents/{current_content_id}" if current_content_id else "/contents"
-    method = "PATCH" if current_content_id else "POST"
-
-    try:
-        upstream = await _call_request_h5p_service(
-            method,
-            path,
-            request=request,
-            json_body={"library": payload.library, "params": payload.params},
-        )
-    except httpx.RequestError:
-        return _private_error({"error": "service_unavailable"}, status_code=503)
-    if not upstream.is_success:
-        return _proxy_h5p_error_response(upstream)
-    try:
-        upstream_payload = upstream.json()
-    except Exception:
-        return _private_error({"error": "bad_gateway"}, status_code=502)
-
-    new_content_id = str((upstream_payload or {}).get("content_id") or "").strip()
-    if not new_content_id:
-        return _private_error({"error": "bad_gateway"}, status_code=502)
-    try:
-        _get_tasks_service().update_task(
-            unit_id,
-            section_id,
-            task_id,
-            sub,
-            h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
-        )
-    except ValueError as exc:
-        await _rollback_h5p_content(new_content_id, request)
-        detail = str(exc) or "invalid_input"
-        if detail not in {"invalid_h5p_config", "invalid_task_kind_config"}:
-            detail = "invalid_input"
-        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
-    except LookupError:
-        await _rollback_h5p_content(new_content_id, request)
-        return _private_error({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        await _rollback_h5p_content(new_content_id, request)
-        return _private_error({"error": "forbidden"}, status_code=403)
-    except Exception:
-        await _rollback_h5p_content(new_content_id, request)
-        return _private_error({"error": "internal_error"}, status_code=500)
-    return _json_private({"content_id": new_content_id, "metadata": (upstream_payload or {}).get("metadata") or {}}, status_code=200)
-
-
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/import")
-async def import_task_h5p_content(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    task_id: str,
-    file: UploadFile = File(...),
-):
-    """Import an H5P archive and link the resulting content to the task."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(task_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
-    if guard:
-        return guard
-    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
-    if task_error:
-        return task_error
-    file_bytes, upload_error = await _read_h5p_upload_file(file)
-    if upload_error:
-        return upload_error
-    if not file_bytes:
-        return _private_error({"error": "bad_request", "detail": "invalid_h5p_file"}, status_code=400)
-
-    try:
-        upstream = await _call_request_h5p_service(
-            "POST",
-            "/contents/import",
-            request=request,
-            files={"file": (file.filename or "content.h5p", file_bytes, file.content_type or "application/zip")},
-        )
-    except httpx.RequestError:
-        return _private_error({"error": "service_unavailable"}, status_code=503)
-    if not upstream.is_success:
-        return _proxy_h5p_error_response(upstream)
-    try:
-        upstream_payload = upstream.json()
-    except Exception:
-        return _private_error({"error": "bad_gateway"}, status_code=502)
-
-    new_content_id = str((upstream_payload or {}).get("content_id") or "").strip()
-    if not new_content_id:
-        return _private_error({"error": "bad_gateway"}, status_code=502)
-    try:
-        updated = _get_tasks_service().update_task(
-            unit_id,
-            section_id,
-            task_id,
-            sub,
-            h5p={"content_id": new_content_id, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
-        )
-    except ValueError as exc:
-        await _rollback_h5p_content(new_content_id, request)
-        detail = str(exc) or "invalid_input"
-        if detail not in {"invalid_h5p_config", "invalid_task_kind_config"}:
-            detail = "invalid_input"
-        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
-    except LookupError:
-        await _rollback_h5p_content(new_content_id, request)
-        return _private_error({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        await _rollback_h5p_content(new_content_id, request)
-        return _private_error({"error": "forbidden"}, status_code=403)
-    except Exception:
-        await _rollback_h5p_content(new_content_id, request)
-        return _private_error({"error": "internal_error"}, status_code=500)
-    return _json_private(_serialize_task(updated), status_code=200)
-
-
-@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/export")
-async def export_task_h5p_content(request: Request, unit_id: str, section_id: str, task_id: str):
-    """Export the currently linked H5P content for an owned task."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(task_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
-    if guard:
-        return guard
-    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
-    if task_error:
-        return task_error
-    content_id = str(((task or {}).get("h5p") or {}).get("content_id") or "").strip()
-    if not content_id:
-        return _private_error({"error": "not_found"}, status_code=404)
-
-    try:
-        upstream = await _call_request_h5p_service("GET", f"/contents/{content_id}/export", request=request)
-    except httpx.RequestError:
-        return _private_error({"error": "service_unavailable"}, status_code=503)
-    if not upstream.is_success:
-        return _proxy_h5p_error_response(upstream)
-    headers = {"Cache-Control": "private, no-store"}
-    content_disposition = upstream.headers.get("content-disposition")
-    if content_disposition:
-        headers["Content-Disposition"] = content_disposition
-    return Response(
-        content=upstream.content,
-        media_type=upstream.headers.get("content-type") or "application/zip",
-        headers=headers,
-    )
-
-
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset")
-async def reset_task_h5p_content(request: Request, unit_id: str, section_id: str, task_id: str):
-    """Unlink the H5P content from a task without deleting upstream content."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = _csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(task_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
-    if guard:
-        return guard
-    task, task_error = _get_owned_h5p_task(unit_id, section_id, task_id, sub)
-    if task_error:
-        return task_error
-    updated = _get_tasks_service().update_task(
-        unit_id,
-        section_id,
-        task_id,
-        sub,
-        h5p={"content_id": None, "display_options": ((task or {}).get("h5p") or {}).get("display_options") or {}},
-    )
-    return _json_private(_serialize_task(updated), status_code=200)
-
-
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/import")
-async def import_module_task_h5p_content(
-    request: Request,
-    unit_id: str,
-    module_id: str,
-    task_id: str,
-    file: UploadFile = File(...),
-):
-    """Import H5P content for a module-backed task with write scope only."""
-
-    section_id, error = _resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        task_id=task_id,
-    )
-    if error:
-        return error
-    return await import_task_h5p_content(request, unit_id, str(section_id), task_id, file)
-
-
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/reset")
-async def reset_module_task_h5p_content(request: Request, unit_id: str, module_id: str, task_id: str):
-    """Unlink H5P content for a module-backed task with write scope only."""
-
-    section_id, error = _resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        task_id=task_id,
-    )
-    if error:
-        return error
-    return await reset_task_h5p_content(request, unit_id, str(section_id), task_id)
 
 
 @teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder")
@@ -5543,7 +4940,7 @@ async def list_module_section_releases(request: Request, course_id: str, module_
             return guard
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
         if isinstance(repo, DBTeachingRepo):
             releases = repo.list_module_section_releases_owned(course_id, module_id, sub)
@@ -5611,7 +5008,7 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
 
     unit_id: str | None = None
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             modules = repo.list_course_modules_for_owner(course_id, sub)
             for m in modules:
@@ -5635,7 +5032,7 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
     sections: list[dict] = []
     releases: list[dict] = []
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
         if isinstance(repo, DBTeachingRepo):
             sections = repo.list_sections_for_author(unit_id, sub)
@@ -5726,95 +5123,6 @@ def _serialize_module(m) -> dict:
     }
 
 
-def _serialize_unit_phase(p) -> dict:
-    if is_dataclass(p):
-        return asdict(p)
-    if isinstance(p, dict):
-        return p
-    return {
-        "id": getattr(p, "id", None),
-        "unit_id": getattr(p, "unit_id", None),
-        "title": getattr(p, "title", None),
-        "position": getattr(p, "position", None),
-        "created_at": getattr(p, "created_at", None),
-        "updated_at": getattr(p, "updated_at", None),
-    }
-
-def _serialize_unit_phase_public(p) -> dict:
-    """Serialize a unit phase for public Teaching API schemas.
-
-    The OpenAPI contract for `TeachingUnitPhase` intentionally exposes only
-    the editor-relevant fields (id/unit_id/title/position).
-    """
-    if isinstance(p, dict):
-        return {
-            "id": p.get("id"),
-            "unit_id": p.get("unit_id"),
-            "title": p.get("title"),
-            "position": p.get("position"),
-        }
-    if is_dataclass(p):
-        return {
-            "id": getattr(p, "id", None),
-            "unit_id": getattr(p, "unit_id", None),
-            "title": getattr(p, "title", None),
-            "position": getattr(p, "position", None),
-        }
-    return {
-        "id": getattr(p, "id", None),
-        "unit_id": getattr(p, "unit_id", None),
-        "title": getattr(p, "title", None),
-        "position": getattr(p, "position", None),
-    }
-
-
-def _serialize_unit_module(m) -> dict:
-    """Serialize a unit module for the teacher visual editor APIs.
-
-    Option B:
-        Modules map 1:1 to sections via `unit_modules.section_id`, but the
-        editor API does not expose section ids to keep the UX vocabulary clean.
-    """
-    if isinstance(m, dict):
-        return {
-            "id": m.get("id"),
-            "unit_id": m.get("unit_id"),
-            "phase_id": m.get("phase_id"),
-            "title": m.get("title"),
-            "position_in_phase": m.get("position_in_phase"),
-            "required_prereq_count": m.get("required_prereq_count", 0),
-        }
-    if is_dataclass(m):
-        return {
-            "id": getattr(m, "id", None),
-            "unit_id": getattr(m, "unit_id", None),
-            "phase_id": getattr(m, "phase_id", None),
-            "title": getattr(m, "title", None),
-            "position_in_phase": getattr(m, "position_in_phase", None),
-            "required_prereq_count": getattr(m, "required_prereq_count", 0),
-        }
-    return {
-        "id": getattr(m, "id", None),
-        "unit_id": getattr(m, "unit_id", None),
-        "phase_id": getattr(m, "phase_id", None),
-        "title": getattr(m, "title", None),
-        "position_in_phase": getattr(m, "position_in_phase", None),
-        "required_prereq_count": getattr(m, "required_prereq_count", 0),
-    }
-
-
-def _serialize_unit_graph_edge(e) -> dict:
-    """Serialize a module edge as {from, to}."""
-    if isinstance(e, dict):
-        # Repo helpers already use `from`/`to` keys.
-        if "from" in e and "to" in e:
-            return {"from": e.get("from"), "to": e.get("to")}
-        return {"from": e.get("from_module_id"), "to": e.get("to_module_id")}
-    if is_dataclass(e):
-        return {"from": getattr(e, "from", None), "to": getattr(e, "to", None)}
-    return {"from": getattr(e, "from", None), "to": getattr(e, "to", None)}
-
-
 def _serialize_section(s) -> dict:
     if is_dataclass(s):
         return asdict(s)
@@ -5845,83 +5153,6 @@ def _serialize_material(m) -> dict:
         "created_at": getattr(m, "created_at", None),
         "updated_at": getattr(m, "updated_at", None),
     }
-
-
-def _serialize_task(t) -> dict:
-    if is_dataclass(t):
-        data = asdict(t)
-    elif isinstance(t, dict):
-        data = dict(t)
-    else:
-        data = {
-            "id": getattr(t, "id", None),
-            "unit_id": getattr(t, "unit_id", None),
-            "section_id": getattr(t, "section_id", None),
-            "instruction_md": getattr(t, "instruction_md", None),
-            "criteria": getattr(t, "criteria", []),
-            "teacher_context_md": getattr(t, "teacher_context_md", None),
-            "due_at": getattr(t, "due_at", None),
-            "max_attempts": getattr(t, "max_attempts", None),
-            "position": getattr(t, "position", None),
-            "created_at": getattr(t, "created_at", None),
-            "updated_at": getattr(t, "updated_at", None),
-        }
-    kind = str(data.get("kind") or "native")
-    data["kind"] = kind
-    if data.get("criteria") is None:
-        data["criteria"] = []
-    # Normalize optional task kind configs to match the OpenAPI contract.
-    if kind == "h5p":
-        h5p_cfg = data.get("h5p")
-        if not isinstance(h5p_cfg, dict):
-            content_id = data.get("h5p_content_id")
-            display_options = data.get("h5p_display_options") or {}
-            if not isinstance(display_options, dict):
-                display_options = {}
-            h5p_cfg = {"content_id": content_id, "display_options": display_options}
-        data["h5p"] = h5p_cfg
-        data["visual"] = None
-        data["scratch"] = None
-        data["calliope"] = None
-        data["filius"] = None
-    elif kind == "visual":
-        visual_cfg = data.get("visual")
-        data["visual"] = visual_cfg if isinstance(visual_cfg, dict) else {}
-        data["h5p"] = None
-        data["scratch"] = None
-        data["calliope"] = None
-        data["filius"] = None
-    elif kind == "scratch":
-        scratch_cfg = data.get("scratch")
-        data["scratch"] = scratch_cfg if isinstance(scratch_cfg, dict) else {}
-        data["h5p"] = None
-        data["visual"] = None
-        data["calliope"] = None
-        data["filius"] = None
-    elif kind == "calliope":
-        calliope_cfg = data.get("calliope")
-        data["calliope"] = calliope_cfg if isinstance(calliope_cfg, dict) else {}
-        data["h5p"] = None
-        data["visual"] = None
-        data["scratch"] = None
-        data["filius"] = None
-    elif kind == "filius":
-        filius_cfg = data.get("filius")
-        data["filius"] = filius_cfg if isinstance(filius_cfg, dict) else {}
-        data["h5p"] = None
-        data["visual"] = None
-        data["scratch"] = None
-        data["calliope"] = None
-    else:
-        data.setdefault("h5p", None)
-        data.setdefault("visual", None)
-        data.setdefault("scratch", None)
-        data.setdefault("calliope", None)
-        data.setdefault("filius", None)
-    # Do not expose internal storage columns; the API uses nested objects.
-    data.pop("h5p_content_id", None)
-    data.pop("h5p_display_options", None)
-    return data
 
 
 def _teacher_id_of(course) -> str | None:
@@ -6013,7 +5244,7 @@ async def list_members(request: Request, course_id: str, limit: int = 10, offset
         return _private_error({"error": "forbidden"}, status_code=403)
     limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=10, max_limit=50)
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
         if isinstance(repo, DBTeachingRepo):
             if not repo.course_exists_for_owner(course_id, sub):
@@ -6077,7 +5308,7 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
     if not isinstance(student_sub, str) or not student_sub.strip():
         return _private_error({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
         if isinstance(repo, DBTeachingRepo):
             # Ensure caller owns the course; otherwise decide 404/403 via helper
@@ -6121,7 +5352,7 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     if csrf:
         return csrf
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             if not repo.course_exists_for_owner(course_id, sub):
                 return _resp_non_owner_or_unknown(course_id, sub)
@@ -6203,7 +5434,7 @@ async def get_unit_live_summary(
 
     # Verify unit is attached to course for the owner
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
         if isinstance(repo, DBTeachingRepo):
             modules = repo.list_course_modules_for_owner(course_id, sub)
@@ -6224,7 +5455,7 @@ async def get_unit_live_summary(
     # Build task list across the unit in position order
     tasks: list[dict] = []
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             sections = repo.list_sections_for_author(unit_id, sub)  # owner==author in tests
             for sec in sections:
@@ -6258,7 +5489,7 @@ async def get_unit_live_summary(
     if include_students:
         roster: list[tuple[str, str]] = []
         try:
-            from teaching.repo_db import DBTeachingRepo  # type: ignore
+            from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
                 roster = repo.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
             else:
@@ -6276,7 +5507,7 @@ async def get_unit_live_summary(
         score_map: dict[tuple[str, str], tuple[int | None, int | None]] = {}
         created_at_map: dict[tuple[str, str], str | None] = {}
         try:
-            from teaching.repo_db import DBTeachingRepo  # type: ignore
+            from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
                 try:
                     aggregate_rows = repo.list_unit_latest_submission_aggregates_for_owner(
@@ -6549,7 +5780,7 @@ async def get_unit_live_delta(
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             modules = repo.list_course_modules_for_owner(course_id, sub)
         else:
@@ -6563,7 +5794,7 @@ async def get_unit_live_delta(
     debug = (os.getenv("DEBUG_DELTA", "").strip() == "1")
     EPS = timedelta(seconds=1)
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             import psycopg  # type: ignore
 
@@ -7127,7 +6358,7 @@ async def get_latest_submission_detail(
 
     # Strict verification that task belongs to unit and unit is attached to course
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         modules = []
         if isinstance(repo, DBTeachingRepo):
             modules = repo.list_course_modules_for_owner(course_id, sub)
@@ -7142,7 +6373,7 @@ async def get_latest_submission_detail(
 
     # Query latest submission via SECURITY DEFINER helper (owner scope)
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
             import psycopg  # type: ignore
 
@@ -7266,7 +6497,7 @@ async def get_latest_submission_detail(
         # Defensive fallback: when helper or extended query fails (e.g. during migrations),
         # try a minimal direct lookup that only relies on the core columns.
         try:
-            from teaching.repo_db import DBTeachingRepo  # type: ignore
+            from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
                 import psycopg  # type: ignore
 
@@ -7420,7 +6651,7 @@ async def get_teaching_submission_file(
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = _get_repo()
         if not isinstance(repo, DBTeachingRepo):
             return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
@@ -7476,7 +6707,7 @@ async def get_teaching_submission_file(
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
 
     try:
-        import routes.learning as learning_routes  # type: ignore
+        from backend.web.routes import learning as learning_routes  # type: ignore
 
         adapter = getattr(learning_routes, "STORAGE_ADAPTER", STORAGE_ADAPTER)
     except Exception:

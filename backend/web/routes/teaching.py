@@ -57,7 +57,12 @@ from backend.web.routes.teaching_shared import (
     _role_in,
 )
 from backend.web.routes.teaching_serialization import (
+    _serialize_course,
+    _serialize_material,
+    _serialize_module,
+    _serialize_section,
     _serialize_task,
+    _serialize_unit,
     _serialize_unit_graph_edge,
     _serialize_unit_module,
     _serialize_unit_phase,
@@ -5071,88 +5076,6 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
         )
 
     return _json_private(out, status_code=200, vary_origin=True)
-
-
-def _serialize_course(c) -> dict:
-    if is_dataclass(c):
-        return asdict(c)
-    if isinstance(c, dict):
-        return c
-    # Last resort: attempt attribute access
-    return {
-        "id": getattr(c, "id", None),
-        "title": getattr(c, "title", None),
-        "subject": getattr(c, "subject", None),
-        "grade_level": getattr(c, "grade_level", None),
-        "term": getattr(c, "term", None),
-        "teacher_id": getattr(c, "teacher_id", None),
-        "created_at": getattr(c, "created_at", None),
-        "updated_at": getattr(c, "updated_at", None),
-    }
-
-
-def _serialize_unit(u) -> dict:
-    if is_dataclass(u):
-        return asdict(u)
-    if isinstance(u, dict):
-        return u
-    return {
-        "id": getattr(u, "id", None),
-        "unit_type": getattr(u, "unit_type", None),
-        "title": getattr(u, "title", None),
-        "summary": getattr(u, "summary", None),
-        "author_id": getattr(u, "author_id", None),
-        "created_at": getattr(u, "created_at", None),
-        "updated_at": getattr(u, "updated_at", None),
-    }
-
-
-def _serialize_module(m) -> dict:
-    if is_dataclass(m):
-        return asdict(m)
-    if isinstance(m, dict):
-        return m
-    return {
-        "id": getattr(m, "id", None),
-        "course_id": getattr(m, "course_id", None),
-        "unit_id": getattr(m, "unit_id", None),
-        "position": getattr(m, "position", None),
-        "context_notes": getattr(m, "context_notes", None),
-        "created_at": getattr(m, "created_at", None),
-        "updated_at": getattr(m, "updated_at", None),
-    }
-
-
-def _serialize_section(s) -> dict:
-    if is_dataclass(s):
-        return asdict(s)
-    if isinstance(s, dict):
-        return s
-    return {
-        "id": getattr(s, "id", None),
-        "unit_id": getattr(s, "unit_id", None),
-        "title": getattr(s, "title", None),
-        "position": getattr(s, "position", None),
-        "created_at": getattr(s, "created_at", None),
-        "updated_at": getattr(s, "updated_at", None),
-    }
-
-
-def _serialize_material(m) -> dict:
-    if is_dataclass(m):
-        return asdict(m)
-    if isinstance(m, dict):
-        return m
-    return {
-        "id": getattr(m, "id", None),
-        "unit_id": getattr(m, "unit_id", None),
-        "section_id": getattr(m, "section_id", None),
-        "title": getattr(m, "title", None),
-        "body_md": getattr(m, "body_md", None),
-        "position": getattr(m, "position", None),
-        "created_at": getattr(m, "created_at", None),
-        "updated_at": getattr(m, "updated_at", None),
-    }
 
 
 def _teacher_id_of(course) -> str | None:

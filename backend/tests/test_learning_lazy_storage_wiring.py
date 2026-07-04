@@ -9,12 +9,10 @@ Why:
 """
 from __future__ import annotations
 
-import os
+import importlib
 import sys
 import types
 import uuid
-from contextlib import contextmanager
-from pathlib import Path
 
 import pytest
 import httpx
@@ -26,12 +24,15 @@ from backend.tests.runtime_auth_helpers import install_session_store
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-BACKEND_DIR = REPO_ROOT / "backend"
-for path in (WEB_DIR, BACKEND_DIR, REPO_ROOT):
-    if str(path) not in os.sys.path:
-        os.sys.path.insert(0, str(path))
+
+def _clear_web_modules(*, include_teaching: bool = False) -> None:
+    """Remove web modules that own startup-time storage wiring state."""
+
+    module_names = {"main", "backend.web.main", "routes.learning", "backend.web.routes.learning"}
+    if include_teaching:
+        module_names.update({"routes.teaching", "backend.web.routes.teaching"})
+    for name in module_names:
+        sys.modules.pop(name, None)
 
 
 def _install_flaky_supabase_module() -> None:
@@ -123,9 +124,7 @@ async def _prepare_fixture(main, monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.anyio
 async def test_upload_intent_lazy_rewire_on_first_request(monkeypatch):
     # Ensure clean import state for startup wiring
-    for name in list(sys.modules.keys()):
-        if name in {"main", "routes.learning", "backend.web.routes.learning"}:
-            del sys.modules[name]
+    _clear_web_modules()
 
     # Set env to enable wiring and disable proxy/stub for a stable assertion
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
@@ -138,9 +137,9 @@ async def test_upload_intent_lazy_rewire_on_first_request(monkeypatch):
     _install_flaky_supabase_module()
 
     # Import app (startup wiring runs and fails once)
-    import main  # type: ignore  # noqa: F401
-    import routes.learning as learning  # type: ignore
-    from teaching.storage import NullStorageAdapter  # type: ignore
+    main = importlib.import_module("backend.web.main")
+    learning = importlib.import_module("backend.web.routes.learning")
+    from backend.teaching.storage import NullStorageAdapter
 
     # Assert still Null after startup wiring failure
     assert isinstance(learning.STORAGE_ADAPTER, NullStorageAdapter)
@@ -179,9 +178,7 @@ async def test_upload_intent_uses_same_origin_proxy_when_enabled(monkeypatch):
         - Response contains normalized headers including content-type.
     """
     # Ensure clean import state for a predictable app
-    for name in list(sys.modules.keys()):
-        if name in {"main", "routes.learning", "backend.web.routes.learning"}:
-            del sys.modules[name]
+    _clear_web_modules()
 
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
@@ -189,8 +186,8 @@ async def test_upload_intent_uses_same_origin_proxy_when_enabled(monkeypatch):
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "false")
 
-    import main  # type: ignore  # noqa: F401
-    import routes.learning as learning  # type: ignore
+    main = importlib.import_module("backend.web.main")
+    learning = importlib.import_module("backend.web.routes.learning")
     learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
 
     class _FakeAdapter:
@@ -226,9 +223,7 @@ async def test_upload_intent_uses_same_origin_proxy_when_enabled(monkeypatch):
 
 @pytest.mark.anyio
 async def test_teaching_upload_intent_lazy_rewire_on_first_request(monkeypatch):
-    for name in list(sys.modules.keys()):
-        if name in {"main", "routes.learning", "routes.teaching", "backend.web.routes.learning", "backend.web.routes.teaching"}:
-            del sys.modules[name]
+    _clear_web_modules(include_teaching=True)
 
     monkeypatch.setenv("SUPABASE_URL", "http://supabase.local:54321")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
@@ -237,9 +232,9 @@ async def test_teaching_upload_intent_lazy_rewire_on_first_request(monkeypatch):
 
     _install_flaky_supabase_module()
 
-    import main  # type: ignore  # noqa: F401
-    import routes.teaching as teaching  # type: ignore
-    from teaching.storage import NullStorageAdapter  # type: ignore
+    main = importlib.import_module("backend.web.main")
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    from backend.teaching.storage import NullStorageAdapter
 
     assert isinstance(teaching.STORAGE_ADAPTER, NullStorageAdapter)
 

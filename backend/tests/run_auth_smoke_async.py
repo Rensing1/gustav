@@ -8,12 +8,9 @@ import httpx
 from httpx import ASGITransport
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND_DIR = REPO_ROOT / "backend"
-WEB_DIR = BACKEND_DIR / "web"
-sys.path.insert(0, str(BACKEND_DIR))
-sys.path.insert(0, str(WEB_DIR))
+sys.path.insert(0, str(REPO_ROOT))
 
-from main import create_app_auth_only  # type: ignore
+from backend.web.main import create_app_auth_only
 
 
 async def main() -> int:

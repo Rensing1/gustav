@@ -9,19 +9,15 @@ Note: We mock token verification to focus on mapping logic.
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import sys
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
-from runtime_auth_helpers import install_oidc_client, install_session_store, install_state_store
+main = importlib.import_module("backend.web.main")
+from backend.tests.runtime_auth_helpers import install_oidc_client, install_session_store, install_state_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -39,7 +35,7 @@ def _install_fake_oidc(monkeypatch: pytest.MonkeyPatch):
 
 
 def _install_fresh_stores(monkeypatch: pytest.MonkeyPatch):
-    from identity_access.stores import StateStore
+    from backend.identity_access.stores import StateStore
 
     state_store = StateStore()
     session_store = install_session_store(monkeypatch, main)

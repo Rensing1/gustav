@@ -8,14 +8,16 @@ Scenarios:
 """
 from __future__ import annotations
 
+import importlib
+
 import pytest
 import httpx
 from httpx import ASGITransport
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.runtime_auth_helpers import install_session_store
 
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -32,12 +34,12 @@ async def _client() -> httpx.AsyncClient:
 async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     """Create a course/unit/section/task and enroll a student; release the section."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
         assert isinstance(teaching.REPO, DBTeachingRepo)
-        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        from backend.learning.repo_db import DBLearningRepo
         assert isinstance(learning.REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required")

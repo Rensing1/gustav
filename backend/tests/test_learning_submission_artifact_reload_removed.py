@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import importlib
+
 import pytest
 import httpx
 from httpx import ASGITransport
 
-import main  # type: ignore
 from backend.tests.runtime_auth_helpers import install_session_store
+
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

@@ -8,14 +8,16 @@ Scenarios (Contract-first):
 """
 from __future__ import annotations
 
+import importlib
+
 import pytest
 import httpx
 from httpx import ASGITransport
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.runtime_auth_helpers import install_session_store
 
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -78,12 +80,12 @@ def _visibility_path(course_id: str, module_id: str, section_id: str) -> str:
 async def test_unit_sections_returns_unit_id_for_released_section(monkeypatch: pytest.MonkeyPatch):
     """When a section is released, response section includes unit_id per contract."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
         assert isinstance(teaching.REPO, DBTeachingRepo)
-        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        from backend.learning.repo_db import DBLearningRepo
         assert isinstance(learning.REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required")
@@ -119,10 +121,10 @@ async def test_unit_sections_returns_unit_id_for_released_section(monkeypatch: p
 async def test_unit_sections_returns_200_and_empty_list_when_none_released(monkeypatch: pytest.MonkeyPatch):
     """New endpoint returns 200 with [] when no sections are released for the unit."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -158,10 +160,10 @@ async def test_unit_sections_returns_200_and_empty_list_when_none_released(monke
 async def test_unit_sections_404_when_unit_not_in_course(monkeypatch: pytest.MonkeyPatch):
     """404 when the requested unit does not belong to the course (no leak on existence)."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -213,10 +215,10 @@ async def test_unit_sections_invalid_uuid_uses_contract_detail_and_cache_header(
 async def test_unit_sections_403_when_student_not_member(monkeypatch: pytest.MonkeyPatch):
     """403 when caller is not enrolled in the course."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -268,10 +270,10 @@ async def test_unit_sections_400_on_invalid_include_param(monkeypatch: pytest.Mo
 async def test_unit_sections_materials_do_not_expose_internal_storage_metadata(monkeypatch: pytest.MonkeyPatch):
     """Learning materials must not expose storage_key/sha256 in student responses."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)

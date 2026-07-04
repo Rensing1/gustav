@@ -8,16 +8,17 @@ Why:
 
 from __future__ import annotations
 
+import importlib
 import os
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
-import main  # type: ignore
 from backend.tests.runtime_auth_helpers import install_session_store
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
+main = importlib.import_module("backend.web.main")
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -41,13 +42,13 @@ async def _client() -> httpx.AsyncClient:
 @pytest.mark.anyio
 async def test_modular_unlock_status_matches_db_helper_for_each_module(monkeypatch: pytest.MonkeyPatch) -> None:
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
 
     try:
         import psycopg  # type: ignore
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
-        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
+        from backend.learning.repo_db import DBLearningRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -136,12 +137,12 @@ async def test_modular_unlock_done_transition_matches_db_helper_minimal(monkeypa
         transition semantics is caught early.
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
 
     try:
         import psycopg  # type: ignore
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)

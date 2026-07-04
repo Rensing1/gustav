@@ -9,8 +9,7 @@ Scenarios (RED):
 
 from __future__ import annotations
 
-from pathlib import Path
-import sys
+import importlib
 
 import pytest
 import httpx
@@ -20,13 +19,9 @@ from httpx import ASGITransport
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
-import routes.teaching as teaching  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 async def _client() -> httpx.AsyncClient:

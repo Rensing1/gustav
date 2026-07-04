@@ -12,20 +12,14 @@ Note:
 
 from __future__ import annotations
 
-from pathlib import Path
-import sys
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore
+main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store
 
 
@@ -82,7 +76,7 @@ async def test_prod_csp_omits_unsafe_inline_and_sets_hsts():
 
 @pytest.mark.anyio
 async def test_teaching_task_create_sets_private_no_store_cache_header(session_store):
-    import routes.teaching as teaching  # type: ignore
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     # Force in-memory repo to avoid DB dependencies for this header contract.
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
@@ -109,7 +103,7 @@ async def test_teaching_task_create_sets_private_no_store_cache_header(session_s
 
 @pytest.mark.anyio
 async def test_teaching_task_update_sets_private_no_store_cache_header(session_store):
-    import routes.teaching as teaching  # type: ignore
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
 

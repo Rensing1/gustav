@@ -14,7 +14,7 @@ from hashlib import sha256 as _sha256
 from pathlib import Path
 from typing import Protocol
 
-from teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
+from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
 from backend.storage.config import get_learning_max_upload_bytes
 
 
@@ -25,6 +25,43 @@ def _allowed_upload_mime() -> frozenset[str]:
 
 
 _MISMATCH_REASONS = frozenset({"size_mismatch", "hash_mismatch"})
+
+
+def compute_local_sha256(
+    *,
+    storage_key: str,
+    expected_size: int,
+    local_verify_root: str | Path | None,
+) -> str | None:
+    """Best-effort compute SHA-256 for a stored object below a trusted root."""
+
+    if not storage_key:
+        return None
+    root = str(local_verify_root or "").strip()
+    if not root:
+        return None
+    try:
+        base = Path(root).resolve()
+        target = (base / storage_key).resolve()
+        common = os.path.commonpath([str(base), str(target)])
+    except Exception:
+        return None
+    if common != str(base):
+        return None
+    if not target.exists() or not target.is_file():
+        return None
+    try:
+        data = target.read_bytes()
+    except Exception:
+        return None
+    if expected_size > 0 and len(data) != expected_size:
+        # This helper is best-effort diagnostics; strict mismatch decisions live
+        # in verify_storage_object_integrity where policy context is available.
+        pass
+    h = _sha256()
+    h.update(data)
+    return h.hexdigest()
+
 
 def _stream_hash_from_url(
     url: str,

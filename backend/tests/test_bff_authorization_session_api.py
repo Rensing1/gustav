@@ -20,7 +20,7 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -30,8 +30,7 @@ pytestmark = pytest.mark.anyio("asyncio")
 async def test_session_bootstrap_rejects_transitional_session_transport(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     rec = store.create(sub="teacher-bff", roles=["teacher"], name="Ada", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -46,8 +45,7 @@ async def test_session_bootstrap_rejects_transitional_session_transport(
 
 @pytest.mark.anyio
 async def test_api_me_rejects_transitional_session_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     rec = store.create(sub="student-bff", roles=["student"], name="Lena", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:

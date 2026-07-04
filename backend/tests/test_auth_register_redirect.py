@@ -36,7 +36,7 @@ async def test_register_dynamic_redirect_respects_whitelist(monkeypatch: pytest.
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    monkeypatch.setattr(main.RUNTIME, "oidc_config", test_cfg)
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://app.localhost:8100") as client:
@@ -60,7 +60,7 @@ async def test_register_dynamic_redirect_falls_back_on_mismatch(monkeypatch: pyt
         client_id="gustav-web",
         redirect_uri=static_redirect,
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    monkeypatch.setattr(main.RUNTIME, "oidc_config", test_cfg)
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://evil.localhost:8100") as client:

@@ -30,6 +30,10 @@ from identity_access.oidc import OIDCConfig  # type: ignore
 pytestmark = pytest.mark.anyio("asyncio")
 
 
+def _install_oidc_config(monkeypatch: pytest.MonkeyPatch, cfg: OIDCConfig) -> None:
+    monkeypatch.setattr(main.RUNTIME, "oidc_config", cfg)
+
+
 @pytest.mark.anyio
 async def test_forgot_redirect_has_cache_header_and_location(monkeypatch: pytest.MonkeyPatch):
     """Basic contract: 302 + Cache-Control: private, no-store + Location."""
@@ -39,7 +43,7 @@ async def test_forgot_redirect_has_cache_header_and_location(monkeypatch: pytest
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", cfg, raising=False)
+    _install_oidc_config(monkeypatch, cfg)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/forgot", follow_redirects=False)
@@ -61,7 +65,7 @@ async def test_forgot_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPat
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", cfg, raising=False)
+    _install_oidc_config(monkeypatch, cfg)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/forgot?login_hint=student%40example.com", follow_redirects=False)
@@ -73,3 +77,25 @@ async def test_forgot_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPat
     qs = parse_qs(url.query)
     assert qs.get("login_hint") == ["student@example.com"]
 
+
+@pytest.mark.anyio
+async def test_forgot_redirect_uses_app_runtime_oidc_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_cfg = OIDCConfig(
+        base_url="http://runtime-kc:8080",
+        realm="runtime-school",
+        client_id="gustav-web",
+        redirect_uri="http://runtime-app.localhost:8100/auth/callback",
+        public_base_url="https://runtime-kc.example",
+    )
+    monkeypatch.setattr(main.RUNTIME, "oidc_config", runtime_cfg)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        resp = await client.get("/auth/forgot", follow_redirects=False)
+
+    assert resp.status_code == 302
+    loc = resp.headers.get("Location", "")
+    url = urlparse(loc)
+    assert f"{url.scheme}://{url.netloc}" == "https://runtime-kc.example"
+    assert url.path.endswith("/realms/runtime-school/login-actions/reset-credentials")

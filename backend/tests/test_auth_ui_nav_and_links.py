@@ -20,16 +20,18 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
 @pytest.mark.anyio
-async def test_sidebar_logout_link_to_auth_logout():
+async def test_sidebar_logout_link_to_auth_logout(monkeypatch: pytest.MonkeyPatch):
     """Authenticated GET / renders sidebar with logout control linking to /auth/logout."""
     # Create a fake authenticated session in the server store
-    sess = main.SESSION_STORE.create(sub="user-1", name="Max Musterschüler", roles=["student"])
+    store = install_session_store(monkeypatch, main)
+    sess = store.create(sub="user-1", name="Max Musterschüler", roles=["student"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", sess.session_id)
         r = await client.get("/", follow_redirects=False)

@@ -20,6 +20,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 import sys
 sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
+from runtime_auth_helpers import install_oidc_client
 
 
 @pytest.fixture
@@ -47,12 +48,12 @@ async def test_register_callback_rejects_when_id_token_nonce_mismatch(monkeypatc
 
     class FakeOIDC:
         def __init__(self):
-            self.cfg = main.OIDC_CFG
+            self.cfg = main.RUNTIME.oidc_config
 
         def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
             return {"id_token": "fake-valid-id-token"}
 
-    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+    install_oidc_client(monkeypatch, main, FakeOIDC())
 
     def fake_verify(id_token: str, cfg: object):
         # Return claims with a wrong nonce on purpose

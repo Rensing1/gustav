@@ -23,29 +23,9 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
-from fastapi import FastAPI  # noqa: E402
-from routes.auth import auth_router  # type: ignore  # noqa: E402
+from backend.web.auth_only_app import create_app_auth_only  # noqa: E402
 from identity_access.stores import StateStore  # noqa: E402
 from identity_access.oidc import OIDCConfig  # noqa: E402
-
-
-def make_auth_only_app() -> FastAPI:
-    app = FastAPI()
-    app.include_router(auth_router)
-    return app
-
-
-def install_main_stub(cfg: OIDCConfig, monkeypatch: pytest.MonkeyPatch):
-    import types
-    stub = types.ModuleType("main")
-    stub.OIDC_CFG = cfg
-    stub.STATE_STORE = StateStore()
-    stub.SESSION_COOKIE_NAME = "gustav_session"
-    class _Settings:
-        environment = "dev"
-    stub.SETTINGS = _Settings()
-    monkeypatch.setitem(sys.modules, "main", stub)
-    return stub
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -59,10 +39,10 @@ async def test_login_redirect_302_has_location_and_cache_headers(monkeypatch: py
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    install_main_stub(cfg, monkeypatch)
+    state_store = StateStore()
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
-    test_app = make_auth_only_app()
+    test_app = create_app_auth_only(oidc_config=cfg, state_store=state_store)
     async with httpx.AsyncClient(transport=ASGITransport(app=test_app), base_url="http://app.localhost:8100") as client:
         r = await client.get("/auth/login", follow_redirects=False)
 
@@ -85,10 +65,10 @@ async def test_register_redirect_302_has_location_and_kc_action(monkeypatch: pyt
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    install_main_stub(cfg, monkeypatch)
+    state_store = StateStore()
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
-    test_app = make_auth_only_app()
+    test_app = create_app_auth_only(oidc_config=cfg, state_store=state_store)
     async with httpx.AsyncClient(transport=ASGITransport(app=test_app), base_url="http://app.localhost:8100") as client:
         r = await client.get("/auth/register", follow_redirects=False)
 

@@ -14,6 +14,7 @@ import sys
 import httpx
 import pytest
 from httpx import ASGITransport
+from types import SimpleNamespace
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,11 +38,37 @@ def _payload(*, access_token: str, refresh_token: str | None = "refresh-1", id_t
     }
 
 
+def _install_bff_session_store(monkeypatch: pytest.MonkeyPatch) -> BFFSessionStore:
+    store = BFFSessionStore()
+    monkeypatch.setattr(main.RUNTIME, "bff_session_store", store)
+    return store
+
+
+@pytest.mark.anyio
+async def test_bff_session_internal_api_uses_app_runtime_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_store = _install_bff_session_store(monkeypatch)
+    monkeypatch.setattr(main.app.state, "main_module", SimpleNamespace())
+    monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "shared-test-secret")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.put(
+            "/backend-internal/app/bff-session",
+            json=_payload(access_token="access-runtime"),
+            headers={"x-gustav-internal-secret": "shared-test-secret"},
+        )
+
+    assert response.status_code == 200
+    session_id = str(response.json()["session_id"])
+    assert runtime_store.get(session_id).access_token == "access-runtime"
+
+
 @pytest.mark.anyio
 async def test_bff_session_internal_api_supports_machine_roundtrip_without_browser_redirect(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(main, "BFF_SESSION_STORE", BFFSessionStore())
+    _install_bff_session_store(monkeypatch)
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "shared-test-secret")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -92,7 +119,7 @@ async def test_bff_session_internal_api_supports_machine_roundtrip_without_brows
 async def test_bff_session_internal_api_missing_header_paths_keep_api_semantics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(main, "BFF_SESSION_STORE", BFFSessionStore())
+    _install_bff_session_store(monkeypatch)
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "shared-test-secret")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:

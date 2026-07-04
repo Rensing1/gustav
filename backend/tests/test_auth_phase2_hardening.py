@@ -24,6 +24,8 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 import sys
 sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
+from runtime_auth_helpers import install_oidc_client, install_session_store
+from backend.web.auth_session import app_session_ttl_seconds
 
 
 @pytest.fixture
@@ -48,12 +50,12 @@ async def test_callback_rejects_when_id_token_nonce_mismatch(monkeypatch: pytest
     # Arrange: Force OIDC to return a token; force verification to return claims with wrong nonce
     class FakeOIDC:
         def __init__(self):
-            self.cfg = main.OIDC_CFG
+            self.cfg = main.RUNTIME.oidc_config
 
         def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
             return {"id_token": "fake-valid-id-token"}
 
-    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+    install_oidc_client(monkeypatch, main, FakeOIDC())
 
     def fake_verify(id_token: str, cfg: object):
         return {
@@ -80,16 +82,16 @@ async def test_callback_rejects_when_id_token_nonce_mismatch(monkeypatch: pytest
 @pytest.mark.anyio
 async def test_callback_sets_cookie_max_age_matches_session_ttl_prod(monkeypatch: pytest.MonkeyPatch):
     # Arrange: run in prod to assert Secure/Strict and Max-Age
-    main.SETTINGS.override_environment("prod")
+    main.RUNTIME.settings.override_environment("prod")
 
     class FakeOIDC:
         def __init__(self):
-            self.cfg = main.OIDC_CFG
+            self.cfg = main.RUNTIME.oidc_config
 
         def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
             return {"id_token": "fake-valid-id-token"}
 
-    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+    install_oidc_client(monkeypatch, main, FakeOIDC())
 
     try:
         async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -97,7 +99,7 @@ async def test_callback_sets_cookie_max_age_matches_session_ttl_prod(monkeypatch
             qs = parse_qs(urlparse(r_login.headers.get("location", "")).query)
             state = qs.get("state", [None])[0]
             # Provide matching nonce in verification claims to satisfy nonce check
-            rec = getattr(main.STATE_STORE, "_data", {}).get(state)
+            rec = getattr(main.RUNTIME.state_store, "_data", {}).get(state)
             expected_nonce = getattr(rec, "nonce", None)
 
             def fake_verify(id_token: str, cfg: object):
@@ -117,23 +119,23 @@ async def test_callback_sets_cookie_max_age_matches_session_ttl_prod(monkeypatch
         assert "SameSite=lax" in sc
         assert "Secure" in sc
     finally:
-        main.SETTINGS.override_environment(None)
+        main.RUNTIME.settings.override_environment(None)
 
 
 @pytest.mark.anyio
 async def test_callback_cookie_max_age_respects_app_session_ttl_env(monkeypatch: pytest.MonkeyPatch):
     """When APP_SESSION_TTL_SECONDS is set, the session cookie Max-Age must match it (prod only)."""
     monkeypatch.setenv("APP_SESSION_TTL_SECONDS", "7200")
-    main.SETTINGS.override_environment("prod")
+    main.RUNTIME.settings.override_environment("prod")
 
     class FakeOIDC:
         def __init__(self):
-            self.cfg = main.OIDC_CFG
+            self.cfg = main.RUNTIME.oidc_config
 
         def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
             return {"id_token": "fake-valid-id-token"}
 
-    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+    install_oidc_client(monkeypatch, main, FakeOIDC())
 
     try:
         async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -141,7 +143,7 @@ async def test_callback_cookie_max_age_respects_app_session_ttl_env(monkeypatch:
             qs = parse_qs(urlparse(r_login.headers.get("location", "")).query)
             state = qs.get("state", [None])[0]
             assert state, "state must be present for callback"
-            rec = getattr(main.STATE_STORE, "_data", {}).get(state)
+            rec = getattr(main.RUNTIME.state_store, "_data", {}).get(state)
             expected_nonce = getattr(rec, "nonce", None)
 
             def fake_verify(id_token: str, cfg: object):
@@ -159,13 +161,14 @@ async def test_callback_cookie_max_age_respects_app_session_ttl_env(monkeypatch:
         sc = r_cb.headers.get("set-cookie", "")
         assert re.search(r"Max-Age=7200", sc, re.I), sc
     finally:
-        main.SETTINGS.override_environment(None)
+        main.RUNTIME.settings.override_environment(None)
 
 
 @pytest.mark.anyio
-async def test_me_includes_expires_at_and_no_store():
+async def test_me_includes_expires_at_and_no_store(monkeypatch: pytest.MonkeyPatch):
     # Create a fake session and call /api/me
-    sess = main.SESSION_STORE.create(sub="user-123", name="Max Musterschüler", roles=["student"])
+    store = install_session_store(monkeypatch, main)
+    sess = store.create(sub="user-123", name="Max Musterschüler", roles=["student"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", sess.session_id)
         r = await client.get("/api/me")
@@ -212,17 +215,17 @@ async def test_login_redirect_uri_uses_configured_scheme_when_proxy_hides_https(
 def test_app_session_ttl_seconds_defaults_and_clamps(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture):
     # Default when unset
     monkeypatch.delenv("APP_SESSION_TTL_SECONDS", raising=False)
-    assert main._app_session_ttl_seconds() == 86400
+    assert app_session_ttl_seconds() == 86400
 
     # Clamp to [15 minutes, 7 days]
     monkeypatch.setenv("APP_SESSION_TTL_SECONDS", "1")
-    assert main._app_session_ttl_seconds() == 15 * 60
+    assert app_session_ttl_seconds() == 15 * 60
 
     monkeypatch.setenv("APP_SESSION_TTL_SECONDS", str(8 * 24 * 60 * 60))
-    assert main._app_session_ttl_seconds() == 7 * 24 * 60 * 60
+    assert app_session_ttl_seconds() == 7 * 24 * 60 * 60
 
     # Invalid values fall back and log a warning
     caplog.set_level(logging.WARNING, logger="gustav.identity_access")
     monkeypatch.setenv("APP_SESSION_TTL_SECONDS", "not-an-int")
-    assert main._app_session_ttl_seconds() == 86400
+    assert app_session_ttl_seconds() == 86400
     assert any("Invalid APP_SESSION_TTL_SECONDS" in rec.message for rec in caplog.records)

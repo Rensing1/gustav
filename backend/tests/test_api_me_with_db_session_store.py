@@ -15,6 +15,7 @@ from pathlib import Path
 import sys
 
 from backend.tests.utils.fake_psycopg import install_fake_psycopg
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -53,7 +54,7 @@ def _cleanup_store(store, rec):
 async def test_api_me_with_db_session_store(monkeypatch: pytest.MonkeyPatch):
     store, _ = _prepare_store(monkeypatch)
 
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    install_session_store(monkeypatch, main, store)
 
     rec = store.create(sub="user-42", roles=["student"], name="Max Musterschüler", ttl_seconds=60)
 
@@ -75,7 +76,7 @@ async def test_api_me_with_db_session_store(monkeypatch: pytest.MonkeyPatch):
 async def test_api_me_with_db_store_expired_session_returns_401(monkeypatch: pytest.MonkeyPatch):
     """If the DB-backed session is expired, /api/me must return 401 with private no-store headers."""
     store, _ = _prepare_store(monkeypatch)
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    install_session_store(monkeypatch, main, store)
 
     rec = store.create(sub="user-expired", roles=["student"], name="Expired", ttl_seconds=-5)
 
@@ -95,7 +96,7 @@ async def test_api_me_with_db_store_expired_session_returns_401(monkeypatch: pyt
 async def test_logout_deletes_session_and_clears_cookie_with_db_store(monkeypatch: pytest.MonkeyPatch):
     """/auth/logout should delete the DB session and clear the cookie."""
     store, _ = _prepare_store(monkeypatch)
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    install_session_store(monkeypatch, main, store)
 
     rec = store.create(sub="user-logout", roles=["student"], name="Max", ttl_seconds=60, id_token="idtok")
 

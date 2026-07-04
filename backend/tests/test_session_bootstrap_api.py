@@ -16,7 +16,7 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -82,8 +82,7 @@ async def test_session_bootstrap_requires_bearer_even_with_cookie_session(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.INFO, logger="gustav.identity_access")
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     rec = store.create(sub="student-cookie", roles=["student"], name="Lena", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -104,10 +103,10 @@ async def test_session_bootstrap_logs_low_cardinality_auth_reason_without_sensit
     caplog.set_level(logging.INFO, logger="gustav.identity_access")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", "sensitive-session")
         response = await client.get(
             "/api/app/session-bootstrap",
             headers={"Authorization": "Bearer sensitive.jwt"},
-            cookies={"gustav_session": "sensitive-session"},
         )
 
     assert response.status_code == 401
@@ -126,10 +125,10 @@ async def test_auth_failure_logs_path_class_without_dynamic_identifiers(
 
     dynamic_path = "/api/teaching/courses/course-1/units/unit-1/tasks/task-1/students/student@example.com/submissions/latest"
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", "sensitive-session")
         response = await client.get(
             dynamic_path,
             headers={"Authorization": "Bearer sensitive.jwt"},
-            cookies={"gustav_session": "sensitive-session"},
         )
 
     assert response.status_code == 401

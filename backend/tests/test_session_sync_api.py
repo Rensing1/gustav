@@ -5,6 +5,7 @@ from __future__ import annotations
 from http.cookies import SimpleCookie
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -17,7 +18,7 @@ if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
 import main  # type: ignore
-from identity_access.stores import SessionStore  # type: ignore
+from runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -46,8 +47,7 @@ def _mock_bearer_auth(
 
 @pytest.mark.anyio
 async def test_session_sync_mints_gustav_session_from_bearer_auth(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     headers = _mock_bearer_auth(monkeypatch, sub="student-sync", roles=["student"], name="Lena")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -64,6 +64,10 @@ async def test_session_sync_mints_gustav_session_from_bearer_auth(monkeypatch: p
     cookie.load(response.headers.get("set-cookie", ""))
     morsel = cookie.get(main.SESSION_COOKIE_NAME)
     assert morsel is not None, "session-sync must set gustav_session"
+    assert not morsel["domain"], "gustav_session must stay host-only"
+    assert morsel["httponly"]
+    assert morsel["secure"]
+    assert morsel["samesite"].lower() == "lax"
     session_id = morsel.value
 
     record = store.get(session_id)
@@ -76,8 +80,7 @@ async def test_session_sync_mints_gustav_session_from_bearer_auth(monkeypatch: p
 
 @pytest.mark.anyio
 async def test_session_sync_replaces_existing_gustav_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     stale = store.create(sub="stale-user", roles=["student"], name="Alt", ttl_seconds=60)
     headers = _mock_bearer_auth(monkeypatch, sub="teacher-sync", roles=["teacher"], name="Ada")
 
@@ -96,6 +99,10 @@ async def test_session_sync_replaces_existing_gustav_session(monkeypatch: pytest
     cookie.load(response.headers.get("set-cookie", ""))
     morsel = cookie.get(main.SESSION_COOKIE_NAME)
     assert morsel is not None
+    assert not morsel["domain"], "replacement gustav_session must stay host-only"
+    assert morsel["httponly"]
+    assert morsel["secure"]
+    assert morsel["samesite"].lower() == "lax"
     assert morsel.value != stale.session_id
     assert store.get(morsel.value).sub == "teacher-sync"
     assert getattr(store.get(morsel.value), "id_token", None) == "id-token-sync-2"
@@ -103,8 +110,7 @@ async def test_session_sync_replaces_existing_gustav_session(monkeypatch: pytest
 
 @pytest.mark.anyio
 async def test_session_sync_requires_bearer_even_with_cookie_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = SessionStore()
-    monkeypatch.setattr(main, "SESSION_STORE", store)
+    store = install_session_store(monkeypatch, main)
     rec = store.create(sub="cookie-only", roles=["student"], name="Lena", ttl_seconds=60)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -114,3 +120,29 @@ async def test_session_sync_requires_bearer_even_with_cookie_session(monkeypatch
     assert response.status_code == 401
     assert response.headers.get("Cache-Control") == "private, no-store"
     assert response.json() == {"error": "unauthenticated"}
+
+
+@pytest.mark.anyio
+async def test_session_sync_uses_app_runtime_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = install_session_store(monkeypatch, main)
+    monkeypatch.setattr(main.app.state, "main_module", SimpleNamespace(SESSION_COOKIE_NAME=main.SESSION_COOKIE_NAME))
+    headers = _mock_bearer_auth(monkeypatch, sub="runtime-sync", roles=["student"], name="Runtime")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/app/session-sync",
+            headers=headers,
+            json={"id_token": "id-token-runtime"},
+        )
+
+    assert response.status_code == 204
+    cookie = SimpleCookie()
+    cookie.load(response.headers.get("set-cookie", ""))
+    morsel = cookie.get(main.SESSION_COOKIE_NAME)
+    assert morsel is not None
+    record = store.get(morsel.value)
+    assert record is not None
+    assert record.sub == "runtime-sync"
+    assert getattr(record, "id_token", None) == "id-token-runtime"

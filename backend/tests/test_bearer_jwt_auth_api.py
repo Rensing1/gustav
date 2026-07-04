@@ -23,6 +23,7 @@ if str(WEB_DIR) not in sys.path:
 
 import main  # type: ignore
 from identity_access.oidc import OIDCConfig  # type: ignore
+from runtime_auth_helpers import install_oidc_config
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -88,7 +89,7 @@ def _configure_jwks(monkeypatch: pytest.MonkeyPatch) -> None:
         client_id=TEST_AUDIENCE,
         redirect_uri="http://app.localhost/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", cfg)
+    install_oidc_config(monkeypatch, main, cfg)
 
     from identity_access import tokens as tokens_module  # type: ignore
 

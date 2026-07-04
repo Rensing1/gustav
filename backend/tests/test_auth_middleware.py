@@ -10,6 +10,7 @@ Requirements:
 
 import pytest
 import httpx
+import importlib
 from httpx import ASGITransport
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
@@ -20,8 +21,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = REPO_ROOT / "backend" / "web"
 sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
+from runtime_auth_helpers import install_cli_token_store
+from backend.web.auth_middleware import is_public_path
+from backend.web.auth_runtime import build_cli_token_store
 from identity_access.cli_tokens import InMemoryCLITokenStore  # type: ignore
 from routes import teaching as teaching_routes  # type: ignore
+
+teaching_h5p_routes = importlib.import_module("backend.web.routes.teaching_h5p")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -41,8 +47,8 @@ def _install_cli_token(
         scopes=scopes,
         ttl_seconds=3_600,
     )
-    monkeypatch.setattr(main, "CLI_TOKEN_STORE", store)
-    monkeypatch.setattr(main, "_roles_for_cli_sub", lambda sub: list(roles))
+    install_cli_token_store(monkeypatch, main, store)
+    monkeypatch.setattr(main.AUTH_WIRING.auth_middleware_dependencies, "roles_for_cli_sub", lambda sub: list(roles))
     return store, created
 
 
@@ -117,7 +123,7 @@ async def test_html_post_unauthenticated_prefers_referer_for_return_to():
 async def test_allowlist_paths_not_redirected():
     # StaticFiles responses can be streaming; avoid exercising them via ASGITransport
     # here and instead assert the middleware's allowlist predicate directly.
-    assert main._is_public_path("/static/css/gustav.css")
+    assert is_public_path("/static/css/gustav.css")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r_auth = await client.get("/auth/login", follow_redirects=False)
@@ -147,6 +153,35 @@ async def test_cli_bearer_can_authenticate_teaching_units_without_jwt_verificati
     class StubRepo:
         def list_units_for_author(self, *, author_id: str, limit: int, offset: int):
             assert author_id == "teacher-cli-auth"
+            return []
+
+    monkeypatch.setattr(teaching_routes, "_REPO", StubRepo())
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/teaching/units",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.anyio
+async def test_cli_bearer_uses_app_runtime_token_store(monkeypatch):
+    store = InMemoryCLITokenStore(now=lambda: 1_000)
+    created = store.create_token(
+        user_sub="teacher-cli-runtime",
+        label="Laptop",
+        scopes=["read"],
+        ttl_seconds=3_600,
+    )
+    monkeypatch.setattr(main.RUNTIME, "cli_token_store", store)
+    monkeypatch.setattr(main.AUTH_WIRING.auth_middleware_dependencies, "roles_for_cli_sub", lambda sub: ["teacher"])
+
+    class StubRepo:
+        def list_units_for_author(self, *, author_id: str, limit: int, offset: int):
+            assert author_id == "teacher-cli-runtime"
             return []
 
     monkeypatch.setattr(teaching_routes, "_REPO", StubRepo())
@@ -306,11 +341,12 @@ def test_cli_token_store_db_mode_fails_fast_outside_pytest(monkeypatch):
         def __init__(self) -> None:
             raise RuntimeError("db unavailable")
 
-    monkeypatch.setenv("CLI_TOKENS_BACKEND", "db")
-    monkeypatch.setattr(main, "DBCLITokenStore", BrokenDBStore)
-
     with pytest.raises(RuntimeError, match="db unavailable"):
-        main._build_cli_token_store(running_under_pytest=False)
+        build_cli_token_store(
+            running_under_pytest=False,
+            backend="db",
+            db_cli_token_store=BrokenDBStore,
+        )
 
 
 @pytest.mark.anyio
@@ -346,7 +382,7 @@ async def test_cli_bearer_can_export_h5p_package_without_browser_csrf(monkeypatc
         assert (method, path) == ("GET", "/contents/123/export")
         return httpx.Response(200, content=b"PK\x03\x04h5p", headers={"content-type": "application/zip"})
 
-    monkeypatch.setattr(teaching_routes, "_request_h5p_service", fake_h5p_request)
+    monkeypatch.setattr(teaching_h5p_routes, "_request_h5p_service", fake_h5p_request)
 
     headers = {"Authorization": f"Bearer {created.raw_token}"}
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -392,7 +428,7 @@ async def test_cli_bearer_h5p_import_rejects_upload_larger_than_web_limit(monkey
         h5p_calls.append((method, path))
         return httpx.Response(200, json={"content_id": "too-late"})
 
-    monkeypatch.setattr(teaching_routes, "_request_h5p_service", fake_h5p_request)
+    monkeypatch.setattr(teaching_h5p_routes, "_request_h5p_service", fake_h5p_request)
 
     headers = {"Authorization": f"Bearer {created.raw_token}"}
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -435,7 +471,7 @@ def test_cli_h5p_service_calls_forward_internal_teacher_context(monkeypatch):
         ),
     )
 
-    headers = teaching_routes._h5p_internal_auth_headers(request)
+    headers = teaching_h5p_routes._h5p_internal_auth_headers(request)
 
     assert headers == {
         "x-gustav-h5p-internal-secret": "internal-h5p-secret",

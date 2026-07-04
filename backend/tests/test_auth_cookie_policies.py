@@ -23,6 +23,7 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore
+from runtime_auth_helpers import install_oidc_client, install_session_store, install_state_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -31,12 +32,12 @@ pytestmark = pytest.mark.anyio("asyncio")
 def _install_fake_oidc_and_verifier(monkeypatch: pytest.MonkeyPatch):
     class FakeOIDC:
         def __init__(self):
-            self.cfg = main.OIDC_CFG
+            self.cfg = main.RUNTIME.oidc_config
 
         def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
             return {"id_token": "fake-id-token"}
 
-    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+    install_oidc_client(monkeypatch, main, FakeOIDC())
 
     def ok_claims(id_token: str, cfg: object):
         return {
@@ -48,17 +49,24 @@ def _install_fake_oidc_and_verifier(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(main, "verify_id_token", ok_claims)
 
 
+def _install_fresh_state(monkeypatch: pytest.MonkeyPatch):
+    from identity_access.stores import StateStore
+
+    state_store = StateStore()
+    install_state_store(monkeypatch, main, state_store)
+    install_session_store(monkeypatch, main)
+    return state_store
+
+
 @pytest.mark.anyio
 async def test_callback_sets_host_only_cookie_dev(monkeypatch: pytest.MonkeyPatch):
     _install_fake_oidc_and_verifier(monkeypatch)
     # Dev mode for predictable flags
-    monkeypatch.setattr(main.SETTINGS, "_env_override", "dev", raising=False)
+    monkeypatch.setattr(main.RUNTIME.settings, "_env_override", "dev", raising=False)
 
     # Fresh state store per run
-    from identity_access.stores import StateStore, SessionStore
-    monkeypatch.setattr(main, "STATE_STORE", StateStore())
-    monkeypatch.setattr(main, "SESSION_STORE", SessionStore())
-    rec = main.STATE_STORE.create(code_verifier="v")
+    state_store = _install_fresh_state(monkeypatch)
+    rec = state_store.create(code_verifier="v")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/callback?code=any&state={rec.state}", follow_redirects=False)
@@ -76,12 +84,10 @@ async def test_callback_sets_host_only_cookie_dev(monkeypatch: pytest.MonkeyPatc
 async def test_callback_sets_host_only_cookie_prod(monkeypatch: pytest.MonkeyPatch):
     _install_fake_oidc_and_verifier(monkeypatch)
     # Prod mode for hardened flags
-    monkeypatch.setattr(main.SETTINGS, "_env_override", "prod", raising=False)
+    monkeypatch.setattr(main.RUNTIME.settings, "_env_override", "prod", raising=False)
 
-    from identity_access.stores import StateStore, SessionStore
-    monkeypatch.setattr(main, "STATE_STORE", StateStore())
-    monkeypatch.setattr(main, "SESSION_STORE", SessionStore())
-    rec = main.STATE_STORE.create(code_verifier="v")
+    state_store = _install_fresh_state(monkeypatch)
+    rec = state_store.create(code_verifier="v")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/callback?code=any&state={rec.state}", follow_redirects=False)

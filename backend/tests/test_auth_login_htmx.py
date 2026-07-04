@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
-from types import ModuleType
 from urllib.parse import urlparse, parse_qs
 
 import pytest
@@ -21,38 +20,42 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in sys.path:
     sys.path.insert(0, str(WEB_DIR))
 
-# Build a minimal auth-only app to avoid DB dependencies in routes/learning.py
-from fastapi import FastAPI  # noqa: E402
-from routes.auth import auth_router  # type: ignore  # noqa: E402
+from backend.web.auth_only_app import create_app_auth_only  # noqa: E402
 from identity_access.stores import StateStore  # noqa: E402
 from identity_access.oidc import OIDCConfig  # noqa: E402
 
 
-def make_auth_only_app() -> FastAPI:
-    app = FastAPI()
-    app.include_router(auth_router)
-    return app
-
-
-def install_main_stub(cfg: OIDCConfig, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
-    """Install a stub 'main' module to satisfy routes.auth late import.
-
-    Provides OIDC_CFG and STATE_STORE compatible with production main.py.
-    """
-    stub = ModuleType("main")
-    stub.OIDC_CFG = cfg
-    stub.STATE_STORE = StateStore()
-    # Defaults used by routes.auth logout (not exercised here)
-    stub.SESSION_COOKIE_NAME = "gustav_session"
-    class _Settings:
-        environment = "dev"
-    stub.SETTINGS = _Settings()
-    # Install stub in sys.modules in a reversible way
-    monkeypatch.setitem(sys.modules, "main", stub)
-    return stub
-
-
 pytestmark = pytest.mark.anyio("asyncio")
+
+
+@pytest.mark.anyio
+async def test_auth_only_app_login_uses_explicit_runtime_without_main_stub(monkeypatch: pytest.MonkeyPatch):
+    cfg = OIDCConfig(
+        base_url="http://kc.localhost:8080",
+        realm="gustav",
+        client_id="gustav-web",
+        redirect_uri="http://app.localhost:8100/auth/callback",
+    )
+    state_store = StateStore()
+    monkeypatch.delitem(sys.modules, "main", raising=False)
+    monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
+
+    test_app = create_app_auth_only(oidc_config=cfg, state_store=state_store)
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=test_app),
+        base_url="http://app.localhost:8100",
+    ) as client:
+        response = await client.get(
+            "/auth/login",
+            headers={"HX-Request": "true", "Host": "app.localhost:8100"},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 204
+    redirect_target = response.headers.get("HX-Redirect")
+    assert redirect_target
+    state_param = parse_qs(urlparse(redirect_target).query).get("state", [None])[0]
+    assert state_param in state_store._data  # type: ignore[attr-defined]
 
 
 @pytest.mark.anyio
@@ -64,13 +67,9 @@ async def test_login_htmx_sets_hx_redirect_and_keeps_state(monkeypatch: pytest.M
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    stub = install_main_stub(cfg, monkeypatch)
+    state_store = StateStore()
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
-
-    # Ensure the store starts empty for assertion clarity
-    stub.STATE_STORE._data.clear()  # type: ignore[attr-defined]
-
-    test_app = make_auth_only_app()
+    test_app = create_app_auth_only(oidc_config=cfg, state_store=state_store)
     async with httpx.AsyncClient(
         transport=ASGITransport(app=test_app),
         base_url="http://app.localhost:8100",
@@ -96,7 +95,7 @@ async def test_login_htmx_sets_hx_redirect_and_keeps_state(monkeypatch: pytest.M
     assert state_param, "Authorization URL must contain state parameter"
 
     # State must remain in the store until the callback consumes it
-    assert state_param in stub.STATE_STORE._data  # type: ignore[attr-defined]
+    assert state_param in state_store._data  # type: ignore[attr-defined]
 
 
 @pytest.mark.anyio
@@ -108,10 +107,10 @@ async def test_register_htmx_sets_hx_redirect(monkeypatch: pytest.MonkeyPatch):
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    install_main_stub(cfg, monkeypatch)
+    state_store = StateStore()
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
-    test_app = make_auth_only_app()
+    test_app = create_app_auth_only(oidc_config=cfg, state_store=state_store)
     async with httpx.AsyncClient(
         transport=ASGITransport(app=test_app),
         base_url="http://app.localhost:8100",
@@ -136,10 +135,10 @@ async def test_login_dynamic_redirect_host_guard(monkeypatch: pytest.MonkeyPatch
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    install_main_stub(cfg, monkeypatch)
+    state_store = StateStore()
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
-    test_app = make_auth_only_app()
+    test_app = create_app_auth_only(oidc_config=cfg, state_store=state_store)
     # Case 1: matching host -> dynamic redirect_uri is used
     async with httpx.AsyncClient(
         transport=ASGITransport(app=test_app),

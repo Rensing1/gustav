@@ -25,9 +25,15 @@ import types
 import requests
 import yaml
 
+from backend.tests.runtime_auth_helpers import install_oidc_client, install_oidc_config, install_session_store, install_state_store
+
 TEST_ISSUER = "http://keycloak:8080/realms/gustav"
 TEST_AUDIENCE = "gustav-web"
 TEST_KID = "gustav-test-key"
+
+
+def _install_oidc_config(monkeypatch: pytest.MonkeyPatch, main_module: object, cfg: object) -> None:
+    install_oidc_config(monkeypatch, main_module, cfg)
 
 
 def _b64url_uint(value: int) -> str:
@@ -106,13 +112,12 @@ async def _call_auth_callback_with_token(
     from main import app as full_app  # type: ignore
     import main  # type: ignore
     from identity_access.oidc import OIDCConfig
-    from identity_access.stores import StateStore, SessionStore
+    from identity_access.stores import StateStore
 
     # Fresh in-memory stores per run to avoid leakage between tests
     state_store = StateStore()
-    session_store = SessionStore()
-    monkeypatch.setattr(main, "STATE_STORE", state_store)
-    monkeypatch.setattr(main, "SESSION_STORE", session_store)
+    session_store = install_session_store(monkeypatch, main)
+    install_state_store(monkeypatch, main, state_store)
 
     test_cfg = OIDCConfig(
         base_url="http://keycloak:8080",
@@ -120,7 +125,7 @@ async def _call_auth_callback_with_token(
         client_id="gustav-web",
         redirect_uri="http://localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    _install_oidc_config(monkeypatch, main, test_cfg)
 
     record = state_store.create(code_verifier="verifier-for-test")
 
@@ -142,7 +147,7 @@ async def _call_auth_callback_with_token(
             }
 
     fake_client = FakeOIDC(id_token)
-    monkeypatch.setattr(main, "OIDC", fake_client)
+    install_oidc_client(monkeypatch, main, fake_client)
 
     # Reset JWKS cache for deterministic tests (no effect until verification module exists)
     try:
@@ -209,7 +214,7 @@ async def test_login_dynamic_redirect_respects_whitelist(monkeypatch: pytest.Mon
         client_id="gustav-web",
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    _install_oidc_config(monkeypatch, main, test_cfg)
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://app.localhost:8100") as client:
@@ -237,7 +242,7 @@ async def test_login_dynamic_redirect_falls_back_on_mismatch(monkeypatch: pytest
         client_id="gustav-web",
         redirect_uri=static_redirect,
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    _install_oidc_config(monkeypatch, main, test_cfg)
     # Intentionally set WEB_BASE to allowed app host
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
@@ -279,7 +284,7 @@ async def test_forgot_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
         client_id="gustav-web",
         redirect_uri="http://localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    _install_oidc_config(monkeypatch, main, test_cfg)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/forgot", follow_redirects=False)
@@ -306,7 +311,7 @@ async def test_forgot_redirect_prefers_public_base_url(monkeypatch: pytest.Monke
         client_id="gustav-web",
         redirect_uri="http://localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    _install_oidc_config(monkeypatch, main, test_cfg)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/forgot", follow_redirects=False)
@@ -333,7 +338,7 @@ async def test_forgot_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPat
         client_id="gustav-web",
         redirect_uri="http://localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    _install_oidc_config(monkeypatch, main, test_cfg)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/forgot?login_hint=student%40example.com", follow_redirects=False)
@@ -428,7 +433,7 @@ async def test_callback_filters_unknown_roles(monkeypatch: pytest.MonkeyPatch):
 
     import main  # type: ignore  # noqa: E402
 
-    stored = main.SESSION_STORE.get(session_id)
+    stored = main.RUNTIME.session_store.get(session_id)
     assert stored is not None
     assert stored.roles == ["student", "teacher"]
 
@@ -444,7 +449,7 @@ async def test_callback_defaults_to_student_when_roles_missing(monkeypatch: pyte
 
     import main  # type: ignore  # noqa: E402
 
-    stored = main.SESSION_STORE.get(session_id)
+    stored = main.RUNTIME.session_store.get(session_id)
     assert stored is not None
     assert stored.roles == ["student"]
 
@@ -492,7 +497,7 @@ async def test_api_me_returns_401_after_session_expired(monkeypatch: pytest.Monk
 
     import main  # type: ignore  # noqa: E402
 
-    record = main.SESSION_STORE.get(session_id)
+    record = main.RUNTIME.session_store.get(session_id)
     assert record is not None
     assert record.expires_at is not None
     future = record.expires_at + 1
@@ -510,7 +515,7 @@ async def test_api_me_returns_401_after_session_expired(monkeypatch: pytest.Monk
 async def test_callback_sets_secure_cookie_flags_in_prod(monkeypatch: pytest.MonkeyPatch):
     def configure(*_):
         import main  # type: ignore  # noqa: E402
-        monkeypatch.setattr(main.SETTINGS, "_env_override", "prod", raising=False)
+        monkeypatch.setattr(main.RUNTIME.settings, "_env_override", "prod", raising=False)
 
     token = _make_id_token()
     resp = await _call_auth_callback_with_token(
@@ -530,7 +535,7 @@ async def test_callback_sets_secure_cookie_flags_in_prod(monkeypatch: pytest.Mon
 async def test_logout_uses_secure_cookie_flags_in_prod(monkeypatch: pytest.MonkeyPatch):
     def configure(*_):
         import main  # type: ignore  # noqa: E402
-        monkeypatch.setattr(main.SETTINGS, "_env_override", "prod", raising=False)
+        monkeypatch.setattr(main.RUNTIME.settings, "_env_override", "prod", raising=False)
 
     token = _make_id_token()
     resp = await _call_auth_callback_with_token(
@@ -677,7 +682,7 @@ async def test_register_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
         client_id="gustav-web",
         redirect_uri="http://localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    _install_oidc_config(monkeypatch, main, test_cfg)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/register", follow_redirects=False)
@@ -708,7 +713,7 @@ async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyP
         client_id="gustav-web",
         redirect_uri="http://localhost:8100/auth/callback",
     )
-    monkeypatch.setattr(main, "OIDC_CFG", test_cfg)
+    _install_oidc_config(monkeypatch, main, test_cfg)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.get("/auth/register?login_hint=new%40example.com", follow_redirects=False)
@@ -729,14 +734,14 @@ async def test_register_callback_redirects_to_safe_in_app_target(monkeypatch: py
 
     class FakeOIDC:
         def __init__(self):
-            self.cfg = main.OIDC_CFG
+            self.cfg = main.RUNTIME.oidc_config
 
         def exchange_code_for_tokens(self, *, code: str, code_verifier: str):
             assert code == "valid"
             assert code_verifier
             return {"id_token": "fake-id-token"}
 
-    monkeypatch.setattr(main, "OIDC", FakeOIDC())
+    install_oidc_client(monkeypatch, main, FakeOIDC())
     monkeypatch.setenv("ALLOWED_REGISTRATION_DOMAINS", "@school.example")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
@@ -750,7 +755,7 @@ async def test_register_callback_redirects_to_safe_in_app_target(monkeypatch: py
         state = parse_qs(urlparse(location).query).get("state", [None])[0]
         assert state, "state must be present in registration redirect"
 
-        rec = getattr(main.STATE_STORE, "_data", {}).get(state)
+        rec = getattr(main.RUNTIME.state_store, "_data", {}).get(state)
         assert rec is not None
         assert rec.redirect == "/teaching/courses/course-1"
 

@@ -2,23 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import importlib
 from urllib.parse import parse_qs, urlparse
-import sys
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore
-from identity_access.oidc import OIDCConfig  # type: ignore
-from identity_access.stores import StateStore  # type: ignore
+main = importlib.import_module("backend.web.main")
+from backend.identity_access.oidc import OIDCConfig
+from backend.identity_access.stores import StateStore
 
 
 pytestmark = pytest.mark.anyio("asyncio")

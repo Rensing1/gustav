@@ -8,17 +8,12 @@ Scope:
 
 from __future__ import annotations
 
-from pathlib import Path
-import sys
-
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-
-from routes.auth import _default_app_base  # type: ignore
-import os
 import contextlib
+import importlib
+import os
+
+
+_default_app_base = importlib.import_module("backend.web.routes.auth")._default_app_base
 
 
 def _clear_env_vars(names: list[str]):

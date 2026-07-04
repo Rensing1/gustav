@@ -19,8 +19,19 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 
 async def _client():
-    import main  # noqa
+    main = importlib.import_module("backend.web.main")
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
+
+
+def _main():
+    return importlib.import_module("backend.web.main")
+
+
+def _reload_learning_route():
+    module_name = "backend.web.routes.learning"
+    if module_name in importlib.sys.modules:
+        return importlib.reload(importlib.import_module(module_name))
+    return importlib.import_module(module_name)
 
 
 def _student_session(monkeypatch: pytest.MonkeyPatch, main_module, sub: str):
@@ -34,11 +45,8 @@ async def test_proxy_rejects_wrong_host(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     # Reload to pick env
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-host")
 
@@ -46,13 +54,7 @@ async def test_proxy_rejects_wrong_host(monkeypatch: pytest.MonkeyPatch) -> None
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when host invalid")
 
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     bad = "https://evil.example.com/storage/v1/object/upload/x"
     async with (await _client()) as c:
@@ -72,15 +74,8 @@ async def test_proxy_rejects_invalid_path(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-path")
 
@@ -88,8 +83,6 @@ async def test_proxy_rejects_invalid_path(monkeypatch: pytest.MonkeyPatch) -> No
         raise AssertionError("forward must not be called when path invalid")
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     # Path does not begin with expected storage upload prefix
     bad = "https://supabase.local:54321/storage/v1/other"
@@ -120,15 +113,8 @@ async def test_proxy_rejects_path_traversal(monkeypatch: pytest.MonkeyPatch, bad
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-traversal")
 
@@ -136,8 +122,6 @@ async def test_proxy_rejects_path_traversal(monkeypatch: pytest.MonkeyPatch, bad
         raise AssertionError("forward must not be called when path contains traversal")
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     bad = f"https://supabase.local:54321{bad_path}"
     async with (await _client()) as c:
@@ -157,15 +141,8 @@ async def test_proxy_rejects_disallowed_mime(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-mime")
 
@@ -173,8 +150,6 @@ async def test_proxy_rejects_disallowed_mime(monkeypatch: pytest.MonkeyPatch) ->
         raise AssertionError("forward must not be called when MIME invalid")
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     good = "https://supabase.local:54321/storage/v1/object/upload/submissions/file"
     async with (await _client()) as c:
@@ -196,15 +171,8 @@ async def test_proxy_filters_forward_headers(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-headers")
 
@@ -218,8 +186,6 @@ async def test_proxy_filters_forward_headers(monkeypatch: pytest.MonkeyPatch) ->
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     token = learning._encode_proxy_headers(  # type: ignore[attr-defined]
         {
@@ -255,15 +221,8 @@ async def test_proxy_rejects_port_mismatch(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-port")
 
@@ -271,8 +230,6 @@ async def test_proxy_rejects_port_mismatch(monkeypatch: pytest.MonkeyPatch) -> N
         raise AssertionError("forward must not be called when port mismatched")
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     bad = "https://supabase.local:65432/storage/v1/object/upload/submissions/file"
     async with (await _client()) as c:
@@ -295,15 +252,8 @@ async def test_proxy_allows_supabase_public_host(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.internal:54321")
     monkeypatch.setenv("SUPABASE_PUBLIC_URL", "https://app.localhost")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-public")
 
@@ -314,8 +264,6 @@ async def test_proxy_allows_supabase_public_host(monkeypatch: pytest.MonkeyPatch
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     good = "https://app.localhost/storage/v1/object/upload/submissions/file"
     async with (await _client()) as c:
@@ -335,15 +283,8 @@ async def test_proxy_allows_host_docker_internal_http(monkeypatch: pytest.Monkey
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "http://host.docker.internal:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-docker")
 
@@ -354,8 +295,6 @@ async def test_proxy_allows_host_docker_internal_http(monkeypatch: pytest.Monkey
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     good = "http://host.docker.internal:54321/storage/v1/object/upload/submissions/file"
     async with (await _client()) as c:
@@ -378,15 +317,8 @@ async def test_proxy_allows_double_slash_path(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "http://host.docker.internal:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-doubleslash")
 
@@ -397,8 +329,6 @@ async def test_proxy_allows_double_slash_path(monkeypatch: pytest.MonkeyPatch) -
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     # Note the double slash after /storage/v1/
     good = "http://host.docker.internal:54321/storage/v1//object/upload/submissions/file"
@@ -420,15 +350,8 @@ async def test_proxy_streams_request_body_without_calling_body(monkeypatch: pyte
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "http://host.docker.internal:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-stream")
 
@@ -439,8 +362,6 @@ async def test_proxy_streams_request_body_without_calling_body(monkeypatch: pyte
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
 
     async def _fail_body(self):  # type: ignore[no-untyped-def]
         raise AssertionError("Request.body() usage is forbidden for streaming proxy")
@@ -466,15 +387,8 @@ async def test_proxy_emits_telemetry_for_successful_upload(monkeypatch: pytest.M
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-
-    import main  # noqa
-    import routes.learning as learning  # noqa
-    try:
-        import backend.web.routes.learning as learning_backend  # type: ignore
-    except Exception:
-        learning_backend = None
+    main = _main()
+    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-telemetry")
 
@@ -491,9 +405,6 @@ async def test_proxy_emits_telemetry_for_successful_upload(monkeypatch: pytest.M
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
     monkeypatch.setattr(learning, "_emit_upload_proxy_telemetry", fake_emit, raising=False)
-    if learning_backend is not None:
-        monkeypatch.setattr(learning_backend, "_async_forward_upload", fake_forward)
-        monkeypatch.setattr(learning_backend, "_emit_upload_proxy_telemetry", fake_emit, raising=False)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)

@@ -17,7 +17,7 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 
 async def _client():
-    import main  # noqa
+    main = importlib.import_module("backend.web.main")
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
@@ -32,11 +32,11 @@ async def test_internal_upload_proxy_respects_central_limit(monkeypatch):
     # Reload config and route to pick env
     if "backend.storage.config" in importlib.sys.modules:
         importlib.reload(importlib.import_module("backend.storage.config"))
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
+    if "backend.web.routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("backend.web.routes.learning"))
 
-    import main  # noqa
-    import routes.learning as learning  # noqa
+    main = importlib.import_module("backend.web.main")
+    importlib.import_module("backend.web.routes.learning")
     from backend.tests.runtime_auth_helpers import install_session_store
 
     # Prepare a student session

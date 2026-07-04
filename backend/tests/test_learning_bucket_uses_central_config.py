@@ -22,12 +22,10 @@ def test_learning_storage_bucket_prefers_central_config(monkeypatch):
     import backend.storage.config as cfg
     monkeypatch.setattr(cfg, "get_submissions_bucket", lambda: "subs-cfg", raising=True)
 
-    # Reload learning routes to pick up behavior. Use alias-friendly name
-    # because the module registers both `routes.learning` and
-    # `backend.web.routes.learning`.
-    if "routes.learning" in importlib.sys.modules:
-        importlib.reload(importlib.import_module("routes.learning"))
-    import routes.learning as learning
+    # Reload learning routes to pick up behavior.
+    if "backend.web.routes.learning" in importlib.sys.modules:
+        importlib.reload(importlib.import_module("backend.web.routes.learning"))
+    learning = importlib.import_module("backend.web.routes.learning")
 
     # Expect the learning adapter to use central config value
     assert learning._storage_bucket() == "subs-cfg"

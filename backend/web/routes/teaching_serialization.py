@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict, is_dataclass
+from datetime import timezone
+from typing import Any, Callable
+
+
+logger = logging.getLogger("gustav.web.teaching.serialization")
 
 
 def _serialize_task(t) -> dict:
@@ -168,6 +174,152 @@ def _serialize_material(m) -> dict:
         "created_at": getattr(m, "created_at", None),
         "updated_at": getattr(m, "updated_at", None),
     }
+
+
+def _normalise_analysis_json(raw: Any) -> dict[str, Any] | None:
+    """Normalise persisted analysis payloads into criteria.v1/v2 response shapes."""
+
+    if not isinstance(raw, dict):
+        return None
+
+    schema = raw.get("schema")
+    if schema in ("criteria.v1", "criteria.v2"):
+        if "criteria_results" in raw and not isinstance(raw.get("criteria_results"), list):
+            return {**raw, "criteria_results": []}
+        return raw
+
+    if "criteria_results" in raw and schema is None:
+        results = raw.get("criteria_results") or []
+        return {"schema": "criteria.v2", "criteria_results": results}
+
+    summary = raw.get("summary")
+    criteria_items = raw.get("criteria")
+    if isinstance(criteria_items, list) and criteria_items:
+        results: list[dict[str, Any]] = []
+        for item in criteria_items:
+            if not isinstance(item, dict):
+                continue
+            title = item.get("title") or item.get("criterion") or summary or "Kriterium"
+            comment = item.get("comment") or item.get("explanation_md") or summary or ""
+            result: dict[str, Any] = {"criterion": str(title)}
+            if comment:
+                result["explanation_md"] = str(comment)
+            raw_score = item.get("score")
+            try:
+                if raw_score is not None:
+                    score_int = int(raw_score)
+                    result["score"] = max(0, min(score_int, 10))
+            except (TypeError, ValueError):
+                pass
+            results.append(result)
+        if results:
+            return {"schema": "criteria.v2", "criteria_results": results}
+
+    try:
+        logger.info(
+            "analysis_json_unhandled_shape",
+            extra={
+                "schema": str(schema or ""),
+                "keys": sorted([str(k) for k in raw.keys()])[:10],
+            },
+        )
+    except Exception:
+        pass
+    return None
+
+
+def _build_latest_submission_payload(
+    *,
+    course_id: str,
+    unit_id: str,
+    file_href_builder: Callable[..., str],
+    sid: Any,
+    tid: Any,
+    ssub: Any,
+    instruction_md: Any,
+    created_at: Any,
+    completed_at: Any,
+    kind: Any,
+    score_raw: Any = None,
+    score_max: Any = None,
+    h5p_content_id: Any = None,
+    h5p_review_token: Any = None,
+    text_body: Any,
+    mime_type: Any,
+    size_bytes: Any,
+    storage_key: Any,
+    feedback_md: Any = None,
+    analysis_json: Any = None,
+    include_files: bool = True,
+) -> dict[str, Any]:
+    """Build a TeachingLatestSubmission response payload from authorised row data."""
+
+    def_kind = str(kind or "text")
+    if def_kind == "file" and isinstance(mime_type, str) and "pdf" in mime_type.lower():
+        def_kind = "pdf"
+
+    def _safe_int(v: Any) -> int | None:
+        if v is None:
+            return None
+        try:
+            n = int(v)
+            return max(0, n)
+        except (TypeError, ValueError):
+            return None
+
+    payload: dict[str, Any] = {
+        "id": str(sid),
+        "task_id": str(tid),
+        "student_sub": str(ssub),
+        "instruction_md": str(instruction_md or ""),
+        "created_at": created_at.astimezone(timezone.utc).isoformat(),
+        "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
+        "kind": def_kind,
+    }
+    if def_kind == "h5p":
+        payload["score_raw"] = _safe_int(score_raw)
+        payload["score_max"] = _safe_int(score_max)
+        payload["h5p"] = {
+            "content_id": (str(h5p_content_id) if h5p_content_id is not None else None),
+            "review_token": (str(h5p_review_token) if h5p_review_token is not None else None),
+        }
+    if isinstance(text_body, str) and text_body:
+        payload["text_body"] = text_body
+    if isinstance(feedback_md, str) and feedback_md:
+        payload["feedback_md"] = feedback_md
+
+    normalised = _normalise_analysis_json(analysis_json)
+    if normalised is not None:
+        payload["analysis_json"] = normalised
+
+    files: list[dict[str, Any]] = []
+    if include_files and def_kind in ("file", "pdf", "image") and isinstance(storage_key, str):
+        try:
+            if size_bytes is not None:
+                try:
+                    size_int = int(size_bytes)
+                    if size_int < 0:
+                        size_int = 0
+                    files.append(
+                        {
+                            "mime": str(mime_type or ""),
+                            "size": size_int,
+                            "url": file_href_builder(
+                                course_id=str(course_id),
+                                unit_id=str(unit_id),
+                                task_id=str(tid),
+                                student_sub=str(ssub),
+                                disposition="inline",
+                            ),
+                        }
+                    )
+                except (TypeError, ValueError):
+                    files = []
+        except Exception:
+            files = []
+    if include_files:
+        payload["files"] = files
+    return payload
 
 
 def _serialize_unit_phase(p) -> dict:

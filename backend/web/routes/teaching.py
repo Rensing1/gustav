@@ -57,6 +57,7 @@ from backend.web.routes.teaching_shared import (
     _role_in,
 )
 from backend.web.routes.teaching_serialization import (
+    _build_latest_submission_payload,
     _serialize_course,
     _serialize_material,
     _serialize_module,
@@ -5992,223 +5993,6 @@ async def get_latest_submission_detail(
         to the course (best-effort verification). Returns 204 when no
         submission exists.
     """
-    def _normalise_analysis_json(raw: Any) -> Optional[Dict[str, Any]]:
-        """Normalise a persisted analysis_json payload into a criteria.v1/v2-compatible dict.
-
-        Why:
-            Older rows and legacy workers may store analysis results in slightly different
-            shapes (e.g. with a free-form `summary` field or without an explicit schema
-            tag). The Teaching API, however, promises that `TeachingLatestSubmission.analysis_json`
-            follows the criteria.v1/v2 contracts so that the Auswertung-Tab can render
-            criteria cards generically.
-
-        Supported input shapes:
-            - Already normalised criteria.v1/v2 objects with a `schema` tag; we return
-              them as-is (ensuring `criteria_results` is at least a list).
-            - Legacy payloads that expose `criteria_results` without `schema`; we attach
-              `schema = "criteria.v2"` to keep the Auswertung contract stable.
-            - Summary/criteria dictionaries of the form
-              `{"summary": "...", "criteria": [{"title": ..., "comment": ..., "score": ...}, ...]}`.
-              These are converted into a criteria.v2 structure with `criteria_results`,
-              including optional score normalisation to integer 0–10 points.
-
-        Returns:
-            A dict that satisfies the criteria.v1/v2 expectations (`schema` tag and,
-            for v2 an optional `criteria_results` list) or `None` when no safe mapping
-            is possible (for example when the shape is completely different).
-
-        Permissions:
-            Caller must ensure that the surrounding DB access already enforced RLS and
-            ownership checks (e.g. via `get_latest_submission_for_owner`). This helper
-            only reshapes already authorised data and never performs I/O on its own.
-        """
-        if not isinstance(raw, dict):
-            return None
-
-        schema = raw.get("schema")
-        if schema in ("criteria.v1", "criteria.v2"):
-            # Already a known criteria payload; ensure criteria_results is at least a list.
-            if "criteria_results" in raw and not isinstance(raw.get("criteria_results"), list):
-                return {**raw, "criteria_results": []}
-            return raw
-
-        # Legacy payloads that already expose criteria_results but no schema tag.
-        if "criteria_results" in raw and schema is None:
-            results = raw.get("criteria_results") or []
-            return {"schema": "criteria.v2", "criteria_results": results}
-
-        # Summary/criteria shape: {"summary": "...", "criteria": [{...}]}
-        summary = raw.get("summary")
-        criteria_items = raw.get("criteria")
-        if isinstance(criteria_items, list) and criteria_items:
-            results: List[Dict[str, Any]] = []
-            for item in criteria_items:
-                if not isinstance(item, dict):
-                    continue
-                title = item.get("title") or item.get("criterion") or summary or "Kriterium"
-                comment = item.get("comment") or item.get("explanation_md") or summary or ""
-                result: Dict[str, Any] = {"criterion": str(title)}
-                if comment:
-                    result["explanation_md"] = str(comment)
-                raw_score = item.get("score")
-                try:
-                    if raw_score is not None:
-                        score_int = int(raw_score)
-                        score_int = max(0, min(score_int, 10))
-                        result["score"] = score_int
-                except (TypeError, ValueError):
-                    # Non-numeric scores are ignored; criteria remain visible without badges.
-                    pass
-                results.append(result)
-            if results:
-                return {"schema": "criteria.v2", "criteria_results": results}
-        # At this point the payload shape is not one of the supported variants.
-        # Log a minimal, non-PII diagnostic so worker/schema regressions remain observable.
-        try:
-            logger.info(
-                "analysis_json_unhandled_shape",
-                extra={
-                    "schema": str(schema or ""),
-                    "keys": sorted([str(k) for k in raw.keys()])[:10],
-                },
-            )
-        except Exception:
-            # Logging must never break the endpoint; ignore logging failures defensively.
-            pass
-        return None
-
-    def _build_latest_submission_payload(
-        *,
-        sid: Any,
-        tid: Any,
-        ssub: Any,
-        instruction_md: Any,
-        created_at: Any,
-        completed_at: Any,
-        kind: Any,
-        score_raw: Any = None,
-        score_max: Any = None,
-        h5p_content_id: Any = None,
-        h5p_review_token: Any = None,
-        text_body: Any,
-        mime_type: Any,
-        size_bytes: Any,
-        storage_key: Any,
-        feedback_md: Any = None,
-        analysis_json: Any = None,
-        include_files: bool = True,
-    ) -> Dict[str, Any]:
-        """Build a TeachingLatestSubmission response payload from a DB row.
-
-        Why:
-            The Teaching-Detail endpoint has two DB code paths (helper + defensive
-            fallback). This helper centralises the mapping from row tuple to the
-            public `TeachingLatestSubmission` contract so that Auswertung/Feedback
-            and Dateien stets konsistent serialisiert werden.
-
-        Parameters:
-            sid, tid, ssub:
-                Identifiers of the submission and task/owner as fetched from the DB.
-            created_at, completed_at:
-                Timestamps used for the submission metadata.
-            kind, text_body, mime_type, size_bytes, storage_key:
-                Raw submission fields describing the content and optional file upload.
-            score_raw, score_max:
-                Optional H5P score fields (raw/max). Only meaningful for `kind='h5p'`.
-            h5p_content_id, h5p_review_token:
-                Optional H5P metadata used by the teacher review UI. The review token
-                is a short-lived capability token and may be null when misconfigured.
-            feedback_md, analysis_json:
-                Optional formative feedback and structured criteria-based analysis
-                attached to the submission.
-            include_files:
-                When `True`, the helper attempts to resolve a signed download URL and
-                attaches a `files[]` array with integer `size`. When `False`, the
-                payload omits `files[]` entirely (graceful degradation when Storage
-                is unavailable).
-
-        Returns:
-            A dict shaped like `TeachingLatestSubmission` that can be JSON-serialised
-            directly as API response body.
-
-        Permissions:
-            The surrounding route must already have verified that the caller is a
-            teacher and course owner and that RLS is in effect. This helper performs
-            no authorisation on its own and only formats data that has passed those
-            checks.
-        """
-        def_kind = str(kind or "text")
-        if def_kind == "file" and isinstance(mime_type, str) and "pdf" in mime_type.lower():
-            def_kind = "pdf"
-
-        def _safe_int(v: Any) -> Optional[int]:
-            if v is None:
-                return None
-            try:
-                n = int(v)
-                return max(0, n)
-            except (TypeError, ValueError):
-                return None
-
-        payload: Dict[str, Any] = {
-            "id": str(sid),
-            "task_id": str(tid),
-            "student_sub": str(ssub),
-            "instruction_md": str(instruction_md or ""),
-            "created_at": created_at.astimezone(timezone.utc).isoformat(),
-            "completed_at": (completed_at.astimezone(timezone.utc).isoformat() if completed_at else None),
-            "kind": def_kind,
-        }
-        if def_kind == "h5p":
-            payload["score_raw"] = _safe_int(score_raw)
-            payload["score_max"] = _safe_int(score_max)
-            payload["h5p"] = {
-                "content_id": (str(h5p_content_id) if h5p_content_id is not None else None),
-                "review_token": (str(h5p_review_token) if h5p_review_token is not None else None),
-            }
-        if isinstance(text_body, str) and text_body:
-            payload["text_body"] = text_body
-        if isinstance(feedback_md, str) and feedback_md:
-            payload["feedback_md"] = feedback_md
-
-        normalised = _normalise_analysis_json(analysis_json)
-        if normalised is not None:
-            payload["analysis_json"] = normalised
-
-        files: List[Dict[str, Any]] = []
-        if include_files and def_kind in ("file", "pdf", "image") and isinstance(storage_key, str):
-            try:
-                if size_bytes is not None:
-                    try:
-                        size_int = int(size_bytes)
-                        if size_int < 0:
-                            size_int = 0
-                        files.append(
-                            {
-                                "mime": str(mime_type or ""),
-                                "size": size_int,
-                                "url": _teaching_submission_file_href(
-                                    course_id=str(course_id),
-                                    unit_id=str(unit_id),
-                                    task_id=str(tid),
-                                    student_sub=str(ssub),
-                                    disposition="inline",
-                                ),
-                            }
-                        )
-                    except (TypeError, ValueError):
-                        # When size cannot be determined, we omit the file entry
-                        # to keep the API contract (size must be an integer).
-                        files = []
-            except Exception:
-                files = []
-        # For include_files=True, always attach a files[] array (possibly empty) so
-        # clients can rely on the presence of the field. For include_files=False we
-        # omit files[] entirely as a signal that no Storage lookup was attempted.
-        if include_files:
-            payload["files"] = files
-        return payload
-
     def _issue_h5p_review_token(
         *,
         owner_sub: str,
@@ -6395,6 +6179,9 @@ async def get_latest_submission_detail(
                                 content_id_in=str(task_h5p_content_id),
                             )
                         payload = _build_latest_submission_payload(
+                            course_id=str(course_id),
+                            unit_id=str(unit_id),
+                            file_href_builder=_teaching_submission_file_href,
                             sid=sid,
                             tid=tid,
                             ssub=ssub,
@@ -6510,6 +6297,9 @@ async def get_latest_submission_detail(
                                 content_id_in=str(task_h5p_content_id),
                             )
                         payload = _build_latest_submission_payload(
+                            course_id=str(course_id),
+                            unit_id=str(unit_id),
+                            file_href_builder=_teaching_submission_file_href,
                             sid=sid,
                             tid=tid,
                             ssub=ssub,

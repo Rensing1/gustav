@@ -9,8 +9,6 @@ Covers /auth/login and /auth/register without HX-Request, verifying:
 
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 from urllib.parse import urlparse, parse_qs
 
 import pytest
@@ -18,14 +16,9 @@ import httpx
 from httpx import ASGITransport
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
-from backend.web.auth_only_app import create_app_auth_only  # noqa: E402
-from identity_access.stores import StateStore  # noqa: E402
-from identity_access.oidc import OIDCConfig  # noqa: E402
+from backend.web.auth_only_app import create_app_auth_only
+from backend.identity_access.stores import StateStore
+from backend.identity_access.oidc import OIDCConfig
 
 
 pytestmark = pytest.mark.anyio("asyncio")

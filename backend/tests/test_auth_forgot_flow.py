@@ -10,21 +10,16 @@ Why:
 
 from __future__ import annotations
 
-from pathlib import Path
+import importlib
 from urllib.parse import urlparse, parse_qs
-import sys
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
-from identity_access.oidc import OIDCConfig  # type: ignore
+main = importlib.import_module("backend.web.main")
+from backend.identity_access.oidc import OIDCConfig
 
 
 pytestmark = pytest.mark.anyio("asyncio")

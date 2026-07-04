@@ -11,25 +11,17 @@ Scenarios:
 """
 from __future__ import annotations
 
-import os
-from pathlib import Path
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
+main = importlib.import_module("backend.web.main")
 pytestmark = pytest.mark.anyio("asyncio")
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-
-
-from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
@@ -56,10 +48,10 @@ async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str) -
 async def test_non_author_unit_patch_empty_body_returns_403_or_404(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -82,10 +74,10 @@ async def test_non_author_unit_patch_empty_body_returns_403_or_404(monkeypatch: 
 async def test_non_author_section_patch_empty_body_returns_403_or_404(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:

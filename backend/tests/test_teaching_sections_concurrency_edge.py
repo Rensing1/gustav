@@ -6,25 +6,18 @@ produce positions 1 and 2 without unique violations.
 """
 from __future__ import annotations
 
-import os
 import asyncio
-from pathlib import Path
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+
+main = importlib.import_module("backend.web.main")
 pytestmark = pytest.mark.anyio("asyncio")
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # noqa: E402
-
-
-from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:

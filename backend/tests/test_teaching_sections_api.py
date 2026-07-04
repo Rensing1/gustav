@@ -7,24 +7,17 @@ in use; they intentionally fail until implementation exists (red phase).
 """
 from __future__ import annotations
 
-import os
-from pathlib import Path
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+
+main = importlib.import_module("backend.web.main")
 pytestmark = pytest.mark.anyio("asyncio")
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # noqa: E402
-
-
-from utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
@@ -61,10 +54,10 @@ async def test_sections_require_auth_and_author_role(monkeypatch: pytest.MonkeyP
 async def test_author_can_crud_sections_and_non_author_is_blocked(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -135,10 +128,10 @@ async def test_author_can_crud_sections_and_non_author_is_blocked(monkeypatch: p
 async def test_section_validation_and_unknown_ids(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -184,10 +177,10 @@ async def test_section_validation_and_unknown_ids(monkeypatch: pytest.MonkeyPatc
 async def test_non_author_list_sections_returns_404(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -209,10 +202,10 @@ async def test_non_author_list_sections_returns_404(monkeypatch: pytest.MonkeyPa
 async def test_invalid_unit_and_section_uuid_paths_return_400_and_patch_without_fields(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -261,10 +254,10 @@ async def test_invalid_unit_and_section_uuid_paths_return_400_and_patch_without_
 async def test_create_multiple_sections_positions_and_delete_middle_resequences(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -299,10 +292,10 @@ async def test_title_boundaries_exact_and_concurrent_creates(monkeypatch: pytest
 
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:

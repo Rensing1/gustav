@@ -6,22 +6,16 @@ single out-of-band sidebar. Guards against regressions that render duplicate
 sidebar containers and break the toggle logic.
 """
 
-from pathlib import Path
-import sys
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
-from urllib.parse import urlparse, parse_qs
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
+from backend.tests.runtime_auth_helpers import install_session_store
 
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 
 
 pytestmark = pytest.mark.anyio("asyncio")

@@ -31,9 +31,18 @@ WEB_DIR = REPO_ROOT / "backend" / "web"
 if str(WEB_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(WEB_DIR))
 import main  # type: ignore  # noqa: E402
-from identity_access.stores import SessionStore  # type: ignore  # noqa: E402
+from runtime_auth_helpers import install_session_store  # type: ignore  # noqa: E402
 
 from utils.db import require_db_or_skip as _require_db_or_skip
+
+
+@pytest.fixture(autouse=True)
+def _fresh_session_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_session_store(monkeypatch, main)
+
+
+def _session_store():
+    return main.RUNTIME.session_store
 
 
 async def _client() -> httpx.AsyncClient:
@@ -83,8 +92,6 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 @pytest.mark.anyio
 async def test_summary_requires_auth_and_owner_role():
-    main.SESSION_STORE = SessionStore()
-
     async with (await _client()) as c:
         # Unauthenticated → 401
         r_unauth = await c.get(
@@ -93,7 +100,7 @@ async def test_summary_requires_auth_and_owner_role():
         assert r_unauth.status_code == 401
 
     # Student → 403
-    student = main.SESSION_STORE.create(sub="s-live-unauth", name="S", roles=["student"])  # type: ignore
+    student = _session_store().create(sub="s-live-unauth", name="S", roles=["student"])  # type: ignore
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
         r_forbidden = await c.get(
@@ -110,8 +117,8 @@ async def test_summary_requires_auth_and_owner_role():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 
-    owner = main.SESSION_STORE.create(sub="t-live-owner", name="Owner", roles=["teacher"])  # type: ignore
-    other = main.SESSION_STORE.create(sub="t-live-other", name="Other", roles=["teacher"])  # type: ignore
+    owner = _session_store().create(sub="t-live-owner", name="Owner", roles=["teacher"])  # type: ignore
+    other = _session_store().create(sub="t-live-other", name="Other", roles=["teacher"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -152,10 +159,9 @@ async def test_summary_happy_path_minimal_status_matrix_and_headers():
     except Exception:
         pytest.skip("DB-backed repos required for live summary test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-matrix", name="Owner", roles=["teacher"])  # type: ignore
-    s1 = main.SESSION_STORE.create(sub="s-live-1", name="Anna", roles=["student"])  # type: ignore
-    s2 = main.SESSION_STORE.create(sub="s-live-2", name="Ben", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-live-matrix", name="Owner", roles=["teacher"])  # type: ignore
+    s1 = _session_store().create(sub="s-live-1", name="Anna", roles=["student"])  # type: ignore
+    s2 = _session_store().create(sub="s-live-2", name="Ben", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -235,9 +241,8 @@ async def test_summary_cursor_can_seed_delta_for_new_changes_even_when_host_cloc
     except Exception:
         pytest.skip("DB-backed repos required for live summary cursor regression")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-cursor-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-live-cursor-learner", name="Student", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-live-cursor-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-live-cursor-learner", name="Student", roles=["student"])  # type: ignore
 
     async with (await _client()) as owner_client, (await _client()) as student_client:
         owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -308,8 +313,7 @@ async def test_summary_returns_503_when_db_cursor_seed_is_unavailable(monkeypatc
     except Exception:
         pytest.skip("DB-backed repos required for live summary cursor failure test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-cursor-503-owner", name="Owner", roles=["teacher"])  # type: ignore
+    owner = _session_store().create(sub="t-live-cursor-503-owner", name="Owner", roles=["teacher"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -352,9 +356,8 @@ async def test_summary_includes_submissions_for_modular_units_without_section_re
     except Exception:
         pytest.skip("DB-backed repos required for live summary test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-mod-matrix", name="Owner", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-live-mod-1", name="Anna", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-live-mod-matrix", name="Owner", roles=["teacher"])  # type: ignore
+    student = _session_store().create(sub="s-live-mod-1", name="Anna", roles=["student"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -405,9 +408,8 @@ async def test_summary_includes_latest_h5p_score_x_y_and_completion_flag():
     except Exception:
         pytest.skip("DB-backed repos required for H5P summary test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-live-h5p-learner", name="Schüler", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-live-h5p-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-live-h5p-learner", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -549,9 +551,8 @@ async def test_summary_uses_latest_h5p_attempt_when_created_at_timestamps_tie():
     if not dsn:
         pytest.skip("SERVICE_ROLE_DSN required for H5P summary tie test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-h5p-tie-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-live-h5p-tie-learner", name="Schüler", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-live-h5p-tie-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-live-h5p-tie-learner", name="Schüler", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -642,9 +643,8 @@ async def test_summary_includes_average_score_for_completed_analysis():
     if not dsn:
         pytest.skip("SERVICE_ROLE_DSN required to emulate analysis completion")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-score-owner", name="Owner", roles=["teacher"])  # type: ignore
-    learner = main.SESSION_STORE.create(sub="s-live-score-learner", name="L", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-live-score-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-live-score-learner", name="L", roles=["student"])  # type: ignore
 
     async with (await _client()) as c_owner, (await _client()) as c_student:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -749,11 +749,10 @@ async def test_summary_keeps_scores_for_later_learners_when_page_contains_more_c
     if not dsn:
         pytest.skip("SERVICE_ROLE_DSN required to emulate analysis completion")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-page-owner", name="Owner", roles=["teacher"])  # type: ignore
+    owner = _session_store().create(sub="t-live-page-owner", name="Owner", roles=["teacher"])  # type: ignore
 
     learners = [
-        main.SESSION_STORE.create(sub=f"s-live-page-{index:02d}", name=f"Student {index:02d}", roles=["student"])  # type: ignore
+        _session_store().create(sub=f"s-live-page-{index:02d}", name=f"Student {index:02d}", roles=["student"])  # type: ignore
         for index in range(1, 12)
     ]
     late_learner = learners[-1]
@@ -842,8 +841,7 @@ async def test_summary_can_skip_student_rows():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for summary include_students test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-include", name="Owner", roles=["teacher"])  # type: ignore
+    owner = _session_store().create(sub="t-live-include", name="Owner", roles=["teacher"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -871,8 +869,7 @@ async def test_summary_rejects_invalid_updated_since():
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for timestamp validation")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-invalid-ts", name="Owner", roles=["teacher"])  # type: ignore
+    owner = _session_store().create(sub="t-live-invalid-ts", name="Owner", roles=["teacher"])  # type: ignore
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -913,9 +910,8 @@ async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("bulk helper unavailable in compat test")),
     )
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-fallback-owner", name="Owner", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-live-fallback", name="Fallback", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-live-fallback-owner", name="Owner", roles=["teacher"])  # type: ignore
+    student = _session_store().create(sub="s-live-fallback", name="Fallback", roles=["student"])  # type: ignore
 
     async with (await _client()) as owner_client, (await _client()) as student_client:
         owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -1027,9 +1023,8 @@ async def test_summary_falls_back_when_helper_score_columns_are_missing(monkeypa
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("bulk helper unavailable in compat test")),
     )
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-legacy-owner", name="Owner", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-live-legacy", name="Legacy", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-live-legacy-owner", name="Owner", roles=["teacher"])  # type: ignore
+    student = _session_store().create(sub="s-live-legacy", name="Legacy", roles=["student"])  # type: ignore
 
     async with (await _client()) as owner_client, (await _client()) as student_client:
         owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -1132,9 +1127,8 @@ async def test_summary_falls_back_when_bulk_aggregate_helper_is_missing(monkeypa
     except Exception:
         pytest.skip("DB-backed repos required for bulk helper fallback test")
 
-    main.SESSION_STORE = SessionStore()
-    owner = main.SESSION_STORE.create(sub="t-live-bulk-missing-owner", name="Owner", roles=["teacher"])  # type: ignore
-    student = main.SESSION_STORE.create(sub="s-live-bulk-missing", name="Fallback", roles=["student"])  # type: ignore
+    owner = _session_store().create(sub="t-live-bulk-missing-owner", name="Owner", roles=["teacher"])  # type: ignore
+    student = _session_store().create(sub="s-live-bulk-missing", name="Fallback", roles=["student"])  # type: ignore
 
     async with (await _client()) as owner_client, (await _client()) as student_client:
         owner_client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)

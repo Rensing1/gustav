@@ -50,11 +50,11 @@ from backend.learning.usecases.h5p_access import (
     CheckH5PContentAccessInput,
     CheckH5PContentAccessUseCase,
 )
-from teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
+from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
 try:
     from backend.web.storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover - container fallback when package path is flattened
-    from storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
+    _wire_storage = None  # type: ignore
 from backend.storage.learning_policy import (
     ALLOWED_FILE_MIME,
     ALLOWED_IMAGE_MIME,
@@ -68,20 +68,12 @@ from backend.storage.keys import make_submission_key
 from backend.storage.submission_content_signatures import validate_submission_content_signature
 from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
-try:
-    from backend.web.material_file_access import (
-        MaterialVisibilityLookupUnavailable,
-        StudentMaterialFileMetadata,
-        load_student_material_file_metadata,
-        load_student_material_file_metadata_batch,
-    )
-except ModuleNotFoundError:  # pragma: no cover - container fallback when package path is flattened
-    from material_file_access import (
-        MaterialVisibilityLookupUnavailable,
-        StudentMaterialFileMetadata,
-        load_student_material_file_metadata,
-        load_student_material_file_metadata_batch,
-    )
+from backend.web.material_file_access import (
+    MaterialVisibilityLookupUnavailable,
+    StudentMaterialFileMetadata,
+    load_student_material_file_metadata,
+    load_student_material_file_metadata_batch,
+)
 import httpx
 from urllib.parse import urlparse as _urlparse, quote as _quote
 import psycopg
@@ -175,6 +167,12 @@ def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = Tru
     global STORAGE_ADAPTER, _STORAGE_ADAPTER_OVERRIDE_ACTIVE
     STORAGE_ADAPTER = adapter
     _STORAGE_ADAPTER_OVERRIDE_ACTIVE = bool(override)
+    for module_name in ("routes.learning", "backend.web.routes.learning"):
+        module = _sys.modules.get(module_name)
+        if module is None:
+            continue
+        setattr(module, "STORAGE_ADAPTER", adapter)
+        setattr(module, "_STORAGE_ADAPTER_OVERRIDE_ACTIVE", bool(override))
     _sync_learning_route_globals(adapter=adapter, override_active=_STORAGE_ADAPTER_OVERRIDE_ACTIVE)
 
 
@@ -447,11 +445,11 @@ def _cache_headers_error() -> dict[str, str]:
 
 
 def _teaching_storage_adapter() -> object | None:
-    try:
-        import routes.teaching as teaching_routes  # type: ignore
-        return getattr(teaching_routes, "STORAGE_ADAPTER", None)
-    except Exception:
-        return None
+    for module_name in ("routes.teaching", "backend.web.routes.teaching"):
+        module = _sys.modules.get(module_name)
+        if module is not None:
+            return getattr(module, "STORAGE_ADAPTER", None)
+    return None
 
 
 def _resolve_student_material_file_url(
@@ -666,14 +664,15 @@ def _current_environment() -> str:
     """Return the current app environment string.
 
     Resolution is lazy to avoid import-order flakiness in tests:
-    - Try to import `backend.web.main` or `main` and read `SETTINGS.environment`.
+    - Try to import `backend.web.main` or `main` and read `RUNTIME.settings.environment`.
     - Fallback to `GUSTAV_ENV` (default "dev").
     """
     def _read_env_from_module(mod: object | None) -> str | None:
         if mod is None:
             return None
         try:
-            settings = getattr(mod, "SETTINGS", None)
+            runtime = getattr(mod, "RUNTIME", None)
+            settings = getattr(runtime, "settings", None)
         except Exception:
             return None
         if settings is None:
@@ -692,7 +691,8 @@ def _current_environment() -> str:
         if mod is None:
             return None
         try:
-            settings = getattr(mod, "SETTINGS", None)
+            runtime = getattr(mod, "RUNTIME", None)
+            settings = getattr(runtime, "settings", None)
         except Exception:
             return None
         if settings is None:
@@ -899,6 +899,28 @@ def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in
     global _REPO, REPO
     _REPO = repo
     REPO = repo
+    for module_name in ("routes.learning", "backend.web.routes.learning"):
+        module = _sys.modules.get(module_name)
+        if module is None:
+            continue
+        setattr(module, "_REPO", repo)
+        setattr(module, "REPO", repo)
+    for module_name in ("main", "backend.web.main"):
+        main_module = _sys.modules.get(module_name)
+        app = getattr(main_module, "app", None) if main_module is not None else None
+        routes = getattr(app, "routes", None)
+        if not routes:
+            continue
+        for route in routes:
+            if not isinstance(route, APIRoute):
+                continue
+            if not str(getattr(route, "path", "")).startswith("/api/learning"):
+                continue
+            route_globals = getattr(route.endpoint, "__globals__", None)
+            if isinstance(route_globals, dict) and "_REPO" in route_globals:
+                route_globals["_REPO"] = repo
+                route_globals["REPO"] = repo
+                route_globals["_get_repo"] = _get_repo
 
 
 @learning_router.get("/api/learning/courses/{course_id}/sections")

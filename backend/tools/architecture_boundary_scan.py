@@ -22,6 +22,11 @@ ZERO_LIMIT_CATEGORIES = {
     "service_fastapi_imports",
 }
 
+APPROVED_WEB_INFRASTRUCTURE = {
+    ("backend", "web", "db_cursor.py"),
+    ("backend", "web", "storage_wiring.py"),
+}
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -68,6 +73,10 @@ def _is_web_adapter(path: Path) -> bool:
     return _relative_parts(path)[:2] == ("backend", "web")
 
 
+def _is_approved_web_infrastructure(path: Path) -> bool:
+    return _relative_parts(path) in APPROVED_WEB_INFRASTRUCTURE
+
+
 def _scan_file(path: Path, findings: dict[str, list[str]]) -> None:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -89,7 +98,7 @@ def _scan_file(path: Path, findings: dict[str, list[str]]) -> None:
                     _record(findings, "usecase_fastapi_imports", path, node)
                 if _is_service(path):
                     _record(findings, "service_fastapi_imports", path, node)
-        elif isinstance(node, ast.Call) and _is_web_adapter(path):
+        elif isinstance(node, ast.Call) and _is_web_adapter(path) and not _is_approved_web_infrastructure(path):
             func = node.func
             if isinstance(func, ast.Attribute) and _attribute_chain(func) == ["psycopg", "connect"]:
                 _record(findings, "web_direct_db_connects", path, node)

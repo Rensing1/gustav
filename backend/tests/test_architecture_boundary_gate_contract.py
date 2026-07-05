@@ -64,6 +64,40 @@ def test_architecture_scanner_and_baseline_cover_required_categories() -> None:
         assert isinstance(categories[category], int)
 
 
+def test_architecture_boundary_baseline_has_no_web_adapter_exceptions() -> None:
+    """Approved boundary helpers should not leave accepted debt in the baseline."""
+
+    baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    categories = baseline.get("categories", {})
+
+    assert categories["web_direct_db_connects"] == 0
+    assert categories["web_direct_supabase_client_creates"] == 0
+
+
+def test_architecture_scan_excludes_approved_boundary_infrastructure() -> None:
+    """DB/storage boundary modules are infrastructure, not route-level debt."""
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "backend.tools.architecture_boundary_scan",
+            "--json",
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+
+    assert payload["categories"]["web_direct_db_connects"] == 0
+    assert payload["categories"]["web_direct_supabase_client_creates"] == 0
+    assert "backend/web/db_cursor.py" not in "\n".join(payload["examples"]["web_direct_db_connects"])
+    assert "backend/web/storage_wiring.py" not in "\n".join(payload["examples"]["web_direct_supabase_client_creates"])
+
+
 def test_architecture_boundary_scan_matches_current_baseline() -> None:
     result = subprocess.run(
         [

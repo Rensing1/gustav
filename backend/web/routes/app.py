@@ -11,8 +11,6 @@ from __future__ import annotations
 import json
 import inspect
 from datetime import datetime, timedelta, timezone
-import hmac
-import os
 
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -28,6 +26,21 @@ from backend.web.security.guards import has_any_role, has_role
 from backend.web.routes import learning as learning_routes
 from backend.web.routes import teaching as teaching_routes
 from backend.web.routes import teaching_guards
+from backend.web.routes.app_session_helpers import (
+    bff_session_payload as _bff_session_payload,
+    bff_session_store as _bff_session_store,
+    current_user as _current_user,
+    internal_bff_secret_configured as _internal_bff_secret_configured,  # noqa: F401
+    oidc_config as _oidc_config,
+    private_headers as _private_headers,
+    require_internal_bff_secret as _require_internal_bff_secret,
+    runtime_from_request as _runtime_from_request,
+    runtime_settings as _runtime_settings,
+    session_store as _session_store,
+    spaces_for_role as _spaces_for_role,
+    start_target_for_role as _start_target_for_role,
+    user_payload as _user_payload,
+)
 
 
 app_router = APIRouter(tags=["App"])
@@ -71,69 +84,6 @@ class ProfileNameLockedError(RuntimeError):
     """Raised when Vorname/Nachname are currently locked."""
 
 
-def _runtime_from_request(request: Request) -> object | None:
-    """Return the explicit app runtime when the ASGI app provides one."""
-
-    try:
-        runtime = getattr(getattr(request, "app", None).state, "runtime", None)
-    except Exception:
-        return None
-    return runtime
-
-
-def _bff_session_store(request: Request):
-    """Return the Browser-BFF session store from the explicit app runtime."""
-
-    runtime = _runtime_from_request(request)
-    if runtime is not None and hasattr(runtime, "bff_session_store"):
-        return runtime.bff_session_store
-    raise RuntimeError("app runtime bff_session_store is not configured")
-
-
-def _session_store(request: Request):
-    """Return the app session store from the explicit app runtime."""
-
-    runtime = _runtime_from_request(request)
-    if runtime is not None and hasattr(runtime, "session_store"):
-        return runtime.session_store
-    raise RuntimeError("app runtime session_store is not configured")
-
-
-def _runtime_settings(request: Request):
-    """Return settings from the explicit app runtime."""
-
-    runtime = _runtime_from_request(request)
-    if runtime is not None and hasattr(runtime, "settings"):
-        return runtime.settings
-    raise RuntimeError("app runtime settings are not configured")
-
-
-def _oidc_config(request: Request | None = None):
-    """Return OIDC configuration from the explicit app runtime."""
-
-    if request is not None:
-        runtime = _runtime_from_request(request)
-        if runtime is not None and hasattr(runtime, "oidc_config"):
-            return runtime.oidc_config
-    raise RuntimeError("app runtime oidc_config is not configured")
-
-
-def _spaces_for_role(role: str) -> list[str]:
-    if role == "student":
-        return ["learning"]
-    return ["teaching", "diagnostics", "live"]
-
-
-def _start_target_for_role(role: str) -> str:
-    if role == "student":
-        return "/learning"
-    return "/teaching"
-
-
-def _private_headers() -> dict[str, str]:
-    return {"Cache-Control": "private, no-store"}
-
-
 def _cli_token_store(request: Request | None = None):
     if request is not None:
         runtime = _runtime_from_request(request)
@@ -157,42 +107,6 @@ def _serialize_cli_token(record: CLITokenRecord) -> dict[str, object]:
         "expires_at": _epoch_to_iso(record.expires_at),
         "last_used_at": _epoch_to_iso(record.last_used_at),
         "revoked_at": _epoch_to_iso(record.revoked_at),
-    }
-
-
-def _internal_bff_secret_configured() -> str:
-    return str(os.getenv("BFF_INTERNAL_SHARED_SECRET") or "").strip()
-
-
-def _require_internal_bff_secret(request: Request) -> bool:
-    expected = _internal_bff_secret_configured()
-    provided = str(request.headers.get("x-gustav-internal-secret") or "").strip()
-    return bool(expected) and bool(provided) and hmac.compare_digest(provided, expected)
-
-
-def _bff_session_payload(session) -> dict[str, object]:
-    return {
-        "session_id": session.session_id,
-        "access_token": session.access_token,
-        "refresh_token": session.refresh_token,
-        "id_token": session.id_token,
-        "expires_at": session.expires_at,
-        "session_expires_at": session.session_expires_at,
-    }
-
-
-def _current_user(request: Request) -> dict | None:
-    user = getattr(request.state, "user", None)
-    return user if isinstance(user, dict) else None
-
-
-def _user_payload(user: dict) -> dict[str, object]:
-    primary_role = str(user.get("role") or "student")
-    return {
-        "sub": str(user.get("sub") or ""),
-        "name": str(user.get("name") or ""),
-        "role": primary_role,
-        "roles": [str(role) for role in (user.get("roles") or []) if isinstance(role, str)],
     }
 
 

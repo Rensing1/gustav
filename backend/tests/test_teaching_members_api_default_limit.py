@@ -18,12 +18,12 @@ from httpx import ASGITransport
 import importlib
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 
 main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client():

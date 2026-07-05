@@ -328,6 +328,24 @@ def test_teaching_course_api_db_integration_files_are_marked_as_db_write() -> No
         assert "db_write" in records[path].markers
 
 
+def test_teaching_materials_and_members_api_db_integration_files_are_marked_as_db_write() -> None:
+    from backend.tools import db_test_inventory
+
+    records = {
+        record.path: record
+        for record in db_test_inventory.scan_tests(REPO_ROOT / "backend" / "tests", repo_root=REPO_ROOT)
+    }
+
+    for path in (
+        "backend/tests/test_teaching_materials_files_api.py",
+        "backend/tests/test_teaching_materials_markdown_api.py",
+        "backend/tests/test_teaching_members_api_default_limit.py",
+        "backend/tests/test_teaching_members_semantics.py",
+    ):
+        assert records[path].marker_status == "marked-db"
+        assert "db_write" in records[path].markers
+
+
 def test_db_test_inventory_is_synchronized_with_generator() -> None:
     result = subprocess.run(
         [

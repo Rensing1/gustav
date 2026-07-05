@@ -4,10 +4,21 @@ Teaching Live — Average score helper (unit tests).
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 
 import pytest
 
 teaching = importlib.import_module("backend.web.routes.teaching")
+row_mappers = importlib.import_module("backend.teaching.repo_row_mappers")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+TEACHING_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "teaching.py"
+
+
+def test_average_score_helper_is_owned_by_repo_row_mappers():
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
+
+    assert "def compute_average_score_from_analysis(" not in teaching_source
+    assert teaching.compute_average_score_from_analysis is row_mappers.compute_average_score_from_analysis
 
 
 def test_compute_average_score_from_analysis_normalises_max_scores():

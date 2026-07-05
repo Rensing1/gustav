@@ -35,6 +35,7 @@ from fastapi.responses import JSONResponse, Response
 
 from backend.teaching.services.materials import MaterialFileSettings, MaterialsService
 from backend.teaching.services.live_student_overview import MAX_UNIT_IDS, StudentLiveOverviewService
+from backend.teaching.repo_row_mappers import compute_average_score_from_analysis  # noqa: F401
 from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 from backend.storage.config import get_submissions_bucket
 from backend.web.routes.teaching_shared import (
@@ -1544,50 +1545,6 @@ def _list_unit_modules_for_author_compat(repo: object, *, unit_id: str, author_i
         if not _is_signature_compat_type_error(exc):
             raise
         return repo.list_unit_modules_for_author(unit_id, author_id)  # type: ignore[attr-defined]
-
-
-def compute_average_score_from_analysis(analysis: object) -> float | None:
-    """Compute the average criteria score on a 0..10 scale from analysis_json.
-
-    Rules:
-        - Only criteria with numeric `score` values are considered.
-        - `max_score` normalises each criterion to a 0..10 scale (default: 10).
-        - Returns None when no valid numeric scores are present.
-    """
-    if not isinstance(analysis, dict):
-        return None
-
-    criteria = analysis.get("criteria_results")
-    if not isinstance(criteria, list):
-        return None
-
-    normalized: list[float] = []
-    for item in criteria:
-        if not isinstance(item, dict):
-            continue
-        raw_score = item.get("score")
-        if raw_score is None:
-            continue
-        try:
-            score_val = float(raw_score)
-        except (TypeError, ValueError):
-            continue
-
-        raw_max = item.get("max_score")
-        try:
-            max_val = float(raw_max)
-        except (TypeError, ValueError):
-            max_val = 10.0
-        if max_val <= 0:
-            max_val = 10.0
-
-        scaled = score_val if max_val == 10.0 else (score_val / max_val * 10.0)
-        scaled = max(0.0, min(10.0, scaled))
-        normalized.append(scaled)
-
-    if not normalized:
-        return None
-    return sum(normalized) / len(normalized)
 
 
 def _load_average_scores_by_submission_id(

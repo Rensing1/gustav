@@ -48,6 +48,7 @@ import {
   ensureThemeStylesLast,
 } from "./lib/model_helpers.mjs";
 import { parseReviewToken } from "./lib/review_tokens.mjs";
+import { sendHtml, sendJson } from "./lib/response_helpers.mjs";
 import { applySecurityHeaders, CSP_DEBUG_HTML } from "./lib/security_headers.mjs";
 import {
   authenticateInternalTeacher,
@@ -125,22 +126,6 @@ const h5pContentAccessCache = new Map();
  *   Forwarding failures must be observable without logging PII or response bodies.
  */
 const finishedForwardingMetrics = createFinishedForwardingMetrics();
-
-function sendJson(res, statusCode, body, headers = {}) {
-  res.status(statusCode);
-  applySecurityHeaders(res);
-  res.setHeader("Cache-Control", "private, no-store");
-  for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
-  res.json(body);
-}
-
-function sendHtml(res, statusCode, html, headers = {}) {
-  res.status(statusCode);
-  applySecurityHeaders(res);
-  res.setHeader("Cache-Control", "private, no-store");
-  for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
-  res.type("html").send(html);
-}
 
 function requireDebugHtmlEnabled(_req, res, next) {
   if (debugHtmlEnabled) return next();

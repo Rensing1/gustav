@@ -11,6 +11,7 @@ from httpx import ASGITransport
 
 main = importlib.import_module("backend.web.main")
 app_routes = importlib.import_module("backend.web.routes.app")
+teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -41,7 +42,7 @@ def _mock_bearer_auth(
 async def test_diagnostics_course_matrix_returns_course_units_and_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(
         app_routes,
         "_get_teacher_course",
@@ -156,7 +157,7 @@ async def test_diagnostics_course_matrix_forbids_students(monkeypatch: pytest.Mo
 async def test_diagnostics_course_matrix_returns_not_found_for_missing_course(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(app_routes, "_get_teacher_course", lambda course_id, owner_sub: None)
     headers = _mock_bearer_auth(monkeypatch, sub="teacher-diagnostics", roles=["teacher"], name="Ada")
 

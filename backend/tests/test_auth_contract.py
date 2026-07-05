@@ -8,6 +8,7 @@ interactions (Keycloak) are not performed here; we only assert HTTP contracts.
 
 import os
 import base64
+import importlib
 from http.cookies import SimpleCookie
 
 import pytest
@@ -15,7 +16,6 @@ import anyio
 import httpx
 from httpx import ASGITransport
 from pathlib import Path
-import sys
 import time
 from typing import Dict, Callable
 from jose import jwt
@@ -109,16 +109,14 @@ async def _call_auth_callback_with_token(
     Helper to exercise the real auth callback endpoint with a controlled ID token.
     """
     # Import lazily to avoid circulars during collection
-    from main import app as full_app  # type: ignore
-    import main  # type: ignore
+    full_app = main.app
     from identity_access.oidc import OIDCConfig
     from identity_access.stores import StateStore
 
     # Fresh in-memory stores per run to avoid leakage between tests
     state_store = StateStore()
-    session_store = install_session_store(monkeypatch, main)
     install_state_store(monkeypatch, main, state_store)
-
+    session_store = install_session_store(monkeypatch, main)
     test_cfg = OIDCConfig(
         base_url="http://keycloak:8080",
         realm="gustav",
@@ -176,10 +174,8 @@ async def _call_auth_callback_with_token(
     return resp
 
 # Import auth-only app factory to keep tests lean
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-from main import create_app_auth_only  # type: ignore
+main = importlib.import_module("backend.web.main")
+create_app_auth_only = main.create_app_auth_only
 
 # Force anyio to use asyncio backend only to avoid trio parametrization
 pytestmark = pytest.mark.anyio("asyncio")
@@ -193,7 +189,7 @@ def is_redirect(status: int) -> bool:
 async def test_login_redirect():
     # Given: not authenticated (no cookie)
     # When: GET /auth/login
-    app = create_app_auth_only()
+    app = main.create_app_auth_only()
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/auth/login", follow_redirects=False)
     # Then: 302 Redirect to Keycloak (contract)
@@ -204,7 +200,6 @@ async def test_login_redirect():
 @pytest.mark.anyio
 async def test_login_dynamic_redirect_respects_whitelist(monkeypatch: pytest.MonkeyPatch):
     """When Host matches WEB_BASE/redirect_uri host, use dynamic redirect_uri."""
-    import main  # type: ignore  # noqa: E402
     from identity_access.oidc import OIDCConfig
     from urllib.parse import urlparse, parse_qs
 
@@ -231,7 +226,6 @@ async def test_login_dynamic_redirect_respects_whitelist(monkeypatch: pytest.Mon
 @pytest.mark.anyio
 async def test_login_dynamic_redirect_falls_back_on_mismatch(monkeypatch: pytest.MonkeyPatch):
     """When Host differs, fall back to configured redirect_uri (avoid IdP errors)."""
-    import main  # type: ignore  # noqa: E402
     from identity_access.oidc import OIDCConfig
     from urllib.parse import urlparse, parse_qs
 
@@ -269,12 +263,6 @@ async def test_forgot_redirect():
 @pytest.mark.anyio
 async def test_forgot_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
     """Forgot redirect should be built from the configured base_url + realm."""
-    # Import full app to hit the real /auth/forgot implementation
-    import sys as _sys
-    REPO_ROOT = Path(__file__).resolve().parents[2]
-    WEB_DIR = REPO_ROOT / "backend" / "web"
-    _sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
     from identity_access.oidc import OIDCConfig
 
     # Given OIDC configuration with custom base URL/realm
@@ -297,11 +285,6 @@ async def test_forgot_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.anyio
 async def test_forgot_redirect_prefers_public_base_url(monkeypatch: pytest.MonkeyPatch):
     """Forgot redirect should use KC_PUBLIC_BASE_URL when provided."""
-    import sys as _sys
-    REPO_ROOT = Path(__file__).resolve().parents[2]
-    WEB_DIR = REPO_ROOT / "backend" / "web"
-    _sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
     from identity_access.oidc import OIDCConfig
 
     test_cfg = OIDCConfig(
@@ -324,11 +307,6 @@ async def test_forgot_redirect_prefers_public_base_url(monkeypatch: pytest.Monke
 @pytest.mark.anyio
 async def test_forgot_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPatch):
     """Forgot redirect forwards login_hint as query param."""
-    import sys as _sys
-    REPO_ROOT = Path(__file__).resolve().parents[2]
-    WEB_DIR = REPO_ROOT / "backend" / "web"
-    _sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
     from identity_access.oidc import OIDCConfig
     from urllib.parse import urlparse, parse_qs
 
@@ -669,11 +647,6 @@ async def test_register_redirect():
 @pytest.mark.anyio
 async def test_register_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
     """Registration redirect should be built from the configured base_url + realm."""
-    import sys as _sys
-    REPO_ROOT = Path(__file__).resolve().parents[2]
-    WEB_DIR = REPO_ROOT / "backend" / "web"
-    _sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
     from identity_access.oidc import OIDCConfig
 
     test_cfg = OIDCConfig(
@@ -696,11 +669,6 @@ async def test_register_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.anyio
 async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPatch):
-    import sys as _sys
-    REPO_ROOT = Path(__file__).resolve().parents[2]
-    WEB_DIR = REPO_ROOT / "backend" / "web"
-    _sys.path.insert(0, str(WEB_DIR))
-    import main  # type: ignore
     from identity_access.oidc import OIDCConfig
     from urllib.parse import urlparse, parse_qs
 

@@ -7,6 +7,7 @@ import lzma
 import struct
 import tempfile
 import zipfile
+import importlib
 
 import httpx
 import pytest
@@ -98,9 +99,14 @@ async def test_e2e_supabase_upload_finalize_download_delete_flow(monkeypatch):
 
     # Import the app fresh so storage wiring runs with current env
     for name in list(sys.modules.keys()):
-        if name in {"main", "routes.teaching", "backend.web.routes.teaching", "teaching.storage_supabase", "backend.teaching.storage_supabase"}:
+        if name in {
+            "main",
+            "backend.web.main",
+            "backend.web.routes.teaching",
+            "backend.teaching.storage_supabase",
+        }:
             del sys.modules[name]
-    import backend.web.main as main  # type: ignore
+    main = importlib.import_module("backend.web.main")  # type: ignore
 
     # Create a teacher session
     store = install_session_store(monkeypatch, main)
@@ -202,10 +208,16 @@ async def test_e2e_learning_submission_file_upload_finalize(monkeypatch):
 
     # Fresh import for wiring with current env
     for name in list(sys.modules.keys()):
-        if name in {"main", "routes.teaching", "routes.learning", "backend.web.routes.teaching", "backend.web.routes.learning", "teaching.storage_supabase", "backend.teaching.storage_supabase"}:
+        if name in {
+            "main",
+            "backend.web.main",
+            "backend.web.routes.teaching",
+            "backend.web.routes.learning",
+            "backend.teaching.storage_supabase",
+        }:
             del sys.modules[name]
-    import backend.web.main as main  # type: ignore
-    import routes.learning as learning  # noqa: F401  # ensure module is loaded
+    main = importlib.import_module("backend.web.main")  # type: ignore
+    importlib.import_module("backend.web.routes.learning")  # noqa: F401  # ensure module is loaded
 
     # Teacher and student sessions
     store = install_session_store(monkeypatch, main)
@@ -309,10 +321,16 @@ async def test_e2e_learning_submission_image_upload_finalize(monkeypatch):
     monkeypatch.setenv("SUPABASE_REWRITE_SIGNED_URL_HOST", "true")
 
     for name in list(sys.modules.keys()):
-        if name in {"main", "routes.teaching", "routes.learning", "backend.web.routes.teaching", "backend.web.routes.learning", "teaching.storage_supabase", "backend.teaching.storage_supabase"}:
+        if name in {
+            "main",
+            "backend.web.main",
+            "backend.web.routes.teaching",
+            "backend.web.routes.learning",
+            "backend.teaching.storage_supabase",
+        }:
             del sys.modules[name]
-    import backend.web.main as main  # type: ignore
-    import routes.learning as learning  # noqa: F401
+    main = importlib.import_module("backend.web.main")  # type: ignore
+    importlib.import_module("backend.web.routes.learning")  # noqa: F401
 
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
@@ -401,10 +419,16 @@ async def test_e2e_learning_submission_scratch_sb3_upload_finalize(monkeypatch):
     monkeypatch.setenv("SUPABASE_REWRITE_SIGNED_URL_HOST", "true")
 
     for name in list(sys.modules.keys()):
-        if name in {"main", "routes.teaching", "routes.learning", "backend.web.routes.teaching", "backend.web.routes.learning", "teaching.storage_supabase", "backend.teaching.storage_supabase"}:
+        if name in {
+            "main",
+            "backend.web.main",
+            "backend.web.routes.teaching",
+            "backend.web.routes.learning",
+            "backend.teaching.storage_supabase",
+        }:
             del sys.modules[name]
-    import backend.web.main as main  # type: ignore
-    import routes.learning as learning  # noqa: F401
+    main = importlib.import_module("backend.web.main")  # type: ignore
+    importlib.import_module("backend.web.routes.learning")  # noqa: F401
 
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
@@ -477,10 +501,16 @@ async def test_e2e_learning_submission_calliope_hex_upload_finalize(monkeypatch)
     monkeypatch.setenv("SUPABASE_REWRITE_SIGNED_URL_HOST", "true")
 
     for name in list(sys.modules.keys()):
-        if name in {"main", "routes.teaching", "routes.learning", "backend.web.routes.teaching", "backend.web.routes.learning", "teaching.storage_supabase", "backend.teaching.storage_supabase"}:
+        if name in {
+            "main",
+            "backend.web.main",
+            "backend.web.routes.teaching",
+            "backend.web.routes.learning",
+            "backend.teaching.storage_supabase",
+        }:
             del sys.modules[name]
-    import backend.web.main as main  # type: ignore
-    import routes.learning as learning  # noqa: F401
+    main = importlib.import_module("backend.web.main")  # type: ignore
+    importlib.import_module("backend.web.routes.learning")  # noqa: F401
 
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])

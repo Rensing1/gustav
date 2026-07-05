@@ -13,6 +13,7 @@ from httpx import ASGITransport
 
 main = importlib.import_module("backend.web.main")
 app_routes = importlib.import_module("backend.web.routes.app")
+teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -45,7 +46,7 @@ def _json_response(payload: object, status_code: int = 200) -> JSONResponse:
 
 @pytest.mark.anyio
 async def test_live_matrix_returns_course_unit_tasks_and_rows(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(
         app_routes,
         "_get_teacher_course",
@@ -133,7 +134,7 @@ async def test_live_matrix_returns_course_unit_tasks_and_rows(monkeypatch: pytes
 
 @pytest.mark.anyio
 async def test_live_detail_sheet_returns_selected_submission(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(
         app_routes,
         "_get_teacher_course",
@@ -221,7 +222,7 @@ async def test_live_detail_sheet_returns_selected_submission(monkeypatch: pytest
 
 @pytest.mark.anyio
 async def test_live_dashboard_returns_rows_summary_and_selected_panel(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(
         app_routes,
         "_get_teacher_course",
@@ -407,7 +408,7 @@ async def test_live_dashboard_returns_rows_summary_and_selected_panel(monkeypatc
 
 @pytest.mark.anyio
 async def test_live_dashboard_uses_explicit_task_selection_for_panel_detail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(
         app_routes,
         "_get_teacher_course",
@@ -488,7 +489,7 @@ async def test_live_dashboard_uses_explicit_task_selection_for_panel_detail(monk
 
 @pytest.mark.anyio
 async def test_live_detail_sheet_prefers_first_and_last_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(
         app_routes,
         "_get_teacher_course",
@@ -538,7 +539,7 @@ async def test_live_detail_sheet_prefers_first_and_last_name(monkeypatch: pytest
 
 @pytest.mark.anyio
 async def test_live_detail_sheet_falls_back_to_localpart_when_names_are_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(
         app_routes,
         "_get_teacher_course",
@@ -588,7 +589,7 @@ async def test_live_detail_sheet_falls_back_to_localpart_when_names_are_missing(
 
 @pytest.mark.anyio
 async def test_live_course_units_returns_lightweight_unit_choices(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(
         app_routes,
         "_get_teacher_course",
@@ -640,7 +641,7 @@ async def test_live_course_units_returns_lightweight_unit_choices(monkeypatch: p
 
 @pytest.mark.anyio
 async def test_live_detail_sheet_returns_no_content_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_routes.teaching_routes, "_guard_course_owner", lambda course_id, owner_sub: None)
+    monkeypatch.setattr(teaching_guards, "_guard_course_owner", lambda course_id, owner_sub, repo_provider=None: None)
     monkeypatch.setattr(
         app_routes,
         "_get_teacher_course",

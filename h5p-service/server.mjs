@@ -43,6 +43,10 @@ import {
   buildFinishedSubmissionIdempotencyKey,
   parseOriginForForwarding,
 } from "./lib/finished_submission_context.mjs";
+import {
+  ensureDivEmbedTypes,
+  ensureThemeStylesLast,
+} from "./lib/model_helpers.mjs";
 import { parseReviewToken } from "./lib/review_tokens.mjs";
 import { applySecurityHeaders, CSP_DEBUG_HTML } from "./lib/security_headers.mjs";
 import {
@@ -66,7 +70,6 @@ const uploadMaxBytes = Number.parseInt(
   process.env.H5P_MAX_UPLOAD_BYTES || String(100 * 1024 * 1024),
   10,
 );
-const themeStylesheetPath = "/h5p/theme/h5p-gustav.css";
 const reviewTokenSecret = String(process.env.H5P_REVIEW_TOKEN_SECRET || "").trim();
 const h5pInternalSharedSecret = String(process.env.H5P_INTERNAL_SHARED_SECRET || "").trim();
 const gustavEnv = String(process.env.GUSTAV_ENV || "dev").trim().toLowerCase();
@@ -122,30 +125,6 @@ const h5pContentAccessCache = new Map();
  *   Forwarding failures must be observable without logging PII or response bodies.
  */
 const finishedForwardingMetrics = createFinishedForwardingMetrics();
-
-function ensureThemeStylesLast(styles) {
-  const arr = Array.isArray(styles) ? styles.filter((s) => s !== themeStylesheetPath) : [];
-  arr.push(themeStylesheetPath);
-  return arr;
-}
-
-function ensureDivEmbedTypes(embedTypes) {
-  // Lumi's `<h5p-player>` prefers DIV when possible (less iframes, better theming).
-  // In practice many H5P packages advertise `embedTypes=["iframe"]` only, which
-  // forces an internal iframe and makes a native GUSTAV theme almost impossible
-  // (tokens do not automatically exist inside the iframe).
-  //
-  // We therefore advertise `div` as supported for the embedded player UI.
-  const raw = Array.isArray(embedTypes) ? embedTypes : [];
-  const out = ["div"];
-  for (const t of raw) {
-    if (!t) continue;
-    if (t === "div") continue;
-    if (out.includes(t)) continue;
-    out.push(t);
-  }
-  return out;
-}
 
 function sendJson(res, statusCode, body, headers = {}) {
   res.status(statusCode);

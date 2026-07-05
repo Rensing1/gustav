@@ -3,23 +3,20 @@ Teaching API — Update & Delete courses (owner checks, validation)
 """
 from __future__ import annotations
 
+import importlib
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import sys
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
-from runtime_auth_helpers import install_session_store
-from utils.db import require_db_or_skip as _require_db_or_skip
+main = importlib.import_module("backend.web.main")
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.teaching.repo_db import DBTeachingRepo
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client():
@@ -29,9 +26,7 @@ async def _client():
 @pytest.mark.anyio
 async def test_owner_can_patch_title_and_non_owner_forbidden(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -60,9 +55,7 @@ async def test_owner_can_patch_title_and_non_owner_forbidden(monkeypatch: pytest
 @pytest.mark.anyio
 async def test_owner_can_delete_course_and_memberships(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -91,9 +84,7 @@ async def test_owner_can_delete_course_and_memberships(monkeypatch: pytest.Monke
 @pytest.mark.anyio
 async def test_patch_validation_errors(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -120,9 +111,7 @@ async def test_patch_validation_errors(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.anyio
 async def test_patch_with_no_fields_returns_current_row(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -144,9 +133,7 @@ async def test_patch_with_no_fields_returns_current_row(monkeypatch: pytest.Monk
 @pytest.mark.anyio
 async def test_patch_can_clear_optional_fields(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -173,9 +160,7 @@ async def test_patch_can_clear_optional_fields(monkeypatch: pytest.MonkeyPatch):
 async def test_owner_delete_unknown_course_returns_404(monkeypatch: pytest.MonkeyPatch):
     """Owner deleting a non-existent course should get 404 Not Found."""
     store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -195,9 +180,7 @@ async def test_owner_delete_unknown_course_returns_404(monkeypatch: pytest.Monke
 @pytest.mark.anyio
 async def test_recently_deleted_marker_expires(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")

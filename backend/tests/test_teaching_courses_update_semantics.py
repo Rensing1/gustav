@@ -5,25 +5,21 @@ Focus: Ensure unknown course yields 404 (not found) and non-owner existing cours
 """
 from __future__ import annotations
 
+import importlib
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import sys
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
+main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store
 
-
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.teaching.repo_db import DBTeachingRepo
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client():
@@ -34,9 +30,7 @@ async def _client():
 async def test_patch_unknown_course_returns_404_for_teacher(monkeypatch: pytest.MonkeyPatch):
     """Contract: Owner-only update returns 404 when course does not exist."""
     session_store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")

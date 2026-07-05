@@ -11,20 +11,15 @@ from __future__ import annotations
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import sys
-
+import importlib
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
-from runtime_auth_helpers import install_session_store
-from utils.db import require_db_or_skip as _require_db_or_skip
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
+from backend.teaching.repo_db import DBTeachingRepo
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client():
@@ -36,9 +31,7 @@ async def test_teacher_can_create_and_list_own_courses(monkeypatch: pytest.Monke
     # Ensure in-memory session store for this test run
     store = install_session_store(monkeypatch, main)
     # Require DB-backed repo
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -80,9 +73,7 @@ async def test_create_course_invalid_title_returns_400(monkeypatch: pytest.Monke
     # Ensure in-memory session store
     store = install_session_store(monkeypatch, main)
     # Require DB-backed repo
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -104,9 +95,6 @@ async def test_create_course_invalid_title_returns_400(monkeypatch: pytest.Monke
 async def test_create_course_invalid_title_in_memory_repo(monkeypatch: pytest.MonkeyPatch):
     """Ensure fallback repo mirrors DB validation for blank titles."""
     store = install_session_store(monkeypatch, main)
-
-    import routes.teaching as teaching
-
     # Force fallback by swapping repo with fresh in-memory implementation.
     repo = teaching._Repo()  # type: ignore[attr-defined]
     monkeypatch.setattr(teaching, "REPO", repo, raising=False)
@@ -148,9 +136,7 @@ async def test_student_cannot_create_course_forbidden(monkeypatch: pytest.Monkey
 async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     # Require DB-backed repo
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -160,8 +146,6 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
     t2 = store.create(sub="teacher-B", name="Herr B", roles=["teacher"])
 
     # Monkeypatch name resolver in teaching router to avoid external dependency
-    import routes.teaching as teaching  # patch the module used by main
-
     def fake_resolver_bulk(ids: list[str]) -> dict[str, str]:
         mapping = {"student-1": "Max Musterschüler", "student-2": "Mia Muster"}
         return {i: mapping.get(i, f"Name:{i}") for i in ids}
@@ -218,9 +202,7 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
 @pytest.mark.anyio
 async def test_add_member_missing_student_sub_returns_400(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -251,9 +233,7 @@ async def test_student_listing_includes_member_courses(monkeypatch: pytest.Monke
     store = install_session_store(monkeypatch, main)
     # Teacher creates course and adds student
     # Require DB-backed repo
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -262,8 +242,6 @@ async def test_student_listing_includes_member_courses(monkeypatch: pytest.Monke
     s = store.create(sub="student-X", name="Schüler X", roles=["student"])
 
     # monkeypatch resolver for completeness (not used by listing)
-    import routes.teaching as teaching
-
     def fake_resolver_bulk(ids: list[str]) -> dict[str, str]:
         return {i: f"Name:{i}" for i in ids}
 
@@ -290,8 +268,6 @@ async def test_student_listing_includes_member_courses(monkeypatch: pytest.Monke
 async def test_list_courses_default_limit_matches_contract_10(monkeypatch: pytest.MonkeyPatch):
     """GET /api/teaching/courses without `limit` must default to 10."""
     store = install_session_store(monkeypatch, main)
-    import routes.teaching as teaching
-
     # Isolate behavior from DB state.
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]
 

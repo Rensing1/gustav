@@ -26,20 +26,15 @@ Then
 from __future__ import annotations
 
 import uuid as _uuid
-from pathlib import Path
-import sys
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore
-from runtime_auth_helpers import install_session_store
+main = importlib.import_module("backend.web.main")
+from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")

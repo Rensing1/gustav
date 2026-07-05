@@ -12,14 +12,16 @@ same-origin, with private, no-store cache headers on both paths.
 """
 from __future__ import annotations
 
+import importlib
 import pytest
 import httpx
 from httpx import ASGITransport
 import uuid
 
-import main  # type: ignore  # noqa: E402
-import routes.teaching as teaching  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
+teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")
+from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -57,13 +59,13 @@ async def test_create_course_blocks_cross_origin_and_allows_same_origin(monkeypa
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-csrf-course", name="Teach", roles=["teacher"])
     csrf_calls = {"count": 0}
-    original_guard = teaching._csrf_guard
+    original_guard = teaching_guards._csrf_guard
 
     def _counting_guard(request):
         csrf_calls["count"] += 1
         return original_guard(request)
 
-    monkeypatch.setattr(teaching, "_csrf_guard", _counting_guard)
+    monkeypatch.setattr(teaching_guards, "_csrf_guard", _counting_guard)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
@@ -152,13 +154,13 @@ async def test_create_unit_blocks_cross_origin_and_allows_same_origin(monkeypatc
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-csrf-unit", name="Teach", roles=["teacher"])
     csrf_calls = {"count": 0}
-    original_guard = teaching._csrf_guard
+    original_guard = teaching_guards._csrf_guard
 
     def _counting_guard(request):
         csrf_calls["count"] += 1
         return original_guard(request)
 
-    monkeypatch.setattr(teaching, "_csrf_guard", _counting_guard)
+    monkeypatch.setattr(teaching_guards, "_csrf_guard", _counting_guard)
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)

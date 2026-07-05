@@ -7,31 +7,22 @@ OpenAPI contract.
 """
 from __future__ import annotations
 
+import importlib
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import sys
-
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
-from backend.tests.runtime_auth_helpers import install_session_store
-
-
-from utils.db import require_db_or_skip as _require_db_or_skip
-
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 def _helpers_available_or_skip():
     """Skip when existence helpers are unavailable (can't disambiguate 404 vs 403 safely)."""
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         repo = DBTeachingRepo()
         # Unknown ID should deterministically return False when helper is present; None means unavailable
         ok = repo.course_exists("00000000-0000-0000-0000-000000000001")
@@ -63,9 +54,8 @@ async def _delete_course(client: httpx.AsyncClient, cid: str) -> None:
 @pytest.mark.anyio
 async def test_add_member_after_delete_returns_404_for_owner(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -86,9 +76,8 @@ async def test_add_member_after_delete_returns_404_for_owner(monkeypatch: pytest
 @pytest.mark.anyio
 async def test_remove_member_after_delete_returns_404_for_owner(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -109,9 +98,8 @@ async def test_remove_member_after_delete_returns_404_for_owner(monkeypatch: pyt
 @pytest.mark.anyio
 async def test_list_members_after_delete_returns_404_for_owner(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -132,9 +120,8 @@ async def test_list_members_after_delete_returns_404_for_owner(monkeypatch: pyte
 async def test_non_owner_list_members_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A different teacher (non-owner) must receive 403 when listing members."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -158,9 +145,8 @@ async def test_non_owner_list_members_returns_403(monkeypatch: pytest.MonkeyPatc
 async def test_non_owner_add_member_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A different teacher (non-owner) must receive 403 when adding a member."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -182,9 +168,8 @@ async def test_non_owner_add_member_returns_403(monkeypatch: pytest.MonkeyPatch)
 async def test_non_owner_remove_member_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A different teacher (non-owner) must receive 403 when removing a member."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -206,9 +191,8 @@ async def test_non_owner_remove_member_returns_403(monkeypatch: pytest.MonkeyPat
 async def test_student_cannot_list_members_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A student must not access the roster (403)."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -230,9 +214,8 @@ async def test_student_cannot_list_members_returns_403(monkeypatch: pytest.Monke
 async def test_student_cannot_add_member_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A student must not add members (403)."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -254,9 +237,8 @@ async def test_student_cannot_add_member_returns_403(monkeypatch: pytest.MonkeyP
 async def test_student_cannot_remove_member_returns_403(monkeypatch: pytest.MonkeyPatch):
     """A student must not remove members (403)."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -278,9 +260,8 @@ async def test_student_cannot_remove_member_returns_403(monkeypatch: pytest.Monk
 async def test_owner_unknown_course_list_returns_404(monkeypatch: pytest.MonkeyPatch):
     """Owner querying a non-existent course must receive 404 (not_found)."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -299,9 +280,8 @@ async def test_owner_unknown_course_list_returns_404(monkeypatch: pytest.MonkeyP
 async def test_owner_unknown_course_add_returns_404(monkeypatch: pytest.MonkeyPatch):
     """Owner adding to a non-existent course must receive 404 (not_found)."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -320,9 +300,8 @@ async def test_owner_unknown_course_add_returns_404(monkeypatch: pytest.MonkeyPa
 async def test_owner_unknown_course_remove_returns_404(monkeypatch: pytest.MonkeyPatch):
     """Owner removing from a non-existent course must receive 404 (not_found)."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")

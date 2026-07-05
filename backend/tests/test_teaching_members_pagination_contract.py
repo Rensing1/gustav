@@ -14,23 +14,16 @@ BDD:
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
-import sys
 
 import httpx
 from httpx import ASGITransport
 import pytest
 
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore
-import routes.teaching as teaching  # type: ignore
 from backend.tests.runtime_auth_helpers import install_session_store
 
 teaching_pkg = importlib.import_module("backend.web.routes.teaching")

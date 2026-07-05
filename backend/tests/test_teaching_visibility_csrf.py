@@ -6,15 +6,17 @@ must require Origin/Referer presence and same-origin semantics.
 """
 from __future__ import annotations
 
+import importlib
 import pytest
 import httpx
 from httpx import ASGITransport
 
 import uuid
 
-import main  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # noqa: E402
-from utils.db import require_db_or_skip as _require_db_or_skip
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -68,9 +70,9 @@ async def test_visibility_patch_requires_origin_or_referer(monkeypatch: pytest.M
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
     try:
-        from routes import teaching as teaching_routes  # noqa: F401  # type: ignore
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
-        assert isinstance(teaching_routes.REPO, DBTeachingRepo)
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
 

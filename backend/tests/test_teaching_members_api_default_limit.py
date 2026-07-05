@@ -15,18 +15,13 @@ from __future__ import annotations
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import sys
+import importlib
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore
+main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store
 from utils.db import require_db_or_skip as _require_db_or_skip
 

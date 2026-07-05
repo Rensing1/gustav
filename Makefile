@@ -28,6 +28,7 @@ help:
 	@echo "  test-api-contract-baseline - Check runtime /api routes against api/openapi.yml"
 	@echo "  test-architecture-boundaries - Check Clean Architecture boundary debt"
 	@echo "  test-route-map     - Check generated route-surface inventory"
+	@echo "  test-db-inventory  - Check generated DB/RLS test inventory"
 	@echo "  test-frontend-h5p  - Run frontend and H5P checks"
 	@echo "  test-full-prod-like - Run full prod-like verification profile"
 	@echo "  harness-minimum    - Run hard PR-1 harness safety gate"
@@ -206,6 +207,10 @@ test-architecture-boundaries:
 test-route-map:
 	. ./.venv/bin/activate && python -m backend.tools.route_map_inventory --check docs/harness/ROUTE_MAP.md
 
+.PHONY: test-db-inventory
+test-db-inventory:
+	. ./.venv/bin/activate && python -m backend.tools.db_test_inventory --check docs/harness/DB_TEST_INVENTORY.md
+
 .PHONY: test-frontend-h5p
 test-frontend-h5p:
 	@cd frontend && npm run check
@@ -360,6 +365,7 @@ verify:
 	@$(MAKE) test-api-contract-baseline
 	@$(MAKE) test-architecture-boundaries
 	@$(MAKE) test-route-map
+	@$(MAKE) test-db-inventory
 	@$(MAKE) test-docker-image-smoke
 	@REQUIRE_DB_TESTS=1 $(MAKE) test
 	@$(MAKE) test-frontend-h5p

@@ -1,0 +1,126 @@
+"""Contracts for the DB/RLS test inventory.
+
+Why:
+    The harness plan asks for a direct DB-access inventory before `db_read`
+    and `db_write` become hard policy markers. This contract keeps that
+    inventory generated and reviewable without silently turning marker cleanup
+    into a broad test-suite rewrite.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MAKEFILE = REPO_ROOT / "Makefile"
+INVENTORY = REPO_ROOT / "docs" / "harness" / "DB_TEST_INVENTORY.md"
+TOOL = REPO_ROOT / "backend" / "tools" / "db_test_inventory.py"
+
+
+def _target_body(target: str) -> str:
+    text = MAKEFILE.read_text(encoding="utf-8")
+    match = re.search(
+        rf"(?ms)^\.PHONY: {re.escape(target)}\n{re.escape(target)}:\n(?P<body>.*?)(?=^\.PHONY: |\Z)",
+        text,
+    )
+    assert match is not None, f"Makefile target {target!r} not found"
+    return match.group("body")
+
+
+def test_makefile_exposes_db_test_inventory_gate() -> None:
+    body = _target_body("test-db-inventory")
+
+    assert "python -m backend.tools.db_test_inventory" in body
+    assert "--check docs/harness/DB_TEST_INVENTORY.md" in body
+
+
+def test_verify_runs_db_test_inventory_gate() -> None:
+    body = _target_body("verify")
+
+    assert "$(MAKE) test-db-inventory" in body
+
+
+def test_db_test_inventory_classifies_real_db_candidates(tmp_path: Path) -> None:
+    from backend.tools import db_test_inventory
+
+    db_test = tmp_path / "test_learning_rls_policy.py"
+    db_test.write_text(
+        "\n".join(
+            [
+                "import os",
+                "import pytest",
+                "pytest.importorskip('psycopg')",
+                "",
+                "def test_student_rls_policy():",
+                "    dsn = os.getenv('RLS_TEST_DSN')",
+                "    import psycopg",
+                "    with psycopg.connect(dsn):",
+                "        pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_storage_test = tmp_path / "test_supabase_storage_adapter.py"
+    fake_storage_test.write_text(
+        "\n".join(
+            [
+                "def test_fake_supabase_storage(monkeypatch):",
+                "    monkeypatch.setenv('SUPABASE_URL', 'https://supabase.local')",
+                "    assert True",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    records = db_test_inventory.scan_tests(tmp_path, repo_root=tmp_path)
+    rows = {record.path: record for record in records}
+
+    assert rows["test_learning_rls_policy.py"].classification == "real-db"
+    assert "missing-db-marker" in rows["test_learning_rls_policy.py"].marker_status
+    assert "rls" in rows["test_learning_rls_policy.py"].signals
+    assert "psycopg-connect" in rows["test_learning_rls_policy.py"].signals
+    assert rows["test_supabase_storage_adapter.py"].classification == "storage-or-config"
+    assert rows["test_supabase_storage_adapter.py"].marker_status == "no-db-marker-needed"
+
+
+def test_db_test_inventory_document_has_required_columns() -> None:
+    assert TOOL.exists(), "Missing DB test inventory tool"
+    assert INVENTORY.exists(), "Missing DB test inventory document"
+    text = INVENTORY.read_text(encoding="utf-8")
+
+    for column in (
+        "Test file",
+        "Classification",
+        "Markers",
+        "Marker status",
+        "Signals",
+        "Recommended action",
+    ):
+        assert column in text
+
+    assert "db_read" in text
+    assert "db_write" in text
+
+
+def test_db_test_inventory_is_synchronized_with_generator() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "backend.tools.db_test_inventory",
+            "--check",
+            "docs/harness/DB_TEST_INVENTORY.md",
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "db-test-inventory-ok" in result.stdout
+    assert result.stderr == ""

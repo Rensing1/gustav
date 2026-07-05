@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 from backend.teaching import repo_row_mappers as _repo_row_mappers
 from backend.teaching import repo_live_queries as _repo_live_queries
 from backend.teaching import repo_material_queries as _repo_material_queries
+from backend.teaching import repo_member_queries as _repo_member_queries
 from backend.teaching import repo_section_queries as _repo_section_queries
 from backend.teaching import repo_unit_queries as _repo_unit_queries
 from backend.teaching import repo_course_module_queries as _repo_course_module_queries
@@ -265,36 +266,13 @@ class DBTeachingRepo:
         ]
 
     def list_courses_for_student(self, *, student_id: str, limit: int, offset: int) -> List[dict]:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (student_id,))
-                cur.execute(
-                    """
-                    select c.id::text, c.title, c.subject, c.grade_level, c.term, c.teacher_id,
-                           to_char(c.created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                           to_char(c.updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    from public.courses c
-                    join public.course_memberships m on m.course_id = c.id
-                    where m.student_id = %s
-                    order by c.created_at desc, c.id
-                    limit %s offset %s
-                    """,
-                    (student_id, int(limit), int(offset)),
-                )
-                rows = cur.fetchall() or []
-        return [
-            {
-                "id": r[0],
-                "title": r[1],
-                "subject": r[2],
-                "grade_level": r[3],
-                "term": r[4],
-                "teacher_id": r[5],
-                "created_at": r[6],
-                "updated_at": r[7],
-            }
-            for r in rows
-        ]
+        return _repo_member_queries.list_courses_for_student(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            student_id=student_id,
+            limit=limit,
+            offset=offset,
+        )
 
     def get_course(self, course_id: str) -> Optional[dict]:
         with psycopg.connect(self._dsn) as conn:
@@ -861,18 +839,13 @@ class DBTeachingRepo:
         )
 
     def course_has_member(self, course_id: str, owner_sub: str, student_sub: str) -> bool:
-        """Check membership using the existing owner-scoped roster helper."""
-        page_size = 50
-        offset = 0
-        while True:
-            page = self.list_members_for_owner(course_id, owner_sub, limit=page_size, offset=offset)
-            if not page:
-                return False
-            if any(str(member_sub) == str(student_sub) for member_sub, _joined_at in page):
-                return True
-            if len(page) < page_size:
-                return False
-            offset += page_size
+        return _repo_member_queries.course_has_member(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            owner_sub=owner_sub,
+            student_sub=student_sub,
+        )
 
     def list_tasks_for_course_unit_owner(self, course_id: str, unit_id: str, owner_sub: str) -> List[dict]:
         return _repo_task_queries.list_tasks_for_course_unit_owner(
@@ -1310,33 +1283,14 @@ class DBTeachingRepo:
         return None
 
     def list_members_for_owner(self, course_id: str, owner_sub: str, limit: int, offset: int) -> List[Tuple[str, str]]:
-        """Return the roster for a course owned by `owner_sub` using the SECURITY DEFINER helper.
-
-        Why:
-            We rely on `public.get_course_members` so that the owner can read members without
-            triggering RLS recursion on `course_memberships`.
-
-        Behavior:
-            - Returns `(student_id, joined_at_iso)` tuples ordered by join time.
-            - Enforces pagination via helper-level clamping (max 50).
-
-        Permissions:
-            Caller must be a teacher who owns the course; helper enforces ownership.
-        """
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-                # Helper runs with definer privileges and applies its own limit/offset guards.
-                cur.execute(
-                    """
-                    select student_id,
-                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    from public.get_course_members(%s, %s, %s, %s)
-                    """,
-                    (owner_sub, course_id, int(limit), int(offset)),
-                )
-                rows = cur.fetchall() or []
-        return [(r[0], r[1]) for r in rows]
+        return _repo_member_queries.list_members_for_owner(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            owner_sub=owner_sub,
+            limit=limit,
+            offset=offset,
+        )
 
     def list_ai_usage_events_for_owner(
         self,
@@ -1416,108 +1370,33 @@ class DBTeachingRepo:
         ]
 
     def add_member_owned(self, course_id: str, owner_sub: str, student_id: str) -> bool:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-                cur.execute(
-                    """
-                    insert into public.course_memberships (course_id, student_id)
-                    values (%s, %s)
-                    on conflict do nothing
-                    """,
-                    (course_id, student_id),
-                )
-                inserted = cur.rowcount == 1
-                conn.commit()
-        return inserted
+        return _repo_member_queries.add_member_owned(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            owner_sub=owner_sub,
+            student_id=student_id,
+        )
 
     def remove_member_owned(self, course_id: str, owner_sub: str, student_id: str) -> None:
-        """Remove a membership for a course owned by `owner_sub`.
-
-        Why:
-            Teachers must be able to unenroll students from their own courses.
-            Under RLS, deletion is allowed only when `app.current_sub` matches
-            the course owner. Some environments may still block the delete
-            (e.g., drifted policies). To keep UX reliable while preserving
-            security, we try under the limited role first. If RLS blocks the
-            row (policy drift), we invoke a SECURITY DEFINER helper that
-            verifies ownership and performs the delete without relying on RLS.
-            As a last resort in dev/test, we fall back to a service-role DSN
-            only when configured and only after ownership was verified by the
-            route.
-
-        Parameters:
-            course_id: Target course UUID (text accepted by psycopg parameter).
-            owner_sub: Subject identifier of the teacher (OIDC `sub`).
-            student_id: Subject identifier of the student to remove.
-
-        Security:
-            - First attempt uses the limited-role DSN (RLS enforced).
-            - Secondary fallback uses SECURITY DEFINER helper
-              `public.remove_course_membership(owner, course, student)`.
-            - Optional final fallback uses `SERVICE_ROLE_DSN` (or test variant) to
-              execute the delete when RLS prevents it, but the route has
-              already verified ownership via a SECURITY DEFINER helper.
-        """
-        affected = 0
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-                cur.execute(
-                    "delete from public.course_memberships where course_id = %s and student_id = %s",
-                    (course_id, student_id),
-                )
-                affected = cur.rowcount or 0
-                if affected == 0:
-                    # Attempt SECURITY DEFINER helper (ownership already verified by route)
-                    try:
-                        cur.execute(
-                            "select public.remove_course_membership(%s, %s, %s)",
-                            (owner_sub, course_id, student_id),
-                        )
-                        affected = 1  # treat as success when helper executes without error
-                    except Exception:
-                        affected = 0
-                conn.commit()
-        # Final fallback (dev/test only): allow service-role DSN when explicitly enabled.
-        if affected == 0 and self._service_dsn:
-            if not self._service_fallback_allowed():
-                # Deny fallback in prod/stage even if the flag is set; log once per call-site.
-                LOG.warning(
-                    "Service-DSN fallback blocked (env not allowed). Set GUSTAV_ENV in {dev,test,local} to enable for testing."
-                )
-                return
-            # Explicitly allowed in test/dev; log to make audits easier.
-            LOG.warning("Using service-DSN fallback for membership delete (test/dev only)")
-            try:
-                with psycopg.connect(self._service_dsn) as conn2:  # type: ignore[arg-type]
-                    with conn2.cursor() as cur2:
-                        cur2.execute(
-                            "delete from public.course_memberships where course_id = %s and student_id = %s",
-                            (course_id, student_id),
-                        )
-                        conn2.commit()
-            except Exception:
-                # Intentionally swallow errors in the test-only branch
-                pass
+        return _repo_member_queries.remove_member_owned(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            service_dsn=self._service_dsn,
+            service_fallback_allowed=self._service_fallback_allowed,
+            logger=LOG,
+            course_id=course_id,
+            owner_sub=owner_sub,
+            student_id=student_id,
+        )
 
     def student_has_course(self, course_id: str, student_sub: str) -> bool:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
-                cur.execute(
-                    """
-                    select exists (
-                      select 1
-                        from public.course_memberships
-                       where course_id = %s
-                         and student_id = %s
-                    )
-                    """,
-                    (course_id, student_sub),
-                )
-                row = cur.fetchone()
-        return bool((row or [False])[0])
+        return _repo_member_queries.student_has_course(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            student_sub=student_sub,
+        )
 
     def create_concern_box_entry(
         self,
@@ -1699,42 +1578,26 @@ class DBTeachingRepo:
 
     # --- Memberships -------------------------------------------------------------
     def add_member(self, course_id: str, student_id: str) -> bool:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into public.course_memberships (course_id, student_id)
-                    values (%s, %s)
-                    on conflict do nothing
-                    """,
-                    (course_id, student_id),
-                )
-                inserted = cur.rowcount == 1
-                conn.commit()
-        return inserted
+        return _repo_member_queries.add_member(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            student_id=student_id,
+        )
 
     def list_members(self, course_id: str, limit: int, offset: int) -> List[Tuple[str, str]]:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    select student_id,
-                           to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                    from public.course_memberships
-                    where course_id = %s
-                    order by created_at asc, student_id
-                    limit %s offset %s
-                    """,
-                    (course_id, int(limit), int(offset)),
-                )
-                rows = cur.fetchall() or []
-        return [(r[0], r[1]) for r in rows]
+        return _repo_member_queries.list_members(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            limit=limit,
+            offset=offset,
+        )
 
     def remove_member(self, course_id: str, student_id: str) -> None:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "delete from public.course_memberships where course_id = %s and student_id = %s",
-                    (course_id, student_id),
-                )
-                conn.commit()
+        return _repo_member_queries.remove_member(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            student_id=student_id,
+        )

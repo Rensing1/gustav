@@ -72,6 +72,12 @@ from backend.web.routes.learning_upload_proxy import (
     normalized_parts as _normalized_parts,
 )
 from backend.web.routes.learning_upload_proxy import async_forward_upload as _default_async_forward_upload
+from backend.web.routes.learning_upload_config import (
+    dev_upload_stub_enabled as _dev_upload_stub_enabled,
+    upload_intent_ttl_seconds as _upload_intent_ttl_seconds,
+    upload_proxy_enabled as _upload_proxy_enabled,
+    upload_proxy_timeout_seconds as _upload_proxy_timeout_seconds,
+)
 import httpx
 from urllib.parse import urlparse as _urlparse, quote as _quote
 learning_router = APIRouter(tags=["Learning"])
@@ -311,32 +317,6 @@ async def _download_storage_object_via_presign(
         hdrs = None
     downloader = _current_download_bytes_with_limit()
     return await downloader(url=url, max_bytes=max_bytes, headers=hdrs)
-
-
-def _upload_intent_ttl_seconds() -> int:
-    raw = (os.getenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS") or "").strip()
-    try:
-        value = int(raw)
-    except ValueError:
-        value = 600
-    return max(60, min(value, 24 * 60 * 60))
-
-
-def _dev_upload_stub_enabled() -> bool:
-    return (os.getenv("ENABLE_DEV_UPLOAD_STUB", "false") or "").strip().lower() == "true"
-
-
-def _upload_proxy_enabled() -> bool:
-    return (os.getenv("ENABLE_STORAGE_UPLOAD_PROXY", "false") or "").strip().lower() == "true"
-
-
-def _upload_proxy_timeout_seconds() -> float:
-    raw = (os.getenv("LEARNING_UPLOAD_PROXY_TIMEOUT_SECONDS") or "").strip()
-    try:
-        value = float(raw)
-    except ValueError:
-        value = 30.0
-    return max(5.0, min(value, 120.0))
 
 
 async def _read_request_stream_with_limit(request: Request, limit: int) -> tuple[bytes | None, str | None]:

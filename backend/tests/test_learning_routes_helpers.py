@@ -10,12 +10,58 @@ from __future__ import annotations
 import base64
 import importlib
 import json
+from pathlib import Path
 import sys
 import types
 
 import pytest
 
 learning = importlib.import_module("backend.web.routes.learning")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LEARNING_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "learning.py"
+UPLOAD_CONFIG_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "learning_upload_config.py"
+
+
+def test_upload_config_helpers_live_outside_learning_hotspot() -> None:
+    upload_config = importlib.import_module("backend.web.routes.learning_upload_config")
+    learning_source = LEARNING_SOURCE.read_text(encoding="utf-8")
+    upload_config_source = UPLOAD_CONFIG_SOURCE.read_text(encoding="utf-8")
+
+    assert "def _upload_intent_ttl_seconds(" not in learning_source
+    assert "def _dev_upload_stub_enabled(" not in learning_source
+    assert "def _upload_proxy_enabled(" not in learning_source
+    assert "def _upload_proxy_timeout_seconds(" not in learning_source
+    assert "def upload_intent_ttl_seconds(" in upload_config_source
+    assert "def dev_upload_stub_enabled(" in upload_config_source
+    assert "def upload_proxy_enabled(" in upload_config_source
+    assert "def upload_proxy_timeout_seconds(" in upload_config_source
+    assert learning._upload_intent_ttl_seconds is upload_config.upload_intent_ttl_seconds
+    assert learning._dev_upload_stub_enabled is upload_config.dev_upload_stub_enabled
+    assert learning._upload_proxy_enabled is upload_config.upload_proxy_enabled
+    assert learning._upload_proxy_timeout_seconds is upload_config.upload_proxy_timeout_seconds
+
+
+def test_upload_config_helpers_keep_clamp_and_boolean_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    upload_config = importlib.import_module("backend.web.routes.learning_upload_config")
+
+    monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", "30")
+    assert upload_config.upload_intent_ttl_seconds() == 60
+    monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", str(48 * 60 * 60))
+    assert upload_config.upload_intent_ttl_seconds() == 24 * 60 * 60
+    monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", "bad")
+    assert upload_config.upload_intent_ttl_seconds() == 600
+
+    monkeypatch.setenv("LEARNING_UPLOAD_PROXY_TIMEOUT_SECONDS", "2")
+    assert upload_config.upload_proxy_timeout_seconds() == 5.0
+    monkeypatch.setenv("LEARNING_UPLOAD_PROXY_TIMEOUT_SECONDS", "500")
+    assert upload_config.upload_proxy_timeout_seconds() == 120.0
+    monkeypatch.setenv("LEARNING_UPLOAD_PROXY_TIMEOUT_SECONDS", "bad")
+    assert upload_config.upload_proxy_timeout_seconds() == 30.0
+
+    monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "true")
+    monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", " TRUE ")
+    assert upload_config.dev_upload_stub_enabled() is True
+    assert upload_config.upload_proxy_enabled() is True
 
 
 def test_encode_proxy_headers_none_and_empty():

@@ -35,6 +35,7 @@ import { constants as fsConstants } from "node:fs";
 import express from "express";
 import multer from "multer";
 import { normalizeH5PAjaxBody } from "./lib/ajax_body.mjs";
+import { checkLearningH5PContentAccess, fetchGustavMe } from "./lib/auth_forwarding.mjs";
 import { buildSessionCookieHeader, parseCookies } from "./lib/cookies.mjs";
 import { debugPagesEnabled, isProdLikeEnv } from "./lib/env.mjs";
 import { fetchWithTimeout } from "./lib/fetch_timeout.mjs";
@@ -83,6 +84,13 @@ const isProdLike = isProdLikeEnv(gustavEnv);
 const upstreamFetchTimeoutMsRaw = Number.parseInt(process.env.H5P_UPSTREAM_FETCH_TIMEOUT_MS || "5000", 10);
 const upstreamFetchTimeoutMs =
   Number.isFinite(upstreamFetchTimeoutMsRaw) && upstreamFetchTimeoutMsRaw > 0 ? upstreamFetchTimeoutMsRaw : 5000;
+const authForwardingOptions = {
+  gustavWebInternalBase,
+  gustavFrontendInternalBase,
+  sessionCookieName,
+  frontendSessionCookieName,
+  timeoutMs: upstreamFetchTimeoutMs,
+};
 const debugHtmlEnabled = debugPagesEnabled({
   gustavEnv,
   enableFlag: process.env.H5P_ENABLE_DEBUG_PAGES,
@@ -245,90 +253,6 @@ function requireSameOrigin(req, res, next) {
   next();
 }
 
-async function fetchGustavMe(cookieHeader) {
-  const backendUrl = `${gustavWebInternalBase.replace(/\/+$/, "")}/api/me`;
-  const frontendUrl = `${gustavFrontendInternalBase.replace(/\/+$/, "")}/internal/h5p/me`;
-  const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
-  const frontendCookieHeader = buildSessionCookieHeader(cookieHeader, frontendSessionCookieName);
-
-  const backendHeaders = {
-    "cache-control": "no-store",
-  };
-  if (sessionCookieHeader) backendHeaders.cookie = sessionCookieHeader;
-
-  if (sessionCookieHeader) {
-    const r = await fetchWithTimeout(backendUrl, { method: "GET", headers: backendHeaders }, { timeoutMs: upstreamFetchTimeoutMs });
-    if (r.status === 200) {
-      const payload = await r.json();
-      return { ok: true, payload };
-    }
-    if (!frontendCookieHeader || r.status !== 401) {
-      return { ok: false, status: r.status };
-    }
-  }
-
-  if (!frontendCookieHeader) {
-    return { ok: false, status: 401 };
-  }
-
-  const frontendHeaders = {
-    "cache-control": "no-store",
-    cookie: frontendCookieHeader,
-  };
-  const r = await fetchWithTimeout(frontendUrl, { method: "GET", headers: frontendHeaders }, { timeoutMs: upstreamFetchTimeoutMs });
-  if (r.status !== 200) {
-    return { ok: false, status: r.status };
-  }
-  const payload = await r.json();
-  return { ok: true, payload };
-}
-
-async function checkLearningH5PContentAccess(courseId, contentId, cookieHeader) {
-  const backendBase = gustavWebInternalBase.replace(/\/+$/, "");
-  const frontendBase = gustavFrontendInternalBase.replace(/\/+$/, "");
-  const url = `${backendBase}/api/learning/courses/${encodeURIComponent(courseId)}/h5p/contents/${encodeURIComponent(contentId)}/access`;
-  const frontendUrl =
-    `${frontendBase}/internal/h5p/access?course_id=${encodeURIComponent(courseId)}&content_id=${encodeURIComponent(contentId)}`;
-  const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
-  const frontendCookieHeader = buildSessionCookieHeader(cookieHeader, frontendSessionCookieName);
-  const headers = {
-    "cache-control": "no-store",
-  };
-  if (sessionCookieHeader) headers.cookie = sessionCookieHeader;
-  try {
-    if (sessionCookieHeader) {
-      const r = await fetchWithTimeout(url, { method: "GET", headers }, { timeoutMs: upstreamFetchTimeoutMs });
-      if (r.status === 204) {
-        return { ok: true, status: 204 };
-      }
-      if (!frontendCookieHeader || r.status !== 401) {
-        return { ok: false, status: r.status };
-      }
-    }
-
-    if (!frontendCookieHeader) {
-      return { ok: false, status: 401 };
-    }
-
-    const frontendHeaders = {
-      "cache-control": "no-store",
-      cookie: frontendCookieHeader,
-    };
-    const r = await fetchWithTimeout(
-      frontendUrl,
-      { method: "GET", headers: frontendHeaders },
-      { timeoutMs: upstreamFetchTimeoutMs },
-    );
-    if (r.status === 204) {
-      return { ok: true, status: 204 };
-    }
-    return { ok: false, status: r.status };
-  } catch {
-    // Upstream network errors: fail-closed in the caller (student context).
-    return { ok: false, status: 503 };
-  }
-}
-
 async function requireAuth(req, res, next) {
   if (authenticateInternalTeacher(req, h5pInternalSharedSecret)) {
     next();
@@ -366,7 +290,7 @@ async function requireAuth(req, res, next) {
   if (cached) authCache.delete(authCacheKey);
 
   try {
-    const me = await fetchGustavMe(cookieHeader);
+    const me = await fetchGustavMe(cookieHeader, authForwardingOptions);
     if (!me.ok) {
       if (me.status === 401) {
         sendJson(res, 401, { error: "unauthenticated" });
@@ -1011,7 +935,7 @@ async function main() {
       }
 
       if (allowed === null) {
-        const checked = await checkLearningH5PContentAccess(courseId, contentId, cookieHeader);
+        const checked = await checkLearningH5PContentAccess(courseId, contentId, cookieHeader, authForwardingOptions);
         if (checked.ok) {
           allowed = true;
           h5pContentAccessCache.delete(cacheKey);

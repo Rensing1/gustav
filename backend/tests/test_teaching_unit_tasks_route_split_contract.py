@@ -49,22 +49,25 @@ def test_unit_task_routes_are_owned_by_dedicated_router_module() -> None:
             assert f"@teaching_router.{method}(\"{path}\"" not in teaching_source
 
 
-def test_unit_task_router_wrappers_delegate_to_teaching_module() -> None:
-    """Wrapper functions should delegate to the existing teaching handlers."""
+def test_unit_task_router_owns_handlers_without_teaching_delegation() -> None:
+    """Task handlers should not keep the large Teaching adapter as implementation."""
 
     tasks_source = TASKS_SOURCE.read_text(encoding="utf-8")
-    expected_delegations = {
-        "list_section_tasks": "teaching_routes.list_section_tasks(",
-        "create_section_task": "teaching_routes.create_section_task(",
-        "update_section_task": "teaching_routes.update_section_task(",
-        "delete_section_task": "teaching_routes.delete_section_task(",
-        "reorder_section_tasks": "teaching_routes.reorder_section_tasks(",
-        "create_module_task": "teaching_routes.create_module_task(",
-        "update_module_task": "teaching_routes.update_module_task(",
-        "delete_module_task": "teaching_routes.delete_module_task(",
-        "reorder_module_tasks": "teaching_routes.reorder_module_tasks(",
-    }
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
+    handler_names = (
+        "list_section_tasks",
+        "create_section_task",
+        "update_section_task",
+        "delete_section_task",
+        "reorder_section_tasks",
+        "create_module_task",
+        "update_module_task",
+        "delete_module_task",
+        "reorder_module_tasks",
+    )
 
-    for fn_name, marker in expected_delegations.items():
+    assert "from backend.web.routes import teaching as teaching_routes" not in tasks_source
+    for fn_name in handler_names:
         assert f"def {fn_name}(" in tasks_source
-        assert marker in tasks_source
+        assert f"teaching_routes.{fn_name}(" not in tasks_source
+        assert f"async def {fn_name}(" not in teaching_source

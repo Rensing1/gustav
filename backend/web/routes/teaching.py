@@ -25,7 +25,7 @@ import os
 import re
 import sys as _sys
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 import asyncio
 
 from fastapi import APIRouter, Request
@@ -52,13 +52,11 @@ from backend.web.routes.teaching_serialization import (
     _serialize_material,
     _serialize_module,
     _serialize_section,
-    _serialize_task,
     _serialize_unit_graph_edge,
     _serialize_unit_module,
     _serialize_unit_phase_public,
 )
 from backend.web.routes.teaching_task_services import (
-    _get_tasks_service,
     configure_task_service_repo_provider,
 )
 from backend.web.routes import teaching_authoring, teaching_guards
@@ -80,9 +78,6 @@ from backend.web.routes.teaching_payloads import (
     MaterialUpdatePayload,
     MaterialUploadIntentPayload,
     ModuleSectionVisibilityPayload,
-    TaskCreatePayload,
-    TaskReorderPayload,
-    TaskUpdatePayload,
     UnitModuleCreatePayload,
     UnitModuleEdgePayload,
     UnitModuleReorderPayload,
@@ -154,7 +149,11 @@ _Repo = InMemoryTeachingRepo
 
 UnitCreatePayload = teaching_payloads.UnitCreatePayload
 UnitUpdatePayload = teaching_payloads.UnitUpdatePayload
+TaskCreatePayload = teaching_payloads.TaskCreatePayload
+TaskUpdatePayload = teaching_payloads.TaskUpdatePayload
+TaskReorderPayload = teaching_payloads.TaskReorderPayload
 _serialize_unit = teaching_serialization._serialize_unit
+_serialize_task = teaching_serialization._serialize_task
 
 
 # Try to use DB-backed repo when available; fallback to in-memory for dev/tests
@@ -1301,304 +1300,7 @@ async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: s
 
 # Section handlers live in backend.web.routes.teaching_unit_sections.
 
-async def list_section_tasks(request: Request, unit_id: str, section_id: str):
-    """List tasks of a section for the authoring teacher.
-
-    Cache policy: private, no-store (teacher-scoped data must not be cached).
-    """
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    try:
-        items = _get_tasks_service().list_tasks(unit_id, section_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    return _json_private([_serialize_task(t) for t in items], status_code=200)
-
-
-async def create_section_task(request: Request, unit_id: str, section_id: str, payload: TaskCreatePayload):
-    """Create a task within a section (author only)."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    try:
-        task = _get_tasks_service().create_task(
-            unit_id,
-            section_id,
-            sub,
-            instruction_md=payload.instruction_md,
-            criteria=payload.criteria,
-            teacher_context_md=payload.teacher_context_md,
-            due_at=payload.due_at,
-            max_attempts=payload.max_attempts,
-            h5p=payload.h5p,
-            visual=payload.visual,
-            scratch=payload.scratch,
-            calliope=payload.calliope,
-            filius=payload.filius,
-        )
-    except LookupError:
-        return _private_error({"error": "not_found"}, status_code=404)
-    except ValueError as exc:
-        detail = str(exc) or "invalid_input"
-        if detail not in {
-            "invalid_instruction_md",
-            "invalid_criteria",
-            "invalid_due_at",
-            "invalid_max_attempts",
-            "invalid_teacher_context_md",
-            "invalid_h5p_config",
-            "invalid_visual_config",
-            "invalid_scratch_config",
-            "invalid_calliope_config",
-            "invalid_filius_config",
-            "invalid_task_kind_config",
-        }:
-            detail = "invalid_input"
-        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
-    except PermissionError:
-        return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private(_serialize_task(task), status_code=201)
-
-
-async def update_section_task(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    task_id: str,
-    payload: TaskUpdatePayload,
-):
-    """Update task fields for an author's section."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(task_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    raw_updates = payload.model_dump(mode="python", exclude_unset=True)
-    if not raw_updates:
-        return _private_error({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
-    kwargs: Dict[str, object] = {}
-    if "instruction_md" in raw_updates:
-        kwargs["instruction_md"] = raw_updates["instruction_md"]
-    if "criteria" in raw_updates:
-        kwargs["criteria"] = raw_updates["criteria"]
-    if "teacher_context_md" in raw_updates:
-        kwargs["teacher_context_md"] = raw_updates["teacher_context_md"]
-    if "due_at" in raw_updates:
-        kwargs["due_at"] = raw_updates["due_at"]
-    if "max_attempts" in raw_updates:
-        kwargs["max_attempts"] = raw_updates["max_attempts"]
-    if "h5p" in raw_updates:
-        kwargs["h5p"] = raw_updates["h5p"]
-    if "visual" in raw_updates:
-        kwargs["visual"] = raw_updates["visual"]
-    if "scratch" in raw_updates:
-        kwargs["scratch"] = raw_updates["scratch"]
-    if "calliope" in raw_updates:
-        kwargs["calliope"] = raw_updates["calliope"]
-    if "filius" in raw_updates:
-        kwargs["filius"] = raw_updates["filius"]
-    try:
-        updated = _get_tasks_service().update_task(
-            unit_id,
-            section_id,
-            task_id,
-            sub,
-            **kwargs,
-        )
-    except ValueError as exc:
-        detail = str(exc) or "invalid_input"
-        if detail not in {
-            "invalid_instruction_md",
-            "invalid_criteria",
-            "invalid_due_at",
-            "invalid_max_attempts",
-            "invalid_teacher_context_md",
-            "invalid_h5p_config",
-            "invalid_visual_config",
-            "invalid_scratch_config",
-            "invalid_calliope_config",
-            "invalid_filius_config",
-            "invalid_task_kind_config",
-        }:
-            detail = "invalid_input"
-        return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
-    except LookupError:
-        return _private_error({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private(_serialize_task(updated), status_code=200)
-
-
-async def delete_section_task(request: Request, unit_id: str, section_id: str, task_id: str):
-    """Delete a task and resequence positions."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(task_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    try:
-        _get_tasks_service().delete_task(unit_id, section_id, task_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
-
-
-async def create_module_task(request: Request, unit_id: str, module_id: str, payload: TaskCreatePayload):
-    """Create a task in a module-backed section with write scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await create_section_task(request, unit_id, str(section_id), payload)
-
-
-async def update_module_task(
-    request: Request,
-    unit_id: str,
-    module_id: str,
-    task_id: str,
-    payload: TaskUpdatePayload,
-):
-    """Update a task in a module-backed section with write scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await update_section_task(request, unit_id, str(section_id), task_id, payload)
-
-
-async def delete_module_task(request: Request, unit_id: str, module_id: str, task_id: str):
-    """Delete a task in a module-backed section with delete scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await delete_section_task(request, unit_id, str(section_id), task_id)
-
-
-async def reorder_module_tasks(request: Request, unit_id: str, module_id: str, payload: TaskReorderPayload):
-    """Reorder tasks in a module-backed section with write scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await reorder_section_tasks(request, unit_id, str(section_id), payload)
-
-
-async def reorder_section_tasks(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    payload: TaskReorderPayload,
-):
-    """Reorder tasks (author only)."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    ids = payload.task_ids
-    if not isinstance(ids, list):
-        return JSONResponse({"error": "bad_request", "detail": "task_ids_must_be_array"}, status_code=400)
-    if len(ids) == 0:
-        return JSONResponse({"error": "bad_request", "detail": "empty_task_ids"}, status_code=400)
-    if len(ids) != len(set(ids)):
-        return JSONResponse({"error": "bad_request", "detail": "duplicate_task_ids"}, status_code=400)
-    if any(not _is_uuid_like(tid) for tid in ids):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_task_ids"}, status_code=400)
-    try:
-        _get_tasks_service().list_tasks(unit_id, section_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    try:
-        ordered = _get_tasks_service().reorder_tasks(unit_id, section_id, sub, ids)
-    except ValueError as exc:
-        detail = str(exc) or "task_mismatch"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=[_serialize_task(t) for t in ordered], status_code=200)
-
+# Task handlers live in backend.web.routes.teaching_unit_tasks.
 
 async def list_section_materials(request: Request, unit_id: str, section_id: str):
     """

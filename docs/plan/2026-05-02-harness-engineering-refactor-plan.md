@@ -891,6 +891,7 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
   - Done in working tree: unused `backend.web.routes.teaching.teaching_router` has been removed from app wiring (`backend/web/main_router_wiring.py`) because all `/api/teaching` routes are now explicitly registered in split routers.
   - Done in working tree: removed the remaining legacy `routes.teaching` module alias compatibility handling from `backend/web/routes/teaching.py`; route-storage/reset tests now use `backend.web.routes.teaching` consistently.
   - Done in working tree: course-owner guard ownership and invocation moved out of `backend/web/routes/teaching.py`; all teaching and app call-sites now use `backend/web/routes/teaching_guards._guard_course_owner`, and guard monkeypatch points in affected tests were moved accordingly.
+  - Done in working tree: reload-heavy route tests are stable again after `backend/web/app_composition.py` started tracking live app shells and the Learning/Teaching route setters synchronize repo/storage state across those shells; the backend failfast suite reports 1917 passed and 35 skipped tests.
   - Open follow-up: continue additional Teaching use-case/service extraction in `backend/web/routes/teaching.py` and remove route/compatibility aliases only where they are no longer needed.
 
 #### PR 18: Separate Serialization and Response Models

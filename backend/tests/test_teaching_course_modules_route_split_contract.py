@@ -48,20 +48,23 @@ def test_course_module_routes_are_owned_by_dedicated_router_module() -> None:
         assert path not in teaching_source
 
 
-def test_course_module_router_wrappers_delegate_to_teaching_module() -> None:
-    """Wrapper functions should delegate to existing teaching handlers."""
+def test_course_module_router_owns_handlers_without_teaching_delegation() -> None:
+    """Course-module handlers should not keep the large Teaching adapter as implementation."""
 
     course_module_source = COURSE_MODULES_SOURCE.read_text(encoding="utf-8")
-    expected_delegations = {
-        "list_course_modules": "teaching_routes.list_course_modules(",
-        "create_course_module": "teaching_routes.create_course_module(",
-        "reorder_course_modules": "teaching_routes.reorder_course_modules(",
-        "delete_course_module": "teaching_routes.delete_course_module(",
-        "update_module_section_visibility": "teaching_routes.update_module_section_visibility(",
-        "list_module_section_releases": "teaching_routes.list_module_section_releases(",
-        "list_module_sections_with_visibility": "teaching_routes.list_module_sections_with_visibility(",
-    }
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
+    handler_names = (
+        "list_course_modules",
+        "create_course_module",
+        "reorder_course_modules",
+        "delete_course_module",
+        "update_module_section_visibility",
+        "list_module_section_releases",
+        "list_module_sections_with_visibility",
+    )
 
-    for fn_name, marker in expected_delegations.items():
+    assert "from backend.web.routes import teaching as teaching_routes" not in course_module_source
+    for fn_name in handler_names:
         assert f"def {fn_name}(" in course_module_source
-        assert marker in course_module_source
+        assert f"teaching_routes.{fn_name}(" not in course_module_source
+        assert f"async def {fn_name}(" not in teaching_source

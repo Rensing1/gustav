@@ -26,6 +26,7 @@ from backend.teaching import repo_member_queries as _repo_member_queries
 from backend.teaching import repo_section_queries as _repo_section_queries
 from backend.teaching import repo_unit_queries as _repo_unit_queries
 from backend.teaching import repo_course_module_queries as _repo_course_module_queries
+from backend.teaching import repo_concern_box_queries as _repo_concern_box_queries
 from backend.teaching import repo_task_queries as _repo_task_queries
 from backend.teaching import repo_unit_module_queries as _repo_unit_module_queries
 
@@ -1406,102 +1407,38 @@ class DBTeachingRepo:
         message_text: str,
         anonymous: bool,
     ) -> dict[str, Any] | None:
-        text = (message_text or "").strip()
-        if not text:
-            raise ValueError("invalid_message_text")
-        try:
-            with psycopg.connect(self._dsn) as conn:
-                with conn.cursor() as cur:
-                    cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
-                    cur.execute(
-                        """
-                        select id::text,
-                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                          from public.create_concern_box_entry(%s, %s::uuid, %s, %s)
-                        """,
-                        (student_sub, course_id, text, bool(anonymous)),
-                    )
-                    row = cur.fetchone()
-                    conn.commit()
-        except Exception:
-            return None
-        if row is None:
-            return None
-        return {"id": row[0], "created_at": row[1]}
+        return _repo_concern_box_queries.create_concern_box_entry(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            student_sub=student_sub,
+            message_text=message_text,
+            anonymous=anonymous,
+        )
 
     def list_concern_box_entries_for_teacher(self, owner_sub: str, scope: str) -> list[dict[str, Any]]:
-        archived = scope == "archived"
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-                cur.execute(
-                    """
-                    select e.id::text,
-                           e.course_id::text,
-                           c.title,
-                           e.student_sub,
-                           e.message_text,
-                           e.anonymous,
-                           to_char(e.created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                           case
-                             when e.archived_at is null then null
-                             else to_char(e.archived_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                           end
-                      from public.concern_box_entries e
-                      join public.courses c on c.id = e.course_id
-                     where (e.archived_at is null) = %s
-                     order by e.created_at desc, e.id desc
-                    """,
-                    (not archived,),
-                )
-                rows = cur.fetchall() or []
-        return [
-            {
-                "id": row[0],
-                "course_id": row[1],
-                "course_title": row[2],
-                "student_sub": row[3],
-                "message_text": row[4],
-                "anonymous": bool(row[5]),
-                "created_at": row[6],
-                "archived_at": row[7],
-            }
-            for row in rows
-        ]
+        return _repo_concern_box_queries.list_concern_box_entries_for_teacher(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            owner_sub=owner_sub,
+            scope=scope,
+        )
 
     def archive_concern_box_entry_owned(self, entry_id: str, owner_sub: str) -> bool:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-                cur.execute(
-                    """
-                    update public.concern_box_entries
-                       set archived_at = now(),
-                           archived_by = %s
-                     where id = %s::uuid
-                    """,
-                    (owner_sub, entry_id),
-                )
-                updated = (cur.rowcount or 0) == 1
-                conn.commit()
-        return updated
+        return _repo_concern_box_queries.archive_concern_box_entry_owned(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            entry_id=entry_id,
+            owner_sub=owner_sub,
+        )
 
     def restore_concern_box_entry_owned(self, entry_id: str, owner_sub: str) -> bool:
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-                cur.execute(
-                    """
-                    update public.concern_box_entries
-                       set archived_at = null,
-                           archived_by = null
-                     where id = %s::uuid
-                    """,
-                    (entry_id,),
-                )
-                updated = (cur.rowcount or 0) == 1
-                conn.commit()
-        return updated
+        return _repo_concern_box_queries.restore_concern_box_entry_owned(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            entry_id=entry_id,
+            owner_sub=owner_sub,
+        )
 
     def update_course(self, course_id: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Optional[dict]:
         # Build dynamic update only for provided fields

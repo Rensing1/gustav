@@ -19,7 +19,7 @@ from . import pdf_renderer as _pdf
 if TYPE_CHECKING:  # only for type checkers; avoid import-time coupling in tests
     from .pdf_renderer import RenderMeta, RenderPage  # pragma: no cover
 
-from .pdf_renderer import RenderMeta, RenderPage, render_pdf_to_images
+from .pdf_renderer import RenderMeta, RenderPage
 from .image_preprocess import preprocess as _preprocess
 
 

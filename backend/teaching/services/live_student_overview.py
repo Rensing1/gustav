@@ -10,7 +10,7 @@ Why:
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence
+from typing import Any, Dict, List, Protocol, Sequence
 from uuid import UUID
 
 

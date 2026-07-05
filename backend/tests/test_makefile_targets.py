@@ -5,6 +5,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = PROJECT_ROOT / "Makefile"
 FRONTEND_VITEST_CONFIG = PROJECT_ROOT / "frontend" / "vitest.config.ts"
+PYPROJECT = PROJECT_ROOT / "pyproject.toml"
+BACKEND_REQUIREMENTS = PROJECT_ROOT / "backend/web/requirements.txt"
 
 
 def _target_body(target: str) -> str:
@@ -161,6 +163,39 @@ def test_quality_scorecard_runs_docker_image_smoke_by_default() -> None:
     body = _target_body("quality-scorecard")
 
     assert "--run-docker-check" in body
+
+
+def test_backend_lint_target_is_explicit_but_not_yet_part_of_verify() -> None:
+    """Closeout v1.1 adds a backend lint entry point without widening verify yet."""
+
+    help_text = MAKEFILE.read_text(encoding="utf-8")
+    lint_body = _target_body("lint-backend")
+    verify_body = _target_body("verify")
+
+    assert "lint-backend" in help_text
+    assert "backend/web/requirements.txt" in lint_body
+    assert "python -m ruff check backend --select F" in lint_body
+    assert "--exclude 'backend/tests/*'" in lint_body
+    assert "--exclude 'backend/tests_e2e/*'" in lint_body
+    assert "python -m ruff format --check backend" not in lint_body
+    assert "$(MAKE) lint-backend" not in verify_body
+
+
+def test_backend_lint_target_uses_central_ruff_configuration() -> None:
+    """Ruff should be configured centrally so agents do not invent local style."""
+
+    config = PYPROJECT.read_text(encoding="utf-8")
+
+    assert "[tool.ruff]" in config
+    assert 'target-version = "py311"' in config
+    assert 'line-length = 100' in config
+    assert "[tool.ruff.lint]" in config
+    assert '"E"' in config
+    assert '"F"' in config
+    assert '"I"' in config
+
+    backend_requirements = BACKEND_REQUIREMENTS.read_text(encoding="utf-8")
+    assert "ruff" in backend_requirements
 
 
 def test_frontend_vitest_uses_numeric_loopback_host() -> None:

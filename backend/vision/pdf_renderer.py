@@ -17,7 +17,7 @@ Note:
 """
 
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import List
 
 
 @dataclass

@@ -25,6 +25,24 @@ Geplanter Inhalt:
 Initialer lokaler Befehl:
 - `make test-fast`
 
+### backend-lint
+Zweck: einfache Python-Qualitätsprobleme früh sichtbar machen, ohne den Closeout-Refactor durch eine unbereinigte Altlastenflut zu blockieren.
+
+Geplanter Inhalt:
+- Ruff-Check für Pyflakes-Fehler im produktiven Backend-Code.
+- Ruff-Format- und Importordnungs-Checks gegen die zentrale `pyproject.toml`, sobald die Alt-Baseline bereinigt ist.
+- Keine automatische Massenformatierung zusammen mit fachlichen Refactors.
+- Type-Checking wird separat bewertet und erst dann hart geschaltet, wenn eine realistische Baseline ohne große False-Positive-Last existiert.
+
+Initialer lokaler Befehl:
+- `make lint-backend`
+
+Aktueller Status:
+- `make lint-backend` ist als expliziter Target vorhanden.
+- Das Profil prüft zunächst nur Pyflakes (`F`) für produktiven Backend-Code und nimmt `backend/tests/*` sowie `backend/tests_e2e/*` aus.
+- Das Profil ist bewusst nicht Teil von `make verify`, bis Ruff-Format, Importordnung, Tests und Type-Checking als realistische Baseline bereinigt sind.
+- Wenn Closeout v1.1 ohne hartes Lint- oder Type-Gate abgeschlossen wird, muss der Restzustand in `docs/harness/TECH_DEBT.md` mit Owner, Review date, Risiko und Exit criterion dokumentiert werden.
+
 ### db-security
 Zweck: Datenbank-, RLS-, Authz-, CSRF- und Migration-Sicherheit sichtbar machen.
 

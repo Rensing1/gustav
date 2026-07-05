@@ -12,7 +12,7 @@ Future work:
   cases are extracted.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional
 from enum import Enum
 from uuid import UUID

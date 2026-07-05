@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import logging
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass, asdict, is_dataclass
@@ -27,7 +26,7 @@ import os
 import re
 import sys as _sys
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 import asyncio
 from uuid import uuid4, UUID
 
@@ -62,7 +61,6 @@ from backend.web.routes.teaching_serialization import (
     _serialize_unit,
     _serialize_unit_graph_edge,
     _serialize_unit_module,
-    _serialize_unit_phase,
     _serialize_unit_phase_public,
 )
 from backend.web.routes.teaching_task_services import (

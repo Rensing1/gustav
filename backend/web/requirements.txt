@@ -28,3 +28,6 @@ pypdfium2==4.30.0
 # Markdown rendering (tables) and sanitizing
 markdown-it-py==3.0.0
 bleach==6.1.0
+
+# Python lint/format gate for the harness closeout.
+ruff>=0.8,<1

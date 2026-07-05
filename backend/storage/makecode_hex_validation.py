@@ -19,7 +19,6 @@ from dataclasses import dataclass
 import json
 import lzma
 import os
-import struct
 from typing import Any
 
 from backend.storage.mime_types import MAKECODE_HEX_MIME

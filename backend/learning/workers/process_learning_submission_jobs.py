@@ -21,7 +21,7 @@ import re
 from typing import Optional, Sequence
 import inspect
 from dataclasses import dataclass
-from uuid import UUID, uuid4
+from uuid import uuid4
 from importlib import import_module
 from concurrent.futures import ThreadPoolExecutor
 

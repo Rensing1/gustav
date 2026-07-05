@@ -12,7 +12,6 @@ import yaml
 from backend.tools.openapi_contract_check import (
     Operation,
     classify_surface,
-    normalize_path,
     openapi_operations,
     runtime_operations,
 )

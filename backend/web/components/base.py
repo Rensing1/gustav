@@ -6,7 +6,7 @@ Using pure Python for HTML generation ensures type safety and better
 IDE support compared to template engines.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, Any
 import html
 
 

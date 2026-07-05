@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from typing import Dict
 from backend.identity_access.domain import ALLOWED_ROLES
 from backend.web.security.guards import has_any_role
 

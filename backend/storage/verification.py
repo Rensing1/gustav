@@ -12,7 +12,6 @@ import time
 from dataclasses import dataclass
 from hashlib import sha256 as _sha256
 from pathlib import Path
-from typing import Protocol
 
 from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
 from backend.storage.config import get_learning_max_upload_bytes
@@ -175,7 +174,6 @@ def verify_storage_object_integrity(
     # be configured and should be authoritative when present.
     require = config.require_remote
 
-    remote_checked = False
     last_reason = "missing_object"
     head_seen = False
     if bucket and not isinstance(adapter, NullStorageAdapter):
@@ -236,7 +234,6 @@ def verify_storage_object_integrity(
 
             if attempt < attempts - 1:
                 time.sleep(config.retry_sleep_seconds)
-        remote_checked = True
 
     if last_reason in _MISMATCH_REASONS:
         # Once a mismatch is detected (remote HEAD returned conflicting size/hash),

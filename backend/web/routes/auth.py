@@ -13,7 +13,7 @@ Notes:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, Response, HTMLResponse, JSONResponse
 from urllib.parse import urlencode
 import os

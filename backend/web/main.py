@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from backend.identity_access.tokens import BearerTokenVerificationError, IDTokenVerificationError, verify_bearer_token, verify_id_token
 import sys as _sys
 
-from backend.web.auth_session import SESSION_COOKIE_NAME
+from backend.web.auth_session import SESSION_COOKIE_NAME  # noqa: F401
 from backend.web import auth_runtime
 from backend.web.app_composition import (
     bootstrap_runtime_environment,

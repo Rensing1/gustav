@@ -128,14 +128,12 @@ def ensure_buckets(base_url: str, key: str, buckets: Iterable[str]) -> bool:
     """
     existing = _list_buckets(base_url, key)
     names = {str(it.get("name") or it.get("id") or "") for it in existing}
-    did = False
     for name in set(buckets):
         if not name:
             continue
         if name in names:
             continue
         _create_bucket(base_url, key, name, public=False)
-        did = True
     # Verify existence after creation attempts and log if still missing.
     try:
         final = _list_buckets(base_url, key)

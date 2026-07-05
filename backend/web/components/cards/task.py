@@ -5,8 +5,8 @@ Encapsulates the visual structure for learning tasks, combining
 instructions, submission history, feedback messages, and the active form.
 """
 
-from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Iterable, List, Optional, Sequence
 
 from ..base import Component
 

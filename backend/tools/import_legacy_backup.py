@@ -13,7 +13,6 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -644,7 +643,6 @@ def transfer_course_memberships(dsn: str, legacy_schema: str, dry_run: bool) -> 
         conn.autocommit = True
         identity_map = _load_existing_user_map(conn)
         missing_students: list[str] = []
-        missing_courses: list[str] = []
         inserted = 0
         skipped = 0
 
@@ -1482,7 +1480,6 @@ def transfer_module_section_releases(dsn: str, legacy_schema: str, dry_run: bool
     ensure_psycopg()
     with psycopg.connect(dsn) as conn:  # type: ignore[call-arg]
         conn.autocommit = True
-        identity_map = _load_existing_user_map(conn)
         with conn.cursor() as cur:  # type: ignore[attr-defined]
             cur.execute("select id::text, teacher_id from public.courses")
             course_owner_map = {course_id: teacher_id for course_id, teacher_id in cur.fetchall()}

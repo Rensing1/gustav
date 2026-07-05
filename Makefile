@@ -20,6 +20,7 @@ help:
 	@echo "  learning-worker-db-login-user - Create/alter worker DB login (IN ROLE gustav_worker, local only)"
 	@echo "  test               - Run test suite (unit/integration)"
 	@echo "  test-fast          - Run fast in-process contract/harness checks"
+	@echo "  lint-backend       - Run Python lint and format checks via Ruff"
 	@echo "  test-db-security   - Run DB/security-focused checks"
 	@echo "  test-upload-llm-boundaries - Run upload and LLM boundary checks"
 	@echo "  test-docker-image-smoke - Build and smoke-test web image without bind mounts"
@@ -127,6 +128,11 @@ test-fast:
 	  backend/tests/test_harness_minimum_contract.py \
 	  backend/tests/test_harness_test_strategy_docs_contract.py \
 	  backend/tests/test_makefile_targets.py
+
+.PHONY: lint-backend
+lint-backend:
+	@. ./.venv/bin/activate && python -c "import ruff" >/dev/null 2>&1 || { echo "Ruff is not installed. Install Python dependencies with: ./.venv/bin/python -m pip install -r backend/web/requirements.txt" >&2; exit 1; }
+	. ./.venv/bin/activate && python -m ruff check backend --select F --exclude 'backend/tests/*' --exclude 'backend/tests_e2e/*'
 
 .PHONY: test-db-security
 test-db-security:

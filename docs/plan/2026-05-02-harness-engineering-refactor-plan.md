@@ -3,7 +3,7 @@
 ## Status
 - Date: 2026-05-02
 - Last updated: 2026-07-05
-- Status: Completed v1.0; the harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, quality scorecard, public-repo safety, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, keeps `TECH_DEBT.md` at zero open entries, and marks the harness documents as active.
+- Status: Completed v1.0; Closeout v1.1 open. The harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, quality scorecard, public-repo safety, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, and marks the harness documents as active. The refactor is not fully closed until Closeout v1.1 either modularizes the remaining large source hotspots or records deliberately accepted residual debt with owner, review date, risk, and exit criterion in `docs/harness/TECH_DEBT.md`.
 - Time horizon: 3 months
 - Strategy: harness first, then refactor in small PRs
 - Gate strategy: security, public-repo hygiene, import boundaries, architecture boundaries, route map, API contract, DB inventory, Docker image parity, frontend/H5P, and full verification run as hard gates; `make harness-signals` remains advisory telemetry.
@@ -970,6 +970,221 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - Done in working tree: added `make quality-scorecard` target and documented it in `docs/harness/QUALITY_GATES.md` and `docs/harness/INDEX.md`.
 - Done in working tree: generated baseline artifacts `docs/harness/QUALITY_SCORECARD.md` and `docs/harness/QUALITY_SCORECARD_HISTORY.json`.
 - Done in working tree: `make quality-scorecard` runs `docker-image-smoke` by default and records pass/fail status in `docs/harness/QUALITY_SCORECARD.md` and `docs/harness/QUALITY_SCORECARD_HISTORY.json`.
+
+### Closeout v1.1: Repo wirklich sauber und wartbar machen
+Dieser Abschnitt ist der verbindliche Abschlussauftrag für den Befehl `/goal Setz bitte den Plan docs/plan/2026-05-02-harness-engineering-refactor-plan.md vollständig um.` Er soll verhindern, dass der Harness-Refactor nur formal grün ist, während die größten Wartbarkeitsrisiken als Monolithen weiterbestehen.
+
+Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen Produktfeatures gebaut, keine API-Semantik verändert und keine großen Rewrite-Aktionen gestartet. Jede Änderung beginnt testgetrieben mit einem Charakterisierungs-, Contract- oder gezielten Regressionstest. Eine Extraktion gilt nur als erledigt, wenn produktive Logik aus dem Hotspot in ein fokussiertes Modul mit klarer Verantwortung verschoben wurde. Reine Wrapper-Router, die nur an den alten Hotspot delegieren, zählen als Übergang, aber nicht als Abschluss.
+
+#### C1: Teaching-Web-Adapter wirklich modularisieren
+- Problem: `backend/web/routes/teaching.py` ist mit mehr als 6000 Zeilen weiterhin der größte echte Quellcode-Hotspot. Der bisherige Split hat die Route-Registrierung verbessert, aber mehrere neue Router delegieren noch direkt zurück in `teaching.py`.
+- Ziel: `teaching.py` wird von einem Sammelpunkt für API-Routen, In-Memory-Repo, Payload-Modelle, Storage-Helfer, Live-Dashboard, Materialien, Aufgaben, Kursmodule und Unit-Graph-Logik zu einer kleinen Fassade oder einem schrittweise abbaubaren Kompatibilitätsmodul.
+- Vorgehen:
+  - Zuerst die vorhandenen route-split-contract-Tests lesen und je Teilbereich einen fehlenden Charakterisierungstest ergänzen, bevor Logik verschoben wird.
+  - Course-, Unit-, Section-, Material-, Task-, Module- und Live-Flächen nacheinander bearbeiten; nie mehrere fachliche Flächen in einem Commit mischen.
+  - Pydantic-Payload-Modelle und reine Validierungshelfer in fachlich passende Module verschieben, damit Router-Module nicht aus `teaching.py` importieren müssen.
+  - Repo-Provider, Storage-Adapter und Guard-Funktionen über explizite kleine Provider-Module führen, nicht über mutable Modulglobals in `teaching.py`.
+  - Bestehende direkte Delegationsrouter wie `teaching_courses.py`, `teaching_unit_materials.py` und `teaching_live.py` so umbauen, dass sie die jeweilige Logik selbst oder über fokussierte Service-/Adaptermodule besitzen.
+- Akzeptanz:
+  - `backend/web/routes/teaching.py` ist deutlich kleiner und enthält keine fachlich gemischten Route-Handler-Blöcke mehr für alle Teaching-Flächen.
+  - Neue oder angepasste Tests belegen, dass die ausgelagerten Module die bestehenden Response-Shapes, Cache-Header, Authz-Fehler und Storage-Fehlerpfade unverändert halten.
+  - `make test-route-map`, `make test-api-contract-baseline`, `make test-architecture-boundaries` und die betroffenen Teaching-Tests sind grün.
+
+#### C2: Teaching-Repository nach Verantwortlichkeiten trennen
+- Problem: `backend/teaching/repo_db.py` ist mit knapp 5000 Zeilen ein zweiter Teaching-Monolith. Er mischt Schreibfälle, Read-Models, Live-/Dashboard-Abfragen, Material-/Task-Zugriffe und Hilfsserialisierung.
+- Ziel: Das Teaching-Repository wird in kleine Module mit stabiler öffentlicher Fassade zerlegt. Bestehende RLS- und Migrationstests bleiben maßgeblich.
+- Vorgehen:
+  - Vor jedem Split einen Repo-Contract- oder DB/RLS-Test identifizieren, der den betroffenen Query-Pfad schützt.
+  - Live-/Dashboard-Read-Models zuerst auslagern, weil sie besonders groß und fehleranfällig sind.
+  - Material-/Task-Zugriffe danach auslagern, weil sie eng mit Storage- und Teaching-Route-Splits verbunden sind.
+  - Schreibfälle erst verschieben, wenn die Read-Model-Splits stabil sind.
+  - Transaktions- und Cursor-Grenzen über bestehende DB-Helfer führen; keine neue direkte Route-DB-Verbindung einführen.
+- Akzeptanz:
+  - `backend/teaching/repo_db.py` ist eine Fassade oder klarer Aggregator statt ein Query-Sammelmodul.
+  - `make test-db-security`, `make test-db-inventory` und betroffene Teaching-Repo-/Migrationstests sind grün.
+
+#### C3: Learning-Web-Adapter splitten
+- Problem: `backend/web/routes/learning.py` ist mit knapp 3000 Zeilen ein großer Adapter, der Course/Unit-Reads, Upload-Intent, Upload-Proxy, Storage-Verifikation, Submissions und Material-Dateien bündelt.
+- Ziel: Learning-Routen werden nach fachlichen Oberflächen getrennt: Course/Unit-Read, Submission, Upload/Storage, Material/File und interne Upload-Helfer.
+- Vorgehen:
+  - Upload-/Storage-Logik zuerst bearbeiten, weil sie sicherheitskritisch ist und bereits viele Boundary-Tests hat.
+  - Submission-Create/Finalize/List danach trennen, weil dort Authz, CSRF, Idempotency und Worker-Anbindung zusammenlaufen.
+  - Material-/Datei-Download-Helfer in ein fokussiertes Modul verschieben und Download-Disposition, Cache-Header und Größenlimits testen.
+- Akzeptanz:
+  - `backend/web/routes/learning.py` enthält keine gemischten Upload-, Submission- und Material-Datei-Helfer mehr.
+  - Upload-, Submission-, H5P-Access-, Material-File- und CSRF-Tests bleiben grün.
+
+#### C4: Browser-BFF- und App-Routen trennen
+- Problem: `backend/web/routes/app.py` ist mit knapp 2500 Zeilen ein großer Browser-BFF-Hotspot.
+- Ziel: Session-Bootstrap, Session-Sync, Profil, View-Modelle und BFF-interne Hilfsfunktionen liegen in getrennten Modulen mit expliziten Provider-Abhängigkeiten.
+- Vorgehen:
+  - Session-Endpunkte zuerst isolieren, weil sie sicherheitsrelevant für Cookies, SameSite, Secure, HttpOnly und Cache-Control sind.
+  - Profil-Endpunkte danach isolieren, inklusive OIDC-/CLI-Provider-Abhängigkeiten.
+  - View-Model-Builder zuletzt trennen, damit reine Datenformung ohne FastAPI-Abhängigkeit testbar wird.
+- Akzeptanz:
+  - `backend/web/routes/app.py` ist nicht mehr Sammelpunkt für Session, Profil und View-Modelle.
+  - Session-, Profil-, BFF-, Auth- und Cache-Header-Tests bleiben grün.
+
+#### C5: Learning-Repository strukturieren
+- Problem: `backend/learning/repo_db.py` ist mit mehr als 2400 Zeilen groß genug, um Query-Gruppen und Schreibfälle schwer überprüfbar zu machen.
+- Ziel: Learning-DB-Zugriffe werden nach Submission-Jobs, Course/Unit-Reads, Materials und Worker-Schreibfällen getrennt, ohne die öffentliche Repo-Fassade abrupt zu brechen.
+- Vorgehen:
+  - Zuerst Read-Model- oder Query-Gruppen auslagern, die von Learning-Routen genutzt werden.
+  - Danach Worker-nahe Schreibfälle auslagern, wenn die Worker-Tests den Pfad abdecken.
+  - RLS-relevante Zugriffspfade bleiben durch DB/RLS-Tests geschützt.
+- Akzeptanz:
+  - `backend/learning/repo_db.py` wird kleiner und enthält eine klare Aggregations- oder Fassadenrolle.
+  - Learning-Worker-, Submission-, Material-, RLS- und Migrationstests bleiben grün.
+
+#### C6: CSS, Legacy-Static und Frontend-Hotspots klassifizieren
+- Problem: `frontend/src/lib/styles/app.css`, `frontend/src/lib/styles/design-system.css`, `backend/web/static/css/gustav.css` und große Legacy-JS-Dateien sind groß genug, um unklare aktive und retired UI-Regeln zu vermischen.
+- Ziel: Jede große Styling- oder Static-Datei hat einen Status: aktiv modularisiert, bewusst eingefroren, oder nach Legacy-Retirement entfernbar.
+- Vorgehen:
+  - Zuerst prüfen, welche `backend/web/static/*`-Assets noch von aktiven FastAPI- oder H5P-Flächen referenziert werden.
+  - Nicht mehr referenzierte Legacy-Assets nur mit Test oder Suchnachweis entfernen.
+  - Aktive Frontend-CSS-Regeln nach Design-System, Layout, Komponenten und Legacy-Kompatibilität trennen.
+  - Große Svelte-Routen weiter entlasten, indem Loader-/State-Normalisierung und View-Komposition in `frontend/src/lib/*`-Module wandern.
+- Akzeptanz:
+  - `docs/harness/HOTSPOTS.md` enthält für jede große CSS-/Static-/Svelte-Fläche einen aktuellen Status.
+  - `npm run check`, relevante Vitest-Tests und `make test-frontend-h5p` bleiben grün.
+
+#### C7: H5P-Sidecar weiter stabilisieren, aber nicht überoptimieren
+- Problem: `h5p-service/server.mjs` wurde bereits verkleinert, bleibt aber ein sichtbarer Hotspot.
+- Ziel: Weitere Extraktionen erfolgen nur dort, wo Route-Handler dadurch klarer und sicherer werden. H5P-Vendor-Dateien sind kein Refactor-Ziel.
+- Vorgehen:
+  - Keine Vendor-Dateien unter `h5p-service/vendor/` refactoren.
+  - Nur eigene Service-Logik aus `server.mjs` verschieben, wenn ein Node-Test das Verhalten schützt.
+  - Auth, CSP, Storage, Response und Forwarding bleiben in den bereits eingeführten `h5p-service/lib/*`-Modulen.
+- Akzeptanz:
+  - H5P-Node-Tests bleiben grün.
+  - `server.mjs` wächst nicht ohne Hotspot- oder Tech-Debt-Begründung.
+
+#### C8: Test-Harness und sehr große Tests entrümpeln
+- Problem: `backend/tests/conftest.py` enthält viele autouse-Fixtures, die globale Route- und Repo-Zustände reparieren. Einige sehr große Testdateien schützen wichtige Flächen, sind aber schwer zu lesen.
+- Ziel: Testisolation wird expliziter und verständlicher. Große Tests werden nur dort geteilt oder gebündelt, wo dadurch kein Sicherheits- oder Contract-Schutz verloren geht.
+- Vorgehen:
+  - `conftest.py` nur schrittweise verkleinern; jede entfernte autouse-Reparatur braucht einen gezielten Test, der die neue explizite Testoberfläche absichert.
+  - Große Security-, API- und DB-Tests nicht löschen, nur weil sie groß sind.
+  - Redundante dokumentnahe Harness-Tests auf strukturierte Zustände umstellen, statt Begriffe wie `follow-up` pauschal zu verbieten.
+- Akzeptanz:
+  - `conftest.py` ist kleiner oder seine verbliebenen globalen Reparaturen sind als bewusst akzeptierte Test-Harness-Schuld in `TECH_DEBT.md` dokumentiert.
+  - `make verify` bleibt grün.
+
+#### C9: Scorecard, Hotspots und Tech Debt ehrlich schließen
+- Problem: Der v1.0-Status meldet aktuell null offene Tech-Debt-Einträge, obwohl mehrere große Hotspots nur überwacht und noch nicht vollständig modularisiert sind.
+- Ziel: Der Abschlussstatus ist ehrlich: Entweder sind Hotspots bearbeitet oder bewusst akzeptiert.
+- Vorgehen:
+  - `docs/harness/HOTSPOTS.md` nach jedem Closeout-Schnitt aktualisieren.
+  - `make quality-scorecard` nach relevanten Hotspot-Änderungen laufen lassen.
+  - Für jeden verbleibenden echten Quellcode-Hotspot über ca. 1500 LOC entweder eine erledigte Modularisierung dokumentieren oder einen `TECH_DEBT.md`-Eintrag mit Risiko, Owner, Review date und Exit criterion anlegen.
+  - Generated, vendored und binäre Dateien nicht als Refactor-Hotspots behandeln. Dazu zählen insbesondere `frontend/build/*`, `h5p-service/vendor/*`, Lockfiles und Testfixtures wie PDF/JPG-Beispiele.
+- Akzeptanz:
+  - `TECH_DEBT.md`, `HOTSPOTS.md`, `QUALITY_SCORECARD.md` und dieser Plan widersprechen einander nicht.
+  - Der Status darf erst auf `Completed v1.1 / closeout verified` gesetzt werden, wenn alle Closeout-Akzeptanzkriterien erfüllt sind.
+
+#### C10: Statische Qualitätsbasis einführen
+- Problem: Die Harness-Gates schützen bereits viele Architektur- und Vertragsgrenzen, aber es gibt noch keine klar dokumentierte Python-Lint-, Format- und Type-Baseline. Dadurch können Refactor-Commits neue einfache Wartbarkeitsprobleme einführen, ohne dass ein Gate anschlägt.
+- Ziel: Closeout v1.1 ergänzt eine kleine, niedrigschwellige statische Qualitätsbasis, die verständlichen Code fördert, ohne den Refactor durch tausende Altbefunde zu blockieren.
+- Vorgehen:
+  - Ruff als Python-Lint- und Format-Baseline über eine zentrale Projektkonfiguration einführen.
+  - Einen expliziten Make-Target wie `make lint-backend` dokumentieren und erst dann als hartes Gate behandeln, wenn die Baseline ohne große False-Positive-Last grün ist.
+  - Keine große automatische Massenformatierung mit fachlichen Extraktionen mischen.
+  - Type-Checking nicht als sofortiges Full-Repo-Hartgate erzwingen. Stattdessen neu extrahierte Modulgrenzen mit klaren Typen, kleinen DTOs oder Protokollen versehen und später gezielt mit Pyright oder Mypy absichern.
+- Akzeptanz:
+  - Die statische Qualitätsbasis ist in `docs/harness/QUALITY_GATES.md` dokumentiert.
+  - Neu extrahierte Module verletzen die gewählte Lint-Baseline nicht.
+  - Wenn Type-Checking noch nicht hart aktiviert wird, ist der Restzustand mit Exit-Kriterium in `docs/harness/TECH_DEBT.md` dokumentiert.
+- Done in working tree: `pyproject.toml` definiert eine zentrale Ruff-Konfiguration; `backend/web/requirements.txt` installiert Ruff über die bestehende Python-Requirements-Datei.
+- Done in working tree: `make lint-backend` prüft zunächst Pyflakes (`F`) für produktiven Backend-Code und nimmt `backend/tests/*` sowie `backend/tests_e2e/*` aus, damit kein unreifer Full-Repo-Stilcheck als hartes Gate eingeführt wird.
+- Done in working tree: 38 produktive Pyflakes-Befunde wurden bereinigt oder als bewusst benötigter Kompatibilitätsalias markiert; `backend.web.main.SESSION_COOKIE_NAME` bleibt mit `# noqa: F401` als öffentlicher Test-/Kompatibilitätsalias erhalten.
+
+#### C11: Dead Code, Legacy-Reste und ungenutzte Assets entfernen
+- Problem: Nach Monolith-Splits bleiben leicht Wrapper, alte Helper, nicht mehr referenzierte Static-Dateien oder Legacy-Kompatibilitätspfade zurück. Solche Reste machen das Repo größer und schwerer erklärbar.
+- Ziel: Jede Extraktion endet mit einer kurzen Referenzprüfung, damit tatsächlich überflüssiger Code entfernt oder bewusst als Restschuld dokumentiert wird.
+- Vorgehen:
+  - Nach jeder größeren Route-, Repository- oder Frontend-Extraktion Import-, Route-Map- und Static-Asset-Referenzen prüfen.
+  - Alte Wrapper nur behalten, wenn sie für Kompatibilität, schrittweise Migration oder klare öffentliche Fassaden nötig sind.
+  - Nicht mehr referenzierte Legacy-Assets nur entfernen, wenn Suchnachweis oder Testabdeckung zeigen, dass keine aktive Oberfläche sie nutzt.
+  - Vendor-Code, generierte Builds, Lockfiles und externe Testfixtures bleiben von Dead-Code-Aufräumarbeiten ausgenommen.
+- Akzeptanz:
+  - Entfernte Altpfade sind durch Tests oder nachvollziehbare Referenzsuche abgesichert.
+  - Verbleibende Legacy-Reste haben Status, Risiko und Exit-Kriterium in `docs/harness/HOTSPOTS.md` oder `docs/harness/TECH_DEBT.md`.
+
+#### C12: API- und Fehlervertrag stärker absichern
+- Problem: Die vorhandene OpenAPI-Baseline schützt Runtime-`/api/*`-Pfade bereits gegen groben Drift, prüft aber nicht in jedem Fall Security-Anforderungen, Statuscodes und Error-Shapes so tief, wie es für einen großen Refactor wünschenswert ist.
+- Ziel: Refactor-Änderungen dürfen API-Verhalten nicht unbemerkt verändern. Wenn ein Endpoint berührt wird, müssen Security, Statuscodes, Response-Shape und Fehlerabbildung bewusst abgesichert sein.
+- Vorgehen:
+  - Bei berührten Endpunkten zuerst prüfen, ob `api/openapi.yml` Security-Schemes, Statuscodes, Request-/Response-Schemas und Fehlerfälle ausreichend beschreibt.
+  - Fehlende Contract-Tests ergänzen, bevor Handler- oder Adapterlogik verschoben wird.
+  - Generische Contract-Gates bevorzugen, wenn mehrere Endpunkte denselben Fehler- oder Security-Vertrag teilen.
+  - Breaking Changes bleiben außerhalb von Closeout v1.1. Falls ein bestehender Bug im Vertrag sichtbar wird, wird die Abweichung dokumentiert und gezielt als Bugfix behandelt.
+- Akzeptanz:
+  - Geänderte API-Flächen bestehen `make test-api-contract-baseline` und ihre fokussierten Contract-Tests.
+  - Fehlerantworten bleiben für Nutzer und Clients stabil oder sind bewusst dokumentiert.
+
+#### C13: Logging, Datenschutz und Fehlerdiagnose vereinheitlichen
+- Problem: Refactors an Auth-, Upload-, H5P-, Teaching- und Learning-Flows können Logging und Fehlerdiagnose unbeabsichtigt verschlechtern. Gleichzeitig darf GUSTAV wegen des Bildungskontexts keine personenbezogenen Daten, Tokens oder Schülerantworten in Logs schreiben.
+- Ziel: Kritische Flows liefern verständliche technische Diagnose, ohne Datenschutz- oder Security-Grenzen zu verletzen.
+- Vorgehen:
+  - Bei jeder Extraktion sicherheitsrelevanter Flows prüfen, ob Logs datensparsam bleiben.
+  - Keine Tokens, Cookies, Dateiinhalte, Schülerantworten, echten Namen, E-Mail-Adressen oder schulbezogenen Identifikatoren loggen.
+  - Wiederkehrende Fehlerfälle mit stabilen Fehlertypen oder Fehlercodes modellieren, soweit dies ohne API-Semantikänderung möglich ist.
+  - Privacy-Logging-Contracts für Upload-, Feedback-, H5P- und Auth-Flows erhalten oder ergänzen.
+- Akzeptanz:
+  - Bestehende Privacy-, Upload-, Auth- und H5P-Tests bleiben grün.
+  - Neue Logs in refactored Code sind datensparsam und fachlich nachvollziehbar.
+
+#### C14: Modul-Dokumentation als Lernmaterial verbessern
+- Problem: Modularisierung allein reicht nicht, wenn neue Module für Felix, Schüler oder externe FOSS-Mitwirkende nicht verständlich sind.
+- Ziel: Neu extrahierte Module erklären ihre Verantwortung klar und knapp. Dokumentation hilft beim Lernen, ohne den Code mit trivialen Kommentaren zu überfrachten.
+- Vorgehen:
+  - Neue fachliche Module erhalten kurze englische Modul-Docstrings oder Kopfkommentare zu Zweck, Verantwortung und erlaubten Abhängigkeiten.
+  - Komplexe Funktionen erhalten Docstrings zu Absicht, Parametern, erwarteter Wirkung und Berechtigungsannahmen.
+  - Inline-Kommentare nur an Stellen setzen, deren Logik für Lernende nicht offensichtlich ist.
+  - Architektur- und Harness-Dokumente nachziehen, wenn sich Modulgrenzen oder Gate-Verantwortungen ändern.
+- Akzeptanz:
+  - Neu extrahierte Module sind ohne Kenntnis des alten Monolithen verständlich.
+  - Dokumentation und Code verwenden die Begriffe aus `GLOSSARY.md` konsistent.
+
+#### C15: Testqualität statt Testmenge absichern
+- Problem: Eine große grüne Testsuite kann trotzdem schwer wartbar sein, wenn sie viele globale Fixtures, Wrapper-Tests oder strukturfragile Dokumenttests enthält.
+- Ziel: Closeout v1.1 verbessert die Aussagekraft der Tests. Gute Tests schützen fachliche Regeln, öffentliche Verträge, Sicherheitsgrenzen oder produktionsnahe Integrationen.
+- Vorgehen:
+  - Sehr große Testdateien nach Verhalten, Risiko und Testebene prüfen, bevor sie geteilt oder zusammengeführt werden.
+  - Wrapper-Tests ohne fachlichen Wert entfernen oder durch Contract-, Regression- oder Boundary-Tests ersetzen.
+  - Dokumentationsnahe Tests auf stabile strukturierte Aussagen prüfen, nicht auf fragile Stichwortverbote.
+  - Große Security-, RLS-, API- und Upload-Tests nicht löschen, nur weil sie groß sind.
+  - `docs/harness/TEST_STRATEGY.md` aktualisieren, wenn neue Regeln für `keep`, `merge`, `rewrite` oder `retire-later` entstehen.
+- Akzeptanz:
+  - Die Testsuite enthält keine neu eingeführten rein mechanischen Tests ohne fachlichen, vertraglichen oder sicherheitsbezogenen Nutzen.
+  - Bereinigte Testbereiche bleiben durch fokussierte Verifikation grün.
+
+#### C16: Performance- und N+1-Risiken bei großen Read-Flows prüfen
+- Problem: Teaching-Dashboards, Learning-Analytics, Submission-Übersichten und H5P-Statusflüsse können durch gut gemeinte Modul-Splits unbemerkt mehr Datenbankabfragen, Storage-Aufrufe oder Netzwerkübergänge auslösen.
+- Ziel: Der Refactor verschlechtert kritische Read-Flows nicht offensichtlich. Es geht nicht um Mikrooptimierung, sondern um Schutz vor N+1-Fehlern und teuren Schleifen.
+- Vorgehen:
+  - Bei ausgelagerten Read-Models prüfen, ob Query-Grenzen, Batch-Reads und vorhandene Aggregationen erhalten bleiben.
+  - Wo sinnvoll, kleine Regressionstests oder Messpunkte für Query-Anzahl, Repository-Aufrufe oder Storage-Zugriffe ergänzen.
+  - Performance-Dokumentation nur dort ergänzen, wo ein Flow fachlich kritisch oder schwer durchschaubar ist.
+  - Keine neuen Caches einführen, wenn ein sauberer Query- oder Aggregationsschnitt ausreicht.
+- Akzeptanz:
+  - Dashboard-, Analytics-, Submission- und H5P-Read-Flows behalten ihre bestehenden Query- und Zugriffsmuster oder dokumentieren bewusst akzeptierte Änderungen.
+  - Offensichtliche N+1-Risiken werden vor Abschluss von Closeout v1.1 beseitigt oder mit Exit-Kriterium als Tech Debt erfasst.
+
+#### Closeout Verification
+Vor Abschluss von Closeout v1.1 müssen diese Befehle erfolgreich sein:
+- `git diff --check`
+- `make test-import-boundaries`
+- `make test-api-contract-baseline`
+- `make test-architecture-boundaries`
+- `make test-route-map`
+- `make test-db-inventory`
+- `make quality-scorecard`
+- `make verify`
+
+Zusätzlich muss der Abschlussbericht festhalten, ob ein hartes Backend-Lint-Gate bereits aktiv ist. Falls `make lint-backend` oder ein gleichwertiger Target eingeführt wurde, muss er vor dem Abschluss ebenfalls grün sein. Falls das Lint- oder Type-Gate bewusst nur als Follow-up aktiviert wird, braucht der Restzustand einen Eintrag in `docs/harness/TECH_DEBT.md` mit Owner, Review date, Risiko und Exit criterion.
+
+Wenn ein Befehl wegen lokaler Infrastruktur nicht ausführbar ist, muss der Agent die Ursache konkret dokumentieren, darf den Plan aber nicht als vollständig umgesetzt markieren. Ein fehlender lokaler Dienst ist nur dann ein akzeptierter Restzustand, wenn derselbe Schritt nicht Teil der Abschlusskriterien ist oder ein gleichwertiger, dokumentierter Nachweis vorliegt.
 
 ## Security, GDPR/Privacy, and FOSS Risks
 

@@ -1576,9 +1576,11 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
         size_bytes = clean_payload.get("size_bytes")
         mime_type = clean_payload.get("mime_type")
         try:
-            ok, reason = _verify_storage_object(str(storage_key), str(sha256), int(size_bytes), str(mime_type))
+            ok, _reason = _verify_storage_object(
+                str(storage_key), str(sha256), int(size_bytes), str(mime_type)
+            )
         except Exception:
-            ok, reason = (False, "verification_error")
+            ok = False
         if not ok:
             detail = "invalid_image_payload" if kind == "image" else "invalid_file_payload"
             return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
@@ -2342,7 +2344,6 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
 
         sup_origin = _origin(supabase_base)
         pub_origin = _origin(public_base)
-        sup_host = sup_origin[1] if sup_origin else ""
         pub_host = pub_origin[1] if pub_origin else ""
         target = _urlparse(url)
         if (target.scheme or "").lower() not in {"http", "https"}:

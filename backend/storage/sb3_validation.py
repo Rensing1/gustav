@@ -20,7 +20,6 @@ import zipfile
 from dataclasses import dataclass
 from typing import Any
 
-from backend.storage.mime_types import SCRATCH_SB3_MIME
 
 
 class SB3ValidationError(ValueError):

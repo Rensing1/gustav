@@ -991,7 +991,10 @@ async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
         assert body["rows"], "expected rows despite helper failure"
         student_row = next(row for row in body["rows"] if row["student"]["sub"] == student.sub)
         assert any(cell["has_submission"] for cell in student_row["tasks"])
-        assert any("get_unit_latest_submissions_for_owner" in msg for msg in caplog.messages)
+        assert any(
+            "Unit live helper row lookup failed" in msg and "get_unit_latest_submissions_for_owner" in msg
+            for msg in caplog.messages
+        )
 
 
 @pytest.mark.anyio
@@ -1106,7 +1109,7 @@ async def test_summary_falls_back_when_helper_score_columns_are_missing(monkeypa
         body = response.json()
         student_row = next(row for row in body["rows"] if row["student"]["sub"] == student.sub)
         assert any(cell["has_submission"] for cell in student_row["tasks"])
-        assert any("get_unit_latest_submissions_for_owner" in msg for msg in caplog.messages)
+        assert any("Unit live helper row lookup failed" in msg and "score_raw" in msg for msg in caplog.messages)
 
 
 @pytest.mark.anyio

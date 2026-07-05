@@ -82,39 +82,51 @@ def _current_learning_module() -> object | None:
 
 
 def _current_storage_adapter() -> StorageAdapterProtocol:
-    """Resolve the active storage adapter from the current learning module."""
+    """Resolve the active storage adapter for the running route module."""
 
-    if _STORAGE_ADAPTER_OVERRIDE_ACTIVE:
-        return STORAGE_ADAPTER
-    module = _current_learning_module()
-    adapter = getattr(module, "STORAGE_ADAPTER", None) if module is not None else None
-    if adapter is None:
-        return STORAGE_ADAPTER
-    return adapter
+    return STORAGE_ADAPTER
 
 
 def _current_async_forward_upload() -> Any:
-    """Resolve the active upload forwarder from the current learning module."""
+    """Resolve the active upload forwarder for the running route module."""
 
+    default = globals().get("_DEFAULT_ASYNC_FORWARD_UPLOAD")
+    local = _async_forward_upload
+    if default is not None and callable(local) and local is not default:
+        return local
     module = _current_learning_module()
-    forwarder = getattr(module, "_async_forward_upload", None) if module is not None else None
-    return forwarder or _async_forward_upload
+    current = getattr(module, "_async_forward_upload", None) if module is not None else None
+    if default is not None and callable(current) and current is not default:
+        return current
+    return local
 
 
 def _current_emit_upload_proxy_telemetry() -> Any:
-    """Resolve the active telemetry emitter from the current learning module."""
+    """Resolve the active telemetry emitter for the running route module."""
 
+    default = globals().get("_DEFAULT_EMIT_UPLOAD_PROXY_TELEMETRY")
+    local = _emit_upload_proxy_telemetry
+    if default is not None and callable(local) and local is not default:
+        return local
     module = _current_learning_module()
-    emitter = getattr(module, "_emit_upload_proxy_telemetry", None) if module is not None else None
-    return emitter or _emit_upload_proxy_telemetry
+    current = getattr(module, "_emit_upload_proxy_telemetry", None) if module is not None else None
+    if default is not None and callable(current) and current is not default:
+        return current
+    return local
 
 
 def _current_download_bytes_with_limit() -> Any:
-    """Resolve the active storage downloader after reloads or monkeypatching."""
+    """Resolve the active storage downloader for the running route module."""
 
+    default = globals().get("_DEFAULT_DOWNLOAD_BYTES_WITH_LIMIT")
+    local = _download_bytes_with_limit
+    if default is not None and callable(local) and local is not default:
+        return local
     module = _current_learning_module()
-    downloader = getattr(module, "_download_bytes_with_limit", None) if module is not None else None
-    return downloader or _download_bytes_with_limit
+    current = getattr(module, "_download_bytes_with_limit", None) if module is not None else None
+    if default is not None and callable(current) and current is not default:
+        return current
+    return local
 
 
 def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol, override_active: bool) -> None:
@@ -128,9 +140,24 @@ def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol, override_ac
         `STORAGE_ADAPTER`.
     """
 
+    apps = []
     for module_name in ("main", "backend.web.main"):
         main_module = _sys.modules.get(module_name)
         app = getattr(main_module, "app", None) if main_module is not None else None
+        if app is not None:
+            apps.append(app)
+    try:
+        from backend.web.app_composition import iter_registered_apps
+
+        apps.extend(iter_registered_apps())
+    except Exception:
+        pass
+    seen_apps: set[int] = set()
+    for app in apps:
+        app_id = id(app)
+        if app_id in seen_apps:
+            continue
+        seen_apps.add(app_id)
         routes = getattr(app, "routes", None)
         if not routes:
             continue
@@ -420,6 +447,9 @@ async def _async_forward_upload(
         return await client.put(url, content=payload, headers=send_headers)
 
 
+_DEFAULT_ASYNC_FORWARD_UPLOAD = _async_forward_upload
+
+
 def _cache_headers_success() -> dict[str, str]:
     # Success responses: private and explicitly non-storable (defense-in-depth
     # against history stores and intermediary caches potentially keeping PII).
@@ -607,6 +637,9 @@ def _emit_upload_proxy_telemetry(
         return
 
 
+_DEFAULT_EMIT_UPLOAD_PROXY_TELEMETRY = _emit_upload_proxy_telemetry
+
+
 def _require_strict_same_origin(request: Request) -> bool:
     """Return True only when a same-origin indicator is present and matches.
 
@@ -708,6 +741,22 @@ def _current_environment() -> str:
         if env:
             return env
     return (os.getenv("GUSTAV_ENV", "dev") or "").lower()
+
+
+def _environment_for_request(request: Request) -> str:
+    """Read the environment from the FastAPI app handling this request."""
+
+    try:
+        runtime = getattr(getattr(request.app, "state", None), "runtime", None)
+        settings = getattr(runtime, "settings", None)
+        raw = getattr(settings, "environment", None)
+        if raw is not None:
+            value = str(raw).strip().lower()
+            if value:
+                return value
+    except Exception:
+        pass
+    return _current_environment()
 
 
 def _current_user(request: Request) -> dict | None:
@@ -894,9 +943,24 @@ def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in
             continue
         setattr(module, "_REPO", repo)
         setattr(module, "REPO", repo)
+    apps = []
     for module_name in ("main", "backend.web.main"):
         main_module = _sys.modules.get(module_name)
         app = getattr(main_module, "app", None) if main_module is not None else None
+        if app is not None:
+            apps.append(app)
+    try:
+        from backend.web.app_composition import iter_registered_apps
+
+        apps.extend(iter_registered_apps())
+    except Exception:
+        pass
+    seen_apps: set[int] = set()
+    for app in apps:
+        app_id = id(app)
+        if app_id in seen_apps:
+            continue
+        seen_apps.add(app_id)
         routes = getattr(app, "routes", None)
         if not routes:
             continue
@@ -1697,7 +1761,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                 port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
             default = 443 if scheme == "https" else 80
             server_origin = f"{scheme}://{host}{(':' + str(port)) if port != default else ''}"
-            diag = f"reason=permission,env={_current_environment()},origin={origin_hdr},server={server_origin}"
+            diag = f"reason=permission,env={_environment_for_request(request)},origin={origin_hdr},server={server_origin}"
         except Exception:
             diag = "reason=permission,env=?,origin=?,server=?"
         try:
@@ -1729,7 +1793,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
     try:
         if kind == "file" and str(clean_payload.get("mime_type")) == PDF_MIME:
             root = resolve_local_verify_root_from_env() or ""
-            env = _current_environment()
+            env = _environment_for_request(request)
             prod_like = env in {"prod", "production", "stage", "staging"}
             if root and (not prod_like):
                 _dev_try_process_pdf(
@@ -2342,6 +2406,9 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
                 return bytes(out)
     except Exception:
         return None
+
+
+_DEFAULT_DOWNLOAD_BYTES_WITH_LIMIT = _download_bytes_with_limit
 
 
 async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int) -> bytes | None:

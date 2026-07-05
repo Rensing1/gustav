@@ -12,9 +12,12 @@ from collections.abc import Iterable
 import os
 from pathlib import Path
 import sys
+from weakref import WeakSet
 
 from fastapi import APIRouter, FastAPI
 from fastapi.staticfiles import StaticFiles
+
+_REGISTERED_APPS: WeakSet[FastAPI] = WeakSet()
 
 
 def running_under_pytest() -> bool:
@@ -72,11 +75,19 @@ def bootstrap_runtime_environment() -> None:
 def create_app_shell() -> FastAPI:
     """Create the base FastAPI shell with GUSTAV metadata."""
 
-    return FastAPI(
+    app = FastAPI(
         title="GUSTAV alpha-2",
         description="KI-gestützte Lernplattform",
         version="0.0.2",
     )
+    _REGISTERED_APPS.add(app)
+    return app
+
+
+def iter_registered_apps() -> tuple[FastAPI, ...]:
+    """Return live app shells created in this Python process."""
+
+    return tuple(_REGISTERED_APPS)
 
 
 def mount_static_files(app: FastAPI, static_dir: Path) -> None:

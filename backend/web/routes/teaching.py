@@ -1457,9 +1457,24 @@ def _sync_teaching_route_globals(*, adapter: StorageAdapterProtocol, override_ac
         stale adapter and makes the suite order-dependent.
     """
 
+    apps = []
     for module_name in ("main", "backend.web.main"):
         main_module = _sys.modules.get(module_name)
         app = getattr(main_module, "app", None) if main_module is not None else None
+        if app is not None:
+            apps.append(app)
+    try:
+        from backend.web.app_composition import iter_registered_apps
+
+        apps.extend(iter_registered_apps())
+    except Exception:
+        pass
+    seen_apps: set[int] = set()
+    for app in apps:
+        app_id = id(app)
+        if app_id in seen_apps:
+            continue
+        seen_apps.add(app_id)
         routes = getattr(app, "routes", None)
         if not routes:
             continue
@@ -1481,9 +1496,24 @@ def _sync_teaching_route_globals(*, adapter: StorageAdapterProtocol, override_ac
 def _sync_teaching_route_repo(repo: Any) -> None:
     """Retarget already-registered Teaching route globals to the current repo."""
 
+    apps = []
     for module_name in ("main", "backend.web.main"):
         main_module = _sys.modules.get(module_name)
         app = getattr(main_module, "app", None) if main_module is not None else None
+        if app is not None:
+            apps.append(app)
+    try:
+        from backend.web.app_composition import iter_registered_apps
+
+        apps.extend(iter_registered_apps())
+    except Exception:
+        pass
+    seen_apps: set[int] = set()
+    for app in apps:
+        app_id = id(app)
+        if app_id in seen_apps:
+            continue
+        seen_apps.add(app_id)
         routes = getattr(app, "routes", None)
         if not routes:
             continue
@@ -1874,6 +1904,9 @@ def _summary_snapshot_cursor(repo: Any, owner_sub: str | None = None) -> str | N
     return None
 
 
+_DEFAULT_SUMMARY_SNAPSHOT_CURSOR = _summary_snapshot_cursor
+
+
 def _resolve_student_names_runtime(subs: list[str]) -> dict[str, str]:
     """Resolve student names via the currently active Teaching module."""
 
@@ -1889,10 +1922,18 @@ def _resolve_student_login_labels_runtime(subs: list[str]) -> dict[str, str]:
 def _summary_snapshot_cursor_runtime(repo: Any, owner_sub: str) -> str | None:
     """Resolve the active live summary cursor helper from the current module."""
 
+    default = globals().get("_DEFAULT_SUMMARY_SNAPSHOT_CURSOR")
+    local = _summary_snapshot_cursor
+    if default is not None and callable(local) and local is not default:
+        resolver = local
+    else:
+        module = _current_teaching_module()
+        current = getattr(module, "_summary_snapshot_cursor", None) if module is not None else None
+        resolver = current if default is not None and callable(current) and current is not default else local
     try:
-        return _summary_snapshot_cursor(repo, owner_sub)
+        return resolver(repo, owner_sub)
     except TypeError:
-        return _summary_snapshot_cursor(repo)
+        return resolver(repo)
 
 
 def _current_max_unit_ids() -> int:

@@ -42,26 +42,57 @@ def _sys_path_mutations(path: Path) -> list[str]:
     return findings
 
 
-def test_conftest_delegates_import_path_bootstrap_to_central_helper() -> None:
+def test_conftest_does_not_mutate_sys_path() -> None:
     text = CONFTEST.read_text(encoding="utf-8")
 
-    assert "from backend.tests.import_paths import configure_test_import_paths" in text
-    assert "configure_test_import_paths()" in text
     assert _sys_path_mutations(CONFTEST) == []
 
 
-def test_central_import_path_helper_documents_legacy_compatibility_paths() -> None:
+def test_central_import_path_helper_no_longer_mutates_sys_path() -> None:
     assert IMPORT_PATHS.exists(), "Missing central pytest import-path helper"
     text = IMPORT_PATHS.read_text(encoding="utf-8")
 
-    assert "LEGACY_TEST_IMPORT_PATHS" in text
-    assert "backend/web" in text
-    assert "PR 9" in text
-    assert "configure_test_import_paths" in text
+    assert "sys.path.insert" not in text
+    assert "sys.path.append" not in text
 
 
-def test_import_boundary_baseline_blocks_new_scattered_test_path_crutches() -> None:
+def test_import_boundary_baseline_has_no_test_path_crutches() -> None:
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
 
     assert isinstance(baseline["categories"]["sys_path_mutations"], int)
-    assert baseline["categories"]["sys_path_mutations"] >= 1
+    assert baseline["categories"]["sys_path_mutations"] == 0
+
+
+def test_tests_use_backend_namespace_for_app_and_bounded_contexts() -> None:
+    """Tests should use the same package namespace as Docker and production."""
+
+    forbidden_roots = {"identity_access", "main", "teaching"}
+    offenders: list[str] = []
+    for path in sorted((REPO_ROOT / "backend" / "tests").rglob("*.py")):
+        if path == IMPORT_PATHS:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".", 1)[0] in forbidden_roots:
+                        offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}: import {alias.name}")
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                if node.module.split(".", 1)[0] in forbidden_roots:
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}: from {node.module} import ...")
+
+    assert offenders == []
+
+
+def test_tests_do_not_manage_flat_main_module_alias() -> None:
+    """Test helpers should not keep the removed `main` alias alive indirectly."""
+
+    offenders: list[str] = []
+    for path in sorted((REPO_ROOT / "backend" / "tests").rglob("*.py")):
+        if path.parent == Path(__file__).resolve().parent:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if 'sys.modules, "main"' in text or '"main", "backend.web.main"' in text:
+            offenders.append(str(path.relative_to(REPO_ROOT)))
+
+    assert offenders == []

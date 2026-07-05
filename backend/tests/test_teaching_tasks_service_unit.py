@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import pytest
 
-from teaching.services.tasks import TasksService, TasksRepoProtocol, _UNSET
+from backend.teaching.services.tasks import TasksService, TasksRepoProtocol, _UNSET
 
 
 class FakeTasksRepo(TasksRepoProtocol):

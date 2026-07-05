@@ -20,7 +20,7 @@ async def test_login_redirect_uses_public_kc_host(monkeypatch: pytest.MonkeyPatc
     import backend.web.main as main  # type: ignore
 
     # Configure OIDC client directly with distinct internal/public bases
-    from identity_access.oidc import OIDCConfig, OIDCClient
+    from backend.identity_access.oidc import OIDCConfig, OIDCClient
     cfg = OIDCConfig(base_url="http://keycloak:8080", realm="gustav", client_id="gustav-web", redirect_uri="https://app.localhost/auth/callback", public_base_url="https://id.example")
     monkeypatch.setattr(main.RUNTIME, "oidc_config", cfg, raising=False)
     monkeypatch.setattr(main.RUNTIME, "oidc_client", OIDCClient(cfg), raising=False)

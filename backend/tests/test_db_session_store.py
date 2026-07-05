@@ -21,7 +21,7 @@ SESSION_TEST_DSN = os.getenv("SESSION_TEST_DSN")
 
 
 def test_create_get_delete_roundtrip(monkeypatch: pytest.MonkeyPatch):
-    from identity_access import stores_db as mod
+    from backend.identity_access import stores_db as mod
     if SESSION_TEST_DSN:
         store = mod.DBSessionStore(dsn=SESSION_TEST_DSN)
     else:
@@ -43,7 +43,7 @@ def test_create_get_delete_roundtrip(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_get_filters_expired_sessions(monkeypatch: pytest.MonkeyPatch):
-    from identity_access import stores_db as mod
+    from backend.identity_access import stores_db as mod
     install_fake_psycopg(monkeypatch, mod)
     store = mod.DBSessionStore(dsn="fake://dsn")
 
@@ -53,7 +53,7 @@ def test_get_filters_expired_sessions(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_invalid_table_name_is_rejected(monkeypatch: pytest.MonkeyPatch):
-    from identity_access import stores_db as mod
+    from backend.identity_access import stores_db as mod
     install_fake_psycopg(monkeypatch, mod)
     import pytest as _pytest
     with _pytest.raises(ValueError):
@@ -66,7 +66,7 @@ def test_invalid_table_name_is_rejected(monkeypatch: pytest.MonkeyPatch):
 
 def test_missing_dsn_raises_runtime_error(monkeypatch: pytest.MonkeyPatch):
     """DBSessionStore should fail fast when no DSN is provided via arg or env."""
-    from identity_access import stores_db as mod
+    from backend.identity_access import stores_db as mod
     # Pretend psycopg is available, but do not set any DSN env var
     install_fake_psycopg(monkeypatch, mod)
     monkeypatch.delenv("DATABASE_URL", raising=False)

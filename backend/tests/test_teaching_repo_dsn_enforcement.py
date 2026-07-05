@@ -22,7 +22,7 @@ def test_repo_rejects_service_dsn_by_default(monkeypatch: pytest.MonkeyPatch):
     except Exception:
         pytest.skip("psycopg not available")
 
-    from teaching.repo_db import DBTeachingRepo  # type: ignore
+    from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
     with pytest.raises(RuntimeError):
         DBTeachingRepo(dsn=bad_dsn)
@@ -37,7 +37,7 @@ def test_repo_allows_override_flag(monkeypatch: pytest.MonkeyPatch):
     except Exception:
         pytest.skip("psycopg not available")
 
-    from teaching.repo_db import DBTeachingRepo  # type: ignore
+    from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
     # Should not raise now (we don't actually connect in constructor)
     DBTeachingRepo(dsn=bad_dsn)
@@ -59,7 +59,7 @@ def test_repo_prod_env_requires_explicit_dsn(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("ALLOW_SERVICE_DSN_FOR_TESTING", raising=False)
     monkeypatch.setenv("GUSTAV_ENV", "prod")
 
-    from teaching import repo_db  # type: ignore
+    from backend.teaching import repo_db  # type: ignore
 
     with pytest.raises(RuntimeError):
         repo_db._dsn()

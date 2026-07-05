@@ -8,21 +8,10 @@ Security: Cookies carry only an opaque session id. Session data stays server-sid
 """
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from typing import Dict, Optional
 import secrets
 import time
-
-# Temporary compatibility while legacy tests still import `identity_access.stores`.
-if __name__ == "backend.identity_access.stores":
-    sys.modules.setdefault("identity_access.stores", sys.modules[__name__])
-elif __name__ == "identity_access.stores":
-    sys.modules.setdefault("backend.identity_access.stores", sys.modules[__name__])
-for _parent_name, _attribute_name in (("identity_access", "stores"), ("backend.identity_access", "stores")):
-    _parent = sys.modules.get(_parent_name)
-    if _parent is not None:
-        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 
 def _now() -> int:

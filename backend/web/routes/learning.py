@@ -141,7 +141,7 @@ def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol, override_ac
     """
 
     apps = []
-    for module_name in ("main", "backend.web.main"):
+    for module_name in ("backend.web.main",):
         main_module = _sys.modules.get(module_name)
         app = getattr(main_module, "app", None) if main_module is not None else None
         if app is not None:
@@ -725,14 +725,14 @@ def _current_environment() -> str:
             return None
         return _read_env_from_module(mod)
 
-    for alias in ("backend.web.main", "main"):
+    for alias in ("backend.web.main",):
         env = _loaded_override_env(alias)
         if env:
             return env
 
     import importlib
 
-    for alias in ("backend.web.main", "main"):
+    for alias in ("backend.web.main",):
         try:
             mod = importlib.import_module(alias)
         except Exception:
@@ -944,7 +944,7 @@ def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in
         setattr(module, "_REPO", repo)
         setattr(module, "REPO", repo)
     apps = []
-    for module_name in ("main", "backend.web.main"):
+    for module_name in ("backend.web.main",):
         main_module = _sys.modules.get(module_name)
         app = getattr(main_module, "app", None) if main_module is not None else None
         if app is not None:
@@ -2817,7 +2817,7 @@ async def get_material_file(
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
     body = await _download_storage_object_via_presign(
-        bucket=(__import__("teaching.services.materials", fromlist=["MaterialFileSettings"]).MaterialFileSettings().storage_bucket),
+        bucket=(__import__("backend.teaching.services.materials", fromlist=["MaterialFileSettings"]).MaterialFileSettings().storage_bucket),
         key=storage_key,
         disposition=normalized_disposition,
         max_bytes=max(get_materials_max_upload_bytes(), size_bytes),

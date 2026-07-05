@@ -8,7 +8,7 @@ Why:
 
 from __future__ import annotations
 
-from teaching.repo_db import _task_row_to_dict
+from backend.teaching.repo_db import _task_row_to_dict
 
 
 def _task_row(kind: str) -> tuple[object, ...]:

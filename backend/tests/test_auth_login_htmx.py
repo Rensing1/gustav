@@ -6,7 +6,6 @@ Regression test for the sidebar login action which issues HTMX requests.
 
 from __future__ import annotations
 
-import sys
 from urllib.parse import urlparse, parse_qs
 
 import pytest
@@ -31,7 +30,6 @@ async def test_auth_only_app_login_uses_explicit_runtime_without_main_stub(monke
         redirect_uri="http://app.localhost:8100/auth/callback",
     )
     state_store = StateStore()
-    monkeypatch.delitem(sys.modules, "main", raising=False)
     monkeypatch.setenv("WEB_BASE", "http://app.localhost:8100")
 
     test_app = create_app_auth_only(oidc_config=cfg, state_store=state_store)

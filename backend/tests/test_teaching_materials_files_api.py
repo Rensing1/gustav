@@ -976,7 +976,7 @@ async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage
     # Force NullStorageAdapter during this test and restore afterwards
     original_adapter = teaching.STORAGE_ADAPTER
     try:
-        from teaching.storage import NullStorageAdapter  # type: ignore
+        from backend.teaching.storage import NullStorageAdapter  # type: ignore
 
         teaching.set_storage_adapter(NullStorageAdapter())
         teacher = store.create(sub="teacher-no-storage", name="Lehrkraft", roles=["teacher"])
@@ -1081,7 +1081,7 @@ async def test_delete_file_material_without_storage_adapter_returns_503(_reset_s
             )).json()
 
             # Now switch to NullStorageAdapter to simulate missing storage during delete
-            from teaching.storage import NullStorageAdapter  # type: ignore
+            from backend.teaching.storage import NullStorageAdapter  # type: ignore
 
             teaching.set_storage_adapter(NullStorageAdapter())
 

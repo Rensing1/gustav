@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -14,16 +13,6 @@ from backend.teaching.storage import StorageAdapterProtocol
 from backend.storage.config import get_materials_bucket, get_materials_max_upload_bytes
 from backend.storage.keys import make_materials_key
 from backend.storage.upload_intents import normalize_upload_intent_headers
-
-# Temporary compatibility while legacy tests still import `teaching.services.materials`.
-if __name__ == "backend.teaching.services.materials":
-    sys.modules.setdefault("teaching.services.materials", sys.modules[__name__])
-elif __name__ == "teaching.services.materials":
-    sys.modules.setdefault("backend.teaching.services.materials", sys.modules[__name__])
-for _parent_name, _attribute_name in (("teaching.services", "materials"), ("backend.teaching.services", "materials")):
-    _parent = sys.modules.get(_parent_name)
-    if _parent is not None:
-        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 
 class MaterialsRepoProtocol(Protocol):

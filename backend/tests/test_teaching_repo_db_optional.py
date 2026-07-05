@@ -36,7 +36,7 @@ async def test_db_repo_create_and_list_courses_when_db_available():
     if not _probe_dsn(dsn):
         pytest.skip("Database not reachable; apply migrations and expose limited DSN")
 
-    from teaching.repo_db import DBTeachingRepo  # type: ignore
+    from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
     repo = DBTeachingRepo(dsn=dsn)
     # Create
@@ -54,7 +54,7 @@ def test_db_repo_memberships_enforce_owner_rls():
     if not _probe_dsn(dsn):
         pytest.skip("Database not reachable; apply migrations and expose limited DSN")
 
-    from teaching.repo_db import DBTeachingRepo  # type: ignore
+    from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
     repo = DBTeachingRepo(dsn=dsn)
     course = repo.create_course(
@@ -89,7 +89,7 @@ def test_course_memberships_insert_blocked_for_non_owner():
     owner = "teacher-owner-insert"
     intruder = "teacher-intruder"
 
-    from teaching.repo_db import DBTeachingRepo  # type: ignore
+    from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
     repo = DBTeachingRepo(dsn=dsn)
     course = repo.create_course(
@@ -112,7 +112,7 @@ def test_course_memberships_insert_blocked_for_non_owner():
 
 def test_create_section_retry_fetches_row_after_unique_violation(monkeypatch: pytest.MonkeyPatch):
     """Ensure create_section returns the inserted row when retrying after 23505."""
-    from teaching import repo_db  # type: ignore
+    from backend.teaching import repo_db  # type: ignore
 
     if not getattr(repo_db, "HAVE_PSYCOPG", False):
         pytest.skip("psycopg not available")

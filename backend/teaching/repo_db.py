@@ -21,16 +21,6 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 from uuid import UUID
 
-# Temporary compatibility while legacy tests still import `teaching.repo_db`.
-if __name__ == "backend.teaching.repo_db":
-    sys.modules.setdefault("teaching.repo_db", sys.modules[__name__])
-elif __name__ == "teaching.repo_db":
-    sys.modules.setdefault("backend.teaching.repo_db", sys.modules[__name__])
-for _parent_name, _attribute_name in (("teaching", "repo_db"), ("backend.teaching", "repo_db")):
-    _parent = sys.modules.get(_parent_name)
-    if _parent is not None:
-        setattr(_parent, _attribute_name, sys.modules[__name__])
-
 try:
     import psycopg
     HAVE_PSYCOPG = True
@@ -105,7 +95,7 @@ def _is_unset(value: object) -> bool:
         return True
     if type(value) is object:
         return True
-    for module_name in ("backend.teaching.services.materials", "teaching.services.materials"):
+    for module_name in ("backend.teaching.services.materials",):
         module = sys.modules.get(module_name)
         if module is not None and value is getattr(module, "_UNSET", None):
             return True

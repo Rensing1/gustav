@@ -8,7 +8,6 @@ Why:
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import hashlib
@@ -18,16 +17,6 @@ import re
 import secrets
 import time
 from uuid import uuid4
-
-# Temporary compatibility while legacy tests still import `identity_access.cli_tokens`.
-if __name__ == "backend.identity_access.cli_tokens":
-    sys.modules.setdefault("identity_access.cli_tokens", sys.modules[__name__])
-elif __name__ == "identity_access.cli_tokens":
-    sys.modules.setdefault("backend.identity_access.cli_tokens", sys.modules[__name__])
-for _parent_name, _attribute_name in (("identity_access", "cli_tokens"), ("backend.identity_access", "cli_tokens")):
-    _parent = sys.modules.get(_parent_name)
-    if _parent is not None:
-        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 try:
     import psycopg

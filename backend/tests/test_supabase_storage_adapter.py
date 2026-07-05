@@ -1,6 +1,6 @@
 import pytest
 
-from teaching.storage_supabase import SupabaseStorageAdapter
+from backend.teaching.storage_supabase import SupabaseStorageAdapter
 
 
 class _BucketStub:

@@ -4,8 +4,8 @@ import logging
 
 import pytest
 
-from identity_access.admin_client import AdminClient
-from identity_access.oidc import OIDCConfig
+from backend.identity_access.admin_client import AdminClient
+from backend.identity_access.oidc import OIDCConfig
 
 
 class _DummyKC:
@@ -36,7 +36,7 @@ def test_update_user_logs_status_without_response_body(monkeypatch: pytest.Monke
     def fake_put(*_args, **_kwargs):  # type: ignore[no-untyped-def]
         return _DummyResponse(400, '{"error":"invalid","email":"student@example.com"}')
 
-    monkeypatch.setattr("identity_access.admin_client.requests.put", fake_put)
+    monkeypatch.setattr("backend.identity_access.admin_client.requests.put", fake_put)
 
     with caplog.at_level(logging.WARNING):
         with pytest.raises(ValueError, match="user_update_failed"):

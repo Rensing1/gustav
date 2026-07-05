@@ -10,9 +10,9 @@ from __future__ import annotations
 import types
 import pytest
 
-from identity_access.tokens import verify_id_token, IDTokenVerificationError
-from identity_access import tokens as tokens_mod
-from identity_access.oidc import OIDCConfig
+from backend.identity_access.tokens import verify_id_token, IDTokenVerificationError
+from backend.identity_access import tokens as tokens_mod
+from backend.identity_access.oidc import OIDCConfig
 
 
 def test_verify_enforces_rs256_alg(monkeypatch: pytest.MonkeyPatch):

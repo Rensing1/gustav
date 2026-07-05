@@ -26,7 +26,7 @@ def _set_session_cookie(client: httpx.AsyncClient, sid: str) -> None:
 
 async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     # Import app and helpers lazily to avoid circular imports
-    import main  # type: ignore
+    import backend.web.main as main  # type: ignore
 
     # Fresh session store per test
     store = install_session_store(monkeypatch, main)

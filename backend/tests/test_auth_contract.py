@@ -110,8 +110,8 @@ async def _call_auth_callback_with_token(
     """
     # Import lazily to avoid circulars during collection
     full_app = main.app
-    from identity_access.oidc import OIDCConfig
-    from identity_access.stores import StateStore
+    from backend.identity_access.oidc import OIDCConfig
+    from backend.identity_access.stores import StateStore
 
     # Fresh in-memory stores per run to avoid leakage between tests
     state_store = StateStore()
@@ -149,7 +149,7 @@ async def _call_auth_callback_with_token(
 
     # Reset JWKS cache for deterministic tests (no effect until verification module exists)
     try:
-        from identity_access import tokens as tokens_module  # type: ignore
+        from backend.identity_access import tokens as tokens_module  # type: ignore
     except ImportError:
         tokens_module = None
     if tokens_module and hasattr(tokens_module, "JWKSCache"):
@@ -200,7 +200,7 @@ async def test_login_redirect():
 @pytest.mark.anyio
 async def test_login_dynamic_redirect_respects_whitelist(monkeypatch: pytest.MonkeyPatch):
     """When Host matches WEB_BASE/redirect_uri host, use dynamic redirect_uri."""
-    from identity_access.oidc import OIDCConfig
+    from backend.identity_access.oidc import OIDCConfig
     from urllib.parse import urlparse, parse_qs
 
     test_cfg = OIDCConfig(
@@ -226,7 +226,7 @@ async def test_login_dynamic_redirect_respects_whitelist(monkeypatch: pytest.Mon
 @pytest.mark.anyio
 async def test_login_dynamic_redirect_falls_back_on_mismatch(monkeypatch: pytest.MonkeyPatch):
     """When Host differs, fall back to configured redirect_uri (avoid IdP errors)."""
-    from identity_access.oidc import OIDCConfig
+    from backend.identity_access.oidc import OIDCConfig
     from urllib.parse import urlparse, parse_qs
 
     static_redirect = "http://app.localhost:8100/auth/callback"
@@ -263,7 +263,7 @@ async def test_forgot_redirect():
 @pytest.mark.anyio
 async def test_forgot_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
     """Forgot redirect should be built from the configured base_url + realm."""
-    from identity_access.oidc import OIDCConfig
+    from backend.identity_access.oidc import OIDCConfig
 
     # Given OIDC configuration with custom base URL/realm
     test_cfg = OIDCConfig(
@@ -285,7 +285,7 @@ async def test_forgot_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.anyio
 async def test_forgot_redirect_prefers_public_base_url(monkeypatch: pytest.MonkeyPatch):
     """Forgot redirect should use KC_PUBLIC_BASE_URL when provided."""
-    from identity_access.oidc import OIDCConfig
+    from backend.identity_access.oidc import OIDCConfig
 
     test_cfg = OIDCConfig(
         base_url="http://kc.internal:8080",
@@ -307,7 +307,7 @@ async def test_forgot_redirect_prefers_public_base_url(monkeypatch: pytest.Monke
 @pytest.mark.anyio
 async def test_forgot_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPatch):
     """Forgot redirect forwards login_hint as query param."""
-    from identity_access.oidc import OIDCConfig
+    from backend.identity_access.oidc import OIDCConfig
     from urllib.parse import urlparse, parse_qs
 
     test_cfg = OIDCConfig(
@@ -409,7 +409,7 @@ async def test_callback_filters_unknown_roles(monkeypatch: pytest.MonkeyPatch):
     cookie.load(cookie_header)
     session_id = cookie["gustav_session"].value
 
-    import main  # type: ignore  # noqa: E402
+    import backend.web.main as main  # type: ignore  # noqa: E402
 
     stored = main.RUNTIME.session_store.get(session_id)
     assert stored is not None
@@ -425,7 +425,7 @@ async def test_callback_defaults_to_student_when_roles_missing(monkeypatch: pyte
     cookie.load(cookie_header)
     session_id = cookie["gustav_session"].value
 
-    import main  # type: ignore  # noqa: E402
+    import backend.web.main as main  # type: ignore  # noqa: E402
 
     stored = main.RUNTIME.session_store.get(session_id)
     assert stored is not None
@@ -451,7 +451,7 @@ async def test_callback_handles_jwks_fetch_failure(monkeypatch: pytest.MonkeyPat
 @pytest.mark.anyio
 async def test_callback_rejects_expired_state(monkeypatch: pytest.MonkeyPatch):
     def configure(record, *_):
-        monkeypatch.setattr("identity_access.stores._now", lambda: record.expires_at + 1)
+        monkeypatch.setattr("backend.identity_access.stores._now", lambda: record.expires_at + 1)
 
     token = _make_id_token()
     resp = await _call_auth_callback_with_token(
@@ -473,14 +473,14 @@ async def test_api_me_returns_401_after_session_expired(monkeypatch: pytest.Monk
     cookie.load(cookie_header)
     session_id = cookie["gustav_session"].value
 
-    import main  # type: ignore  # noqa: E402
+    import backend.web.main as main  # type: ignore  # noqa: E402
 
     record = main.RUNTIME.session_store.get(session_id)
     assert record is not None
     assert record.expires_at is not None
     future = record.expires_at + 1
 
-    monkeypatch.setattr("identity_access.stores._now", lambda: future)
+    monkeypatch.setattr("backend.identity_access.stores._now", lambda: future)
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", session_id)
@@ -492,7 +492,7 @@ async def test_api_me_returns_401_after_session_expired(monkeypatch: pytest.Monk
 @pytest.mark.anyio
 async def test_callback_sets_secure_cookie_flags_in_prod(monkeypatch: pytest.MonkeyPatch):
     def configure(*_):
-        import main  # type: ignore  # noqa: E402
+        import backend.web.main as main  # type: ignore  # noqa: E402
         monkeypatch.setattr(main.RUNTIME.settings, "_env_override", "prod", raising=False)
 
     token = _make_id_token()
@@ -512,7 +512,7 @@ async def test_callback_sets_secure_cookie_flags_in_prod(monkeypatch: pytest.Mon
 @pytest.mark.anyio
 async def test_logout_uses_secure_cookie_flags_in_prod(monkeypatch: pytest.MonkeyPatch):
     def configure(*_):
-        import main  # type: ignore  # noqa: E402
+        import backend.web.main as main  # type: ignore  # noqa: E402
         monkeypatch.setattr(main.RUNTIME.settings, "_env_override", "prod", raising=False)
 
     token = _make_id_token()
@@ -527,7 +527,7 @@ async def test_logout_uses_secure_cookie_flags_in_prod(monkeypatch: pytest.Monke
     cookie.load(cookie_header)
     session_id = cookie["gustav_session"].value
 
-    import main  # type: ignore  # noqa: E402
+    import backend.web.main as main  # type: ignore  # noqa: E402
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", session_id)
@@ -647,7 +647,7 @@ async def test_register_redirect():
 @pytest.mark.anyio
 async def test_register_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
     """Registration redirect should be built from the configured base_url + realm."""
-    from identity_access.oidc import OIDCConfig
+    from backend.identity_access.oidc import OIDCConfig
 
     test_cfg = OIDCConfig(
         base_url="http://kc.example:8080",
@@ -669,7 +669,7 @@ async def test_register_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.anyio
 async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPatch):
-    from identity_access.oidc import OIDCConfig
+    from backend.identity_access.oidc import OIDCConfig
     from urllib.parse import urlparse, parse_qs
 
     # Ensure allow-listing does not interfere with the happy-path redirect contract
@@ -697,7 +697,7 @@ async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.anyio
 async def test_register_callback_redirects_to_safe_in_app_target(monkeypatch: pytest.MonkeyPatch):
-    import main  # type: ignore  # noqa: E402
+    import backend.web.main as main  # type: ignore  # noqa: E402
     from urllib.parse import parse_qs, urlparse
 
     class FakeOIDC:

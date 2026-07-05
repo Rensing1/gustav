@@ -124,12 +124,11 @@ def test_current_environment_prefers_loaded_module_when_imports_fail(monkeypatch
     dummy_main = types.SimpleNamespace(RUNTIME=types.SimpleNamespace(settings=dummy_settings))
 
     monkeypatch.setitem(sys.modules, "backend.web.main", dummy_main)
-    monkeypatch.setitem(sys.modules, "main", dummy_main)
 
     real_import_module = importlib.import_module
 
     def fake_import_module(name: str):
-        if name in ("backend.web.main", "main"):
+        if name in ("backend.web.main",):
             raise ImportError("simulated module loader failure")
         return real_import_module(name)
 
@@ -140,36 +139,29 @@ def test_current_environment_prefers_loaded_module_when_imports_fail(monkeypatch
     assert env == "prod"
 
 
-def test_current_environment_falls_back_to_main_runtime_when_backend_import_fails(monkeypatch: pytest.MonkeyPatch):
-    """If backend.web.main import fails, use main.RUNTIME.settings.environment."""
+def test_current_environment_falls_back_to_env_when_backend_main_import_fails(monkeypatch: pytest.MonkeyPatch):
+    """If backend.web.main import fails, use GUSTAV_ENV instead of a flat main alias."""
+
     real_import_module = importlib.import_module
-
-    class DummySettings:
-        def __init__(self, env: str) -> None:
-            self.environment = env
-
-    dummy_main = type("DummyMain", (), {"RUNTIME": types.SimpleNamespace(settings=DummySettings("stage"))})
 
     def fake_import_module(name: str):
         if name == "backend.web.main":
             raise ImportError("simulated backend.web.main failure")
-        if name == "main":
-            return dummy_main
         return real_import_module(name)
 
     monkeypatch.setattr(importlib, "import_module", fake_import_module)
     monkeypatch.setenv("GUSTAV_ENV", "prod")
 
     env = learning._current_environment()
-    assert env == "stage"
+    assert env == "prod"
 
 
 def test_current_environment_falls_back_to_env_when_no_module(monkeypatch: pytest.MonkeyPatch):
-    """If neither backend.web.main nor main is importable, use GUSTAV_ENV."""
+    """If backend.web.main is not importable, use GUSTAV_ENV."""
     real_import_module = importlib.import_module
 
     def fake_import_module(name: str):
-        if name in ("backend.web.main", "main"):
+        if name in ("backend.web.main",):
             raise ImportError("simulated failure")
         return real_import_module(name)
 

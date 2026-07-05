@@ -10,7 +10,7 @@ import pytest
 from httpx import ASGITransport
 
 
-import main  # type: ignore
+import backend.web.main as main  # type: ignore
 from backend.tests.runtime_auth_helpers import install_session_store
 
 teaching_routes = importlib.import_module("backend.web.routes.teaching")

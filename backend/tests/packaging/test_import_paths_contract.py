@@ -106,12 +106,25 @@ def test_runtime_backend_code_uses_backend_namespace_for_bounded_contexts() -> N
     assert offenders == []
 
 
-def test_main_module_keeps_legacy_alias_only_as_compatibility_bridge() -> None:
+def test_main_module_does_not_publish_flat_legacy_alias() -> None:
     src = (_repo_root() / "backend" / "web" / "main.py").read_text(encoding="utf-8")
 
-    assert '__name__ == "backend.web.main"' in src
-    assert '_sys.modules.setdefault("main", _sys.modules[__name__])' in src
+    assert 'setdefault("main"' not in src
     assert '__name__ == "main"' not in src
+
+
+def test_web_routes_do_not_probe_flat_main_alias() -> None:
+    """Runtime route modules should only coordinate through `backend.web.main`."""
+
+    for relative_path in (
+        "backend/web/routes/learning.py",
+        "backend/web/routes/teaching.py",
+    ):
+        source = (_repo_root() / relative_path).read_text(encoding="utf-8")
+
+        assert '"main", "backend.web.main"' not in source
+        assert '"backend.web.main", "main"' not in source
+        assert 'import_module("main")' not in source
 
 
 def test_harness_does_not_require_legacy_route_aliases() -> None:
@@ -130,25 +143,26 @@ def test_harness_does_not_require_legacy_route_aliases() -> None:
     assert importlib.import_module("backend.web.routes.learning") is package_module
 
 
-def test_legacy_bounded_context_imports_share_package_module_instances() -> None:
-    """Legacy bounded-context imports must not duplicate shared classes."""
+def test_bounded_context_modules_do_not_publish_legacy_top_level_aliases() -> None:
+    """Bounded contexts should be imported through the production `backend.*` namespace."""
 
-    for package_name, module_name in (
-        ("identity_access", "cli_tokens"),
-        ("identity_access", "directory"),
-        ("identity_access", "oidc"),
-        ("identity_access", "stores"),
-        ("identity_access", "tokens"),
-        ("teaching", "repo_db"),
-        ("teaching", "storage"),
-        ("teaching", "storage_supabase"),
-        ("teaching.services", "live_student_overview"),
-        ("teaching.services", "materials"),
-        ("teaching.services", "tasks"),
+    for relative_path in (
+        "backend/identity_access/__init__.py",
+        "backend/identity_access/cli_tokens.py",
+        "backend/identity_access/directory.py",
+        "backend/identity_access/oidc.py",
+        "backend/identity_access/stores.py",
+        "backend/identity_access/tokens.py",
+        "backend/teaching/__init__.py",
+        "backend/teaching/repo_db.py",
+        "backend/teaching/storage.py",
+        "backend/teaching/storage_supabase.py",
+        "backend/teaching/services/__init__.py",
+        "backend/teaching/services/live_student_overview.py",
+        "backend/teaching/services/materials.py",
+        "backend/teaching/services/tasks.py",
     ):
-        package_module = importlib.import_module(f"backend.{package_name}.{module_name}")
-        legacy_module = importlib.import_module(f"{package_name}.{module_name}")
+        source = (_repo_root() / relative_path).read_text(encoding="utf-8")
 
-        assert legacy_module is package_module
-        parent = importlib.import_module(package_name)
-        assert getattr(parent, module_name) is package_module
+        assert "sys.modules.setdefault" not in source
+        assert "__name__ ==" not in source

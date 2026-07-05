@@ -10,7 +10,7 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
-import main  # type: ignore  # noqa: E402
+import backend.web.main as main  # type: ignore  # noqa: E402
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 

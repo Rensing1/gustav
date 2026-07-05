@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from identity_access.oidc import OIDCConfig
-from identity_access.tokens import (
+from backend.identity_access.oidc import OIDCConfig
+from backend.identity_access.tokens import (
     BearerTokenVerificationError,
     IDTokenVerificationError,
     verify_bearer_token,
 )
-from identity_access import tokens as tokens_mod
+from backend.identity_access import tokens as tokens_mod
 
 
 class FakeCache:

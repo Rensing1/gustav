@@ -247,7 +247,7 @@ def _is_unset(value: object) -> bool:
         return True
     if type(value) is object:
         return True
-    for module_name in ("backend.teaching.services.materials", "teaching.services.materials"):
+    for module_name in ("backend.teaching.services.materials",):
         module = _sys.modules.get(module_name)
         if module is not None and value is getattr(module, "_UNSET", None):
             return True
@@ -1458,7 +1458,7 @@ def _sync_teaching_route_globals(*, adapter: StorageAdapterProtocol, override_ac
     """
 
     apps = []
-    for module_name in ("main", "backend.web.main"):
+    for module_name in ("backend.web.main",):
         main_module = _sys.modules.get(module_name)
         app = getattr(main_module, "app", None) if main_module is not None else None
         if app is not None:
@@ -1497,7 +1497,7 @@ def _sync_teaching_route_repo(repo: Any) -> None:
     """Retarget already-registered Teaching route globals to the current repo."""
 
     apps = []
-    for module_name in ("main", "backend.web.main"):
+    for module_name in ("backend.web.main",):
         main_module = _sys.modules.get(module_name)
         app = getattr(main_module, "app", None) if main_module is not None else None
         if app is not None:

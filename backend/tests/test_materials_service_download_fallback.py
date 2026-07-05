@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from teaching.services.materials import MaterialsService, MaterialFileSettings
+from backend.teaching.services.materials import MaterialsService, MaterialFileSettings
 
 
 class _RepoStub:

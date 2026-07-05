@@ -372,7 +372,7 @@ def _reset_learning_route_globals_between_tests():
             "_download_bytes_with_limit",
             "_load_storage_bytes_for_validation",
         )
-        for main_name in ("main", "backend.web.main"):
+        for main_name in ("backend.web.main",):
             main = importlib.import_module(main_name)
             for route in getattr(main.app, "routes", []):
                 if not isinstance(route, APIRoute):
@@ -400,7 +400,7 @@ def _reset_teaching_route_globals_between_tests():
         teaching = importlib.import_module("backend.web.routes.teaching")
 
         helper_names = ("_get_repo", "_get_materials_service")
-        for main_name in ("main", "backend.web.main"):
+        for main_name in ("backend.web.main",):
             main = importlib.import_module(main_name)
             for route in getattr(main.app, "routes", []):
                 if not isinstance(route, APIRoute):
@@ -424,12 +424,12 @@ def _reset_auth_state_store():
     Reset the global OIDC state store before each pytest case.
 
     Why:
-        Auth tests share the `main.RUNTIME.state_store` singleton; without a reset,
+        Auth tests share the `backend.web.main.RUNTIME.state_store` singleton; without a reset,
         PKCE state/nonce entries leak across tests and trigger 400 callbacks.
     Parameters:
         (autouse fixture) – no caller-supplied parameters; executes for every test.
     Behavior:
-        - Re-imports `main` / `backend.web.main` if necessary.
+        - Re-imports `backend.web.main` if necessary.
         - Replaces their Runtime state store with a fresh in-memory `StateStore`.
     Permissions:
         Internal test helper; no runtime permissions required.
@@ -441,7 +441,7 @@ def _reset_auth_state_store():
         return
 
     modules = []
-    for name in ("main", "backend.web.main"):
+    for name in ("backend.web.main",):
         mod = sys.modules.get(name)
         if mod is None:
             try:
@@ -450,7 +450,7 @@ def _reset_auth_state_store():
                 continue
         modules.append(mod)
 
-    # Use a single shared instance for both import names to avoid drift.
+    # Use a single shared instance for the package-oriented runtime module.
     shared_state = StateStore()
     for mod in modules:
         runtime = getattr(mod, "RUNTIME", None)
@@ -657,15 +657,15 @@ def _reset_settings_environment_override():
 
     Why:
         Some tests temporarily force `prod` semantics via
-        `main.RUNTIME.settings.override_environment("prod")`. If a test aborts early
+        `backend.web.main.RUNTIME.settings.override_environment("prod")`. If a test aborts early
         or misses cleanup, the override can leak into unrelated tests in a full
         run. This autouse fixture restores the default (env-driven) behavior
         before each test to keep CSRF/cookie decisions deterministic.
     """
     try:
         import importlib, sys as _sys
-        # Reset override on both import names if present.
-        for name in ("main", "backend.web.main"):
+        # Reset override on the package-oriented runtime module if present.
+        for name in ("backend.web.main",):
             mod = _sys.modules.get(name) or importlib.import_module(name)
             runtime = getattr(mod, "RUNTIME", None)
             settings = getattr(runtime, "settings", None)

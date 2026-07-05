@@ -17,22 +17,11 @@ Security:
 """
 from __future__ import annotations
 
-import sys
 from typing import Any, Dict
 import os
 from urllib.parse import urlparse as _urlparse, urlunparse as _urlunparse
 
 from .storage import StorageAdapterProtocol
-
-# Temporary compatibility while legacy tests still import `teaching.storage_supabase`.
-if __name__ == "backend.teaching.storage_supabase":
-    sys.modules.setdefault("teaching.storage_supabase", sys.modules[__name__])
-elif __name__ == "teaching.storage_supabase":
-    sys.modules.setdefault("backend.teaching.storage_supabase", sys.modules[__name__])
-for _parent_name, _attribute_name in (("teaching", "storage_supabase"), ("backend.teaching", "storage_supabase")):
-    _parent = sys.modules.get(_parent_name)
-    if _parent is not None:
-        setattr(_parent, _attribute_name, sys.modules[__name__])
 
 
 class SupabaseStorageAdapter(StorageAdapterProtocol):

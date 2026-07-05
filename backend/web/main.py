@@ -28,11 +28,6 @@ from backend.web.main_middleware_wiring import install_main_middlewares
 from backend.web.main_router_wiring import include_main_routers
 from backend.web.main_storage_wiring import initialize_main_storage
 
-# Ensure legacy imports consistently reference the same module instance.
-if __name__ == "backend.web.main":
-    _sys.modules.setdefault("main", _sys.modules[__name__])
-
-
 bootstrap_runtime_environment()
 
 # --- App & Settings Setup -------------------------------------------------------

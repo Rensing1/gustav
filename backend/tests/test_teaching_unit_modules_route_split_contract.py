@@ -54,28 +54,32 @@ def test_unit_module_routes_are_owned_by_dedicated_router_module() -> None:
             assert marker not in teaching_source
 
 
-def test_unit_module_router_wrappers_delegate_to_teaching_module() -> None:
-    """Wrapper functions should delegate unchanged behavior to the existing teaching handlers."""
+def test_unit_module_router_owns_handlers_without_teaching_delegation() -> None:
+    """Unit module/phase handlers must live in the dedicated router module."""
 
     modules_source = UNIT_MODULE_SOURCE.read_text(encoding="utf-8")
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
 
-    expected_delegations = {
-        "list_unit_phases": "teaching_routes.list_unit_phases(",
-        "create_unit_phase": "teaching_routes.create_unit_phase(",
-        "update_unit_phase": "teaching_routes.update_unit_phase(",
-        "delete_unit_phase": "teaching_routes.delete_unit_phase(",
-        "reorder_unit_phases": "teaching_routes.reorder_unit_phases(",
-        "get_unit_modules_graph": "teaching_routes.get_unit_modules_graph(",
-        "get_unit_module_content_target": "teaching_routes.get_unit_module_content_target(",
-        "create_unit_module": "teaching_routes.create_unit_module(",
-        "create_unit_module_edge": "teaching_routes.create_unit_module_edge(",
-        "delete_unit_module_edge": "teaching_routes.delete_unit_module_edge(",
-        "delete_unit_module_edge_by_path": "teaching_routes.delete_unit_module_edge_by_path(",
-        "update_unit_module": "teaching_routes.update_unit_module(",
-        "delete_unit_module": "teaching_routes.delete_unit_module(",
-        "reorder_unit_phase_modules": "teaching_routes.reorder_unit_phase_modules(",
-    }
+    assert "from backend.web.routes import teaching as teaching_routes" not in modules_source
 
-    for fn_name, marker in expected_delegations.items():
+    owned_handlers = (
+        "list_unit_phases",
+        "create_unit_phase",
+        "update_unit_phase",
+        "delete_unit_phase",
+        "reorder_unit_phases",
+        "get_unit_modules_graph",
+        "get_unit_module_content_target",
+        "create_unit_module",
+        "create_unit_module_edge",
+        "delete_unit_module_edge",
+        "delete_unit_module_edge_by_path",
+        "update_unit_module",
+        "delete_unit_module",
+        "reorder_unit_phase_modules",
+    )
+
+    for fn_name in owned_handlers:
         assert f"def {fn_name}(" in modules_source
-        assert marker in modules_source
+        assert f"teaching_routes.{fn_name}(" not in modules_source
+        assert f"async def {fn_name}(" not in teaching_source

@@ -410,9 +410,15 @@ def _reset_teaching_route_globals_between_tests():
                 route_globals = getattr(route.endpoint, "__globals__", None)
                 if not isinstance(route_globals, dict):
                     continue
+                route_module_name = getattr(route.endpoint, "__module__", "")
+                try:
+                    route_module = importlib.import_module(route_module_name)
+                except Exception:
+                    route_module = teaching
                 for helper_name in helper_names:
-                    if helper_name in route_globals and hasattr(teaching, helper_name):
-                        route_globals[helper_name] = getattr(teaching, helper_name)
+                    helper_source = route_module if hasattr(route_module, helper_name) else teaching
+                    if helper_name in route_globals and hasattr(helper_source, helper_name):
+                        route_globals[helper_name] = getattr(helper_source, helper_name)
     except Exception:
         pass
     yield

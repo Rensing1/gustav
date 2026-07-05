@@ -13,7 +13,7 @@ import httpx
 from httpx import ASGITransport
 import os
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 os.environ["H5P_REVIEW_TOKEN_SECRET"] = "test-secret"

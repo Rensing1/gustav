@@ -9,7 +9,7 @@ import httpx
 from httpx import ASGITransport
 import importlib
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
@@ -67,7 +67,7 @@ async def test_summary_falls_back_to_legacy_email_localpart_and_hides_random_ids
     store = install_session_store(monkeypatch, main)
     owner = store.create(sub="t-legacy-owner", name="Owner", roles=["teacher"])
 
-    legacy_sub = "legacy-email:raphael.fournell@schule.de"
+    legacy_sub = "legacy-email:student@example.com"
     random_sub = "not-a-uuid-sub-xyz"
 
     async with (await _client()) as c:
@@ -90,7 +90,7 @@ async def test_summary_falls_back_to_legacy_email_localpart_and_hides_random_ids
         # Legacy email must fall back to the stable localpart.
         legacy_name = names_by_sub.get(legacy_sub, "")
         assert legacy_name and "@" not in legacy_name and not legacy_name.startswith("legacy-email:")
-        assert legacy_name == "raphael.fournell"
+        assert legacy_name == "student"
 
         # Random SUB should remain Unbekannt (no false localpart derivation)
         assert names_by_sub.get(random_sub, "") == "Unbekannt"

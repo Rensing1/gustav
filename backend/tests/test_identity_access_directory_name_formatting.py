@@ -14,19 +14,19 @@ from backend.identity_access import directory
 
 
 def test_display_name_prefers_attribute_then_first_last():
-    u = {"firstName": "Max", "lastName": "Mustermann", "attributes": {"display_name": ["Franz Müller"]}}
-    assert directory._display_name(u) == "Franz Müller"
+    u = {"firstName": "Max", "lastName": "Mustermann", "attributes": {"display_name": ["Person Beispiel"]}}
+    assert directory._display_name(u) == "Person Beispiel"
 
     u2 = {"firstName": "Max", "lastName": "Mustermann"}
     assert directory._display_name(u2) == "Max Mustermann"
 
 
 def test_display_name_humanizes_email_and_legacy_prefix():
-    u = {"email": "raphael.fournell@gym.example.de"}
-    assert directory._display_name(u) == "Raphael Fournell"
+    u = {"email": "student.example@example.edu"}
+    assert directory._display_name(u) == "Student Example"
 
-    u2 = {"username": "legacy-email:max.tolle"}
-    assert directory._display_name(u2) == "Max Tolle"
+    u2 = {"username": "legacy-email:learner.placeholder"}
+    assert directory._display_name(u2) == "Learner Placeholder"
 
 
 def test_display_name_handles_single_word_and_fallback():

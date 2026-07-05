@@ -12,8 +12,8 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 
 ## Zusammenfassung
 - Inventarisierte Dateien: 115
-- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 62
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 26
+- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 55
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 33
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 13
 - Statische Migrationstests ohne echte DB-Verbindung: 5
@@ -104,13 +104,13 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 | backend/tests/test_teaching_courses_api.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
 | backend/tests/test_teaching_courses_update_delete_api.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
 | backend/tests/test_teaching_courses_update_semantics.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_live_detail_api.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_live_detail_relation_guard.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_live_student_overview_api.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_live_unit_delta_api.py | real-db | - | missing-db-marker | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_live_unit_summary_api.py | real-db | - | missing-db-marker | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_live_unit_summary_legacy_email_fallback.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_live_unit_summary_names_humanized.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
+| backend/tests/test_teaching_live_detail_api.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_live_detail_relation_guard.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_live_student_overview_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_live_unit_delta_api.py | real-db | db_write | marked-db | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_live_unit_summary_api.py | real-db | db_write | marked-db | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_live_unit_summary_legacy_email_fallback.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_live_unit_summary_names_humanized.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_teaching_materials_files_api.py | real-db | - | missing-db-marker | env:DATABASE_URL, psycopg-connect, psycopg-import, requires-db | Review for db_read/db_write before marker hardening |
 | backend/tests/test_teaching_materials_markdown_api.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
 | backend/tests/test_teaching_members_api_default_limit.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |

@@ -155,6 +155,14 @@ def test_full_prod_like_runs_external_integration_smokes() -> None:
     assert "$(MAKE) test-e2e" in body
 
 
+def test_quality_scorecard_runs_docker_image_smoke_by_default() -> None:
+    """The monthly scorecard should not leave image parity as an unrun follow-up."""
+
+    body = _target_body("quality-scorecard")
+
+    assert "--run-docker-check" in body
+
+
 def test_frontend_vitest_uses_numeric_loopback_host() -> None:
     """Frontend unit tests should not depend on localhost DNS resolution."""
 

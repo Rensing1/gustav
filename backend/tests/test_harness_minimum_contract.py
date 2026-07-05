@@ -112,6 +112,19 @@ def test_data_inventory_documents_personal_data_boundaries() -> None:
         assert required_term in text
 
 
+def test_tech_debt_inventory_has_no_open_entries_after_harness_hardening() -> None:
+    """Accepted deviations should be explicit, but the closed plan must not leave open debt."""
+
+    text = _read("docs/harness/TECH_DEBT.md")
+
+    open_rows = [
+        line
+        for line in text.splitlines()
+        if line.startswith("| TD-") and not line.startswith("| TD-EXAMPLE")
+    ]
+    assert open_rows == []
+
+
 def test_plan_memory_documents_exist() -> None:
     """Agents need a small searchable planning memory before refactor work grows."""
 
@@ -259,3 +272,12 @@ def test_ci_runs_same_harness_minimum_entry_point_as_local_development() -> None
 
     gitignore = _read(".gitignore")
     assert ".env" in gitignore
+
+
+def test_ci_makes_docker_image_smoke_visible() -> None:
+    """CI must expose image-only startup parity instead of relying on bind mounts."""
+
+    workflow = _read(".github/workflows/harness-minimum.yml")
+
+    assert "test-docker-image-smoke" in workflow
+    assert "make test-docker-image-smoke" in workflow

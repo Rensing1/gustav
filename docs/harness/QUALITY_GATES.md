@@ -86,7 +86,7 @@ Initialer lokaler Befehl:
 Aktueller Status:
 - Als hartes Gate in `make verify` enthalten.
 - In `harness-signals` warning-only sichtbar.
-- In `harness-minimum` nur als schneller Source-Contract enthalten, nicht als Docker-Build.
+- In CI als expliziter Schritt nach `make harness-minimum` sichtbar, damit Image-Parität nicht hinter Bind-Mounts verschwindet.
 - Packaging-Contracts prüfen zusätzlich, dass Web und Learning-Worker das Backend lokal als ein Package unter `/app/backend` mounten und keine einzelnen Backend-Subpackages als zweite Wurzeln einhängen.
 
 ### import-boundaries
@@ -219,7 +219,7 @@ Aktueller Status:
 - Implementiert als eigenständiger Reporter (`backend/tools/quality_scorecard.py`) mit:
   - Markdown-Bericht in `docs/harness/QUALITY_SCORECARD.md`
   - JSON-Historie in `docs/harness/QUALITY_SCORECARD_HISTORY.json`
-- Sicherheits- und Contract-Checks laufen im Standardmodus; Docker-Image-Parität wird nur bei Bedarf ausgeführt (`--run-docker-check`) und bleibt kein täglicher Standard.
+- Sicherheits-, Contract- und Docker-Image-Paritätschecks laufen im Standardmodus, damit der Monatsbericht keine unrun-Docker-Follow-ups erzeugt.
 
 ## Harte Regeln
 - Sicherheits-, Privacy-, Secret- und API-Security-Contract-Fehler blockieren sofort.

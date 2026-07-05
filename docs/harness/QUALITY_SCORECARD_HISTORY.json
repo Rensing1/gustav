@@ -4,8 +4,8 @@
       "checks": {
         "docker-image-smoke": {
           "command": "/home/felix/gustav-alpha2/.venv/bin/python -m backend.tools.docker_image_smoke",
-          "exit_code": null,
-          "ok": null
+          "exit_code": 0,
+          "ok": true
         },
         "openapi": {
           "command": "/home/felix/gustav-alpha2/.venv/bin/python -m backend.tools.openapi_contract_check --spec /home/felix/gustav-alpha2/api/openapi.yml",
@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-05T11:26:48",
+      "generated": "2026-07-05T13:07:56",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -56,7 +56,7 @@
           "path": "backend/teaching/repo_db.py"
         },
         {
-          "delta_from_previous": -76,
+          "delta_from_previous": 0,
           "loc": 1633,
           "path": "h5p-service/server.mjs"
         },
@@ -191,18 +191,8 @@
         ]
       },
       "tech_debt": {
-        "count": 1,
-        "entries": [
-          {
-            "bereich": "Harness PR 1",
-            "exit_criterion": "`make harness-signals` ist stabil und einzelne Signale sind als harte Gates eingeordnet",
-            "grund": "Erstes Harness soll Orientierung schaffen, ohne laufende Refactors zu blockieren",
-            "id": "TD-001",
-            "owner": "Produktverantwortlicher",
-            "review_date": "2026-08-02",
-            "risiko": "Warning-Signale blockieren noch nicht"
-          }
-        ]
+        "count": 0,
+        "entries": []
       }
     }
   ]

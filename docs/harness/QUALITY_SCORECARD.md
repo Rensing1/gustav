@@ -20,7 +20,7 @@ Review cadence: monatlich
 | frontend/src/lib/styles/design-system.css | 1903 | +0 |
 | frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte | 1644 | +0 |
 | frontend/src/routes/teaching/units/[unitId]/+page.svelte | 1210 | +0 |
-| h5p-service/server.mjs | 1633 | -76 |
+| h5p-service/server.mjs | 1633 | +0 |
 
 ### Security status
 - Security quick checks: pass (/home/felix/gustav-alpha2/.venv/bin/pytest -q backend/tests/test_config_security.py backend/tests/test_privacy_logging_contract.py backend/tests/test_csrf_tokens_contract.py)
@@ -30,16 +30,13 @@ Review cadence: monatlich
 - Route map inventory: pass (/home/felix/gustav-alpha2/.venv/bin/python -m backend.tools.route_map_inventory --check /home/felix/gustav-alpha2/docs/harness/ROUTE_MAP.md)
 
 ### Docker image parity
-- Web image smoke check: not run (/home/felix/gustav-alpha2/.venv/bin/python -m backend.tools.docker_image_smoke)
+- Web image smoke check: pass (/home/felix/gustav-alpha2/.venv/bin/python -m backend.tools.docker_image_smoke)
 
 - OpenAPI operations: 147
 - Runtime operations: 136
 
 ### Open TECH_DEBT
-- Outstanding entries: 1
-| ID | Bereich | Risiko | Exit criterion |
-| --- | --- | --- | --- |
-| TD-001 | Harness PR 1 | Warning-Signale blockieren noch nicht | `make harness-signals` ist stabil und einzelne Signale sind als harte Gates eingeordnet |
+- Outstanding entries: 0
 
 ### Skill inventory and eval status
 - Active skills: 7

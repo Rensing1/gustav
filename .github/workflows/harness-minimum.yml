@@ -30,3 +30,6 @@ jobs:
 
       - name: Run harness minimum
         run: make harness-minimum
+
+      - name: Run Docker image smoke
+        run: make test-docker-image-smoke

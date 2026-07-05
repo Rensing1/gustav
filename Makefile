@@ -189,7 +189,7 @@ test-docker-image-smoke:
 
 .PHONY: quality-scorecard
 quality-scorecard:
-	. ./.venv/bin/activate && python -m backend.tools.quality_scorecard --month `date +%Y-%m`
+	. ./.venv/bin/activate && python -m backend.tools.quality_scorecard --month `date +%Y-%m` --run-docker-check
 
 .PHONY: test-import-boundaries
 test-import-boundaries:

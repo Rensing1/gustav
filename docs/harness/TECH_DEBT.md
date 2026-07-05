@@ -1,6 +1,6 @@
 # Tech Debt
 
-Status: Draft
+Status: Active
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`
 CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`
@@ -8,9 +8,22 @@ Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich während des Harness-Refactors
 
 ## Zweck
-Dieses Dokument macht bewusst akzeptierte Abweichungen sichtbar.
+Dieses Dokument macht bewusst akzeptierte Abweichungen sichtbar. Der aktuelle Harness-Stand akzeptiert keine offenen Abweichungen als Restarbeit des Refactor-Plans.
 
-## Vorlage
-| ID | Bereich | Risiko | Grund | Owner | Review date | Exit criterion |
-| --- | --- | --- | --- | --- | --- | --- |
-| TD-001 | Harness PR 1 | Warning-Signale blockieren noch nicht | Erstes Harness soll Orientierung schaffen, ohne laufende Refactors zu blockieren | Produktverantwortlicher | 2026-08-02 | `make harness-signals` ist stabil und einzelne Signale sind als harte Gates eingeordnet |
+## Aktueller Stand
+
+Keine offenen Tech-Debt-Einträge.
+
+## Vorlage für neue Einträge
+
+Neue Einträge müssen als Tabelle mit diesen Spalten angelegt werden:
+
+- ID
+- Bereich
+- Risiko
+- Grund
+- Owner
+- Review date
+- Exit criterion
+
+Jeder Eintrag braucht ein konkretes Exit-Kriterium und darf nur eine bewusst akzeptierte, zeitlich überprüfbare Abweichung beschreiben. Wenn ein Eintrag nötig wird, beginnt die echte Tabelle mit `| ID | Bereich | Risiko | Grund | Owner | Review date | Exit criterion |`; solange keine echte Tabelle vorhanden ist, zählt die Scorecard null offene Einträge.

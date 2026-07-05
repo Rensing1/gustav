@@ -43,7 +43,6 @@ from backend.web.routes.teaching_shared import (
     _json_private,
     _private_error,
     _require_teacher,
-    _role_in,
 )
 from backend.web.routes.teaching_serialization import (
     _build_latest_submission_payload,
@@ -67,7 +66,6 @@ from backend.web.routes.teaching_guards import (
     configure_teaching_guard_repo_provider,
 )
 from backend.web.routes.teaching_payloads import (
-    AddMember,
     MaterialCreatePayload,
     MaterialFinalizePayload,
     MaterialReorderPayload,
@@ -83,7 +81,6 @@ from backend.web.routes.teaching_payloads import (
 )
 from backend.web.routes.teaching_validation import (
     canonical_uuid as _canonical_uuid,
-    clamp_limit_offset as _clamp_limit_offset,
     safe_int as _safe_int,
 )
 from backend.web.routes import teaching_course_state, teaching_payloads, teaching_serialization, teaching_storage_cleanup
@@ -1961,142 +1958,7 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
     return _private_error({"error": "forbidden"}, status_code=403)
 
 
-async def list_members(request: Request, course_id: str, limit: int = 10, offset: int = 0):
-    """List members for a course — owner-only, with names resolved via directory adapter.
-
-    Why:
-        Owners need to view roster with minimal PII. Names are resolved on-the-fly
-        from identity directory using stable `sub` identifiers.
-
-    Behavior:
-        - 200 with [{ sub, name, joined_at }]
-        - 403 when caller is not owner; 404 when the course does not exist
-        - Pagination via limit (1..50) and offset (>=0); default limit = 10
-
-    Permissions:
-        Caller must be a teacher AND owner of the course.
-    """
-    user = getattr(request.state, "user", None)
-    sub = _current_sub(user)
-    if not _role_in(user, "teacher"):
-        return _private_error({"error": "forbidden"}, status_code=403)
-    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=10, max_limit=50)
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        repo = _get_repo()
-        if isinstance(repo, DBTeachingRepo):
-            if not repo.course_exists_for_owner(course_id, sub):
-                return _resp_non_owner_or_unknown(course_id, sub)
-            pairs = repo.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
-        else:
-            # Fallback in-memory owner check
-            course = repo.get_course(course_id)
-            if not course:
-                return _private_error({"error": "not_found"}, status_code=404)
-            if _teacher_id_of(course) != sub:
-                return _private_error({"error": "forbidden"}, status_code=403)
-            pairs = repo.list_members(course_id, limit=limit, offset=offset)
-    except Exception as exc:
-        # Defensive default: if DB helper path fails, do not risk information leakage.
-        # Log for observability, avoid logging full identifiers to minimize PII exposure.
-        cid_tail = (course_id or "").replace("-", "")[-6:]
-        logger.warning("list_members failed: cid_tail=%s err=%s", cid_tail, exc.__class__.__name__)
-        return _private_error({"error": "forbidden"}, status_code=403)
-    subs = [sid for sid, _ in pairs]
-    # Avoid blocking the event loop on synchronous network I/O
-    names = await asyncio.to_thread(_resolve_student_names_runtime, subs)
-    result = []
-    for sid, joined_at in pairs:
-        result.append({"sub": sid, "name": names.get(sid, sid), "joined_at": joined_at})
-    return _json_private(result, status_code=200)
-
-
-async def add_member(request: Request, course_id: str, payload: AddMember):
-    """Add a student to a course — owner-only; idempotent (201 new, 204 existing).
-
-    Why:
-        Allow owners to enroll students using stable `student_sub` identifiers.
-
-    Behavior:
-        - 201 when a new membership is created
-        - 204 when the student is already a member
-        - 400 when `student_sub` is missing/invalid; 403 when not owner
-
-    Permissions:
-        Caller must be a teacher AND owner of the course.
-    """
-    user = getattr(request.state, "user", None)
-    sub = _current_sub(user)
-    if not _role_in(user, "teacher"):
-        return _private_error({"error": "forbidden"}, status_code=403)
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    # Prefer the contract key; fall back to legacy `sub` for compatibility with older callers/tests.
-    student_sub = getattr(payload, "student_sub", None) or getattr(payload, "sub", None)
-    if not isinstance(student_sub, str) or not student_sub.strip():
-        return _private_error({"error": "bad_request", "detail": "student_sub_required"}, status_code=400)
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        repo = _get_repo()
-        if isinstance(repo, DBTeachingRepo):
-            # Ensure caller owns the course; otherwise decide 404/403 via helper
-            if not repo.course_exists_for_owner(course_id, sub):
-                return _resp_non_owner_or_unknown(course_id, sub)
-            created = repo.add_member_owned(course_id, sub, student_sub.strip())
-        else:
-            # Fallback owner check
-            course = repo.get_course(course_id)
-            if not course:
-                return _private_error({"error": "not_found"}, status_code=404)
-            if _teacher_id_of(course) != sub:
-                return _private_error({"error": "forbidden"}, status_code=403)
-            created = repo.add_member(course_id, student_sub.strip())
-    except Exception:
-        # Fail closed: do not attempt mutation without clear ownership/existence semantics
-        return _resp_non_owner_or_unknown(course_id, sub)
-    if created:
-        return _json_private({}, status_code=201)
-    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
-
-
-async def remove_member(request: Request, course_id: str, student_sub: str):
-    """Remove a student from a course — owner-only; idempotent 204.
-
-    Behavior:
-        - 204 even if the student is not currently a member
-        - 403 when caller is not owner
-
-    Permissions:
-        Caller must be a teacher AND owner of the course.
-    """
-    repo = _get_repo()
-    user = getattr(request.state, "user", None)
-    sub = _current_sub(user)
-    if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    # CSRF guard for membership mutation
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(repo, DBTeachingRepo):
-            if not repo.course_exists_for_owner(course_id, sub):
-                return _resp_non_owner_or_unknown(course_id, sub)
-            repo.remove_member_owned(course_id, sub, str(student_sub))
-        else:
-            course = repo.get_course(course_id)
-            if not course:
-                return JSONResponse({"error": "not_found"}, status_code=404)
-            if _teacher_id_of(course) != sub:
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-            repo.remove_member(course_id, str(student_sub))
-    except Exception:
-        # Fail closed: do not attempt mutation without clear ownership/existence semantics
-        return _resp_non_owner_or_unknown(course_id, sub)
-    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
-
+# Course-member handlers live in backend.web.routes.teaching_course_members.
 
 async def get_unit_live_summary(
     request: Request,

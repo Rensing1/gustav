@@ -44,16 +44,15 @@ def test_course_member_routes_are_owned_by_dedicated_router_module() -> None:
         assert path not in teaching_source
 
 
-def test_course_member_router_wrappers_delegate_to_teaching_module() -> None:
-    """Wrapper functions should delegate to the legacy teaching handlers."""
+def test_course_member_router_owns_handlers_without_teaching_delegation() -> None:
+    """Course-member handlers should not keep the large Teaching adapter as implementation."""
 
     course_member_source = COURSE_MEMBERS_SOURCE.read_text(encoding="utf-8")
-    expected_delegations = {
-        "list_members": "teaching_routes.list_members(",
-        "add_member": "teaching_routes.add_member(",
-        "remove_member": "teaching_routes.remove_member(",
-    }
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
+    handler_names = ("list_members", "add_member", "remove_member")
 
-    for fn_name, marker in expected_delegations.items():
+    assert "from backend.web.routes import teaching as teaching_routes" not in course_member_source
+    for fn_name in handler_names:
         assert f"def {fn_name}(" in course_member_source
-        assert marker in course_member_source
+        assert f"teaching_routes.{fn_name}(" not in course_member_source
+        assert f"async def {fn_name}(" not in teaching_source

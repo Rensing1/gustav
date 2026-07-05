@@ -127,12 +127,13 @@ Regel: E2E-Smokes sind teuer und fragil. Sie schützen Vertrauen in die Integrat
 - `upload-llm-boundaries`: servicefreie Upload-, Storage-, Signatur-, Feedback-/DSPy- und Privacy-Contracts; keine inhaltliche Vorprüfung oder Veränderung von Schüler-Submissions.
 - `docker-image-smoke`: Web-Image ohne Compose-Bind-Mounts bauen, package-orientierten Start `backend.web.main:app` prüfen, kritische Imports prüfen und `/health` abfragen; Bestandteil von `make verify`.
 - `import-boundaries`: AST-basierter Baseline-Scan für flache Web-Imports, gemischte `backend.web.routes.*`-Imports und verstreute `sys.path`-Manipulationen.
+- `db-inventory`: generierte Übersicht in `docs/harness/DB_TEST_INVENTORY.md` für echte DB/RLS-Kandidaten, statische Migrationstests und Supabase-Storage-/Konfigurationsverträge; Bestandteil von `make verify` als Synchronitätscheck.
 - `frontend-h5p`: `npm run check`, Vitest und H5P Node tests; Bestandteil von `make verify`.
 - `full-prod-like`: Supabase, OpenAI-kompatibler Endpunkt, Docker/Compose und E2E-Smokes.
 
 ## Marker-Regeln
 - `e2e`, `supabase_integration`, `openai_integration` und `legacy_migration` bleiben opt-in.
-- `db_read` und `db_write` werden erst dann als Strategie-Marker akzeptiert, wenn sie tatsächlich im Portfolio genutzt werden.
+- `db_read` und `db_write` werden erst dann als Strategie-Marker akzeptiert, wenn die `missing-db-marker`-Einträge aus `docs/harness/DB_TEST_INVENTORY.md` geprüft und bereinigt wurden.
 - Tests mit echten externen Diensten dürfen nicht durch zufällig gesetzte ENV-Variablen in der Standardsuite landen.
 - Tests mit globalen DB-Mutationen brauchen ein eigenes Gate oder bleiben aus der Standardsuite ausgeschlossen.
 

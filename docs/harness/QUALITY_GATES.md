@@ -190,6 +190,17 @@ Initialer lokaler Befehl:
 Regel:
 - Dieses Profil bleibt teuer und bewusst opt-in oder CI-staged.
 
+### db-inventory
+Zweck: DB-, RLS-, Migrations- und Supabase-nahe Testdateien sichtbar machen, bevor `db_read` und `db_write` harte Marker werden.
+
+Lokaler Befehl:
+- `make test-db-inventory`
+
+Aktueller Status:
+- Implementiert als generierter Synchronitätscheck (`backend/tools/db_test_inventory.py`) mit Markdown-Bericht in `docs/harness/DB_TEST_INVENTORY.md`.
+- `make verify` prüft, dass das Inventar aktuell ist.
+- `missing-db-marker` ist aktuell ein Review-Signal. Die Marker-Bereinigung selbst wird erst nach Datei-Batches hart geschaltet.
+
 ### quality-scorecard
 Zweck: den Refactor-Status monatlich messbar machen.
 
@@ -219,5 +230,5 @@ Aktueller Status:
 
 ## Offene Umsetzung
 - Die PR-1-Make-Targets existieren; ihre Inhalte werden nach Testportfolio- und DB-Marker-Inventar weiter geschärft.
-- `db_read` und `db_write` werden erst dann harte Marker, wenn ihr Einsatz im Portfolio überprüft wurde.
+- `db_read` und `db_write` werden erst dann harte Marker, wenn die `missing-db-marker`-Einträge aus `docs/harness/DB_TEST_INVENTORY.md` in kleinen Review-Batches geprüft wurden.
 - CI startet mit dem kleinsten verlässlichen Profil und erweitert die Matrix schrittweise.

@@ -12,13 +12,28 @@ Why:
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 
 import pytest
 
 learning = importlib.import_module("backend.web.routes.learning")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LEARNING_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "learning.py"
+DOWNLOADS_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "learning_downloads.py"
 
 
 pytestmark = pytest.mark.anyio("asyncio")
+
+
+def test_download_security_logic_lives_outside_learning_hotspot() -> None:
+    downloads = importlib.import_module("backend.web.routes.learning_downloads")
+    learning_source = LEARNING_SOURCE.read_text(encoding="utf-8")
+    downloads_source = DOWNLOADS_SOURCE.read_text(encoding="utf-8")
+
+    assert "def _is_private_host(" not in learning_source
+    assert "def _origin(" not in learning_source
+    assert "async def download_bytes_with_limit(" in downloads_source
+    assert callable(downloads.download_bytes_with_limit)
 
 
 @pytest.mark.anyio

@@ -1020,6 +1020,7 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
 - Akzeptanz:
   - `backend/web/routes/learning.py` enthält keine gemischten Upload-, Submission- und Material-Datei-Helfer mehr.
   - Upload-, Submission-, H5P-Access-, Material-File- und CSRF-Tests bleiben grün.
+- Done in working tree: `backend/web/routes/learning_downloads.py` übernimmt den SSRF-geschützten, größenbegrenzten Download-Fetcher inklusive Public-to-Internal-Supabase-Rewrite; `backend/web/routes/learning.py` behält nur den alten privaten Wrapper für bestehende Monkeypatch-Punkte. Die bestehenden Rewrite-/SSRF-Tests schützen diesen Schnitt. `backend/web/routes/learning.py` liegt nach diesem Schnitt bei 2764 LOC.
 
 #### C4: Browser-BFF- und App-Routen trennen
 - Problem: `backend/web/routes/app.py` ist mit knapp 2500 Zeilen ein großer Browser-BFF-Hotspot.

@@ -1035,6 +1035,7 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
   - `backend/web/routes/app.py` ist nicht mehr Sammelpunkt für Session, Profil und View-Modelle.
   - Session-, Profil-, BFF-, Auth- und Cache-Header-Tests bleiben grün.
 - Done in working tree: `backend/web/routes/app_session_helpers.py` übernimmt Runtime-/Session-Store-Auflösung, private App-Header, BFF-Shared-Secret-Prüfung und kleine Session-/User-Payload-Builder; `backend/web/routes/app.py` behält Kompatibilitätsaliase und die Route-Handler. Ein Contract-Test schützt, dass diese Session-Helfer nicht wieder in den App-Hotspot zurückwandern. `backend/web/routes/app.py` liegt nach diesem Schnitt bei 2412 LOC.
+- Done in working tree: `backend/web/routes/app_profile_helpers.py` übernimmt reine Profil-Claims-, Namens-, Lock-Timestamp- und Identity-Attribute-Normalisierung; `backend/web/routes/app.py` behält die Keycloak-Admin-Schreibfunktionen und Kompatibilitätsaliase. Ein Contract-Test schützt, dass diese Profil-Normalisierung nicht wieder in den App-Hotspot zurückwandert. `backend/web/routes/app.py` liegt nach diesem Schnitt bei 2362 LOC.
 
 #### C5: Learning-Repository strukturieren
 - Problem: `backend/learning/repo_db.py` ist mit mehr als 2400 Zeilen groß genug, um Query-Gruppen und Schreibfälle schwer überprüfbar zu machen.

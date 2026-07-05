@@ -26,6 +26,13 @@ from backend.web.security.guards import has_any_role, has_role
 from backend.web.routes import learning as learning_routes
 from backend.web.routes import teaching as teaching_routes
 from backend.web.routes import teaching_guards
+from backend.web.routes.app_profile_helpers import (
+    claims_email as _claims_email,  # noqa: F401
+    normalized_attributes as _normalized_attributes,
+    parse_lock_timestamp as _parse_lock_timestamp,
+    profile_identity_defaults as _profile_identity_defaults,
+    split_name_suggestion as _split_name_suggestion,  # noqa: F401
+)
 from backend.web.routes.app_session_helpers import (
     bff_session_payload as _bff_session_payload,
     bff_session_store as _bff_session_store,
@@ -123,63 +130,6 @@ def _current_claims(request: Request) -> dict[str, object]:
     except Exception:
         return {}
     return claims if isinstance(claims, dict) else {}
-
-
-def _claims_email(claims: dict[str, object]) -> str:
-    return str(claims.get("email") or claims.get("preferred_username") or "").strip()
-
-
-def _parse_lock_timestamp(value: object) -> datetime | None:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except Exception:
-        return None
-
-
-def _split_name_suggestion(identifier: str) -> tuple[str, str]:
-    try:
-        from backend.identity_access import directory  # type: ignore
-
-        humanized = str(directory.humanize_identifier(identifier) or "").strip()
-    except Exception:
-        humanized = ""
-    if not humanized:
-        return "", ""
-    parts = [part for part in humanized.split(" ") if part]
-    if not parts:
-        return "", ""
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], " ".join(parts[1:])
-
-
-def _profile_identity_defaults(claims: dict[str, object]) -> dict[str, object]:
-    email = _claims_email(claims)
-    first_name, last_name = _split_name_suggestion(email)
-    return {
-        "display_name": str(claims.get("gustav_display_name") or claims.get("name") or first_name or "Benutzer"),
-        "email": email,
-        "first_name": first_name,
-        "last_name": last_name,
-        "name_locked_until": None,
-        "name_can_edit": True,
-    }
-
-
-def _normalized_attributes(payload: object) -> dict[str, list[str]]:
-    attrs = payload if isinstance(payload, dict) else {}
-    out: dict[str, list[str]] = {}
-    for key, value in attrs.items():
-        if not isinstance(key, str):
-            continue
-        if isinstance(value, list):
-            out[key] = [str(item) for item in value if str(item or "").strip()]
-        elif value is not None and str(value).strip():
-            out[key] = [str(value)]
-    return out
 
 
 def _load_profile_identity(sub: str, claims: dict[str, object], request: Request | None = None) -> dict[str, object]:

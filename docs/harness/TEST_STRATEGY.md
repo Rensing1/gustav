@@ -1,11 +1,11 @@
 # Teststrategie
 
-Status: Draft
+Status: Active
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_test_strategy_docs_contract.py`
-CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; weitere Profile werden schrittweise ergänzt.
+CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; `make verify` führt die produktionsnahen Gates aus.
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
-Review cadence: monatlich während des Harness-Refactors
+Review cadence: monatlich
 
 ## Zweck
 Diese Strategie beschreibt, welche Tests GUSTAV braucht und wofür sie zuständig sind. Das Ziel ist nicht maximale Testanzahl, sondern ein verständliches, schnelles und sicherheitsbewusstes Testportfolio.
@@ -141,6 +141,6 @@ Regel: E2E-Smokes sind teuer und fragil. Sie schützen Vertrauen in die Integrat
 - `keep`: Der Test schützt eine klare Regel, einen Vertrag oder eine Sicherheitsgrenze.
 - `merge`: Der Test ist sinnvoll, aber redundant mit mehreren ähnlichen Tests.
 - `rewrite`: Der Test prüft das Richtige, aber auf der falschen Ebene.
-- `retire-later`: Der Test schützt Legacy-Verhalten oder Archivwissen und braucht eine bewusste spätere Entscheidung.
+- `retire-later`: Der Test schützt Legacy-Verhalten oder Archivwissen; Entfernung braucht eine bewusste Entscheidung vor dem Löschen.
 
 Keine Testdatei wird nur gelöscht, weil sie alt ist. Sie wird entfernt, wenn ihr Zweck anders besser geschützt ist oder der geschützte Pfad bewusst retired wurde.

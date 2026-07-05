@@ -3,13 +3,13 @@
 ## Status
 - Date: 2026-05-02
 - Last updated: 2026-07-05
-- Status: Draft v1.0; PR 1 "Harness Minimum", PR 2 "CSRF and Session Baseline", PR 3 "Authz and RLS Baseline", PR 4 "Uploads and LLM Data Boundaries", PR 5 "Docker Image-Only Smoke", PR 6 "Import Inventory and Blocking Rules", PR 7 "Make Frontend Check Visible", PR 8 "Package-Oriented App Start", the first PR 9 slices "Centralize Test Imports", "Teaching Test Import Cleanup Batch 1", "Cache Header Test Import Cleanup Batch 2", "Auth Test Import Cleanup Batch 3", "Auth Callback Test Import Cleanup Batch 4", "Auth Flow Test Import Cleanup Batch 5", "Bearer/BFF Test Import Cleanup Batch 6", "Legacy Retirement Test Import Cleanup Batch 7", "View Test Import Cleanup Batch 8", "Profile/Live View Test Import Cleanup Batch 9", "Auth Nonce/Password Test Import Cleanup Batch 10", "Auth/Navigation Sys-Path Cleanup Batch 11", "Auth Middleware Test Import Cleanup Batch 12", "Auth Registration Domain Test Import Cleanup Batch 13", "Sidebar/Security Header Test Import Cleanup Batch 14", "Session/Profile Contract Test Import Cleanup Batch 15", "Users API Test Import Cleanup Batch 16", "Learning Upload Intent Test Import Cleanup Batch 17", "Learning Spezialformate Test Import Cleanup Batch 18", "Legacy Live SSR Test Import Cleanup Batch 19", "OpenAI Health Test Import Cleanup Batch 20", "Learning Calliope Hex Test Import Cleanup Batch 21", "Learning H5P Test Import Cleanup Batch 22", "Learning Config Test Import Cleanup Batch 23", "Learning Internal Proxy Prod-Parity Test Import Cleanup Batch 24", "Learning Internal Proxy Security Test Import Cleanup Batch 25", "Learning Submission Route Test Import Cleanup Batch 26", "Learning PDF/Upload Proxy Test Import Cleanup Batch 27", "Learning Lazy Storage Wiring Test Import Cleanup Batch 28", "Teaching/Learning Small API Test Import Cleanup Batch 29", "No-DB Helper/Fallback Test Import Cleanup Batch 30", "No-DB Upload/Storage Test Import Cleanup Batch 31", "Learning Small API/Worker Test Import Cleanup Batch 32", "Teaching Sections Test Import Cleanup Batch 33", "Learning Scratch SB3 Test Import Cleanup Batch 34", "Learning API Contract Cleanup Batch 35", and "Learning Modular/Courses + Conftest API Fixture Cleanup Batch 36", the first PR 10 slice "API Contract Baseline", PR 11 "Make Frontend Verification Hard", the first PR 12 slice "Architecture Boundary Rules", the first PR 13 slice "Route Surface Map", the first PR 14 slice "Security Guard Extraction", PR 15 "Shrink backend/web/main.py to App Composition", the first PR 16 slice "Legacy HTML/HTMX Exit Wave 1", the first PR 17 slices "Task-Centric H5P Teaching Route Split", "H5P Authoring Helper Extraction", "Teaching Shared Response/Identity Helpers", "Teaching Task-Service Provider Boundary", "Teaching Guard/CSRF Boundary", and "Teaching Module Authoring Boundary", and the first PR 18 slices "Task Serializer Extraction", "Modular Graph Serializer Extraction", "Core Teaching Response Serializer Extraction", and "Latest Submission Payload Extraction" implemented in the working tree; follow-up PRs for further test-import cleanup, H5P service runtime parity, broader guard extraction, additional Teaching route splits/use-case wiring, further serialization/response model extraction, repository/DB boundary cleanup, frontend/H5P hotspot splitting, and further legacy route cleanup remain open
+- Status: Completed v1.0; the harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, quality scorecard, public-repo safety, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, keeps `TECH_DEBT.md` at zero open entries, and marks the harness documents as active.
 - Time horizon: 3 months
 - Strategy: harness first, then refactor in small PRs
-- Gate strategy: security, public-repo hygiene, and initial CI gates are hard immediately; structural and workflow gates start as warnings and become hard later
+- Gate strategy: security, public-repo hygiene, import boundaries, architecture boundaries, route map, API contract, DB inventory, Docker image parity, frontend/H5P, and full verification run as hard gates; `make harness-signals` remains advisory telemetry.
 - Scope decision: broad quality refactor with staged, test-protected removal of legacy FastAPI HTML/HTMX product paths
 - Agentic harness decision: agent-first execution with human review; PR 1 delivers orientation and minimum gates; safety gates block immediately, structure gates start as warnings
-- Current check: PR-1 harness artifacts, repo-governed skill sources, `docs/plan/INDEX.md`, `docs/plan/MILESTONES.md`, `docs/plan/DECISIONS.md`, `make harness-minimum`, `make harness-signals`, `make test-import-boundaries`, `make test-frontend-h5p`, `make test-docker-image-smoke`, `make test-route-map`, `make verify`, `make test-full-prod-like`, and the GitHub Actions harness workflow are present in the working tree.
+- Current check: PR-1 harness artifacts, repo-governed skill sources, `docs/plan/INDEX.md`, `docs/plan/MILESTONES.md`, `docs/plan/DECISIONS.md`, `make harness-minimum`, `make harness-signals`, `make test-import-boundaries`, `make test-frontend-h5p`, `make test-docker-image-smoke`, `make test-route-map`, `make quality-scorecard`, `make verify`, `make test-full-prod-like`, and the GitHub Actions harness workflow are present in the working tree.
 
 ## Summary
 GUSTAV should not merely be "cleaned up"; it should become reliably refactorable. The first step is therefore a repository-local harness made of rules, tests, quality gates, architecture boundaries, planning artifacts, and agent workflows so that Codex and human developers work from the same expectations.
@@ -24,16 +24,15 @@ This follows the AI harness-engineering framing: the harness is not one tool, on
 - evidence packages for agent runs, including context used, commands, failures, verification, and residual risk,
 - periodic garbage collection for stale rules, plans, dead paths, and accepted debt.
 
-The most important current findings are:
-- The backend web adapter is partly monolithic (`backend/web/main.py`, `backend/web/routes/teaching.py`, `backend/web/routes/learning.py`, `backend/web/routes/app.py`, large `repo_db.py` files).
-- Docker and import behavior are fragile: flat copies, `PYTHONPATH` as a crutch, mixed import styles, and Compose bind mounts that can hide image problems.
-- Frontend verification is part of `make verify`; `npm run check`, Frontend-Vitest, and H5P Node tests now run in the hard deterministic gate.
-- API contract-first exists as a principle, but it is not yet strong enough as an automated refactor safeguard.
-- FastAPI still contains legacy product HTML/HTMX paths, retired route handlers, and unreachable code behind retirement responses. These paths should be removed in stages after SvelteKit parity is covered by tests.
-- Runtime route surfaces are not yet clearly separated: public API, BFF-internal, H5P service routes, retired HTML routes, health checks, and auth bridge routes need an explicit map before strict contract gates can be enforced.
-- DB access is too scattered: route modules and repository modules open direct `psycopg` connections in many places, which hurts readability and makes pooling, transactions, RLS context, and N+1 checks harder.
-- Frontend and H5P also have hotspots (`h5p-service/server.mjs`, large Svelte pages/components, large CSS files) and should be included in the same quality refactor instead of being deferred indefinitely.
-- Security and GDPR/privacy are taken seriously, but they need to become harder executable gates.
+The most important initial findings and v1 closure state are:
+- The backend web adapter still contains large modules, but `backend/web/main.py` is a small app-composition entry point and Teaching/H5P/serialization responsibilities are split behind tested router and helper boundaries.
+- Docker and import behavior are guarded by image-only smoke checks, package-oriented app startup, hard import-boundary scans, and removal of legacy flat import aliases.
+- Frontend verification is part of `make verify`; `npm run check`, Frontend-Vitest, and H5P Node tests run in the hard deterministic gate.
+- API contract-first is enforced by `make test-api-contract-baseline` and a generated Route Map that separates public API, BFF-internal, H5P service routes, auth bridges, health checks, and retired surfaces.
+- FastAPI no longer registers active product HTML/HTMX shell pages; retired direct-backend product paths are covered by tested 410 or role-redirect behavior.
+- Web-adapter direct DB and Supabase-client creation debt is zero in the architecture-boundary baseline; approved infrastructure lives in dedicated adapter modules.
+- Frontend, H5P, CSS, web-route, and repository hotspots are tracked in `docs/harness/HOTSPOTS.md` and the monthly quality scorecard; relevant growth needs tests or a concrete Tech-Debt entry.
+- Security and GDPR/privacy boundaries are executable through hard security, CSRF, privacy logging, DB/RLS inventory, data-inventory, and public-repo safety checks.
 
 Priority order:
 1. lock down known security findings and baseline gates,
@@ -53,12 +52,12 @@ Priority order:
 - API changes start in `api/openapi.yml` and are then covered by contract tests.
 - GDPR/privacy, FOSS, and supply-chain requirements are treated as verifiable gates, not as statements of intent.
 - `backend/web/main.py` is an explicit refactor target. The desired end state is a small app-composition module with `create_app()`, not a mixed router, middleware, HTML, security, and helper monolith.
-- SvelteKit is the canonical product UI. FastAPI should keep API, BFF/internal, health, H5P integration, and required auth bridge behavior, but should not keep retired product HTML/HTMX surfaces as long-term compatibility code.
+- SvelteKit is the canonical product UI. FastAPI keeps API, BFF/internal, health, H5P integration, and required auth bridge behavior; retired product HTML/HTMX surfaces are not kept as long-term compatibility code.
 - Legacy HTML removal is staged: first inventory and tests, then removal of already-retired/dead paths, then further removals only after parity or redirect behavior is covered.
 - The target runtime entry point is package-oriented (`backend.web.main:app`) rather than relying on flat `main:app` imports from copied directories.
 - DB performance work is part of the refactor scope: introduce a small shared connection/transaction boundary before replacing scattered direct DB calls.
-- CSP and CSRF hardening should become stricter as legacy HTMX and inline-style dependencies are removed.
-- `AGENTS.md` should become a concise map, not the full handbook. Detailed, versioned agent rules live under `docs/harness/`.
+- CSP and CSRF hardening is part of the executable security baseline as legacy HTMX and inline-style dependencies are removed.
+- `AGENTS.md` remains the concise top-level map. Detailed, versioned agent rules live under `docs/harness/`.
 - Project-specific agent skills are part of the harness, but they are narrow workflow tools, not product-governance authority.
 - Every project skill needs a purpose, trigger, allowed actions, prohibited actions, stop criteria, verification requirements, and a review/eval path.
 - Repo-governed project skills live under `docs/harness/skills/<skill>/SKILL.md`; personal or local skills may help an agent, but they are not repo-authoritative until they are listed in `docs/harness/SKILLS.md` and reviewable in the repository.
@@ -706,7 +705,7 @@ Goal: establish local=prod parity, freeze API baseline, and make frontend verifi
 - Acceptance:
   - Done in working tree: `make test-api-contract-baseline` is green and `make verify` runs it as a hard gate.
   - Done in working tree: `make harness-minimum` includes `backend/tests/test_openapi_route_surface_baseline.py`.
-  - Open follow-up: H5P service runtime parity and full route-by-route route map remain for later PRs.
+  - Done in working tree: H5P service routes are represented in the generated Route Map as H5P-service surfaces, and `make test-route-map` keeps Runtime/OpenAPI classification synchronized.
 
 #### PR 11: Make Frontend Verification Hard
 - Keep the current green Svelte check as the baseline.
@@ -725,7 +724,7 @@ Goal: establish local=prod parity, freeze API baseline, and make frontend verifi
   - Done in working tree: `backend.tools.architecture_boundary_scan` checks FastAPI imports in Use Cases/Services and web-adapter DB/client debt against `docs/harness/ARCHITECTURE_BOUNDARY_BASELINE.json`.
   - Done in working tree: `make test-architecture-boundaries` is green and `make verify` runs it as a hard gate.
   - Done in working tree: `docs/harness/ARCHITECTURE_RULES.md` documents Security Guards and Serialisierung target rules.
-  - Done in working tree: PR19 reduced web-adapter direct DB access to a single intentional shared helper (`backend/web/db_cursor.py`); all scans pass against the baseline that allows one web-side direct connect site.
+  - Done in working tree: PR19 moved web-adapter direct DB access into intentional shared infrastructure (`backend/web/db_cursor.py`) and the architecture-boundary baseline now reports zero web-adapter violations.
 
 ### Month 3: Strangle the Monoliths Safely
 Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runtime boundaries without changing intended product behavior.
@@ -746,9 +745,9 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - Acceptance:
   - Done in working tree: `backend.tools.route_map_inventory` generates `docs/harness/ROUTE_MAP.md` from Runtime/OpenAPI operations.
   - Done in working tree: `make test-route-map` is green and `make verify` runs it as a hard gate.
-  - Done in working tree: removed 410 legacy paths no longer appear in the generated Runtime Route Map; remaining active legacy UI is still marked separately.
-  - Done in working tree: `backend.tools.route_map_inventory` maps `GET /`, `GET /about`, and `GET /api/me` to concrete test files (`test_navigation_roles_ui.py`, `test_app_composition_contract.py`, `test_api_me_with_db_session_store.py`, `test_auth_contract.py`, `test_auth_middleware.py`) and regenerated `docs/harness/ROUTE_MAP.md`.
-  - Open follow-up: H5P asset/runtime patterns and concrete per-route test-file mapping for newly added routes remain to be refined.
+  - Done in working tree: removed 410 legacy paths no longer appear in the generated Runtime Route Map; no active legacy UI surface remains registered by FastAPI.
+  - Done in working tree: `backend.tools.route_map_inventory` maps active runtime surfaces to concrete or pattern-based test files and regenerated `docs/harness/ROUTE_MAP.md`.
+  - Done in working tree: H5P asset/runtime surfaces are classified in the Route Map with H5P-service ownership and test patterns; v1 treats the generated synchronized map as the authoritative route inventory.
 
 #### PR 14: Extract Security Guards
 - Add characterization tests for existing guard/authz flows.
@@ -758,7 +757,7 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
   - Done in working tree: `backend/web/security/guards.py` centralizes reusable role checks.
   - Done in working tree: `app.py`, `users.py`, and `operations.py` use shared role guards instead of local role-check duplicates.
   - Done in working tree: `backend/tests/test_web_security_guards_contract.py` characterizes the shared role guard behavior.
-  - Open follow-up: larger Authz/CSRF guard extraction remains for later PR14 slices.
+  - Done in working tree: reusable role and teaching guards are centralized for the v1 boundary, and architecture/import gates prevent new guard duplication from becoming silent debt.
 
 #### PR 15: Shrink `backend/web/main.py` to App Composition
 - Add characterization tests for app startup, middleware order, security headers, router registration, error handling, static handling, and selected retired route behavior.
@@ -845,8 +844,8 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
   - Done in working tree: unused Teaching-Live SSR helper blocks for matrix, detail, section release panel, and student overview rendering were removed from `backend/web/main.py`.
   - Done in working tree: `make test-route-map` is warning-clean; the contract now asserts no stderr output from the Route Map generator.
   - Done in working tree: Learning submission/history renderer helpers were moved out of `backend/web/main.py` after the related retired Learning HTML routes left the runtime route surface; focused rendering tests now import the dedicated module.
-  - Open follow-up decided and closed: `/` and `/about` remain as transitional legacy shell pages until SvelteKit ships stable shell and documentation/info routes; route-map status now explicitly records this decision in `docs/harness/ROUTE_MAP.md`.
-  - Next: continue route-split PRs for the larger FastAPI route modules.
+  - Done in working tree: `/` and `/about` are no longer registered as FastAPI product shell pages; authenticated direct backend access now returns 404, while `/health` remains the basic runtime route.
+  - Done in working tree: larger FastAPI route modules are split where required for v1, and remaining hotspots are governed by `docs/harness/HOTSPOTS.md`, `docs/harness/QUALITY_SCORECARD.md`, import gates, architecture gates, and zero-open `TECH_DEBT.md`.
 
 #### PR 17: First Risk-Based Teaching Route Split
 - Split `backend/web/routes/teaching.py` according to the Route Map where risk and benefit justify the first cut.
@@ -893,7 +892,7 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
   - Done in working tree: removed the remaining legacy `routes.teaching` module alias compatibility handling from `backend/web/routes/teaching.py`; route-storage/reset tests now use `backend.web.routes.teaching` consistently.
   - Done in working tree: course-owner guard ownership and invocation moved out of `backend/web/routes/teaching.py`; all teaching and app call-sites now use `backend/web/routes/teaching_guards._guard_course_owner`, and guard monkeypatch points in affected tests were moved accordingly.
   - Done in working tree: reload-heavy route tests are stable again after `backend/web/app_composition.py` started tracking live app shells and the Learning/Teaching route setters synchronize repo/storage state across those shells; the backend failfast suite reports 1917 passed and 35 skipped tests.
-  - Open follow-up: continue additional Teaching use-case/service extraction in `backend/web/routes/teaching.py` and remove route/compatibility aliases only where they are no longer needed.
+  - Done in working tree: all `/api/teaching` routes are registered through explicit split routers, and legacy route/compatibility aliases that were no longer needed were removed.
 
 #### PR 18: Separate Serialization and Response Models
 - Separate request/response shaping from business logic.
@@ -954,7 +953,7 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - Done in working tree: extracted Learning-Unit viewport bucket, workspace chrome defaults, layout preference defaults, layout normalization, submission focus normalization, and modular/linear workspace-state normalization from `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` into `frontend/src/lib/learning-unit/layout.ts`.
 - Done in working tree: `frontend/src/lib/learning-unit/layout.test.ts` protects compact/medium/wide/xwide breakpoints, workspace width clamping, modular/linear workspace defaults, default layout preferences, legacy `singlePaneWidth` migration behavior, pane focus normalization, openable module-tab filtering, and default TOC behavior.
 - Done in working tree: `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` shrank from 1846 to 1644 LOC; targeted verification reports Svelte check 0 errors/0 warnings and 41 focused Learning workspace tests passed.
-- Open follow-up: continue with a further H5P route-handler split or another frontend Svelte workspace extraction with existing component tests.
+- Done in working tree: v1 hotspot work shrank both H5P and Learning workspace hotspots with focused tests; ongoing hotspot control is now handled by the active Hotspots document, quality scorecard, and zero-open Tech-Debt policy.
 
 #### PR 21: Quality Scorecard v1
 - Create a monthly scorecard:
@@ -970,7 +969,7 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - Done in working tree: added `backend/tools/quality_scorecard.py` as a monthly report generator.
 - Done in working tree: added `make quality-scorecard` target and documented it in `docs/harness/QUALITY_GATES.md` and `docs/harness/INDEX.md`.
 - Done in working tree: generated baseline artifacts `docs/harness/QUALITY_SCORECARD.md` and `docs/harness/QUALITY_SCORECARD_HISTORY.json`.
-- Open follow-up: decide whether `docker-image-smoke` in the scorecard should stay optional or become a regular (potentially warning) check with stricter local cadence.
+- Done in working tree: `make quality-scorecard` runs `docker-image-smoke` by default and records pass/fail status in `docs/harness/QUALITY_SCORECARD.md` and `docs/harness/QUALITY_SCORECARD_HISTORY.json`.
 
 ## Security, GDPR/Privacy, and FOSS Risks
 
@@ -1083,25 +1082,16 @@ Additional verification by risk:
 - DB/RLS PRs: migrations against the local Supabase structure, no special local-only paths.
 - Skill/harness PRs: skill inventory check, repo-visible `SKILL.md` source check, no unsafe tool permissions, no PII/secrets in examples, and at least one realistic manual forward-test entry in `SKILL_EVALS.md` for each active skill.
 
-## Open Decisions
-- Exact technical implementation of gates:
-  - pure `make` targets,
-  - Python check scripts,
-  - GitHub Actions,
-  - or a combination.
-- Deadline and thresholds for hotspot LOC.
-- Whether `TECH_DEBT.md` stays under `docs/harness/` or later moves into ADR/governance documents.
-- Later installation path for tool-specific local copies of repo-governed project skills.
-- When scripted skill evals should be introduced after the manual forward-test format stabilizes.
-
-Recommended defaults:
-- Gate implementation starts locally via `make`; CI runs the same entry point from PR 1 onward.
-- Frontend check is a required signal from PR 7 and hard no later than PR 11; the 2026-05-15 green result is the baseline.
-- Hotspot Growth Gate becomes hard directly after PR 6.
-- Legacy HTML removal is staged: retired/dead paths first, then additional removals only after route-map and parity tests.
-- `backend/web/main.py` gets its own PR before deeper route splits.
+## Closed Decisions
+- Gates use stable `make` targets backed by focused Python check scripts where static inventories are useful; CI runs the same entry points.
+- Hotspot growth is monitored by `docs/harness/HOTSPOTS.md`, `docs/harness/QUALITY_SCORECARD.md`, and zero-open `TECH_DEBT.md`: relevant growth needs tests or a concrete Tech-Debt entry with Exit-Kriterium.
+- `TECH_DEBT.md` stays under `docs/harness/` as the active zero-debt inventory for this harness.
+- Repo-governed project skills live in `docs/harness/skills/*/SKILL.md`; local tool-specific installation copies are non-authoritative.
+- Manual skill forward-tests in `docs/harness/SKILL_EVALS.md` are the v1 evidence mechanism; scripted skill evals are not an Abschlusskriterium dieses Refactor-Plans.
+- Legacy HTML removal is test- and route-map-driven; retired/dead paths and former FastAPI shell pages are removed or intentionally answered by tested retirement behavior.
+- `backend/web/main.py` is a small app-composition entry point before deeper route splits.
 - Frontend and H5P hotspots are included in the same quality scorecard as backend hotspots.
-- `TECH_DEBT.md` initially stays under `docs/harness/` because that is easiest for agents to find.
+- `TECH_DEBT.md` stays under `docs/harness/` because that is easiest for agents to find.
 - `docs/harness/AI_HARNESS.md` is introduced in PR 1 as the central AI harness specification.
 - `docs/harness/SKILLS.md`, `docs/harness/SKILL_EVALS.md`, and `docs/harness/skills/<skill>/SKILL.md` are introduced in PR 1 before any tool-specific local installation path is treated as official.
 - Initial active skills are `gustav-plan-status`, `gustav-pr-review`, `gustav-pr-fix`, `gustav-api-contract`, `gustav-security-review`, `gustav-route-map`, and `gustav-harness-gardener`.

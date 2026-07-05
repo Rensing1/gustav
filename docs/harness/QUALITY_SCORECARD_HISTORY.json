@@ -23,11 +23,11 @@
           "ok": true
         }
       },
-      "generated": "2026-07-05T13:07:56",
+      "generated": "2026-07-05T13:33:18",
       "hotspots": [
         {
           "delta_from_previous": 0,
-          "loc": 98,
+          "loc": 93,
           "path": "backend/web/main.py"
         },
         {
@@ -52,7 +52,7 @@
         },
         {
           "delta_from_previous": 0,
-          "loc": 4854,
+          "loc": 4844,
           "path": "backend/teaching/repo_db.py"
         },
         {
@@ -84,11 +84,11 @@
       "month": "2026-07",
       "openapi_summary": {
         "openapi_operations": 147,
-        "runtime_operations": 136,
+        "runtime_operations": 134,
         "surfaces": {
           "BFF/internal": 33,
           "H5P service": 16,
-          "active legacy UI": 2,
+          "active legacy UI": 0,
           "auth bridge": 8,
           "health/ops": 3,
           "public API": 91,

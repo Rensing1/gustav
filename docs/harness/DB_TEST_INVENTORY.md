@@ -1,6 +1,6 @@
 # DB Test Inventory
 
-Status: Draft
+Status: Active
 Owner: Produktverantwortlicher
 Local checks: `make test-db-inventory`
 CI status: `make verify` führt `make test-db-inventory` als Synchronitätscheck aus.

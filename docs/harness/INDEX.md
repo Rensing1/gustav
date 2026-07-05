@@ -1,14 +1,14 @@
 # Harness Index
 
-Status: Draft
+Status: Active
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`
 CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`, `docs/plan/2026-07-02-harness-minimum-implementation.md`
-Review cadence: monatlich während des Harness-Refactors
+Review cadence: monatlich
 
 ## Zweck
-Dieses Dokument ist die Fünf-Minuten-Startseite für Agenten und Entwickler. Es zeigt, wo Regeln, Gates, Autonomiegrenzen und offene Refactor-Pläne liegen.
+Dieses Dokument ist die Fünf-Minuten-Startseite für Agenten und Entwickler. Es zeigt, wo Regeln, Gates, Autonomiegrenzen und aktuelle Planungsartefakte liegen.
 
 ## Lesereihenfolge
 1. `AGENTS.md` für die verbindlichen Repository-Regeln.

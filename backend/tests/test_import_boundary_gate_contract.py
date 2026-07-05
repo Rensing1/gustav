@@ -80,7 +80,6 @@ def test_import_inventory_documents_target_import_scheme() -> None:
         "components",
         "backend.web.main:app",
         "main:app",
-        "PR 8",
         "sys.path",
         "make test-import-boundaries",
     ):

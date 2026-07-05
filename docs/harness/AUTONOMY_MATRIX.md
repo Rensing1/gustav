@@ -1,11 +1,11 @@
 # Autonomy Matrix
 
-Status: Draft
+Status: Active
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`
 CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
-Review cadence: monatlich während des Harness-Refactors
+Review cadence: monatlich
 
 ## Zweck
 Diese Matrix legt fest, welche Agentenhandlungen nach Risiko und Dateikategorie erlaubt sind.

@@ -31,6 +31,8 @@ REQUIRED_PLAN_MEMORY_DOCS = (
     "docs/plan/2026-07-02-harness-minimum-implementation.md",
 )
 
+HARNESS_REFACTOR_PLAN = "docs/plan/2026-05-02-harness-engineering-refactor-plan.md"
+
 INITIAL_PROJECT_SKILLS = (
     "gustav-plan-status",
     "gustav-harness-gardener",
@@ -89,6 +91,55 @@ def test_harness_minimum_documents_exist_and_have_contract_header() -> None:
             "Review cadence:",
         ):
             assert required_label in text, f"{relative_path} misses {required_label}"
+
+
+def test_harness_documents_are_active_after_refactor_closure() -> None:
+    """Closed harness-plan documents should no longer look like draft working notes."""
+
+    for relative_path in REQUIRED_HARNESS_DOCS:
+        text = _read(relative_path)
+
+        assert "Status: Draft" not in text, f"{relative_path} still has draft status"
+        assert "# Status: Draft" not in text, f"{relative_path} still has draft status"
+        assert "während des Harness-Refactors" not in text, (
+            f"{relative_path} still uses a refactor-only review cadence"
+        )
+
+
+def test_harness_documents_do_not_leave_open_refactor_followups() -> None:
+    """The closed plan should not leave repo cleanup work as vague follow-up text."""
+
+    forbidden_markers = (
+        "Open follow-up",
+        "Follow-up",
+        "follow-up",
+        "Offene Arbeit",
+        "folgt später",
+        "remain open",
+        "bleibt offen",
+        "harte LOC-Schwellen folgen",
+    )
+
+    for relative_path in REQUIRED_HARNESS_DOCS:
+        text = _read(relative_path)
+        for marker in forbidden_markers:
+            assert marker not in text, f"{relative_path} still contains {marker!r}"
+
+
+def test_harness_refactor_plan_is_marked_complete_without_open_followups() -> None:
+    """The implementation plan should describe the closed state, not leftover debt."""
+
+    text = _read(HARNESS_REFACTOR_PLAN)
+
+    assert "- Status: Completed" in text
+    for marker in (
+        "Open follow-up",
+        "follow-up PRs",
+        "remain open",
+        "bleibt offen",
+        "Offene Arbeit",
+    ):
+        assert marker not in text
 
 
 def test_data_inventory_documents_personal_data_boundaries() -> None:

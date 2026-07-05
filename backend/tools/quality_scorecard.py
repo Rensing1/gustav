@@ -217,7 +217,7 @@ def _emit_report(
     lines = [
         "# Quality Scorecard",
         "",
-        "Status: Draft",
+        "Status: Active",
         "Owner: Produktverantwortlicher",
         "Related plan: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`",
         "Review cadence: monatlich",

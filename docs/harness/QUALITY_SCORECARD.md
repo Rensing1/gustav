@@ -1,6 +1,6 @@
 # Quality Scorecard
 
-Status: Draft
+Status: Active
 Owner: Produktverantwortlicher
 Related plan: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich
@@ -11,8 +11,8 @@ Review cadence: monatlich
 | File | LOC | Delta vs previous month |
 | --- | ---: | ---: |
 | backend/learning/repo_db.py | 2425 | +0 |
-| backend/teaching/repo_db.py | 4854 | +0 |
-| backend/web/main.py | 98 | +0 |
+| backend/teaching/repo_db.py | 4844 | +0 |
+| backend/web/main.py | 93 | +0 |
 | backend/web/routes/app.py | 2499 | +0 |
 | backend/web/routes/learning.py | 2884 | +0 |
 | backend/web/routes/teaching.py | 6146 | +0 |
@@ -33,7 +33,7 @@ Review cadence: monatlich
 - Web image smoke check: pass (/home/felix/gustav-alpha2/.venv/bin/python -m backend.tools.docker_image_smoke)
 
 - OpenAPI operations: 147
-- Runtime operations: 136
+- Runtime operations: 134
 
 ### Open TECH_DEBT
 - Outstanding entries: 0

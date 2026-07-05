@@ -267,7 +267,7 @@ def render_markdown(spec_path: Path) -> str:
     lines = [
         "# Route Map",
         "",
-        "Status: Draft",
+        "Status: Active",
         "Owner: Produktverantwortlicher",
         "Local checks: `make test-route-map`, `make test-api-contract-baseline`",
         "CI status: `make verify` führt `make test-route-map` als hartes Gate aus; `make harness-minimum` prüft den Contract-Test.",
@@ -311,10 +311,10 @@ def render_markdown(spec_path: Path) -> str:
             "",
             DOC_END,
             "",
-            "## Offene Arbeit",
-            "- Retired-UI-Kandidaten erst nach Characterization-Tests als retired legacy UI markieren.",
-            "- Bestehende active legacy UI schrittweise nach SvelteKit verschieben oder mit getesteter 404-/410-Entscheidung entfernen.",
-            "- Testabdeckung von heuristischen Patterns auf konkrete Testdateien verfeinern.",
+            "## Abschlussstand",
+            "- FastAPI registriert keine aktiven Legacy-Produkt-HTML-Seiten mehr.",
+            "- Bereits entfernte Legacy-Produktpfade bleiben durch Characterization-Tests als 410- oder Redirect-Verhalten geschützt.",
+            "- `make test-route-map` hält Runtime-App und generierte Route Map synchron.",
         ]
     )
     return "\n".join(lines) + "\n"

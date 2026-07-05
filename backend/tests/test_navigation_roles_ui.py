@@ -1,140 +1,61 @@
-"""
-Sidebar navigation (rollenbasiert) – TDD: RED first
+"""Contracts for retiring the remaining FastAPI shell pages."""
 
-Verifiziert Sichtbarkeit, Reihenfolge und aktive Zustände für Schüler/Lehrer.
-Zusätzlich Smoke-Tests für neue Platzhalterseiten (/about, /units) und
-HTMX-OOB-Sidebar-Update.
-"""
+from __future__ import annotations
 
 import importlib
 
-import pytest
 import httpx
+import pytest
+from fastapi.routing import APIRoute
 from httpx import ASGITransport
 
-
 from backend.tests.runtime_auth_helpers import install_session_store
-main = importlib.import_module("backend.web.main")
 
+
+main = importlib.import_module("backend.web.main")
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-@pytest.fixture
-def session_store(monkeypatch: pytest.MonkeyPatch):
-    """Install an isolated in-memory app session store for one navigation test."""
+def test_fastapi_shell_no_longer_registers_home_or_about_pages() -> None:
+    """The product entry surface belongs to SvelteKit, not FastAPI HTML."""
 
-    return install_session_store(monkeypatch, main)
+    operations = {
+        (route.path, method)
+        for route in main.app.routes
+        if isinstance(route, APIRoute)
+        for method in route.methods
+    }
 
-
-def _pos(html: str, label: str) -> int:
-    """Return the index of a sidebar label within nav-text span.
-
-    Keeps tests resilient to markup changes outside of the nav-text span.
-    """
-    token = f'nav-text">{label}'
-    return html.find(token)
-
-
-@pytest.mark.anyio
-async def test_sidebar_for_student_contains_expected_items_in_order(session_store):
-    # Arrange: authenticated session with student role
-    sess = session_store.create(sub="s-1", name="Schülerin A", roles=["student"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
-        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        r = await c.get("/")
-
-    assert r.status_code == 200
-    html = r.text
-
-    # Order: Startseite -> Über GUSTAV
-    p_home = _pos(html, "Startseite")
-    p_about = _pos(html, "Über GUSTAV")
-    assert p_home != -1 and p_about != -1
-    assert p_home < p_about
-
-    # Legacy product navigation should no longer appear in the backend sidebar.
-    forbidden = [
-        "Meine Kurse", "Kurse", "Lerneinheiten", "Unterricht",
-        "Dashboard", "Wissenschaft", "Karteikarten", "Fortschritt",
-        "Einstellungen", "Analytics", "Schüler", "Inhalte erstellen",
-    ]
-    for label in forbidden:
-        assert _pos(html, label) == -1
-
-    # Active state on home
-    assert '<a href="/"' in html
-    home_link_fragment = html.split('<a href="/"', 1)[1].split('</a>', 1)[0]
-    assert 'aria-current="page"' in home_link_fragment
-    assert 'sidebar-link active' in home_link_fragment
+    assert ("/", "GET") not in operations
+    assert ("/about", "GET") not in operations
+    assert ("/health", "GET") in operations
 
 
 @pytest.mark.anyio
-async def test_sidebar_for_teacher_contains_expected_items_in_order(session_store):
-    # Arrange: authenticated session with teacher role
-    sess = session_store.create(sub="t-1", name="Lehrer B", roles=["teacher"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
-        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        r = await c.get("/")
+async def test_fastapi_shell_home_and_about_are_not_product_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Authenticated requests to removed shell pages should not render legacy HTML."""
 
-    assert r.status_code == 200
-    html = r.text
+    session_store = install_session_store(monkeypatch, main)
+    session = session_store.create(sub="teacher-shell-retired", name="Teacher", roles=["teacher"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, session.session_id)
+        home = await client.get("/")
+        about = await client.get("/about")
 
-    # Order: Startseite -> Über GUSTAV
-    p_home = _pos(html, "Startseite")
-    p_about = _pos(html, "Über GUSTAV")
-    assert p_home != -1 and p_about != -1
-    assert p_home < p_about
-
-    forbidden = [
-        "Meine Kurse", "Kurse", "Lerneinheiten", "Unterricht",
-        "Dashboard", "Wissenschaft", "Karteikarten", "Fortschritt",
-        "Einstellungen", "Analytics", "Schüler", "Inhalte erstellen",
-    ]
-    for label in forbidden:
-        # Only check sidebar labels (nav-text), not arbitrary page content.
-        assert _pos(html, label) == -1
+    assert home.status_code == 404
+    assert about.status_code == 404
 
 
 @pytest.mark.anyio
-async def test_sidebar_unknown_role_falls_back_to_minimal_menu(session_store):
-    # Arrange: unknown/unsupported role -> minimal: Startseite, Über GUSTAV
-    sess = session_store.create(sub="u-1", name="User C", roles=["guest"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
-        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        r = await c.get("/")
+async def test_retired_product_route_still_returns_410(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Removing shell pages must not weaken existing retired-product responses."""
 
-    assert r.status_code == 200
-    html = r.text
-    assert _pos(html, "Startseite") != -1
-    assert _pos(html, "Über GUSTAV") != -1
-    # Should not show role-specific items
-    assert _pos(html, "Meine Kurse") == -1
-    assert _pos(html, "Kurse") == -1
-    assert _pos(html, "Lerneinheiten") == -1
+    session_store = install_session_store(monkeypatch, main)
+    session = session_store.create(sub="teacher-retired-route", name="Teacher", roles=["teacher"])
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, session.session_id)
+        units = await client.get("/units")
 
-
-@pytest.mark.anyio
-async def test_htmx_request_includes_sidebar_oob_update(session_store):
-    sess = session_store.create(sub="s-2", name="Schüler D", roles=["student"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
-        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        r = await c.get("/", headers={"HX-Request": "true"})
-
-    assert r.status_code == 200
-    assert 'hx-swap-oob="true"' in r.text
-
-
-@pytest.mark.anyio
-async def test_about_page_exists_and_units_page_is_retired(session_store):
-    # `/about` stays as a small SSR info page; `/units` is now a retired legacy entry.
-    sess = session_store.create(sub="t-2", name="Lehrer E", roles=["teacher"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as c:
-        c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        r_about = await c.get("/about")
-        r_units = await c.get("/units")
-
-    assert r_about.status_code == 200
-    assert r_units.status_code == 410
-    assert "GUSTAV" in r_about.text
-    assert "legacy route retired" in r_units.text.lower()
+    assert units.status_code == 410
+    assert "legacy route retired" in units.text.lower()

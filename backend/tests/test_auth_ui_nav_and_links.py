@@ -16,30 +16,7 @@ import httpx
 from httpx import ASGITransport
 
 main = importlib.import_module("backend.web.main")
-from backend.tests.runtime_auth_helpers import install_session_store
-
-
 pytestmark = pytest.mark.anyio("asyncio")
-
-
-@pytest.mark.anyio
-async def test_sidebar_logout_link_to_auth_logout(monkeypatch: pytest.MonkeyPatch):
-    """Authenticated GET / renders sidebar with logout control linking to /auth/logout."""
-    # Create a fake authenticated session in the server store
-    store = install_session_store(monkeypatch, main)
-    sess = store.create(sub="user-1", name="Max Musterschüler", roles=["student"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", sess.session_id)
-        r = await client.get("/", follow_redirects=False)
-
-    assert r.status_code == 200
-    html = r.text
-    assert "sidebar-logout" in html, "Logout control missing in sidebar"
-    assert 'href="/auth/logout"' in html, "Logout should link to /auth/logout"
-    assert 'hx-' not in html or 'hx-post="/auth/logout"' not in html, "Logout should be a normal link (no HTMX)"
-    # Sidebar should show display name and German role
-    assert "Max Musterschüler" in html
-    assert "Schüler" in html
 
 
 # Direct-Grant SSR pages were removed; the remaining GET endpoints redirect to Keycloak.

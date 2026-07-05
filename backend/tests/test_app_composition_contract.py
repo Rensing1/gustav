@@ -52,9 +52,11 @@ def test_main_app_keeps_core_router_and_local_routes_registered() -> None:
         ("/api/users/search", "GET"),
         ("/internal/health/openai", "GET"),
         ("/health", "GET"),
-        ("/about", "GET"),
     ):
         assert expected in operations
+
+    assert ("/", "GET") not in operations
+    assert ("/about", "GET") not in operations
 
 
 def test_main_delegates_runtime_bootstrap_to_app_composition() -> None:
@@ -104,8 +106,8 @@ def test_main_entrypoint_does_not_keep_removed_learning_ui_helpers() -> None:
     assert "from backend.web.components.pages import SciencePage" not in source
 
 
-def test_main_delegates_basic_pages_to_dedicated_router() -> None:
-    """Root, about, and health routes are basic-page routing concerns."""
+def test_main_delegates_health_page_to_dedicated_router() -> None:
+    """Health routing is a basic-page concern; product shell pages are retired."""
 
     import backend.web.main as main
 
@@ -126,9 +128,9 @@ def test_main_delegates_basic_pages_to_dedicated_router() -> None:
     assert "async def home(" not in source
     assert "async def health_check(" not in source
     assert "async def about_page(" not in source
-    assert ("/", "GET") in operations
+    assert ("/", "GET") not in operations
     assert ("/health", "GET") in operations
-    assert ("/about", "GET") in operations
+    assert ("/about", "GET") not in operations
 
 
 def test_html_layout_response_is_owned_by_dedicated_module() -> None:

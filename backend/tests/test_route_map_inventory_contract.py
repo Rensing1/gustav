@@ -87,6 +87,14 @@ def test_route_map_no_longer_lists_removed_deep_teaching_live_routes() -> None:
         assert removed_route not in text
 
 
+def test_route_map_has_no_active_legacy_ui_surface() -> None:
+    text = ROUTE_MAP.read_text(encoding="utf-8")
+
+    assert "active legacy UI" not in text
+    assert "retain until strangled" not in text
+    assert "## Offene Arbeit" not in text
+
+
 def test_route_map_is_synchronized_with_generator() -> None:
     result = subprocess.run(
         [

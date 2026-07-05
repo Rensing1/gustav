@@ -1,6 +1,6 @@
 # Route Map
 
-Status: Draft
+Status: Active
 Owner: Produktverantwortlicher
 Local checks: `make test-route-map`, `make test-api-contract-baseline`
 CI status: `make verify` führt `make test-route-map` als hartes Gate aus; `make harness-minimum` prüft den Contract-Test.
@@ -33,8 +33,6 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | DELETE /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id} | public API | teacher | teaching repo | empty/redirect | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
 | DELETE /backend-internal/app/bff-session | BFF/internal | authenticated BFF | identity/session | unspecified | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
 | DELETE /h5p/contents/{content_id} | H5P service | teacher | H5P storage/service | empty/redirect | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
-| GET / | active legacy UI | authenticated | none | HTML/HTMX | backend/tests/test_navigation_roles_ui.py, backend/tests/test_app_composition_contract.py | medium | active legacy UI | retain until strangled | SvelteKit or removal |
-| GET /about | active legacy UI | authenticated | none | HTML/HTMX | backend/tests/test_navigation_roles_ui.py, backend/tests/test_app_composition_contract.py | medium | active legacy UI | retain until strangled | SvelteKit or removal |
 | GET /api/app/profile | BFF/internal | authenticated BFF | identity/session | AppProfileView | backend/tests/test_app_*, test_session_* | medium | active | retain | SvelteKit BFF/view model |
 | GET /api/app/profile/cli-tokens | BFF/internal | authenticated BFF | identity/session | array | backend/tests/test_app_*, test_session_* | medium | active | retain | SvelteKit BFF/view model |
 | GET /api/app/session-bootstrap | BFF/internal | authenticated BFF | identity/session | SessionBootstrap | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
@@ -173,7 +171,7 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 
 <!-- route-map:generated:end -->
 
-## Offene Arbeit
-- Retired-UI-Kandidaten erst nach Characterization-Tests als retired legacy UI markieren.
-- Bestehende active legacy UI schrittweise nach SvelteKit verschieben oder mit getesteter 404-/410-Entscheidung entfernen.
-- Testabdeckung von heuristischen Patterns auf konkrete Testdateien verfeinern.
+## Abschlussstand
+- FastAPI registriert keine aktiven Legacy-Produkt-HTML-Seiten mehr.
+- Bereits entfernte Legacy-Produktpfade bleiben durch Characterization-Tests als 410- oder Redirect-Verhalten geschützt.
+- `make test-route-map` hält Runtime-App und generierte Route Map synchron.

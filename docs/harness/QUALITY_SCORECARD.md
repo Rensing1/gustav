@@ -18,7 +18,7 @@ Review cadence: monatlich
 | backend/web/routes/teaching.py | 6146 | +0 |
 | frontend/src/lib/styles/app.css | 5617 | +0 |
 | frontend/src/lib/styles/design-system.css | 1903 | +0 |
-| frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte | 1710 | -136 |
+| frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte | 1644 | -66 |
 | frontend/src/routes/teaching/units/[unitId]/+page.svelte | 1210 | +0 |
 | h5p-service/server.mjs | 1709 | +0 |
 

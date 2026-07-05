@@ -20,7 +20,7 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 | `backend/learning/repo_db.py` | 2425 | Learning Repository | Read Models und Query-Gruppen schrittweise isolieren |
 | `backend/teaching/repo_db.py` | 4854 | Teaching Repository | Live-/Dashboard-Read-Models und Schreibfälle trennen |
 | `h5p-service/server.mjs` | 1709 | H5P Sidecar | Auth, Forwarding und Route-Handler weiter splitten |
-| `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` | 1710 | Learning Workspace | weitere Loader-/State- und View-Komponenten trennen |
+| `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` | 1644 | Learning Workspace | weitere Loader- und View-Komponenten trennen |
 | `frontend/src/routes/teaching/units/[unitId]/+page.svelte` | 1210 | Teaching Workspace | Graph-State, Command-Bar und Node-Editor-Komposition trennen |
 | `frontend/src/lib/styles/app.css` | 5617 | App CSS | Komponentennahe Styles und Tokens auslagern |
 | `frontend/src/lib/styles/design-system.css` | 1903 | Design System CSS | Tokens, Layout-Utilities und Komponentenregeln schärfer trennen |
@@ -35,8 +35,8 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 - `h5p-service/lib/response_helpers.mjs` übernimmt seit PR20 die zentralen JSON-/HTML-Sendehelfer mit Security- und Cache-Headern; `h5p-service/test/response_helpers.test.mjs` schützt Defaults und explizite Header-Overrides.
 - `h5p-service/lib/storage_helpers.mjs` übernimmt seit PR20 H5P-Storage-Verzeichnisaufbau, Storage-Readiness-Probe und Header-Dateinamen-Sanitizing; `h5p-service/test/storage_helpers.test.mjs` schützt Layout, Fehlerpfad und Header-Sicherheit.
 - `h5p-service/server.mjs` ist dadurch von 1942 auf 1709 LOC gesunken; weitere H5P-Splits sollen Route-Handler und verbleibende Auth-/Forwarding-Integration betreffen.
-- `frontend/src/lib/learning-unit/layout.ts` übernimmt seit PR20 die reinen Viewport-, Workspace-Chrome- und Layout-Preference-Defaults der großen Learning-Unit-Route; `frontend/src/lib/learning-unit/layout.test.ts` schützt Breakpoints, Defaults, Clamping und Legacy-Layout-Normalisierung.
-- `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` ist dadurch von 1846 auf 1710 LOC gesunken; weitere Frontend-Splits sollen Ladezustand, Workspace-State und View-Komposition trennen.
+- `frontend/src/lib/learning-unit/layout.ts` übernimmt seit PR20 die reinen Viewport-, Workspace-Chrome-, Layout-Preference- und gespeicherten Workspace-State-Normalisierer der großen Learning-Unit-Route; `frontend/src/lib/learning-unit/layout.test.ts` schützt Breakpoints, Defaults, Clamping, Legacy-Layout-Normalisierung, Pane-Fokus und offene Modul-Tabs.
+- `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` ist dadurch von 1846 auf 1644 LOC gesunken; weitere Frontend-Splits sollen Ladezustand und View-Komposition trennen.
 
 ## Regel
 Hotspots dürfen im Refactor nicht ohne bewusst dokumentierten Grund wachsen. Kleine Extraktionen sollen eine passende Contract- oder Komponententest-Abdeckung haben; harte LOC-Schwellen folgen, sobald die Baseline über mehrere Scorecards stabil ist.

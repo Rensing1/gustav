@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-05T11:11:58",
+      "generated": "2026-07-05T11:18:56",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -61,8 +61,8 @@
           "path": "h5p-service/server.mjs"
         },
         {
-          "delta_from_previous": -136,
-          "loc": 1710,
+          "delta_from_previous": -66,
+          "loc": 1644,
           "path": "frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte"
         },
         {

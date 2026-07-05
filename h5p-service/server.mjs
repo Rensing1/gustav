@@ -44,6 +44,7 @@ import {
   parseOriginForForwarding,
 } from "./lib/finished_submission_context.mjs";
 import { parseReviewToken } from "./lib/review_tokens.mjs";
+import { applySecurityHeaders, CSP_DEBUG_HTML } from "./lib/security_headers.mjs";
 import {
   authenticateInternalTeacher,
   isInternalAuth,
@@ -122,64 +123,6 @@ const h5pContentAccessCache = new Map();
  */
 const finishedForwardingMetrics = createFinishedForwardingMetrics();
 
-// Default CSP for all `/h5p/*` responses (strict, no wildcards, no unsafe-eval).
-//
-// Note:
-//   In the primary GUSTAV flow, the H5P editor/player runs embedded inside
-//   regular GUSTAV pages (Lumi webcomponents). In that embedded mode, the
-//   browser enforces the *app* CSP for script execution.
-//
-//   This CSP is still valuable as defense-in-depth for standalone HTML pages
-//   served by the H5P service (especially the admin-only debug pages).
-const CSP_DEFAULT = [
-  "default-src 'self'",
-  "base-uri 'none'",
-  "object-src 'none'",
-  "form-action 'self'",
-  "frame-ancestors 'self'",
-  "script-src 'self'",
-  // H5P uses inline styles and style attributes widely. We keep this
-  // permission scoped to the H5P service (not the whole app).
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "media-src 'self' data: blob:",
-  "frame-src 'self' blob:",
-  "worker-src 'self' blob:",
-].join("; ");
-
-// Scoped CSP exception for standalone debug HTML pages only.
-// Those pages currently contain inline <script> and an inline import map.
-const CSP_DEBUG_HTML = [
-  "default-src 'self'",
-  "base-uri 'none'",
-  "object-src 'none'",
-  "form-action 'self'",
-  "frame-ancestors 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "media-src 'self' data: blob:",
-  "frame-src 'self' blob:",
-  "worker-src 'self' blob:",
-].join("; ");
-
-const SECURITY_HEADERS = {
-  "X-Content-Type-Options": "nosniff",
-  // Align with the main app: keep a useful Referer for same-origin requests,
-  // and only send the *origin* on cross-origin requests (no path leaks).
-  //
-  // Why:
-  //   Some H5P embed modes may end up with `Origin: null` (sandboxed iframes).
-  //   In those cases we still want a same-origin indicator for CSRF checks.
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  // Default CSP is strict. The standalone debug pages override it with CSP_DEBUG_HTML.
-  "Content-Security-Policy": CSP_DEFAULT,
-};
-
 function ensureThemeStylesLast(styles) {
   const arr = Array.isArray(styles) ? styles.filter((s) => s !== themeStylesheetPath) : [];
   arr.push(themeStylesheetPath);
@@ -206,7 +149,7 @@ function ensureDivEmbedTypes(embedTypes) {
 
 function sendJson(res, statusCode, body, headers = {}) {
   res.status(statusCode);
-  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+  applySecurityHeaders(res);
   res.setHeader("Cache-Control", "private, no-store");
   for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
   res.json(body);
@@ -214,7 +157,7 @@ function sendJson(res, statusCode, body, headers = {}) {
 
 function sendHtml(res, statusCode, html, headers = {}) {
   res.status(statusCode);
-  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+  applySecurityHeaders(res);
   res.setHeader("Cache-Control", "private, no-store");
   for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
   res.type("html").send(html);
@@ -719,7 +662,7 @@ async function main() {
 
   // Security headers for all responses (Cache-Control is set route-specific).
   app.use((req, res, next) => {
-    for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+    applySecurityHeaders(res);
     next();
   });
 
@@ -1571,7 +1514,7 @@ async function main() {
     try {
       await h5pEditor.deleteContent(contentId, req.user);
       res.status(204);
-      for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+      applySecurityHeaders(res);
       res.setHeader("Cache-Control", "private, no-store");
       res.setHeader("Vary", "Origin");
       res.end();
@@ -1591,7 +1534,7 @@ async function main() {
       return;
     }
     res.status(200);
-    for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+    applySecurityHeaders(res);
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("Content-Type", "application/zip");
     const safeName = sanitizeHeaderFilename(contentId);

@@ -29,7 +29,6 @@
     flattenContentGroups,
     type LearningUnitViewState,
     type ModularWorkspaceSnapshot,
-    normalizePaneStacks,
     orderedOpenModules,
     reconcileModularWorkspaceState,
     reconcilePaneStacks,
@@ -53,6 +52,8 @@
     defaultModularWorkspaceState,
     defaultWorkspaceChrome,
     normalizeLayoutPreferences,
+    normalizeLinearWorkspaceState,
+    normalizeModularWorkspaceState,
     type LayoutPreferences,
     type LinearWorkspaceState,
     type ModularWorkspaceState
@@ -136,29 +137,6 @@
     return browser ? window.innerWidth : 1280;
   }
 
-  function normalizeSubmissionFocus(raw: unknown): Record<PaneId, SubmissionFocusState> {
-    const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-
-    function paneState(value: unknown): SubmissionFocusState {
-      if (value && typeof value === "object") {
-        const pane = value as { itemKey?: unknown; mode?: unknown };
-        return {
-          itemKey: typeof pane.itemKey === "string" ? pane.itemKey : null,
-          mode: pane.mode === "text" || pane.mode === "upload" ? pane.mode : null
-        };
-      }
-      if (typeof value === "string") {
-        return { itemKey: value, mode: null };
-      }
-      return { itemKey: null, mode: null };
-    }
-
-    return {
-      left: paneState(candidate.left),
-      right: paneState(candidate.right)
-    };
-  }
-
   function graphModuleById(moduleId: string | null): LearningUnitGraphModule | null {
     if (!moduleId) {
       return null;
@@ -172,50 +150,6 @@
         .filter((module) => module.status === "open" || module.status === "done")
         .map((module) => module.id)
     );
-  }
-
-  function normalizeModularWorkspaceState(raw: unknown): ModularWorkspaceState {
-    const allowed = openableModuleIds();
-    const candidate = raw && typeof raw === "object" ? (raw as Partial<ModularWorkspaceState>) : {};
-    const openTabs = Array.isArray(candidate.openTabs)
-      ? candidate.openTabs.map(String).filter((moduleId) => allowed.has(moduleId))
-      : [];
-    const activeTab =
-      candidate.activeTab && openTabs.includes(String(candidate.activeTab))
-        ? String(candidate.activeTab)
-        : openTabs[0] ?? null;
-
-    return {
-      view: candidate.view === "content" ? "content" : "overview",
-      openTabs,
-      activeTab,
-      splitView: Boolean(candidate.splitView),
-      tocOpen:
-        typeof candidate.tocOpen === "boolean"
-          ? candidate.tocOpen
-          : candidate.splitView === true
-            ? false
-            : true,
-      activePane: candidate.activePane === "right" ? "right" : "left",
-      paneStacks: normalizePaneStacks(candidate.paneStacks),
-      submissionFocus: normalizeSubmissionFocus(candidate.submissionFocus)
-    };
-  }
-
-  function normalizeLinearWorkspaceState(raw: unknown): LinearWorkspaceState {
-    const candidate = raw && typeof raw === "object" ? (raw as Partial<LinearWorkspaceState>) : {};
-    return {
-      splitView: Boolean(candidate.splitView),
-      tocOpen:
-        typeof candidate.tocOpen === "boolean"
-          ? candidate.tocOpen
-          : candidate.splitView === true
-            ? false
-            : true,
-      activePane: candidate.activePane === "right" ? "right" : "left",
-      paneStacks: normalizePaneStacks(candidate.paneStacks),
-      submissionFocus: normalizeSubmissionFocus(candidate.submissionFocus)
-    };
   }
 
   function readStoredWorkspaceState(viewportWidth = currentViewportWidth()): {
@@ -250,14 +184,14 @@
         ("modular" in parsed || "linear" in parsed)
       ) {
         return {
-          modular: normalizeModularWorkspaceState(parsed.modular ?? null),
+          modular: normalizeModularWorkspaceState(parsed.modular ?? null, openableModuleIds()),
           linear: normalizeLinearWorkspaceState(parsed.linear ?? null),
           layout: normalizeLayoutPreferences(parsed.layout ?? null, viewportWidth)
         };
       }
 
       return {
-        modular: normalizeModularWorkspaceState(parsed),
+        modular: normalizeModularWorkspaceState(parsed, openableModuleIds()),
         linear: defaultLinearWorkspaceState(viewportWidth),
         layout: defaultLayoutPreferences(viewportWidth)
       };
@@ -271,7 +205,7 @@
   }
 
   function seedModularWorkspaceState(base: ModularWorkspaceState): ModularWorkspaceState {
-    const seeded = normalizeModularWorkspaceState(base);
+    const seeded = normalizeModularWorkspaceState(base, openableModuleIds());
     const next = reconcileModularWorkspaceState(
       {
         view: seeded.view,

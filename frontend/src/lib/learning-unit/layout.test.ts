@@ -6,6 +6,9 @@ import {
   defaultModularWorkspaceState,
   defaultWorkspaceChrome,
   normalizeLayoutPreferences,
+  normalizeLinearWorkspaceState,
+  normalizeModularWorkspaceState,
+  normalizeSubmissionFocus,
   viewportLayoutBucket,
   viewportWorkspaceWidth
 } from "./layout";
@@ -101,5 +104,82 @@ describe("learning unit layout helpers", () => {
     });
 
     expect(normalizeLayoutPreferences({ singlePaneWidth: 30 }, 1280).workspaceWidth).toBe(48);
+  });
+
+  it("normalizes legacy submission focus strings and invalid modes", () => {
+    expect(
+      normalizeSubmissionFocus({
+        left: "task:1",
+        right: { itemKey: "task:2", mode: "invalid" }
+      })
+    ).toEqual({
+      left: { itemKey: "task:1", mode: null },
+      right: { itemKey: "task:2", mode: null }
+    });
+  });
+
+  it("normalizes modular workspace state against currently openable modules", () => {
+    expect(
+      normalizeModularWorkspaceState(
+        {
+          view: "content",
+          openTabs: ["locked-module", "open-module"],
+          activeTab: "locked-module",
+          splitView: true,
+          activePane: "right",
+          paneStacks: {
+            left: ["task:1"],
+            right: [{ key: "material:1", expanded: false }]
+          },
+          submissionFocus: {
+            left: { itemKey: "task:1", mode: "text" }
+          }
+        },
+        new Set(["open-module"])
+      )
+    ).toEqual({
+      view: "content",
+      openTabs: ["open-module"],
+      activeTab: "open-module",
+      splitView: true,
+      tocOpen: false,
+      activePane: "right",
+      paneStacks: {
+        left: [{ key: "task:1", expanded: true }],
+        right: [{ key: "material:1", expanded: false }]
+      },
+      submissionFocus: {
+        left: { itemKey: "task:1", mode: "text" },
+        right: { itemKey: null, mode: null }
+      }
+    });
+  });
+
+  it("normalizes linear workspace state with default TOC behavior", () => {
+    expect(
+      normalizeLinearWorkspaceState({
+        splitView: false,
+        activePane: "right",
+        paneStacks: {
+          left: [{ key: "task:1" }],
+          right: "invalid"
+        },
+        submissionFocus: {
+          right: { itemKey: "task:2", mode: "upload" }
+        }
+      })
+    ).toEqual({
+      splitView: false,
+      tocOpen: true,
+      activePane: "right",
+      paneStacks: {
+        left: [{ key: "task:1", expanded: true }],
+        right: []
+      },
+      submissionFocus: {
+        left: { itemKey: null, mode: null },
+        right: { itemKey: "task:2", mode: "upload" }
+      }
+    });
   });
 });

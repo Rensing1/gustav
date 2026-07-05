@@ -1472,6 +1472,10 @@ def _sync_teaching_route_globals(*, adapter: StorageAdapterProtocol, override_ac
             if isinstance(route_globals, dict) and "STORAGE_ADAPTER" in route_globals:
                 route_globals["STORAGE_ADAPTER"] = adapter
                 route_globals["_STORAGE_ADAPTER_OVERRIDE_ACTIVE"] = override_active
+                bound_teaching = route_globals.get("teaching_routes")
+                if bound_teaching is not None:
+                    setattr(bound_teaching, "STORAGE_ADAPTER", adapter)
+                    setattr(bound_teaching, "_STORAGE_ADAPTER_OVERRIDE_ACTIVE", override_active)
 
 
 def _sync_teaching_route_repo(repo: Any) -> None:
@@ -1492,20 +1496,15 @@ def _sync_teaching_route_repo(repo: Any) -> None:
             if isinstance(route_globals, dict) and "_REPO" in route_globals:
                 route_globals["_REPO"] = repo
                 route_globals["REPO"] = repo
+                bound_teaching = route_globals.get("teaching_routes")
+                if bound_teaching is not None:
+                    setattr(bound_teaching, "_REPO", repo)
+                    setattr(bound_teaching, "REPO", repo)
 
 def _get_materials_service() -> MaterialsService:
-    module = _current_teaching_module()
-    factory = getattr(module, "_get_materials_service", None) if module is not None else None
-    if callable(factory) and factory is not _get_materials_service:
-        return factory()
-    settings = getattr(module, "MATERIAL_FILE_SETTINGS", MATERIAL_FILE_SETTINGS) if module is not None else MATERIAL_FILE_SETTINGS
-    return MaterialsService(_get_repo(), settings=settings)
+    return MaterialsService(_get_repo(), settings=MATERIAL_FILE_SETTINGS)
 
 def _get_student_live_overview_service() -> StudentLiveOverviewService:
-    module = _current_teaching_module()
-    factory = getattr(module, "_get_student_live_overview_service", None) if module is not None else None
-    if callable(factory) and factory is not _get_student_live_overview_service:
-        return factory()
     return StudentLiveOverviewService(_get_repo())
 
 
@@ -1878,43 +1877,29 @@ def _summary_snapshot_cursor(repo: Any, owner_sub: str | None = None) -> str | N
 def _resolve_student_names_runtime(subs: list[str]) -> dict[str, str]:
     """Resolve student names via the currently active Teaching module."""
 
-    module = _current_teaching_module()
-    resolver = getattr(module, "resolve_student_names", None) if module is not None else None
-    if not callable(resolver) or resolver is _resolve_student_names_runtime:
-        resolver = resolve_student_names
-    return resolver(subs)
+    return resolve_student_names(subs)
 
 
 def _resolve_student_login_labels_runtime(subs: list[str]) -> dict[str, str]:
     """Resolve login labels via the currently active Teaching module."""
 
-    module = _current_teaching_module()
-    resolver = getattr(module, "resolve_student_login_labels_by_sub", None) if module is not None else None
-    if not callable(resolver) or resolver is _resolve_student_login_labels_runtime:
-        resolver = resolve_student_login_labels_by_sub
-    return resolver(subs)
+    return resolve_student_login_labels_by_sub(subs)
 
 
 def _summary_snapshot_cursor_runtime(repo: Any, owner_sub: str) -> str | None:
     """Resolve the active live summary cursor helper from the current module."""
 
-    module = _current_teaching_module()
-    resolver = getattr(module, "_summary_snapshot_cursor", None) if module is not None else None
-    if not callable(resolver) or resolver is _summary_snapshot_cursor_runtime:
-        resolver = _summary_snapshot_cursor
     try:
-        return resolver(repo, owner_sub)
+        return _summary_snapshot_cursor(repo, owner_sub)
     except TypeError:
-        return resolver(repo)
+        return _summary_snapshot_cursor(repo)
 
 
 def _current_max_unit_ids() -> int:
     """Return the active live-overview unit-id limit."""
 
-    module = _current_teaching_module()
-    value = getattr(module, "MAX_UNIT_IDS", MAX_UNIT_IDS) if module is not None else MAX_UNIT_IDS
     try:
-        return max(1, int(value))
+        return max(1, int(MAX_UNIT_IDS))
     except Exception:
         return MAX_UNIT_IDS
 

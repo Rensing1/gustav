@@ -459,11 +459,8 @@ async def test_deleting_unit_keeps_unit_when_storage_cleanup_fails(monkeypatch: 
     def collect_storage_objects(repo_arg: object, *, unit_id: str) -> list[tuple[str, str]]:
         return [("submissions", "unit/delete/file.pdf")]
 
-    monkeypatch.setitem(
-        _endpoint_globals("/api/teaching/units/{unit_id}", "DELETE"),
-        "_collect_unit_delete_storage_objects",
-        collect_storage_objects,
-    )
+    route_teaching = _endpoint_globals("/api/teaching/units/{unit_id}", "DELETE").get("teaching_routes", teaching)
+    monkeypatch.setattr(route_teaching, "_collect_unit_delete_storage_objects", collect_storage_objects)
 
     teacher = store.create(sub="teacher-storage-abort", name="Storage Abort", roles=["teacher"])
 

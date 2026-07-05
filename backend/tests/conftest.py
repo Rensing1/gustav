@@ -575,9 +575,9 @@ def _reset_route_storage_adapters_between_tests():
     """
     try:
         import importlib
-        from teaching.storage import NullStorageAdapter  # type: ignore
+        from backend.teaching.storage import NullStorageAdapter  # type: ignore
 
-        for alias in ("backend.web.routes.learning",):
+        for alias in ("backend.web.routes.learning", "backend.web.routes.teaching"):
             try:
                 mod = importlib.import_module(alias)
                 if hasattr(mod, "set_storage_adapter"):

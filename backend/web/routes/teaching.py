@@ -105,6 +105,14 @@ InMemoryTeachingRepo = teaching_inmemory_repo.InMemoryTeachingRepo
 # InMemoryTeachingRepo from teaching_inmemory_repo directly.
 _Repo = InMemoryTeachingRepo
 
+_serialize_unit = teaching_serialization._serialize_unit
+_serialize_section = teaching_serialization._serialize_section
+_serialize_material = teaching_serialization._serialize_material
+_serialize_task = teaching_serialization._serialize_task
+_serialize_unit_phase_public = teaching_serialization._serialize_unit_phase_public
+_serialize_unit_module = teaching_serialization._serialize_unit_module
+_serialize_unit_graph_edge = teaching_serialization._serialize_unit_graph_edge
+
 UnitCreatePayload = teaching_payloads.UnitCreatePayload
 UnitUpdatePayload = teaching_payloads.UnitUpdatePayload
 TaskCreatePayload = teaching_payloads.TaskCreatePayload

@@ -1007,6 +1007,7 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
 - Akzeptanz:
   - `backend/teaching/repo_db.py` ist eine Fassade oder klarer Aggregator statt ein Query-Sammelmodul.
   - `make test-db-security`, `make test-db-inventory` und betroffene Teaching-Repo-/Migrationstests sind grün.
+- Done in working tree: `backend/teaching/repo_row_mappers.py` übernimmt reine Material-/Task-Row-Mapper und die Live-Score-Normalisierung; `backend/teaching/repo_db.py` importiert die bisherigen Unterstrich-Namen als Kompatibilitätsaliase. Ein Contract-Test schützt, dass diese DB-freie Mapping-Logik nicht wieder in den Repository-Hotspot zurückwandert. `backend/teaching/repo_db.py` liegt nach diesem Schnitt bei 4716 LOC.
 
 #### C3: Learning-Web-Adapter splitten
 - Problem: `backend/web/routes/learning.py` ist mit knapp 3000 Zeilen ein großer Adapter, der Course/Unit-Reads, Upload-Intent, Upload-Proxy, Storage-Verifikation, Submissions und Material-Dateien bündelt.

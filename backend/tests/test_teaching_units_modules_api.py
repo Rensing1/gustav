@@ -9,9 +9,9 @@ strict RLS.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from uuid import uuid4
 import uuid
+import importlib
 
 import pytest
 import httpx
@@ -20,15 +20,11 @@ from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
@@ -122,10 +118,10 @@ async def test_units_require_auth_and_teacher_role(monkeypatch: pytest.MonkeyPat
 async def test_teacher_can_crud_units_and_ownership_is_enforced(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -182,10 +178,10 @@ async def test_teacher_can_crud_units_and_ownership_is_enforced(monkeypatch: pyt
 async def test_unit_validation_errors(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -225,10 +221,10 @@ async def test_unit_validation_errors(monkeypatch: pytest.MonkeyPatch):
 async def test_course_modules_owner_workflow_and_duplicates(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -283,10 +279,10 @@ async def test_course_modules_owner_workflow_and_duplicates(monkeypatch: pytest.
 async def test_course_modules_require_unit_author(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -316,10 +312,10 @@ async def test_course_modules_require_unit_author(monkeypatch: pytest.MonkeyPatc
 async def test_course_modules_reorder_updates_positions(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -357,10 +353,10 @@ async def test_course_modules_reorder_updates_positions(monkeypatch: pytest.Monk
 async def test_course_modules_reorder_validation_rules(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -417,10 +413,10 @@ async def test_course_modules_reorder_validation_rules(monkeypatch: pytest.Monke
 async def test_deleting_unit_cascades_course_modules(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -451,7 +447,7 @@ async def test_deleting_unit_cascades_course_modules(monkeypatch: pytest.MonkeyP
 @pytest.mark.anyio
 async def test_deleting_unit_keeps_unit_when_storage_cleanup_fails(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     original_repo = teaching.REPO
     original_storage = teaching.STORAGE_ADAPTER
@@ -491,11 +487,11 @@ async def test_deleting_unit_keeps_unit_when_storage_cleanup_fails(monkeypatch: 
 async def test_deleting_unit_removes_material_and_submission_storage_objects(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
     import psycopg  # type: ignore  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -575,11 +571,11 @@ async def test_deleting_unit_removes_material_and_submission_storage_objects(mon
 async def test_deleting_unit_aborts_when_storage_delete_fails(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
     import psycopg  # type: ignore  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -628,10 +624,10 @@ async def test_deleting_unit_aborts_when_storage_delete_fails(monkeypatch: pytes
 async def test_course_modules_reorder_with_invalid_uuid_returns_400(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -660,10 +656,10 @@ async def test_course_modules_reorder_with_invalid_uuid_returns_400(monkeypatch:
 async def test_course_module_create_with_invalid_unit_uuid_returns_400(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -689,10 +685,10 @@ async def test_course_module_create_with_invalid_unit_uuid_returns_400(monkeypat
 async def test_course_modules_reorder_empty_list_returns_400(monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -723,10 +719,10 @@ async def test_course_modules_reorder_invalid_course_id_returns_400(monkeypatch:
     """Invalid course_id (not UUID) must map to 400 invalid_course_id per contract."""
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -752,10 +748,10 @@ async def test_course_modules_reorder_non_owner_invalid_payload_is_403(monkeypat
     """Non-owner should get 403 even with invalid payload (security-first, avoid error oracle)."""
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -785,10 +781,10 @@ async def test_course_modules_delete_resequences_positions(monkeypatch: pytest.M
     """Deleting a module resequences remaining positions to 1..n (owner only)."""
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -825,10 +821,10 @@ async def test_course_modules_delete_invalid_ids_returns_400(monkeypatch: pytest
     """Invalid UUIDs map to 400 with invalid_* detail (contract)."""
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -858,10 +854,10 @@ async def test_course_modules_delete_non_owner_is_403_or_404(monkeypatch: pytest
     """Non-owner receives 403/404 for delete to avoid error oracle (not 400)."""
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -887,10 +883,10 @@ async def test_sections_reorder_non_author_invalid_payload_is_403(monkeypatch: p
     """Non-author should get 403/404 even with invalid payload (avoid error oracle for sections)."""
     store = _session_store(monkeypatch)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:

@@ -10,24 +10,20 @@ These endpoints power the teacher-side visual editor:
 
 from __future__ import annotations
 
-from pathlib import Path
-import sys
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -58,10 +54,8 @@ async def test_teaching_modular_unit_graph_endpoints_support_visual_authoring(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -152,10 +146,8 @@ async def test_teaching_modular_unit_required_prereq_count_tracks_incoming_edges
 ) -> None:
     """Option 1: k defaults to n and keeps tracking while "auto" (k==n)."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -235,10 +227,8 @@ async def test_teaching_modular_unit_required_prereq_count_decreases_when_auto_a
 ) -> None:
     """When k==n, removing an incoming edge should keep k in sync."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -302,10 +292,8 @@ async def test_teaching_modular_unit_duplicate_edge_returns_conflict_instead_of_
 ) -> None:
     """Creating the same edge twice must return a stable API error, not 500."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -355,10 +343,8 @@ async def test_teaching_modular_unit_edge_create_accepts_uppercase_module_ids(
 ) -> None:
     """Edge create must accept valid UUIDs regardless of letter casing."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -391,10 +377,8 @@ async def test_teaching_modular_unit_edge_delete_rejects_linear_unit_invalid_uni
 ) -> None:
     """Edge delete endpoint must reject linear units with a typed 400 detail code."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -426,10 +410,8 @@ async def test_teaching_modular_unit_edge_delete_by_path_params_happy_path(
 ) -> None:
     """Preferred edge delete endpoint should work without DELETE request body."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:

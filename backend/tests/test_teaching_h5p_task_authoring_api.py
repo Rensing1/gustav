@@ -9,9 +9,7 @@ Why:
 
 from __future__ import annotations
 
-import os
 import importlib
-from pathlib import Path
 
 import httpx
 import pytest
@@ -19,16 +17,12 @@ from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 teaching_h5p = importlib.import_module("backend.web.routes.teaching_h5p")
 teaching_task_services = importlib.import_module("backend.web.routes.teaching_task_services")
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -62,8 +56,6 @@ async def _create_h5p_task(client: httpx.AsyncClient, unit_id: str, section_id: 
 
 @pytest.mark.anyio
 async def test_task_h5p_editor_model_uses_task_linked_content_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    import routes.teaching as teaching  # noqa: E402
-
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-h5p-editor-model", name="T", roles=["teacher"])
 
@@ -95,8 +87,6 @@ async def test_task_h5p_editor_model_uses_task_linked_content_id(monkeypatch: py
 
 @pytest.mark.anyio
 async def test_task_h5p_import_links_uploaded_content_to_task(monkeypatch: pytest.MonkeyPatch) -> None:
-    import routes.teaching as teaching  # noqa: E402
-
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-h5p-import", name="T", roles=["teacher"])
 
@@ -133,8 +123,6 @@ async def test_task_h5p_import_links_uploaded_content_to_task(monkeypatch: pytes
 async def test_task_h5p_save_rolls_back_upstream_content_when_local_persist_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import routes.teaching as teaching  # noqa: E402
-
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-h5p-save-rollback", name="T", roles=["teacher"])
 
@@ -180,8 +168,6 @@ async def test_task_h5p_save_rolls_back_upstream_content_when_local_persist_fail
 async def test_task_h5p_import_rolls_back_upstream_content_when_local_persist_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import routes.teaching as teaching  # noqa: E402
-
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-h5p-import-rollback", name="T", roles=["teacher"])
 
@@ -225,8 +211,6 @@ async def test_task_h5p_import_rolls_back_upstream_content_when_local_persist_fa
 
 @pytest.mark.anyio
 async def test_task_h5p_reset_clears_linked_content_id_without_hitting_h5p_service(monkeypatch: pytest.MonkeyPatch) -> None:
-    import routes.teaching as teaching  # noqa: E402
-
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-h5p-reset", name="T", roles=["teacher"])
 

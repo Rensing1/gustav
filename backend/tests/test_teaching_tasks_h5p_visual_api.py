@@ -16,25 +16,22 @@ Why:
 
 from __future__ import annotations
 
-from pathlib import Path
 import os
+import importlib
 import pytest
 import httpx
 from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-
 # Allow DBTeachingRepo guardrails in tests.
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
+
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
@@ -60,10 +57,9 @@ async def _create_section(client: httpx.AsyncClient, unit_id: str, title: str = 
 @pytest.mark.anyio
 async def test_create_h5p_task_sets_kind_and_returns_h5p_config(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -96,10 +92,9 @@ async def test_create_h5p_task_sets_kind_and_returns_h5p_config(monkeypatch: pyt
 @pytest.mark.anyio
 async def test_create_visual_task_sets_kind_and_returns_visual_config(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -128,10 +123,9 @@ async def test_create_visual_task_sets_kind_and_returns_visual_config(monkeypatc
 @pytest.mark.anyio
 async def test_create_scratch_task_sets_kind_and_returns_scratch_config(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -161,10 +155,9 @@ async def test_create_scratch_task_sets_kind_and_returns_scratch_config(monkeypa
 @pytest.mark.anyio
 async def test_create_task_rejects_h5p_and_visual_together(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -195,10 +188,9 @@ async def test_create_task_rejects_h5p_and_visual_together(monkeypatch: pytest.M
 @pytest.mark.anyio
 async def test_create_task_rejects_scratch_and_visual_together(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -229,10 +221,9 @@ async def test_create_task_rejects_scratch_and_visual_together(monkeypatch: pyte
 @pytest.mark.anyio
 async def test_update_h5p_task_allows_setting_content_id(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -267,10 +258,9 @@ async def test_update_h5p_task_allows_setting_content_id(monkeypatch: pytest.Mon
 @pytest.mark.anyio
 async def test_update_h5p_task_rejects_non_numeric_content_id(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:

@@ -8,9 +8,9 @@ according to the red-green-refactor TDD workflow.
 """
 from __future__ import annotations
 
-import os
-from pathlib import Path
+import importlib
 from typing import Sequence
+import os
 
 import pytest
 import httpx
@@ -18,15 +18,11 @@ from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
-
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -88,10 +84,9 @@ async def test_materials_require_auth_and_author_role(monkeypatch: pytest.Monkey
 async def test_author_can_crud_materials_and_non_author_is_blocked(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -164,10 +159,9 @@ async def test_author_can_crud_materials_and_non_author_is_blocked(monkeypatch: 
 async def test_material_validation_and_unknown_ids(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -233,10 +227,9 @@ def _assert_positions(materials: Sequence[dict], expected_ids: Sequence[str]) ->
 async def test_material_reorder_and_payload_guards(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -304,10 +297,9 @@ async def test_patch_rejects_invalid_body_md_type(monkeypatch: pytest.MonkeyPatc
     """PATCH must return 400 when body_md is not a string."""
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -333,10 +325,9 @@ async def test_reorder_rejects_invalid_uuid_in_payload(monkeypatch: pytest.Monke
     """Reorder must return 400 invalid_material_ids when list contains a non-UUID."""
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -364,10 +355,9 @@ async def test_patch_rejects_empty_title_as_invalid(monkeypatch: pytest.MonkeyPa
     """PATCH must return 400 invalid_title when title is an empty string."""
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:

@@ -10,23 +10,19 @@ Why:
 
 from __future__ import annotations
 
-from pathlib import Path
-import sys
+import importlib
 
 import pytest
 import httpx
 from httpx import ASGITransport
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-sys.path.insert(0, str(WEB_DIR))
-
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -47,10 +43,9 @@ async def test_teaching_modular_unit_module_update_and_delete_remove_backing_con
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -107,10 +102,9 @@ async def test_teaching_modular_unit_phase_delete_cascades_to_modules_edges_and_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -169,10 +163,9 @@ async def test_teaching_modular_create_section_after_deleting_last_phase_remains
 ) -> None:
     """Deleting the last phase must not break subsequent section creation."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -212,10 +205,9 @@ async def test_teaching_modular_create_section_keeps_documented_section_to_modul
 ) -> None:
     """`createSection` in modular units must still create the backing module entry."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -249,10 +241,9 @@ async def test_teaching_modular_module_delete_clamps_required_prereq_count_after
 ) -> None:
     """Deleting a prerequisite module must clamp target k-of-n to remaining incoming edges."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -308,10 +299,9 @@ async def test_teaching_modular_phase_delete_clamps_required_prereq_count_after_
 ) -> None:
     """Deleting a phase with prerequisite modules must clamp target k-of-n to zero."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:

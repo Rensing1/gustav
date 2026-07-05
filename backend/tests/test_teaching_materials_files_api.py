@@ -11,8 +11,8 @@ import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
+import importlib
 
 import httpx
 import pytest
@@ -20,18 +20,14 @@ from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _reset_storage_adapter():
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     storage = FakeStorageAdapter()
     try:
@@ -115,14 +111,14 @@ class FakeStorageAdapter:
 @pytest.mark.anyio
 async def test_upload_intent_flow_requires_teacher_and_returns_presign_payload(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     # Require DB-backed repo to hit real policies.
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -181,13 +177,13 @@ async def test_upload_intent_flow_requires_teacher_and_returns_presign_payload(_
 @pytest.mark.anyio
 async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -301,13 +297,13 @@ async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter
 async def test_finalize_accepts_head_content_type_with_parameters(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize should accept storage head content-type with parameters (e.g., charset)."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -351,13 +347,13 @@ async def test_finalize_accepts_head_content_type_with_parameters(_reset_storage
 async def test_finalize_rejects_invalid_sha256_pattern(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Server-side validation rejects invalid sha256 (length/pattern) with 400 checksum_mismatch."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -392,13 +388,13 @@ async def test_finalize_rejects_invalid_sha256_pattern(_reset_storage_adapter, m
 async def test_finalize_rejects_non_hex_sha256_with_length_64(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize must reject sha256 with non-hex chars (length 64) with 400 checksum_mismatch."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -434,13 +430,13 @@ async def test_finalize_rejects_non_hex_sha256_with_length_64(_reset_storage_ada
 async def test_finalize_rejects_content_length_mismatch_and_deletes_object(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize must reject when storage HEAD content_length differs and delete the object."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -483,13 +479,13 @@ async def test_finalize_rejects_content_length_mismatch_and_deletes_object(_rese
 @pytest.mark.anyio
 async def test_upload_intent_rejects_invalid_filename(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -513,13 +509,13 @@ async def test_upload_intent_rejects_invalid_filename(_reset_storage_adapter, mo
 @pytest.mark.anyio
 async def test_upload_intent_accepts_mime_with_uppercase(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -545,13 +541,13 @@ async def test_upload_intent_accepts_mime_with_uppercase(_reset_storage_adapter,
 @pytest.mark.anyio
 async def test_upload_intent_rejects_size_exceeded(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -575,13 +571,13 @@ async def test_upload_intent_rejects_size_exceeded(_reset_storage_adapter, monke
 @pytest.mark.anyio
 async def test_finalize_rejects_expired_intent(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -633,13 +629,13 @@ async def test_finalize_rejects_expired_intent(_reset_storage_adapter, monkeypat
 @pytest.mark.anyio
 async def test_patch_file_material_allows_alt_text_update(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -682,7 +678,7 @@ async def test_patch_file_material_allows_alt_text_update(_reset_storage_adapter
 async def test_upload_flow_works_with_in_memory_repo(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Ensure dev fallback repo implements complete file workflow."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     original_repo = teaching.REPO
     original_adapter = teaching.STORAGE_ADAPTER
@@ -738,13 +734,13 @@ async def test_upload_flow_works_with_in_memory_repo(_reset_storage_adapter, mon
 async def test_finalize_rejects_invalid_alt_text_too_long(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize should reject alt_text > 500 with 400 invalid_alt_text."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -781,13 +777,13 @@ async def test_finalize_rejects_invalid_alt_text_too_long(_reset_storage_adapter
 async def test_delete_file_material_storage_failure_returns_502_and_preserves_db(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Deleting a file material should fail with 502 if storage delete fails and keep DB row intact."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -844,7 +840,7 @@ async def test_delete_file_material_storage_failure_returns_502_and_preserves_db
 async def test_finalize_accepts_missing_head_content_type_uses_intent_mime(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Finalize should succeed when HEAD lacks content_type by falling back to intent mime_type."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     # Switch to in-memory repo to avoid DB requirements
     original_repo = teaching.REPO
@@ -902,7 +898,7 @@ async def test_finalize_accepts_missing_head_content_type_uses_intent_mime(_rese
 async def test_download_url_without_expires_at_returns_server_computed(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Download URL should include a fallback expires_at if adapter omits it."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     original_repo = teaching.REPO
     original_adapter = teaching.STORAGE_ADAPTER
@@ -965,13 +961,13 @@ async def test_download_url_without_expires_at_returns_server_computed(_reset_st
 async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """When no storage adapter is configured, upload-intents must return 503."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -1002,13 +998,13 @@ async def test_upload_intent_returns_503_when_storage_unavailable(_reset_storage
 async def test_download_url_sets_private_no_store_header(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """Download URL responses must not be cacheable (Cache-Control: private, no-store)."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
-    from utils.db import require_db_or_skip
+    from backend.tests.utils.db import require_db_or_skip
 
     require_db_or_skip()
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -1043,7 +1039,7 @@ async def test_download_url_sets_private_no_store_header(_reset_storage_adapter,
 async def test_delete_file_material_without_storage_adapter_returns_503(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     """DELETE should return 503 when storage adapter is not configured (NullStorageAdapter)."""
     store = _session_store(monkeypatch)
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     # Use in-memory repo to avoid DB dependency for this edge case
     original_repo = teaching.REPO

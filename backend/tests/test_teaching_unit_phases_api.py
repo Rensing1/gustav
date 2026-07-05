@@ -7,8 +7,7 @@ Contract-first intent:
 """
 from __future__ import annotations
 
-import os
-from pathlib import Path
+import importlib
 
 import pytest
 import httpx
@@ -16,14 +15,11 @@ from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # noqa: E402
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
+from backend.tests.runtime_auth_helpers import install_session_store
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:
@@ -49,10 +45,9 @@ def _assert_phase_public_shape(phase: dict, *, unit_id: str) -> None:
 async def test_unit_phases_list_create_rename_reorder_happy_path(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -114,10 +109,9 @@ async def test_unit_phases_requires_authentication_returns_401(monkeypatch: pyte
     """Phase endpoints must return 401 without an authenticated session."""
     install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -137,10 +131,9 @@ async def test_unit_phases_non_teacher_returns_403(monkeypatch: pytest.MonkeyPat
     """Phase endpoints must return 403 for authenticated non-teacher callers."""
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -158,10 +151,9 @@ async def test_unit_phases_non_teacher_returns_403(monkeypatch: pytest.MonkeyPat
 async def test_unit_phases_rejects_linear_unit_invalid_unit_type(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -187,10 +179,9 @@ async def test_unit_phases_reorder_rejects_edge_constraint_violation(monkeypatch
     """Reordering phases must fail-closed when it would invalidate existing edges."""
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -244,10 +235,9 @@ async def test_unit_phases_reorder_rejects_non_string_ids_with_400(monkeypatch: 
     """Reorder must not crash on unhashable items; return invalid_phase_ids."""
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
@@ -280,10 +270,9 @@ async def test_unit_phase_modules_reorder_rejects_non_string_ids_with_400(monkey
     """Module reorder must not crash on unhashable items; return invalid_module_ids."""
     store = install_session_store(monkeypatch, main)
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:

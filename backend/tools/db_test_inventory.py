@@ -89,6 +89,14 @@ def _subscript_string_value(node: ast.Subscript) -> str | None:
     return _string_constant(node.slice)
 
 
+def _is_env_read_call(chain: list[str]) -> bool:
+    return chain in (["os", "getenv"], ["os", "environ", "get"], ["getenv"])
+
+
+def _is_env_subscript(node: ast.Subscript) -> bool:
+    return _attribute_chain(node.value) == ["os", "environ"]
+
+
 def _identifier_text(tree: ast.AST) -> str:
     identifiers: list[str] = []
     for node in ast.walk(tree):
@@ -132,15 +140,16 @@ def _find_signals(path: Path, tree: ast.AST) -> tuple[str, ...]:
                 signals.add("psycopg-required")
             if chain and chain[-1] in {"require_db_or_skip", "_require_db_or_skip"}:
                 signals.add("requires-db")
-            for env_name in DB_ENV_NAMES:
-                if env_name in values:
-                    signals.add(f"env:{env_name}")
-            for env_name in SUPABASE_ENV_NAMES:
-                if env_name in values:
-                    signals.add(f"env:{env_name}")
+            if _is_env_read_call(chain):
+                for env_name in DB_ENV_NAMES:
+                    if env_name in values:
+                        signals.add(f"env:{env_name}")
+                for env_name in SUPABASE_ENV_NAMES:
+                    if env_name in values:
+                        signals.add(f"env:{env_name}")
             if any("supabase/migrations" in value.lower() or "migrations/" in value.lower() for value in values):
                 signals.add("migration")
-        elif isinstance(node, ast.Subscript):
+        elif isinstance(node, ast.Subscript) and _is_env_subscript(node):
             value = _subscript_string_value(node)
             if value in DB_ENV_NAMES:
                 signals.add(f"env:{value}")

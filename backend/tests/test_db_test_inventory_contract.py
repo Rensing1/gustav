@@ -146,6 +146,26 @@ def test_db_test_inventory_does_not_treat_rls_name_as_real_db_alone(tmp_path: Pa
     assert records == []
 
 
+def test_db_test_inventory_ignores_monkeypatch_env_only_contracts(tmp_path: Path) -> None:
+    from backend.tools import db_test_inventory
+
+    fake_contract = tmp_path / "test_verify_db_preflight.py"
+    fake_contract.write_text(
+        "\n".join(
+            [
+                "def test_build_dsn_prefers_database_url(monkeypatch):",
+                "    monkeypatch.setenv('DATABASE_URL', 'postgresql://x:y@db.local:5432/app')",
+                "    assert True",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    records = db_test_inventory.scan_tests(tmp_path, repo_root=tmp_path)
+
+    assert records == []
+
+
 def test_db_test_inventory_document_has_required_columns() -> None:
     assert TOOL.exists(), "Missing DB test inventory tool"
     assert INVENTORY.exists(), "Missing DB test inventory document"

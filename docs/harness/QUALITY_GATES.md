@@ -1,11 +1,11 @@
 # Quality Gates
 
-Status: Draft
+Status: Active
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_test_strategy_docs_contract.py`
 CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; weitere Profile werden schrittweise ergänzt.
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
-Review cadence: monatlich während des Harness-Refactors
+Review cadence: monatlich
 
 ## Zweck
 Dieses Dokument beschreibt die geplanten Gate-Profile für den Harness-Refactor. Die Profile sollen lokale Entwicklung und CI angleichen, ohne teure oder externe Suites versehentlich in schnelle Checks zu mischen.
@@ -47,8 +47,9 @@ Aktueller harter Inhalt:
 - Learning- und Teaching-RLS-Regressionen inklusive Membership-Delete-Policies, SECURITY-DEFINER-Owner-Binding und Helper-EXECUTE-Privilegien.
 - Das Profil setzt `REQUIRE_DB_TESTS=1`; fehlende lokale Supabase-DB oder fehlende App-Rollen führen zu einem Gate-Fehler statt zu stillen Skips.
 
-Offen:
-- Tests mit echter DB-Abhängigkeit sind noch nicht vollständig markiert oder anderweitig eindeutig inventarisiert.
+Aktueller Inventarstatus:
+- `make test-db-inventory` meldet 0 echte DB/RLS-Kandidaten ohne `db_read`/`db_write`.
+- DB-Testinfrastruktur ist als `test-infra` klassifiziert und wird nicht als fehlender Marker gezählt.
 
 ### upload-llm-boundaries
 Zweck: technische Upload-Grenzen und LLM-Datengrenzen sichtbar machen, ohne Schüler-Submissions inhaltlich vorzuprüfen oder umzuschreiben.
@@ -68,7 +69,7 @@ Aktueller harter Inhalt:
 - Die LLM-Produktentscheidung ist ein Harness-Contract: Schüler-Submissions werden vor dem LLM nicht inhaltlich geprüft, nicht gefiltert, nicht normalisiert, nicht moderiert und nicht umgeschrieben.
 - Technische Verpackung ist erlaubt, solange das gespeicherte Original unverändert bleibt.
 
-Offen:
+Bewusst opt-in:
 - Supabase-Storage-, H5P-E2E- und OpenAI/Ollama-Smokes bleiben opt-in und werden nicht in dieses schnelle Boundary-Profil gemischt.
 
 ### docker-image-smoke
@@ -171,7 +172,7 @@ Aktueller harter Inhalt:
 - H5P-Node-Tests.
 - `make verify` ruft dieses Profil auf.
 
-Offen:
+Bewusst opt-in:
 - Browser-E2E und visuelle Regressionen bleiben im `full-prod-like`-Profil.
 
 ### full-prod-like
@@ -199,7 +200,7 @@ Lokaler Befehl:
 Aktueller Status:
 - Implementiert als generierter Synchronitätscheck (`backend/tools/db_test_inventory.py`) mit Markdown-Bericht in `docs/harness/DB_TEST_INVENTORY.md`.
 - `make verify` prüft, dass das Inventar aktuell ist.
-- `missing-db-marker` ist aktuell ein Review-Signal. Die Marker-Bereinigung selbst wird erst nach Datei-Batches hart geschaltet.
+- `missing-db-marker` ist ein Fehlerzustand: echte DB/RLS-Kandidaten ohne `db_read`/`db_write` dürfen nicht in der Baseline verbleiben.
 
 ### quality-scorecard
 Zweck: den Refactor-Status monatlich messbar machen.
@@ -219,7 +220,7 @@ Aktueller Status:
 - Implementiert als eigenständiger Reporter (`backend/tools/quality_scorecard.py`) mit:
   - Markdown-Bericht in `docs/harness/QUALITY_SCORECARD.md`
   - JSON-Historie in `docs/harness/QUALITY_SCORECARD_HISTORY.json`
-- Sicherheits-, Contract- und Docker-Image-Paritätschecks laufen im Standardmodus, damit der Monatsbericht keine unrun-Docker-Follow-ups erzeugt.
+- Sicherheits-, Contract- und Docker-Image-Paritätschecks laufen im Standardmodus, damit der Monatsbericht keine unausgeführten Docker-Prüfungen ausweist.
 
 ## Harte Regeln
 - Sicherheits-, Privacy-, Secret- und API-Security-Contract-Fehler blockieren sofort.
@@ -228,7 +229,7 @@ Aktueller Status:
 - Externe Suites brauchen explizite Marker und ENV-Flags.
 - Kein Gate darf lokale Sonderpfade nutzen, die in Produktion nicht gelten.
 
-## Offene Umsetzung
-- Die PR-1-Make-Targets existieren; ihre Inhalte werden nach Testportfolio- und DB-Marker-Inventar weiter geschärft.
-- `db_read` und `db_write` werden erst dann harte Marker, wenn die `missing-db-marker`-Einträge aus `docs/harness/DB_TEST_INVENTORY.md` in kleinen Review-Batches geprüft wurden.
-- CI startet mit dem kleinsten verlässlichen Profil und erweitert die Matrix schrittweise.
+## Pflege
+- Neue Gates beginnen als Contract-Test oder fokussierter Make-Target und werden erst dokumentiert, wenn der lokale Befehl existiert.
+- Baselines dürfen nur mit Begründung gesenkt oder verschärft werden; Wachstum in Import-, Architektur-, Route- oder DB-Inventaren ist ein Gate-Fehler.
+- Externe Integrationssuites bleiben bewusst opt-in und brauchen explizite Marker und ENV-Flags.

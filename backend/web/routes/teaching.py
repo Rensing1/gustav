@@ -22,7 +22,6 @@ import logging
 import time
 from dataclasses import asdict, is_dataclass
 import os
-import re
 import sys as _sys
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
@@ -48,25 +47,17 @@ from backend.web.routes.teaching_serialization import (
     _build_latest_submission_payload,
     _build_live_delta_cells,
     _build_live_summary_rows,
-    _serialize_material,
 )
 from backend.web.routes.teaching_task_services import (
     configure_task_service_repo_provider,
 )
-from backend.web.routes import teaching_authoring, teaching_guards
+from backend.web.routes import teaching_guards
 from backend.web.routes.teaching_authoring import (
     _is_signature_compat_type_error,
     configure_teaching_authoring_repo_provider,
 )
 from backend.web.routes.teaching_guards import (
     configure_teaching_guard_repo_provider,
-)
-from backend.web.routes.teaching_payloads import (
-    MaterialCreatePayload,
-    MaterialFinalizePayload,
-    MaterialReorderPayload,
-    MaterialUpdatePayload,
-    MaterialUploadIntentPayload,
 )
 from backend.web.routes.teaching_validation import (
     canonical_uuid as _canonical_uuid,
@@ -133,6 +124,11 @@ UnitUpdatePayload = teaching_payloads.UnitUpdatePayload
 TaskCreatePayload = teaching_payloads.TaskCreatePayload
 TaskUpdatePayload = teaching_payloads.TaskUpdatePayload
 TaskReorderPayload = teaching_payloads.TaskReorderPayload
+MaterialCreatePayload = teaching_payloads.MaterialCreatePayload
+MaterialFinalizePayload = teaching_payloads.MaterialFinalizePayload
+MaterialReorderPayload = teaching_payloads.MaterialReorderPayload
+MaterialUpdatePayload = teaching_payloads.MaterialUpdatePayload
+MaterialUploadIntentPayload = teaching_payloads.MaterialUploadIntentPayload
 UnitModuleCreatePayload = teaching_payloads.UnitModuleCreatePayload
 UnitModuleEdgePayload = teaching_payloads.UnitModuleEdgePayload
 UnitModuleReorderPayload = teaching_payloads.UnitModuleReorderPayload
@@ -142,6 +138,7 @@ UnitPhaseReorderPayload = teaching_payloads.UnitPhaseReorderPayload
 UnitPhaseUpdatePayload = teaching_payloads.UnitPhaseUpdatePayload
 _serialize_unit = teaching_serialization._serialize_unit
 _serialize_task = teaching_serialization._serialize_task
+_serialize_material = teaching_serialization._serialize_material
 _serialize_unit_graph_edge = teaching_serialization._serialize_unit_graph_edge
 _serialize_unit_module = teaching_serialization._serialize_unit_module
 _serialize_unit_phase_public = teaching_serialization._serialize_unit_phase_public
@@ -700,6 +697,24 @@ _MOVED_UNIT_MODULE_HANDLER_NAMES = frozenset(
         "reorder_unit_phase_modules",
     }
 )
+_MOVED_UNIT_MATERIAL_HANDLER_NAMES = frozenset(
+    {
+        "list_section_materials",
+        "create_section_material",
+        "update_section_material",
+        "delete_section_material",
+        "create_section_material_upload_intent",
+        "finalize_section_material_upload",
+        "create_module_material",
+        "update_module_material",
+        "delete_module_material",
+        "reorder_module_materials",
+        "create_module_material_upload_intent",
+        "finalize_module_material_upload",
+        "get_section_material_download_url",
+        "reorder_section_materials",
+    }
+)
 
 
 def __getattr__(name: str) -> Any:
@@ -709,640 +724,16 @@ def __getattr__(name: str) -> Any:
         from backend.web.routes import teaching_unit_modules
 
         return getattr(teaching_unit_modules, name)
+    if name in _MOVED_UNIT_MATERIAL_HANDLER_NAMES:
+        from backend.web.routes import teaching_unit_materials
+
+        return getattr(teaching_unit_materials, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # Section handlers live in backend.web.routes.teaching_unit_sections.
 
 # Task handlers live in backend.web.routes.teaching_unit_tasks.
-
-async def list_section_materials(request: Request, unit_id: str, section_id: str):
-    """
-    List markdown materials of a section for its author.
-
-    Why:
-        The authoring UI needs an ordered list of materials per Abschnitt.
-
-    Parameters:
-        request: FastAPI request carrying the authenticated teacher session.
-        unit_id: UUID of the learning unit (path parameter).
-        section_id: UUID of the section within the unit (path parameter).
-
-    Expected behavior:
-        - 200 with ordered materials (position asc) when the section exists for the author.
-        - 400 when `unit_id` or `section_id` are not UUID-like.
-        - 403 via `_guard_unit_author` if caller is not the unit author.
-        - 404 when the section is unknown to the author.
-
-    Permissions:
-        Caller must be a teacher and the author of the unit.
-    """
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    try:
-        items = _get_materials_service().list_markdown_materials(unit_id, section_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    return _json_private([_serialize_material(m) for m in items], status_code=200)
-
-
-async def create_section_material(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    payload: MaterialCreatePayload,
-):
-    """
-    Create a markdown material in a section (author only).
-
-    Why:
-        Teachers add textual resources to each Abschnitt; default behavior appends to the end.
-
-    Parameters:
-        request: FastAPI request with authenticated teacher.
-        unit_id: UUID of the learning unit.
-        section_id: UUID of the section where the material will live.
-        payload: JSON body containing `title` and `body_md`.
-
-    Expected behavior:
-        - 201 with the created material when validation passes.
-        - 400 for invalid titles/bodies or malformed UUIDs.
-        - 403 when caller is not the author (guard catches earlier).
-        - 404 when the section is not owned/found.
-
-    Permissions:
-        Caller must be a teacher and author of the unit/section.
-    """
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    try:
-        _get_materials_service().ensure_section_owned(unit_id, section_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    title = payload.title or ""
-    if not title or len(title) > 200:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
-    body = payload.body_md
-    if body is None or not isinstance(body, str):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_body_md"}, status_code=400)
-    try:
-        material = _get_materials_service().create_markdown_material(
-            unit_id,
-            section_id,
-            sub,
-            title=title,
-            body_md=body,
-        )
-    except ValueError as exc:
-        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return _json_private(_serialize_material(material), status_code=201)
-
-
-async def update_section_material(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    material_id: str,
-    payload: MaterialUpdatePayload,
-):
-    """
-    Update mutable fields of a markdown material (author only).
-
-    Why:
-        Enables fine-grained edits to titles or Markdown content without reordering.
-
-    Parameters:
-        request: FastAPI request with teacher session.
-        unit_id: UUID of the learning unit (path).
-        section_id: UUID of the section (path).
-        material_id: UUID of the material (path).
-        payload: Partial JSON body with optional `title` and/or `body_md`.
-
-    Expected behavior:
-        - 200 with updated material when at least one field is valid.
-        - 400 for invalid payloads (empty, out-of-range title, non-string body).
-        - 404 when the material (or section) is not owned/found.
-
-    Permissions:
-        Caller must be a teacher and author of the unit/section.
-    """
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(material_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    try:
-        _get_materials_service().ensure_section_owned(unit_id, section_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    if _get_materials_service().get_material_owned(unit_id, section_id, material_id, sub) is None:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    # Include None for provided fields to detect intentionally empty values (e.g., title="")
-    raw_updates = payload.model_dump(mode="python", exclude_unset=True)
-    fields_set = payload.model_fields_set
-    if not fields_set:
-        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
-    # Manual validation keeps responses aligned with our 400-contract (FastAPI would emit 422 otherwise).
-    kwargs = {}
-    if "title" in fields_set:
-        # Normalizer maps empty/blank strings to None; treat as invalid_title when provided
-        if raw_updates.get("title") is None:
-            return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
-        title_val = raw_updates.get("title") or ""
-        if not title_val or len(title_val) > 200:
-            return JSONResponse({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
-        kwargs["title"] = title_val
-    if "body_md" in fields_set:
-        body_val = raw_updates.get("body_md")
-        if body_val is None or not isinstance(body_val, str):
-            return JSONResponse({"error": "bad_request", "detail": "invalid_body_md"}, status_code=400)
-        kwargs["body_md"] = body_val
-    if "alt_text" in fields_set:
-        alt_val = raw_updates.get("alt_text")
-        if alt_val is not None and not isinstance(alt_val, str):
-            return JSONResponse({"error": "bad_request", "detail": "invalid_alt_text"}, status_code=400)
-        normalized_alt = (alt_val or "").strip() if isinstance(alt_val, str) else None
-        kwargs["alt_text"] = normalized_alt or None
-    try:
-        updated = _get_materials_service().update_material(
-            unit_id,
-            section_id,
-            material_id,
-            sub,
-            **kwargs,
-        )
-    except ValueError as exc:
-        detail = str(exc) or "invalid_input"
-        if detail not in {"invalid_title", "invalid_body_md", "invalid_alt_text"}:
-            detail = "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=_serialize_material(updated), status_code=200)
-
-
-async def delete_section_material(request: Request, unit_id: str, section_id: str, material_id: str):
-    """
-    Delete a markdown material (author only) and resequence positions.
-
-    Why:
-        Keeps material ordering contiguous (1..n) after removals.
-
-    Parameters:
-        request: FastAPI request with teacher session.
-        unit_id: UUID of the learning unit.
-        section_id: UUID of the section.
-        material_id: UUID of the material to delete.
-
-    Expected behavior:
-        - 204 on success.
-        - 400 for malformed UUIDs.
-        - 404 when the material is unknown to the author.
-
-    Permissions:
-        Caller must be a teacher and the author of the unit/section.
-    """
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(material_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    try:
-        _get_materials_service().ensure_section_owned(unit_id, section_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    material_obj = _get_materials_service().get_material_owned(unit_id, section_id, material_id, sub)
-    if material_obj is None:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    material_snapshot = _serialize_material(material_obj)
-    storage_key = material_snapshot.get("storage_key")
-    material_kind = material_snapshot.get("kind")
-    # Delete storage object first to avoid orphaning when storage fails after DB deletion.
-    if material_kind == "file" and storage_key:
-        # Delete from storage if the adapter supports it. Some tests inject a
-        # minimal FakeStorageAdapter without a delete_object method — treat that
-        # as a no-op rather than failing the request.
-        try:
-            delete_fn = getattr(STORAGE_ADAPTER, "delete_object", None)
-            if callable(delete_fn):
-                delete_fn(
-                    bucket=MATERIAL_FILE_SETTINGS.storage_bucket,
-                    key=storage_key,
-                )
-        except RuntimeError as exc:  # pragma: no cover - defensive log path
-            if str(exc) == "storage_adapter_not_configured":
-                logger.error(
-                    "Storage adapter unavailable during delete for material %s", material_id
-                )
-                return JSONResponse({"error": "service_unavailable"}, status_code=503)
-            raise
-        except Exception:  # pragma: no cover - log unexpected storage failures
-            logger.exception("Failed deleting storage object for material %s", material_id)
-            return JSONResponse(
-                {"error": "bad_gateway", "detail": "storage_delete_failed"},
-                status_code=502,
-            )
-    # After storage deletion succeeded (or not required), remove DB record and resequence.
-    try:
-        _get_materials_service().delete_material(unit_id, section_id, material_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
-
-
-async def create_section_material_upload_intent(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    payload: MaterialUploadIntentPayload,
-):
-    """Create a presigned upload intent for a file material (author only)."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    # Keep Teaching aligned with Learning: when startup wiring failed because
-    # Supabase was not reachable yet, the first real upload-intent should retry
-    # wiring before failing closed with 503.
-    if (
-        isinstance(STORAGE_ADAPTER, NullStorageAdapter)
-        and not _STORAGE_ADAPTER_OVERRIDE_ACTIVE
-        and callable(_wire_storage)
-    ):  # type: ignore[arg-type]
-        try:
-            _wire_storage()  # type: ignore[misc]
-        except Exception:
-            # Non-fatal; the service still fails closed below if wiring did not succeed.
-            pass
-    try:
-        intent = _get_materials_service().create_file_upload_intent(
-            unit_id,
-            section_id,
-            sub,
-            filename=payload.filename,
-            mime_type=payload.mime_type,
-            size_bytes=int(payload.size_bytes),
-            storage=STORAGE_ADAPTER,
-        )
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except ValueError as exc:
-        detail = str(exc) or "invalid_input"
-        if detail not in {"mime_not_allowed", "size_exceeded", "invalid_filename"}:
-            detail = "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
-    except RuntimeError as exc:
-        if str(exc) == "storage_adapter_not_configured":
-            return JSONResponse({"error": "service_unavailable"}, status_code=503)
-        raise
-    return JSONResponse(content=intent, status_code=200)
-
-
-async def finalize_section_material_upload(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    payload: MaterialFinalizePayload,
-):
-    """Finalize an upload intent and persist the file material."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(payload.intent_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_intent_id"}, status_code=400)
-    # Server-side sha256 pattern validation to align with OpenAPI and avoid 422 from Pydantic.
-    normalized_sha = (payload.sha256 or "").strip().lower()
-    if not re.fullmatch(r"[0-9a-f]{64}", normalized_sha):
-        return JSONResponse({"error": "bad_request", "detail": "checksum_mismatch"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    try:
-        material, created = _get_materials_service().finalize_file_material(
-            unit_id,
-            section_id,
-            sub,
-            intent_id=payload.intent_id,
-            title=payload.title,
-            sha256=payload.sha256,
-            alt_text=payload.alt_text,
-            storage=STORAGE_ADAPTER,
-        )
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except ValueError as exc:
-        detail = str(exc) or "invalid_input"
-        if detail not in {
-            "intent_expired",
-            "checksum_mismatch",
-            "invalid_title",
-            "mime_not_allowed",
-            "invalid_alt_text",
-        }:
-            detail = "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
-    except RuntimeError as exc:
-        if str(exc) == "storage_adapter_not_configured":
-            return JSONResponse({"error": "service_unavailable"}, status_code=503)
-        raise
-    status_code = 201 if created else 200
-    return JSONResponse(content=_serialize_material(material), status_code=status_code)
-
-
-async def create_module_material(
-    request: Request,
-    unit_id: str,
-    module_id: str,
-    payload: MaterialCreatePayload,
-):
-    """Create a material in a module-backed section with write scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await create_section_material(request, unit_id, str(section_id), payload)
-
-
-async def update_module_material(
-    request: Request,
-    unit_id: str,
-    module_id: str,
-    material_id: str,
-    payload: MaterialUpdatePayload,
-):
-    """Update a material in a module-backed section with write scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await update_section_material(request, unit_id, str(section_id), material_id, payload)
-
-
-async def delete_module_material(request: Request, unit_id: str, module_id: str, material_id: str):
-    """Delete a material in a module-backed section with delete scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await delete_section_material(request, unit_id, str(section_id), material_id)
-
-
-async def reorder_module_materials(
-    request: Request,
-    unit_id: str,
-    module_id: str,
-    payload: MaterialReorderPayload,
-):
-    """Reorder materials in a module-backed section with write scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await reorder_section_materials(request, unit_id, str(section_id), payload)
-
-
-async def create_module_material_upload_intent(
-    request: Request,
-    unit_id: str,
-    module_id: str,
-    payload: MaterialUploadIntentPayload,
-):
-    """Create a file-material upload intent in a module with write scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await create_section_material_upload_intent(request, unit_id, str(section_id), payload)
-
-
-async def finalize_module_material_upload(
-    request: Request,
-    unit_id: str,
-    module_id: str,
-    payload: MaterialFinalizePayload,
-):
-    """Finalize a file-material upload in a module with write scope only."""
-
-    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        repo_provider=_get_repo,
-    )
-    if error:
-        return error
-    return await finalize_section_material_upload(request, unit_id, str(section_id), payload)
-
-
-async def get_section_material_download_url(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    material_id: str,
-    disposition: Optional[str] = None,
-):
-    """Generate a short-lived download URL for a file material."""
-
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    if not _is_uuid_like(material_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    # Normalize and validate disposition at the route layer to return 400 (not FastAPI 422).
-    normalized_disposition = (disposition or "attachment").strip().lower()
-    if normalized_disposition not in {"inline", "attachment"}:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_disposition"}, status_code=400)
-    try:
-        payload = _get_materials_service().generate_file_download_url(
-            unit_id,
-            section_id,
-            material_id,
-            sub,
-            disposition=normalized_disposition,
-            storage=STORAGE_ADAPTER,
-        )
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except ValueError as exc:
-        detail = str(exc) or "invalid_input"
-        if detail not in {"invalid_disposition"}:
-            detail = "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
-    except RuntimeError as exc:
-        if str(exc) == "storage_adapter_not_configured":
-            return JSONResponse({"error": "service_unavailable"}, status_code=503)
-        raise
-    return JSONResponse(content=payload, status_code=200, headers={"Cache-Control": "private, no-store"})
-
-
-async def reorder_section_materials(
-    request: Request,
-    unit_id: str,
-    section_id: str,
-    payload: MaterialReorderPayload,
-):
-    """
-    Reorder materials within a section (author only).
-
-    Why:
-        Allows teachers to define the pedagogical flow; uses deferrable constraints for atomic swaps.
-
-    Parameters:
-        request: FastAPI request with teacher session.
-        unit_id: Learning unit UUID (path).
-        section_id: Section UUID (path).
-        payload: JSON body containing `material_ids` as the desired order.
-
-    Expected behavior:
-        - 200 with the reordered materials list.
-        - 400 for invalid payload shapes (non-array, empty, duplicates, non-UUIDs, mismatch).
-        - 404 when submitted IDs refer to unknown materials in the unit.
-
-    Permissions:
-        Caller must be a teacher and author of the unit/section.
-    """
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    if not _is_uuid_like(unit_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    if not _is_uuid_like(section_id):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    ids = payload.material_ids
-    # Validate payload shape before delegating to the service to avoid leaking database semantics.
-    if not isinstance(ids, list):
-        return JSONResponse({"error": "bad_request", "detail": "material_ids_must_be_array"}, status_code=400)
-    if len(ids) == 0:
-        return JSONResponse({"error": "bad_request", "detail": "empty_material_ids"}, status_code=400)
-    if len(ids) != len(set(ids)):
-        return JSONResponse({"error": "bad_request", "detail": "duplicate_material_ids"}, status_code=400)
-    if any(not _is_uuid_like(mid) for mid in ids):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_material_ids"}, status_code=400)
-    try:
-        _get_materials_service().ensure_section_owned(unit_id, section_id, sub)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    try:
-        ordered = _get_materials_service().reorder_markdown_materials(unit_id, section_id, sub, ids)
-    except ValueError as exc:
-        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return JSONResponse(content=[_serialize_material(m) for m in ordered], status_code=200)
-
 
 # Course-module handlers live in backend.web.routes.teaching_course_modules.
 

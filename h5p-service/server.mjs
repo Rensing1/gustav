@@ -30,7 +30,6 @@
  */
 
 import path from "node:path";
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { access, mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import express from "express";
@@ -44,6 +43,7 @@ import {
   buildFinishedSubmissionIdempotencyKey,
   parseOriginForForwarding,
 } from "./lib/finished_submission_context.mjs";
+import { parseReviewToken } from "./lib/review_tokens.mjs";
 import {
   authenticateInternalTeacher,
   isInternalAuth,
@@ -281,56 +281,6 @@ function sanitizeHeaderFilename(value) {
   const raw = String(value || "").trim();
   const safe = raw.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_").slice(0, 80);
   return safe || "download";
-}
-
-function parseReviewToken(token) {
-  if (!reviewTokenSecret) return null;
-  if (typeof token !== "string" || !token) return null;
-  const parts = token.split(".");
-  if (parts.length !== 2) return null;
-  const [payloadB64, sigB64] = parts;
-  let payloadBytes;
-  let sigBytes;
-  try {
-    payloadBytes = Buffer.from(payloadB64, "base64url");
-    sigBytes = Buffer.from(sigB64, "base64url");
-  } catch {
-    return null;
-  }
-
-  try {
-    const expected = createHmac("sha256", reviewTokenSecret).update(payloadBytes).digest();
-    if (sigBytes.length !== expected.length) return null;
-    if (!timingSafeEqual(sigBytes, expected)) return null;
-  } catch {
-    return null;
-  }
-
-  let obj;
-  try {
-    obj = JSON.parse(payloadBytes.toString("utf-8"));
-  } catch {
-    return null;
-  }
-  if (!obj || typeof obj !== "object") return null;
-
-  const teacherSub = obj.teacher_sub;
-  const studentSub = obj.student_sub;
-  const courseId = obj.course_id;
-  const taskId = obj.task_id;
-  const contentId = obj.content_id;
-  const exp = obj.exp;
-
-  if (typeof teacherSub !== "string" || !teacherSub) return null;
-  if (typeof studentSub !== "string" || !studentSub) return null;
-  if (typeof courseId !== "string" || !courseId) return null;
-  if (typeof taskId !== "string" || !taskId) return null;
-  if (typeof contentId !== "string" || !contentId) return null;
-  if (typeof exp !== "number" || !Number.isFinite(exp)) return null;
-  const now = Math.floor(Date.now() / 1000);
-  if (exp <= now) return null;
-
-  return { teacherSub, studentSub, courseId, taskId, contentId, exp };
 }
 
 function getPublicOrigin(req) {
@@ -878,7 +828,7 @@ async function main() {
     }
 
     // Review token must be valid and match the authenticated teacher.
-    const payload = parseReviewToken(reviewToken);
+    const payload = parseReviewToken(reviewToken, { secret: reviewTokenSecret });
     if (!payload) {
       sendJson(res, 403, { error: "forbidden" });
       return;
@@ -1280,7 +1230,7 @@ async function main() {
       return;
     }
 
-    const payload = parseReviewToken(reviewToken);
+    const payload = parseReviewToken(reviewToken, { secret: reviewTokenSecret });
     if (!payload) {
       sendJson(res, 403, { error: "forbidden" });
       return;

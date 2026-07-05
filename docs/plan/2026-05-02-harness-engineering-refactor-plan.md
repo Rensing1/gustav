@@ -942,8 +942,9 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - Done in working tree: `docs/harness/HOTSPOTS.md` now records concrete LOC baselines for backend, frontend, CSS, and H5P hotspots.
 - Done in working tree: extracted H5P Finished-Data forwarding context helpers from `h5p-service/server.mjs` into `h5p-service/lib/finished_submission_context.mjs`, covering Origin/Referer forwarding metadata and Learning-compatible idempotency keys.
 - Done in working tree: extracted signed H5P review-token parsing from `h5p-service/server.mjs` into `h5p-service/lib/review_tokens.mjs`, keeping token signature, expiry, and required-claim validation covered outside the server hotspot.
-- Done in working tree: `h5p-service/test/finished_submission_context.test.mjs` and `h5p-service/test/review_tokens.test.mjs` protect the extracted H5P forwarding and review-token behavior; `npm test` in `h5p-service` reports 9 passing Node test files.
-- Done in working tree: `h5p-service/server.mjs` shrank from 1942 to 1847 LOC across the first two PR20 H5P slices.
+- Done in working tree: extracted H5P CSP/security-header policy from `h5p-service/server.mjs` into `h5p-service/lib/security_headers.mjs`, keeping default CSP, debug-page CSP, and response-header overrides covered outside the server hotspot.
+- Done in working tree: `h5p-service/test/finished_submission_context.test.mjs`, `h5p-service/test/review_tokens.test.mjs`, and `h5p-service/test/security_headers.test.mjs` protect the extracted H5P forwarding, review-token, and security-header behavior; `npm test` in `h5p-service` reports 10 passing Node test files.
+- Done in working tree: `h5p-service/server.mjs` shrank from 1942 to 1790 LOC across the first three PR20 H5P slices.
 - Open follow-up: continue with a second H5P split around route handlers/storage response helpers or a frontend Svelte workspace extraction with existing component tests.
 
 #### PR 21: Quality Scorecard v1

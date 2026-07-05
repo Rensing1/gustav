@@ -20,7 +20,7 @@ Review cadence: monatlich
 | frontend/src/lib/styles/design-system.css | 1903 | +0 |
 | frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte | 1846 | +0 |
 | frontend/src/routes/teaching/units/[unitId]/+page.svelte | 1210 | +0 |
-| h5p-service/server.mjs | 1847 | -50 |
+| h5p-service/server.mjs | 1790 | -57 |
 
 ### Security status
 - Security quick checks: pass (/home/felix/gustav-alpha2/.venv/bin/pytest -q backend/tests/test_config_security.py backend/tests/test_privacy_logging_contract.py backend/tests/test_csrf_tokens_contract.py)

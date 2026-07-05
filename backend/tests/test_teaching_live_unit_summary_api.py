@@ -16,6 +16,7 @@ import json
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
+import importlib
 import pytest
 import psycopg
 from psycopg import errors as psy_errors
@@ -24,16 +25,10 @@ from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-from pathlib import Path
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # type: ignore  # noqa: E402
-
-from utils.db import require_db_or_skip as _require_db_or_skip
+main = importlib.import_module("backend.web.main")
 
 
 @pytest.fixture(autouse=True)
@@ -110,9 +105,9 @@ async def test_summary_requires_auth_and_owner_role():
 
     # Owner vs non-owner
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for this test")
@@ -149,10 +144,10 @@ async def test_summary_requires_auth_and_owner_role():
 @pytest.mark.anyio
 async def test_summary_happy_path_minimal_status_matrix_and_headers():
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -231,10 +226,10 @@ async def test_summary_cursor_can_seed_delta_for_new_changes_even_when_host_cloc
         the next delta poll.
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -303,10 +298,10 @@ async def test_summary_returns_503_when_db_cursor_seed_is_unavailable(monkeypatc
         weaken that contract and reintroduce clock-skew risk.
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -345,11 +340,11 @@ async def test_summary_includes_submissions_for_modular_units_without_section_re
         `module_section_releases`.
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -398,10 +393,10 @@ async def test_summary_includes_latest_h5p_score_x_y_and_completion_flag():
           (score_raw == score_max, including 0/0), even if later attempts are worse
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -537,10 +532,10 @@ async def test_summary_uses_latest_h5p_attempt_when_created_at_timestamps_tie():
         semantic attempt, not an arbitrary physical row.
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -628,10 +623,10 @@ async def test_summary_uses_latest_h5p_attempt_when_created_at_timestamps_tie():
 @pytest.mark.anyio
 async def test_summary_includes_average_score_for_completed_analysis():
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -738,9 +733,9 @@ async def test_summary_keeps_scores_for_later_learners_when_page_contains_more_c
         `average_score`.
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for pagination regression test")
@@ -834,9 +829,9 @@ async def test_summary_keeps_scores_for_later_learners_when_page_contains_more_c
 @pytest.mark.anyio
 async def test_summary_can_skip_student_rows():
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for summary include_students test")
@@ -862,9 +857,9 @@ async def test_summary_can_skip_student_rows():
 @pytest.mark.anyio
 async def test_summary_rejects_invalid_updated_since():
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for timestamp validation")
@@ -889,10 +884,10 @@ async def test_summary_rejects_invalid_updated_since():
 @pytest.mark.anyio
 async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -1002,10 +997,10 @@ async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
 @pytest.mark.anyio
 async def test_summary_falls_back_when_helper_score_columns_are_missing(monkeypatch, caplog):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -1117,10 +1112,10 @@ async def test_summary_falls_back_when_helper_score_columns_are_missing(monkeypa
 @pytest.mark.anyio
 async def test_summary_falls_back_when_bulk_aggregate_helper_is_missing(monkeypatch, caplog):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)

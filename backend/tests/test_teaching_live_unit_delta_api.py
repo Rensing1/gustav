@@ -11,25 +11,23 @@ import json
 import uuid
 from datetime import datetime, timezone, timedelta
 import logging
+import importlib
+import os
 
 import pytest
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
-import os
 import psycopg
 from psycopg import errors as psy_errors
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 @pytest.fixture(autouse=True)
@@ -104,9 +102,8 @@ async def test_delta_requires_auth_and_owner():
 
     _require_db_or_skip()
     logging.getLogger("gustav.web.teaching").setLevel(logging.DEBUG)
-    import routes.teaching as teaching  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for delta tests")
@@ -139,10 +136,8 @@ async def test_delta_requires_auth_and_owner():
 @pytest.mark.anyio
 async def test_delta_returns_cells_after_submission():
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -216,10 +211,8 @@ async def test_delta_returns_cells_after_submission():
 @pytest.mark.anyio
 async def test_delta_falls_back_when_helper_score_columns_are_missing(monkeypatch, caplog):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -329,10 +322,8 @@ async def test_delta_falls_back_when_helper_score_columns_are_missing(monkeypatc
 @pytest.mark.anyio
 async def test_delta_includes_average_score_for_completed_analysis():
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -422,10 +413,8 @@ async def test_delta_includes_average_score_for_completed_analysis():
 async def test_delta_includes_latest_h5p_score_x_y_and_completion_flag():
     """Delta cells must expose latest x/y and keep the completion flag for H5P."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)

@@ -8,22 +8,19 @@ from __future__ import annotations
 
 import uuid
 import pytest
+import importlib
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
 import os
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 os.environ["H5P_REVIEW_TOKEN_SECRET"] = "test-secret"
-import main  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # type: ignore  # noqa: E402
-from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+
+main = importlib.import_module("backend.web.main")
 
 
 @pytest.fixture(autouse=True)
@@ -107,10 +104,10 @@ async def test_latest_detail_requires_owner_and_valid_ids():
 @pytest.mark.anyio
 async def test_latest_detail_happy_path_and_no_content_cases():
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -183,10 +180,10 @@ async def test_latest_detail_long_text_body_matches_learning():
           to the learner-facing API.
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -240,10 +237,10 @@ async def test_latest_detail_long_text_body_matches_learning():
 async def test_latest_detail_includes_text_and_files_for_pdf_submission():
     """File/PDF submissions should expose extracted text and stable app file URLs."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -347,10 +344,10 @@ async def test_teaching_submission_file_route_streams_owner_visible_bytes(monkey
     """Teachers should open live-detail submission files through a stable app route."""
 
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -466,10 +463,10 @@ async def test_latest_detail_includes_feedback_and_analysis():
           and `criteria_results` (no raw `summary` dict in the public contract).
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -582,10 +579,10 @@ async def test_latest_detail_logs_unhandled_analysis_shape(caplog: pytest.LogCap
           a structured info log about the unhandled analysis_json shape.
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -682,10 +679,10 @@ async def test_latest_detail_includes_integer_file_size_for_pdf_submission():
         - The API returns an integer in files[0].size (no null values).
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -797,10 +794,10 @@ async def test_latest_detail_omits_files_when_size_unknown():
           (no entry with `size = null`).
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -910,10 +907,10 @@ async def test_latest_detail_falls_back_to_learning_submissions_when_primary_que
           (id, text_body, feedback_md, normalised analysis_json) and omits files[].
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -1034,10 +1031,10 @@ async def test_latest_detail_fallback_respects_unit_relation(monkeypatch: pytest
         - The endpoint must not return the submission for the mismatched unit and should respond 404.
     """
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -1136,10 +1133,10 @@ async def test_latest_detail_fallback_respects_unit_relation(monkeypatch: pytest
 async def test_latest_detail_h5p_includes_score_and_review_token():
     """H5P latest-detail should include score + review token for the embedded review player."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)

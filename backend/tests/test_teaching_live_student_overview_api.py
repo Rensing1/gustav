@@ -3,24 +3,23 @@ Teaching API — Student live overview across course units (RED)
 """
 from __future__ import annotations
 
-import os
+import importlib
 import uuid
-from pathlib import Path
 from urllib.parse import quote
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-import main  # type: ignore  # noqa: E402
-from runtime_auth_helpers import install_session_store  # type: ignore  # noqa: E402
-from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
+teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 @pytest.fixture(autouse=True)
@@ -98,11 +97,9 @@ async def test_student_live_overview_requires_teacher_owner_and_valid_ids() -> N
 @pytest.mark.anyio
 async def test_student_live_overview_lists_all_units_and_supports_filtering() -> None:
     _require_db_or_skip()
-    import routes.learning as learning  # noqa: E402
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -165,11 +162,9 @@ async def test_student_live_overview_lists_all_units_and_supports_filtering() ->
 @pytest.mark.anyio
 async def test_student_live_overview_rejects_foreign_unit_and_non_member() -> None:
     _require_db_or_skip()
-    import routes.learning as learning  # noqa: E402
-    import routes.teaching as teaching  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -194,8 +189,6 @@ async def test_student_live_overview_rejects_foreign_unit_and_non_member() -> No
 
 @pytest.mark.anyio
 async def test_student_live_overview_deduplicates_unit_ids_case_insensitively(monkeypatch: pytest.MonkeyPatch) -> None:
-    import routes.teaching as teaching  # noqa: E402
-
     owner = _session_store().create(sub="t-live-overview-casefold-owner", name="Owner", roles=["teacher"])  # type: ignore
     course_id = str(uuid.uuid4())
     unit_id = str(uuid.uuid4())
@@ -214,7 +207,12 @@ async def test_student_live_overview_deduplicates_unit_ids_case_insensitively(mo
 
     fake_service = _FakeService()
     monkeypatch.setattr(teaching, "MAX_UNIT_IDS", 1, raising=False)
-    monkeypatch.setattr(teaching, "_guard_course_owner", lambda _course_id, _owner_sub: None, raising=False)
+    monkeypatch.setattr(
+        teaching_guards,
+        "_guard_course_owner",
+        lambda _course_id, _owner_sub, repo_provider=None: None,
+        raising=False,
+    )
     monkeypatch.setattr(teaching, "_get_student_live_overview_service", lambda: fake_service, raising=False)
     monkeypatch.setattr(
         teaching,
@@ -237,8 +235,6 @@ async def test_student_live_overview_deduplicates_unit_ids_case_insensitively(mo
 
 @pytest.mark.anyio
 async def test_student_live_overview_accepts_path_encoded_student_sub_with_slash(monkeypatch: pytest.MonkeyPatch) -> None:
-    import routes.teaching as teaching  # noqa: E402
-
     owner = _session_store().create(sub="t-live-overview-path-owner", name="Owner", roles=["teacher"])  # type: ignore
     course_id = str(uuid.uuid4())
     student_sub = "legacy/student"
@@ -256,7 +252,12 @@ async def test_student_live_overview_accepts_path_encoded_student_sub_with_slash
             return _FakeOverview()
 
     fake_service = _FakeService()
-    monkeypatch.setattr(teaching, "_guard_course_owner", lambda _course_id, _owner_sub: None, raising=False)
+    monkeypatch.setattr(
+        teaching_guards,
+        "_guard_course_owner",
+        lambda _course_id, _owner_sub, repo_provider=None: None,
+        raising=False,
+    )
     monkeypatch.setattr(teaching, "_get_student_live_overview_service", lambda: fake_service, raising=False)
     monkeypatch.setattr(
         teaching,

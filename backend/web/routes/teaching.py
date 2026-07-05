@@ -29,7 +29,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import asyncio
 from uuid import uuid4
 
-import httpx
 from fastapi import APIRouter, Request
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse, Response
@@ -111,6 +110,11 @@ from backend.web.routes.teaching_storage_cleanup import (
     metadata_page_keys as _metadata_page_keys,  # noqa: F401 - kept for route module compatibility
     unit_delete_storage_metadata_dsn as _unit_delete_storage_metadata_dsn,  # noqa: F401
 )
+from backend.web.routes.teaching_submission_files import (
+    download_bytes_with_limit as _download_bytes_with_limit,
+    safe_download_filename as _safe_download_filename,
+    teaching_submission_file_href as _teaching_submission_file_href,
+)
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
 
@@ -130,47 +134,6 @@ def _delete_unit_storage_objects(objects: list[tuple[str, str]]) -> None:
 
     teaching_storage_cleanup.delete_storage_objects(STORAGE_ADAPTER, objects)
 
-
-def _safe_download_filename(filename: str | None, fallback: str) -> str:
-    raw = str(filename or "").strip()
-    candidate = raw or fallback
-    cleaned = "".join(ch for ch in candidate if ch not in {'"', "\r", "\n"})
-    return cleaned or fallback
-
-
-async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[str, str] | None = None) -> bytes | None:
-    """Fetch a private file download into memory with a hard size limit."""
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
-            async with client.stream("GET", url, headers=headers) as resp:
-                code = int(getattr(resp, "status_code", 500))
-                if 300 <= code < 400 or code >= 400:
-                    return None
-                out = bytearray()
-                async for chunk in resp.aiter_bytes():
-                    if not chunk:
-                        continue
-                    out.extend(chunk)
-                    if len(out) > int(max_bytes):
-                        return None
-                return bytes(out)
-    except Exception:
-        return None
-
-
-def _teaching_submission_file_href(
-    *,
-    course_id: str,
-    unit_id: str,
-    task_id: str,
-    student_sub: str,
-    disposition: str,
-) -> str:
-    return (
-        f"/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest/file"
-        f"?disposition={disposition}"
-    )
 
 # Optional storage wiring helper (lazy rewire for local Supabase E2E)
 try:  # pragma: no cover - simple import guard

@@ -47,22 +47,26 @@ def test_live_routes_are_owned_by_dedicated_router_module() -> None:
         assert path not in teaching_source
 
 
-def test_live_router_wrappers_delegate_to_teaching_module() -> None:
-    """Wrapper functions should delegate unchanged behavior to the existing teaching handlers."""
+def test_live_router_owns_handlers_without_teaching_delegation() -> None:
+    """Live handlers must live in the dedicated router module."""
 
     live_router_source = TEACHING_LIVE_SOURCE.read_text(encoding="utf-8")
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
 
-    expected_delegations = {
-        "get_unit_live_summary": "teaching_routes.get_unit_live_summary(",
-        "get_unit_live_delta": "teaching_routes.get_unit_live_delta(",
-        "get_student_live_overview": "teaching_routes.get_student_live_overview(",
-        "get_latest_submission_detail": "teaching_routes.get_latest_submission_detail(",
-        "get_teaching_submission_file": "teaching_routes.get_teaching_submission_file(",
-    }
+    assert "from backend.web.routes import teaching as teaching_routes" not in live_router_source
 
-    for name, delegate in expected_delegations.items():
+    owned_handlers = (
+        "get_unit_live_summary",
+        "get_unit_live_delta",
+        "get_student_live_overview",
+        "get_latest_submission_detail",
+        "get_teaching_submission_file",
+    )
+
+    for name in owned_handlers:
         assert f"def {name}(" in live_router_source
-        assert delegate in live_router_source
+        assert f"teaching_routes.{name}(" not in live_router_source
+        assert f"async def {name}(" not in teaching_source
 
     live_module = importlib.import_module("backend.web.routes.teaching_live")
     assert hasattr(live_module, "teaching_live_router")

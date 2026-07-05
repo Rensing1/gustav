@@ -12,8 +12,8 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 
 ## Zusammenfassung
 - Inventarisierte Dateien: 115
-- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 47
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 41
+- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 42
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 46
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 13
 - Statische Migrationstests ohne echte DB-Verbindung: 5
@@ -116,11 +116,11 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 | backend/tests/test_teaching_members_api_default_limit.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_teaching_members_semantics.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_teaching_memberships_delete_rls_policy.py | real-db | db_write | marked-db | requires-db, rls | Keep marker and isolation visible |
-| backend/tests/test_teaching_modular_unit_editor_crud_api_contract.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_modular_unit_graph_api_contract.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_module_section_releases_api.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_module_sections_list_api.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_teaching_module_sections_releases_headers.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
+| backend/tests/test_teaching_modular_unit_editor_crud_api_contract.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_modular_unit_graph_api_contract.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_module_section_releases_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_module_sections_list_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
+| backend/tests/test_teaching_module_sections_releases_headers.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_teaching_repo_db_optional.py | real-db | - | missing-db-marker | env:DATABASE_URL, psycopg-connect, psycopg-import, rls | Review for db_read/db_write before marker hardening |
 | backend/tests/test_teaching_rls_policies_optional.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_DSN, psycopg-connect, psycopg-import, requires-db, rls | Keep marker and isolation visible |
 | backend/tests/test_teaching_section_id_immutability_db_contract.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:RLS_TEST_DSN, psycopg-connect, psycopg-import, requires-db | Review for db_read/db_write before marker hardening |

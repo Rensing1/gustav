@@ -21,7 +21,7 @@ teaching = importlib.import_module("backend.web.routes.teaching")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 
 async def _client() -> httpx.AsyncClient:

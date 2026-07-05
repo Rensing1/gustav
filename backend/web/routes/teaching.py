@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import logging
 
-import json
 import time
 from dataclasses import dataclass, asdict, is_dataclass
 import os
@@ -107,113 +106,29 @@ from backend.web.routes.teaching_validation import (
     clamp_limit_offset as _clamp_limit_offset,
     safe_int as _safe_int,
 )
+from backend.web.routes import teaching_storage_cleanup
+from backend.web.routes.teaching_storage_cleanup import (
+    metadata_page_keys as _metadata_page_keys,  # noqa: F401 - kept for route module compatibility
+    unit_delete_storage_metadata_dsn as _unit_delete_storage_metadata_dsn,  # noqa: F401
+)
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
 
 
-def _unit_delete_storage_metadata_dsn(repo: object) -> str | None:
-    """Return the DSN used to read storage keys before a unit delete."""
+def _collect_unit_delete_storage_objects(repo: object, *, unit_id: str) -> list[tuple[str, str]]:
+    """Collect object storage entries that must be removed before deleting a unit."""
 
-    return (
-        str(getattr(repo, "_service_dsn", "") or "").strip()
-        or str(getattr(repo, "_dsn", "") or "").strip()
-        or None
+    return teaching_storage_cleanup.collect_unit_delete_storage_objects(
+        repo,
+        unit_id=unit_id,
+        materials_bucket=MATERIAL_FILE_SETTINGS.storage_bucket,
     )
 
 
-def _metadata_page_keys(internal_metadata: Any) -> list[str]:
-    """Extract PDF-derived page keys from a learning submission metadata value."""
-
-    metadata = internal_metadata
-    if isinstance(metadata, str):
-        try:
-            metadata = json.loads(metadata)
-        except json.JSONDecodeError:
-            return []
-    if not isinstance(metadata, dict):
-        return []
-    raw_page_keys = metadata.get("page_keys")
-    if not isinstance(raw_page_keys, list):
-        return []
-    return [str(key).strip() for key in raw_page_keys if str(key or "").strip()]
-
-
-def _collect_unit_delete_storage_objects(repo: object, *, unit_id: str) -> list[tuple[str, str]]:
-    """Collect object storage entries that must be removed before deleting a unit.
-
-    Why:
-        PostgreSQL cascades remove relational rows, but Supabase Storage objects
-        live outside those foreign keys. The route reads keys first and deletes
-        the files before the database delete so failures can still abort safely.
-
-    Permissions:
-        The caller must already have passed the author guard for this unit.
-    """
-
-    dsn = _unit_delete_storage_metadata_dsn(repo)
-    if not dsn:
-        return []
-    from backend.web.db_cursor import open_repo_cursor
-
-    objects: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-
-    def add(bucket: str, key: str | None) -> None:
-        normalized_key = str(key or "").strip()
-        if not normalized_key:
-            return
-        item = (bucket, normalized_key)
-        if item not in seen:
-            seen.add(item)
-            objects.append(item)
-
-    try:
-        with open_repo_cursor(dsn=dsn) as (_conn, cur):
-            cur.execute(
-                """
-                select storage_key
-                  from public.unit_materials
-                 where unit_id = %s
-                   and kind = 'file'
-                   and storage_key is not null
-                """,
-                (unit_id,),
-            )
-            for row in cur.fetchall():
-                add(MATERIAL_FILE_SETTINGS.storage_bucket, row[0])
-
-            cur.execute(
-                """
-                select ls.storage_key, ls.internal_metadata
-                  from public.learning_submissions ls
-                  join public.unit_tasks t on t.id = ls.task_id
-                 where t.unit_id = %s
-                   and (ls.storage_key is not null or ls.internal_metadata ? 'page_keys')
-                """,
-                (unit_id,),
-            )
-            submissions_bucket = get_submissions_bucket()
-            for storage_key, internal_metadata in cur.fetchall():
-                add(submissions_bucket, storage_key)
-                for page_key in _metadata_page_keys(internal_metadata):
-                    add(submissions_bucket, page_key)
-    except Exception:
-        logger.warning("unit delete storage metadata unavailable unit_id=%s", unit_id, exc_info=True)
-        raise RuntimeError("storage_metadata_unavailable")
-
-    return objects
-
-
 def _delete_unit_storage_objects(objects: list[tuple[str, str]]) -> None:
-    """Delete collected storage objects, failing closed when storage is unavailable."""
+    """Delete collected storage objects using the active Teaching storage adapter."""
 
-    if not objects:
-        return
-    delete_object = getattr(STORAGE_ADAPTER, "delete_object", None)
-    if not callable(delete_object):
-        raise RuntimeError("storage_adapter_not_configured")
-    for bucket, key in objects:
-        delete_object(bucket=bucket, key=key)
+    teaching_storage_cleanup.delete_storage_objects(STORAGE_ADAPTER, objects)
 
 
 def _safe_download_filename(filename: str | None, fallback: str) -> str:

@@ -60,11 +60,16 @@ from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
 from backend.web.material_file_access import (
     MaterialVisibilityLookupUnavailable,
-    StudentMaterialFileMetadata,
     load_student_material_file_metadata,
-    load_student_material_file_metadata_batch,
 )
 from backend.web.routes import learning_downloads
+from backend.web.routes.learning_material_files import (
+    attach_modular_material_files as _attach_modular_material_files,
+    attach_section_material_files as _attach_section_material_files,
+    material_file_href as _material_file_href,  # noqa: F401 - kept for route module compatibility
+    resolve_student_material_file_url as _resolve_student_material_file_url,  # noqa: F401
+    resolve_student_modular_material_file_url as _resolve_student_modular_material_file_url,  # noqa: F401
+)
 from backend.web.routes.learning_upload_proxy import (
     decode_proxy_headers as _decode_proxy_headers,
     encode_proxy_headers as _encode_proxy_headers,
@@ -276,15 +281,6 @@ def _submission_file_href(*, course_id: str, task_id: str, submission_id: str, d
     )
 
 
-def _material_file_href(*, course_id: str, material_id: str, disposition: str) -> str:
-    """Return a stable same-origin file URL for a learner-visible material."""
-
-    return (
-        f"/api/learning/courses/{_quote(str(course_id), safe='')}/materials/"
-        f"{_quote(str(material_id), safe='')}/file?disposition={_quote(str(disposition), safe='')}"
-    )
-
-
 def _safe_download_filename(filename: str | None, fallback: str) -> str:
     raw = str(filename or "").strip()
     candidate = raw or fallback
@@ -376,139 +372,6 @@ def _teaching_storage_adapter() -> object | None:
         if module is not None:
             return getattr(module, "STORAGE_ADAPTER", None)
     return None
-
-
-def _resolve_student_material_file_url(
-    *,
-    student_sub: str,
-    course_id: str,
-    material_id: str,
-) -> str | None:
-    if not (student_sub and _is_uuid_like(course_id) and _is_uuid_like(material_id)):
-        return None
-    repo = _get_repo()
-    try:
-        metadata = load_student_material_file_metadata(
-            repo=repo,
-            student_sub=student_sub,
-            course_id=str(course_id),
-            material_id=str(material_id),
-        )
-    except Exception:
-        return None
-    if metadata is None:
-        return None
-    return _material_file_href(course_id=course_id, material_id=material_id, disposition="inline")
-
-
-def _load_visible_material_file_metadata(
-    *,
-    student_sub: str,
-    course_id: str,
-    material_ids: list[str],
-) -> dict[str, StudentMaterialFileMetadata]:
-    """Load visible file-material metadata for a student with one DB connection."""
-
-    valid_material_ids = [str(material_id) for material_id in material_ids if _is_uuid_like(material_id)]
-    if not (student_sub and _is_uuid_like(course_id) and valid_material_ids):
-        return {}
-
-    repo = _get_repo()
-    try:
-        return load_student_material_file_metadata_batch(
-            repo=repo,
-            student_sub=student_sub,
-            course_id=str(course_id),
-            material_ids=valid_material_ids,
-        )
-    except Exception:
-        return {}
-
-
-def _resolve_student_modular_material_file_url(
-    *,
-    student_sub: str,
-    course_id: str,
-    material_id: str,
-) -> str | None:
-    return _resolve_student_material_file_url(
-        student_sub=student_sub,
-        course_id=course_id,
-        material_id=material_id,
-    )
-
-
-def _attach_section_material_files(
-    *,
-    student_sub: str,
-    course_id: str,
-    sections: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    material_ids = [
-        str(material.get("id") or "")
-        for section in sections
-        for material in (section.get("materials") or [])
-        if isinstance(section, dict) and isinstance(material, dict) and material.get("kind") == "file"
-    ]
-    material_rows = _load_visible_material_file_metadata(
-        student_sub=student_sub,
-        course_id=course_id,
-        material_ids=material_ids,
-    )
-    enriched: list[dict[str, Any]] = []
-    for section in sections:
-        payload = dict(section)
-        materials = []
-        for material in payload.get("materials") or []:
-            material_payload = dict(material)
-            if material_payload.get("kind") == "file":
-                material_id = str(material_payload.get("id") or "")
-                material_payload["file_url"] = (
-                    _material_file_href(course_id=course_id, material_id=material_id, disposition="inline")
-                    if material_id in material_rows
-                    else None
-                )
-            else:
-                material_payload["file_url"] = None
-            materials.append(material_payload)
-        payload["materials"] = materials
-        enriched.append(payload)
-    return enriched
-
-
-def _attach_modular_material_files(
-    *,
-    student_sub: str,
-    course_id: str,
-    unit_id: str,
-    module_id: str,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    out = dict(payload)
-    material_rows = _load_visible_material_file_metadata(
-        student_sub=student_sub,
-        course_id=course_id,
-        material_ids=[
-            str(material.get("id") or "")
-            for material in (out.get("materials") or [])
-            if isinstance(material, dict) and material.get("kind") == "file"
-        ],
-    )
-    materials = []
-    for material in out.get("materials") or []:
-        material_payload = dict(material)
-        if material_payload.get("kind") == "file":
-            material_id = str(material_payload.get("id") or "")
-            material_payload["file_url"] = (
-                _material_file_href(course_id=course_id, material_id=material_id, disposition="inline")
-                if material_id in material_rows
-                else None
-            )
-        else:
-            material_payload["file_url"] = None
-        materials.append(material_payload)
-    out["materials"] = materials
-    return out
 
 
 def _require_repo_methods(repo: object, *method_names: str) -> JSONResponse | None:

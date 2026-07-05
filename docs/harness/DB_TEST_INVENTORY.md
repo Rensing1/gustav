@@ -11,11 +11,11 @@ Review cadence: vor dem Scharfstellen von `db_read`/`db_write` und nach größer
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, bevor `db_read` und `db_write` als harte Marker-Regel eingesetzt werden. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 126
-- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 85
+- Inventarisierte Dateien: 115
+- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 73
 - Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 15
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
-- Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 12
+- Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 13
 - Statische Migrationstests ohne echte DB-Verbindung: 5
 
 ## Marker-Regel
@@ -25,18 +25,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 | --- | --- | --- | --- | --- | --- |
 | backend/tests/conftest.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:RLS_TEST_DSN, env:SUPABASE_SERVICE_ROLE_KEY, psycopg-connect, psycopg-import | Review for db_read/db_write before marker hardening |
 | backend/tests/learning_adapters/test_learning_worker_dspy_only_placeholder.py | real-db | - | missing-db-marker | env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_feedback_visual_pipeline.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_dev_upload_root.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_filius_fls.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_makecode_hex.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_missing_bytes_transient.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_pdf_cached_paths.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_pdf_remote_render.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_remote_fetch.py | real-db | - | missing-db-marker | psycopg-required, supabase | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_sb3.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_streaming.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_local_vision_text_passthrough.py | real-db | - | missing-db-marker | psycopg-required | Review for db_read/db_write before marker hardening |
+| backend/tests/learning_adapters/test_local_vision_remote_fetch.py | storage-or-config | - | no-db-marker-needed | psycopg-required, supabase | Keep service-free unless it reaches the real DB |
 | backend/tests/migration/test_ai_usage_events_security.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_concern_box_entries_rls.py | real-db | db_read | marked-db | migration, psycopg-connect, psycopg-import, requires-db, rls | Keep marker and isolation visible |
 | backend/tests/migration/test_course_memberships_rls_delete_policy.py | real-db | db_write | marked-db | migration, psycopg-connect, psycopg-import, requires-db, rls | Keep marker and isolation visible |

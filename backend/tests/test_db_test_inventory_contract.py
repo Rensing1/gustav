@@ -166,6 +166,28 @@ def test_db_test_inventory_ignores_monkeypatch_env_only_contracts(tmp_path: Path
     assert records == []
 
 
+def test_db_test_inventory_does_not_treat_psycopg_dependency_as_real_db_alone(tmp_path: Path) -> None:
+    from backend.tools import db_test_inventory
+
+    dependency_only_test = tmp_path / "test_local_vision.py"
+    dependency_only_test.write_text(
+        "\n".join(
+            [
+                "import pytest",
+                "pytest.importorskip('psycopg')",
+                "",
+                "def test_uses_adapter_with_fake_storage():",
+                "    assert True",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    records = db_test_inventory.scan_tests(tmp_path, repo_root=tmp_path)
+
+    assert records == []
+
+
 def test_db_test_inventory_document_has_required_columns() -> None:
     assert TOOL.exists(), "Missing DB test inventory tool"
     assert INVENTORY.exists(), "Missing DB test inventory document"

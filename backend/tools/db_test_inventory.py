@@ -169,7 +169,7 @@ def _find_signals(path: Path, tree: ast.AST) -> tuple[str, ...]:
 
 
 def _classification(signals: tuple[str, ...]) -> str:
-    if any(signal in signals for signal in ("psycopg-connect", "psycopg-required")):
+    if "psycopg-connect" in signals:
         return "real-db"
     if any(signal.startswith("env:") and signal.removeprefix("env:") in DB_ENV_NAMES for signal in signals):
         return "real-db"

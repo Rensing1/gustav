@@ -9,6 +9,7 @@ Review cadence: monatlich während des Harness-Refactors
 
 ## Zweck
 Dieses Inventar macht Import-Schulden zählbar. PR 6 behebt die Schulden nicht breitflächig; es verhindert, dass neue Verstöße unbemerkt hinzukommen.
+PR 8 hat den Zielpfad für den produktiven Web-Start auf `backend.web.main:app` gelegt; dieses Inventar hält die danach verbleibenden Import-Schulden messbar.
 
 ## Baseline vom 2026-07-05
 Die maschinenlesbare Baseline liegt in `docs/harness/IMPORT_BOUNDARY_BASELINE.json`.

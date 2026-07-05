@@ -14,7 +14,7 @@ def test_run_auth_smoke_async_uses_package_imports() -> None:
     """The standalone auth smoke script should run from the repository root."""
 
     result = subprocess.run(
-        [sys.executable, "backend/tests/run_auth_smoke_async.py"],
+        [sys.executable, "-m", "backend.tests.run_auth_smoke_async"],
         cwd=REPO_ROOT,
         check=False,
         capture_output=True,

@@ -7,6 +7,7 @@ before attempting to forward.
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 import httpx
 import pytest
 from httpx import ASGITransport
@@ -16,6 +17,9 @@ from backend.tests.runtime_auth_helpers import install_session_store
 
 
 pytestmark = pytest.mark.anyio("asyncio")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LEARNING_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "learning.py"
+UPLOAD_PROXY_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "learning_upload_proxy.py"
 
 
 async def _client():
@@ -37,6 +41,26 @@ def _reload_learning_route():
 def _student_session(monkeypatch: pytest.MonkeyPatch, main_module, sub: str):
     store = install_session_store(monkeypatch, main_module)
     return store.create(sub=sub, name="S", roles=["student"])
+
+
+def test_upload_proxy_helpers_live_outside_learning_hotspot() -> None:
+    learning = importlib.import_module("backend.web.routes.learning")
+    upload_proxy = importlib.import_module("backend.web.routes.learning_upload_proxy")
+    learning_source = LEARNING_SOURCE.read_text(encoding="utf-8")
+    upload_proxy_source = UPLOAD_PROXY_SOURCE.read_text(encoding="utf-8")
+
+    assert "def _encode_proxy_headers(" not in learning_source
+    assert "def _decode_proxy_headers(" not in learning_source
+    assert "def _filter_upload_proxy_headers(" not in learning_source
+    assert "def _normalized_parts(" not in learning_source
+    assert "def encode_proxy_headers(" in upload_proxy_source
+    assert "def decode_proxy_headers(" in upload_proxy_source
+    assert "def filter_upload_proxy_headers(" in upload_proxy_source
+    assert "def normalized_parts(" in upload_proxy_source
+    assert learning._encode_proxy_headers is upload_proxy.encode_proxy_headers
+    assert learning._decode_proxy_headers is upload_proxy.decode_proxy_headers
+    assert learning._filter_upload_proxy_headers is upload_proxy.filter_upload_proxy_headers
+    assert learning._normalized_parts is upload_proxy.normalized_parts
 
 
 @pytest.mark.anyio

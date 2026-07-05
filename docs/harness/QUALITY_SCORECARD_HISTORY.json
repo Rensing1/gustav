@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-05T10:32:25",
+      "generated": "2026-07-05T10:37:31",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -36,12 +36,12 @@
           "path": "backend/web/routes/app.py"
         },
         {
-          "delta_from_previous": 69,
+          "delta_from_previous": 0,
           "loc": 2884,
           "path": "backend/web/routes/learning.py"
         },
         {
-          "delta_from_previous": 26,
+          "delta_from_previous": 0,
           "loc": 6146,
           "path": "backend/web/routes/teaching.py"
         },
@@ -56,8 +56,8 @@
           "path": "backend/teaching/repo_db.py"
         },
         {
-          "delta_from_previous": -45,
-          "loc": 1897,
+          "delta_from_previous": -50,
+          "loc": 1847,
           "path": "h5p-service/server.mjs"
         },
         {

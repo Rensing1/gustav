@@ -32,7 +32,7 @@ main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 
 class FakeStorageAdapter(StorageAdapterProtocol):

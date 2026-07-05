@@ -14,7 +14,7 @@ import os
 import pytest
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 
 def _have_dsn() -> bool:

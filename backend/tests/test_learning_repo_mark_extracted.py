@@ -16,6 +16,9 @@ import pytest
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_write
+
+
 def _dsn() -> str:
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")

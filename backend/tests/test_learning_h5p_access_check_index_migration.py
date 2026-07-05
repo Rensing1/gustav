@@ -19,6 +19,12 @@ import os
 from pathlib import Path
 
 
+import pytest
+
+
+pytestmark = pytest.mark.db_write
+
+
 def test_h5p_access_check_index_exists_or_is_migrated():
     root = Path(__file__).resolve().parents[2]
     migration = root / "supabase" / "migrations" / "20260112121000_learning_h5p_access_check_index.sql"
@@ -54,4 +60,3 @@ def test_h5p_access_check_index_exists_or_is_migrated():
     assert "idx_unit_tasks_h5p_content_id" in sql
     assert "unit_tasks" in low
     assert "where" in low and "kind" in low and "h5p" in low
-

@@ -18,6 +18,9 @@ import os
 import pytest
 
 
+pytestmark = pytest.mark.db_write
+
+
 def _probe(dsn: str) -> bool:
     try:
         import psycopg  # type: ignore

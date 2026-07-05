@@ -35,7 +35,7 @@ from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E4
 from backend.identity_access.stores import SessionStore  # noqa: E402
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 
 async def _client() -> httpx.AsyncClient:

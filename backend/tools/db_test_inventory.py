@@ -168,7 +168,20 @@ def _find_signals(path: Path, tree: ast.AST) -> tuple[str, ...]:
     return tuple(sorted(signals))
 
 
-def _classification(signals: tuple[str, ...]) -> str:
+def _is_test_infra(path: Path, repo_root: Path) -> bool:
+    relative_parts = path.relative_to(repo_root).parts
+    if path.name == "conftest.py":
+        return True
+    if len(relative_parts) >= 2 and relative_parts[-2:] == ("utils", "db.py"):
+        return True
+    if len(relative_parts) >= 3 and relative_parts[:2] == ("backend", "tests") and relative_parts[2] == "utils":
+        return True
+    return False
+
+
+def _classification(path: Path, repo_root: Path, signals: tuple[str, ...]) -> str:
+    if _is_test_infra(path, repo_root):
+        return "test-infra"
     if "psycopg-connect" in signals:
         return "real-db"
     if any(signal.startswith("env:") and signal.removeprefix("env:") in DB_ENV_NAMES for signal in signals):
@@ -201,6 +214,8 @@ def _recommended_action(classification: str, marker_status: str) -> str:
         return "Keep marker and isolation visible"
     if marker_status == "covered-by-opt-in-marker":
         return "Keep existing opt-in gate"
+    if classification == "test-infra":
+        return "Keep pytest infrastructure marker-free"
     if classification == "migration-static":
         return "Keep static migration contract unless it opens a DB connection"
     if classification == "storage-or-config":
@@ -211,7 +226,7 @@ def _recommended_action(classification: str, marker_status: str) -> str:
 def _record_for(path: Path, repo_root: Path, text: str) -> DbTestRecord | None:
     tree = ast.parse(text, filename=str(path))
     signals = _find_signals(path, tree)
-    classification = _classification(signals)
+    classification = _classification(path, repo_root, signals)
     if classification == "unit-or-contract":
         return None
 
@@ -231,7 +246,8 @@ def scan_tests(root: Path, *, repo_root: Path | None = None) -> list[DbTestRecor
     """Return DB-relevant test inventory records below `root`.
 
     `repo_root` controls how paths are rendered. The scanner is intentionally
-    heuristic because it is a review aid, not the final marker gate.
+    heuristic, but the generated inventory is now a hard marker-hygiene gate:
+    real DB/RLS candidates must be reviewed and marked.
     """
 
     resolved_root = root.resolve()
@@ -270,10 +286,10 @@ def render_markdown(root: Path | None = None) -> str:
         "Local checks: `make test-db-inventory`",
         "CI status: `make verify` führt `make test-db-inventory` als Synchronitätscheck aus.",
         "Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`",
-        "Review cadence: vor dem Scharfstellen von `db_read`/`db_write` und nach größeren DB/RLS-Teständerungen",
+        "Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Testprofilen",
         "",
         "## Zweck",
-        "Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, bevor `db_read` und `db_write` als harte Marker-Regel eingesetzt werden. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.",
+        "Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.",
         "",
         "## Zusammenfassung",
         f"- Inventarisierte Dateien: {len(records)}",
@@ -284,7 +300,7 @@ def render_markdown(root: Path | None = None) -> str:
         f"- Statische Migrationstests ohne echte DB-Verbindung: {migration_static}",
         "",
         "## Marker-Regel",
-        "`missing-db-marker` ist in diesem Schritt ein Review-Signal, kein harter Fehler. Vor einer späteren Verschärfung muss jede betroffene Datei entweder `db_read`/`db_write` bekommen oder bewusst als servicefreier Contract-Test klassifiziert werden.",
+        "`missing-db-marker` ist ein Fehlerzustand: Jede echte DB/RLS-Testdatei braucht `db_read` oder `db_write`. Test-Infrastruktur wie `conftest.py` und `backend/tests/utils/*` bleibt bewusst markerfrei und wird als `test-infra` klassifiziert.",
         "",
         "| Test file | Classification | Markers | Marker status | Signals | Recommended action |",
         "| --- | --- | --- | --- | --- | --- |",
@@ -310,10 +326,10 @@ def render_markdown(root: Path | None = None) -> str:
     lines.extend(
         [
             "",
-            "## Offene Arbeit",
-            "- `missing-db-marker`-Dateien in kleine Review-Batches aufteilen.",
-            "- Danach entscheiden, ob `db_read` und `db_write` harte Marker oder ersetzbare Übergangsmarker sind.",
-            "- Tests mit globalen DB-Mutationen getrennt von isolierten DB-Lese-/Schreibtests behandeln.",
+            "## Pflege-Regeln",
+            "- Neue echte DB/RLS-Testdateien bekommen direkt `db_read` oder `db_write`.",
+            "- Tests mit globalen DB-Mutationen werden konservativ als `db_write` markiert.",
+            "- Servicefreie Supabase-/Storage-Contracts und statische Migrationstests bleiben ohne DB-Marker, solange sie keine echte DB-Verbindung öffnen.",
         ]
     )
     return "\n".join(lines) + "\n"

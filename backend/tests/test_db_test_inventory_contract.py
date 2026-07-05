@@ -188,6 +188,49 @@ def test_db_test_inventory_does_not_treat_psycopg_dependency_as_real_db_alone(tm
     assert records == []
 
 
+def test_db_test_inventory_treats_pytest_infrastructure_as_no_marker_needed(tmp_path: Path) -> None:
+    from backend.tools import db_test_inventory
+
+    conftest = tmp_path / "conftest.py"
+    conftest.write_text(
+        "\n".join(
+            [
+                "import os",
+                "import psycopg",
+                "",
+                "def pytest_configure():",
+                "    dsn = os.getenv('DATABASE_URL')",
+                "    psycopg.connect(dsn).close()",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    utils_dir = tmp_path / "utils"
+    utils_dir.mkdir()
+    db_helper = utils_dir / "db.py"
+    db_helper.write_text(
+        "\n".join(
+            [
+                "import os",
+                "import psycopg",
+                "",
+                "def require_db_or_skip():",
+                "    dsn = os.getenv('DATABASE_URL')",
+                "    psycopg.connect(dsn).close()",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    records = db_test_inventory.scan_tests(tmp_path, repo_root=tmp_path)
+    rows = {record.path: record for record in records}
+
+    assert rows["conftest.py"].classification == "test-infra"
+    assert rows["conftest.py"].marker_status == "no-db-marker-needed"
+    assert rows["utils/db.py"].classification == "test-infra"
+    assert rows["utils/db.py"].marker_status == "no-db-marker-needed"
+
+
 def test_db_test_inventory_document_has_required_columns() -> None:
     assert TOOL.exists(), "Missing DB test inventory tool"
     assert INVENTORY.exists(), "Missing DB test inventory document"
@@ -363,6 +406,15 @@ def test_teaching_modular_api_db_integration_files_are_marked_as_db_write() -> N
     ):
         assert records[path].marker_status == "marked-db"
         assert "db_write" in records[path].markers
+
+
+def test_db_test_inventory_has_no_unreviewed_real_db_candidates() -> None:
+    from backend.tools import db_test_inventory
+
+    records = db_test_inventory.scan_tests(REPO_ROOT / "backend" / "tests", repo_root=REPO_ROOT)
+    missing = [record.path for record in records if record.marker_status == "missing-db-marker"]
+
+    assert missing == []
 
 
 def test_db_test_inventory_is_synchronized_with_generator() -> None:

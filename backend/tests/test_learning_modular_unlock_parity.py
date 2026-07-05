@@ -20,7 +20,7 @@ from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 main = importlib.import_module("backend.web.main")
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 
 def _dsn() -> str:

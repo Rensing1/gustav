@@ -25,7 +25,7 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.teaching.storage import StorageAdapterProtocol
@@ -34,7 +34,7 @@ main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 
 class FakeStorageAdapter(StorageAdapterProtocol):

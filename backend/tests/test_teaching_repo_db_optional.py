@@ -10,6 +10,9 @@ import os
 import pytest
 
 
+pytestmark = pytest.mark.db_write
+
+
 def _fallback_login_dsn() -> str:
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")

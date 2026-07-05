@@ -65,7 +65,7 @@ def _use_storage_adapter(adapter: StorageAdapterProtocol):
             learning.set_storage_adapter(original)
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 
 async def _client() -> httpx.AsyncClient:

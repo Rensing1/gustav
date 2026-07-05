@@ -14,6 +14,9 @@ import pytest
 from backend.tests.utils.fake_psycopg import install_fake_psycopg
 
 
+pytestmark = pytest.mark.db_write
+
+
 SESSION_TEST_DSN = os.getenv("SESSION_TEST_DSN")
 
 

@@ -25,7 +25,7 @@ from backend.tests.runtime_auth_helpers import install_session_store
 from backend.identity_access.stores import SessionStore
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 main = importlib.import_module("backend.web.main")
 

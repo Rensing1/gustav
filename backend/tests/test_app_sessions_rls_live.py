@@ -21,6 +21,8 @@ import os
 import pytest
 
 
+pytestmark = pytest.mark.db_write
+
 psycopg = None  # late import, tests fallback to static checks when unavailable
 try:  # pragma: no cover - optional import in CI
     import psycopg  # type: ignore

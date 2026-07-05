@@ -19,6 +19,9 @@ from pathlib import Path
 import pytest
 
 
+pytestmark = pytest.mark.db_write
+
+
 @pytest.fixture
 def reload_backend_conftest(monkeypatch: pytest.MonkeyPatch):
     """

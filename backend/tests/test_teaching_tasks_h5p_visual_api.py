@@ -22,7 +22,7 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 # Allow DBTeachingRepo guardrails in tests.
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"

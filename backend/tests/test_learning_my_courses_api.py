@@ -20,7 +20,7 @@ from httpx import ASGITransport
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
-pytestmark = pytest.mark.anyio("asyncio")
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402

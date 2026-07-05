@@ -16,6 +16,9 @@ import pytest
 from backend.tests.utils import db as db_utils
 
 
+pytestmark = pytest.mark.db_write
+
+
 class _FailingPsycopg(types.SimpleNamespace):
     def connect(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
         raise RuntimeError("db_unreachable")

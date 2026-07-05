@@ -1,0 +1,209 @@
+{
+  "entries": [
+    {
+      "checks": {
+        "docker-image-smoke": {
+          "command": "/home/felix/gustav-alpha2/.venv/bin/python -m backend.tools.docker_image_smoke",
+          "exit_code": null,
+          "ok": null
+        },
+        "openapi": {
+          "command": "/home/felix/gustav-alpha2/.venv/bin/python -m backend.tools.openapi_contract_check --spec /home/felix/gustav-alpha2/api/openapi.yml",
+          "exit_code": 0,
+          "ok": true
+        },
+        "route-map": {
+          "command": "/home/felix/gustav-alpha2/.venv/bin/python -m backend.tools.route_map_inventory --check /home/felix/gustav-alpha2/docs/harness/ROUTE_MAP.md",
+          "exit_code": 0,
+          "ok": true
+        },
+        "security": {
+          "command": "/home/felix/gustav-alpha2/.venv/bin/pytest -q backend/tests/test_config_security.py backend/tests/test_privacy_logging_contract.py backend/tests/test_csrf_tokens_contract.py",
+          "exit_code": 0,
+          "ok": true
+        }
+      },
+      "generated": "2026-07-05T09:44:25",
+      "hotspots": [
+        {
+          "delta_from_previous": 0,
+          "loc": 98,
+          "path": "backend/web/main.py"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 2499,
+          "path": "backend/web/routes/app.py"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 2815,
+          "path": "backend/web/routes/learning.py"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 6120,
+          "path": "backend/web/routes/teaching.py"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 2425,
+          "path": "backend/learning/repo_db.py"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 4854,
+          "path": "backend/teaching/repo_db.py"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 1942,
+          "path": "h5p-service/server.mjs"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 1846,
+          "path": "frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 1210,
+          "path": "frontend/src/routes/teaching/units/[unitId]/+page.svelte"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 5617,
+          "path": "frontend/src/lib/styles/app.css"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 1903,
+          "path": "frontend/src/lib/styles/design-system.css"
+        }
+      ],
+      "month": "2026-07",
+      "openapi_summary": {
+        "openapi_operations": 147,
+        "runtime_operations": 136,
+        "surfaces": {
+          "BFF/internal": 33,
+          "H5P service": 16,
+          "active legacy UI": 2,
+          "auth bridge": 8,
+          "health/ops": 3,
+          "public API": 91,
+          "retired legacy UI": 0
+        }
+      },
+      "skills": {
+        "active": [
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Dokumente lesen, Statusvorschl\u00e4ge machen, Dokumentationsupdates vorbereiten",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Produktcode, Migrationen, Secrets, L\u00f6schungen",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Kein Netzwerk, keine produktive Mutation",
+            "Skill": "gustav-plan-status",
+            "Source path": "`docs/harness/skills/gustav-plan-status/SKILL.md`",
+            "Stop/escalation rules": "Unklare Produktentscheidung an den Produktverantwortlichen",
+            "Trigger phrases": "Planstatus, stale plan, docs/plan index",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Harness-Dokumente pr\u00fcfen und kleine Doku-Korrekturen vorbereiten",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Gates schw\u00e4chen, historische Entscheidungen l\u00f6schen",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Kein Netzwerk, keine Secrets",
+            "Skill": "gustav-harness-gardener",
+            "Source path": "`docs/harness/skills/gustav-harness-gardener/SKILL.md`",
+            "Stop/escalation rules": "Gate- oder Autonomie\u00e4nderungen eskalieren",
+            "Trigger phrases": "Harness-Gardening, stale harness, tech debt",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Diff lesen, Risiken priorisieren, Review-Dokument schreiben",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Code \u00e4ndern, Findings ohne Evidenz erfinden",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Nur Analyse; keine Mutation",
+            "Skill": "gustav-pr-review",
+            "Source path": "`docs/harness/skills/gustav-pr-review/SKILL.md`",
+            "Stop/escalation rules": "Security/API/DB/Privacy-Funde markieren",
+            "Trigger phrases": "PR review, branch review, Review gegen master",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Bestehende Findings pr\u00fcfen, Tests entwerfen, minimale Fixes planen",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Blindes Umsetzen ohne roten Test, fremde \u00c4nderungen revertieren",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Code\u00e4nderungen nur nach TDD und Review",
+            "Skill": "gustav-pr-fix",
+            "Source path": "`docs/harness/skills/gustav-pr-fix/SKILL.md`",
+            "Stop/escalation rules": "Unklare Findings oder Produktentscheidungen eskalieren",
+            "Trigger phrases": "PR-fix, review feedback fix",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "OpenAPI und Contract-Tests pr\u00fcfen, Route-Surface planen",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Breaking Changes entscheiden",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Keine Migrationen, keine Produktentscheidung",
+            "Skill": "gustav-api-contract",
+            "Source path": "`docs/harness/skills/gustav-api-contract/SKILL.md`",
+            "Stop/escalation rules": "Breaking API an den Produktverantwortlichen eskalieren",
+            "Trigger phrases": "OpenAPI, API contract, breaking change",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_openapi_no_null_type.py backend/tests/test_openapi_security_headers.py backend/tests/test_openapi_internal_flags.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Sicherheitsrisiken pr\u00fcfen, negative und positive Tests fordern",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Security-Ausnahmen autorisieren, Secrets lesen oder schreiben",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Keine Secrets, kein Netzwerk",
+            "Skill": "gustav-security-review",
+            "Source path": "`docs/harness/skills/gustav-security-review/SKILL.md`",
+            "Stop/escalation rules": "Security-Tradeoffs an den Produktverantwortlichen eskalieren",
+            "Trigger phrases": "security review, CSRF, RLS, authz, privacy",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_config_security.py backend/tests/test_privacy_logging_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Routen klassifizieren, Legacy-Exit planen",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Routen l\u00f6schen ohne Characterization-Test",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Keine Laufzeitmutation",
+            "Skill": "gustav-route-map",
+            "Source path": "`docs/harness/skills/gustav-route-map/SKILL.md`",
+            "Stop/escalation rules": "Aktive UI- oder API-Entscheidungen eskalieren",
+            "Trigger phrases": "route map, legacy route, retired UI",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          }
+        ]
+      },
+      "tech_debt": {
+        "count": 1,
+        "entries": [
+          {
+            "bereich": "Harness PR 1",
+            "exit_criterion": "`make harness-signals` ist stabil und einzelne Signale sind als harte Gates eingeordnet",
+            "grund": "Erstes Harness soll Orientierung schaffen, ohne laufende Refactors zu blockieren",
+            "id": "TD-001",
+            "owner": "Produktverantwortlicher",
+            "review_date": "2026-08-02",
+            "risiko": "Warning-Signale blockieren noch nicht"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -16,8 +16,9 @@ Dieses Dokument ist die Fünf-Minuten-Startseite für Agenten und Entwickler. Es
 3. `docs/harness/AGENT_PLAYBOOK.md` für den praktischen Arbeitsablauf.
 4. `docs/harness/QUALITY_GATES.md` und `docs/harness/TEST_STRATEGY.md` für lokale Checks.
 5. `docs/harness/ARCHITECTURE_RULES.md`, `docs/harness/IMPORT_INVENTORY.md` und `docs/harness/ROUTE_MAP.md` für Import-, Architektur- und Route-Surface-Grenzen.
-6. `docs/harness/SKILLS.md` und `docs/harness/SKILL_EVALS.md` für repo-gesteuerte Skills.
-7. `docs/plan/INDEX.md`, `docs/plan/MILESTONES.md` und `docs/plan/DECISIONS.md` für aktuelle Planung.
+6. `docs/harness/QUALITY_SCORECARD.md` und `docs/harness/QUALITY_SCORECARD_HISTORY.json` für den monatlichen Qualitätsüberblick.
+7. `docs/harness/SKILLS.md` und `docs/harness/SKILL_EVALS.md` für repo-gesteuerte Skills.
+8. `docs/plan/INDEX.md`, `docs/plan/MILESTONES.md` und `docs/plan/DECISIONS.md` für aktuelle Planung.
 
 ## Kritische Gates
 - Hard: `make harness-minimum`

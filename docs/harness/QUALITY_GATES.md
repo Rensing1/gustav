@@ -190,6 +190,26 @@ Initialer lokaler Befehl:
 Regel:
 - Dieses Profil bleibt teuer und bewusst opt-in oder CI-staged.
 
+### quality-scorecard
+Zweck: den Refactor-Status monatlich messbar machen.
+
+Geplanter Inhalt:
+- Hotspot-LOC je definierter Backend-/Frontend-/H5P-Datei.
+- Security-Check-Status.
+- OpenAPI-/Route-Map-Contract-Diff-Status.
+- Offene TECH_DEBT-Einträge.
+- Skill-Inventory und Evaluationsstatus.
+- Docker-Image-Paritätsnachweis.
+
+Initialer lokaler Befehl:
+- `make quality-scorecard`
+
+Aktueller Status:
+- Implementiert als eigenständiger Reporter (`backend/tools/quality_scorecard.py`) mit:
+  - Markdown-Bericht in `docs/harness/QUALITY_SCORECARD.md`
+  - JSON-Historie in `docs/harness/QUALITY_SCORECARD_HISTORY.json`
+- Sicherheits- und Contract-Checks laufen im Standardmodus; Docker-Image-Parität wird nur bei Bedarf ausgeführt (`--run-docker-check`) und bleibt kein täglicher Standard.
+
 ## Harte Regeln
 - Sicherheits-, Privacy-, Secret- und API-Security-Contract-Fehler blockieren sofort.
 - Struktur-, Hotspot-, Route-Surface-, Import- und Skill-Governance-Signale dürfen anfangs Warnungen sein, müssen aber einen Härtungstermin haben.

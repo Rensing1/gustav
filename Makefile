@@ -23,6 +23,7 @@ help:
 	@echo "  test-db-security   - Run DB/security-focused checks"
 	@echo "  test-upload-llm-boundaries - Run upload and LLM boundary checks"
 	@echo "  test-docker-image-smoke - Build and smoke-test web image without bind mounts"
+	@echo "  quality-scorecard   - Generate monthly quality scorecard"
 	@echo "  test-import-boundaries - Check import boundary debt against baseline"
 	@echo "  test-api-contract-baseline - Check runtime /api routes against api/openapi.yml"
 	@echo "  test-architecture-boundaries - Check Clean Architecture boundary debt"
@@ -184,6 +185,10 @@ test-upload-llm-boundaries:
 .PHONY: test-docker-image-smoke
 test-docker-image-smoke:
 	. ./.venv/bin/activate && python -m backend.tools.docker_image_smoke
+
+.PHONY: quality-scorecard
+quality-scorecard:
+	. ./.venv/bin/activate && python -m backend.tools.quality_scorecard --month `date +%Y-%m`
 
 .PHONY: test-import-boundaries
 test-import-boundaries:

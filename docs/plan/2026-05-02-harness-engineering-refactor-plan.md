@@ -944,8 +944,9 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - Done in working tree: extracted signed H5P review-token parsing from `h5p-service/server.mjs` into `h5p-service/lib/review_tokens.mjs`, keeping token signature, expiry, and required-claim validation covered outside the server hotspot.
 - Done in working tree: extracted H5P CSP/security-header policy from `h5p-service/server.mjs` into `h5p-service/lib/security_headers.mjs`, keeping default CSP, debug-page CSP, and response-header overrides covered outside the server hotspot.
 - Done in working tree: extracted H5P response model helpers from `h5p-service/server.mjs` into `h5p-service/lib/model_helpers.mjs`, keeping Gustav theme-style ordering and `div` embed-type preference covered outside the server hotspot.
-- Done in working tree: `h5p-service/test/finished_submission_context.test.mjs`, `h5p-service/test/review_tokens.test.mjs`, `h5p-service/test/security_headers.test.mjs`, and `h5p-service/test/model_helpers.test.mjs` protect the extracted H5P forwarding, review-token, security-header, and model-helper behavior; `npm test` in `h5p-service` reports 11 passing Node test files.
-- Done in working tree: `h5p-service/server.mjs` shrank from 1942 to 1769 LOC across the first four PR20 H5P slices.
+- Done in working tree: extracted H5P cookie parsing from `h5p-service/server.mjs` into the existing `h5p-service/lib/cookies.mjs`, keeping session-cookie decoding and malformed-value fallback behavior covered outside the server hotspot.
+- Done in working tree: `h5p-service/test/finished_submission_context.test.mjs`, `h5p-service/test/review_tokens.test.mjs`, `h5p-service/test/security_headers.test.mjs`, `h5p-service/test/model_helpers.test.mjs`, and `h5p-service/test/cookies.test.mjs` protect the extracted H5P forwarding, review-token, security-header, model-helper, and cookie behavior; `npm test` in `h5p-service` reports 11 passing Node test files.
+- Done in working tree: `h5p-service/server.mjs` shrank from 1942 to 1749 LOC across the first five PR20 H5P slices.
 - Open follow-up: continue with a further H5P split around route handlers/storage integration or a frontend Svelte workspace extraction with existing component tests.
 
 #### PR 21: Quality Scorecard v1

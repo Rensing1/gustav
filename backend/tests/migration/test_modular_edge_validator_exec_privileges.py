@@ -16,6 +16,9 @@ import pytest
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_read
+
+
 _SIG = "public.validate_unit_module_edges_for_unit(uuid, uuid)"
 
 

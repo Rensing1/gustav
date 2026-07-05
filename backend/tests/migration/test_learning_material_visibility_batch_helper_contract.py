@@ -16,6 +16,9 @@ import pytest
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_read
+
+
 _BATCH_SIG = "public.get_material_file_metadata_batch_for_student(text, uuid, uuid[])"
 _SINGLE_SIG = "public.get_material_file_metadata_for_student(text, uuid, uuid)"
 

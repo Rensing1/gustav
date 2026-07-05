@@ -16,6 +16,9 @@ import pytest
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_read
+
+
 _BOOL_SIG = "public.modular_section_is_open_or_done_for_student(text, uuid, uuid, uuid)"
 _STATE_SIG = "public.get_modular_unit_module_states_for_student(text, uuid, uuid)"
 

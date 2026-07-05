@@ -18,6 +18,9 @@ pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
 
 
+pytestmark = pytest.mark.db_read
+
+
 def _dsn() -> str:
     host = os.getenv("TEST_DB_HOST", "127.0.0.1")
     port = os.getenv("TEST_DB_PORT", "54322")

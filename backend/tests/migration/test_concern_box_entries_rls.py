@@ -7,6 +7,9 @@ import pytest
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_read
+
+
 @pytest.mark.anyio
 async def test_concern_box_entries_table_and_policies_exist() -> None:
     _require_db_or_skip()

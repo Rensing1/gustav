@@ -186,6 +186,26 @@ def test_db_security_rls_files_are_marked_as_db_write() -> None:
         assert "db_write" in records[path].markers
 
 
+def test_migration_metadata_contracts_are_marked_as_db_read() -> None:
+    from backend.tools import db_test_inventory
+
+    records = {
+        record.path: record
+        for record in db_test_inventory.scan_tests(REPO_ROOT / "backend" / "tests", repo_root=REPO_ROOT)
+    }
+
+    for path in (
+        "backend/tests/migration/test_ai_usage_events_security.py",
+        "backend/tests/migration/test_concern_box_entries_rls.py",
+        "backend/tests/migration/test_learning_material_visibility_batch_helper_contract.py",
+        "backend/tests/migration/test_modular_edge_validator_exec_privileges.py",
+        "backend/tests/migration/test_modular_unlock_helper_no_edge_n_plus_one.py",
+        "backend/tests/migration/test_unit_module_edges_update_hardening.py",
+    ):
+        assert records[path].marker_status == "marked-db"
+        assert "db_read" in records[path].markers
+
+
 def test_db_test_inventory_is_synchronized_with_generator() -> None:
     result = subprocess.run(
         [

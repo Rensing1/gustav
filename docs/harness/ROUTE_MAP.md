@@ -33,8 +33,8 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | DELETE /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id} | public API | teacher | teaching repo | empty/redirect | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
 | DELETE /backend-internal/app/bff-session | BFF/internal | authenticated BFF | identity/session | unspecified | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
 | DELETE /h5p/contents/{content_id} | H5P service | teacher | H5P storage/service | empty/redirect | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
-| GET / | active legacy UI | authenticated | none | HTML/HTMX | characterization pending | medium | active legacy UI | retain until strangled | SvelteKit or removal |
-| GET /about | active legacy UI | authenticated | none | HTML/HTMX | characterization pending | medium | active legacy UI | retain until strangled | SvelteKit or removal |
+| GET / | active legacy UI | authenticated | none | HTML/HTMX | backend/tests/test_navigation_roles_ui.py, backend/tests/test_app_composition_contract.py | medium | active legacy UI | retain until strangled | SvelteKit or removal |
+| GET /about | active legacy UI | authenticated | none | HTML/HTMX | backend/tests/test_navigation_roles_ui.py, backend/tests/test_app_composition_contract.py | medium | active legacy UI | retain until strangled | SvelteKit or removal |
 | GET /api/app/profile | BFF/internal | authenticated BFF | identity/session | AppProfileView | backend/tests/test_app_*, test_session_* | medium | active | retain | SvelteKit BFF/view model |
 | GET /api/app/profile/cli-tokens | BFF/internal | authenticated BFF | identity/session | array | backend/tests/test_app_*, test_session_* | medium | active | retain | SvelteKit BFF/view model |
 | GET /api/app/session-bootstrap | BFF/internal | authenticated BFF | identity/session | SessionBootstrap | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
@@ -57,7 +57,7 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | GET /api/live/views/courses/{course_id}/units/{unit_id}/dashboard | BFF/internal | teacher | teaching repo | LiveUnitDashboardView | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | SvelteKit BFF/view model |
 | GET /api/live/views/courses/{course_id}/units/{unit_id}/detail-sheet | BFF/internal | teacher | teaching repo | LiveDetailSheetView | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | SvelteKit BFF/view model |
 | GET /api/live/views/courses/{course_id}/units/{unit_id}/matrix | BFF/internal | teacher | teaching repo | LiveUnitMatrixView | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | SvelteKit BFF/view model |
-| GET /api/me | public API | authenticated | none | Me | characterization pending | medium | active | retain | OpenAPI + use case adapter |
+| GET /api/me | public API | authenticated | none | Me | backend/tests/test_api_me_with_db_session_store.py, backend/tests/test_auth_contract.py, backend/tests/test_auth_middleware.py | medium | active | retain | OpenAPI + use case adapter |
 | GET /api/teaching/courses | public API | teacher | teaching repo | array | backend/tests/test_teaching_*, test_openapi_teaching_* | medium | active | retain | OpenAPI + use case adapter |
 | GET /api/teaching/courses/{course_id} | public API | teacher | teaching repo | Course | backend/tests/test_teaching_*, test_openapi_teaching_* | medium | active | retain | OpenAPI + use case adapter |
 | GET /api/teaching/courses/{course_id}/members | public API | teacher | teaching repo | array | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |

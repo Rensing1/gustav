@@ -10,15 +10,15 @@ Review cadence: monatlich während des Harness-Refactors
 ## Zweck
 Dieses Inventar macht Import-Schulden zählbar. PR 6 behebt die Schulden nicht breitflächig; es verhindert, dass neue Verstöße unbemerkt hinzukommen.
 
-## Baseline vom 2026-07-04
+## Baseline vom 2026-07-05
 Die maschinenlesbare Baseline liegt in `docs/harness/IMPORT_BOUNDARY_BASELINE.json`.
 
 | Kategorie | Anzahl | Bedeutung |
 | --- | ---: | --- |
-| `flat_routes_imports` | 237 | Flache `routes.*`-Imports, derzeit noch in Tests. Produktiver Web-Code startet package-orientiert. |
+| `flat_routes_imports` | 0 | Flache `routes.*`-Imports sind aktuell vollständig beseitigt. |
 | `flat_components_imports` | 0 | Flache `components`-Imports wurden aus produktivem Web-Code entfernt. |
 | `backend_web_routes_imports` | 0 | Statische `backend.web.routes.*`-Imports außerhalb des Web-Adapters sind aus der Scanner-Baseline entfernt; Tests verwenden bei Bedarf dynamische package-orientierte Imports. |
-| `sys_path_mutations` | 38 | Verstreute `sys.path`-/`os.sys.path`-Manipulationen, vor allem in Tests. |
+| `sys_path_mutations` | 1 | Verbleiben aktuell nur noch in `backend/tests/import_paths.py` (zentraler Test-Bootstrap). |
 
 ## Gate
 `make test-import-boundaries` führt `backend.tools.import_boundary_scan` gegen die Baseline aus. Das Target schlägt fehl, wenn eine Kategorie über die Baseline wächst. In `harness-signals` ist derselbe Check warning-only sichtbar.

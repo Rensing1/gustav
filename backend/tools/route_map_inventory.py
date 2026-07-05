@@ -139,6 +139,10 @@ def _data_access(path: str) -> str:
 
 
 def _tests(path: str) -> str:
+    if path in {"/", "/about"}:
+        return "backend/tests/test_navigation_roles_ui.py, backend/tests/test_app_composition_contract.py"
+    if path == "/api/me":
+        return "backend/tests/test_api_me_with_db_session_store.py, backend/tests/test_auth_contract.py, backend/tests/test_auth_middleware.py"
     if path.startswith("/h5p/"):
         return "backend/tests/test_h5p_*, h5p-service/test/*.mjs"
     if path.startswith("/auth/"):

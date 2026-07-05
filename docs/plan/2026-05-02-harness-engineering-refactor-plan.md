@@ -939,6 +939,11 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - Acceptance:
   - H5P and frontend hotspots stop growing and at least one high-value hotspot shrinks with tests.
   - `npm run check` and relevant H5P/frontend tests remain green.
+- Done in working tree: `docs/harness/HOTSPOTS.md` now records concrete LOC baselines for backend, frontend, CSS, and H5P hotspots.
+- Done in working tree: extracted H5P Finished-Data forwarding context helpers from `h5p-service/server.mjs` into `h5p-service/lib/finished_submission_context.mjs`, covering Origin/Referer forwarding metadata and Learning-compatible idempotency keys.
+- Done in working tree: `h5p-service/test/finished_submission_context.test.mjs` protects the extracted H5P forwarding context behavior; `npm test` in `h5p-service` reports 8 passing Node test files.
+- Done in working tree: `h5p-service/server.mjs` shrank from 1942 to 1897 LOC in the first PR20 H5P slice.
+- Open follow-up: continue with a second H5P split around route handlers/storage response helpers or a frontend Svelte workspace extraction with existing component tests.
 
 #### PR 21: Quality Scorecard v1
 - Create a monthly scorecard:

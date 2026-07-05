@@ -14,13 +14,13 @@ Review cadence: monatlich
 | backend/teaching/repo_db.py | 4854 | +0 |
 | backend/web/main.py | 98 | +0 |
 | backend/web/routes/app.py | 2499 | +0 |
-| backend/web/routes/learning.py | 2815 | +0 |
-| backend/web/routes/teaching.py | 6120 | +0 |
+| backend/web/routes/learning.py | 2884 | +69 |
+| backend/web/routes/teaching.py | 6146 | +26 |
 | frontend/src/lib/styles/app.css | 5617 | +0 |
 | frontend/src/lib/styles/design-system.css | 1903 | +0 |
 | frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte | 1846 | +0 |
 | frontend/src/routes/teaching/units/[unitId]/+page.svelte | 1210 | +0 |
-| h5p-service/server.mjs | 1942 | +0 |
+| h5p-service/server.mjs | 1897 | -45 |
 
 ### Security status
 - Security quick checks: pass (/home/felix/gustav-alpha2/.venv/bin/pytest -q backend/tests/test_config_security.py backend/tests/test_privacy_logging_contract.py backend/tests/test_csrf_tokens_contract.py)

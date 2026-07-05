@@ -11,14 +11,24 @@ Review cadence: monatlich während des Harness-Refactors
 Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen, ohne dass bewusst Debt dokumentiert wird.
 
 ## Initiale Hotspots
-- `backend/web/main.py`
-- `backend/web/routes/teaching.py`
-- `backend/web/routes/learning.py`
-- `backend/web/routes/app.py`
-- große `repo_db.py`-Dateien
-- `h5p-service/server.mjs`
-- große Svelte-Routen und Komponenten
-- große CSS-Dateien
+| Datei | Baseline LOC | Bereich | Split-Ziel |
+| --- | ---: | --- | --- |
+| `backend/web/main.py` | 98 | App Composition | nicht wieder mit Route-, Auth- oder Rendering-Logik füllen |
+| `backend/web/routes/teaching.py` | 6146 | Teaching Web Adapter | weitere Use-Case-, Guard-, Read-Model- und Serializer-Grenzen extrahieren |
+| `backend/web/routes/learning.py` | 2884 | Learning Web Adapter | Upload-/Storage-, Submission- und Material-Read-Grenzen weiter entflechten |
+| `backend/web/routes/app.py` | 2499 | Browser-BFF und App-Routen | Profil-, Session- und View-Helfer klein halten |
+| `backend/learning/repo_db.py` | 2425 | Learning Repository | Read Models und Query-Gruppen schrittweise isolieren |
+| `backend/teaching/repo_db.py` | 4854 | Teaching Repository | Live-/Dashboard-Read-Models und Schreibfälle trennen |
+| `h5p-service/server.mjs` | 1897 | H5P Sidecar | Auth, Forwarding, Storage, Route-Handler und Response-Helfer weiter splitten |
+| `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` | 1846 | Learning Workspace | Loader-/State- und View-Komponenten trennen |
+| `frontend/src/routes/teaching/units/[unitId]/+page.svelte` | 1210 | Teaching Workspace | Graph-State, Command-Bar und Node-Editor-Komposition trennen |
+| `frontend/src/lib/styles/app.css` | 5617 | App CSS | Komponentennahe Styles und Tokens auslagern |
+| `frontend/src/lib/styles/design-system.css` | 1903 | Design System CSS | Tokens, Layout-Utilities und Komponentenregeln schärfer trennen |
+
+## PR20 Fortschritt
+- `h5p-service/lib/finished_submission_context.mjs` übernimmt seit PR20 die Origin-/Referer-Auswertung und Idempotency-Key-Erzeugung für H5P-Finished-Data-Forwarding.
+- `h5p-service/test/finished_submission_context.test.mjs` schützt diese reine Forwarding-Kontextlogik mit Node-Contracts.
+- `h5p-service/server.mjs` ist dadurch von 1942 auf 1897 LOC gesunken; weitere H5P-Splits sollen Route-Handler, Storage-Integration und Response-Helfer betreffen.
 
 ## Regel
-PR 1 inventarisiert die Hotspots nur. Harte LOC-Schwellen folgen, sobald Baselines und Ausnahmeprozess stabil sind.
+Hotspots dürfen im Refactor nicht ohne bewusst dokumentierten Grund wachsen. Kleine Extraktionen sollen eine passende Contract- oder Komponententest-Abdeckung haben; harte LOC-Schwellen folgen, sobald die Baseline über mehrere Scorecards stabil ist.

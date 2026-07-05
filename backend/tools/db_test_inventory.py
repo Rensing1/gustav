@@ -8,6 +8,7 @@ configuration before `db_read` and `db_write` markers become hard policy.
 from __future__ import annotations
 
 import argparse
+import ast
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -17,13 +18,14 @@ import sys
 DB_TEST_INVENTORY_OK = "db-test-inventory-ok"
 
 DB_MARKERS = ("db_read", "db_write")
-KNOWN_MARKERS = DB_MARKERS + (
+OPT_IN_MARKERS = (
     "supabase_integration",
     "e2e",
     "integration",
     "scratch_db_required",
     "legacy_migration",
 )
+KNOWN_MARKERS = DB_MARKERS + OPT_IN_MARKERS
 DB_ENV_NAMES = (
     "RLS_TEST_DSN",
     "RLS_TEST_SERVICE_DSN",
@@ -59,39 +61,97 @@ def _iter_python_tests(root: Path) -> list[Path]:
     return sorted(path for path in root.rglob("*.py") if "__pycache__" not in path.parts)
 
 
-def _find_markers(text: str) -> tuple[str, ...]:
-    markers = [marker for marker in KNOWN_MARKERS if re.search(rf"pytest\.mark\.{re.escape(marker)}\b", text)]
+def _attribute_chain(node: ast.AST) -> list[str]:
+    parts: list[str] = []
+    current: ast.AST | None = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if isinstance(current, ast.Name):
+        parts.append(current.id)
+    return list(reversed(parts))
+
+
+def _string_constant(node: ast.AST | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _call_string_values(node: ast.Call) -> set[str]:
+    values = {_string_constant(arg) for arg in node.args}
+    for keyword in node.keywords:
+        values.add(_string_constant(keyword.value))
+    return {value for value in values if value}
+
+
+def _subscript_string_value(node: ast.Subscript) -> str | None:
+    return _string_constant(node.slice)
+
+
+def _identifier_text(tree: ast.AST) -> str:
+    identifiers: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            identifiers.append(node.name)
+        elif isinstance(node, ast.Name):
+            identifiers.append(node.id)
+        elif isinstance(node, ast.Attribute):
+            identifiers.append(node.attr)
+    return " ".join(identifiers).lower()
+
+
+def _find_markers(tree: ast.AST) -> tuple[str, ...]:
+    markers: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute):
+            continue
+        chain = _attribute_chain(node)
+        if len(chain) >= 3 and chain[:2] == ["pytest", "mark"] and chain[2] in KNOWN_MARKERS:
+            markers.append(chain[2])
     return tuple(sorted(set(markers)))
 
 
-def _find_signals(path: Path, text: str) -> tuple[str, ...]:
+def _find_signals(path: Path, tree: ast.AST) -> tuple[str, ...]:
     lower_path = path.as_posix().lower()
-    lower_text = text.lower()
+    identifiers = _identifier_text(tree)
     signals: set[str] = set()
 
-    if "psycopg.connect" in text:
-        signals.add("psycopg-connect")
-    if "pytest.importorskip(\"psycopg\"" in text or "pytest.importorskip('psycopg'" in text:
-        signals.add("psycopg-required")
-    if re.search(r"^\s*import\s+psycopg\b", text, flags=re.MULTILINE):
-        signals.add("psycopg-import")
-    if re.search(r"^\s*from\s+psycopg\b", text, flags=re.MULTILINE):
-        signals.add("psycopg-import")
-
-    for env_name in DB_ENV_NAMES:
-        if env_name in text:
-            signals.add(f"env:{env_name}")
-    for env_name in SUPABASE_ENV_NAMES:
-        if env_name in text:
-            signals.add(f"env:{env_name}")
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [alias.name for alias in getattr(node, "names", [])]
+            module = getattr(node, "module", None)
+            if module == "psycopg" or any(name == "psycopg" for name in names):
+                signals.add("psycopg-import")
+        elif isinstance(node, ast.Call):
+            chain = _attribute_chain(node.func)
+            if chain and chain[-1] == "connect" and "psycopg" in chain:
+                signals.add("psycopg-connect")
+            values = _call_string_values(node)
+            if chain == ["pytest", "importorskip"] and "psycopg" in values:
+                signals.add("psycopg-required")
+            for env_name in DB_ENV_NAMES:
+                if env_name in values:
+                    signals.add(f"env:{env_name}")
+            for env_name in SUPABASE_ENV_NAMES:
+                if env_name in values:
+                    signals.add(f"env:{env_name}")
+            if any("supabase/migrations" in value.lower() or "migrations/" in value.lower() for value in values):
+                signals.add("migration")
+        elif isinstance(node, ast.Subscript):
+            value = _subscript_string_value(node)
+            if value in DB_ENV_NAMES:
+                signals.add(f"env:{value}")
+            if value in SUPABASE_ENV_NAMES:
+                signals.add(f"env:{value}")
 
     if re.search(r"(^|[^a-z0-9])rls([^a-z0-9]|$)", lower_path) or re.search(
-        r"(^|[^a-z0-9])rls([^a-z0-9]|$)", lower_text
+        r"(^|[^a-z0-9])rls([^a-z0-9]|$)", identifiers
     ):
         signals.add("rls")
-    if "supabase/migrations" in lower_text or "/migration/" in lower_path or "migrations/" in lower_text:
+    if "/migration/" in lower_path:
         signals.add("migration")
-    if "supabase" in lower_path or "supabase" in lower_text:
+    if "supabase" in lower_path or "supabase" in identifiers:
         signals.add("supabase")
 
     return tuple(sorted(signals))
@@ -113,8 +173,13 @@ def _classification(signals: tuple[str, ...]) -> str:
 
 def _marker_status(classification: str, markers: tuple[str, ...]) -> str:
     has_db_marker = any(marker in DB_MARKERS for marker in markers)
+    has_opt_in_marker = any(marker in OPT_IN_MARKERS for marker in markers)
     if classification == "real-db":
-        return "marked-db" if has_db_marker else "missing-db-marker"
+        if has_db_marker:
+            return "marked-db"
+        if has_opt_in_marker:
+            return "covered-by-opt-in-marker"
+        return "missing-db-marker"
     return "no-db-marker-needed"
 
 
@@ -123,6 +188,8 @@ def _recommended_action(classification: str, marker_status: str) -> str:
         return "Review for db_read/db_write before marker hardening"
     if marker_status == "marked-db":
         return "Keep marker and isolation visible"
+    if marker_status == "covered-by-opt-in-marker":
+        return "Keep existing opt-in gate"
     if classification == "migration-static":
         return "Keep static migration contract unless it opens a DB connection"
     if classification == "storage-or-config":
@@ -131,12 +198,13 @@ def _recommended_action(classification: str, marker_status: str) -> str:
 
 
 def _record_for(path: Path, repo_root: Path, text: str) -> DbTestRecord | None:
-    signals = _find_signals(path, text)
+    tree = ast.parse(text, filename=str(path))
+    signals = _find_signals(path, tree)
     classification = _classification(signals)
     if classification == "unit-or-contract":
         return None
 
-    markers = _find_markers(text)
+    markers = _find_markers(tree)
     marker_status = _marker_status(classification, markers)
     return DbTestRecord(
         path=path.relative_to(repo_root).as_posix(),
@@ -179,6 +247,7 @@ def render_markdown(root: Path | None = None) -> str:
     records = scan_tests(tests_root, repo_root=_repo_root())
     missing = sum(1 for record in records if record.marker_status == "missing-db-marker")
     marked = sum(1 for record in records if record.marker_status == "marked-db")
+    opt_in = sum(1 for record in records if record.marker_status == "covered-by-opt-in-marker")
     storage_or_config = sum(1 for record in records if record.classification == "storage-or-config")
     migration_static = sum(1 for record in records if record.classification == "migration-static")
 
@@ -199,6 +268,7 @@ def render_markdown(root: Path | None = None) -> str:
         f"- Inventarisierte Dateien: {len(records)}",
         f"- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: {missing}",
         f"- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: {marked}",
+        f"- Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: {opt_in}",
         f"- Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: {storage_or_config}",
         f"- Statische Migrationstests ohne echte DB-Verbindung: {migration_static}",
         "",

@@ -75,6 +75,21 @@ def test_db_test_inventory_classifies_real_db_candidates(tmp_path: Path) -> None
         ),
         encoding="utf-8",
     )
+    opt_in_db_test = tmp_path / "test_legacy_migration_import.py"
+    opt_in_db_test.write_text(
+        "\n".join(
+            [
+                "import pytest",
+                "pytestmark = pytest.mark.legacy_migration",
+                "",
+                "def test_legacy_import_uses_real_db():",
+                "    import psycopg",
+                "    with psycopg.connect('postgresql://example.invalid/postgres'):",
+                "        pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     records = db_test_inventory.scan_tests(tmp_path, repo_root=tmp_path)
     rows = {record.path: record for record in records}
@@ -85,6 +100,31 @@ def test_db_test_inventory_classifies_real_db_candidates(tmp_path: Path) -> None
     assert "psycopg-connect" in rows["test_learning_rls_policy.py"].signals
     assert rows["test_supabase_storage_adapter.py"].classification == "storage-or-config"
     assert rows["test_supabase_storage_adapter.py"].marker_status == "no-db-marker-needed"
+    assert rows["test_legacy_migration_import.py"].classification == "real-db"
+    assert rows["test_legacy_migration_import.py"].marker_status == "covered-by-opt-in-marker"
+    assert rows["test_legacy_migration_import.py"].recommended_action == "Keep existing opt-in gate"
+
+
+def test_db_test_inventory_ignores_embedded_fixture_source_strings(tmp_path: Path) -> None:
+    from backend.tools import db_test_inventory
+
+    scanner_contract = tmp_path / "test_scanner_contract.py"
+    scanner_contract.write_text(
+        "\n".join(
+            [
+                "def test_scanner_fixture(tmp_path):",
+                "    fake_test = tmp_path / 'test_fake.py'",
+                "    fake_test.write_text(\"pytestmark = pytest.mark.legacy_migration\")",
+                "    fake_test.write_text(\"with psycopg.connect('postgresql://example.invalid/postgres'): pass\")",
+                "    fake_test.write_text(\"os.getenv('RLS_TEST_DSN')\")",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    records = db_test_inventory.scan_tests(tmp_path, repo_root=tmp_path)
+
+    assert [record.path for record in records] == []
 
 
 def test_db_test_inventory_document_has_required_columns() -> None:

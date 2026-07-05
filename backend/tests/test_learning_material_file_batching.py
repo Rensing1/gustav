@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import importlib
 from types import SimpleNamespace
+from typing import Iterator
 
 import pytest
 
@@ -46,6 +48,18 @@ class _FakeConnection:
         return self._cursor
 
 
+def _patch_material_cursor(monkeypatch: pytest.MonkeyPatch, *, cursor: _FakeCursor, connect_calls: list[str]) -> None:
+    material_access = importlib.import_module("backend.web.material_file_access")
+
+    @contextmanager
+    def _fake_open_repo_cursor(*, repo=None, dsn=None) -> Iterator[tuple[_FakeConnection, _FakeCursor]]:  # noqa: ANN001
+        raw_dsn = str(dsn if dsn is not None else getattr(repo, "_dsn", "") or "")
+        connect_calls.append(raw_dsn)
+        yield _FakeConnection(cursor), cursor
+
+    monkeypatch.setattr(material_access, "open_repo_cursor", _fake_open_repo_cursor)
+
+
 def test_attach_section_material_files_batches_storage_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     learning = importlib.import_module("backend.web.routes.learning")
 
@@ -76,11 +90,7 @@ def test_attach_section_material_files_batches_storage_lookup(monkeypatch: pytes
     connect_calls: list[str] = []
 
     monkeypatch.setattr(learning, "_get_repo", lambda: SimpleNamespace(_dsn="postgresql://test"))
-    monkeypatch.setattr(
-        learning.psycopg,
-        "connect",
-        lambda dsn: connect_calls.append(dsn) or _FakeConnection(cursor),
-    )
+    _patch_material_cursor(monkeypatch, cursor=cursor, connect_calls=connect_calls)
 
     payload = learning._attach_section_material_files(
         student_sub="student-1",
@@ -142,11 +152,7 @@ def test_attach_modular_material_files_batches_storage_lookup(monkeypatch: pytes
     connect_calls: list[str] = []
 
     monkeypatch.setattr(learning, "_get_repo", lambda: SimpleNamespace(_dsn="postgresql://test"))
-    monkeypatch.setattr(
-        learning.psycopg,
-        "connect",
-        lambda dsn: connect_calls.append(dsn) or _FakeConnection(cursor),
-    )
+    _patch_material_cursor(monkeypatch, cursor=cursor, connect_calls=connect_calls)
 
     payload = learning._attach_modular_material_files(
         student_sub="student-1",

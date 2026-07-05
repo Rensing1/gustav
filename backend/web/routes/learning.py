@@ -676,7 +676,7 @@ def _current_environment() -> str:
         return value or None
 
     def _loaded_override_env(alias: str) -> str | None:
-        mod = sys.modules.get(alias)
+        mod = _sys.modules.get(alias)
         if mod is None:
             return None
         try:
@@ -2234,6 +2234,8 @@ async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[
             h = (host or "").strip().lower()
             if not h:
                 return False
+            if h.endswith(".internal"):
+                return True
             if h in {"127.0.0.1", "localhost", "::1", "host.docker.internal"}:
                 return True
             try:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import importlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -28,6 +28,8 @@ def test_core_response_serializers_live_outside_teaching_router() -> None:
         "_serialize_unit_phase_public",
         "_serialize_unit_module",
         "_serialize_unit_graph_edge",
+        "_build_live_summary_rows",
+        "_build_live_delta_cells",
     )
     for name in expected:
         assert hasattr(serializers, name)
@@ -72,6 +74,54 @@ def test_core_response_serializers_live_outside_teaching_router() -> None:
     assert serializers._serialize_material(  # type: ignore[attr-defined]
         {"id": "material-1", "unit_id": "unit-1", "title": "Material"}
     ) == {"id": "material-1", "unit_id": "unit-1", "title": "Material"}
+    assert serializers._build_live_summary_rows(  # type: ignore[attr-defined]
+        members=["student-1", "student-2"],
+        names={"student-1": "Anna"},
+        tasks=[{"id": "task-1", "kind": "h5p"}, {"id": "task-2", "kind": "text"}],
+        has_map={("student-1", "task-1"), ("student-1", "task-2")},
+        avg_map={("student-1", "task-1"): 0.8, ("student-1", "task-2"): 0.4},
+        created_at_map={("student-1", "task-1"): "2026-01-01T00:00:00Z"},
+        score_map={("student-1", "task-1"): (10, 12)},
+        h5p_map={("student-1", "task-1"): True},
+    ) == [
+        {
+            "student": {"sub": "student-1", "name": "Anna"},
+            "tasks": [
+                {
+                    "task_id": "task-1",
+                    "has_submission": True,
+                    "average_score": 0.8,
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "score_raw": 10,
+                    "score_max": 12,
+                    "h5p_completed": True,
+                },
+                {
+                    "task_id": "task-2",
+                    "has_submission": True,
+                    "average_score": 0.4,
+                    "created_at": None,
+                },
+            ],
+        },
+        {
+            "student": {"sub": "student-2", "name": "Unbekannt"},
+            "tasks": [
+                {
+                    "task_id": "task-1",
+                    "has_submission": False,
+                    "average_score": None,
+                    "created_at": None,
+                },
+                {
+                    "task_id": "task-2",
+                    "has_submission": False,
+                    "average_score": None,
+                    "created_at": None,
+                },
+            ],
+        },
+    ]
 
 
 def test_latest_submission_response_shaping_lives_outside_teaching_router() -> None:
@@ -128,3 +178,35 @@ def test_latest_submission_response_shaping_lives_outside_teaching_router() -> N
         "schema": "criteria.v2",
         "criteria_results": [{"criterion": "Form"}],
     }
+
+
+def test_live_delta_serializer_shapes_change_cells() -> None:
+    serializers = importlib.import_module("backend.web.routes.teaching_serialization")
+    now = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)
+
+    cells = serializers._build_live_delta_cells(  # type: ignore[attr-defined]
+        helper_rows=[
+            {
+                "student_sub": "student-1",
+                "task_id": "task-1",
+                "submission_id": "sub-1",
+                "score_raw": 10,
+                "score_max": 12,
+                "created_at_iso": now.isoformat().replace("+00:00", "Z"),
+                "h5p_completed": True,
+            }
+        ],
+        latest_state_by_task={},
+        avg_by_id={"sub-1": 0.9},
+        latest_changed_by_pair={("student-1", "task-1"): now},
+        original_updated_dt=now - timedelta(seconds=2),
+        timestamp_provider=lambda: now,
+        debug=False,
+        epsilon_seconds=1,
+    )
+
+    assert len(cells) == 1
+    assert cells[0]["student_sub"] == "student-1"
+    assert cells[0]["task_id"] == "task-1"
+    assert cells[0]["has_submission"] is True
+    assert cells[0]["average_score"] == 0.9

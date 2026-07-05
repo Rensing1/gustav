@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 from dataclasses import asdict, is_dataclass
-from datetime import timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Callable
 
 
@@ -373,3 +374,164 @@ def _serialize_unit_graph_edge(e) -> dict:
             return {"from": e.get("from"), "to": e.get("to")}
         return {"from": e.get("from_module_id"), "to": e.get("to_module_id")}
     return {"from": getattr(e, "from", None), "to": getattr(e, "to", None)}
+
+
+def _build_live_summary_rows(
+    *,
+    members: list[str],
+    names: dict[str, str],
+    tasks: list[dict[str, Any]],
+    has_map: set[tuple[str, str]],
+    avg_map: dict[tuple[str, str], Any],
+    created_at_map: dict[tuple[str, str], str | None],
+    score_map: dict[tuple[str, str], tuple[int | None, int | None]] | None = None,
+    h5p_map: dict[tuple[str, str], bool] | None = None,
+) -> list[dict[str, Any]]:
+    """Build one live-summary row per student with per-task status cells.
+
+    Why:
+        Keep route handlers focused on guards and data access, while response
+        shaping is centralized and testable in one place.
+    """
+
+    resolved_h5p_map = h5p_map or {}
+    resolved_score_map = score_map or {}
+
+    rows: list[dict[str, Any]] = []
+    for sid in members:
+        task_cells: list[dict[str, Any]] = []
+        for task in tasks:
+            tid = task.get("id")
+            if tid is None:
+                continue
+            key = (sid, str(tid))
+            has_submission = key in has_map
+            cell: dict[str, Any] = {
+                "task_id": str(tid),
+                "has_submission": has_submission,
+                "average_score": avg_map.get(key),
+                "created_at": created_at_map.get(key),
+            }
+            if task.get("kind") == "h5p" and has_submission:
+                latest_scores = resolved_score_map.get(key, (None, None))
+                cell["score_raw"] = latest_scores[0]
+                cell["score_max"] = latest_scores[1]
+                cell["h5p_completed"] = resolved_h5p_map.get(key, False)
+            task_cells.append(cell)
+
+        rows.append(
+            {
+                "student": {
+                    "sub": sid,
+                    "name": names.get(sid, "Unbekannt"),
+                },
+                "tasks": task_cells,
+            }
+        )
+    return rows
+
+
+def _build_live_delta_cells(
+    *,
+    helper_rows: list[dict[str, Any]],
+    latest_state_by_task: dict[tuple[str, str], dict[str, Any]],
+    avg_by_id: dict[str, Any] | None,
+    latest_changed_by_pair: dict[tuple[str, str], Any],
+    original_updated_dt: datetime,
+    logger_obj: Any = None,
+    debug: bool = False,
+    timestamp_provider: Callable[[], datetime] | None = None,
+    epsilon_seconds: int = 1,
+) -> list[dict[str, Any]]:
+    """Build live-delta change-cells from helper rows and timing maps.
+
+    Why:
+        Delta payload assembly is data-shaping work; keeping it here makes the
+        route function easier to reason about and test in isolation.
+    """
+
+    eps = timedelta(seconds=max(1, int(epsilon_seconds)))
+    now_fn = timestamp_provider or (lambda: datetime.now(timezone.utc))
+    cells: list[dict[str, Any]] = []
+    resolved_avg = avg_by_id or {}
+
+    for row in helper_rows:
+        student_sub = str(row.get("student_sub") or "")
+        task_id = str(row.get("task_id") or "")
+        latest_state = latest_state_by_task.get((student_sub, task_id), {})
+        submission_id = latest_state.get("submission_id") or row.get("submission_id")
+        score_raw = row.get("score_raw")
+        score_max = row.get("score_max")
+        if score_raw is None or score_max is None:
+            score_raw = latest_state.get("score_raw", score_raw)
+            score_max = latest_state.get("score_max", score_max)
+
+        created_iso = row.get("created_at_iso")
+        completed_iso = row.get("completed_at_iso")
+        h5p_completed = row.get("h5p_completed")
+
+        changed_dt = None
+        latest_changed_at = latest_changed_by_pair.get((student_sub, task_id))
+        if latest_changed_at is not None:
+            try:
+                changed_dt = latest_changed_at.astimezone(timezone.utc)
+            except Exception:
+                changed_dt = None
+
+        if changed_dt is None:
+            fallback_iso = completed_iso or created_iso
+            if fallback_iso:
+                try:
+                    changed_dt = datetime.fromisoformat(str(fallback_iso).replace("Z", "+00:00")).astimezone(timezone.utc)
+                except Exception:
+                    changed_dt = None
+
+        if changed_dt is None:
+            changed_dt = now_fn()
+
+        if debug and logger_obj is not None:
+            try:
+                student_sub_hash = hashlib.sha256(student_sub.encode("utf-8")).hexdigest()[:12]
+                logger_obj.debug(
+                    "delta-cell",
+                    extra={
+                        "student_sub_hash": student_sub_hash,
+                        "task_id": task_id,
+                        "changed_dt": changed_dt.isoformat(timespec="microseconds"),
+                        "original_updated": original_updated_dt.isoformat(timespec="microseconds"),
+                    },
+                )
+            except Exception:
+                pass
+
+        include = changed_dt > (original_updated_dt - eps)
+        if not include:
+            continue
+
+        emit_dt = (changed_dt + eps) if changed_dt > original_updated_dt else (original_updated_dt + eps)
+        average_score = resolved_avg.get(submission_id) if submission_id else None
+        cell: dict[str, Any] = {
+            "student_sub": student_sub,
+            "task_id": task_id,
+            "has_submission": bool(submission_id),
+            "average_score": average_score,
+            "changed_at": emit_dt.isoformat(timespec="microseconds"),
+        }
+        if h5p_completed is not None:
+            cell["h5p_completed"] = bool(h5p_completed)
+            if score_raw is not None:
+                cell["score_raw"] = _safe_int(score_raw)
+            if score_max is not None:
+                cell["score_max"] = _safe_int(score_max)
+        cells.append(cell)
+
+    return cells
+
+
+def _safe_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

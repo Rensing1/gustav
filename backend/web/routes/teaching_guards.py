@@ -61,6 +61,50 @@ def _guard_unit_author(
     return _private_error({"error": "forbidden"}, status_code=403)
 
 
+def _guard_course_owner(
+    course_id: str,
+    owner_sub: str,
+    *,
+    repo_provider: Callable[[], Any] | None = None,
+) -> JSONResponse | None:
+    """Validate caller ownership of a course, returning JSON errors when denied."""
+
+    if not course_id or not owner_sub:
+        return _private_error({"error": "forbidden"}, status_code=403)
+
+    repo = _get_repo(repo_provider)
+
+    # Prefer explicit DB ownership query when available because it short-circuits
+    # with stable security semantics and avoids fetching full course payloads.
+    try:
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        if isinstance(repo, DBTeachingRepo):
+            if repo.course_exists_for_owner(course_id, owner_sub):
+                return None
+            if repo.course_exists(course_id) is False:
+                return _private_error({"error": "not_found"}, status_code=404)
+            return _private_error({"error": "forbidden"}, status_code=403)
+    except Exception:
+        return _private_error({"error": "forbidden"}, status_code=403)
+
+    # Fallback for in-memory/test repos: fetch the row and compare teacher_id.
+    try:
+        course = repo.get_course(course_id)
+        if not course:
+            return _private_error({"error": "not_found"}, status_code=404)
+        owner_id = (
+            course.get("teacher_id")
+            if isinstance(course, dict)
+            else getattr(course, "teacher_id", None)
+        )
+        if owner_id != owner_sub:
+            return _private_error({"error": "forbidden"}, status_code=403)
+        return None
+    except Exception:
+        return _private_error({"error": "forbidden"}, status_code=403)
+
+
 def _csrf_guard(request: Request) -> JSONResponse | None:
     """Strict CSRF guard for browser-origin write requests."""
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-import psycopg
+from backend.web.db_cursor import open_repo_cursor
 
 
 class MaterialVisibilityLookupUnavailable(RuntimeError):
@@ -116,30 +116,29 @@ def load_student_material_file_metadata_batch(
 
     out: dict[str, StudentMaterialFileMetadata] = {}
     try:
-        with psycopg.connect(dsn) as conn:
-            with conn.cursor() as cur:
-                _set_student_scope(cur, repo=repo, student_sub=student_sub, course_id=course_id)
-                cur.execute(
-                    """
-                    select visible.material_id::text,
-                           visible.section_id::text,
-                           visible.unit_id::text,
-                           visible.mime_type,
-                           visible.size_bytes,
-                           visible.storage_key,
-                           visible.filename_original
-                      from public.get_material_file_metadata_batch_for_student(
-                            %s,
-                            %s::uuid,
-                            %s::uuid[]
-                      ) visible
-                    """,
-                    (student_sub, course_id, requested_ids),
-                )
-                for row in cur.fetchall() or []:
-                    metadata = _coerce_row(row)
-                    if metadata is not None:
-                        out[metadata.material_id] = metadata
+        with open_repo_cursor(dsn=dsn) as (_conn, cur):
+            _set_student_scope(cur, repo=repo, student_sub=student_sub, course_id=course_id)
+            cur.execute(
+                """
+                select visible.material_id::text,
+                       visible.section_id::text,
+                       visible.unit_id::text,
+                       visible.mime_type,
+                       visible.size_bytes,
+                       visible.storage_key,
+                       visible.filename_original
+                  from public.get_material_file_metadata_batch_for_student(
+                        %s,
+                        %s::uuid,
+                        %s::uuid[]
+                  ) visible
+                """,
+                (student_sub, course_id, requested_ids),
+            )
+            for row in cur.fetchall() or []:
+                metadata = _coerce_row(row)
+                if metadata is not None:
+                    out[metadata.material_id] = metadata
     except MaterialVisibilityLookupUnavailable:
         raise
     except Exception as exc:

@@ -45,17 +45,19 @@ def test_h5p_service_knows_frontend_bff_cookie_bridge() -> None:
     compose_path = REPO_ROOT / "docker-compose.yml"
     env_example_path = REPO_ROOT / ".env.example"
     h5p_server_path = REPO_ROOT / "h5p-service" / "server.mjs"
+    h5p_auth_forwarding_path = REPO_ROOT / "h5p-service" / "lib" / "auth_forwarding.mjs"
 
     compose_src = compose_path.read_text(encoding="utf-8")
     env_src = env_example_path.read_text(encoding="utf-8")
     server_src = h5p_server_path.read_text(encoding="utf-8")
+    auth_forwarding_src = h5p_auth_forwarding_path.read_text(encoding="utf-8")
 
     assert "GUSTAV_FRONTEND_INTERNAL_BASE" in compose_src
     assert "FRONTEND_SESSION_COOKIE_NAME" in compose_src
     assert "gustav_bff_session" in env_src
     assert "gustavFrontendInternalBase" in server_src
     assert "frontendSessionCookieName" in server_src
-    assert "/internal/h5p/me" in server_src
+    assert "/internal/h5p/me" in auth_forwarding_src
 
 
 def test_teacher_h5p_editor_static_entry_is_shipped_with_frontend() -> None:

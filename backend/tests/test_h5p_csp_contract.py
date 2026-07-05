@@ -57,9 +57,12 @@ def _get_directive(directives: list[str], name: str) -> str:
 def test_h5p_csp_policy_matrix_and_debug_access_control() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     server_path = repo_root / "h5p-service" / "server.mjs"
+    security_headers_path = repo_root / "h5p-service" / "lib" / "security_headers.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
+    assert security_headers_path.is_file(), f"Missing H5P security headers helper: {security_headers_path}"
 
     js = server_path.read_text(encoding="utf-8")
+    security_js = security_headers_path.read_text(encoding="utf-8")
 
     # Debug HTML pages must be admin-only.
     assert 'app.get("/editor",' in js and "requireAdmin" in js
@@ -67,7 +70,7 @@ def test_h5p_csp_policy_matrix_and_debug_access_control() -> None:
     assert re.search(r'app\.get\(\"/player\",\s*.*?requireAdmin', js), "player debug page must be admin-only"
 
     # Default CSP is strict (no wildcards, no unsafe-eval).
-    default_directives = _extract_csp_directives(js, "CSP_DEFAULT")
+    default_directives = _extract_csp_directives(security_js, "CSP_DEFAULT")
     assert not any("*" in d for d in default_directives), default_directives
     assert not any("unsafe-eval" in d for d in default_directives), default_directives
 
@@ -80,14 +83,14 @@ def test_h5p_csp_policy_matrix_and_debug_access_control() -> None:
     assert _get_directive(default_directives, "style-src") == "style-src 'self' 'unsafe-inline'"
 
     # Debug HTML CSP is a scoped exception: inline scripts allowed, still no unsafe-eval.
-    debug_directives = _extract_csp_directives(js, "CSP_DEBUG_HTML")
+    debug_directives = _extract_csp_directives(security_js, "CSP_DEBUG_HTML")
     assert not any("*" in d for d in debug_directives), debug_directives
     assert not any("unsafe-eval" in d for d in debug_directives), debug_directives
 
     assert _get_directive(debug_directives, "script-src") == "script-src 'self' 'unsafe-inline'"
 
     # The default security header must use CSP_DEFAULT.
-    assert '"Content-Security-Policy": CSP_DEFAULT' in js
+    assert '"Content-Security-Policy": CSP_DEFAULT' in security_js
 
     # Only debug HTML routes may override the header to CSP_DEBUG_HTML.
     # Guard this by requiring exactly two uses of CSP_DEBUG_HTML in sendHtml calls

@@ -31,8 +31,11 @@ def _load_h5p_server_source() -> str:
 
 
 def test_h5p_sendjson_sets_private_no_store() -> None:
-    js = _load_h5p_server_source()
-    block = _extract_block(js, start_token="function sendJson(", end_token="function sendHtml(")
+    repo_root = Path(__file__).resolve().parents[2]
+    response_helper_path = repo_root / "h5p-service" / "lib" / "response_helpers.mjs"
+    assert response_helper_path.is_file(), f"Missing H5P response helper: {response_helper_path}"
+    js = response_helper_path.read_text(encoding="utf-8")
+    block = _extract_block(js, start_token="export function sendJson(", end_token="export function sendHtml(")
     assert 'res.setHeader("Cache-Control", "private, no-store")' in block
 
 
@@ -47,4 +50,3 @@ def test_h5p_auth_caches_are_bounded_and_swept() -> None:
     # Both caches must be pruned (TTL sweep + max-size cap).
     assert "pruneCacheToMaxEntries(authCache" in js
     assert "pruneCacheToMaxEntries(h5pContentAccessCache" in js
-

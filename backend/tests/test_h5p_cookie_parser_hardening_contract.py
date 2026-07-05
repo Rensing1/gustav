@@ -24,15 +24,15 @@ def _extract_block(src: str, *, start_token: str, end_token: str) -> str:
 
 def test_h5p_cookie_parser_wraps_decodeuricomponent_in_try_catch() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    server_path = repo_root / "h5p-service" / "server.mjs"
-    assert server_path.is_file(), f"Missing H5P service file: {server_path}"
+    cookies_path = repo_root / "h5p-service" / "lib" / "cookies.mjs"
+    assert cookies_path.is_file(), f"Missing H5P cookie helper: {cookies_path}"
 
-    js = server_path.read_text(encoding="utf-8")
+    js = cookies_path.read_text(encoding="utf-8")
 
-    block = _extract_block(js, start_token="function parseCookies(", end_token="function parseMaxEntries(")
+    block = js[js.find("export function parseCookies(") :]
+    assert block, "Missing parseCookies helper"
 
     # Contract: `decodeURIComponent` may be used, but must not be called unguarded.
     assert "decodeURIComponent" in block
     assert "try" in block and "catch" in block
     assert "out[rawKey] = decodeURIComponent" not in block
-

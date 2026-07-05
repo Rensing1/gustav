@@ -31,15 +31,15 @@ def _assert_base_headers(hdrs: dict[str, str]) -> None:
 
 
 @pytest.mark.anyio
-async def test_html_route_includes_security_headers(monkeypatch: pytest.MonkeyPatch):
-    # Arrange: ensure in-memory sessions and authenticated user
+async def test_retired_html_route_includes_security_headers(monkeypatch: pytest.MonkeyPatch):
+    # Arrange: ensure in-memory sessions and authenticated user for a retired HTML page.
     store = install_session_store(monkeypatch, main)
     sess = store.create(sub="t-sec-1", name="Lehrkraft", roles=["teacher"])
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://app.localhost:8100") as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, sess.session_id)
-        r = await c.get("/")
+        r = await c.get("/units")
 
-    assert r.status_code == 200
+    assert r.status_code == 410
     _assert_base_headers(r.headers)
 
 

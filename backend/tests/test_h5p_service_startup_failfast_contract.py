@@ -31,9 +31,8 @@ def test_h5p_service_exits_on_storage_probe_failure() -> None:
 
     block = _extract_block(
         js,
-        start_token="const storage = await probeStorage();",
+        start_token="const storage = await probeStorageDirs(storageDirs);",
         end_token="const configPath",
     )
     assert "if (!storage.ok)" in block
     assert "process.exit(1)" in block
-

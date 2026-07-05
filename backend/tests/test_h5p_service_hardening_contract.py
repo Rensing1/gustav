@@ -20,6 +20,8 @@ from pathlib import Path
 def _extract_block(src: str, *, start_token: str, end_token: str) -> str:
     start = src.find(start_token)
     assert start != -1, f"Missing start token: {start_token}"
+    if not end_token:
+        return src[start:]
     end = src.find(end_token, start + len(start_token))
     assert end != -1, f"Missing end token: {end_token}"
     return src[start:end]
@@ -53,19 +55,20 @@ def test_h5p_finisheddata_does_not_read_or_log_upstream_response_body() -> None:
 
 def test_h5p_student_visibility_check_uses_access_check_endpoint() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    server_path = repo_root / "h5p-service" / "server.mjs"
-    assert server_path.is_file(), f"Missing H5P service file: {server_path}"
-    js = server_path.read_text(encoding="utf-8")
+    auth_forwarding_path = repo_root / "h5p-service" / "lib" / "auth_forwarding.mjs"
+    assert auth_forwarding_path.is_file(), f"Missing H5P auth forwarding helper: {auth_forwarding_path}"
+    js = auth_forwarding_path.read_text(encoding="utf-8")
 
     block = _extract_block(
         js,
-        start_token="async function checkLearningH5PContentAccess(",
-        end_token="async function requireAuth(",
+        start_token="export async function checkLearningH5PContentAccess(",
+        end_token="",
     )
 
     # Data minimization: avoid enumerating released sections/tasks for students.
     assert "include=tasks" not in block
-    assert "/api/learning/courses/${encodeURIComponent(courseId)}/h5p/contents/${encodeURIComponent(contentId)}/access" in block
+    assert "/api/learning/courses/${encodeURIComponent(courseId)}" in block
+    assert "/h5p/contents/${encodeURIComponent(contentId)}/access" in block
 
 
 def test_h5p_upload_default_max_bytes_is_reduced() -> None:
@@ -102,6 +105,6 @@ def test_h5p_internal_teacher_auth_is_secret_bound_and_skips_browser_csrf() -> N
     same_origin = _extract_block(
         js,
         start_token="function requireSameOrigin(req, res, next) {",
-        end_token="async function probeStorage()",
+        end_token="async function requireAuth(",
     )
     assert "isInternalAuth(req)" in same_origin

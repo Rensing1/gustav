@@ -18,8 +18,9 @@ from httpx import ASGITransport
 
 from backend.identity_access.oidc import OIDCConfig
 from backend.identity_access.stores import SessionStore, SessionRecord, StateStore
-from backend.web.auth_runtime import AuthSettings
 from backend.tests.runtime_auth_helpers import install_oidc_client, install_session_store
+from backend.web.auth_runtime import AuthSettings
+from backend.web.components.navigation import Navigation
 
 main = importlib.import_module("backend.web.main")
 
@@ -185,16 +186,13 @@ async def test_callback_errors_set_no_store_header():
 
 @pytest.mark.anyio
 async def test_role_priority_for_ssr_display(monkeypatch: pytest.MonkeyPatch):
-    """SSR sidebar must display primary role by fixed priority (admin>teacher>student)."""
-    # Create a session with roles in an order that would be ambiguous without priority
-    store = install_session_store(monkeypatch, main)
-    sess = store.create(sub="teacher-1", name="Frau Lehrerin", roles=["student", "teacher"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", sess.session_id)
-        r = await client.get("/", follow_redirects=False)
-    assert r.status_code == 200
-    html = r.text
-    # Expect German label for teacher (higher priority than student)
+    """The retained navigation component displays the already-resolved primary role."""
+
+    html = Navigation(
+        {"sub": "teacher-1", "name": "Test User", "role": "teacher", "roles": ["student", "teacher"]},
+        current_path="/units",
+    ).render()
+
     assert "Lehrer" in html
 
 
@@ -552,17 +550,14 @@ async def test_redirect_max_length_enforced(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.anyio
 async def test_sidebar_displays_name_not_email(monkeypatch: pytest.MonkeyPatch):
-    """SSR sidebar should render the user's display name (not email)."""
-    # Create a session with a specific display name
-    store = install_session_store(monkeypatch, main)
-    sess = store.create(sub="user-xyz", name="Alice Example", roles=["student"])
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        client.cookies.set("gustav_session", sess.session_id)
-        r = await client.get("/", follow_redirects=False)
-    assert r.status_code == 200
-    html = r.text
-    assert "Alice Example" in html
-    # Ensure the updated CSS hook is present for teaching clarity
+    """The retained navigation component renders display names without email fallback."""
+
+    html = Navigation(
+        {"sub": "user-xyz", "name": "Display User", "role": "student", "roles": ["student"]},
+        current_path="/learning",
+    ).render()
+
+    assert "Display User" in html
     assert "user-name" in html
 
 

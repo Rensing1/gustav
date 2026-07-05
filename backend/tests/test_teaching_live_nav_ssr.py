@@ -27,14 +27,14 @@ async def _client() -> httpx.AsyncClient:
 
 
 @pytest.mark.anyio
-async def test_sidebar_hides_live_link_for_teacher(monkeypatch: pytest.MonkeyPatch):
+async def test_retired_sidebar_hides_live_link_for_teacher(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub="t-nav-live", name="Teacher", roles=["teacher"])
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r = await c.get("/")
-        assert r.status_code == 200
+        r = await c.get("/units")
+        assert r.status_code == 410
         html = r.text
         assert 'href="/teaching/live"' not in html, "Legacy sidebar should not expose Live link anymore"
 

@@ -949,7 +949,10 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - Done in working tree: extracted H5P storage directory layout, storage readiness probing, and Content-Disposition filename sanitizing from `h5p-service/server.mjs` into `h5p-service/lib/storage_helpers.mjs`.
 - Done in working tree: `h5p-service/test/finished_submission_context.test.mjs`, `h5p-service/test/review_tokens.test.mjs`, `h5p-service/test/security_headers.test.mjs`, `h5p-service/test/model_helpers.test.mjs`, `h5p-service/test/cookies.test.mjs`, `h5p-service/test/response_helpers.test.mjs`, and `h5p-service/test/storage_helpers.test.mjs` protect the extracted H5P forwarding, review-token, security-header, model-helper, cookie, response-helper, and storage-helper behavior; `npm test` in `h5p-service` reports 13 passing Node test files.
 - Done in working tree: `h5p-service/server.mjs` shrank from 1942 to 1709 LOC across the first seven PR20 H5P slices.
-- Open follow-up: continue with a further H5P split around route handlers/auth-forwarding integration or a frontend Svelte workspace extraction with existing component tests.
+- Done in working tree: extracted Learning-Unit viewport bucket, workspace chrome defaults, layout preference defaults, and layout normalization from `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` into `frontend/src/lib/learning-unit/layout.ts`.
+- Done in working tree: `frontend/src/lib/learning-unit/layout.test.ts` protects compact/medium/wide/xwide breakpoints, workspace width clamping, modular/linear workspace defaults, default layout preferences, and legacy `singlePaneWidth` migration behavior.
+- Done in working tree: `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` shrank from 1846 to 1710 LOC; targeted verification reports Svelte check 0 errors/0 warnings and 38 focused Learning workspace tests passed.
+- Open follow-up: continue with a further H5P split around route handlers/auth-forwarding integration or another frontend Svelte workspace extraction with existing component tests.
 
 #### PR 21: Quality Scorecard v1
 - Create a monthly scorecard:

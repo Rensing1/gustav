@@ -35,7 +35,7 @@ import { constants as fsConstants } from "node:fs";
 import express from "express";
 import multer from "multer";
 import { normalizeH5PAjaxBody } from "./lib/ajax_body.mjs";
-import { buildSessionCookieHeader } from "./lib/cookies.mjs";
+import { buildSessionCookieHeader, parseCookies } from "./lib/cookies.mjs";
 import { debugPagesEnabled, isProdLikeEnv } from "./lib/env.mjs";
 import { fetchWithTimeout } from "./lib/fetch_timeout.mjs";
 import { createFinishedForwardingMetrics, forwardLearningSubmission } from "./lib/finished_forwarding.mjs";
@@ -153,26 +153,6 @@ function asyncHandler(fn) {
   return function wrapped(req, res, next) {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
-}
-
-function parseCookies(cookieHeader) {
-  const out = {};
-  if (!cookieHeader) return out;
-  for (const part of cookieHeader.split(";")) {
-    const [rawKey, ...rawRest] = part.trim().split("=");
-    if (!rawKey) continue;
-    const rawValue = rawRest.join("=");
-    // decodeURIComponent can throw on malformed percent encodings; treat such
-    // values as opaque and keep the raw string to avoid a 500.
-    let decoded = rawValue;
-    try {
-      decoded = decodeURIComponent(rawValue);
-    } catch {
-      decoded = rawValue;
-    }
-    out[rawKey] = decoded;
-  }
-  return out;
 }
 
 function parseMaxEntries(raw, defaultValue) {

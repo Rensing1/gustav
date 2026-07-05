@@ -31,3 +31,24 @@ export function buildSessionCookieHeader(cookieHeader, cookieName) {
   }
   return "";
 }
+
+
+export function parseCookies(cookieHeader) {
+  const out = {};
+  if (!cookieHeader) return out;
+  for (const part of cookieHeader.split(";")) {
+    const [rawKey, ...rawRest] = part.trim().split("=");
+    if (!rawKey) continue;
+    const rawValue = rawRest.join("=");
+    // decodeURIComponent can throw on malformed percent encodings; treat such
+    // values as opaque and keep the raw string to avoid a 500.
+    let decoded = rawValue;
+    try {
+      decoded = decodeURIComponent(rawValue);
+    } catch {
+      decoded = rawValue;
+    }
+    out[rawKey] = decoded;
+  }
+  return out;
+}

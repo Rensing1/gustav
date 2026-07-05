@@ -12,8 +12,8 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 
 ## Zusammenfassung
 - Inventarisierte Dateien: 144
-- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 91
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 13
+- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 89
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 15
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 27
 - Statische Migrationstests ohne echte DB-Verbindung: 4
@@ -60,8 +60,8 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 | backend/tests/migration/test_rls_exec_privileges.py | real-db | db_write | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db, rls | Keep marker and isolation visible |
 | backend/tests/migration/test_sub_mapping_sync.py | real-db | legacy_migration | covered-by-opt-in-marker | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, migration, psycopg-connect, psycopg-import | Keep existing opt-in gate |
 | backend/tests/migration/test_sub_mapping_sync_keycloak.py | real-db | legacy_migration | covered-by-opt-in-marker | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, migration, psycopg-connect, psycopg-import | Keep existing opt-in gate |
-| backend/tests/migration/test_teaching_latest_submission_owner_helper_hardening.py | real-db | - | missing-db-marker | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/migration/test_teaching_live_unit_summary_helper_hardening.py | real-db | - | missing-db-marker | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Review for db_read/db_write before marker hardening |
+| backend/tests/migration/test_teaching_latest_submission_owner_helper_hardening.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
+| backend/tests/migration/test_teaching_live_unit_summary_helper_hardening.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_unit_module_edges_update_hardening.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_verify_db_preflight.py | real-db | - | missing-db-marker | env:DATABASE_URL, migration | Review for db_read/db_write before marker hardening |
 | backend/tests/storage/test_bootstrap_timeouts.py | storage-or-config | - | no-db-marker-needed | env:SUPABASE_SERVICE_ROLE_KEY, env:SUPABASE_STORAGE_BUCKET, env:SUPABASE_URL | Keep service-free unless it reaches the real DB |

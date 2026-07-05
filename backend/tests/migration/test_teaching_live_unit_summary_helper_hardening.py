@@ -21,6 +21,9 @@ import pytest
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_read
+
+
 _SIG = "public.get_unit_latest_submissions_for_owner(text, uuid, uuid, timestamptz, integer, integer)"
 
 

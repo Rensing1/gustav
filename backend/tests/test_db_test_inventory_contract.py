@@ -206,6 +206,22 @@ def test_migration_metadata_contracts_are_marked_as_db_read() -> None:
         assert "db_read" in records[path].markers
 
 
+def test_security_definer_helper_hardening_contracts_are_marked_as_db_read() -> None:
+    from backend.tools import db_test_inventory
+
+    records = {
+        record.path: record
+        for record in db_test_inventory.scan_tests(REPO_ROOT / "backend" / "tests", repo_root=REPO_ROOT)
+    }
+
+    for path in (
+        "backend/tests/migration/test_teaching_latest_submission_owner_helper_hardening.py",
+        "backend/tests/migration/test_teaching_live_unit_summary_helper_hardening.py",
+    ):
+        assert records[path].marker_status == "marked-db"
+        assert "db_read" in records[path].markers
+
+
 def test_db_test_inventory_is_synchronized_with_generator() -> None:
     result = subprocess.run(
         [

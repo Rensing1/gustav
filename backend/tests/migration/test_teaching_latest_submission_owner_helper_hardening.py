@@ -22,6 +22,9 @@ import pytest
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_read
+
+
 _SIG = "public.get_latest_submission_for_owner(text, uuid, uuid, uuid, text)"
 
 
@@ -92,4 +95,3 @@ async def test_latest_submission_owner_helper_is_hardened() -> None:
                 r"teacher_id\s*=\s*coalesce\(\s*current_setting\('app\.current_sub'(::text)?,\s*true\)\s*,\s*''",
                 definition,
             ), definition
-

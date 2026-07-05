@@ -53,7 +53,6 @@ from backend.web.routes.teaching_serialization import (
     _serialize_module,
     _serialize_section,
     _serialize_task,
-    _serialize_unit,
     _serialize_unit_graph_edge,
     _serialize_unit_module,
     _serialize_unit_phase_public,
@@ -87,7 +86,6 @@ from backend.web.routes.teaching_payloads import (
     TaskCreatePayload,
     TaskReorderPayload,
     TaskUpdatePayload,
-    UnitCreatePayload,
     UnitModuleCreatePayload,
     UnitModuleEdgePayload,
     UnitModuleReorderPayload,
@@ -95,14 +93,13 @@ from backend.web.routes.teaching_payloads import (
     UnitPhaseCreatePayload,
     UnitPhaseReorderPayload,
     UnitPhaseUpdatePayload,
-    UnitUpdatePayload,
 )
 from backend.web.routes.teaching_validation import (
     canonical_uuid as _canonical_uuid,
     clamp_limit_offset as _clamp_limit_offset,
     safe_int as _safe_int,
 )
-from backend.web.routes import teaching_course_state, teaching_storage_cleanup
+from backend.web.routes import teaching_course_state, teaching_payloads, teaching_serialization, teaching_storage_cleanup
 from backend.web.routes.teaching_storage_cleanup import (
     metadata_page_keys as _metadata_page_keys,  # noqa: F401 - kept for route module compatibility
     unit_delete_storage_metadata_dsn as _unit_delete_storage_metadata_dsn,  # noqa: F401
@@ -157,6 +154,10 @@ InMemoryTeachingRepo = teaching_inmemory_repo.InMemoryTeachingRepo
 # Backwards-compatible test/import alias. New code should import
 # InMemoryTeachingRepo from teaching_inmemory_repo directly.
 _Repo = InMemoryTeachingRepo
+
+UnitCreatePayload = teaching_payloads.UnitCreatePayload
+UnitUpdatePayload = teaching_payloads.UnitUpdatePayload
+_serialize_unit = teaching_serialization._serialize_unit
 
 
 # Try to use DB-backed repo when available; fallback to in-memory for dev/tests
@@ -692,209 +693,7 @@ def resolve_student_login_labels_by_sub(subs: list[str]) -> dict[str, str]:
 
 # Course handlers live in backend.web.routes.teaching_courses.
 
-async def list_units(request: Request, limit: int = 20, offset: int = 0):
-    """
-    Return units authored by the current teacher.
-
-    Parameters:
-        request: FastAPI request with session context.
-        limit: Pagination window size (1..50).
-        offset: Pagination start index (>=0).
-
-    Behavior:
-        - 200 with a list of serialized units owned by the caller.
-        - 403 when the caller is not a teacher.
-
-    Permissions:
-        Caller must have role `teacher`; units are filtered by `author_id == sub`.
-    """
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=20, max_limit=50)
-    sub = _current_sub(user)
-    try:
-        units = _get_repo().list_units_for_author(author_id=sub, limit=limit, offset=offset)
-    except Exception as exc:
-        logger.warning("list_units failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
-        return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private([_serialize_unit(u) for u in units], status_code=200)
-
-
-async def create_unit(request: Request, payload: UnitCreatePayload):
-    """
-    Create a reusable unit owned by the calling teacher.
-
-    Parameters:
-        request: FastAPI request with authenticated session.
-        payload: Body containing `title` and optional `summary`.
-
-    Behavior:
-        - 201 with the persisted unit on success.
-        - 400 when validation fails (e.g., blank/too long title).
-        - 403 when the caller is not a teacher.
-
-    Permissions:
-        Caller must be a teacher; ownership is derived from the authenticated `sub`.
-    """
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    sub = _current_sub(user)
-    repo = _get_repo()
-    unit_type = str(payload.unit_type or "").strip().lower()
-    if unit_type == "modular":
-        repo_error = _require_modular_repo_methods(repo, *_MODULAR_UNIT_CREATE_REQUIRED_METHODS)
-        if repo_error:
-            return repo_error
-    try:
-        title = payload.title or ""
-        unit = repo.create_unit(title=title, summary=payload.summary, author_id=sub, unit_type=payload.unit_type)
-    except ValueError as exc:
-        detail = str(exc)
-        if detail in {"invalid_title", "invalid_summary", "invalid_unit_type"}:
-            return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
-        return _private_error({"error": "bad_request"}, status_code=400)
-    except PermissionError:
-        return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private(_serialize_unit(unit), status_code=201)
-
-
-async def get_unit(request: Request, unit_id: str):
-    """
-    Get a learning unit by id — author only.
-
-    Why:
-        The SSR edit form and API clients need a direct lookup to prefill
-        fields without scanning a paginated list.
-
-    Behavior:
-        - 200 with `Unit` when the caller authored the unit
-        - 400 when `unit_id` is not UUID-like
-        - 404 when the unit does not exist
-        - 403 when the caller is not the author
-
-    Permissions:
-        Caller must be a teacher and the author of the unit.
-    """
-    repo = _get_repo()
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    if not _is_uuid_like(unit_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    # Author confirmed; fetch the unit via repo (DB or in-memory)
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(repo, DBTeachingRepo):
-            u = repo.get_unit_for_author(unit_id, sub)
-        else:
-            u = repo.get_unit_for_author(unit_id, sub)
-    except Exception:
-        u = repo.get_unit_for_author(unit_id, sub)
-    if not u:
-        return _private_error({"error": "not_found"}, status_code=404)
-    return _json_private(_serialize_unit(u), status_code=200)
-
-
-async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload):
-    """
-    Update metadata of a unit owned by the current teacher.
-
-    Parameters:
-        request: FastAPI request context.
-        unit_id: Unit identifier (UUID string).
-        payload: Partial update for `title` and/or `summary`.
-
-    Behavior:
-        - 200 with updated unit.
-        - 400 when payload is empty or fails validation.
-        - 403 when the caller is not the author.
-        - 404 when the unit does not exist.
-
-    Permissions:
-        Caller must be a teacher and the author of the unit.
-    """
-    repo = _get_repo()
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    updates = payload.model_dump(mode="python", exclude_unset=True)
-    if not updates:
-        return JSONResponse({"error": "bad_request", "detail": "empty_payload"}, status_code=400)
-    try:
-        updated = repo.update_unit_owned(unit_id, sub, **updates)
-    except ValueError as exc:
-        detail = str(exc)
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
-    if not updated:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    return _json_private(_serialize_unit(updated), status_code=200)
-
-
-async def delete_unit(request: Request, unit_id: str):
-    """
-    Delete a unit owned by the current teacher.
-
-    Behavior:
-        - 204 on success, cascading removal of associated modules.
-        - 502 when a storage object could not be deleted.
-        - 503 when storage metadata or adapter access is unavailable.
-        - 403 when caller is not the author.
-        - 404 when the unit does not exist.
-
-    Permissions:
-        Caller must be a teacher and the author of the unit.
-    """
-    repo = _get_repo()
-    user, error = _require_teacher(request)
-    if error:
-        return error
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    sub = _current_sub(user)
-    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    try:
-        storage_objects = _collect_unit_delete_storage_objects(repo, unit_id=unit_id)
-        _delete_unit_storage_objects(storage_objects)
-        deleted = repo.delete_unit_owned(unit_id, sub)
-    except RuntimeError as exc:
-        detail = str(exc) or "storage_delete_failed"
-        if detail in {"storage_adapter_not_configured", "storage_metadata_unavailable"}:
-            return JSONResponse(
-                {"error": "service_unavailable", "detail": "storage_adapter_unavailable"},
-                status_code=503,
-            )
-        return JSONResponse(
-            {"error": "bad_gateway", "detail": "storage_delete_failed"},
-            status_code=502,
-        )
-    except Exception:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    if not deleted:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    # No content but still enforce private, no-store to be explicit in proxies
-    return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
-
-
-
+# Unit handlers live in backend.web.routes.teaching_units.
 
 async def list_unit_phases(request: Request, unit_id: str):
     """List phases of a modular unit (author only)."""

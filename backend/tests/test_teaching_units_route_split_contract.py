@@ -45,18 +45,21 @@ def test_unit_routes_are_owned_by_dedicated_router_module() -> None:
             assert f"@teaching_router.{method}(\"{path}\"" not in teaching_source
 
 
-def test_unit_router_wrappers_delegate_to_teaching_module() -> None:
-    """Wrapper functions should delegate unchanged to teaching handlers."""
+def test_unit_router_owns_handlers_without_teaching_delegation() -> None:
+    """Unit handlers should not keep the large Teaching adapter as implementation."""
 
     units_source = UNITS_SOURCE.read_text(encoding="utf-8")
-    expected_delegations = {
-        "list_units": "teaching_routes.list_units(",
-        "create_unit": "teaching_routes.create_unit(",
-        "get_unit": "teaching_routes.get_unit(",
-        "update_unit": "teaching_routes.update_unit(",
-        "delete_unit": "teaching_routes.delete_unit(",
-    }
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
+    handler_names = (
+        "list_units",
+        "create_unit",
+        "get_unit",
+        "update_unit",
+        "delete_unit",
+    )
 
-    for fn_name, marker in expected_delegations.items():
+    assert "from backend.web.routes import teaching as teaching_routes" not in units_source
+    for fn_name in handler_names:
         assert f"def {fn_name}(" in units_source
-        assert marker in units_source
+        assert f"teaching_routes.{fn_name}(" not in units_source
+        assert f"async def {fn_name}(" not in teaching_source

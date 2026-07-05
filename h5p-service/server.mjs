@@ -30,7 +30,7 @@
  */
 
 import path from "node:path";
-import { access, mkdir, readdir, unlink, writeFile } from "node:fs/promises";
+import { access, readdir, unlink, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import express from "express";
 import multer from "multer";
@@ -50,6 +50,11 @@ import {
 import { parseReviewToken } from "./lib/review_tokens.mjs";
 import { sendHtml, sendJson } from "./lib/response_helpers.mjs";
 import { applySecurityHeaders, CSP_DEBUG_HTML } from "./lib/security_headers.mjs";
+import {
+  buildStorageDirs,
+  probeStorageDirs,
+  sanitizeHeaderFilename,
+} from "./lib/storage_helpers.mjs";
 import {
   authenticateInternalTeacher,
   isInternalAuth,
@@ -97,14 +102,7 @@ if (isProdLike && (!h5pInternalSharedSecret || h5pInternalSharedSecret.toUpperCa
   process.exit(1);
 }
 
-const storageDirs = {
-  root: storageRoot,
-  libraries: path.join(storageRoot, "libraries"),
-  content: path.join(storageRoot, "content"),
-  tmp: path.join(storageRoot, "tmp"),
-  userdata: path.join(storageRoot, "userdata"),
-  uploads: path.join(storageRoot, "uploads"),
-};
+const storageDirs = buildStorageDirs(storageRoot);
 
 /**
  * Cache auth lookups for short bursts (editor/player loads many assets quickly).
@@ -159,15 +157,6 @@ function pruneCacheToMaxEntries(cache, nowMs, maxEntries) {
     if (firstKey === undefined) break;
     cache.delete(firstKey);
   }
-}
-
-function sanitizeHeaderFilename(value) {
-  // Content-Disposition is a response header and must never contain control
-  // characters (CR/LF). Node would reject invalid header chars, causing 500s.
-  // We keep this KISS: map to a conservative ASCII token.
-  const raw = String(value || "").trim();
-  const safe = raw.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_").slice(0, 80);
-  return safe || "download";
 }
 
 function getPublicOrigin(req) {
@@ -254,20 +243,6 @@ function requireSameOrigin(req, res, next) {
   }
 
   next();
-}
-
-async function probeStorage() {
-  try {
-    await mkdir(storageDirs.libraries, { recursive: true });
-    await mkdir(storageDirs.content, { recursive: true });
-    await mkdir(storageDirs.tmp, { recursive: true });
-    await mkdir(storageDirs.userdata, { recursive: true });
-    await mkdir(storageDirs.uploads, { recursive: true });
-    await access(storageDirs.tmp, fsConstants.W_OK);
-    return { ok: true, root: storageDirs.root };
-  } catch (err) {
-    return { ok: false, root: storageDirs.root, error: String(err) };
-  }
 }
 
 async function fetchGustavMe(cookieHeader) {
@@ -516,7 +491,7 @@ async function main() {
   const { H5PConfig, H5PEditor, H5PPlayer, H5PAjaxEndpoint, fsImplementations } = H5P;
   const { h5pAjaxExpressRouter } = H5PExpress;
 
-  const storage = await probeStorage();
+  const storage = await probeStorageDirs(storageDirs);
   if (!storage.ok) {
     // eslint-disable-next-line no-console
     console.error(`H5P storage not ready: ${storage.error}`);
@@ -616,7 +591,7 @@ async function main() {
 
   // Public readiness probe (used by E2E and docker-compose health checks).
   app.get("/healthz", asyncHandler(async (_req, res) => {
-    const storage = await probeStorage();
+    const storage = await probeStorageDirs(storageDirs);
     sendJson(res, storage.ok ? 200 : 503, {
       status: storage.ok ? "healthy" : "unhealthy",
       service: "gustav-h5p",
@@ -1261,7 +1236,7 @@ async function main() {
   }));
 
   app.get("/libraries", requireTeacher, asyncHandler(async (_req, res) => {
-    const storage = await probeStorage();
+    const storage = await probeStorageDirs(storageDirs);
     if (!storage.ok) {
       sendJson(res, 503, { error: "storage_unavailable" });
       return;

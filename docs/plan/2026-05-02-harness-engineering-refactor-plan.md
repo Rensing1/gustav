@@ -991,6 +991,7 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
   - `make test-route-map`, `make test-api-contract-baseline`, `make test-architecture-boundaries` und die betroffenen Teaching-Tests sind grün.
 - Done in working tree: `backend/web/routes/teaching_payloads.py` übernimmt die Pydantic-Request-Payloads für Courses, Units, Modules, Sections, Materials, Tasks und Course Members; `backend/web/routes/teaching.py` importiert diese Namen zurück, damit bestehende `teaching_routes.*Payload`-Aufrufer kompatibel bleiben.
 - Done in working tree: Ein Contract-Test schützt, dass Payload-Modelle nicht wieder in den Teaching-Hotspot zurückwandern; `backend/web/routes/teaching.py` ist durch diesen Schnitt auf 5790 LOC gesunken.
+- Done in working tree: `backend/web/routes/teaching_validation.py` übernimmt reine UUID-, Integer- und Pagination-Helfer; ein Contract-Test schützt die Kompatibilitätsaliase in `teaching.py`. `backend/web/routes/teaching.py` liegt nach diesem Schnitt bei 5756 LOC.
 
 #### C2: Teaching-Repository nach Verantwortlichkeiten trennen
 - Problem: `backend/teaching/repo_db.py` ist mit knapp 5000 Zeilen ein zweiter Teaching-Monolith. Er mischt Schreibfälle, Read-Models, Live-/Dashboard-Abfragen, Material-/Task-Zugriffe und Hilfsserialisierung.

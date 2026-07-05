@@ -28,7 +28,7 @@ import sys as _sys
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import asyncio
-from uuid import uuid4, UUID
+from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Request
@@ -101,6 +101,11 @@ from backend.web.routes.teaching_payloads import (
     UnitPhaseReorderPayload,
     UnitPhaseUpdatePayload,
     UnitUpdatePayload,
+)
+from backend.web.routes.teaching_validation import (
+    canonical_uuid as _canonical_uuid,
+    clamp_limit_offset as _clamp_limit_offset,
+    safe_int as _safe_int,
 )
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
@@ -1600,21 +1605,6 @@ def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = Tru
 
 # --- Request/Response models -----------------------------------------------------
 
-def _canonical_uuid(value: str) -> str:
-    """Return canonical lowercase UUID string."""
-    return str(UUID(str(value)))
-
-
-def _safe_int(value: Any) -> Optional[int]:
-    """Parse an optional integer defensively."""
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _validate_uuid_id_list(
     raw_ids: object,
     *,
@@ -1641,30 +1631,6 @@ def _validate_uuid_id_list(
     if len(ids) != len(set(ids)):
         return None, _private_error({"error": "bad_request", "detail": duplicate_detail}, status_code=400)
     return ids, None
-
-
-def _clamp_limit_offset(
-    *,
-    limit: int | None,
-    offset: int | None,
-    default_limit: int,
-    max_limit: int = 50,
-    zero_means_default: bool = True,
-) -> tuple[int, int]:
-    """Clamp list pagination consistently across Teaching endpoints."""
-    try:
-        norm_limit = int(limit) if limit is not None else default_limit
-    except (TypeError, ValueError):
-        norm_limit = default_limit
-    if zero_means_default and norm_limit == 0:
-        norm_limit = default_limit
-    norm_limit = max(1, min(max_limit, norm_limit))
-    try:
-        norm_offset = int(offset) if offset is not None else 0
-    except (TypeError, ValueError):
-        norm_offset = 0
-    norm_offset = max(0, norm_offset)
-    return norm_limit, norm_offset
 
 
 def _require_modular_repo_methods(repo: object, *method_names: str) -> JSONResponse | None:

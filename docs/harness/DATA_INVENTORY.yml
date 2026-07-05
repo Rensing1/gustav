@@ -1,0 +1,200 @@
+# GUSTAV Data Inventory
+#
+# Status: Draft
+# Owner: Produktverantwortlicher
+# Local checks: `.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`
+# CI status: `make harness-minimum`
+# Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`, `docs/plan/2026-07-02-upload-llm-boundaries.md`
+# Review cadence: monatlich während des Harness-Refactors und vor neuen AI-/Feedback-/Analytics-Flows
+
+version: 1
+purpose: >
+  Reviewbares Inventar personenbezogener und lernbezogener Daten in GUSTAV.
+  Dieses Dokument ist ein Harness-Artefakt für Datenschutz-, Security-,
+  LLM- und Learning-Analytics-Reviews; es ersetzt keine Datenschutzfolgeabschätzung.
+
+principles:
+  local_equals_prod: true
+  no_real_personal_data_in_repo: true
+  open_source_safe_examples: true
+  student_submission_content_preserved: true
+
+entities:
+  user_account:
+    description: Login- und Profilbezug für Lernende, Lehrkräfte und Admins.
+    personal_data:
+      - subject_id
+      - display_name
+      - role
+      - optional_email_or_external_login
+    purpose:
+      - authentication
+      - authorization
+      - classroom_roster_display
+    access:
+      student: own_profile
+      teacher: course_members_only
+      admin: administrative_support
+    retention: active_account_plus_configured_school_policy
+    export: user_profile_and_memberships
+    deletion: anonymize_or_delete_after_account_removal_policy
+    llm_usage:
+      sent_to_llm: false
+
+  course_membership:
+    description: Zuordnung von Lernenden zu Kursen.
+    personal_data:
+      - course_id
+      - student_subject_id
+      - teacher_subject_id
+      - joined_at
+    purpose:
+      - course_access
+      - teacher_dashboard
+      - section_release_visibility
+    access:
+      student: own_course_membership
+      teacher: owned_courses
+      admin: administrative_support
+    retention: course_lifecycle_plus_configured_school_policy
+    export: course_roster_and_membership_history
+    deletion: remove_membership_or_anonymize_history_after_policy
+    llm_usage:
+      sent_to_llm: false
+
+  learning_unit:
+    description: Lehrkraftseitig erstellte Lerneinheiten, Abschnitte, Materialien, Aufgaben und Karteikarten.
+    personal_data:
+      - teacher_subject_id
+      - authoring_metadata
+      - optional_material_file_metadata
+    purpose:
+      - lesson_authoring
+      - assignment_delivery
+      - spaced_repetition
+    access:
+      student: released_content_only
+      teacher: own_units_and_attached_courses
+      admin: administrative_support
+    retention: learning_content_lifecycle
+    export: authored_learning_content
+    deletion: remove_or_archive_unit_after_policy
+    llm_usage:
+      sent_to_llm: teacher_controlled_only
+
+  student_submission:
+    description: Von Lernenden eingereichte Antworten, Texte, Dateien, Bilder und H5P-Ergebnisse.
+    personal_data:
+      - student_subject_id
+      - course_id
+      - unit_id
+      - task_id
+      - original_submission_content
+      - file_metadata
+      - submitted_at
+    purpose:
+      - formative_feedback
+      - learning_progress
+      - teacher_review
+    access:
+      student: own_submissions
+      teacher: submissions_in_owned_courses
+      admin: administrative_support
+    retention: course_lifecycle_plus_configured_school_policy
+    export: original_submission_and_feedback_history
+    deletion: delete_or_anonymize_submission_after_policy
+    llm_usage:
+      sent_to_llm: true
+      technical_packaging_allowed: true
+      content_filtering_allowed: false
+      content_normalization_allowed: false
+      content_moderation_allowed: false
+      content_rewriting_allowed: false
+      note: >
+        GUSTAV verändert Schüler-Einreichungen vor der LLM-Nutzung nicht inhaltlich.
+        Erlaubt ist nur technische Verpackung, zum Beispiel JSON-Struktur,
+        Metadaten, MIME-Informationen oder Prompt-Kontext.
+
+  learning_feedback:
+    description: Automatisch erzeugtes formatives Feedback, Kriterienanalyse und optionale Scores.
+    personal_data:
+      - student_subject_id
+      - task_id
+      - feedback_text
+      - criteria_analysis
+      - generated_at
+      - model_metadata
+    purpose:
+      - formative_feedback
+      - teacher_dashboard
+      - learning_analytics
+    access:
+      student: own_feedback
+      teacher: feedback_in_owned_courses
+      admin: administrative_support
+    retention: course_lifecycle_plus_configured_school_policy
+    export: feedback_history
+    deletion: delete_or_anonymize_with_submission_after_policy
+    llm_usage:
+      sent_to_llm: possible_as_context_for_followup_feedback
+      technical_packaging_allowed: true
+      content_rewriting_allowed: false
+
+  learning_analytics_event:
+    description: Ereignisse und Aggregationen für Lernfortschritt, Live-Dashboard und Diagnoseansichten.
+    personal_data:
+      - student_subject_id
+      - course_id
+      - unit_id
+      - task_id
+      - status
+      - score_or_completion
+      - timestamps
+    purpose:
+      - teacher_dashboard
+      - progress_monitoring
+      - support_intervention
+    access:
+      student: own_progress
+      teacher: owned_courses
+      admin: administrative_support
+    retention: course_lifecycle_plus_configured_school_policy
+    export: progress_and_feedback_history
+    deletion: delete_or_anonymize_after_policy
+    llm_usage:
+      sent_to_llm: false_by_default
+
+storage:
+  postgres:
+    contains:
+      - structured_application_data
+      - authz_relations
+      - feedback_and_analytics
+    isolation:
+      - rls_policies
+      - service_role_only_for_controlled_server_paths
+      - db_read_db_write_test_markers
+  supabase_storage:
+    contains:
+      - uploaded_submission_files
+      - teaching_material_files
+    isolation:
+      - bucket_policy
+      - signed_urls
+      - mime_size_signature_checks
+  llm_runtime:
+    contains:
+      - technically_packaged_submission_context
+      - generated_feedback
+    isolation:
+      - privacy_logging_contract
+      - no_background_content_rewrite
+      - local_or_configured_openai_compatible_endpoint
+
+review_triggers:
+  - new_personal_data_field
+  - new_ai_or_llm_flow
+  - new_learning_analytics_view
+  - changed_retention_or_deletion_policy
+  - changed_role_or_course_access_model
+  - new_external_storage_or_model_provider

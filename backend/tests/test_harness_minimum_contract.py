@@ -16,6 +16,7 @@ REQUIRED_HARNESS_DOCS = (
     "docs/harness/TEST_PORTFOLIO.md",
     "docs/harness/IMPORT_INVENTORY.md",
     "docs/harness/API_CONTRACTS.md",
+    "docs/harness/DATA_INVENTORY.yml",
     "docs/harness/ROUTE_MAP.md",
     "docs/harness/HOTSPOTS.md",
     "docs/harness/TECH_DEBT.md",
@@ -88,6 +89,27 @@ def test_harness_minimum_documents_exist_and_have_contract_header() -> None:
             "Review cadence:",
         ):
             assert required_label in text, f"{relative_path} misses {required_label}"
+
+
+def test_data_inventory_documents_personal_data_boundaries() -> None:
+    """Privacy-critical flows need a reviewable personal-data inventory."""
+
+    text = _read("docs/harness/DATA_INVENTORY.yml")
+
+    for required_term in (
+        "version:",
+        "entities:",
+        "student_submission",
+        "learning_feedback",
+        "course_membership",
+        "llm_usage:",
+        "technical_packaging_allowed:",
+        "content_rewriting_allowed: false",
+        "retention:",
+        "export:",
+        "deletion:",
+    ):
+        assert required_term in text
 
 
 def test_plan_memory_documents_exist() -> None:

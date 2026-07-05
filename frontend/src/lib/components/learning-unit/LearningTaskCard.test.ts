@@ -3,16 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import LearningTaskCard from "./LearningTaskCard.svelte";
 import type { LearningTask } from "$lib/types/learning";
-
-beforeAll(() => {
-  vi.stubGlobal("__SVELTEKIT_PAYLOAD__", { base: "", assets: "" });
-  vi.stubGlobal("__SVELTEKIT_PATHS__", { base: "", assets: "" });
-  vi.stubGlobal("__SVELTEKIT_APP_DIR__", "_app");
-});
 
 const task: LearningTask = {
   id: "task-1",

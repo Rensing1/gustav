@@ -3,15 +3,8 @@
 from __future__ import annotations
 
 import os
-import sys
 import time
 from urllib.parse import urljoin
-
-# Temporary compatibility while legacy tests still import `routes.operations`.
-if __name__ == "backend.web.routes.operations":
-    sys.modules.setdefault("routes.operations", sys.modules[__name__])
-elif __name__ == "routes.operations":
-    sys.modules.setdefault("backend.web.routes.operations", sys.modules[__name__])
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse

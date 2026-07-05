@@ -11,16 +11,9 @@ from __future__ import annotations
 import asyncio
 import json
 import inspect
-import sys
 from datetime import datetime, timedelta, timezone
 import hmac
 import os
-
-# Temporary compatibility while legacy tests still import `routes.app`.
-if __name__ == "backend.web.routes.app":
-    sys.modules.setdefault("routes.app", sys.modules[__name__])
-elif __name__ == "routes.app":
-    sys.modules.setdefault("backend.web.routes.app", sys.modules[__name__])
 
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -35,6 +28,7 @@ from backend.web.security.guards import has_any_role, has_role
 
 from backend.web.routes import learning as learning_routes
 from backend.web.routes import teaching as teaching_routes
+from backend.web.routes import teaching_guards
 
 
 app_router = APIRouter(tags=["App"])
@@ -765,27 +759,13 @@ def _list_submission_pairs_for_students(
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     try:
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        import psycopg  # type: ignore
-
         if isinstance(repo, DBTeachingRepo):
-            dsn = getattr(repo, "_dsn", None)
-            if not dsn:
-                return set()
-            with psycopg.connect(dsn) as conn:
-                with conn.cursor() as cur:
-                    cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-                    cur.execute(
-                        """
-                        select distinct student_sub::text, task_id::text
-                        from public.learning_submissions
-                        where course_id = %s
-                          and student_sub = any(%s)
-                          and task_id::text = any(%s)
-                        """,
-                        (course_id, student_subs, task_ids),
-                    )
-                    rows = cur.fetchall() or []
-            return {(str(student_sub), str(task_id)) for student_sub, task_id in rows}
+            return repo.list_submission_pairs_for_students(
+                owner_sub=owner_sub,
+                course_id=course_id,
+                student_subs=student_subs,
+                task_ids=task_ids,
+            )
     except Exception:
         return set()
     return set()
@@ -1214,7 +1194,7 @@ async def create_learner_concern_box_entry(request: Request, payload: ConcernBox
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     if not has_role(user, "student"):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-    csrf = teaching_routes._csrf_guard(request)  # type: ignore[attr-defined]
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
 
@@ -1310,7 +1290,7 @@ async def archive_teacher_concern_box_entry(request: Request, entry_id: str):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
     if not teaching_routes._is_uuid_like(entry_id):  # type: ignore[attr-defined]
         return JSONResponse({"error": "bad_request", "detail": "invalid_entry_id"}, status_code=400, headers=_private_headers())
-    csrf = teaching_routes._csrf_guard(request)  # type: ignore[attr-defined]
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
 
@@ -1331,7 +1311,7 @@ async def restore_teacher_concern_box_entry(request: Request, entry_id: str):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
     if not teaching_routes._is_uuid_like(entry_id):  # type: ignore[attr-defined]
         return JSONResponse({"error": "bad_request", "detail": "invalid_entry_id"}, status_code=400, headers=_private_headers())
-    csrf = teaching_routes._csrf_guard(request)  # type: ignore[attr-defined]
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
 
@@ -1498,7 +1478,11 @@ async def get_teacher_unit_workspace(
         )
 
     owner_sub = str(user.get("sub") or "")
-    guard = teaching_routes._guard_unit_author(unit_id, owner_sub)  # type: ignore[attr-defined]
+    guard = teaching_guards._guard_unit_author(
+        unit_id,
+        owner_sub,
+        repo_provider=teaching_routes._get_repo,  # type: ignore[attr-defined]
+    )
     if guard:
         return guard
 
@@ -1721,7 +1705,11 @@ async def get_teacher_unit_node_editor(request: Request, unit_id: str, node_id: 
         return JSONResponse({"error": "bad_request", "detail": "invalid_node_id"}, status_code=400, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    guard = teaching_routes._guard_unit_author(unit_id, owner_sub)  # type: ignore[attr-defined]
+    guard = teaching_guards._guard_unit_author(
+        unit_id,
+        owner_sub,
+        repo_provider=teaching_routes._get_repo,  # type: ignore[attr-defined]
+    )
     if guard:
         return guard
 
@@ -1829,7 +1817,11 @@ async def get_teacher_course_context(request: Request, course_id: str, limit: in
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    guard = teaching_guards._guard_course_owner(
+        course_id,
+        owner_sub,
+        repo_provider=teaching_routes._get_current_teaching_repo_for_provider,
+    )
     if guard:
         return guard
 
@@ -1896,7 +1888,11 @@ async def get_teacher_course_ai_usage(
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    guard = teaching_guards._guard_course_owner(
+        course_id,
+        owner_sub,
+        repo_provider=teaching_routes._get_current_teaching_repo_for_provider,
+    )
     if guard:
         guard.headers.setdefault("Cache-Control", _private_headers()["Cache-Control"])
         return guard
@@ -1974,7 +1970,11 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    guard = teaching_guards._guard_course_owner(
+        course_id,
+        owner_sub,
+        repo_provider=teaching_routes._get_current_teaching_repo_for_provider,
+    )
     if guard:
         return guard
 
@@ -2021,7 +2021,11 @@ async def get_live_unit_matrix(request: Request, course_id: str, unit_id: str, l
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    guard = teaching_guards._guard_course_owner(
+        course_id,
+        owner_sub,
+        repo_provider=teaching_routes._get_current_teaching_repo_for_provider,
+    )
     if guard:
         return guard
 
@@ -2117,7 +2121,11 @@ async def get_live_course_units(request: Request, course_id: str):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    guard = teaching_guards._guard_course_owner(
+        course_id,
+        owner_sub,
+        repo_provider=teaching_routes._get_current_teaching_repo_for_provider,
+    )
     if guard:
         return guard
 
@@ -2219,7 +2227,11 @@ async def get_live_unit_dashboard(
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    guard = teaching_guards._guard_course_owner(
+        course_id,
+        owner_sub,
+        repo_provider=teaching_routes._get_current_teaching_repo_for_provider,
+    )
     if guard:
         return guard
 
@@ -2389,7 +2401,11 @@ async def get_live_detail_sheet(request: Request, course_id: str, unit_id: str, 
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    guard = teaching_routes._guard_course_owner(course_id, owner_sub)  # type: ignore[attr-defined]
+    guard = teaching_guards._guard_course_owner(
+        course_id,
+        owner_sub,
+        repo_provider=teaching_routes._get_current_teaching_repo_for_provider,
+    )
     if guard:
         return guard
 

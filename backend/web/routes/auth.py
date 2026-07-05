@@ -13,14 +13,6 @@ Notes:
 
 from __future__ import annotations
 
-import sys
-
-# Temporary compatibility while legacy tests still import `routes.auth`.
-if __name__ == "backend.web.routes.auth":
-    sys.modules.setdefault("routes.auth", sys.modules[__name__])
-elif __name__ == "routes.auth":
-    sys.modules.setdefault("backend.web.routes.auth", sys.modules[__name__])
-
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse, Response, HTMLResponse, JSONResponse
 from urllib.parse import urlencode

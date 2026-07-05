@@ -2,14 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
-# Ensure imports via `routes.learning` and `backend.web.routes.learning` point to the same module.
-if __name__ == "backend.web.routes.learning":
-    sys.modules.setdefault("routes.learning", sys.modules[__name__])
-elif __name__ == "routes.learning":
-    sys.modules.setdefault("backend.web.routes.learning", sys.modules[__name__])
-
 import base64
 import json
 import logging
@@ -76,9 +68,6 @@ from backend.web.material_file_access import (
 )
 import httpx
 from urllib.parse import urlparse as _urlparse, quote as _quote
-import psycopg
-
-
 learning_router = APIRouter(tags=["Learning"])
 logger = logging.getLogger("gustav.web.learning")
 
@@ -87,9 +76,9 @@ _STORAGE_ADAPTER_OVERRIDE_ACTIVE = False
 
 
 def _current_learning_module() -> object | None:
-    """Return the currently active learning module instance when available."""
+    """Return the active learning module instance."""
 
-    return _sys.modules.get("routes.learning") or _sys.modules.get("backend.web.routes.learning")
+    return _sys.modules.get("backend.web.routes.learning")
 
 
 def _current_storage_adapter() -> StorageAdapterProtocol:
@@ -132,7 +121,7 @@ def _sync_learning_route_globals(*, adapter: StorageAdapterProtocol, override_ac
     """Keep already-registered FastAPI learning routes bound to the latest adapter.
 
     Why:
-        Some tests deliberately reload `routes.learning` while keeping an older
+        Some tests deliberately reload `backend.web.routes.learning` while keeping an older
         `main.app` instance alive. FastAPI route callables keep the globals from
         the module instance they were created in, so updating only the freshly
         imported module would leave old route endpoints pointing at a stale
@@ -161,13 +150,13 @@ def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = Tru
 
     The update also retargets already-registered Learning route globals in
     existing FastAPI app instances. This keeps reload-heavy tests deterministic
-    when a fresh `routes.learning` module is imported after `main.app` was
+    when a fresh `backend.web.routes.learning` module is imported after `main.app` was
     constructed earlier in the same Python process.
     """
     global STORAGE_ADAPTER, _STORAGE_ADAPTER_OVERRIDE_ACTIVE
     STORAGE_ADAPTER = adapter
     _STORAGE_ADAPTER_OVERRIDE_ACTIVE = bool(override)
-    for module_name in ("routes.learning", "backend.web.routes.learning"):
+    for module_name in ("backend.web.routes.learning",):
         module = _sys.modules.get(module_name)
         if module is None:
             continue
@@ -445,7 +434,7 @@ def _cache_headers_error() -> dict[str, str]:
 
 
 def _teaching_storage_adapter() -> object | None:
-    for module_name in ("routes.teaching", "backend.web.routes.teaching"):
+    for module_name in ("backend.web.routes.teaching",):
         module = _sys.modules.get(module_name)
         if module is not None:
             return getattr(module, "STORAGE_ADAPTER", None)
@@ -828,7 +817,7 @@ def _get_repo() -> _LearningRepoCombined:
     global _REPO, REPO
     if _REPO is None:
         _REPO = DBLearningRepo()
-    # Keep the public alias in sync for tests that do `isinstance(routes.learning.REPO, ...)`.
+    # Keep the public alias in sync for tests that check `learning.REPO`.
     REPO = _REPO
     return _REPO
 
@@ -899,7 +888,7 @@ def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in
     global _REPO, REPO
     _REPO = repo
     REPO = repo
-    for module_name in ("routes.learning", "backend.web.routes.learning"):
+    for module_name in ("backend.web.routes.learning",):
         module = _sys.modules.get(module_name)
         if module is None:
             continue

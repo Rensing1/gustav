@@ -8,18 +8,11 @@ Why:
 """
 from __future__ import annotations
 
-import sys
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from typing import Dict
 from backend.identity_access.domain import ALLOWED_ROLES
 from backend.web.security.guards import has_any_role
-
-# Temporary compatibility while legacy tests still import `routes.users`.
-if __name__ == "backend.web.routes.users":
-    sys.modules.setdefault("routes.users", sys.modules[__name__])
-elif __name__ == "routes.users":
-    sys.modules.setdefault("backend.web.routes.users", sys.modules[__name__])
 
 
 users_router = APIRouter(tags=["Users"])  # explicit path below

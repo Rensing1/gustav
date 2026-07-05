@@ -426,11 +426,7 @@ def build_identity_map(dsn: str, legacy_schema: str, dry_run: bool, kc_config: K
 
         if kc_config:
             try:
-                import sys
-                root_dir = Path(__file__).resolve().parents[1]
-                if str(root_dir) not in sys.path:
-                    sys.path.append(str(root_dir))
-                from backend.tools.legacy_user_import import KeycloakAdminClient  # type: ignore
+                from .legacy_user_import import KeycloakAdminClient  # type: ignore
 
                 kc_client = KeycloakAdminClient.from_credentials(
                     base_url=kc_config.base_url,

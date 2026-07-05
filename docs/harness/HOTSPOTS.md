@@ -54,6 +54,7 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 - `backend/web/routes/app_session_helpers.py` übernimmt seit Closeout v1.1 Runtime-/Session-Store-Auflösung, private App-Header, BFF-Shared-Secret-Prüfung und kleine Session-/User-Payload-Builder.
 - `backend/web/routes/app_profile_helpers.py` übernimmt seit Closeout v1.1 reine Profil-Claims-, Namens-, Lock-Timestamp- und Identity-Attribute-Normalisierung. `backend/web/routes/app.py` behält die Keycloak-Admin-Schreibfunktionen und Kompatibilitätsaliase.
 - `backend/web/routes/app.py` ist dadurch von 2499 auf 2362 LOC gesunken. C4 ist damit begonnen, aber noch nicht abgeschlossen: CLI-Token-Flächen, View-Modelle und große Dashboard-/Live-App-Read-Models müssen weiter getrennt werden.
+- `backend/learning/repo_submission_mapping.py` übernimmt seit Closeout v1.1 Submission-Row-Mapping, öffentliche Fehler-Sanitizer und deterministische MVP-Analyse-/Feedback-Stubs. `backend/learning/repo_db.py` ist dadurch von 2425 auf 2249 LOC gesunken. C5 ist damit begonnen, aber noch nicht abgeschlossen: Course/Unit-Read-Modelle, Submission-Schreibfälle und Worker-nahe DB-Zugriffe müssen weiter getrennt werden.
 
 ## Regel
 Hotspots dürfen nicht ohne bewusst dokumentierten Grund wachsen. Kleine Extraktionen brauchen passende Contract- oder Komponententest-Abdeckung. Die monatliche Scorecard dokumentiert LOC-Veränderungen; relevantes Wachstum braucht entweder eine getestete Extraktion oder einen expliziten Tech-Debt-Eintrag mit Exit-Kriterium.

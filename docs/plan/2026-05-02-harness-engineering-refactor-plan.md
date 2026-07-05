@@ -1047,6 +1047,7 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
 - Akzeptanz:
   - `backend/learning/repo_db.py` wird kleiner und enthält eine klare Aggregations- oder Fassadenrolle.
   - Learning-Worker-, Submission-, Material-, RLS- und Migrationstests bleiben grün.
+- Done in working tree: `backend/learning/repo_submission_mapping.py` übernimmt Submission-Row-Mapping, öffentliche Fehler-Sanitizer und deterministische MVP-Analyse-/Feedback-Stubs; `backend/learning/repo_db.py` hängt diese Funktionen als Kompatibilitäts-staticmethods an `DBLearningRepo`. Existing Submission-Mapping-, Sanitizer- und Worker-Fehlercode-Tests schützen diesen Schnitt. `backend/learning/repo_db.py` liegt nach diesem Schnitt bei 2249 LOC.
 
 #### C6: CSS, Legacy-Static und Frontend-Hotspots klassifizieren
 - Problem: `frontend/src/lib/styles/app.css`, `frontend/src/lib/styles/design-system.css`, `backend/web/static/css/gustav.css` und große Legacy-JS-Dateien sind groß genug, um unklare aktive und retired UI-Regeln zu vermischen.

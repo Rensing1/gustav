@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 import json
 import os
 import re
 from uuid import UUID, uuid5
+from backend.learning.repo_submission_mapping import (
+    build_analysis_payload as _build_analysis_payload,
+    build_scores as _build_scores,
+    image_text_stub as _image_text_stub,
+    pdf_text_stub as _pdf_text_stub,
+    render_feedback as _render_feedback,
+    row_to_submission as _row_to_submission,
+    sanitize_error_message as _sanitize_error_message,  # noqa: F401
+)
 from backend.learning.submission_kind_policy import validate_task_submission_kind
 
 try:  # pragma: no cover -- optional dependency in some environments
@@ -23,11 +32,6 @@ except Exception:  # pragma: no cover
     Connection = Any  # type: ignore
     HAVE_PSYCOPG = False
 
-_ERROR_MAX_LENGTH = 256
-_SENSITIVE_TOKEN_PATTERN = re.compile(r"(?i)(secret|token|password|key)[-_a-z0-9]*\s*[:=]\s*\S+")
-_FILESYSTEM_PATH_PATTERN = re.compile(r"(?:[A-Za-z]:\\[^\s]+|/[^\s]+)")
-
-
 def _validate_task_submission_kind(*, task_kind: str, submission_kind: str, mime_type: str | None) -> None:
     """Backward-compatible wrapper for the shared Learning policy."""
     validate_task_submission_kind(
@@ -35,20 +39,6 @@ def _validate_task_submission_kind(*, task_kind: str, submission_kind: str, mime
         submission_kind=submission_kind,
         mime_type=mime_type,
     )
-
-
-def _sanitize_error_message(value: Optional[str]) -> Optional[str]:
-    """Strip secrets and truncate lengthy adapter errors for safe exposure."""
-    if not value:
-        return None
-    collapsed = " ".join(str(value).split())
-    if not collapsed:
-        return None
-    scrubbed = _SENSITIVE_TOKEN_PATTERN.sub("[redacted]", collapsed)
-    scrubbed = _FILESYSTEM_PATH_PATTERN.sub("[path]", scrubbed)
-    if len(scrubbed) > _ERROR_MAX_LENGTH:
-        scrubbed = scrubbed[: _ERROR_MAX_LENGTH - 3].rstrip() + "..."
-    return scrubbed
 
 
 def _running_under_pytest() -> bool:
@@ -159,6 +149,13 @@ class SubmissionInput:
 
 class DBLearningRepo:
     """Persistence adapter used by Learning use cases."""
+
+    _render_feedback = staticmethod(_render_feedback)
+    _build_analysis_payload = staticmethod(_build_analysis_payload)
+    _build_scores = staticmethod(_build_scores)
+    _image_text_stub = staticmethod(_image_text_stub)
+    _pdf_text_stub = staticmethod(_pdf_text_stub)
+    _row_to_submission = staticmethod(_row_to_submission)
 
     def __init__(self, dsn: Optional[str] = None) -> None:
         if not HAVE_PSYCOPG:
@@ -2208,179 +2205,6 @@ class DBLearningRepo:
         if reg and reg[0]:
             return "learning_submission_jobs"
         raise RuntimeError("Queue table public.learning_submission_jobs missing; run migrations.")
-
-    @staticmethod
-    def _render_feedback(kind: str, attempt: int) -> str:
-        if kind == "text":
-            return f"Attempt {attempt}: Thanks for your explanation."
-        if kind == "file":
-            return f"Attempt {attempt}: PDF submission received."
-        return f"Attempt {attempt}: Image submission received."
-
-    def _build_analysis_payload(
-        self,
-        *,
-        kind: str,
-        text_body: Optional[str],
-        storage_key: Optional[str],
-        sha256: Optional[str],
-        criteria: Sequence[str],
-    ) -> dict:
-        """Produce the synchronous analysis stub used until ML integration.
-
-        Why:
-            MVP returns immediate formative feedback to help Lernende reflektieren,
-            bevor echte Modelle (OCR, Scoring) angeschlossen werden. Wir liefern
-            deterministische, leicht nachvollziehbare Inhalte:
-            - text: Originaltext (getrimmt)
-            - image: "OCR placeholder for <basename|hash>"
-            - file (PDF): "PDF text placeholder for <basename|hash>"
-
-        Security:
-            Keine Dateiinhalte werden zurückgegeben; nur Platzhaltertexte.
-        """
-        if kind == "text":
-            text = (text_body or "").strip()
-        elif kind == "file":
-            # MVP: show placeholder that mimics extracted PDF text for history
-            text = self._pdf_text_stub(storage_key, sha256)
-        else:
-            text = self._image_text_stub(storage_key, sha256)
-        length = len(text)
-        scores = self._build_scores(criteria, length)
-        return {
-            "text": text,
-            "length": length,
-            "scores": scores,
-        }
-
-    def _build_scores(self, criteria: Sequence[str], text_length: int) -> List[dict]:
-        """Generate rubric-style scores with deterministic, easy-to-read values."""
-        names = [c for c in criteria if c]
-        if not names:
-            names = ["Submission"]
-        # Simple heuristic: longer answers receive slightly higher stub scores.
-        base_score = 6 if text_length < 20 else 8
-        scores: List[dict] = []
-        for index, criterion in enumerate(names):
-            score = min(10, base_score + min(index, 2))
-            scores.append(
-                {
-                    "criterion": criterion,
-                    "score": score,
-                    "explanation": "Stubbed analysis until machine learning is integrated.",
-                }
-            )
-        return scores
-
-    @staticmethod
-    def _image_text_stub(storage_key: Optional[str], sha256: Optional[str]) -> str:
-        """Derive a deterministic textual placeholder for OCR output."""
-        if storage_key:
-            token = storage_key.split("/")[-1]
-        elif sha256:
-            token = sha256[:12]
-        else:
-            token = "image"
-        return f"OCR placeholder for {token}"
-
-    @staticmethod
-    def _pdf_text_stub(storage_key: Optional[str], sha256: Optional[str]) -> str:
-        """Produce a stable placeholder for PDF-derived text.
-
-        Intention: In der Historie zeigen wir den extrahierten Text (später OCR),
-        jetzt ein Platzhalter mit Dateinamen/Hash für Lernzwecke.
-        """
-        if storage_key:
-            token = storage_key.split("/")[-1]
-        elif sha256:
-            token = sha256[:12]
-        else:
-            token = "document.pdf"
-        return f"PDF text placeholder for {token}"
-
-    @staticmethod
-    def _row_to_submission(row: Iterable[Any]) -> dict:
-        """Map a DB row to an API submission dict with safe fallbacks.
-
-        Why:
-            Only completed submissions expose `analysis_json`. Historical rows
-            may still miss optional fields, so for completed states we
-            synthesize a minimal payload to keep learner history readable.
-        """
-        (
-            submission_id,
-            attempt_nr,
-            intent,
-            kind,
-            score_raw,
-            score_max,
-            text_body,
-            mime_type,
-            size_bytes,
-            storage_key,
-            sha256,
-            status,
-            analysis_raw,
-            feedback_md,
-            error_code,
-            vision_attempts,
-            vision_last_error,
-            feedback_last_attempt_at,
-            feedback_last_error,
-            created_at,
-            completed_at,
-        ) = list(row)
-        if kind == "h5p":
-            analysis_payload = None
-        elif status != "completed":
-            analysis_payload = None
-        else:
-            analysis_payload = analysis_raw
-            if isinstance(analysis_payload, str):
-                try:
-                    analysis_payload = json.loads(analysis_payload)
-                except Exception:  # pragma: no cover - defensive
-                    pass
-            # Synthesize fallback analysis text when missing/empty
-            if not isinstance(analysis_payload, dict):
-                analysis_payload = {}
-            existing_text = str(
-                (analysis_payload.get("text") if isinstance(analysis_payload, dict) else "") or ""
-            )
-            if not existing_text.strip():
-                if kind == "text":
-                    analysis_payload["text"] = (text_body or "").strip()
-                elif kind == "file":
-                    analysis_payload["text"] = DBLearningRepo._pdf_text_stub(storage_key, sha256)
-                else:
-                    analysis_payload["text"] = DBLearningRepo._image_text_stub(storage_key, sha256)
-        telemetry_attempts = int(vision_attempts or 0)
-        return {
-            "id": submission_id,
-            "attempt_nr": int(attempt_nr),
-            "intent": intent,
-            "kind": kind,
-            "score_raw": score_raw,
-            "score_max": score_max,
-            "text_body": text_body,
-            "mime_type": mime_type,
-            "size_bytes": size_bytes,
-            "storage_key": storage_key,
-            "sha256": sha256,
-            "analysis_status": status,
-            "analysis_json": analysis_payload,
-            # Expose feedback only after analysis is fully completed.
-            "feedback_md": feedback_md if status == "completed" else None,
-            "error_code": error_code,
-            "vision_attempts": telemetry_attempts,
-            "vision_last_error": _sanitize_error_message(vision_last_error),
-            "feedback_last_attempt_at": feedback_last_attempt_at,
-            "feedback_last_error": _sanitize_error_message(feedback_last_error),
-            # created_at/completed_at already returned as ISO strings
-            "created_at": created_at,
-            "completed_at": completed_at,
-        }
 
     # ------------------------------------------------------------------
     def mark_extracted(self, *, submission_id: str, page_keys: List[str]) -> None:

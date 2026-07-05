@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import importlib
 from typing import Sequence
-import os
 
 import pytest
 import httpx
@@ -339,7 +338,7 @@ async def test_reorder_rejects_invalid_uuid_in_payload(monkeypatch: pytest.Monke
         unit = await _create_unit(client, title="Elektrizität")
         section = await _create_section(client, unit["id"], title="Strom")
         m1 = await _create_material(client, unit["id"], section["id"], title="A", body="A")
-        m2 = await _create_material(client, unit["id"], section["id"], title="B", body="B")
+        await _create_material(client, unit["id"], section["id"], title="B", body="B")
         m3 = await _create_material(client, unit["id"], section["id"], title="C", body="C")
 
         invalid = await client.post(

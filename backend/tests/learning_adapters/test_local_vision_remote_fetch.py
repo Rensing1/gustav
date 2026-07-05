@@ -537,7 +537,7 @@ def test_resolve_image_bytes_prefers_local_and_returns_meta(monkeypatch: pytest.
     submission = {"id": "sub-local", "course_id": "course", "task_id": "task", "student_sub": "student"}
     job_payload = {"mime_type": "image/png", "storage_key": str(data_path.relative_to(storage_root))}
 
-    meta: Dict = {}
+    meta: dict = {}
     image_b64 = helper(
         submission=submission,
         job_payload=job_payload,

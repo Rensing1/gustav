@@ -6,7 +6,6 @@ config, and that the generated storage key follows the helper's shape.
 """
 from __future__ import annotations
 
-import os
 import re
 import uuid
 import httpx

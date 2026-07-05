@@ -175,8 +175,8 @@ def test_backend_lint_target_is_explicit_but_not_yet_part_of_verify() -> None:
     assert "lint-backend" in help_text
     assert "backend/web/requirements.txt" in lint_body
     assert "python -m ruff check backend --select F" in lint_body
-    assert "--exclude 'backend/tests/*'" in lint_body
-    assert "--exclude 'backend/tests_e2e/*'" in lint_body
+    assert "--exclude 'backend/tests/*'" not in lint_body
+    assert "--exclude 'backend/tests_e2e/*'" not in lint_body
     assert "python -m ruff format --check backend" not in lint_body
     assert "$(MAKE) lint-backend" not in verify_body
 

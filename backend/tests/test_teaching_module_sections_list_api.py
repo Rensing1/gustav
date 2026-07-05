@@ -10,7 +10,6 @@ the API is implemented according to the OpenAPI contract.
 """
 from __future__ import annotations
 
-import os
 import importlib
 
 import pytest

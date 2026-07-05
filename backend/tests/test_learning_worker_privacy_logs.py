@@ -60,7 +60,7 @@ async def test_worker_logs_do_not_include_text_body(caplog):
     repo = DBLearningRepo(dsn=dsn)
     usecase = CreateSubmissionUseCase(repo)
     secret_text = "SUPER-SECRET-STUDENT-CONTENT"
-    submission = usecase.execute(
+    usecase.execute(
         CreateSubmissionInput(
             course_id=fixture.course_id,
             task_id=fixture.task["id"],

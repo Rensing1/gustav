@@ -5,7 +5,6 @@ Validates that owner-scoped GET responses include Vary: Origin for cache safety.
 """
 from __future__ import annotations
 
-import os
 import importlib
 
 import pytest

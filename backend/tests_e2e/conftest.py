@@ -9,7 +9,6 @@ Behavior:
   against docker-compose, export RUN_E2E=1 to enable these tests.
 """
 import os
-import sys
 import re
 from pathlib import Path
 
@@ -47,7 +46,6 @@ def _configure_requests_tls_for_local_e2e() -> None:
     except Exception:
         pass
     try:
-        import requests  # type: ignore
         from requests.sessions import Session  # type: ignore
 
         original_request = Session.request

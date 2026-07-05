@@ -7,8 +7,6 @@ We verify two properties for the fallback HEAD metadata probe:
 """
 from __future__ import annotations
 
-import os
-import types
 import pytest
 
 from backend.teaching.storage_supabase import SupabaseStorageAdapter

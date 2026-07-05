@@ -43,8 +43,6 @@ def _sys_path_mutations(path: Path) -> list[str]:
 
 
 def test_conftest_does_not_mutate_sys_path() -> None:
-    text = CONFTEST.read_text(encoding="utf-8")
-
     assert _sys_path_mutations(CONFTEST) == []
 
 

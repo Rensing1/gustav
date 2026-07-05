@@ -6,7 +6,6 @@ root and verify that page PNGs are written and the repo is marked extracted.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 
 class _FakeRepo:
@@ -46,7 +45,6 @@ def test_dev_try_process_pdf_renders_and_persists(tmp_path, monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "")  # ensure no external wiring
 
     import importlib
-    from backend.web import routes as _routes
     learning = importlib.import_module("backend.web.routes.learning")
 
     # Wire helper dependencies: bucket resolver and repo

@@ -7,7 +7,6 @@ regardless of JWKS 'alg' value.
 
 from __future__ import annotations
 
-import types
 import pytest
 
 from backend.identity_access.tokens import verify_id_token, IDTokenVerificationError

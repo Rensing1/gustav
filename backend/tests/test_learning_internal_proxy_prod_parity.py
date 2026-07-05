@@ -44,7 +44,7 @@ async def test_upload_proxy_raises_502_on_exception(monkeypatch: pytest.MonkeyPa
     learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
-    student = store.create(sub="s-proxy-err", name="S", roles=["student"])
+    store.create(sub="s-proxy-err", name="S", roles=["student"])
 
     # Monkeypatch async forwarder to raise
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
@@ -63,7 +63,7 @@ async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatc
     learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
-    student = store.create(sub="s-proxy-500", name="S", roles=["student"])
+    store.create(sub="s-proxy-500", name="S", roles=["student"])
 
     class _Resp:
         status_code = 500

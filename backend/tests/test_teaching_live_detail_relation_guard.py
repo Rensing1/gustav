@@ -6,7 +6,6 @@ unit that is attached to the course (owner scope).
 """
 from __future__ import annotations
 
-import uuid
 import pytest
 import httpx
 import importlib

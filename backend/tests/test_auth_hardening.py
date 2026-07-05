@@ -18,7 +18,7 @@ from httpx import ASGITransport
 
 from backend.identity_access.oidc import OIDCConfig
 from backend.identity_access.stores import SessionStore, SessionRecord, StateStore
-from backend.tests.runtime_auth_helpers import install_oidc_client, install_session_store
+from backend.tests.runtime_auth_helpers import install_oidc_client
 from backend.web.auth_runtime import AuthSettings
 from backend.web.components.navigation import Navigation
 

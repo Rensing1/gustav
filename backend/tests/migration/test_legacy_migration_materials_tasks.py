@@ -223,7 +223,7 @@ def test_materials_and_tasks_migrate_with_audit() -> None:
         _prepare_tables(conn)
         unit_id, section_ids = _seed_units_sections(conn)
         mid_md, mid_file = _seed_materials(conn, section_ids)
-        tid = _seed_tasks(conn, section_ids[0])
+        _seed_tasks(conn, section_ids[0])
 
     runner = CliRunner()
     result = runner.invoke(

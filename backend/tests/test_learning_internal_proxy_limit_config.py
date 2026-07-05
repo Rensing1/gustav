@@ -7,7 +7,6 @@ limit are rejected with 400 without reaching the upstream.
 from __future__ import annotations
 
 import importlib
-import os
 import pytest
 import httpx
 from httpx import ASGITransport

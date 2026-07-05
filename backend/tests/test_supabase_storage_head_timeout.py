@@ -6,7 +6,6 @@ prevent hangs during network issues.
 """
 from __future__ import annotations
 
-import types
 import pytest
 
 from backend.teaching.storage_supabase import SupabaseStorageAdapter

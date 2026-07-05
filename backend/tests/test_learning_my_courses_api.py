@@ -11,7 +11,6 @@ from __future__ import annotations
 import importlib
 from dataclasses import dataclass
 from uuid import uuid4
-import os
 
 import pytest
 import httpx

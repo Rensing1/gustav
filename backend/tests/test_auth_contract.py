@@ -6,16 +6,13 @@ authentication slice (login, callback, logout, me, forgot). External IdP
 interactions (Keycloak) are not performed here; we only assert HTTP contracts.
 """
 
-import os
 import base64
 import importlib
 from http.cookies import SimpleCookie
 
 import pytest
-import anyio
 import httpx
 from httpx import ASGITransport
-from pathlib import Path
 import time
 from typing import Dict, Callable
 from jose import jwt
@@ -563,7 +560,6 @@ async def test_logout_requires_authentication():
 @pytest.mark.anyio
 async def test_logout_clears_cookie():
     # With a (fake) session cookie, logout should clear it
-    cookies = {"gustav_session": "fake-session"}
     app = create_app_auth_only()
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         client.cookies.set("gustav_session", "fake-session")

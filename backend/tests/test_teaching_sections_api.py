@@ -36,7 +36,7 @@ async def test_sections_require_auth_and_author_role(monkeypatch: pytest.MonkeyP
     store = install_session_store(monkeypatch, main)
 
     async with (await _client()) as client:
-        resp = await client.get(f"/api/teaching/units/00000000-0000-0000-0000-000000000000/sections")
+        resp = await client.get("/api/teaching/units/00000000-0000-0000-0000-000000000000/sections")
         assert resp.status_code == 401
 
     # Student must be forbidden
@@ -44,7 +44,7 @@ async def test_sections_require_auth_and_author_role(monkeypatch: pytest.MonkeyP
     async with (await _client()) as client:
         client.cookies.set("gustav_session", student.session_id)
         resp = await client.post(
-            f"/api/teaching/units/00000000-0000-0000-0000-000000000000/sections",
+            "/api/teaching/units/00000000-0000-0000-0000-000000000000/sections",
             json={"title": "Nope"},
         )
         assert resp.status_code == 403

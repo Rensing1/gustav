@@ -59,7 +59,7 @@ async def test_worker_bypasses_vision_for_text_and_preserves_text(monkeypatch: p
         conn.commit()
     repo = DBLearningRepo(dsn=dsn)
     usecase = CreateSubmissionUseCase(repo)
-    submission = usecase.execute(
+    usecase.execute(
             CreateSubmissionInput(
                 course_id=fixture.course_id,
                 task_id=fixture.task["id"],

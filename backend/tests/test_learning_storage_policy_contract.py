@@ -9,7 +9,6 @@ of duplicating them inside the FastAPI router.
 import importlib
 import re
 
-import pytest
 
 
 def _import(name: str):

@@ -12,7 +12,7 @@ implementing the protocol, supporting KISS + Clean Architecture goals.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 import pytest
 

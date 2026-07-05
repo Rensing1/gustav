@@ -67,7 +67,7 @@ def test_stream_hash_from_url_allows_supabase_public_host(monkeypatch) -> None:
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:443")
     monkeypatch.setenv("SUPABASE_PUBLIC_URL", "https://app.localhost")
 
-    state = _install_fake_httpx(monkeypatch, chunks=[b"hello"])
+    _install_fake_httpx(monkeypatch, chunks=[b"hello"])
 
     ok, sha, size, reason = verification._stream_hash_from_url("https://app.localhost/storage/v1/object/foo")
 

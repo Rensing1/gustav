@@ -39,7 +39,7 @@ Initialer lokaler Befehl:
 
 Aktueller Status:
 - `make lint-backend` ist als expliziter Target vorhanden.
-- Das Profil prüft zunächst nur Pyflakes (`F`) für produktiven Backend-Code und nimmt `backend/tests/*` sowie `backend/tests_e2e/*` aus.
+- Das Profil prüft zunächst Pyflakes (`F`) für den gesamten Backend-Baum inklusive Tests und E2E-Tests.
 - Das Profil ist bewusst nicht Teil von `make verify`, bis Ruff-Format, Importordnung, Tests und Type-Checking als realistische Baseline bereinigt sind.
 - Wenn Closeout v1.1 ohne hartes Lint- oder Type-Gate abgeschlossen wird, muss der Restzustand in `docs/harness/TECH_DEBT.md` mit Owner, Review date, Risiko und Exit criterion dokumentiert werden.
 

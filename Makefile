@@ -132,7 +132,7 @@ test-fast:
 .PHONY: lint-backend
 lint-backend:
 	@. ./.venv/bin/activate && python -c "import ruff" >/dev/null 2>&1 || { echo "Ruff is not installed. Install Python dependencies with: ./.venv/bin/python -m pip install -r backend/web/requirements.txt" >&2; exit 1; }
-	. ./.venv/bin/activate && python -m ruff check backend --select F --exclude 'backend/tests/*' --exclude 'backend/tests_e2e/*'
+	. ./.venv/bin/activate && python -m ruff check backend --select F
 
 .PHONY: test-db-security
 test-db-security:

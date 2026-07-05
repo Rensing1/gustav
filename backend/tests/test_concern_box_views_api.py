@@ -60,7 +60,7 @@ async def test_learner_concern_box_view_returns_current_courses(monkeypatch: pyt
     student_sub = _unique_sub("student-concern")
     teacher = store.create(sub=teacher_sub, roles=["teacher"], name="Ada", ttl_seconds=60)
     student = store.create(sub=student_sub, roles=["student"], name="Lena", ttl_seconds=60)
-    teacher_headers = _mock_bearer_auth(monkeypatch, sub=teacher_sub, roles=["teacher"], name="Ada")
+    _mock_bearer_auth(monkeypatch, sub=teacher_sub, roles=["teacher"], name="Ada")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         client.cookies.set("gustav_session", teacher.session_id)
@@ -176,7 +176,7 @@ async def test_learner_concern_box_write_requires_bearer_even_with_cookie_sessio
 async def test_learner_concern_box_rejects_invalid_course_id_as_bad_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = install_session_store(monkeypatch, main)
+    install_session_store(monkeypatch, main)
     learner_headers = _mock_bearer_auth(
         monkeypatch, sub="student-invalid-course", roles=["student"], name="Lena"
     )

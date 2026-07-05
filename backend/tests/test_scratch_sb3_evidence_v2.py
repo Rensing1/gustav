@@ -9,7 +9,6 @@ Intent:
 
 from __future__ import annotations
 
-import pytest
 
 
 def _min_project(*, sprite_blocks: dict) -> dict:

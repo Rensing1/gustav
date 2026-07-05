@@ -796,7 +796,7 @@ async def test_course_modules_delete_resequences_positions(monkeypatch: pytest.M
         unit_b = await _create_unit(client, title="B")
         unit_c = await _create_unit(client, title="C")
 
-        mod_a = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_a["id"]})).json()
+        await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_a["id"]})
         mod_b = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_b["id"]})).json()
         _mod_c = (await client.post(f"/api/teaching/courses/{course_id}/modules", json={"unit_id": unit_c["id"]})).json()
 

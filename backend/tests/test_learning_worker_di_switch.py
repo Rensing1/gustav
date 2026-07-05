@@ -11,7 +11,6 @@ We patch `import_module` and `run_forever` to avoid network and infinite loops.
 
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace
 
 import pytest

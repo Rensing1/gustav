@@ -116,7 +116,7 @@ async def test_teacher_course_context_returns_course_members_and_units(
 async def test_teacher_course_context_forbids_non_owner(monkeypatch: pytest.MonkeyPatch) -> None:
     store = install_session_store(monkeypatch, main)
     owner = store.create(sub="teacher-owner", roles=["teacher"], name="Ada", ttl_seconds=60)
-    outsider = store.create(sub="teacher-outsider", roles=["teacher"], name="Linus", ttl_seconds=60)
+    store.create(sub="teacher-outsider", roles=["teacher"], name="Linus", ttl_seconds=60)
     outsider_headers = _mock_bearer_auth(monkeypatch, sub="teacher-outsider", roles=["teacher"], name="Linus")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:

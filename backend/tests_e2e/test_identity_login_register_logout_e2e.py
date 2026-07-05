@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import time
 import re
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urljoin, urlparse
 
 import pytest
 import requests

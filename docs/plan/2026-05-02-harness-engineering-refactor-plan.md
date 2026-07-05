@@ -1095,7 +1095,7 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
   - Neu extrahierte Module verletzen die gewählte Lint-Baseline nicht.
   - Wenn Type-Checking noch nicht hart aktiviert wird, ist der Restzustand mit Exit-Kriterium in `docs/harness/TECH_DEBT.md` dokumentiert.
 - Done in working tree: `pyproject.toml` definiert eine zentrale Ruff-Konfiguration; `backend/web/requirements.txt` installiert Ruff über die bestehende Python-Requirements-Datei.
-- Done in working tree: `make lint-backend` prüft zunächst Pyflakes (`F`) für produktiven Backend-Code und nimmt `backend/tests/*` sowie `backend/tests_e2e/*` aus, damit kein unreifer Full-Repo-Stilcheck als hartes Gate eingeführt wird.
+- Done in working tree: `make lint-backend` prüft zunächst Pyflakes (`F`) für den gesamten Backend-Baum inklusive Tests und E2E-Tests, damit Syntax-, Namens- und ungenutzte Import-/Variablenprobleme nicht weiter anwachsen.
 - Done in working tree: 38 produktive Pyflakes-Befunde wurden bereinigt oder als bewusst benötigter Kompatibilitätsalias markiert; `backend.web.main.SESSION_COOKIE_NAME` bleibt mit `# noqa: F401` als öffentlicher Test-/Kompatibilitätsalias erhalten.
 
 #### C11: Dead Code, Legacy-Reste und ungenutzte Assets entfernen
@@ -1158,6 +1158,7 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
 - Akzeptanz:
   - Die Testsuite enthält keine neu eingeführten rein mechanischen Tests ohne fachlichen, vertraglichen oder sicherheitsbezogenen Nutzen.
   - Bereinigte Testbereiche bleiben durch fokussierte Verifikation grün.
+- Done in working tree: Pyflakes läuft über die Testsuite; 62 Test-/E2E-Befunde wurden bereinigt, darunter ungenutzte Imports, wirkungslose lokale Variablen und ein fehlender Typname in einem Vision-Adapter-Test.
 
 #### C16: Performance- und N+1-Risiken bei großen Read-Flows prüfen
 - Problem: Teaching-Dashboards, Learning-Analytics, Submission-Übersichten und H5P-Statusflüsse können durch gut gemeinte Modul-Splits unbemerkt mehr Datenbankabfragen, Storage-Aufrufe oder Netzwerkübergänge auslösen.

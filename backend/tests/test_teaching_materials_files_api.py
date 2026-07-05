@@ -84,8 +84,6 @@ class FakeStorageAdapter:
 
     def presign_upload(self, **kwargs):
         self.presign_upload_calls.append(kwargs)
-        bucket = kwargs.get("bucket", "materials")
-        key = kwargs.get("key", "")
         headers = kwargs.get("headers", {})
         return {
             "url": "http://storage.local/upload",

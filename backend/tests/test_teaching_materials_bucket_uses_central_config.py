@@ -10,7 +10,6 @@ Expected to fail until materials service uses backend.storage.config.
 from __future__ import annotations
 
 import importlib
-import os
 
 
 def test_teaching_materials_service_uses_central_config(monkeypatch):

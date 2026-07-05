@@ -11,7 +11,6 @@ import importlib
 import os
 import sys
 from dataclasses import dataclass
-import json
 from typing import Sequence
 from uuid import uuid4
 
@@ -883,7 +882,6 @@ async def test_finalize_latest_feedback_submission_creates_final_submission_with
 
     _require_db_or_skip()
     import psycopg  # type: ignore
-    from backend.learning.repo_db import _dsn  # type: ignore
 
     service_dsn = os.getenv("SERVICE_ROLE_DSN") or os.getenv("RLS_TEST_SERVICE_DSN") or os.getenv("DATABASE_URL")
     if not service_dsn:
@@ -1676,7 +1674,7 @@ async def test_list_submissions_requires_authentication(monkeypatch: pytest.Monk
 
     async with (await _client()) as client:
         resp = await client.get(
-            f"/api/learning/courses/00000000-0000-0000-0000-000000000000/tasks/00000000-0000-0000-0000-000000000000/submissions",
+            "/api/learning/courses/00000000-0000-0000-0000-000000000000/tasks/00000000-0000-0000-0000-000000000000/submissions",
             params={"limit": 10, "offset": 0},
         )
 

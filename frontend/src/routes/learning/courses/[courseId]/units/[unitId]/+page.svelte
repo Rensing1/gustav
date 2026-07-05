@@ -46,6 +46,17 @@
     type ReviewFocusByPane,
     type SubmissionFocusState
   } from "$lib/learning-unit/workspace";
+  import {
+    clamp,
+    defaultLayoutPreferences,
+    defaultLinearWorkspaceState,
+    defaultModularWorkspaceState,
+    defaultWorkspaceChrome,
+    normalizeLayoutPreferences,
+    type LayoutPreferences,
+    type LinearWorkspaceState,
+    type ModularWorkspaceState
+  } from "$lib/learning-unit/layout";
   import { highlightedLearnerGraphModuleIds } from "$lib/learning-unit/graph-selection";
   import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type {
@@ -59,31 +70,6 @@
   import type { ActionData, PageData } from "./$types";
 
   type ModularRestoreState = "idle" | "restoring" | "ready" | "failed";
-  type ModularWorkspaceState = {
-    view: LearningUnitViewState;
-    openTabs: string[];
-    activeTab: string | null;
-    splitView: boolean;
-    tocOpen: boolean;
-    activePane: PaneId;
-    paneStacks: PaneStacks | null;
-    submissionFocus: Record<PaneId, SubmissionFocusState>;
-  };
-  type LinearWorkspaceState = {
-    splitView: boolean;
-    tocOpen: boolean;
-    activePane: PaneId;
-    paneStacks: PaneStacks | null;
-    submissionFocus: Record<PaneId, SubmissionFocusState>;
-  };
-  type LayoutPreferences = {
-    tocWidth: number;
-    workspaceWidth: number;
-    splitRatio: number;
-    tocGap: number;
-    paneGap: number;
-    fontScale: number;
-  };
   type StoredWorkspaceState = {
     version: 11 | 12 | 13 | 14 | 15 | 16;
     modular?: Partial<ModularWorkspaceState>;
@@ -104,15 +90,15 @@
   let flowEdges = $state.raw<TeacherFlowEdge[]>([]);
   let graphBusy = $state(false);
   let graphState = $state<LearningUnitGraph | null>(null);
-  let modularWorkspace = $state<ModularWorkspaceState>(defaultModularWorkspaceState());
-  let linearWorkspace = $state<LinearWorkspaceState>(defaultLinearWorkspaceState());
+  let modularWorkspace = $state<ModularWorkspaceState>(defaultModularWorkspaceState(currentViewportWidth()));
+  let linearWorkspace = $state<LinearWorkspaceState>(defaultLinearWorkspaceState(currentViewportWidth()));
   let moduleCache = $state.raw<Record<string, LearningModuleContent>>({});
   let moduleLoading = $state.raw<Record<string, boolean>>({});
   let moduleErrors = $state.raw<Record<string, string | null>>({});
   let workspaceReady = $state(false);
   let historyRestored = $state(false);
   let modularSettingsMenuOpen = $state(false);
-  let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences());
+  let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences(currentViewportWidth()));
   let workspaceRoot = $state<HTMLDivElement | null>(null);
   let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({});
   let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>({});
@@ -148,128 +134,6 @@
 
   function currentViewportWidth(): number {
     return browser ? window.innerWidth : 1280;
-  }
-
-  function viewportLayoutBucket(viewportWidth: number): "compact" | "medium" | "wide" | "xwide" {
-    if (viewportWidth < 760) {
-      return "compact";
-    }
-    if (viewportWidth < 1180) {
-      return "medium";
-    }
-    if (viewportWidth < 1500) {
-      return "wide";
-    }
-    return "xwide";
-  }
-
-  function viewportWorkspaceWidth(viewportWidth: number, preferredRem: number): number {
-    const viewportBasedRem = (viewportWidth - 48) / 16;
-    return clamp(Math.floor(Math.min(preferredRem, viewportBasedRem) * 2) / 2, 16, 320);
-  }
-
-  function defaultWorkspaceChrome(viewportWidth = currentViewportWidth()): Pick<ModularWorkspaceState, "splitView" | "tocOpen" | "activePane"> {
-    const bucket = viewportLayoutBucket(viewportWidth);
-    if (bucket === "compact") {
-      return { splitView: false, tocOpen: false, activePane: "left" };
-    }
-    if (bucket === "medium") {
-      return { splitView: false, tocOpen: false, activePane: "left" };
-    }
-    return { splitView: false, tocOpen: true, activePane: "left" };
-  }
-
-  function defaultModularWorkspaceState(viewportWidth = currentViewportWidth()): ModularWorkspaceState {
-    const chromeDefaults = defaultWorkspaceChrome(viewportWidth);
-    return {
-      view: "overview",
-      openTabs: [],
-      activeTab: null,
-      splitView: chromeDefaults.splitView,
-      tocOpen: chromeDefaults.tocOpen,
-      activePane: chromeDefaults.activePane,
-      paneStacks: null,
-      submissionFocus: emptySubmissionFocus()
-    };
-  }
-
-  function defaultLinearWorkspaceState(viewportWidth = currentViewportWidth()): LinearWorkspaceState {
-    const chromeDefaults = defaultWorkspaceChrome(viewportWidth);
-    return {
-      splitView: chromeDefaults.splitView,
-      tocOpen: chromeDefaults.tocOpen,
-      activePane: chromeDefaults.activePane,
-      paneStacks: null,
-      submissionFocus: emptySubmissionFocus()
-  };
-  }
-
-  function defaultLayoutPreferences(viewportWidth = currentViewportWidth()): LayoutPreferences {
-    const bucket = viewportLayoutBucket(viewportWidth);
-    if (bucket === "compact") {
-      return {
-        tocWidth: 14.5,
-        workspaceWidth: viewportWorkspaceWidth(viewportWidth, 42),
-        splitRatio: 50,
-        tocGap: 0.75,
-        paneGap: 0.75,
-        fontScale: 1
-      };
-    }
-    if (bucket === "medium") {
-      return {
-        tocWidth: 15,
-        workspaceWidth: viewportWorkspaceWidth(viewportWidth, 64),
-        splitRatio: 50,
-        tocGap: 0.9,
-        paneGap: 0.9,
-        fontScale: 1
-      };
-    }
-    if (bucket === "wide") {
-      return {
-        tocWidth: 16.25,
-        workspaceWidth: viewportWorkspaceWidth(viewportWidth, 64),
-        splitRatio: 50,
-        tocGap: 1.1,
-        paneGap: 1.1,
-        fontScale: 1
-      };
-    }
-    return {
-      tocWidth: 17,
-      workspaceWidth: viewportWorkspaceWidth(viewportWidth, 64),
-      splitRatio: 50,
-      tocGap: 1.25,
-      paneGap: 1.25,
-      fontScale: 1
-    };
-  }
-
-  function clamp(value: number, min: number, max: number): number {
-    return Math.min(max, Math.max(min, value));
-  }
-
-  function normalizeLayoutPreferences(raw: unknown, viewportWidth = currentViewportWidth()): LayoutPreferences {
-    const candidate = raw && typeof raw === "object" ? (raw as Partial<LayoutPreferences>) : {};
-    const defaults = defaultLayoutPreferences(viewportWidth);
-    return {
-      tocWidth: typeof candidate.tocWidth === "number" ? clamp(candidate.tocWidth, 0, 120) : defaults.tocWidth,
-      workspaceWidth:
-        typeof candidate.workspaceWidth === "number"
-          ? clamp(candidate.workspaceWidth, 16, 320)
-          : typeof (candidate as { singlePaneWidth?: unknown }).singlePaneWidth === "number"
-            ? clamp(Number((candidate as { singlePaneWidth?: unknown }).singlePaneWidth) + 18, 16, 320)
-            : defaults.workspaceWidth,
-      splitRatio:
-        typeof candidate.splitRatio === "number" ? clamp(candidate.splitRatio, 0, 100) : defaults.splitRatio,
-      tocGap:
-        typeof candidate.tocGap === "number" ? clamp(candidate.tocGap, 0, 40) : defaults.tocGap,
-      paneGap:
-        typeof candidate.paneGap === "number" ? clamp(candidate.paneGap, 0, 40) : defaults.paneGap,
-      fontScale:
-        typeof candidate.fontScale === "number" ? clamp(candidate.fontScale, 0.1, 4) : defaults.fontScale
-    };
   }
 
   function normalizeSubmissionFocus(raw: unknown): Record<PaneId, SubmissionFocusState> {

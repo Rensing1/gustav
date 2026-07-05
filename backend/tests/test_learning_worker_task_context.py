@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import importlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Sequence
@@ -17,8 +18,9 @@ from httpx import ASGITransport
 pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
 
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
+from backend.teaching.repo_db import DBTeachingRepo
 from backend.learning.repo_db import DBLearningRepo  # noqa: E402
 from backend.learning.usecases.submissions import (  # noqa: E402
     CreateSubmissionInput,
@@ -160,16 +162,12 @@ class _FeedbackCapturingAdapter:
 
 async def _prepare_modular_learning_fixture(monkeypatch: pytest.MonkeyPatch) -> dict:
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
-
         assert isinstance(teaching.REPO, DBTeachingRepo)
-        from backend.learning.repo_db import DBLearningRepo as _DBLearningRepo  # type: ignore
-
-        assert isinstance(learning.REPO, _DBLearningRepo)
+        assert isinstance(learning.REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required")
 

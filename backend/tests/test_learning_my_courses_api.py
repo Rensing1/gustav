@@ -8,6 +8,7 @@ Covers:
 """
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from uuid import uuid4
 import os
@@ -16,12 +17,12 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
@@ -79,10 +80,10 @@ def _setup_sessions(monkeypatch: pytest.MonkeyPatch) -> tuple[_Actor, _Actor]:
 async def test_list_student_courses_alphabetical_and_minimal_fields(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     # Ensure DB-backed repos are active
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -118,10 +119,10 @@ async def test_list_student_courses_alphabetical_and_minimal_fields(monkeypatch:
 @pytest.mark.anyio
 async def test_list_units_for_course_returns_ordered_positions_and_404_when_not_member(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -161,10 +162,10 @@ async def test_list_units_for_course_returns_ordered_positions_and_404_when_not_
 async def test_list_student_courses_empty_list(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     # DB-backed repos required
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -184,10 +185,10 @@ async def test_list_student_courses_empty_list(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.anyio
 async def test_courses_pagination_clamp_limit_and_offset(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -285,10 +286,10 @@ async def test_non_student_forbidden_units(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.anyio
 async def test_courses_pagination_clamp_limit_upper_bound(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)

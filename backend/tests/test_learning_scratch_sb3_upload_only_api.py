@@ -12,6 +12,7 @@ Intent:
 
 from __future__ import annotations
 
+import importlib
 import os
 import uuid
 from hashlib import sha256
@@ -23,12 +24,12 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.teaching.storage import StorageAdapterProtocol
 
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-import routes.learning as learning  # type: ignore  # noqa: E402
-from teaching.storage import StorageAdapterProtocol  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
+learning = importlib.import_module("backend.web.routes.learning")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -103,11 +104,11 @@ async def _prepare_task_fixture(
     """Create course/unit/section with one released task and one enrolled student."""
     _require_db_or_skip()
 
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
-        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
+        from backend.learning.repo_db import DBLearningRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         assert isinstance(learning.REPO, DBLearningRepo)

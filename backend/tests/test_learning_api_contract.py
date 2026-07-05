@@ -12,7 +12,6 @@ import os
 import sys
 from dataclasses import dataclass
 import json
-from pathlib import Path
 from typing import Sequence
 from uuid import uuid4
 
@@ -20,23 +19,15 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 from backend.tests.utils.storage_fixtures import dummy_jpeg_bytes, dummy_png_bytes
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.identity_access.stores import SessionStore
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-# Ensure top-level package path exists so `backend.*` imports resolve without hacks
-if str(REPO_ROOT) not in os.sys.path:
-    os.sys.path.insert(0, str(REPO_ROOT))
-
-import main  # type: ignore  # noqa: E402
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-from backend.identity_access.stores import SessionStore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 
 
 @dataclass
@@ -66,8 +57,7 @@ async def _client() -> httpx.AsyncClient:
 @pytest.fixture(autouse=True)
 def _provide_submission_validation_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep legacy contract tests focused on API behavior, not storage setup."""
-    import importlib
-    import routes.learning as learning  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")
 
     async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int) -> bytes:  # noqa: ARG001
         key = str(storage_key or "").lower()
@@ -213,12 +203,12 @@ async def _prepare_learning_fixture(
     create_hidden_section: bool = False,
 ) -> LearningFixture:
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
 
     # Verify Teaching repository is DB-backed
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
     except Exception:
         pytest.skip("DB-backed TeachingRepo required for Learning contract tests")
@@ -402,7 +392,7 @@ async def test_sections_includes_unit_id_in_section_core(monkeypatch: pytest.Mon
 @pytest.mark.anyio
 async def test_sections_include_stable_file_url_for_released_file_materials(monkeypatch: pytest.MonkeyPatch):
     """Released file materials expose a stable app URL for the student UI."""
-    import routes.teaching as teaching  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
 
     fixture = await _prepare_learning_fixture()
     original_adapter = teaching.STORAGE_ADAPTER
@@ -943,7 +933,7 @@ async def test_finalize_latest_feedback_file_submission_returns_decorated_files(
     """Finalizing an upload draft must return the same learner-visible file decoration as history."""
 
     fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
-    import routes.learning as learning  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")
 
     original_adapter = learning.STORAGE_ADAPTER
     try:
@@ -1028,7 +1018,7 @@ async def test_learning_submission_file_route_streams_owner_file(monkeypatch: py
     """Learners should open their own submission files through a stable app route."""
 
     fixture = await _prepare_learning_fixture(monkeypatch, max_attempts=2)
-    import routes.learning as learning  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")
 
     original_adapter = learning.STORAGE_ADAPTER
     try:
@@ -1079,8 +1069,8 @@ async def test_learning_submission_file_route_streams_owner_file(monkeypatch: py
 async def test_learning_material_file_route_streams_released_material(monkeypatch: pytest.MonkeyPatch):
     """Released learner materials should stream through the canonical app route."""
 
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
 
     fixture = await _prepare_learning_fixture(monkeypatch)
     original_adapter = teaching.STORAGE_ADAPTER
@@ -1142,8 +1132,8 @@ async def test_learning_material_file_route_streams_released_material(monkeypatc
 async def test_learning_material_file_legacy_alias_requires_matching_section(monkeypatch: pytest.MonkeyPatch):
     """Legacy alias route must stay fail-closed when section_id does not match the visible material."""
 
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
 
     fixture = await _prepare_learning_fixture(monkeypatch, create_hidden_section=True)
     assert fixture.hidden_section_id is not None
@@ -1209,7 +1199,7 @@ async def test_learning_material_file_routes_return_503_when_visibility_lookup_i
 ):
     """Visibility lookup failures must stay distinguishable from real 404 material misses."""
 
-    import routes.learning as learning  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")
 
     fixture = await _prepare_learning_fixture(monkeypatch)
 
@@ -1253,7 +1243,7 @@ async def test_learning_material_file_routes_return_503_when_visibility_lookup_i
 
 @pytest.mark.anyio
 async def test_set_storage_adapter_updates_existing_learning_route_globals_after_reload(monkeypatch: pytest.MonkeyPatch):
-    """A fresh `routes.learning` import must still retarget already-registered route globals."""
+    """A fresh `backend.web.routes.learning` import must still retarget already-registered route globals."""
 
     def _find_finalize_endpoint():
         from fastapi.routing import APIRoute
@@ -1263,16 +1253,16 @@ async def test_set_storage_adapter_updates_existing_learning_route_globals_after
                 return route.endpoint
         raise AssertionError("finalize route not registered")
 
-    original_learning = importlib.import_module("routes.learning")
+    original_learning = importlib.import_module("backend.web.routes.learning")
     original_adapter = original_learning.STORAGE_ADAPTER
     endpoint = _find_finalize_endpoint()
     original_globals = endpoint.__globals__
     assert "STORAGE_ADAPTER" in original_globals
 
-    for name in ("routes.learning", "backend.web.routes.learning"):
+    for name in ("backend.web.routes.learning",):
         sys.modules.pop(name, None)
 
-    fresh_learning = importlib.import_module("routes.learning")
+    fresh_learning = importlib.import_module("backend.web.routes.learning")
     assert fresh_learning is not original_learning
 
     class _Adapter:

@@ -10,6 +10,7 @@ Contract-first intent:
 
 from __future__ import annotations
 
+import importlib
 from uuid import UUID
 
 import pytest
@@ -17,9 +18,9 @@ import httpx
 from httpx import ASGITransport
 import os
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 
@@ -70,7 +71,7 @@ async def test_learning_modular_module_content_rejects_empty_include_query_value
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`include=` must fail with 400 invalid_include (no silent defaulting)."""
-    import routes.learning as learning  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     class _StubRepo:
         def list_units_for_student_course(self, *, student_sub: str, course_id: str):
@@ -101,7 +102,7 @@ async def test_learning_modular_module_content_rejects_trailing_comma_in_include
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`include=materials,` must fail with 400 invalid_include."""
-    import routes.learning as learning  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     class _StubRepo:
         def list_units_for_student_course(self, *, student_sub: str, course_id: str):
@@ -131,11 +132,11 @@ async def test_learning_modular_module_content_rejects_trailing_comma_in_include
 async def test_learning_course_units_include_unit_type(monkeypatch: pytest.MonkeyPatch):
     """Units list must include `unit_type` so SSR can branch (linear/modular)."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
@@ -169,11 +170,11 @@ async def test_learning_course_units_include_unit_type(monkeypatch: pytest.Monke
 async def test_learning_modular_graph_endpoint_rejects_linear_units(monkeypatch: pytest.MonkeyPatch):
     """Modular graph endpoint must return 400 invalid_unit_type for linear units."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
@@ -205,11 +206,11 @@ async def test_learning_modular_graph_endpoint_rejects_linear_units(monkeypatch:
 async def test_learning_modular_module_content_endpoint_rejects_linear_units(monkeypatch: pytest.MonkeyPatch):
     """Module content endpoint must return 400 invalid_unit_type for linear units."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
@@ -242,11 +243,11 @@ async def test_learning_modular_module_content_endpoint_rejects_linear_units(mon
 async def test_learning_modular_module_content_happy_path_via_graph(monkeypatch: pytest.MonkeyPatch):
     """Student can fetch graph modules and then load module content (materials/tasks)."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
@@ -318,11 +319,11 @@ async def test_learning_modular_module_content_happy_path_via_graph(monkeypatch:
 async def test_learning_modular_module_content_includes_file_preview_url_for_file_materials(monkeypatch: pytest.MonkeyPatch):
     """Modular module content exposes canonical file URLs for visible file materials."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -400,11 +401,11 @@ async def test_learning_modular_module_content_includes_file_preview_url_for_fil
 async def test_learning_modular_material_file_url_streams_visible_material(monkeypatch: pytest.MonkeyPatch):
     """A modular material `file_url` must stream successfully through the canonical route."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -494,11 +495,11 @@ async def test_learning_modular_material_file_url_streams_visible_material(monke
 async def test_learning_modular_endpoints_accept_uppercase_unit_id(monkeypatch: pytest.MonkeyPatch):
     """Valid UUID casing in unit_id must not cause false 404 on modular endpoints."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
@@ -556,11 +557,11 @@ async def test_learning_modular_endpoints_accept_uppercase_unit_id(monkeypatch: 
 async def test_learning_modular_graph_includes_edges(monkeypatch: pytest.MonkeyPatch):
     """Graph endpoint returns `edges` based on unit_module_edges (Option B module IDs)."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
@@ -633,11 +634,11 @@ async def test_learning_modular_graph_includes_edges(monkeypatch: pytest.MonkeyP
 async def test_learning_modular_unlock_and_locked_module_returns_404_until_prereqs_done(monkeypatch: pytest.MonkeyPatch):
     """Locked modules must be hidden (404) until prerequisites are done."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
@@ -772,11 +773,11 @@ async def test_learning_modular_unlock_and_locked_module_returns_404_until_prere
 async def test_learning_modular_locked_task_is_hidden_in_sql_helpers(monkeypatch: pytest.MonkeyPatch):
     """Defense-in-depth: SQL helpers must hide locked modular tasks."""
     _require_db_or_skip()
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
+    teaching = importlib.import_module("backend.web.routes.teaching")  # noqa: E402
+    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
 
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore

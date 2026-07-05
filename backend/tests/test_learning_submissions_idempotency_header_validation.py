@@ -6,25 +6,16 @@ Ensures the API rejects invalid tokens (non-ASCII, spaces, symbols) per regex
 """
 from __future__ import annotations
 
+import importlib
 import uuid
 import pytest
 import httpx
 from httpx import ASGITransport
 
-import os
-from pathlib import Path
-
 
 pytestmark = pytest.mark.anyio("asyncio")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in os.sys.path:
-    os.sys.path.insert(0, str(WEB_DIR))
-if str(REPO_ROOT) not in os.sys.path:
-    os.sys.path.insert(0, str(REPO_ROOT))
-
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 

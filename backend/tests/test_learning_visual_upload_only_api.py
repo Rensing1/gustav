@@ -16,15 +16,21 @@ from __future__ import annotations
 
 import os
 import uuid
+import importlib
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
-from utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 from backend.tests.utils.storage_fixtures import dummy_png_bytes
+from backend.teaching.repo_db import DBTeachingRepo
+from backend.learning.repo_db import DBLearningRepo
 
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
+learning = importlib.import_module("backend.web.routes.learning")
+teaching = importlib.import_module("backend.web.routes.teaching")
+
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 from backend.identity_access.stores import SessionStore  # noqa: E402
 
@@ -58,14 +64,9 @@ async def _prepare_visual_task_fixture(monkeypatch: pytest.MonkeyPatch | None = 
     """Create course/unit/section with one released visual task and one enrolled student."""
     _require_db_or_skip()
 
-    import routes.teaching as teaching  # noqa: E402
-    import routes.learning as learning  # noqa: E402
-
     # Verify repos are DB-backed (avoid in-memory fallbacks masking behavior)
     try:
-        from teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
-        from backend.learning.repo_db import DBLearningRepo  # type: ignore
         assert isinstance(learning.REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required")
@@ -156,9 +157,6 @@ async def test_visual_task_accepts_upload_submissions(monkeypatch: pytest.Monkey
 
 @pytest.fixture(autouse=True)
 def _provide_submission_validation_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
-    import importlib
-    import routes.learning as learning  # noqa: E402
-
     async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int) -> bytes:  # noqa: ARG001
         return dummy_png_bytes()
 

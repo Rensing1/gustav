@@ -28,9 +28,9 @@ pytestmark = pytest.mark.anyio("asyncio")
 def _clear_web_modules(*, include_teaching: bool = False) -> None:
     """Remove web modules that own startup-time storage wiring state."""
 
-    module_names = {"main", "backend.web.main", "routes.learning", "backend.web.routes.learning"}
+    module_names = {"main", "backend.web.main", "backend.web.routes.learning"}
     if include_teaching:
-        module_names.update({"routes.teaching", "backend.web.routes.teaching"})
+        module_names.update({"backend.web.routes.teaching"})
     for name in module_names:
         sys.modules.pop(name, None)
 

@@ -106,7 +106,7 @@ async def test_upload_proxy_flow(monkeypatch):
         return _Resp()
 
     monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    # Some suites reload routes.learning. Patch the actual FastAPI endpoint globals as well.
+    # Some suites reload backend.web.routes.learning. Patch the FastAPI endpoint globals as well.
     for route in main.app.routes:
         if isinstance(route, APIRoute) and route.path == "/api/learning/internal/upload-proxy":
             route.endpoint.__globals__["_async_forward_upload"] = fake_forward

@@ -368,7 +368,7 @@ async def test_upload_intent_fail_closed_when_authorization_check_unavailable(mo
     original_import_module = importlib.import_module
 
     def _blocked_import(name, package=None):  # noqa: ANN001
-        if name in {"routes.teaching", "backend.web.routes.teaching"}:
+        if name == "backend.web.routes.teaching":
             raise ModuleNotFoundError(name)
         return original_import_module(name, package=package)
 

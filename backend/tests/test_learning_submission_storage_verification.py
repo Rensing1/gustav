@@ -7,8 +7,7 @@ REQUIRE_STORAGE_VERIFY=true for strict environments/tests.
 """
 from __future__ import annotations
 
-import os
-import sys
+import importlib
 import tempfile
 from contextlib import contextmanager
 from hashlib import sha256
@@ -23,18 +22,11 @@ from PIL import Image
 
 import uuid
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND_DIR = REPO_ROOT / "backend"
-WEB_DIR = BACKEND_DIR / "web"
-for path in (WEB_DIR, BACKEND_DIR, REPO_ROOT):
-    if str(path) not in sys.path:
-        os.sys.path.insert(0, str(path))
-
-import main  # type: ignore  # noqa: E402
+main = importlib.import_module("backend.web.main")
+learning = importlib.import_module("backend.web.routes.learning")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-import routes.learning as learning  # type: ignore  # noqa: E402
-from teaching.storage import StorageAdapterProtocol  # type: ignore  # noqa: E402
-from utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore  # noqa: E402
+from backend.teaching.storage import StorageAdapterProtocol
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
 
 
 class FakeStorageAdapter(StorageAdapterProtocol):

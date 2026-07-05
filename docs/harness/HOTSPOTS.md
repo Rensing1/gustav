@@ -39,5 +39,9 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 - `frontend/src/lib/learning-unit/layout.ts` übernimmt seit PR20 die reinen Viewport-, Workspace-Chrome-, Layout-Preference- und gespeicherten Workspace-State-Normalisierer der großen Learning-Unit-Route; `frontend/src/lib/learning-unit/layout.test.ts` schützt Breakpoints, Defaults, Clamping, Legacy-Layout-Normalisierung, Pane-Fokus und offene Modul-Tabs.
 - `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` ist dadurch von 1846 auf 1644 LOC gesunken; Ladezustand und View-Komposition bleiben im Scorecard-Monitoring.
 
+## Closeout v1.1 Fortschritt
+- `backend/web/routes/teaching_payloads.py` übernimmt seit Closeout v1.1 die Pydantic-Request-Payloads für Teaching-Routen. `backend/web/routes/teaching.py` exportiert die Namen weiterhin als Kompatibilitätsalias für bestehende Split-Router und Tests.
+- `backend/web/routes/teaching.py` ist dadurch von 6146 auf 5790 LOC gesunken. C1 ist damit begonnen, aber noch nicht abgeschlossen: Route-Handler, Repo-Provider, Storage-Helfer und Live-/Material-/Task-Flächen müssen weiter aus dem Hotspot herausgelöst werden.
+
 ## Regel
 Hotspots dürfen nicht ohne bewusst dokumentierten Grund wachsen. Kleine Extraktionen brauchen passende Contract- oder Komponententest-Abdeckung. Die monatliche Scorecard dokumentiert LOC-Veränderungen; relevantes Wachstum braucht entweder eine getestete Extraktion oder einen expliziten Tech-Debt-Eintrag mit Exit-Kriterium.

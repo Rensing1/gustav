@@ -10,8 +10,26 @@ Intent:
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 
 teaching = importlib.import_module("backend.web.routes.teaching")
+payloads = importlib.import_module("backend.web.routes.teaching_payloads")
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+TEACHING_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "teaching.py"
+PAYLOADS_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "teaching_payloads.py"
+
+
+def test_teaching_payload_models_live_outside_teaching_hotspot() -> None:
+    """Request payload models should not keep growing the teaching route hotspot."""
+
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
+    payload_source = PAYLOADS_SOURCE.read_text(encoding="utf-8")
+
+    assert "class TaskCreatePayload" not in teaching_source
+    assert "class TaskCreatePayload" in payload_source
+    assert teaching.TaskCreatePayload is payloads.TaskCreatePayload
+    assert teaching.AddMember is payloads.AddMember
 
 
 def test_task_create_payload_accepts_filius_marker_config() -> None:

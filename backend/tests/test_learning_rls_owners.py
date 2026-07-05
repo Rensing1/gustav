@@ -23,6 +23,9 @@ import pytest
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_write
+
+
 def _dsn() -> str:
     user = os.getenv("APP_DB_USER", "gustav_app")
     password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")

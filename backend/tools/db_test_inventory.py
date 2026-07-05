@@ -130,6 +130,8 @@ def _find_signals(path: Path, tree: ast.AST) -> tuple[str, ...]:
             values = _call_string_values(node)
             if chain == ["pytest", "importorskip"] and "psycopg" in values:
                 signals.add("psycopg-required")
+            if chain and chain[-1] in {"require_db_or_skip", "_require_db_or_skip"}:
+                signals.add("requires-db")
             for env_name in DB_ENV_NAMES:
                 if env_name in values:
                     signals.add(f"env:{env_name}")
@@ -162,7 +164,7 @@ def _classification(signals: tuple[str, ...]) -> str:
         return "real-db"
     if any(signal.startswith("env:") and signal.removeprefix("env:") in DB_ENV_NAMES for signal in signals):
         return "real-db"
-    if "rls" in signals:
+    if "requires-db" in signals:
         return "real-db"
     if "migration" in signals:
         return "migration-static"

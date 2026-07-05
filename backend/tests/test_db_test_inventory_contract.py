@@ -127,6 +127,25 @@ def test_db_test_inventory_ignores_embedded_fixture_source_strings(tmp_path: Pat
     assert [record.path for record in records] == []
 
 
+def test_db_test_inventory_does_not_treat_rls_name_as_real_db_alone(tmp_path: Path) -> None:
+    from backend.tools import db_test_inventory
+
+    docs_only_test = tmp_path / "test_rls_docs_contract.py"
+    docs_only_test.write_text(
+        "\n".join(
+            [
+                "def test_rls_policy_is_documented():",
+                "    assert 'RLS' == 'RLS'",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    records = db_test_inventory.scan_tests(tmp_path, repo_root=tmp_path)
+
+    assert records == []
+
+
 def test_db_test_inventory_document_has_required_columns() -> None:
     assert TOOL.exists(), "Missing DB test inventory tool"
     assert INVENTORY.exists(), "Missing DB test inventory document"
@@ -144,6 +163,27 @@ def test_db_test_inventory_document_has_required_columns() -> None:
 
     assert "db_read" in text
     assert "db_write" in text
+
+
+def test_db_security_rls_files_are_marked_as_db_write() -> None:
+    from backend.tools import db_test_inventory
+
+    records = {
+        record.path: record
+        for record in db_test_inventory.scan_tests(REPO_ROOT / "backend" / "tests", repo_root=REPO_ROOT)
+    }
+
+    for path in (
+        "backend/tests/test_learning_student_rls_policies.py",
+        "backend/tests/test_learning_rls_owners.py",
+        "backend/tests/test_teaching_rls_policies_optional.py",
+        "backend/tests/test_teaching_memberships_delete_rls_policy.py",
+        "backend/tests/migration/test_course_memberships_rls_delete_policy.py",
+        "backend/tests/migration/test_memberships_remove_definer_owner_binding.py",
+        "backend/tests/migration/test_rls_exec_privileges.py",
+    ):
+        assert records[path].marker_status == "marked-db"
+        assert "db_write" in records[path].markers
 
 
 def test_db_test_inventory_is_synchronized_with_generator() -> None:

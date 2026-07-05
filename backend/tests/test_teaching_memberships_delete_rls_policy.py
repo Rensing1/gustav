@@ -25,6 +25,9 @@ import pytest
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # type: ignore
 
 
+pytestmark = pytest.mark.db_write
+
+
 def test_owner_can_delete_membership_under_rls(monkeypatch: pytest.MonkeyPatch) -> None:
     _require_db_or_skip()
 
@@ -55,4 +58,3 @@ def test_owner_can_delete_membership_under_rls(monkeypatch: pytest.MonkeyPatch) 
     roster = repo.list_members_for_owner(course["id"], owner, limit=50, offset=0)
     subs = [sid for sid, _ in roster]
     assert student not in subs
-

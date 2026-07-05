@@ -13,6 +13,9 @@ import pytest
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_write
+
+
 def _dsn_from_repo(repo) -> str:
     """Return the limited-role DSN from the repo and assert RLS membership."""
     dsn = getattr(repo, "_dsn")

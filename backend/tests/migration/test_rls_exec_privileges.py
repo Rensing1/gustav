@@ -14,6 +14,9 @@ import pytest
 from utils.db import require_db_or_skip as _require_db_or_skip
 
 
+pytestmark = pytest.mark.db_write
+
+
 HELPERS = (
     ("student_is_course_member", "text, uuid", ("sub", "00000000-0000-0000-0000-000000000000")),
     ("student_can_access_unit", "text, uuid", ("sub", "00000000-0000-0000-0000-000000000000")),

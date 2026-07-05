@@ -13,6 +13,7 @@ Note:
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 
@@ -25,15 +26,39 @@ def test_ssr_does_not_log_raw_session_id_marker() -> None:
     assert "__SSR_DEBUG_SID__" not in src
 
 
-def test_teaching_delta_debug_has_no_print_and_no_raw_student_sub_in_logs() -> None:
-    src = (_repo_root() / "backend" / "web" / "routes" / "teaching.py").read_text(encoding="utf-8")
-    assert "print(" not in src
+def _logging_calls(tree: ast.AST) -> list[ast.Call]:
+    calls: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if func.attr not in {"debug", "info", "warning", "error", "exception", "critical"}:
+            continue
+        if isinstance(func.value, ast.Name) and func.value.id == "logger":
+            calls.append(node)
+    return calls
 
-    start = src.find('"delta-cell"')
-    assert start != -1, "Expected delta debug log marker 'delta-cell' in teaching routes"
-    end = src.find("# Include changes after", start)
-    assert end != -1, "Expected delta debug block terminator comment in teaching routes"
 
-    block = src[start:end]
-    assert '"student_sub": student_sub' not in block
+def _contains_raw_student_sub(node: ast.AST) -> bool:
+    return any(isinstance(child, ast.Name) and child.id == "student_sub" for child in ast.walk(node))
 
+
+def test_teaching_routes_do_not_log_raw_student_sub() -> None:
+    route_paths = [
+        _repo_root() / "backend" / "web" / "routes" / "teaching.py",
+        _repo_root() / "backend" / "web" / "routes" / "teaching_live.py",
+    ]
+
+    offenders: list[str] = []
+    for path in route_paths:
+        src = path.read_text(encoding="utf-8")
+        assert "print(" not in src
+
+        tree = ast.parse(src, filename=str(path))
+        for call in _logging_calls(tree):
+            if _contains_raw_student_sub(call):
+                offenders.append(f"{path.relative_to(_repo_root())}:{call.lineno}")
+
+    assert offenders == []

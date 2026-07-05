@@ -37,9 +37,17 @@ def include_main_routers(
     from backend.web.routes.app import app_router
     from backend.web.routes.auth import auth_router
     from backend.web.routes.basic_pages import create_basic_pages_router
+    from backend.web.routes.teaching_courses import teaching_courses_router
+    from backend.web.routes.teaching_course_modules import teaching_course_modules_router
+    from backend.web.routes.teaching_course_members import teaching_course_members_router
+    from backend.web.routes.teaching_unit_modules import teaching_unit_modules_router
+    from backend.web.routes.teaching_unit_materials import teaching_unit_materials_router
+    from backend.web.routes.teaching_unit_sections import teaching_unit_sections_router
+    from backend.web.routes.teaching_unit_tasks import teaching_unit_tasks_router
+    from backend.web.routes.teaching_units import teaching_units_router
     from backend.web.routes.learning import learning_router
     from backend.web.routes.operations import operations_router
-    from backend.web.routes.teaching import teaching_router
+    from backend.web.routes.teaching_live import teaching_live_router
     from backend.web.routes.teaching_h5p import teaching_h5p_router
     from backend.web.routes.users import users_router
 
@@ -50,7 +58,15 @@ def include_main_routers(
             auth_router,
             app_router,
             learning_router,
-            teaching_router,
+            teaching_live_router,
+            teaching_courses_router,
+            teaching_course_modules_router,
+            teaching_unit_sections_router,
+            teaching_course_members_router,
+            teaching_unit_modules_router,
+            teaching_unit_materials_router,
+            teaching_unit_tasks_router,
+            teaching_units_router,
             teaching_h5p_router,
             users_router,
             operations_router,

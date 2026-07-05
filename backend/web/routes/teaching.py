@@ -38,12 +38,6 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 
-# Temporary compatibility while legacy tests still import `routes.teaching`.
-if __name__ == "backend.web.routes.teaching":
-    _sys.modules.setdefault("routes.teaching", _sys.modules[__name__])
-elif __name__ == "routes.teaching":
-    _sys.modules.setdefault("backend.web.routes.teaching", _sys.modules[__name__])
-
 from backend.teaching.services.materials import MaterialFileSettings, MaterialsService
 from backend.teaching.services.live_student_overview import MAX_UNIT_IDS, StudentLiveOverviewService
 from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol
@@ -58,6 +52,8 @@ from backend.web.routes.teaching_shared import (
 )
 from backend.web.routes.teaching_serialization import (
     _build_latest_submission_payload,
+    _build_live_delta_cells,
+    _build_live_summary_rows,
     _serialize_course,
     _serialize_material,
     _serialize_module,
@@ -128,10 +124,7 @@ def _collect_unit_delete_storage_objects(repo: object, *, unit_id: str) -> list[
     dsn = _unit_delete_storage_metadata_dsn(repo)
     if not dsn:
         return []
-    try:
-        import psycopg  # type: ignore
-    except Exception:
-        return []
+    from backend.web.db_cursor import open_repo_cursor
 
     objects: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
@@ -146,36 +139,35 @@ def _collect_unit_delete_storage_objects(repo: object, *, unit_id: str) -> list[
             objects.append(item)
 
     try:
-        with psycopg.connect(dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    select storage_key
-                      from public.unit_materials
-                     where unit_id = %s
-                       and kind = 'file'
-                       and storage_key is not null
-                    """,
-                    (unit_id,),
-                )
-                for row in cur.fetchall():
-                    add(MATERIAL_FILE_SETTINGS.storage_bucket, row[0])
+        with open_repo_cursor(dsn=dsn) as (_conn, cur):
+            cur.execute(
+                """
+                select storage_key
+                  from public.unit_materials
+                 where unit_id = %s
+                   and kind = 'file'
+                   and storage_key is not null
+                """,
+                (unit_id,),
+            )
+            for row in cur.fetchall():
+                add(MATERIAL_FILE_SETTINGS.storage_bucket, row[0])
 
-                cur.execute(
-                    """
-                    select ls.storage_key, ls.internal_metadata
-                      from public.learning_submissions ls
-                      join public.unit_tasks t on t.id = ls.task_id
-                     where t.unit_id = %s
-                       and (ls.storage_key is not null or ls.internal_metadata ? 'page_keys')
-                    """,
-                    (unit_id,),
-                )
-                submissions_bucket = get_submissions_bucket()
-                for storage_key, internal_metadata in cur.fetchall():
-                    add(submissions_bucket, storage_key)
-                    for page_key in _metadata_page_keys(internal_metadata):
-                        add(submissions_bucket, page_key)
+            cur.execute(
+                """
+                select ls.storage_key, ls.internal_metadata
+                  from public.learning_submissions ls
+                  join public.unit_tasks t on t.id = ls.task_id
+                 where t.unit_id = %s
+                   and (ls.storage_key is not null or ls.internal_metadata ? 'page_keys')
+                """,
+                (unit_id,),
+            )
+            submissions_bucket = get_submissions_bucket()
+            for storage_key, internal_metadata in cur.fetchall():
+                add(submissions_bucket, storage_key)
+                for page_key in _metadata_page_keys(internal_metadata):
+                    add(submissions_bucket, page_key)
     except Exception:
         logger.warning("unit delete storage metadata unavailable unit_id=%s", unit_id, exc_info=True)
         raise RuntimeError("storage_metadata_unavailable")
@@ -1409,8 +1401,7 @@ _REPO = None
 
 def _current_teaching_module() -> object | None:
     """Return the currently active Teaching module instance when available."""
-
-    return _sys.modules.get("routes.teaching") or _sys.modules.get("backend.web.routes.teaching")
+    return _sys.modules.get("backend.web.routes.teaching")
 
 def _get_repo():  # pragma: no cover - simple accessor
     global _REPO, REPO
@@ -1421,7 +1412,8 @@ def _get_repo():  # pragma: no cover - simple accessor
         if module is not None:
             setattr(module, "_REPO", current_repo)
             setattr(module, "REPO", current_repo)
-    # Keep the public alias in sync for tests that do `isinstance(routes.teaching.REPO, ...)`.
+    # Keep the public module-level alias in sync for tests that do
+    # `isinstance(routes_module.REPO, ...)`.
     _REPO = current_repo
     REPO = current_repo
     return current_repo
@@ -1442,24 +1434,6 @@ configure_teaching_guard_repo_provider(_get_current_teaching_repo_for_provider)
 configure_teaching_authoring_repo_provider(_get_current_teaching_repo_for_provider)
 
 
-def _guard_unit_author(unit_id: str, author_sub: str) -> JSONResponse | None:
-    """Route-local adapter that keeps legacy endpoint repo monkeypatches working."""
-
-    return teaching_guards._guard_unit_author(unit_id, author_sub, repo_provider=_get_repo)
-
-
-def _csrf_guard(request: Request) -> JSONResponse | None:
-    """Route-local adapter for the shared Teaching CSRF guard."""
-
-    return teaching_guards._csrf_guard(request)
-
-
-def _require_strict_same_origin(request: Request) -> bool:
-    """Route-local adapter for strict same-origin checks."""
-
-    return teaching_guards._require_strict_same_origin(request)
-
-
 # Back-compat symbol used in tests: set_repo() and _get_repo() keep this public
 # alias in sync after the first real repository access. Keeping it empty at
 # import time avoids DB connection attempts during route inventory and imports.
@@ -1476,7 +1450,7 @@ def _sync_teaching_route_globals(*, adapter: StorageAdapterProtocol, override_ac
     """Retarget already-registered Teaching route globals to the current adapter.
 
     Why:
-        Some tests reload `routes.teaching` while keeping the original FastAPI
+        Some tests reload `backend.web.routes.teaching` while keeping the original FastAPI
         app instance alive. Route callables still reference the globals of the
         module instance they were created from. Without this sync, changing the
         adapter on a freshly imported module leaves old endpoints bound to a
@@ -1548,7 +1522,7 @@ def set_repo(repo) -> None:
     global _REPO, REPO
     _REPO = repo
     REPO = repo
-    for module_name in ("routes.teaching", "backend.web.routes.teaching"):
+    for module_name in ("backend.web.routes.teaching",):
         module = _sys.modules.get(module_name)
         if module is None:
             continue
@@ -1562,7 +1536,7 @@ def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = Tru
     global STORAGE_ADAPTER, _STORAGE_ADAPTER_OVERRIDE_ACTIVE
     STORAGE_ADAPTER = adapter
     _STORAGE_ADAPTER_OVERRIDE_ACTIVE = bool(override)
-    for module_name in ("routes.teaching", "backend.web.routes.teaching"):
+    for module_name in ("backend.web.routes.teaching",):
         module = _sys.modules.get(module_name)
         if module is None:
             continue
@@ -1690,26 +1664,6 @@ def _list_unit_modules_for_author_compat(repo: object, *, unit_id: str, author_i
         return repo.list_unit_modules_for_author(unit_id, author_id)  # type: ignore[attr-defined]
 
 
-def _guard_course_owner(course_id: str, owner_sub: str):
-    """Ensure caller owns the course, mapping to 404/403 appropriately."""
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        repo = _get_repo()
-        if isinstance(repo, DBTeachingRepo):
-            if repo.course_exists_for_owner(course_id, owner_sub):
-                return None
-            return _resp_non_owner_or_unknown(course_id, owner_sub)
-    except Exception:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    repo = _get_repo()
-    course = repo.get_course(course_id)
-    if not course:
-        return JSONResponse({"error": "not_found"}, status_code=404)
-    if _teacher_id_of(course) != owner_sub:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    return None
-
-
 def compute_average_score_from_analysis(analysis: object) -> float | None:
     """Compute the average criteria score on a 0..10 scale from analysis_json.
 
@@ -1755,7 +1709,7 @@ def compute_average_score_from_analysis(analysis: object) -> float | None:
 
 
 def _load_average_scores_by_submission_id(
-    cur,
+    repo,
     owner_sub: str,
     submission_ids_by_student: dict[str, list[str]],
 ) -> dict[str, float | None]:
@@ -1772,37 +1726,20 @@ def _load_average_scores_by_submission_id(
     """
     if not submission_ids_by_student:
         return {}
-    out: dict[str, float | None] = {}
     try:
-        for student_sub, submission_ids in submission_ids_by_student.items():
-            if not submission_ids:
-                continue
-            cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
-            try:
-                cur.execute(
-                    """
-                    select id::text, analysis_status::text, analysis_json
-                      from public.learning_submissions
-                     where id = any(%s)
-                    """,
-                    (submission_ids,),
-                )
-                rows = cur.fetchall() or []
-            except Exception as exc:
-                logger.warning("Unit live average score lookup failed — %s", exc)
-                rows = []
-            for submission_id, analysis_status, analysis_json in rows:
-                if str(analysis_status or "") != "completed":
-                    out[str(submission_id)] = None
-                    continue
-                out[str(submission_id)] = compute_average_score_from_analysis(analysis_json)
-    finally:
-        cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-    return out
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(repo, DBTeachingRepo):
+            return repo.list_unit_live_average_scores_by_submission_id(
+                owner_sub=owner_sub,
+                submission_ids_by_student=submission_ids_by_student,
+            )
+    except Exception as exc:
+        logger.warning("Unit live average score lookup failed — %s", exc)
+    return {}
 
 
 def _load_latest_submission_state_by_task(
-    cur,
+    repo,
     owner_sub: str,
     course_id: str,
     task_ids_by_student: dict[str, list[str]],
@@ -1810,46 +1747,21 @@ def _load_latest_submission_state_by_task(
     """Load the latest submission state per `(student_sub, task_id)` under RLS."""
     if not task_ids_by_student:
         return {}
-    out: dict[tuple[str, str], dict[str, Any]] = {}
     try:
-        for student_sub, task_ids in task_ids_by_student.items():
-            if not task_ids:
-                continue
-            cur.execute("select set_config('app.current_sub', %s, true)", (student_sub,))
-            try:
-                cur.execute(
-                    """
-                    select distinct on (task_id)
-                           task_id::text,
-                           id::text,
-                           score_raw,
-                           score_max,
-                           greatest(created_at, coalesce(completed_at, created_at))
-                      from public.learning_submissions
-                     where course_id = %s
-                       and task_id = any(%s)
-                     order by task_id, created_at desc, attempt_nr desc, id desc
-                    """,
-                    (course_id, task_ids),
-                )
-                rows = cur.fetchall() or []
-            except Exception as exc:
-                logger.warning("Unit live latest submission lookup failed — %s", exc)
-                rows = []
-            for task_id, submission_id, score_raw, score_max, changed_at in rows:
-                out[(student_sub, str(task_id))] = {
-                    "submission_id": str(submission_id) if submission_id else None,
-                    "score_raw": _safe_int(score_raw),
-                    "score_max": _safe_int(score_max),
-                    "changed_at": changed_at,
-                }
-    finally:
-        cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
-    return out
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(repo, DBTeachingRepo):
+            return repo.list_unit_live_submission_state_by_task(
+                owner_sub=owner_sub,
+                course_id=course_id,
+                task_ids_by_student=task_ids_by_student,
+            )
+    except Exception as exc:
+        logger.warning("Unit live latest submission lookup failed — %s", exc)
+    return {}
 
 
 def _load_unit_live_helper_rows(
-    cur,
+    repo,
     *,
     owner_sub: str,
     course_id: str,
@@ -1872,66 +1784,20 @@ def _load_unit_live_helper_rows(
         `student_sub`, `task_id`, `submission_id`, `score_raw`, `score_max`,
         `created_at_iso`, `completed_at_iso`, `h5p_completed`.
     """
-    params = (owner_sub, course_id, unit_id, updated_since_dt, int(limit), int(offset))
-    current_sql = """
-        select student_sub::text,
-               task_id::text,
-               submission_id::text,
-               score_raw,
-               score_max,
-               created_at_iso,
-               completed_at_iso,
-               h5p_completed
-          from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
-    """
-    legacy_sql = """
-        select student_sub::text,
-               task_id::text,
-               submission_id::text,
-               null::integer as score_raw,
-               null::integer as score_max,
-               created_at_iso,
-               completed_at_iso,
-               h5p_completed
-          from public.get_unit_latest_submissions_for_owner(%s, %s, %s, %s, %s, %s)
-    """
-
-    last_exc: Exception | None = None
-    cur.execute("savepoint live_helper_compat")
-    for idx, sql in enumerate((current_sql, legacy_sql)):
-        if idx > 0:
-            cur.execute("rollback to savepoint live_helper_compat")
-        try:
-            cur.execute(sql, params)
-            raw_rows = cur.fetchall() or []
-            cur.execute("release savepoint live_helper_compat")
-            return [
-                {
-                    "student_sub": str(row[0]),
-                    "task_id": str(row[1]),
-                    "submission_id": (str(row[2]) if row[2] else None),
-                    "score_raw": _safe_int(row[3]),
-                    "score_max": _safe_int(row[4]),
-                    "created_at_iso": (str(row[5]) if row[5] else None),
-                    "completed_at_iso": (str(row[6]) if row[6] else None),
-                    "h5p_completed": (bool(row[7]) if row[7] is not None else None),
-                }
-                for row in raw_rows
-            ]
-        except Exception as exc:
-            last_exc = exc
-
     try:
-        cur.execute("rollback to savepoint live_helper_compat")
-    except Exception:
-        pass
-    try:
-        cur.execute("release savepoint live_helper_compat")
-    except Exception:
-        pass
-    if last_exc is not None:
-        raise last_exc
-    raise RuntimeError("live helper compatibility probe failed")
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(repo, DBTeachingRepo):
+            return repo.list_unit_live_helper_rows(
+                owner_sub=owner_sub,
+                course_id=course_id,
+                unit_id=unit_id,
+                updated_since_dt=updated_since_dt,
+                limit=int(limit),
+                offset=int(offset),
+            )
+    except Exception as exc:
+        logger.warning("Unit live helper row lookup failed — %s", exc)
+    return []
 
 
 # --- User directory adapter (mockable) ------------------------------------------
@@ -1987,7 +1853,7 @@ def resolve_live_student_names_by_sub(subs: list[str]) -> dict[str, str]:
         return _resolve_student_login_labels_runtime(subs)
 
 
-def _summary_snapshot_cursor(repo: Any) -> str | None:
+def _summary_snapshot_cursor(repo: Any, owner_sub: str | None = None) -> str | None:
     """Return a DB-based live summary cursor when the teaching repo has a DSN.
 
     Why:
@@ -2001,17 +1867,9 @@ def _summary_snapshot_cursor(repo: Any) -> str | None:
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if not isinstance(repo, DBTeachingRepo):
             return None
-        dsn = getattr(repo, "_dsn", None)
-        if not dsn:
-            return None
-        import psycopg  # type: ignore
-
-        with psycopg.connect(dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select statement_timestamp()")
-                row = cur.fetchone()
-        if row and row[0] is not None:
-            return row[0].astimezone(timezone.utc).isoformat(timespec="microseconds")
+        if owner_sub is None:
+            owner_sub = ""
+        return repo.get_statement_timestamp(owner_sub=owner_sub)
     except Exception:
         return None
     return None
@@ -2037,24 +1895,17 @@ def _resolve_student_login_labels_runtime(subs: list[str]) -> dict[str, str]:
     return resolver(subs)
 
 
-def _summary_snapshot_cursor_runtime(repo: Any) -> str | None:
+def _summary_snapshot_cursor_runtime(repo: Any, owner_sub: str) -> str | None:
     """Resolve the active live summary cursor helper from the current module."""
 
     module = _current_teaching_module()
     resolver = getattr(module, "_summary_snapshot_cursor", None) if module is not None else None
     if not callable(resolver) or resolver is _summary_snapshot_cursor_runtime:
         resolver = _summary_snapshot_cursor
-    return resolver(repo)
-
-
-def _guard_course_owner_runtime(course_id: str, owner_sub: str):
-    """Resolve the current course-owner guard from the active Teaching module."""
-
-    module = _current_teaching_module()
-    guard = getattr(module, "_guard_course_owner", None) if module is not None else None
-    if not callable(guard) or guard is _guard_course_owner_runtime:
-        guard = _guard_course_owner
-    return guard(course_id, owner_sub)
+    try:
+        return resolver(repo, owner_sub)
+    except TypeError:
+        return resolver(repo)
 
 
 def _current_max_unit_ids() -> int:
@@ -2120,7 +1971,6 @@ def resolve_student_login_labels_by_sub(subs: list[str]) -> dict[str, str]:
 
 # --- Routes ----------------------------------------------------------------------
 
-@teaching_router.get("/api/teaching/courses")
 async def list_courses(request: Request, limit: int = 10, offset: int = 0):
     """
     List courses for the current user with simple pagination.
@@ -2140,7 +1990,6 @@ async def list_courses(request: Request, limit: int = 10, offset: int = 0):
     return _json_private([_serialize_course(c) for c in items], status_code=200)
 
 
-@teaching_router.post("/api/teaching/courses")
 async def create_course(request: Request, payload: CourseCreate):
     """Create a new course (teacher only).
 
@@ -2159,7 +2008,7 @@ async def create_course(request: Request, payload: CourseCreate):
     user = getattr(request.state, "user", None)
     if not _role_in(user, "teacher"):
         return _private_error({"error": "forbidden"}, status_code=403)
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     sub = _current_sub(user)
@@ -2178,7 +2027,6 @@ async def create_course(request: Request, payload: CourseCreate):
     return _json_private(_serialize_course(course), status_code=201)
 
 
-@teaching_router.get("/api/teaching/courses/{course_id}")
 async def get_course(request: Request, course_id: str):
     """Get a course by id — owner-only.
 
@@ -2202,7 +2050,7 @@ async def get_course(request: Request, course_id: str):
     # Validate path parameter format early to avoid unintended 500s
     if not _is_uuid_like(course_id):
         return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     # Owner confirmed; fetch course and return
@@ -2576,7 +2424,6 @@ class TaskReorderPayload(BaseModel):
     task_ids: object | None = None
 
 
-@teaching_router.patch("/api/teaching/courses/{course_id}")
 async def update_course(request: Request, course_id: str, payload: CourseUpdate):
     """Update course fields — owner-only.
 
@@ -2596,7 +2443,7 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return _private_error({"error": "forbidden"}, status_code=403)
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     updates = payload.model_dump(mode="python", exclude_unset=True)
@@ -2633,7 +2480,6 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     return _json_private(_serialize_course(updated), status_code=200, vary_origin=True)
 
 
-@teaching_router.delete("/api/teaching/courses/{course_id}")
 async def delete_course(request: Request, course_id: str):
     """Delete a course and its memberships — owner-only.
 
@@ -2654,7 +2500,7 @@ async def delete_course(request: Request, course_id: str):
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     # CSRF defense-in-depth for browser clients
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     try:
@@ -2683,7 +2529,6 @@ async def delete_course(request: Request, course_id: str):
         # Conservative default: do not claim deletion if ownership/existence cannot be determined
         return JSONResponse({"error": "forbidden"}, status_code=403)
 
-@teaching_router.get("/api/teaching/units")
 async def list_units(request: Request, limit: int = 20, offset: int = 0):
     """
     Return units authored by the current teacher.
@@ -2713,7 +2558,6 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     return _json_private([_serialize_unit(u) for u in units], status_code=200)
 
 
-@teaching_router.post("/api/teaching/units")
 async def create_unit(request: Request, payload: UnitCreatePayload):
     """
     Create a reusable unit owned by the calling teacher.
@@ -2733,7 +2577,7 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     sub = _current_sub(user)
@@ -2756,7 +2600,6 @@ async def create_unit(request: Request, payload: UnitCreatePayload):
     return _json_private(_serialize_unit(unit), status_code=201)
 
 
-@teaching_router.get("/api/teaching/units/{unit_id}")
 async def get_unit(request: Request, unit_id: str):
     """
     Get a learning unit by id — author only.
@@ -2781,7 +2624,7 @@ async def get_unit(request: Request, unit_id: str):
     if not _is_uuid_like(unit_id):
         return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     # Author confirmed; fetch the unit via repo (DB or in-memory)
@@ -2798,7 +2641,6 @@ async def get_unit(request: Request, unit_id: str):
     return _json_private(_serialize_unit(u), status_code=200)
 
 
-@teaching_router.patch("/api/teaching/units/{unit_id}")
 async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload):
     """
     Update metadata of a unit owned by the current teacher.
@@ -2821,11 +2663,11 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     updates = payload.model_dump(mode="python", exclude_unset=True)
@@ -2841,7 +2683,6 @@ async def update_unit(request: Request, unit_id: str, payload: UnitUpdatePayload
     return _json_private(_serialize_unit(updated), status_code=200)
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}")
 async def delete_unit(request: Request, unit_id: str):
     """
     Delete a unit owned by the current teacher.
@@ -2860,11 +2701,11 @@ async def delete_unit(request: Request, unit_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -2890,7 +2731,8 @@ async def delete_unit(request: Request, unit_id: str):
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
-@teaching_router.get("/api/teaching/units/{unit_id}/phases")
+
+
 async def list_unit_phases(request: Request, unit_id: str):
     """List phases of a modular unit (author only)."""
     repo = _get_repo()
@@ -2898,7 +2740,7 @@ async def list_unit_phases(request: Request, unit_id: str):
     if error:
         return error
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "list_unit_phases_for_author")
@@ -2918,18 +2760,17 @@ async def list_unit_phases(request: Request, unit_id: str):
     return _json_private([_serialize_unit_phase_public(p) for p in items], status_code=200)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/phases")
 async def create_unit_phase(request: Request, unit_id: str, payload: UnitPhaseCreatePayload):
     """Create a phase in a modular unit (author only); appends at the next position."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "create_unit_phase")
@@ -2948,20 +2789,24 @@ async def create_unit_phase(request: Request, unit_id: str, payload: UnitPhaseCr
     return _json_private(_serialize_unit_phase_public(phase), status_code=201, vary_origin=True)
 
 
-@teaching_router.patch("/api/teaching/units/{unit_id}/phases/{phase_id}")
-async def update_unit_phase(request: Request, unit_id: str, phase_id: str, payload: UnitPhaseUpdatePayload):
+async def update_unit_phase(
+    request: Request,
+    unit_id: str,
+    phase_id: str,
+    payload: UnitPhaseUpdatePayload,
+):
     """Rename a phase in a modular unit (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id) or not _is_uuid_like(phase_id):
         return _private_error({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "update_unit_phase_title")
@@ -2984,14 +2829,13 @@ async def update_unit_phase(request: Request, unit_id: str, phase_id: str, paylo
     return _json_private(_serialize_unit_phase_public(updated), status_code=200, vary_origin=True)
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/phases/{phase_id}")
 async def delete_unit_phase(request: Request, unit_id: str, phase_id: str):
     """Delete a phase (and all modules/edges/content inside it) (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -2999,7 +2843,7 @@ async def delete_unit_phase(request: Request, unit_id: str, phase_id: str):
     if not _is_uuid_like(phase_id):
         return _private_error({"error": "bad_request", "detail": "invalid_phase_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "delete_unit_phase_for_author")
@@ -3019,21 +2863,20 @@ async def delete_unit_phase(request: Request, unit_id: str, phase_id: str):
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/phases/reorder")
 async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhaseReorderPayload):
     """Reorder phases (author only) transactionally to positions 1..n as provided."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
         return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
     # Security-first: verify authorship before deep payload validation to avoid error oracle
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "reorder_unit_phases_owned")
@@ -3060,19 +2903,16 @@ async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhase
     except Exception as exc:
         sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
         if sqlstate == "23514":  # check_violation
-            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
+            return _private_error(
+                {"error": "bad_request", "detail": "edge_constraint_violation"},
+                status_code=400,
+            )
         raise
     return _json_private([_serialize_unit_phase_public(p) for p in ordered], status_code=200, vary_origin=True)
 
 
-@teaching_router.get("/api/teaching/units/{unit_id}/modules/graph")
 async def get_unit_modules_graph(request: Request, unit_id: str):
-    """Return the authoring graph payload for a modular unit (author only).
-
-    Why:
-        The teacher UI needs a single endpoint to load the visual editor state:
-        phases (columns), modules (nodes) and dependency edges.
-    """
+    """Return the authoring graph payload for a modular unit (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
@@ -3080,7 +2920,7 @@ async def get_unit_modules_graph(request: Request, unit_id: str):
     if not _is_uuid_like(unit_id):
         return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(
@@ -3114,16 +2954,8 @@ async def get_unit_modules_graph(request: Request, unit_id: str):
     return _json_private(payload, status_code=200)
 
 
-@teaching_router.get("/api/teaching/units/{unit_id}/modules/{module_id}/content-target")
 async def get_unit_module_content_target(request: Request, unit_id: str, module_id: str):
-    """Return the backing section id for a modular unit module.
-
-    Why:
-        Module authoring stores materials and tasks in a backing `unit_sections`
-        row. The regular module graph intentionally hides that implementation
-        detail, so machine clients need this narrow resolver instead of relying
-        on UI read-model payloads.
-    """
+    """Return the backing section id for a modular unit module."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
@@ -3133,7 +2965,7 @@ async def get_unit_module_content_target(request: Request, unit_id: str, module_
     if not _is_uuid_like(module_id):
         return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     if not hasattr(repo, "get_unit_module_for_author"):
@@ -3149,25 +2981,19 @@ async def get_unit_module_content_target(request: Request, unit_id: str, module_
     return _json_private({"module_id": str(module_id), "section_id": str(section_id)}, status_code=200)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/modules")
 async def create_unit_module(request: Request, unit_id: str, payload: UnitModuleCreatePayload):
-    """Create a module (graph node) inside a phase (author only).
-
-    Option B:
-        Internally this creates a backing `unit_sections` row and a 1:1
-        `unit_modules` row. The API returns module metadata only.
-    """
+    """Create a module (graph node) inside a phase (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
         return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "create_unit_module_for_author")
@@ -3193,20 +3019,19 @@ async def create_unit_module(request: Request, unit_id: str, payload: UnitModule
     return _json_private(_serialize_unit_module(created), status_code=201, vary_origin=True)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/edges")
 async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
     """Create a directed dependency edge within a modular unit (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
         return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(
@@ -3270,13 +3095,13 @@ def _delete_unit_module_edge_common(*, request: Request, unit_id: str, from_id: 
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
         return _private_error({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "delete_unit_module_edge_for_author")
@@ -3287,7 +3112,10 @@ def _delete_unit_module_edge_common(*, request: Request, unit_id: str, from_id: 
         return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
     try:
         deleted = repo.delete_unit_module_edge_for_author(
-            unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub
+            unit_id=unit_id,
+            from_module_id=from_id,
+            to_module_id=to_id,
+            author_id=sub,
         )
     except ValueError:
         return _private_error({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400)
@@ -3314,7 +3142,6 @@ def _legacy_edge_delete_successor_link(*, unit_id: str, from_module_id: str, to_
     )
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/modules/edges")
 async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitModuleEdgePayload):
     """Delete a dependency edge using request-body module ids (author only).
 
@@ -3342,9 +3169,11 @@ async def delete_unit_module_edge(request: Request, unit_id: str, payload: UnitM
     return response
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{from_module_id}/edges/{to_module_id}")
 async def delete_unit_module_edge_by_path(
-    request: Request, unit_id: str, from_module_id: str, to_module_id: str
+    request: Request,
+    unit_id: str,
+    from_module_id: str,
+    to_module_id: str,
 ):
     """Delete a dependency edge using path params (author only)."""
     return _delete_unit_module_edge_common(
@@ -3355,14 +3184,18 @@ async def delete_unit_module_edge_by_path(
     )
 
 
-@teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}")
-async def update_unit_module(request: Request, unit_id: str, module_id: str, payload: UnitModuleUpdatePayload):
+async def update_unit_module(
+    request: Request,
+    unit_id: str,
+    module_id: str,
+    payload: UnitModuleUpdatePayload,
+):
     """Update module settings (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -3370,7 +3203,7 @@ async def update_unit_module(request: Request, unit_id: str, module_id: str, pay
     if not _is_uuid_like(module_id):
         return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "update_unit_module_owned")
@@ -3388,7 +3221,10 @@ async def update_unit_module(request: Request, unit_id: str, module_id: str, pay
     k = payload.required_prereq_count if k_provided else _UNSET
     if k is not _UNSET:
         if k is None or isinstance(k, bool) or (not isinstance(k, int)) or int(k) < 0:
-            return _private_error({"error": "bad_request", "detail": "invalid_required_prereq_count"}, status_code=400)
+            return _private_error(
+                {"error": "bad_request", "detail": "invalid_required_prereq_count"},
+                status_code=400,
+            )
     try:
         update_kwargs: dict[str, object] = {}
         if title_provided:
@@ -3413,14 +3249,13 @@ async def update_unit_module(request: Request, unit_id: str, module_id: str, pay
     return _json_private(_serialize_unit_module(updated), status_code=200, vary_origin=True)
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{module_id}")
 async def delete_unit_module(request: Request, unit_id: str, module_id: str):
     """Delete a module and its backing content (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -3428,7 +3263,7 @@ async def delete_unit_module(request: Request, unit_id: str, module_id: str):
     if not _is_uuid_like(module_id):
         return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "delete_unit_module_for_author")
@@ -3448,19 +3283,13 @@ async def delete_unit_module(request: Request, unit_id: str, module_id: str):
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/phases/{phase_id}/modules/reorder")
 async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: str, payload: UnitModuleReorderPayload):
-    """Reorder (and move) modules for a phase (author only).
-
-    Contract:
-        - Rejects requests that would violate dependency edge constraints with
-          detail=edge_constraint_violation.
-    """
+    """Reorder (and move) modules for a phase (author only)."""
     repo = _get_repo()
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -3468,7 +3297,7 @@ async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: s
     if not _is_uuid_like(phase_id):
         return _private_error({"error": "bad_request", "detail": "invalid_phase_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     repo_error = _require_modular_repo_methods(repo, "reorder_unit_phase_modules_owned")
@@ -3502,13 +3331,15 @@ async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: s
     except Exception as exc:
         sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
         if sqlstate == "23514":  # check_violation
-            return _private_error({"error": "bad_request", "detail": "edge_constraint_violation"}, status_code=400)
+            return _private_error(
+                {"error": "bad_request", "detail": "edge_constraint_violation"},
+                status_code=400,
+            )
         raise
 
     return _json_private([_serialize_unit_module(m) for m in ordered], status_code=200, vary_origin=True)
 
 
-@teaching_router.get("/api/teaching/units/{unit_id}/sections")
 async def list_sections(request: Request, unit_id: str):
     """List sections of a learning unit (author only).
 
@@ -3526,7 +3357,7 @@ async def list_sections(request: Request, unit_id: str):
         # Unauthenticated/role → 403 (middleware may map unauth to 401 earlier)
         return error
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -3536,7 +3367,6 @@ async def list_sections(request: Request, unit_id: str):
     return _json_private([_serialize_section(s) for s in items], status_code=200)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/sections")
 async def create_section(request: Request, unit_id: str, payload: SectionCreatePayload):
     """Create a section in a unit (author only); appends at the next position.
 
@@ -3553,11 +3383,11 @@ async def create_section(request: Request, unit_id: str, payload: SectionCreateP
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     title = payload.title or ""
@@ -3570,7 +3400,6 @@ async def create_section(request: Request, unit_id: str, payload: SectionCreateP
     return JSONResponse(content=_serialize_section(sec), status_code=201)
 
 
-@teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}")
 async def update_section(request: Request, unit_id: str, section_id: str, payload: SectionUpdatePayload):
     """Update a section (author only). Only `title` is updatable in this slice.
 
@@ -3587,13 +3416,13 @@ async def update_section(request: Request, unit_id: str, section_id: str, payloa
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     updates = payload.model_dump(mode="python", exclude_unset=True)
@@ -3608,7 +3437,6 @@ async def update_section(request: Request, unit_id: str, section_id: str, payloa
     return JSONResponse(content=_serialize_section(updated), status_code=200)
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}")
 async def delete_section(request: Request, unit_id: str, section_id: str):
     """Delete a section in a unit (author only); resequences remaining positions.
 
@@ -3625,13 +3453,13 @@ async def delete_section(request: Request, unit_id: str, section_id: str):
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id) or not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_path_params"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     deleted = repo.delete_section(unit_id, section_id, sub)
@@ -3640,7 +3468,6 @@ async def delete_section(request: Request, unit_id: str, section_id: str):
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/reorder")
 async def reorder_sections(request: Request, unit_id: str, payload: SectionReorderPayload):
     """Reorder sections (author only) transactionally to positions 1..n as provided.
 
@@ -3657,14 +3484,14 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     sub = _current_sub(user)
     # Security-first: verify authorship before deep payload validation to avoid error oracle
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     ids = payload.section_ids
@@ -3688,7 +3515,6 @@ async def reorder_sections(request: Request, unit_id: str, payload: SectionReord
     return JSONResponse(content=[_serialize_section(s) for s in ordered], status_code=200)
 
 
-@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
 async def list_section_tasks(request: Request, unit_id: str, section_id: str):
     """List tasks of a section for the authoring teacher.
 
@@ -3703,7 +3529,7 @@ async def list_section_tasks(request: Request, unit_id: str, section_id: str):
     if not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -3713,14 +3539,13 @@ async def list_section_tasks(request: Request, unit_id: str, section_id: str):
     return _json_private([_serialize_task(t) for t in items], status_code=200)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks")
 async def create_section_task(request: Request, unit_id: str, section_id: str, payload: TaskCreatePayload):
     """Create a task within a section (author only)."""
 
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -3728,7 +3553,7 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
     if not _is_uuid_like(section_id):
         return _private_error({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -3771,7 +3596,6 @@ async def create_section_task(request: Request, unit_id: str, section_id: str, p
     return _json_private(_serialize_task(task), status_code=201)
 
 
-@teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")
 async def update_section_task(
     request: Request,
     unit_id: str,
@@ -3784,7 +3608,7 @@ async def update_section_task(
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -3794,7 +3618,7 @@ async def update_section_task(
     if not _is_uuid_like(task_id):
         return _private_error({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     raw_updates = payload.model_dump(mode="python", exclude_unset=True)
@@ -3853,14 +3677,13 @@ async def update_section_task(
     return _json_private(_serialize_task(updated), status_code=200)
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")
 async def delete_section_task(request: Request, unit_id: str, section_id: str, task_id: str):
     """Delete a task and resequence positions."""
 
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -3870,7 +3693,7 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
     if not _is_uuid_like(task_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_task_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -3882,39 +3705,20 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
-def _resolve_module_section_for_authoring_mutation(
-    request: Request,
-    *,
-    unit_id: str,
-    module_id: str,
-    task_id: str | None = None,
-) -> tuple[str | None, Response | JSONResponse | None]:
-    """Route-local adapter for shared module-backed authoring resolution."""
-
-    return teaching_authoring._resolve_module_section_for_authoring_mutation(
-        request,
-        unit_id=unit_id,
-        module_id=module_id,
-        task_id=task_id,
-        repo_provider=_get_repo,
-    )
-
-
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks")
 async def create_module_task(request: Request, unit_id: str, module_id: str, payload: TaskCreatePayload):
     """Create a task in a module-backed section with write scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await create_section_task(request, unit_id, str(section_id), payload)
 
 
-@teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}")
 async def update_module_task(
     request: Request,
     unit_id: str,
@@ -3924,45 +3728,45 @@ async def update_module_task(
 ):
     """Update a task in a module-backed section with write scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await update_section_task(request, unit_id, str(section_id), task_id, payload)
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}")
 async def delete_module_task(request: Request, unit_id: str, module_id: str, task_id: str):
     """Delete a task in a module-backed section with delete scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await delete_section_task(request, unit_id, str(section_id), task_id)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/reorder")
 async def reorder_module_tasks(request: Request, unit_id: str, module_id: str, payload: TaskReorderPayload):
     """Reorder tasks in a module-backed section with write scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await reorder_section_tasks(request, unit_id, str(section_id), payload)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder")
 async def reorder_section_tasks(
     request: Request,
     unit_id: str,
@@ -3974,7 +3778,7 @@ async def reorder_section_tasks(
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -3982,7 +3786,7 @@ async def reorder_section_tasks(
     if not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     ids = payload.task_ids
@@ -4010,7 +3814,6 @@ async def reorder_section_tasks(
     return JSONResponse(content=[_serialize_task(t) for t in ordered], status_code=200)
 
 
-@teaching_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/materials")
 async def list_section_materials(request: Request, unit_id: str, section_id: str):
     """
     List markdown materials of a section for its author.
@@ -4040,7 +3843,7 @@ async def list_section_materials(request: Request, unit_id: str, section_id: str
     if not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -4050,7 +3853,6 @@ async def list_section_materials(request: Request, unit_id: str, section_id: str
     return _json_private([_serialize_material(m) for m in items], status_code=200)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials")
 async def create_section_material(
     request: Request,
     unit_id: str,
@@ -4081,7 +3883,7 @@ async def create_section_material(
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -4089,7 +3891,7 @@ async def create_section_material(
     if not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -4119,7 +3921,6 @@ async def create_section_material(
     return _json_private(_serialize_material(material), status_code=201)
 
 
-@teaching_router.patch("/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}")
 async def update_section_material(
     request: Request,
     unit_id: str,
@@ -4151,7 +3952,7 @@ async def update_section_material(
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -4161,7 +3962,7 @@ async def update_section_material(
     if not _is_uuid_like(material_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -4216,7 +4017,6 @@ async def update_section_material(
     return JSONResponse(content=_serialize_material(updated), status_code=200)
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}")
 async def delete_section_material(request: Request, unit_id: str, section_id: str, material_id: str):
     """
     Delete a markdown material (author only) and resequence positions.
@@ -4241,7 +4041,7 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -4251,7 +4051,7 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
     if not _is_uuid_like(material_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -4299,7 +4099,6 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents")
 async def create_section_material_upload_intent(
     request: Request,
     unit_id: str,
@@ -4311,7 +4110,7 @@ async def create_section_material_upload_intent(
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -4319,7 +4118,7 @@ async def create_section_material_upload_intent(
     if not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     # Keep Teaching aligned with Learning: when startup wiring failed because
@@ -4359,7 +4158,6 @@ async def create_section_material_upload_intent(
     return JSONResponse(content=intent, status_code=200)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize")
 async def finalize_section_material_upload(
     request: Request,
     unit_id: str,
@@ -4371,7 +4169,7 @@ async def finalize_section_material_upload(
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -4385,7 +4183,7 @@ async def finalize_section_material_upload(
     if not re.fullmatch(r"[0-9a-f]{64}", normalized_sha):
         return JSONResponse({"error": "bad_request", "detail": "checksum_mismatch"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -4420,7 +4218,6 @@ async def finalize_section_material_upload(
     return JSONResponse(content=_serialize_material(material), status_code=status_code)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/materials")
 async def create_module_material(
     request: Request,
     unit_id: str,
@@ -4429,17 +4226,17 @@ async def create_module_material(
 ):
     """Create a material in a module-backed section with write scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await create_section_material(request, unit_id, str(section_id), payload)
 
 
-@teaching_router.patch("/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}")
 async def update_module_material(
     request: Request,
     unit_id: str,
@@ -4449,31 +4246,31 @@ async def update_module_material(
 ):
     """Update a material in a module-backed section with write scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await update_section_material(request, unit_id, str(section_id), material_id, payload)
 
 
-@teaching_router.delete("/api/teaching/units/{unit_id}/modules/{module_id}/materials/{material_id}")
 async def delete_module_material(request: Request, unit_id: str, module_id: str, material_id: str):
     """Delete a material in a module-backed section with delete scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await delete_section_material(request, unit_id, str(section_id), material_id)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/materials/reorder")
 async def reorder_module_materials(
     request: Request,
     unit_id: str,
@@ -4482,17 +4279,17 @@ async def reorder_module_materials(
 ):
     """Reorder materials in a module-backed section with write scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await reorder_section_materials(request, unit_id, str(section_id), payload)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/materials/upload-intents")
 async def create_module_material_upload_intent(
     request: Request,
     unit_id: str,
@@ -4501,17 +4298,17 @@ async def create_module_material_upload_intent(
 ):
     """Create a file-material upload intent in a module with write scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await create_section_material_upload_intent(request, unit_id, str(section_id), payload)
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/materials/finalize")
 async def finalize_module_material_upload(
     request: Request,
     unit_id: str,
@@ -4520,19 +4317,17 @@ async def finalize_module_material_upload(
 ):
     """Finalize a file-material upload in a module with write scope only."""
 
-    section_id, error = _resolve_module_section_for_authoring_mutation(
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_mutation(
         request,
         unit_id=unit_id,
         module_id=module_id,
+        repo_provider=_get_repo,
     )
     if error:
         return error
     return await finalize_section_material_upload(request, unit_id, str(section_id), payload)
 
 
-@teaching_router.get(
-    "/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url"
-)
 async def get_section_material_download_url(
     request: Request,
     unit_id: str,
@@ -4552,7 +4347,7 @@ async def get_section_material_download_url(
     if not _is_uuid_like(material_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_material_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     # Normalize and validate disposition at the route layer to return 400 (not FastAPI 422).
@@ -4582,7 +4377,6 @@ async def get_section_material_download_url(
     return JSONResponse(content=payload, status_code=200, headers={"Cache-Control": "private, no-store"})
 
 
-@teaching_router.post("/api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder")
 async def reorder_section_materials(
     request: Request,
     unit_id: str,
@@ -4612,7 +4406,7 @@ async def reorder_section_materials(
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(unit_id):
@@ -4620,7 +4414,7 @@ async def reorder_section_materials(
     if not _is_uuid_like(section_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_section_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_unit_author(unit_id, sub)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     ids = payload.material_ids
@@ -4648,7 +4442,6 @@ async def reorder_section_materials(
     return JSONResponse(content=[_serialize_material(m) for m in ordered], status_code=200)
 
 
-@teaching_router.get("/api/teaching/courses/{course_id}/modules")
 async def list_course_modules(request: Request, course_id: str):
     """
     List modules for a course owned by the current teacher.
@@ -4669,7 +4462,7 @@ async def list_course_modules(request: Request, course_id: str):
     if error:
         return error
     sub = _current_sub(user)
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
@@ -4680,7 +4473,6 @@ async def list_course_modules(request: Request, course_id: str):
     return JSONResponse(content=[_serialize_module(m) for m in modules], status_code=200)
 
 
-@teaching_router.post("/api/teaching/courses/{course_id}/modules")
 async def create_course_module(request: Request, course_id: str, payload: CourseModuleCreatePayload):
     """
     Attach a unit as a module within a course owned by the caller.
@@ -4703,7 +4495,7 @@ async def create_course_module(request: Request, course_id: str, payload: Course
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     sub = _current_sub(user)
@@ -4711,10 +4503,10 @@ async def create_course_module(request: Request, course_id: str, payload: Course
     if not _is_uuid_like(unit_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400)
     try:
-        guard_course = _guard_course_owner(course_id, sub)
+        guard_course = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
         if guard_course:
             return guard_course
-        guard_unit = _guard_unit_author(unit_id, sub)
+        guard_unit = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
         if guard_unit:
             return guard_unit
         module = _get_repo().create_course_module_owned(
@@ -4735,7 +4527,6 @@ async def create_course_module(request: Request, course_id: str, payload: Course
     return _json_private(_serialize_module(module), status_code=201)
 
 
-@teaching_router.post("/api/teaching/courses/{course_id}/modules/reorder")
 async def reorder_course_modules(request: Request, course_id: str, payload: CourseModuleReorderPayload):
     """
     Reorder modules within a course atomically.
@@ -4758,14 +4549,14 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     user, error = _require_teacher(request)
     if error:
         return error
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     if not _is_uuid_like(course_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
     sub = _current_sub(user)
     # Security-first: check ownership before deep payload validation to avoid error oracle
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     module_ids = payload.module_ids
@@ -4791,7 +4582,6 @@ async def reorder_course_modules(request: Request, course_id: str, payload: Cour
     return JSONResponse(content=[_serialize_module(m) for m in modules], status_code=200)
 
 
-@teaching_router.delete("/api/teaching/courses/{course_id}/modules/{module_id}")
 async def delete_course_module(request: Request, course_id: str, module_id: str):
     """
     Remove a unit from a course (owner only).
@@ -4815,12 +4605,12 @@ async def delete_course_module(request: Request, course_id: str, module_id: str)
     if not _is_uuid_like(module_id):
         return JSONResponse({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400)
     sub = _current_sub(user)
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         return guard
     try:
         # CSRF guard for DELETE
-        csrf = _csrf_guard(request)
+        csrf = teaching_guards._csrf_guard(request)
         if csrf:
             return csrf
         deleted = _get_repo().delete_course_module_owned(course_id, module_id, sub)
@@ -4830,7 +4620,6 @@ async def delete_course_module(request: Request, course_id: str, module_id: str)
         return JSONResponse({"error": "not_found"}, status_code=404)
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
-@teaching_router.patch("/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility")
 async def update_module_section_visibility(
     request: Request,
     course_id: str,
@@ -4866,7 +4655,7 @@ async def update_module_section_visibility(
     if error:
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
 
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
 
@@ -4889,7 +4678,7 @@ async def update_module_section_visibility(
             vary_origin=True,
         )
     sub = _current_sub(user)
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         # Normalize guard response to include private cache header
         if isinstance(guard, JSONResponse):
@@ -4922,7 +4711,6 @@ async def update_module_section_visibility(
     return _json_private(record, status_code=200, vary_origin=True)
 
 
-@teaching_router.get("/api/teaching/courses/{course_id}/modules/{module_id}/sections/releases")
 async def list_module_section_releases(request: Request, course_id: str, module_id: str):
     """List release state entries for sections in a module (owner only).
 
@@ -4938,7 +4726,7 @@ async def list_module_section_releases(request: Request, course_id: str, module_
     if not _is_uuid_like(module_id):
         return _private_error({"error": "bad_request", "detail": "invalid_module_id"}, status_code=400, vary_origin=True)
     # Guard ownership (403/404 semantics handled by helper)
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
@@ -4968,7 +4756,6 @@ async def list_module_section_releases(request: Request, course_id: str, module_
     return _json_private(releases, status_code=200, vary_origin=True)
 
 
-@teaching_router.get("/api/teaching/courses/{course_id}/modules/{module_id}/sections")
 async def list_module_sections_with_visibility(request: Request, course_id: str, module_id: str):
     """List sections of the unit attached to a module, with visibility state.
 
@@ -5004,7 +4791,7 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
 
     sub = _current_sub(user)
     # Owner guard (ensures teacher owns the course)
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
@@ -5146,7 +4933,6 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
     return _private_error({"error": "forbidden"}, status_code=403)
 
 
-@teaching_router.get("/api/teaching/courses/{course_id}/members")
 async def list_members(request: Request, course_id: str, limit: int = 10, offset: int = 0):
     """List members for a course — owner-only, with names resolved via directory adapter.
 
@@ -5205,7 +4991,6 @@ class AddMember(BaseModel):
     name: str | None = None  # ignored by API, accepted for compatibility
 
 
-@teaching_router.post("/api/teaching/courses/{course_id}/members")
 async def add_member(request: Request, course_id: str, payload: AddMember):
     """Add a student to a course — owner-only; idempotent (201 new, 204 existing).
 
@@ -5224,7 +5009,7 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
     sub = _current_sub(user)
     if not _role_in(user, "teacher"):
         return _private_error({"error": "forbidden"}, status_code=403)
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     # Prefer the contract key; fall back to legacy `sub` for compatibility with older callers/tests.
@@ -5255,7 +5040,6 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
-@teaching_router.delete("/api/teaching/courses/{course_id}/members/{student_sub}")
 async def remove_member(request: Request, course_id: str, student_sub: str):
     """Remove a student from a course — owner-only; idempotent 204.
 
@@ -5272,7 +5056,7 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     if not _role_in(user, "teacher"):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     # CSRF guard for membership mutation
-    csrf = _csrf_guard(request)
+    csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     try:
@@ -5294,7 +5078,6 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
 
-@teaching_router.get("/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary")
 async def get_unit_live_summary(
     request: Request,
     course_id: str,
@@ -5348,7 +5131,7 @@ async def get_unit_live_summary(
             return _private_error({"error": "bad_request", "detail": "invalid_timestamp"}, status_code=400, vary_origin=True)
 
     # Ownership guard
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
@@ -5368,7 +5151,7 @@ async def get_unit_live_summary(
         modules = []
     if str(unit_id) not in {str(m.get("unit_id")) for m in modules}:
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
-    snapshot_cursor = _summary_snapshot_cursor_runtime(repo)
+    snapshot_cursor = _summary_snapshot_cursor_runtime(repo, sub)
     if not snapshot_cursor:
         return _private_error(
             {"error": "service_unavailable", "detail": "summary_cursor_unavailable"},
@@ -5472,125 +5255,104 @@ async def get_unit_live_summary(
                         exc,
                         extra={"course_id": course_id, "unit_id": unit_id},
                     )
-                    import psycopg  # type: ignore
-                    dsn = getattr(repo, "_dsn", None)
                     helper_rows: list[dict[str, Any]] = []
-                    if dsn:
-                        with psycopg.connect(dsn) as conn:
-                            with conn.cursor() as cur:
-                                cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
-                                try:
-                                    helper_rows = _load_unit_live_helper_rows(
-                                        cur,
+                    try:
+                        helper_rows = _load_unit_live_helper_rows(
+                            repo,
+                            owner_sub=sub,
+                            course_id=course_id,
+                            unit_id=unit_id,
+                            updated_since_dt=updated_since_dt,
+                            limit=int(limit),
+                            offset=int(offset),
+                        )
+                        has_map = {(str(row["student_sub"]), str(row["task_id"])) for row in helper_rows}
+                        task_ids_by_student: dict[str, list[str]] = {}
+                        for row in helper_rows:
+                            student_sub = str(row["student_sub"])
+                            task_ids_by_student.setdefault(student_sub, []).append(str(row["task_id"]))
+                        latest_state_by_task = (
+                            _load_latest_submission_state_by_task(repo, sub, course_id, task_ids_by_student)
+                            if any(
+                                row.get("score_raw") is None or row.get("score_max") is None
+                                for row in helper_rows
+                            )
+                            else {}
+                        )
+                        submission_ids_by_student: dict[str, list[str]] = {}
+                        for row in helper_rows:
+                            student_sub = str(row["student_sub"])
+                            task_id = str(row["task_id"])
+                            latest_state = latest_state_by_task.get((student_sub, task_id), {})
+                            submission_id = latest_state.get("submission_id") or row.get("submission_id")
+                            if submission_id:
+                                submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
+                            score_raw = _safe_int(row.get("score_raw"))
+                            score_max = _safe_int(row.get("score_max"))
+                            if score_raw is None or score_max is None:
+                                score_raw = latest_state.get("score_raw", score_raw)
+                                score_max = latest_state.get("score_max", score_max)
+                            score_map[(student_sub, task_id)] = (score_raw, score_max)
+                        avg_by_id = _load_average_scores_by_submission_id(repo, sub, submission_ids_by_student)
+                        avg_map = {
+                            (
+                                str(row["student_sub"]),
+                                str(row["task_id"]),
+                            ): avg_by_id.get(
+                                latest_state_by_task.get((str(row["student_sub"]), str(row["task_id"])), {}).get(
+                                    "submission_id"
+                                )
+                                or row.get("submission_id")
+                            )
+                            for row in helper_rows
+                        }
+                        h5p_map = {
+                            (str(row["student_sub"]), str(row["task_id"])): bool(row["h5p_completed"])
+                            for row in helper_rows
+                            if row.get("h5p_completed") is not None
+                        }
+                        created_at_map = {
+                            (str(row["student_sub"]), str(row["task_id"])): str(row.get("created_at_iso") or "")
+                            for row in helper_rows
+                            if row.get("created_at_iso")
+                        }
+
+                        if tasks and member_subs:
+                            task_ids = [t["id"] for t in tasks]
+                            if not has_map:
+                                fallback_rows = repo.list_unit_live_summary_fallback_rows(
+                                    owner_sub=sub,
+                                    course_id=course_id,
+                                    task_ids=task_ids,
+                                    member_subs=member_subs,
+                                )
+                                has_map = {(str(student_sub), str(task_id)) for student_sub, task_id, _ in fallback_rows}
+                                created_at_map.update(
+                                    {
+                                        (str(student_sub), str(task_id)): str(created_at_iso or "")
+                                        for student_sub, task_id, created_at_iso in fallback_rows
+                                        if created_at_iso
+                                    }
+                                )
+                            if not has_map:
+                                for sid in member_subs:
+                                    sid_rows = repo.list_unit_live_task_ids_for_student(
                                         owner_sub=sub,
                                         course_id=course_id,
-                                        unit_id=unit_id,
-                                        updated_since_dt=updated_since_dt,
-                                        limit=int(limit),
-                                        offset=int(offset),
+                                        student_sub=sid,
+                                        task_ids=task_ids,
                                     )
-                                    has_map = {(row["student_sub"], row["task_id"]) for row in helper_rows}
-                                    task_ids_by_student: dict[str, list[str]] = {}
-                                    for row in helper_rows:
-                                        student_sub = str(row["student_sub"])
-                                        task_ids_by_student.setdefault(student_sub, []).append(str(row["task_id"]))
-                                    latest_state_by_task = (
-                                        _load_latest_submission_state_by_task(cur, sub, course_id, task_ids_by_student)
-                                        if any(
-                                            row.get("score_raw") is None or row.get("score_max") is None
-                                            for row in helper_rows
-                                        )
-                                        else {}
-                                    )
-                                    submission_ids_by_student: dict[str, list[str]] = {}
-                                    for row in helper_rows:
-                                        student_sub = str(row["student_sub"])
-                                        task_id = str(row["task_id"])
-                                        latest_state = latest_state_by_task.get((student_sub, task_id), {})
-                                        submission_id = latest_state.get("submission_id") or row.get("submission_id")
-                                        if submission_id:
-                                            submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
-                                        score_raw = _safe_int(row.get("score_raw"))
-                                        score_max = _safe_int(row.get("score_max"))
-                                        if score_raw is None or score_max is None:
-                                            score_raw = latest_state.get("score_raw", score_raw)
-                                            score_max = latest_state.get("score_max", score_max)
-                                        score_map[(student_sub, task_id)] = (score_raw, score_max)
-                                    avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
-                                    avg_map = {
-                                        (
-                                            str(row["student_sub"]),
-                                            str(row["task_id"]),
-                                        ): avg_by_id.get(
-                                            latest_state_by_task.get((str(row["student_sub"]), str(row["task_id"])), {}).get("submission_id")
-                                            or row.get("submission_id")
-                                        )
-                                        for row in helper_rows
-                                    }
-                                    h5p_map = {
-                                        (str(row["student_sub"]), str(row["task_id"])): bool(row["h5p_completed"])
-                                        for row in helper_rows
-                                        if row.get("h5p_completed") is not None
-                                    }
-                                    created_at_map = {
-                                        (str(row["student_sub"]), str(row["task_id"])): str(row.get("created_at_iso") or "")
-                                        for row in helper_rows
-                                        if row.get("created_at_iso")
-                                    }
-                                except Exception as legacy_exc:
-                                    logger.warning(
-                                        "Unit summary fallback: get_unit_latest_submissions_for_owner unavailable — %s",
-                                        legacy_exc,
-                                        extra={"course_id": course_id, "unit_id": unit_id},
-                                    )
-                                    helper_rows = []
-                                if tasks and member_subs:
-                                    task_ids = [t["id"] for t in tasks]
-                                    if not helper_rows:
-                                        cur.execute(
-                                            """
-                                            select distinct on (student_sub, task_id)
-                                                   student_sub::text,
-                                                   task_id::text,
-                                                   to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                                            from public.learning_submissions
-                                            where course_id = %s
-                                              and task_id = any(%s)
-                                              and student_sub = any(%s)
-                                            order by student_sub, task_id, created_at desc, attempt_nr desc, id desc
-                                            """,
-                                            (course_id, task_ids, member_subs),
-                                        )
-                                        rows = cur.fetchall() or []
-                                        has_map = {(r[0], r[1]) for r in rows}
-                                        created_at_map.update(
-                                            {
-                                                (str(student_sub), str(task_id)): str(created_at_iso or "")
-                                                for student_sub, task_id, created_at_iso in rows
-                                                if created_at_iso
-                                            }
-                                        )
-                                    if not has_map:
-                                        for sid in member_subs:
-                                            cur.execute("select set_config('app.current_sub', %s, true)", (sid,))
-                                            cur.execute(
-                                                """
-                                                select distinct on (task_id)
-                                                       task_id::text,
-                                                       to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                                                from public.learning_submissions
-                                                where course_id = %s
-                                                  and student_sub = %s
-                                                  and task_id = any(%s)
-                                                order by task_id, created_at desc, attempt_nr desc, id desc
-                                                """,
-                                                (course_id, sid, task_ids),
-                                            )
-                                            for tid, created_at_iso in cur.fetchall() or []:
-                                                has_map.add((sid, tid))
-                                                if created_at_iso:
-                                                    created_at_map[(sid, tid)] = str(created_at_iso)
-                                        cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                                    for task_id, created_at_iso in sid_rows:
+                                        has_map.add((sid, task_id))
+                                        if created_at_iso:
+                                            created_at_map[(sid, task_id)] = str(created_at_iso)
+                    except Exception as legacy_exc:
+                        logger.warning(
+                            "Unit summary fallback: get_unit_latest_submissions_for_owner unavailable — %s",
+                            legacy_exc,
+                            extra={"course_id": course_id, "unit_id": unit_id},
+                        )
+                        helper_rows = []
         except Exception:
             has_map = set()
             avg_map = {}
@@ -5598,30 +5360,16 @@ async def get_unit_live_summary(
             score_map = {}
             created_at_map = {}
 
-        for sid in member_subs:
-            task_cells: list[dict] = []
-            for t in tasks:
-                tid = t["id"]
-                has = ((sid, tid) in has_map)
-                cell: dict = {
-                    "task_id": tid,
-                    "has_submission": has,
-                    "average_score": (avg_map.get((sid, tid)) if has else None),
-                    "created_at": (created_at_map.get((sid, tid)) if has else None),
-                }
-                # H5P tasks are auto-scorable; for the live matrix we only need
-                # a binary "completed" flag (full score at least once).
-                if (t.get("kind") == "h5p") and has:
-                    latest_scores = score_map.get((sid, tid), (None, None))
-                    cell["score_raw"] = latest_scores[0]
-                    cell["score_max"] = latest_scores[1]
-                    cell["h5p_completed"] = h5p_map.get((sid, tid), False)
-                task_cells.append(cell)
-            row = {
-                "student": {"sub": sid, "name": names.get(sid, "Unbekannt")},
-                "tasks": task_cells,
-            }
-            rows_out.append(row)
+        rows_out = _build_live_summary_rows(
+            members=member_subs,
+            names=names,
+            tasks=tasks,
+            has_map=has_map,
+            avg_map=avg_map,
+            created_at_map=created_at_map,
+            score_map=score_map,
+            h5p_map=h5p_map,
+        )
 
     payload = {
         "cursor": snapshot_cursor,
@@ -5632,7 +5380,6 @@ async def get_unit_live_summary(
     return _json_private(payload, status_code=200, vary_origin=True)
 
 
-@teaching_router.get("/api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta")
 async def get_unit_live_delta(
     request: Request,
     course_id: str,
@@ -5695,7 +5442,7 @@ async def get_unit_live_delta(
         return _private_error({"error": "bad_request", "detail": "invalid_timestamp"}, status_code=400, vary_origin=True)
 
     sub = _current_sub(user)
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
@@ -5720,179 +5467,99 @@ async def get_unit_live_delta(
     try:
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
-            import psycopg  # type: ignore
+            helper_rows: list[dict[str, Any]] = []
+            helper_ok = True
+            avg_by_id: dict[str, float | None] = {}
+            try:
+                helper_rows = _load_unit_live_helper_rows(
+                    repo,
+                    owner_sub=sub,
+                    course_id=course_id,
+                    unit_id=unit_id,
+                    updated_since_dt=db_lower_bound,
+                    limit=int(limit),
+                    offset=int(offset),
+                )
+                task_ids_by_student: dict[str, list[str]] = {}
+                for row in helper_rows:
+                    student_sub = str(row["student_sub"])
+                    task_ids_by_student.setdefault(student_sub, []).append(str(row["task_id"]))
+                latest_state_by_task = (
+                    _load_latest_submission_state_by_task(repo, sub, course_id, task_ids_by_student)
+                    if any(
+                        row.get("score_raw") is None or row.get("score_max") is None
+                        for row in helper_rows
+                    )
+                    else {}
+                )
+                latest_changed_by_pair = repo.list_unit_live_latest_changed_at_by_pairs(
+                    owner_sub=sub,
+                    course_id=course_id,
+                    task_ids_by_student=task_ids_by_student,
+                )
+                submission_ids_by_student: dict[str, list[str]] = {}
+                for row in helper_rows:
+                    student_sub = str(row["student_sub"])
+                    task_id = str(row["task_id"])
+                    submission_id = (
+                        latest_state_by_task.get((student_sub, task_id), {}).get("submission_id")
+                        or row.get("submission_id")
+                    )
+                    if submission_id:
+                        submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
+                avg_by_id = _load_average_scores_by_submission_id(repo, sub, submission_ids_by_student)
+            except Exception as exc:
+                logger.warning(
+                    "Unit delta fallback: helper unavailable — %s",
+                    exc,
+                    extra={"course_id": course_id, "unit_id": unit_id},
+                )
+                helper_rows = []
+                helper_ok = False
 
-            dsn = getattr(repo, "_dsn", None)
-            if dsn:
-                with psycopg.connect(dsn) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
-                        helper_ok = True
-                        avg_by_id: dict[str, float | None] = {}
-                        try:
-                            helper_rows = _load_unit_live_helper_rows(
-                                cur,
-                                owner_sub=sub,
-                                course_id=course_id,
-                                unit_id=unit_id,
-                                updated_since_dt=db_lower_bound,
-                                limit=int(limit),
-                                offset=int(offset),
-                            )
-                            task_ids_by_student: dict[str, list[str]] = {}
-                            for row in helper_rows:
-                                student_sub = str(row["student_sub"])
-                                task_ids_by_student.setdefault(student_sub, []).append(str(row["task_id"]))
-                            latest_state_by_task = (
-                                _load_latest_submission_state_by_task(cur, sub, course_id, task_ids_by_student)
-                                if any(
-                                    row.get("score_raw") is None or row.get("score_max") is None
-                                    for row in helper_rows
-                                )
-                                else {}
-                            )
-                            submission_ids_by_student: dict[str, list[str]] = {}
-                            for row in helper_rows:
-                                student_sub = str(row["student_sub"])
-                                task_id = str(row["task_id"])
-                                submission_id = (
-                                    latest_state_by_task.get((student_sub, task_id), {}).get("submission_id")
-                                    or row.get("submission_id")
-                                )
-                                if submission_id:
-                                    submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
-                            avg_by_id = _load_average_scores_by_submission_id(cur, sub, submission_ids_by_student)
-                        except Exception as exc:
-                            logger.warning(
-                                "Unit delta fallback: helper unavailable — %s",
-                                exc,
-                                extra={"course_id": course_id, "unit_id": unit_id},
-                            )
-                            helper_rows = []
-                            helper_ok = False
-                        for row in helper_rows:
-                            student_sub = str(row["student_sub"])
-                            task_id = str(row["task_id"])
-                            latest_state = latest_state_by_task.get((student_sub, task_id), {})
-                            submission_id = latest_state.get("submission_id") or row.get("submission_id")
-                            score_raw = _safe_int(row.get("score_raw"))
-                            score_max = _safe_int(row.get("score_max"))
-                            if score_raw is None or score_max is None:
-                                score_raw = latest_state.get("score_raw", score_raw)
-                                score_max = latest_state.get("score_max", score_max)
-                            created_iso = row.get("created_at_iso")
-                            completed_iso = row.get("completed_at_iso")
-                            h5p_completed = row.get("h5p_completed")
-                            cur.execute(
-                                """
-                                select greatest(created_at, coalesce(completed_at, created_at))
-                                 from public.learning_submissions
-                                 where course_id = %s
-                                   and task_id = %s::uuid
-                                   and student_sub = %s
-                                 order by created_at desc, attempt_nr desc, id desc
-                                 limit 1
-                                """,
-                                (course_id, task_id, student_sub),
-                            )
-                            ts_row = cur.fetchone()
-                            if ts_row and ts_row[0] is not None:
-                                changed_dt = ts_row[0].astimezone(timezone.utc)
-                            else:
-                                latest_changed_at = latest_state.get("changed_at")
-                                if latest_changed_at is not None:
-                                    try:
-                                        changed_dt = latest_changed_at.astimezone(timezone.utc)
-                                    except Exception:
-                                        changed_dt = datetime.now(timezone.utc)
-                                else:
-                                    # fall back to helper-provided timestamps or now
-                                    fallback_iso = completed_iso or created_iso
-                                    if fallback_iso:
-                                        try:
-                                            changed_dt = datetime.fromisoformat(fallback_iso.replace("Z", "+00:00")).astimezone(timezone.utc)
-                                        except Exception:
-                                            changed_dt = datetime.now(timezone.utc)
-                                    else:
-                                        changed_dt = datetime.now(timezone.utc)
-                            changed_iso = changed_dt.isoformat(timespec="microseconds")
-                            if logger.isEnabledFor(logging.DEBUG) or debug:
-                                student_sub_hash = hashlib.sha256(student_sub.encode("utf-8")).hexdigest()[:12]
-                                logger.debug(
-                                    "delta-cell",
-                                    extra={
-                                        "student_sub_hash": student_sub_hash,
-                                        "task_id": task_id,
-                                        "changed_dt": changed_dt.isoformat(timespec="microseconds"),
-                                        "original_updated": original_updated_dt.isoformat(timespec="microseconds"),
-                                    },
-                                )
-                            # Include changes after (cursor - EPS) to account for clock skew
-                            include = changed_dt > (original_updated_dt - EPS)
-                            if not include:
-                                continue
-                            # Emit a cursor strictly beyond the client's cursor when
-                            # we include due to clock skew, otherwise use the DB time.
-                            # Move the emitted cursor forward to avoid duplicates on the next poll.
-                            emit_dt = (
-                                (changed_dt + EPS) if changed_dt > original_updated_dt else (original_updated_dt + EPS)
-                            )
-                            avg_score = avg_by_id.get(submission_id) if submission_id else None
-                            cell: dict = {
-                                "student_sub": student_sub,
-                                "task_id": task_id,
-                                "has_submission": bool(submission_id),
-                                "average_score": avg_score,
-                                "changed_at": emit_dt.isoformat(timespec="microseconds"),
-                            }
-                            if h5p_completed is not None:
-                                cell["h5p_completed"] = bool(h5p_completed)
-                                cell["score_raw"] = _safe_int(score_raw)
-                                cell["score_max"] = _safe_int(score_max)
-                            cells.append(cell)
+            if helper_ok:
+                cells = _build_live_delta_cells(
+                    helper_rows=helper_rows,
+                    latest_state_by_task=latest_state_by_task,
+                    avg_by_id=avg_by_id,
+                    latest_changed_by_pair=latest_changed_by_pair,
+                    original_updated_dt=original_updated_dt,
+                    logger_obj=logger,
+                    debug=logger.isEnabledFor(logging.DEBUG) or debug,
+                    timestamp_provider=lambda: datetime.now(timezone.utc),
+                    epsilon_seconds=1,
+                )
 
-                        if not helper_ok:
-                            # Fallback to bulk query when helper missing. Return a real timestamptz
-                            # and format in Python to preserve microseconds precision consistently.
-                            try:
-                                cur.execute(
-                                    """
-                                    select distinct student_sub::text,
-                                                   task_id::text,
-                                                   greatest(created_at, coalesce(completed_at, created_at)) as changed_ts
-                                      from public.learning_submissions
-                                     where course_id = %s
-                                       and greatest(created_at, coalesce(completed_at, created_at)) > %s
-                                     order by changed_ts desc
-                                     limit %s offset %s
-                                    """,
-                                    (course_id, db_lower_bound, int(limit), int(offset)),
-                                )
-                                fallback_rows = cur.fetchall() or []
-                            except Exception:
-                                fallback_rows = []
-                            for student_sub, task_id, changed_ts in fallback_rows:
-                                try:
-                                    # Ensure UTC and microsecond precision
-                                    changed_dt = changed_ts.astimezone(timezone.utc)
-                                except Exception:
-                                    changed_dt = datetime.now(timezone.utc)
-                                include = changed_dt > (original_updated_dt - EPS)
-                                if not include:
-                                    continue
-                                emit_dt = (
-                                    (changed_dt + EPS) if changed_dt > original_updated_dt else (original_updated_dt + EPS)
-                                )
-                                changed_iso = emit_dt.isoformat(timespec="microseconds")
-                                cells.append(
-                                    {
-                                        "student_sub": student_sub,
-                                        "task_id": task_id,
-                                        "has_submission": True,
-                                        "average_score": None,
-                                        "changed_at": changed_iso,
-                                    }
-                                )
+            if not helper_ok:
+                try:
+                    fallback_rows = repo.list_unit_live_delta_fallback_rows(
+                        owner_sub=sub,
+                        course_id=course_id,
+                        changed_since=db_lower_bound,
+                        limit=int(limit),
+                        offset=int(offset),
+                    )
+                except Exception:
+                    fallback_rows = []
+                for student_sub, task_id, changed_ts in fallback_rows:
+                    try:
+                        changed_dt = changed_ts.astimezone(timezone.utc)
+                    except Exception:
+                        changed_dt = datetime.now(timezone.utc)
+                    include = changed_dt > (original_updated_dt - EPS)
+                    if not include:
+                        continue
+                    emit_dt = (changed_dt + EPS) if changed_dt > original_updated_dt else (original_updated_dt + EPS)
+                    changed_iso = emit_dt.isoformat(timespec="microseconds")
+                    cells.append(
+                        {
+                            "student_sub": student_sub,
+                            "task_id": task_id,
+                            "has_submission": True,
+                            "average_score": None,
+                            "changed_at": changed_iso,
+                        }
+                    )
 
     except Exception as exc:
         logger.warning(
@@ -5908,7 +5575,6 @@ async def get_unit_live_delta(
     return _json_private(payload, status_code=200, vary_origin=True)
 
 
-@teaching_router.get("/api/teaching/courses/{course_id}/students/{student_sub:path}/submissions/overview")
 async def get_student_live_overview(request: Request, course_id: str, student_sub: str):
     """Return a teacher-facing live overview for one student across course units.
 
@@ -5946,7 +5612,7 @@ async def get_student_live_overview(request: Request, course_id: str, student_su
             return _private_error({"error": "bad_request", "detail": "too_many_unit_ids"}, status_code=400, vary_origin=True)
 
     sub = _current_sub(user)
-    guard = _guard_course_owner_runtime(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
@@ -5971,9 +5637,6 @@ async def get_student_live_overview(request: Request, course_id: str, student_su
     return _json_private(overview.to_dict(student_name=display_name), status_code=200, vary_origin=True)
 
 
-@teaching_router.get(
-    "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub:path}/submissions/latest"
-)
 async def get_latest_submission_detail(
     request: Request,
     course_id: str,
@@ -6055,7 +5718,7 @@ async def get_latest_submission_detail(
 
     sub = _current_sub(user)
     # Ownership guard
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
@@ -6082,14 +5745,139 @@ async def get_latest_submission_detail(
     try:
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
-            import psycopg  # type: ignore
+            from backend.web.db_cursor import open_repo_cursor
 
             dsn = getattr(repo, "_dsn", None)
             if dsn:
-                with psycopg.connect(dsn) as conn:
-                    with conn.cursor() as cur:
+                with open_repo_cursor(dsn=dsn) as (_conn, cur):
+                    cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+                    # Enforce task ∈ unit via explicit relation check (DB)
+                    cur.execute(
+                        """
+                        select t.kind::text,
+                               t.instruction_md,
+                               t.h5p_content_id::text
+                          from public.unit_tasks t
+                          join public.unit_sections s on s.id = t.section_id
+                          join public.course_modules m on m.unit_id = s.unit_id
+                         where m.course_id = %s
+                           and s.unit_id = %s::uuid
+                           and t.id = %s::uuid
+                         limit 1
+                        """,
+                        (course_id, unit_id, task_id),
+                    )
+                    task_row = cur.fetchone()
+                    if task_row is None:
+                        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+                    task_kind, task_instruction_md, task_h5p_content_id = task_row
+                    try:
+                        # SECURITY DEFINER helper encapsulates owner checks and RLS-aware access
+                        cur.execute(
+                            """
+                            select id::text,
+                                   task_id::text,
+                                   student_sub::text,
+                                   created_at,
+                                   completed_at,
+                                   kind,
+                                   score_raw,
+                                   score_max,
+                                   text_body,
+                                   mime_type,
+                                   size_bytes,
+                                   storage_key,
+                                   feedback_md,
+                                   analysis_json
+                              from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s)
+                            """,
+                            (sub, course_id, unit_id, task_id, student_sub),
+                        )
+                    except Exception as exc:
+                        logger.warning("latest submission helper unavailable — %s", exc)
+                        # Safe fallback under RLS with strict relation + owner scope; may still be restricted
+                        cur.execute(
+                            """
+                            select id::text, task_id::text, student_sub::text, created_at, completed_at, kind,
+                                   score_raw, score_max,
+                                   text_body, mime_type, size_bytes, storage_key, feedback_md, analysis_json
+                              from public.learning_submissions
+                             where course_id = %s
+                               and task_id = %s::uuid
+                               and student_sub = %s
+                             order by created_at desc, attempt_nr desc, id desc
+                             limit 1
+                            """,
+                            (course_id, task_id, student_sub),
+                        )
+                    row = cur.fetchone()
+                    if not row:
+                        return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
+                    (
+                        sid,
+                        tid,
+                        ssub,
+                        created_at,
+                        completed_at,
+                        kind,
+                        score_raw,
+                        score_max,
+                        text_body,
+                        mime_type,
+                        size_bytes,
+                        storage_key,
+                        feedback_md,
+                        analysis_json,
+                    ) = row
+                    review_token = None
+                    if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
+                        review_token = _issue_h5p_review_token(
+                            owner_sub=str(sub),
+                            course_id_in=str(course_id),
+                            task_id_in=str(task_id),
+                            student_sub_in=str(student_sub),
+                            content_id_in=str(task_h5p_content_id),
+                        )
+                    payload = _build_latest_submission_payload(
+                        course_id=str(course_id),
+                        unit_id=str(unit_id),
+                        file_href_builder=_teaching_submission_file_href,
+                        sid=sid,
+                        tid=tid,
+                        ssub=ssub,
+                        instruction_md=task_instruction_md,
+                        created_at=created_at,
+                        completed_at=completed_at,
+                        kind=kind,
+                        score_raw=score_raw,
+                        score_max=score_max,
+                        h5p_content_id=(task_h5p_content_id if str(task_kind or "") == "h5p" else None),
+                        h5p_review_token=review_token,
+                        text_body=text_body,
+                        mime_type=mime_type,
+                        size_bytes=size_bytes,
+                        storage_key=storage_key,
+                        feedback_md=feedback_md,
+                        analysis_json=analysis_json,
+                        include_files=True,
+                    )
+                    return _json_private(payload, status_code=200, vary_origin=True)
+    except Exception as exc:
+        logger.warning("latest submission query failed — %s", exc, extra={"course_id": course_id, "task_id": task_id})
+        # Defensive fallback: when helper or extended query fails (e.g. during migrations),
+        # try a minimal direct lookup that only relies on the core columns.
+        try:
+            from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+            if isinstance(repo, DBTeachingRepo):
+                from backend.web.db_cursor import open_repo_cursor
+
+                dsn = getattr(repo, "_dsn", None)
+                if dsn:
+                    with open_repo_cursor(dsn=dsn) as (_conn, cur):
                         cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
-                        # Enforce task ∈ unit via explicit relation check (DB)
+                        # Re-apply the strict task ∈ unit ∈ course relation check in the
+                        # fallback path as well so mismatched unit/task combinations still
+                        # fail with 404 instead of accidentally leaking submissions.
                         cur.execute(
                             """
                             select t.kind::text,
@@ -6107,165 +5895,36 @@ async def get_latest_submission_detail(
                         )
                         task_row = cur.fetchone()
                         if task_row is None:
-                            return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+                            return _private_error(
+                                {"error": "not_found"}, status_code=404, vary_origin=True
+                            )
                         task_kind, task_instruction_md, task_h5p_content_id = task_row
-                        helper_ok = True
-                        try:
-                            # SECURITY DEFINER helper encapsulates owner checks and RLS-aware access
-                            cur.execute(
-                                """
-                                select id::text,
-                                       task_id::text,
-                                       student_sub::text,
-                                       created_at,
-                                       completed_at,
-                                       kind,
-                                       score_raw,
-                                       score_max,
-                                       text_body,
-                                       mime_type,
-                                       size_bytes,
-                                       storage_key,
-                                       feedback_md,
-                                       analysis_json
-                                  from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s)
-                                """,
-                                (sub, course_id, unit_id, task_id, student_sub),
-                            )
-                        except Exception as exc:
-                            logger.warning("latest submission helper unavailable — %s", exc)
-                            helper_ok = False
-                            # Safe fallback under RLS with strict relation + owner scope; may still be restricted
-                            cur.execute(
-                                """
-                                select id::text, task_id::text, student_sub::text, created_at, completed_at, kind,
-                                       score_raw, score_max,
-                                       text_body, mime_type, size_bytes, storage_key, feedback_md, analysis_json
-                                  from public.learning_submissions
-                                 where course_id = %s
-                                   and task_id = %s::uuid
-                                   and student_sub = %s
-                                 order by created_at desc, attempt_nr desc, id desc
-                                 limit 1
-                                """,
-                                (course_id, task_id, student_sub),
-                            )
-                        row = cur.fetchone()
-                        if not row:
-                            return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
-                        (
-                            sid,
-                            tid,
-                            ssub,
-                            created_at,
-                            completed_at,
-                            kind,
-                            score_raw,
-                            score_max,
-                            text_body,
-                            mime_type,
-                            size_bytes,
-                            storage_key,
-                            feedback_md,
-                            analysis_json,
-                        ) = row
-                        review_token = None
-                        if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
-                            review_token = _issue_h5p_review_token(
-                                owner_sub=str(sub),
-                                course_id_in=str(course_id),
-                                task_id_in=str(task_id),
-                                student_sub_in=str(student_sub),
-                                content_id_in=str(task_h5p_content_id),
-                            )
-                        payload = _build_latest_submission_payload(
-                            course_id=str(course_id),
-                            unit_id=str(unit_id),
-                            file_href_builder=_teaching_submission_file_href,
-                            sid=sid,
-                            tid=tid,
-                            ssub=ssub,
-                            instruction_md=task_instruction_md,
-                            created_at=created_at,
-                            completed_at=completed_at,
-                            kind=kind,
-                            score_raw=score_raw,
-                            score_max=score_max,
-                            h5p_content_id=(task_h5p_content_id if str(task_kind or "") == "h5p" else None),
-                            h5p_review_token=review_token,
-                            text_body=text_body,
-                            mime_type=mime_type,
-                            size_bytes=size_bytes,
-                            storage_key=storage_key,
-                            feedback_md=feedback_md,
-                            analysis_json=analysis_json,
-                            include_files=True,
+                        cur.execute(
+                            """
+                            select id::text,
+                                   task_id::text,
+                                   student_sub::text,
+                                   created_at,
+                                   completed_at,
+                                   kind,
+                                   score_raw,
+                                   score_max,
+                                   text_body,
+                                   mime_type,
+                                   size_bytes,
+                                   storage_key,
+                                   feedback_md,
+                                   analysis_json
+                              from public.learning_submissions
+                             where course_id = %s
+                               and task_id = %s::uuid
+                               and student_sub = %s
+                             order by created_at desc, attempt_nr desc, id desc
+                             limit 1
+                            """,
+                            (course_id, task_id, student_sub),
                         )
-                        return _json_private(payload, status_code=200, vary_origin=True)
-    except Exception as exc:
-        logger.warning("latest submission query failed — %s", exc, extra={"course_id": course_id, "task_id": task_id})
-        # Defensive fallback: when helper or extended query fails (e.g. during migrations),
-        # try a minimal direct lookup that only relies on the core columns.
-        try:
-            from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-            if isinstance(repo, DBTeachingRepo):
-                import psycopg  # type: ignore
-
-                dsn = getattr(repo, "_dsn", None)
-                if dsn:
-                    with psycopg.connect(dsn) as conn:
-                        with conn.cursor() as cur:
-                            cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
-                            # Re-apply the strict task ∈ unit ∈ course relation check in the
-                            # fallback path as well so mismatched unit/task combinations still
-                            # fail with 404 instead of accidentally leaking submissions.
-                            cur.execute(
-                                """
-                                select t.kind::text,
-                                       t.instruction_md,
-                                       t.h5p_content_id::text
-                                  from public.unit_tasks t
-                                  join public.unit_sections s on s.id = t.section_id
-                                  join public.course_modules m on m.unit_id = s.unit_id
-                                 where m.course_id = %s
-                                   and s.unit_id = %s::uuid
-                                   and t.id = %s::uuid
-                                 limit 1
-                                """,
-                                (course_id, unit_id, task_id),
-                            )
-                            task_row = cur.fetchone()
-                            if task_row is None:
-                                return _private_error(
-                                    {"error": "not_found"}, status_code=404, vary_origin=True
-                                )
-                            task_kind, task_instruction_md, task_h5p_content_id = task_row
-                            cur.execute(
-                                """
-                                select id::text,
-                                       task_id::text,
-                                       student_sub::text,
-                                       created_at,
-                                       completed_at,
-                                       kind,
-                                       score_raw,
-                                       score_max,
-                                       text_body,
-                                       mime_type,
-                                       size_bytes,
-                                       storage_key,
-                                       feedback_md,
-                                       analysis_json
-                                  from public.learning_submissions
-                                 where course_id = %s
-                                   and task_id = %s::uuid
-                                   and student_sub = %s
-                                 order by created_at desc, attempt_nr desc, id desc
-                                 limit 1
-                                """,
-                                (course_id, task_id, student_sub),
-                            )
-                            row = cur.fetchone()
+                        row = cur.fetchone()
                         if not row:
                             return Response(
                                 status_code=204,
@@ -6328,9 +5987,6 @@ async def get_latest_submission_detail(
     return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
 
-@teaching_router.get(
-    "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub:path}/submissions/latest/file"
-)
 async def get_teaching_submission_file(
     request: Request,
     course_id: str,
@@ -6355,7 +6011,7 @@ async def get_teaching_submission_file(
         return _private_error({"error": "bad_request", "detail": "invalid_disposition"}, status_code=400, vary_origin=True)
 
     sub = _current_sub(user)
-    guard = _guard_course_owner(course_id, sub)
+    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
     if guard:
         if isinstance(guard, JSONResponse):
             guard.headers.setdefault("Cache-Control", "private, no-store")
@@ -6369,40 +6025,39 @@ async def get_teaching_submission_file(
         if not isinstance(repo, DBTeachingRepo):
             return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
 
-        import psycopg  # type: ignore
+        from backend.web.db_cursor import open_repo_cursor
 
         dsn = getattr(repo, "_dsn", None)
         if not dsn:
             return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
 
-        with psycopg.connect(dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
-                cur.execute(
-                    """
-                    select exists(
-                             select 1
-                               from public.course_modules
-                              where course_id = %s
-                                and unit_id = %s::uuid
-                         )
-                    """,
-                    (course_id, unit_id),
-                )
-                if not bool((cur.fetchone() or [False])[0]):
-                    return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
-                cur.execute(
-                    """
-                    select s.mime_type,
-                           s.size_bytes,
-                           s.storage_key
-                      from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s) s
-                     where s.id::text is not null
-                     limit 1
-                    """,
-                    (sub, course_id, unit_id, task_id, student_sub),
-                )
-                row = cur.fetchone()
+        with open_repo_cursor(dsn=dsn) as (_conn, cur):
+            cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
+            cur.execute(
+                """
+                select exists(
+                         select 1
+                           from public.course_modules
+                          where course_id = %s
+                            and unit_id = %s::uuid
+                     )
+                """,
+                (course_id, unit_id),
+            )
+            if not bool((cur.fetchone() or [False])[0]):
+                return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+            cur.execute(
+                """
+                select s.mime_type,
+                       s.size_bytes,
+                       s.storage_key
+                  from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s) s
+                 where s.id::text is not null
+                 limit 1
+                """,
+                (sub, course_id, unit_id, task_id, student_sub),
+            )
+            row = cur.fetchone()
     except Exception:
         row = None
 

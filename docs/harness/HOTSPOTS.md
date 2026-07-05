@@ -19,7 +19,7 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 | `backend/web/routes/app.py` | 2499 | Browser-BFF und App-Routen | Profil-, Session- und View-Helfer klein halten |
 | `backend/learning/repo_db.py` | 2425 | Learning Repository | Read Models und Query-Gruppen schrittweise isolieren |
 | `backend/teaching/repo_db.py` | 4854 | Teaching Repository | Live-/Dashboard-Read-Models und Schreibfälle trennen |
-| `h5p-service/server.mjs` | 1734 | H5P Sidecar | Auth, Forwarding, Storage und Route-Handler weiter splitten |
+| `h5p-service/server.mjs` | 1709 | H5P Sidecar | Auth, Forwarding und Route-Handler weiter splitten |
 | `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` | 1846 | Learning Workspace | Loader-/State- und View-Komponenten trennen |
 | `frontend/src/routes/teaching/units/[unitId]/+page.svelte` | 1210 | Teaching Workspace | Graph-State, Command-Bar und Node-Editor-Komposition trennen |
 | `frontend/src/lib/styles/app.css` | 5617 | App CSS | Komponentennahe Styles und Tokens auslagern |
@@ -33,7 +33,8 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 - `h5p-service/lib/model_helpers.mjs` übernimmt seit PR20 die reinen H5P-Response-Helfer für Theme-Styles und Embed-Types; `h5p-service/test/model_helpers.test.mjs` schützt Reihenfolge, Deduplikation und Fallbacks.
 - `h5p-service/lib/cookies.mjs` übernimmt seit PR20 auch das Cookie-Parsing für H5P-Session- und BFF-Session-Erkennung; `h5p-service/test/cookies.test.mjs` schützt Decoding, malformed Fallbacks und leere Cookie-Teile.
 - `h5p-service/lib/response_helpers.mjs` übernimmt seit PR20 die zentralen JSON-/HTML-Sendehelfer mit Security- und Cache-Headern; `h5p-service/test/response_helpers.test.mjs` schützt Defaults und explizite Header-Overrides.
-- `h5p-service/server.mjs` ist dadurch von 1942 auf 1734 LOC gesunken; weitere H5P-Splits sollen Route-Handler und Storage-Integration betreffen.
+- `h5p-service/lib/storage_helpers.mjs` übernimmt seit PR20 H5P-Storage-Verzeichnisaufbau, Storage-Readiness-Probe und Header-Dateinamen-Sanitizing; `h5p-service/test/storage_helpers.test.mjs` schützt Layout, Fehlerpfad und Header-Sicherheit.
+- `h5p-service/server.mjs` ist dadurch von 1942 auf 1709 LOC gesunken; weitere H5P-Splits sollen Route-Handler und verbleibende Auth-/Forwarding-Integration betreffen.
 
 ## Regel
 Hotspots dürfen im Refactor nicht ohne bewusst dokumentierten Grund wachsen. Kleine Extraktionen sollen eine passende Contract- oder Komponententest-Abdeckung haben; harte LOC-Schwellen folgen, sobald die Baseline über mehrere Scorecards stabil ist.

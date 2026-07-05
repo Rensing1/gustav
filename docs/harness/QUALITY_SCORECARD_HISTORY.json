@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-05T10:58:32",
+      "generated": "2026-07-05T11:03:03",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -56,8 +56,8 @@
           "path": "backend/teaching/repo_db.py"
         },
         {
-          "delta_from_previous": -15,
-          "loc": 1734,
+          "delta_from_previous": -25,
+          "loc": 1709,
           "path": "h5p-service/server.mjs"
         },
         {

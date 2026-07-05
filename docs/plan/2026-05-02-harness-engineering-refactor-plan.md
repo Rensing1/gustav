@@ -946,9 +946,10 @@ Goal: shrink large files, remove retired legacy UI surfaces, and improve DB/runt
 - Done in working tree: extracted H5P response model helpers from `h5p-service/server.mjs` into `h5p-service/lib/model_helpers.mjs`, keeping Gustav theme-style ordering and `div` embed-type preference covered outside the server hotspot.
 - Done in working tree: extracted H5P cookie parsing from `h5p-service/server.mjs` into the existing `h5p-service/lib/cookies.mjs`, keeping session-cookie decoding and malformed-value fallback behavior covered outside the server hotspot.
 - Done in working tree: extracted H5P JSON/HTML response sending helpers from `h5p-service/server.mjs` into `h5p-service/lib/response_helpers.mjs`, keeping Security-Header defaults, private cache headers, and explicit header overrides covered outside the server hotspot.
-- Done in working tree: `h5p-service/test/finished_submission_context.test.mjs`, `h5p-service/test/review_tokens.test.mjs`, `h5p-service/test/security_headers.test.mjs`, `h5p-service/test/model_helpers.test.mjs`, `h5p-service/test/cookies.test.mjs`, and `h5p-service/test/response_helpers.test.mjs` protect the extracted H5P forwarding, review-token, security-header, model-helper, cookie, and response-helper behavior; `npm test` in `h5p-service` reports 12 passing Node test files.
-- Done in working tree: `h5p-service/server.mjs` shrank from 1942 to 1734 LOC across the first six PR20 H5P slices.
-- Open follow-up: continue with a further H5P split around route handlers/storage integration or a frontend Svelte workspace extraction with existing component tests.
+- Done in working tree: extracted H5P storage directory layout, storage readiness probing, and Content-Disposition filename sanitizing from `h5p-service/server.mjs` into `h5p-service/lib/storage_helpers.mjs`.
+- Done in working tree: `h5p-service/test/finished_submission_context.test.mjs`, `h5p-service/test/review_tokens.test.mjs`, `h5p-service/test/security_headers.test.mjs`, `h5p-service/test/model_helpers.test.mjs`, `h5p-service/test/cookies.test.mjs`, `h5p-service/test/response_helpers.test.mjs`, and `h5p-service/test/storage_helpers.test.mjs` protect the extracted H5P forwarding, review-token, security-header, model-helper, cookie, response-helper, and storage-helper behavior; `npm test` in `h5p-service` reports 13 passing Node test files.
+- Done in working tree: `h5p-service/server.mjs` shrank from 1942 to 1709 LOC across the first seven PR20 H5P slices.
+- Open follow-up: continue with a further H5P split around route handlers/auth-forwarding integration or a frontend Svelte workspace extraction with existing component tests.
 
 #### PR 21: Quality Scorecard v1
 - Create a monthly scorecard:

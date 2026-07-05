@@ -3,7 +3,7 @@ Routes repo swapping contract.
 
 Why:
     Several tests switch between DB-backed and in-memory repos via `set_repo(...)`.
-    The public module attribute (`routes.<x>.REPO`) must reflect that change,
+    The public module attribute (`backend.web.routes.<x>.REPO`) must reflect that change,
     because other tests use it for `isinstance(...)` guards.
 
     A mismatch causes order-dependent skips in full-suite runs.
@@ -68,10 +68,10 @@ def test_learning_set_repo_updates_existing_route_get_repo_after_reload():
     original_repo = original_learning._get_repo()  # type: ignore[attr-defined]
     original_get_repo = endpoint.__globals__["_get_repo"]
 
-    for name in ("routes.learning", "backend.web.routes.learning"):
+    for name in ("backend.web.routes.learning",):
         sys.modules.pop(name, None)
 
-    fresh_learning = importlib.import_module("routes.learning")
+    fresh_learning = importlib.import_module("backend.web.routes.learning")
     assert fresh_learning is not original_learning
 
     class _StubRepo:
@@ -111,10 +111,10 @@ def test_teaching_set_storage_adapter_updates_existing_route_globals_after_reloa
     original_globals = endpoint.__globals__
     assert "STORAGE_ADAPTER" in original_globals
 
-    for name in ("routes.teaching", "backend.web.routes.teaching"):
+    for name in ("backend.web.routes.teaching",):
         sys.modules.pop(name, None)
 
-    fresh_teaching = importlib.import_module("routes.teaching")
+    fresh_teaching = importlib.import_module("backend.web.routes.teaching")
     assert fresh_teaching is not original_teaching
 
     class _Adapter:
@@ -135,6 +135,7 @@ def test_teaching_route_guard_uses_endpoint_repo_accessor_after_reload():
 
     import uuid
     from fastapi.routing import APIRoute
+    teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")
 
     main = importlib.import_module("backend.web.main")
 
@@ -157,7 +158,11 @@ def test_teaching_route_guard_uses_endpoint_repo_accessor_after_reload():
 
     try:
         route_globals["_get_repo"] = lambda: _StubRepo()
-        guard = route_globals["_guard_unit_author"](str(uuid.uuid4()), "teacher-route-guard")
+        guard = teaching_guards._guard_unit_author(
+            str(uuid.uuid4()),
+            "teacher-route-guard",
+            repo_provider=route_globals["_get_repo"],
+        )
         assert guard is None
     finally:
         route_globals["_get_repo"] = original_get_repo

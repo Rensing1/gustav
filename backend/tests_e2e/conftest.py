@@ -66,11 +66,6 @@ _configure_requests_tls_for_local_e2e()
 
 
 # Ensure backend/web is importable if needed by E2E helpers
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIR = REPO_ROOT / "backend" / "web"
-if str(WEB_DIR) not in sys.path:
-    sys.path.insert(0, str(WEB_DIR))
-
 def _derive_app_base() -> str:
     wb = os.getenv("WEB_BASE")
     if wb:

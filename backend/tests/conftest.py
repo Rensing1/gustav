@@ -295,8 +295,7 @@ def _reset_teaching_repo_between_tests():
     """
     try:
         import os
-        import importlib
-        import routes.teaching as teaching  # type: ignore
+        teaching = importlib.import_module("backend.web.routes.teaching")
         try:
             import psycopg  # type: ignore
         except Exception:
@@ -322,7 +321,7 @@ def _reset_learning_repo_between_tests():
     """Reset Learning repo between tests when the local DB is reachable.
 
     Why:
-        Several Learning tests temporarily replace `routes.learning.REPO`.
+        Several Learning tests temporarily replace `backend.web.routes.learning.REPO`.
         Without a symmetric reset, later DB-backed tests can accidentally use a
         stale in-memory/stub repository and fail with misleading 503 responses.
     """
@@ -504,8 +503,8 @@ def _reset_session_store_and_oidc(monkeypatch: pytest.MonkeyPatch):
         when subsequent tests rely on defaults.
     """
     try:
-        import main  # type: ignore
-        from identity_access.oidc import OIDCClient  # type: ignore
+        main = importlib.import_module("backend.web.main")
+        from backend.identity_access.oidc import OIDCClient  # type: ignore
     except Exception:
         yield
         return
@@ -547,7 +546,7 @@ def _reset_session_store_and_oidc(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture(autouse=True)
 def _reset_learning_requests_alias(monkeypatch: pytest.MonkeyPatch):
-    """Ensure routes.learning.requests points to the real requests module by default.
+    """Ensure backend.web.routes.learning.requests points to the real requests module by default.
 
     Why:
         Upload-proxy tests monkeypatch this attribute; a lingering stub can
@@ -556,11 +555,9 @@ def _reset_learning_requests_alias(monkeypatch: pytest.MonkeyPatch):
     try:
         import importlib
         import requests as real_requests  # type: ignore
-        # Import both aliases and bind their symbol to the real module
-        lr1 = importlib.import_module("routes.learning")
-        lr2 = importlib.import_module("backend.web.routes.learning")
-        monkeypatch.setattr(lr1, "requests", real_requests, raising=False)
-        monkeypatch.setattr(lr2, "requests", real_requests, raising=False)
+        # Bind the canonical Learning module to the real requests library.
+        learning = importlib.import_module("backend.web.routes.learning")
+        monkeypatch.setattr(learning, "requests", real_requests, raising=False)
     except Exception:
         pass
     yield
@@ -571,8 +568,8 @@ def _reset_route_storage_adapters_between_tests():
     """Restore route-level storage adapters to Null adapters before each test.
 
     Why:
-        Many API tests patch `routes.learning.STORAGE_ADAPTER` or
-        `routes.teaching.STORAGE_ADAPTER` directly. If a test reloads a route
+        Many API tests patch `backend.web.routes.learning.STORAGE_ADAPTER` or
+        `backend.web.routes.teaching.STORAGE_ADAPTER` directly. If a test reloads a route
         module or forgets cleanup, later tests can accidentally run against a
         stale fake adapter and produce order-dependent failures.
     """
@@ -580,11 +577,7 @@ def _reset_route_storage_adapters_between_tests():
         import importlib
         from teaching.storage import NullStorageAdapter  # type: ignore
 
-        for alias in (
-            "routes.learning",
-            "backend.web.routes.learning",
-            "routes.teaching",
-        ):
+        for alias in ("backend.web.routes.learning",):
             try:
                 mod = importlib.import_module(alias)
                 if hasattr(mod, "set_storage_adapter"):
@@ -634,7 +627,7 @@ def _prune_live_db_env_when_unreachable():
 
 @pytest.fixture(autouse=True)
 def _reset_learning_create_submission_uc(monkeypatch: pytest.MonkeyPatch):
-    """Ensure routes.learning.CreateSubmissionUseCase points to the real class per test.
+    """Ensure backend.web.routes.learning.CreateSubmissionUseCase points to the real class per test.
 
     Why:
         Some tests monkeypatch the submissions use case to control behavior
@@ -647,7 +640,7 @@ def _reset_learning_create_submission_uc(monkeypatch: pytest.MonkeyPatch):
         import importlib
         uc_mod = importlib.import_module("backend.learning.usecases.submissions")
         real_uc = getattr(uc_mod, "CreateSubmissionUseCase")
-        for alias in ("routes.learning", "backend.web.routes.learning"):
+        for alias in ("backend.web.routes.learning",):
             try:
                 lr = importlib.import_module(alias)
                 monkeypatch.setattr(lr, "CreateSubmissionUseCase", real_uc, raising=False)

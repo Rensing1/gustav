@@ -1,20 +1,16 @@
 """
 Async standalone smoke check using httpx.AsyncClient against the ASGI app.
 """
-from pathlib import Path
-import sys
+import importlib
 import anyio
 import httpx
 from httpx import ASGITransport
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT))
-
-from backend.web.main import create_app_auth_only
+main = importlib.import_module("backend.web.main")
 
 
-async def main() -> int:
-    app = create_app_auth_only()
+async def run_smoke() -> int:
+    app = main.create_app_auth_only()
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/auth/login", follow_redirects=False)
@@ -28,4 +24,4 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(anyio.run(main))
+    raise SystemExit(anyio.run(run_smoke))

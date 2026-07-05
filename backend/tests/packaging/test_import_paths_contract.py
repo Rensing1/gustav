@@ -114,18 +114,8 @@ def test_main_module_keeps_legacy_alias_only_as_compatibility_bridge() -> None:
     assert '__name__ == "main"' not in src
 
 
-def test_legacy_route_imports_share_package_module_instances() -> None:
-    """Legacy `routes.*` imports must not create a second router module instance."""
-
-    for module_name in ("app", "auth", "learning", "operations", "teaching", "users"):
-        package_module = importlib.import_module(f"backend.web.routes.{module_name}")
-        legacy_module = importlib.import_module(f"routes.{module_name}")
-
-        assert legacy_module is package_module
-
-
-def test_harness_repairs_legacy_route_aliases_after_partial_sys_modules_pruning() -> None:
-    """The pytest import harness must repair route aliases between tests."""
+def test_harness_does_not_require_legacy_route_aliases() -> None:
+    """No legacy route aliases should be required after explicit package imports."""
 
     import sys
 
@@ -136,7 +126,8 @@ def test_harness_repairs_legacy_route_aliases_after_partial_sys_modules_pruning(
 
     canonicalize_legacy_route_aliases()
 
-    assert importlib.import_module("routes.learning") is package_module
+    assert "routes.learning" not in sys.modules
+    assert importlib.import_module("backend.web.routes.learning") is package_module
 
 
 def test_legacy_bounded_context_imports_share_package_module_instances() -> None:

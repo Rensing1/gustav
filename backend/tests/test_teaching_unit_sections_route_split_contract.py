@@ -47,18 +47,21 @@ def test_unit_sections_routes_are_owned_by_dedicated_router_module() -> None:
             assert marker not in teaching_source
 
 
-def test_unit_sections_router_wrappers_delegate_to_teaching_module() -> None:
-    """Wrapper functions should delegate to the existing handlers in teaching.py."""
+def test_unit_sections_router_owns_handlers_without_teaching_delegation() -> None:
+    """Section handlers should not keep the large Teaching adapter as implementation."""
 
     sections_source = SECTIONS_SOURCE.read_text(encoding="utf-8")
-    expected_delegations = {
-        "list_sections": "teaching_routes.list_sections(",
-        "create_section": "teaching_routes.create_section(",
-        "update_section": "teaching_routes.update_section(",
-        "delete_section": "teaching_routes.delete_section(",
-        "reorder_sections": "teaching_routes.reorder_sections(",
-    }
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
+    handler_names = (
+        "list_sections",
+        "create_section",
+        "update_section",
+        "delete_section",
+        "reorder_sections",
+    )
 
-    for fn_name, marker in expected_delegations.items():
+    assert "from backend.web.routes import teaching as teaching_routes" not in sections_source
+    for fn_name in handler_names:
         assert f"def {fn_name}(" in sections_source
-        assert marker in sections_source
+        assert f"teaching_routes.{fn_name}(" not in sections_source
+        assert f"async def {fn_name}(" not in teaching_source

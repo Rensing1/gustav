@@ -264,6 +264,31 @@ def test_security_definer_helper_hardening_contracts_are_marked_as_db_read() -> 
         assert "db_read" in records[path].markers
 
 
+def test_learning_worker_db_integration_files_are_marked_as_db_write() -> None:
+    from backend.tools import db_test_inventory
+
+    records = {
+        record.path: record
+        for record in db_test_inventory.scan_tests(REPO_ROOT / "backend" / "tests", repo_root=REPO_ROOT)
+    }
+
+    for path in (
+        "backend/tests/learning_adapters/test_learning_worker_dspy_only_placeholder.py",
+        "backend/tests/test_learning_worker_e2e_local.py",
+        "backend/tests/test_learning_worker_error_codes.py",
+        "backend/tests/test_learning_worker_jobs.py",
+        "backend/tests/test_learning_worker_pdf_extracted_flow.py",
+        "backend/tests/test_learning_worker_privacy_logs.py",
+        "backend/tests/test_learning_worker_security.py",
+        "backend/tests/test_learning_worker_task_context.py",
+        "backend/tests/test_learning_worker_text_bypass_vision.py",
+        "backend/tests/test_learning_worker_transaction_boundaries.py",
+        "backend/tests/test_learning_worker_visual_dspy_pipeline.py",
+    ):
+        assert records[path].marker_status == "marked-db"
+        assert "db_write" in records[path].markers
+
+
 def test_db_test_inventory_is_synchronized_with_generator() -> None:
     result = subprocess.run(
         [

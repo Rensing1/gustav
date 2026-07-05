@@ -25,6 +25,7 @@ from backend.learning.usecases.submissions import CreateSubmissionInput, CreateS
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 pytest.importorskip("psycopg")
+pytestmark = pytest.mark.db_write
 
 try:
     _require_db_or_skip()

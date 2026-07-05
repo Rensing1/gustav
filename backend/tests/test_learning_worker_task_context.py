@@ -16,6 +16,7 @@ import httpx
 from httpx import ASGITransport
 
 pytest.importorskip("psycopg")
+pytestmark = pytest.mark.db_write
 import psycopg  # type: ignore  # noqa: E402
 
 main = importlib.import_module("backend.web.main")

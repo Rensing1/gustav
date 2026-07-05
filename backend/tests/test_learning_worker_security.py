@@ -21,6 +21,7 @@ from backend.tests.test_learning_api_contract import _prepare_learning_fixture  
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 pytest.importorskip("psycopg")
+pytestmark = pytest.mark.db_write
 
 import psycopg  # type: ignore  # noqa: E402
 from psycopg.types.json import Json  # type: ignore  # noqa: E402

@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 import pytest
 
 pytest.importorskip("psycopg")
+pytestmark = pytest.mark.db_write
 import psycopg  # type: ignore
 
 from backend.learning.workers.process_learning_submission_jobs import (  # type: ignore

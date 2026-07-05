@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 pytest.importorskip("psycopg")
+pytestmark = pytest.mark.db_write
 import psycopg  # type: ignore  # noqa: E402
 
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402

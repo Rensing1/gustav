@@ -27,6 +27,7 @@ import uuid
 import pytest
 
 pytest.importorskip("psycopg")
+pytestmark = pytest.mark.db_write
 import psycopg  # type: ignore  # noqa: E402
 
 from backend.learning.repo_db import DBLearningRepo  # noqa: E402

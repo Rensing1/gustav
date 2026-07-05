@@ -12,8 +12,8 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 
 ## Zusammenfassung
 - Inventarisierte Dateien: 115
-- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 73
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 15
+- Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 62
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 26
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 13
 - Statische Migrationstests ohne echte DB-Verbindung: 5
@@ -24,7 +24,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 | Test file | Classification | Markers | Marker status | Signals | Recommended action |
 | --- | --- | --- | --- | --- | --- |
 | backend/tests/conftest.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:RLS_TEST_DSN, env:SUPABASE_SERVICE_ROLE_KEY, psycopg-connect, psycopg-import | Review for db_read/db_write before marker hardening |
-| backend/tests/learning_adapters/test_learning_worker_dspy_only_placeholder.py | real-db | - | missing-db-marker | env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required | Review for db_read/db_write before marker hardening |
+| backend/tests/learning_adapters/test_learning_worker_dspy_only_placeholder.py | real-db | db_write | marked-db | env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required | Keep marker and isolation visible |
 | backend/tests/learning_adapters/test_local_vision_remote_fetch.py | storage-or-config | - | no-db-marker-needed | psycopg-required, supabase | Keep service-free unless it reaches the real DB |
 | backend/tests/migration/test_ai_usage_events_security.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_concern_box_entries_rls.py | real-db | db_read | marked-db | migration, psycopg-connect, psycopg-import, requires-db, rls | Keep marker and isolation visible |
@@ -81,17 +81,17 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar, b
 | backend/tests/test_learning_unit_sections_api.py | real-db | - | missing-db-marker | requires-db | Review for db_read/db_write before marker hardening |
 | backend/tests/test_learning_upload_intent_public_host.py | storage-or-config | - | no-db-marker-needed | supabase | Keep service-free unless it reaches the real DB |
 | backend/tests/test_learning_visual_upload_only_api.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_learning_worker_e2e_local.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_learning_worker_error_codes.py | real-db | - | missing-db-marker | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_learning_worker_jobs.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_learning_worker_pdf_extracted_flow.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_learning_worker_privacy_logs.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-required, requires-db | Review for db_read/db_write before marker hardening |
+| backend/tests/test_learning_worker_e2e_local.py | real-db | db_write | marked-db | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
+| backend/tests/test_learning_worker_error_codes.py | real-db | db_write | marked-db | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
+| backend/tests/test_learning_worker_jobs.py | real-db | db_write | marked-db | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
+| backend/tests/test_learning_worker_pdf_extracted_flow.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
+| backend/tests/test_learning_worker_privacy_logs.py | real-db | db_write | marked-db | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-required, requires-db | Keep marker and isolation visible |
 | backend/tests/test_learning_worker_queue_legacy.py | storage-or-config | - | no-db-marker-needed | supabase | Keep service-free unless it reaches the real DB |
-| backend/tests/test_learning_worker_security.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_learning_worker_task_context.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_learning_worker_text_bypass_vision.py | real-db | - | missing-db-marker | env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required | Review for db_read/db_write before marker hardening |
-| backend/tests/test_learning_worker_transaction_boundaries.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Review for db_read/db_write before marker hardening |
-| backend/tests/test_learning_worker_visual_dspy_pipeline.py | real-db | - | missing-db-marker | env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Review for db_read/db_write before marker hardening |
+| backend/tests/test_learning_worker_security.py | real-db | db_write | marked-db | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
+| backend/tests/test_learning_worker_task_context.py | real-db | db_write | marked-db | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
+| backend/tests/test_learning_worker_text_bypass_vision.py | real-db | db_write | marked-db | env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required | Keep marker and isolation visible |
+| backend/tests/test_learning_worker_transaction_boundaries.py | real-db | db_write | marked-db | env:DATABASE_URL, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
+| backend/tests/test_learning_worker_visual_dspy_pipeline.py | real-db | db_write | marked-db | env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
 | backend/tests/test_storage_buckets_provisioning.py | real-db | - | missing-db-marker | env:DATABASE_URL, env:RLS_TEST_DSN, migration, psycopg-connect, psycopg-import, supabase | Review for db_read/db_write before marker hardening |
 | backend/tests/test_storage_public_url_rewrite.py | storage-or-config | - | no-db-marker-needed | env:SUPABASE_URL, supabase | Keep service-free unless it reaches the real DB |
 | backend/tests/test_storage_supabase_adapter.py | storage-or-config | - | no-db-marker-needed | supabase | Keep service-free unless it reaches the real DB |

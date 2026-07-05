@@ -14,6 +14,7 @@ from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 from backend.tests.utils.db_isolation import current_test_run_id
 
 pytest.importorskip("psycopg")
+pytestmark = pytest.mark.db_write
 
 
 def _dsn() -> str:

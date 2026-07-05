@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 pytest.importorskip("psycopg")
+pytestmark = pytest.mark.db_write
 
 import psycopg  # type: ignore  # noqa: E402
 

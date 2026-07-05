@@ -12,6 +12,7 @@ import os
 import pytest
 
 pytest.importorskip("psycopg")
+pytestmark = pytest.mark.db_write
 import psycopg  # type: ignore
 
 from backend.learning.repo_db import DBLearningRepo  # type: ignore

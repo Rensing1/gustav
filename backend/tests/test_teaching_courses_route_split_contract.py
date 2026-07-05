@@ -45,18 +45,21 @@ def test_course_routes_are_owned_by_dedicated_router_module() -> None:
             assert f"@teaching_router.{method}(\"{path}\"" not in teaching_source
 
 
-def test_course_router_wrappers_delegate_to_teaching_module() -> None:
-    """Wrapper functions should delegate unchanged to teaching handlers."""
+def test_course_router_owns_handlers_without_teaching_delegation() -> None:
+    """Course handlers should not keep the large Teaching adapter as implementation."""
 
     course_source = COURSES_SOURCE.read_text(encoding="utf-8")
-    expected_delegations = {
-        "list_courses": "teaching_routes.list_courses(",
-        "create_course": "teaching_routes.create_course(",
-        "get_course": "teaching_routes.get_course(",
-        "update_course": "teaching_routes.update_course(",
-        "delete_course": "teaching_routes.delete_course(",
-    }
+    teaching_source = TEACHING_SOURCE.read_text(encoding="utf-8")
+    handler_names = (
+        "list_courses",
+        "create_course",
+        "get_course",
+        "update_course",
+        "delete_course",
+    )
 
-    for fn_name, marker in expected_delegations.items():
+    assert "from backend.web.routes import teaching as teaching_routes" not in course_source
+    for fn_name in handler_names:
         assert f"def {fn_name}(" in course_source
-        assert marker in course_source
+        assert f"teaching_routes.{fn_name}(" not in course_source
+        assert f"async def {fn_name}(" not in teaching_source

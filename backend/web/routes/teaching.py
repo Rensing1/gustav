@@ -49,7 +49,6 @@ from backend.web.routes.teaching_serialization import (
     _build_latest_submission_payload,
     _build_live_delta_cells,
     _build_live_summary_rows,
-    _serialize_course,
     _serialize_material,
     _serialize_module,
     _serialize_section,
@@ -74,10 +73,8 @@ from backend.web.routes.teaching_guards import (
 )
 from backend.web.routes.teaching_payloads import (
     AddMember,
-    CourseCreate,
     CourseModuleCreatePayload,
     CourseModuleReorderPayload,
-    CourseUpdate,
     MaterialCreatePayload,
     MaterialFinalizePayload,
     MaterialReorderPayload,
@@ -105,7 +102,7 @@ from backend.web.routes.teaching_validation import (
     clamp_limit_offset as _clamp_limit_offset,
     safe_int as _safe_int,
 )
-from backend.web.routes import teaching_storage_cleanup
+from backend.web.routes import teaching_course_state, teaching_storage_cleanup
 from backend.web.routes.teaching_storage_cleanup import (
     metadata_page_keys as _metadata_page_keys,  # noqa: F401 - kept for route module compatibility
     unit_delete_storage_metadata_dsn as _unit_delete_storage_metadata_dsn,  # noqa: F401
@@ -693,206 +690,7 @@ def resolve_student_login_labels_by_sub(subs: list[str]) -> dict[str, str]:
 
 # --- Routes ----------------------------------------------------------------------
 
-async def list_courses(request: Request, limit: int = 10, offset: int = 0):
-    """
-    List courses for the current user with simple pagination.
-
-    Behavior:
-        - Teachers: return owned courses.
-        - Students: return courses the student is a member of (empty in MVP unless managed elsewhere).
-    """
-    user = getattr(request.state, "user", None)
-    sub = _current_sub(user)
-    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=10, max_limit=50)
-    repo = _get_repo()
-    if _role_in(user, "teacher"):
-        items = repo.list_courses_for_teacher(teacher_id=sub, limit=limit, offset=offset)
-    else:
-        items = repo.list_courses_for_student(student_id=sub, limit=limit, offset=offset)
-    return _json_private([_serialize_course(c) for c in items], status_code=200)
-
-
-async def create_course(request: Request, payload: CourseCreate):
-    """Create a new course (teacher only).
-
-    Why:
-        Teachers own courses they create; the owner is derived from the authenticated
-        subject (`sub`).
-
-    Behavior:
-        - 201 with `Course` on success
-        - 400 on invalid `title` length
-        - 403 when caller is not a teacher
-
-    Permissions:
-        Caller must have role `teacher` (owner becomes `teacher_id=sub`).
-    """
-    user = getattr(request.state, "user", None)
-    if not _role_in(user, "teacher"):
-        return _private_error({"error": "forbidden"}, status_code=403)
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    sub = _current_sub(user)
-    try:
-        course = _get_repo().create_course(
-            title=payload.title.strip(),
-            subject=payload.subject,
-            grade_level=payload.grade_level,
-            term=payload.term,
-            teacher_id=sub,
-        )
-    except ValueError:
-        # Map repo validation to contract 400
-        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
-    # Security: return private, no-store to prevent caching of owner-scoped data
-    return _json_private(_serialize_course(course), status_code=201)
-
-
-async def get_course(request: Request, course_id: str):
-    """Get a course by id — owner-only.
-
-    Why:
-        UI (edit form, members page) and API clients need a direct lookup that
-        respects ownership without scanning lists.
-
-    Behavior:
-        - 200 with `Course` when the caller owns the course
-        - 404 when the course does not exist
-        - 403 when the caller is not the owner
-
-    Permissions:
-        Caller must be a teacher AND owner of the course.
-    """
-    repo = _get_repo()
-    user = getattr(request.state, "user", None)
-    sub = _current_sub(user)
-    if not _role_in(user, "teacher"):
-        return _private_error({"error": "forbidden"}, status_code=403)
-    # Validate path parameter format early to avoid unintended 500s
-    if not _is_uuid_like(course_id):
-        return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
-    guard = teaching_guards._guard_course_owner(course_id, sub, repo_provider=_get_repo)
-    if guard:
-        return guard
-    # Owner confirmed; fetch course and return
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(repo, DBTeachingRepo):
-            # Use owner-scoped helper under RLS
-            c = repo.get_course_for_owner(course_id, sub)
-        else:
-            c = repo.get_course(course_id)
-    except Exception:
-        c = repo.get_course(course_id)
-    if not c:
-        return _private_error({"error": "not_found"}, status_code=404)
-    return _json_private(_serialize_course(c), status_code=200)
-
-async def update_course(request: Request, course_id: str, payload: CourseUpdate):
-    """Update course fields — owner-only.
-
-    Why:
-        Allow owners to adjust metadata without changing ownership.
-
-    Behavior:
-        - 200 with updated `Course`
-        - 400 on invalid fields (e.g., empty/too long title)
-        - 403 when caller is not owner; 404 when course unknown (DB path disambiguates; in-memory returns 404 for unknown)
-
-    Permissions:
-        Caller must be a teacher AND owner of the course.
-    """
-    repo = _get_repo()
-    user = getattr(request.state, "user", None)
-    sub = _current_sub(user)
-    if not _role_in(user, "teacher"):
-        return _private_error({"error": "forbidden"}, status_code=403)
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    updates = payload.model_dump(mode="python", exclude_unset=True)
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(repo, DBTeachingRepo):
-            # Contract-aligned semantics: disambiguate 404 vs 403 prior to mutation
-            if not repo.course_exists_for_owner(course_id, sub):
-                ex = repo.course_exists(course_id)
-                if ex is False:
-                    return _private_error({"error": "not_found"}, status_code=404)
-                return _private_error({"error": "forbidden"}, status_code=403)
-            updated = repo.update_course_owned(
-                course_id,
-                sub,
-                **updates,
-            )
-        else:
-            course = repo.get_course(course_id)
-            if not course:
-                return _private_error({"error": "not_found"}, status_code=404)
-            owner_id = course["teacher_id"] if isinstance(course, dict) else getattr(course, "teacher_id", None)
-            if sub != owner_id:
-                return _private_error({"error": "forbidden"}, status_code=403)
-            updated = repo.update_course(
-                course_id,
-                **updates,
-            )
-    except ValueError:
-        return _private_error({"error": "bad_request", "detail": "invalid_field"}, status_code=400)
-    if not updated:
-        # Should not normally happen after existence/ownership checks; keep conservative 403
-        return _private_error({"error": "forbidden"}, status_code=403)
-    return _json_private(_serialize_course(updated), status_code=200, vary_origin=True)
-
-
-async def delete_course(request: Request, course_id: str):
-    """Delete a course and its memberships — owner-only.
-
-    Why:
-        Owners can remove their courses entirely; memberships are deleted via FK cascade.
-
-    Behavior:
-        - 204 on success (owner)
-        - 404 when course does not exist (for owner)
-        - 403 for non-owner
-
-    Permissions:
-        Caller must be a teacher AND owner of the course.
-    """
-    repo = _get_repo()
-    user = getattr(request.state, "user", None)
-    sub = _current_sub(user)
-    if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-    # CSRF defense-in-depth for browser clients
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        if isinstance(repo, DBTeachingRepo):
-            # Owner check with ability to disambiguate 404 vs 403
-            if not repo.course_exists_for_owner(course_id, sub):
-                ex = repo.course_exists(course_id)
-                if ex is False:
-                    return JSONResponse({"error": "not_found"}, status_code=404)
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-            repo.delete_course_owned(course_id, sub)
-            _mark_recently_deleted(sub, course_id)
-            return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
-        else:
-            course = repo.get_course(course_id)
-            if not course:
-                return JSONResponse({"error": "not_found"}, status_code=404)
-            owner_id = course["teacher_id"] if isinstance(course, dict) else getattr(course, "teacher_id", None)
-            if sub != owner_id:
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-            repo.delete_course(course_id)
-            _mark_recently_deleted(sub, course_id)
-            return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
-    except Exception:
-        # Conservative default: do not claim deletion if ownership/existence cannot be determined
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+# Course handlers live in backend.web.routes.teaching_courses.
 
 async def list_units(request: Request, limit: int = 20, offset: int = 0):
     """
@@ -3231,44 +3029,10 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
     return _json_private(out, status_code=200, vary_origin=True)
 
 
-def _teacher_id_of(course) -> str | None:
-    """Return the teacher_id from a Course (dataclass or dict)."""
-    if isinstance(course, dict):
-        return course.get("teacher_id")
-    try:
-        return getattr(course, "teacher_id", None)
-    except Exception:
-        return None
-
-_RECENTLY_DELETED_TTL_SECONDS = 15.0
-_RECENTLY_DELETED_BY: dict[str, dict[str, float]] = {}
-
-
-def _prune_recently_deleted(owner_id: str, *, now: float | None = None) -> None:
-    bucket = _RECENTLY_DELETED_BY.get(owner_id)
-    if not bucket:
-        return
-    current = now if now is not None else time.time()
-    expired = [cid for cid, ts in bucket.items() if current - ts > _RECENTLY_DELETED_TTL_SECONDS]
-    for cid in expired:
-        bucket.pop(cid, None)
-    if not bucket:
-        _RECENTLY_DELETED_BY.pop(owner_id, None)
-
-
-def _mark_recently_deleted(owner_id: str, course_id: str) -> None:
-    now = time.time()
-    bucket = _RECENTLY_DELETED_BY.setdefault(owner_id, {})
-    bucket[course_id] = now
-    _prune_recently_deleted(owner_id, now=now)
-
-
-def _was_recently_deleted(owner_id: str, course_id: str) -> bool:
-    _prune_recently_deleted(owner_id)
-    bucket = _RECENTLY_DELETED_BY.get(owner_id)
-    if not bucket:
-        return False
-    return course_id in bucket
+_teacher_id_of = teaching_course_state.teacher_id_of
+_prune_recently_deleted = teaching_course_state.prune_recently_deleted
+_mark_recently_deleted = teaching_course_state.mark_recently_deleted
+_was_recently_deleted = teaching_course_state.was_recently_deleted
 
 
 def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):

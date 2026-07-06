@@ -62,6 +62,11 @@ from backend.web.routes.learning_material_file_routes import (
     get_material_file_legacy_alias as get_material_file_legacy_alias,  # noqa: F401
     learning_material_file_router,
 )
+from backend.web.routes.learning_internal_upload_routes import (
+    internal_upload_proxy as internal_upload_proxy,  # noqa: F401 - kept for route module compatibility
+    internal_upload_stub as internal_upload_stub,  # noqa: F401
+    learning_internal_upload_router,
+)
 from backend.web.routes.learning_upload_intents import (
     create_upload_intent as create_upload_intent,  # noqa: F401 - kept for route module compatibility
     learning_upload_intents_router,
@@ -74,23 +79,24 @@ from backend.web.routes.learning_material_files import (
     resolve_student_modular_material_file_url as _resolve_student_modular_material_file_url,  # noqa: F401
 )
 from backend.web.routes.learning_upload_proxy import (
-    decode_proxy_headers as _decode_proxy_headers,
+    decode_proxy_headers as _decode_proxy_headers,  # noqa: F401 - kept for route module compatibility
     encode_proxy_headers as _encode_proxy_headers,  # noqa: F401 - kept for route module compatibility
-    filter_upload_proxy_headers as _filter_upload_proxy_headers,
-    normalized_parts as _normalized_parts,
+    filter_upload_proxy_headers as _filter_upload_proxy_headers,  # noqa: F401
+    normalized_parts as _normalized_parts,  # noqa: F401
 )
 from backend.web.routes.learning_upload_proxy import async_forward_upload as _default_async_forward_upload
 from backend.web.routes.learning_upload_config import (
-    dev_upload_stub_enabled as _dev_upload_stub_enabled,
+    dev_upload_stub_enabled as _dev_upload_stub_enabled,  # noqa: F401 - kept for route module compatibility
     upload_intent_ttl_seconds as _upload_intent_ttl_seconds,  # noqa: F401
-    upload_proxy_enabled as _upload_proxy_enabled,
-    upload_proxy_timeout_seconds as _upload_proxy_timeout_seconds,
+    upload_proxy_enabled as _upload_proxy_enabled,  # noqa: F401
+    upload_proxy_timeout_seconds as _upload_proxy_timeout_seconds,  # noqa: F401
 )
 import httpx
-from urllib.parse import urlparse as _urlparse, quote as _quote
+from urllib.parse import urlparse as _urlparse, quote as _quote  # noqa: F401
 learning_router = APIRouter(tags=["Learning"])
 learning_router.include_router(learning_material_file_router)
 learning_router.include_router(learning_upload_intents_router)
+learning_router.include_router(learning_internal_upload_router)
 logger = logging.getLogger("gustav.web.learning")
 
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
@@ -1808,212 +1814,6 @@ async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int
         hdrs = None
     return await _download_bytes_with_limit(url=url, max_bytes=max_bytes, headers=hdrs)
 
-
-@learning_router.put("/api/learning/internal/upload-stub")
-async def internal_upload_stub(request: Request):
-    """Accept a small file upload and persist under STORAGE_VERIFY_ROOT.
-
-    Why:
-        In dev/offline setups we don't have a presigned upload target. This
-        stub endpoint allows the browser to PUT the file directly to the app,
-        writing to a local directory for integrity verification.
-
-    Behavior:
-        - Requires same-origin (Origin/Referer) and an authenticated student.
-        - Query string must include `storage_key` (path-like; validated).
-        - Body bytes are written to STORAGE_VERIFY_ROOT/storage_key (or `./.tmp/dev_uploads/...` when unset).
-        - Responds with JSON: {sha256, size_bytes}.
-    """
-    if not _dev_upload_stub_enabled():
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-    user, error = _require_student(request)
-    if error:
-        return error
-    if not _require_strict_same_origin(request):
-        return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())
-
-    storage_key = str(request.query_params.get("storage_key") or "").strip()
-    if not storage_key or not STORAGE_KEY_RE.fullmatch(storage_key):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_storage_key"}, status_code=400, headers=_cache_headers_error())
-
-    # Resolve target path safely beneath the configured local validation root.
-    root = resolve_local_verify_root_from_env()
-    if not root:
-        return JSONResponse(
-            {"error": "service_unavailable", "detail": "upload_stub_storage_unavailable"},
-            status_code=503,
-            headers=_cache_headers_error(),
-        )
-    from pathlib import Path as _Path
-    base = _Path(root).resolve()
-    target = (base / storage_key).resolve()
-    try:
-        common = os.path.commonpath([str(base), str(target)])
-    except Exception:
-        return JSONResponse({"error": "bad_request", "detail": "path_error"}, status_code=400, headers=_cache_headers_error())
-    if common != str(base):
-        return JSONResponse({"error": "bad_request", "detail": "path_escape"}, status_code=400, headers=_cache_headers_error())
-
-    body, body_error = await _read_request_stream_with_limit(request, _max_upload_bytes())
-    if body_error:
-        return JSONResponse({"error": "bad_request", "detail": body_error}, status_code=400, headers=_cache_headers_error())
-
-    # Ensure parent dirs exist and write the file.
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("wb") as fh:
-        fh.write(body)
-
-    # Compute sha256 for the response so the client can finalize submission.
-    import hashlib as _hashlib
-    h = _hashlib.sha256()
-    h.update(body)
-    sha_hex = h.hexdigest()
-    return JSONResponse({"sha256": sha_hex, "size_bytes": len(body)}, status_code=200, headers=_cache_headers_success())
-
-
-@learning_router.put("/api/learning/internal/upload-proxy")
-async def internal_upload_proxy(request: Request):
-    """Proxy a file upload to a presigned Storage URL (same-origin fallback).
-
-    Security:
-        - Requires authenticated student and strict same-origin.
-        - Validates the target URL host against SUPABASE_URL to prevent SSRF.
-        - Allows http only for local dev hosts (localhost, 127.0.0.0/8, ::1, host.docker.internal).
-        - Restricts the path to `/storage/v1/object/...` to narrow SSRF surface.
-        - Enforces MAX_UPLOAD_BYTES size and a MIME allowlist (images/PDF and
-          `application/octet-stream` for compatibility with some browsers).
-    Behavior:
-        - Forwards the raw body with the incoming Content-Type header.
-        - Returns {sha256, size_bytes} on success (200≤code<300).
-    """
-    target_host_for_log = "n/a"
-    content_type_for_log = request.headers.get("content-type") or "application/octet-stream"
-
-    def _proxy_error(payload: dict[str, str], *, status_code: int, reason: str) -> JSONResponse:
-        _current_emit_upload_proxy_telemetry()(
-            outcome="error",
-            status_code=status_code,
-            reason=reason,
-            target_host=target_host_for_log,
-            content_type=content_type_for_log,
-            size_bytes=None,
-        )
-        return JSONResponse(payload, status_code=status_code, headers=_cache_headers_error())
-
-    user, error = _require_student(request)
-    if error:
-        _current_emit_upload_proxy_telemetry()(
-            outcome="error",
-            status_code=int(getattr(error, "status_code", 401)),
-            reason="auth",
-            target_host=target_host_for_log,
-            content_type=content_type_for_log,
-            size_bytes=None,
-        )
-        return error
-    if not _require_strict_same_origin(request):
-        return _proxy_error({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, reason="csrf_violation")
-    if not _upload_proxy_enabled():
-        return _proxy_error({"error": "not_found"}, status_code=404, reason="feature_disabled")
-
-    target = str(request.query_params.get("url") or "").strip()
-    header_token = str(request.query_params.get("headers") or "").strip()
-    forward_headers = _filter_upload_proxy_headers(_decode_proxy_headers(header_token))
-    if not target:
-        return _proxy_error({"error": "bad_request", "detail": "missing_url"}, status_code=400, reason="missing_url")
-    base = (os.getenv("SUPABASE_URL") or "").strip()
-    public_base = (os.getenv("SUPABASE_PUBLIC_URL") or "").strip()
-    try:
-        parsed_target = _urlparse(target)
-        parsed_base = _urlparse(base) if base else None
-        parsed_public = _urlparse(public_base) if public_base else None
-    except Exception:
-        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_parse")
-
-    target_scheme, target_host, target_port = _normalized_parts(parsed_target)
-    target_host_for_log = target_host or "n/a"
-
-    if not target_scheme or target_scheme not in {"http", "https"} or not target_host:
-        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_parts")
-
-    local_hosts = {"localhost", "::1", "host.docker.internal"}
-    is_local_http = target_host in local_hosts or target_host.startswith("127.")
-    if target_scheme == "http" and not is_local_http:
-        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_scheme")
-    allowed_hosts: list[tuple[str, str, int | None]] = []
-    for parsed in (parsed_base, parsed_public):
-        if not parsed:
-            continue
-        scheme, host, port = _normalized_parts(parsed)
-        if host:
-            allowed_hosts.append((scheme, host, port))
-    if not allowed_hosts:
-        return _proxy_error({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, reason="missing_allowed_hosts")
-
-    matched_scheme = None
-    matched_port: int | None = None
-    for scheme, host, port in allowed_hosts:
-        if target_host == host:
-            matched_scheme = scheme
-            matched_port = port
-            break
-
-    if matched_scheme is None:
-        return _proxy_error({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, reason="invalid_url_host")
-    if matched_scheme == "https" and target_scheme != "https":
-        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_scheme")
-    if matched_port and target_port and target_port != matched_port:
-        return _proxy_error({"error": "bad_request", "detail": "invalid_url_host"}, status_code=400, reason="invalid_url_port")
-
-    # Enforce that the path targets the storage upload endpoint to reduce SSRF surface.
-    path = parsed_target.path or "/"
-    # Be tolerant to accidental double slashes from upstream clients by
-    # collapsing them before applying prefix checks (dev/local presigners can
-    # produce .../storage/v1//object/...). This does not weaken the check
-    # because we still require the fixed upload prefix afterwards.
-    while "//" in path:
-        path = path.replace("//", "/")
-    if ".." in path or re.search(r"%2e", path, flags=re.IGNORECASE):
-        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_path")
-    if not path.startswith("/storage/v1/object/"):
-        return _proxy_error({"error": "bad_request", "detail": "invalid_url"}, status_code=400, reason="invalid_url_path")
-
-    body, body_error = await _read_request_stream_with_limit(request, _max_upload_bytes())
-    if body_error:
-        return _proxy_error({"error": "bad_request", "detail": body_error}, status_code=400, reason=body_error)
-    content_type = request.headers.get("content-type") or "application/octet-stream"
-    content_type_for_log = content_type
-    # Enforce MIME allowlist for uploads proxied through our origin.
-    allowed_mime = (set(ALLOWED_IMAGE_MIME) | set(ALLOWED_FILE_MIME) | {"application/octet-stream"})
-    if content_type not in allowed_mime:
-        return _proxy_error({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, reason="mime_not_allowed")
-
-    try:
-        resp = await _current_async_forward_upload()(
-            url=target,
-            payload=body,
-            content_type=content_type,
-            timeout=_upload_proxy_timeout_seconds(),
-            headers=forward_headers or None,
-        )
-    except Exception:
-        # Prod-parity: any upstream exception is a 502 (no soft-200 in dev/test).
-        return _proxy_error({"error": "bad_gateway", "detail": "proxy_failed"}, status_code=502, reason="proxy_failed")
-    if getattr(resp, "status_code", 500) >= 300:
-        # Prod-parity: non-2xx upstream is a 502 in all environments.
-        return _proxy_error({"error": "bad_gateway", "detail": "upstream_error"}, status_code=502, reason="upstream_error")
-
-    import hashlib as _hashlib
-    h = _hashlib.sha256(); h.update(body)
-    _current_emit_upload_proxy_telemetry()(
-        outcome="success",
-        status_code=200,
-        reason="ok",
-        target_host=target_host_for_log,
-        content_type=content_type_for_log,
-        size_bytes=len(body),
-    )
-    return JSONResponse({"sha256": h.hexdigest(), "size_bytes": len(body)}, status_code=200, headers=_cache_headers_success())
 
 @learning_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
 async def list_submissions(

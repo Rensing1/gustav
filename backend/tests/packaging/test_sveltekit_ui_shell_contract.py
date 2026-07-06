@@ -109,6 +109,21 @@ def test_learner_unit_workspace_styles_are_split_from_app_shell() -> None:
     assert ".learning-submission-workspace" not in app_src
 
 
+def test_teacher_workspace_styles_are_split_from_app_shell() -> None:
+    layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
+    app_style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "app.css"
+    teacher_style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "teaching-workspace.css"
+
+    layout_src = layout_path.read_text(encoding="utf-8")
+    app_src = app_style_path.read_text(encoding="utf-8")
+
+    assert 'import "$lib/styles/teaching-workspace.css";' in layout_src
+    assert teacher_style_path.is_file(), f"Missing teacher workspace stylesheet: {teacher_style_path}"
+    assert ".teacher-flow-unit-node" not in app_src
+    assert ".workspace-node-editor" not in app_src
+    assert ".workspace-unit-commandbar-popover" not in app_src
+
+
 def test_app_html_loads_nunito_font() -> None:
     package_path = REPO_ROOT / "frontend" / "package.json"
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"

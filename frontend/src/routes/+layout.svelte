@@ -15,6 +15,7 @@
   import "@fontsource/work-sans/600.css";
   import "$lib/styles/app.css";
   import "$lib/styles/learning-unit.css";
+  import "$lib/styles/teaching-workspace.css";
   import "$lib/styles/auth-theme.css";
   import "$lib/styles/design-system.css";
   import BreadcrumbBar from "$lib/components/ui/BreadcrumbBar.svelte";

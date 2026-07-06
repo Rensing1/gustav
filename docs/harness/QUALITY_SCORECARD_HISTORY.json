@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-06T17:17:24",
+      "generated": "2026-07-06T17:24:30",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -71,14 +71,19 @@
           "path": "frontend/src/routes/teaching/units/[unitId]/+page.svelte"
         },
         {
-          "delta_from_previous": 0,
-          "loc": 3386,
+          "delta_from_previous": -2094,
+          "loc": 1292,
           "path": "frontend/src/lib/styles/app.css"
         },
         {
-          "delta_from_previous": null,
-          "loc": 2233,
+          "delta_from_previous": 1,
+          "loc": 2234,
           "path": "frontend/src/lib/styles/learning-unit.css"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 2096,
+          "path": "frontend/src/lib/styles/teaching-workspace.css"
         },
         {
           "delta_from_previous": 0,
@@ -86,7 +91,7 @@
           "path": "frontend/src/lib/styles/design-system.css"
         },
         {
-          "delta_from_previous": null,
+          "delta_from_previous": 0,
           "loc": 2684,
           "path": "backend/web/static/css/gustav.css"
         }

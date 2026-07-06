@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const globalStyleFiles = ["app.css", "learning-unit.css", "auth-theme.css", "design-system.css"];
+const globalStyleFiles = [
+  "app.css",
+  "learning-unit.css",
+  "teaching-workspace.css",
+  "auth-theme.css",
+  "design-system.css"
+];
 const workspaceStyleFiles = ["app.css", "learning-unit.css"];
 
 export function readGlobalCssBundle(stylesDir: string): string {

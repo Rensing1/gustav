@@ -184,6 +184,7 @@ def test_quality_scorecard_tracks_split_frontend_and_static_css_hotspots() -> No
     for required_hotspot in (
         "frontend/src/lib/styles/app.css",
         "frontend/src/lib/styles/learning-unit.css",
+        "frontend/src/lib/styles/teaching-workspace.css",
         "frontend/src/lib/styles/design-system.css",
         "backend/web/static/css/gustav.css",
     ):

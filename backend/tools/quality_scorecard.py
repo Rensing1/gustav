@@ -33,6 +33,7 @@ DEFAULT_HOTSPOTS = [
     "frontend/src/routes/teaching/units/[unitId]/+page.svelte",
     "frontend/src/lib/styles/app.css",
     "frontend/src/lib/styles/learning-unit.css",
+    "frontend/src/lib/styles/teaching-workspace.css",
     "frontend/src/lib/styles/design-system.css",
     "backend/web/static/css/gustav.css",
 ]

@@ -46,9 +46,6 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - container fallback when package path is flattened
     _wire_storage = None  # type: ignore
 from backend.storage.learning_policy import (
-    ALLOWED_FILE_MIME,
-    ALLOWED_IMAGE_MIME,
-    STORAGE_KEY_RE,
     resolve_local_verify_root_from_env,
 )
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
@@ -88,6 +85,10 @@ from backend.web.routes.learning_submission_files import (
     list_submissions as list_submissions,  # noqa: F401
     normalize_download_disposition as _normalize_download_disposition,  # noqa: F401
     submission_file_href as _submission_file_href,  # noqa: F401
+)
+from backend.web.routes.learning_submission_processing import (
+    dev_try_process_pdf as _dev_try_process_pdf,
+    validate_submission_payload as _validate_submission_payload,
 )
 from backend.web.routes.learning_upload_proxy import (
     decode_proxy_headers as _decode_proxy_headers,  # noqa: F401 - kept for route module compatibility
@@ -1112,139 +1113,6 @@ async def get_modular_unit_module_content(
     return JSONResponse(payload, headers=_cache_headers_success())
 
 
-def _validate_submission_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Validate and normalize the submission payload (text/image/file/h5p).
-
-    Why:
-        Keep FastAPI layer thin, but ensure inputs are sane before invoking
-        use cases/repo and touching the database. Enforces MIME allowlists,
-        size bounds, and storage key/sha256 formats. Error detail strings match
-        the OpenAPI contract for precise client handling.
-
-    Returns:
-        (kind, clean_payload) where kind in {text,image,file,h5p} and
-        clean_payload contains the normalized fields for the given kind.
-
-    Errors:
-        Raises ValueError with one of: 'invalid_input', 'invalid_image_payload',
-        'invalid_file_payload', 'invalid_h5p_payload'.
-    """
-    if not isinstance(payload, dict):
-        raise ValueError("invalid_input")
-    intent_raw = payload.get("intent")
-    if intent_raw is None:
-        intent = "submit"
-    elif not isinstance(intent_raw, str):
-        raise ValueError("invalid_input")
-    else:
-        intent = intent_raw.strip().lower()
-    if intent not in {"feedback", "submit"}:
-        raise ValueError("invalid_input")
-    kind = payload.get("kind")
-    if kind not in ("text", "image", "file", "h5p"):
-        raise ValueError("invalid_input")
-    if kind == "text":
-        text_body = payload.get("text_body")
-        if not isinstance(text_body, str) or not text_body.strip():
-            # Harmonize with API contract: return generic invalid_input
-            raise ValueError("invalid_input")
-        # Optional guardrail: prevent oversized payloads from overloading DB
-        # Global limit: allow up to 64k characters for text submissions.
-        if len(text_body) > 65_536:
-            raise ValueError("invalid_input")
-        return kind, {"intent": intent, "text_body": text_body.strip()}
-    elif kind == "h5p":
-        required = {"score_raw", "score_max"}
-        if not required.issubset(payload.keys()):
-            raise ValueError("invalid_h5p_payload")
-        try:
-            raw_int = int(payload.get("score_raw"))
-            max_int = int(payload.get("score_max"))
-        except (TypeError, ValueError):
-            raise ValueError("invalid_h5p_payload") from None
-        if raw_int < 0 or max_int < 0 or raw_int > max_int:
-            raise ValueError("invalid_h5p_payload")
-        return kind, {"intent": intent, "score_raw": raw_int, "score_max": max_int}
-    elif kind == "image":
-        # Image submissions require finalized storage metadata
-        required = {"storage_key", "mime_type", "size_bytes", "sha256"}
-        if not required.issubset(payload.keys()):
-            raise ValueError("invalid_image_payload")
-        size_bytes = payload.get("size_bytes")
-        try:
-            size_int = int(size_bytes)
-        except (TypeError, ValueError):
-            raise ValueError("invalid_image_payload") from None
-        if size_int <= 0 or size_int > _max_upload_bytes():
-            raise ValueError("invalid_image_payload")
-        mime_type_raw = payload.get("mime_type")
-        if not isinstance(mime_type_raw, str) or not mime_type_raw:
-            raise ValueError("invalid_image_payload")
-        # Compare MIME types case-insensitively; normalize for downstream checks.
-        mime_type = mime_type_raw.strip().lower()
-        if mime_type not in ALLOWED_IMAGE_MIME:
-            raise ValueError("invalid_image_payload")
-        storage_key = payload.get("storage_key")
-        if not isinstance(storage_key, str) or not storage_key:
-            raise ValueError("invalid_image_payload")
-        # Restrict to path-like storage keys (defense-in-depth):
-        # - allow only lower-case, digits, _, ., /, -
-        # - first char must be [a-z0-9]
-        # - explicitly forbid any ".." sequence to avoid traversal-like patterns
-        if not STORAGE_KEY_RE.fullmatch(storage_key):
-            raise ValueError("invalid_image_payload")
-        sha256 = payload.get("sha256")
-        if not isinstance(sha256, str):
-            raise ValueError("invalid_image_payload")
-        sha256_normalized = sha256.strip().lower()
-        if len(sha256_normalized) != 64 or any(c not in "0123456789abcdef" for c in sha256_normalized):
-            raise ValueError("invalid_image_payload")
-        return kind, {
-            "intent": intent,
-            "storage_key": storage_key,
-            "mime_type": mime_type,
-            "size_bytes": size_int,
-            "sha256": sha256_normalized,
-        }
-    else:  # kind == "file"
-        # PDF submissions (MVP) with finalized storage metadata
-        required = {"storage_key", "mime_type", "size_bytes", "sha256"}
-        if not required.issubset(payload.keys()):
-            raise ValueError("invalid_file_payload")
-        size_bytes = payload.get("size_bytes")
-        try:
-            size_int = int(size_bytes)
-        except (TypeError, ValueError):
-            raise ValueError("invalid_file_payload") from None
-        if size_int <= 0 or size_int > _max_upload_bytes():
-            raise ValueError("invalid_file_payload")
-        mime_type_raw = payload.get("mime_type")
-        if not isinstance(mime_type_raw, str) or not mime_type_raw:
-            raise ValueError("invalid_file_payload")
-        # Compare MIME types case-insensitively; normalize for downstream checks.
-        mime_type = mime_type_raw.strip().lower()
-        if mime_type not in ALLOWED_FILE_MIME:
-            raise ValueError("invalid_file_payload")
-        storage_key = payload.get("storage_key")
-        if not isinstance(storage_key, str) or not storage_key:
-            raise ValueError("invalid_file_payload")
-        if not STORAGE_KEY_RE.fullmatch(storage_key):
-            raise ValueError("invalid_file_payload")
-        sha256 = payload.get("sha256")
-        if not isinstance(sha256, str):
-            raise ValueError("invalid_file_payload")
-        sha256_normalized = sha256.strip().lower()
-        if len(sha256_normalized) != 64 or any(c not in "0123456789abcdef" for c in sha256_normalized):
-            raise ValueError("invalid_file_payload")
-        return kind, {
-            "intent": intent,
-            "storage_key": storage_key,
-            "mime_type": mime_type,
-            "size_bytes": size_int,
-            "sha256": sha256_normalized,
-        }
-
-
 @learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
 async def create_submission(request: Request, course_id: str, task_id: str, payload: dict[str, Any]):
     """Create a student submission for a task.
@@ -1597,73 +1465,6 @@ async def finalize_submission(request: Request, course_id: str, task_id: str, pa
 
     decorated = _attach_submission_files(submission, course_id=course_id, task_id=task_id)
     return JSONResponse(decorated, status_code=201, headers=_cache_headers_success())
-
-
-def _dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, course_id: str, task_id: str, student_sub: str) -> None:
-    """Best-effort dev helper: render, persist pages, and mark extracted.
-
-    Intent:
-        In lokalen Umgebungen, in denen Uploads auf das Dateisystem geschrieben
-        werden, verarbeiten wir eingereichte PDFs sofort und speichern
-        abgeleitete Seitenbilder unter einem stabilen Pfad.
-
-    Permissions:
-        Nur für Dev. Produktion soll einen Worker/Queue nutzen.
-    """
-    from pathlib import Path as _Path
-    base = _Path(root).resolve()
-    pdf_path = (base / storage_key).resolve()
-    common = os.path.commonpath([str(base), str(pdf_path)])
-    if common != str(base) or not pdf_path.exists() or not pdf_path.is_file():
-        return
-
-    try:
-        data = pdf_path.read_bytes()
-    except Exception:
-        return
-
-    # Lazy import optional deps only when invoked
-    try:
-        from backend.vision.pipeline import process_pdf_bytes  # type: ignore
-        from backend.vision.persistence import SubmissionScope, persist_rendered_pages  # type: ignore
-    except Exception:
-        return
-
-    try:
-        pages, _meta = process_pdf_bytes(data)
-    except Exception:
-        return
-
-    # Minimal filesystem-backed BinaryWriteStorage implementation for dev
-    class _FSWriter:
-        def __init__(self, root_dir: _Path) -> None:
-            self._root = root_dir
-
-        def put_object(self, *, bucket: str, key: str, body: bytes, content_type: str) -> None:  # noqa: D401
-            # Ignore content_type; write bytes under root/bucket/key
-            target = (self._root / bucket / key).resolve()
-            # Enforce containment in root
-            common2 = os.path.commonpath([str(self._root), str(target)])
-            if common2 != str(self._root):
-                raise RuntimeError("path_escape_blocked")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(body)
-
-    fs = _FSWriter(base)
-    scope = SubmissionScope(
-        course_id=str(course_id), task_id=str(task_id), student_sub=str(student_sub), submission_id=str(submission_id)
-    )
-    try:
-        persist_rendered_pages(
-            storage=fs,
-            bucket=_storage_bucket(),
-            scope=scope,
-            pages=pages,
-            repo=_get_repo(),  # type: ignore[arg-type]
-        )
-    except Exception:
-        # Never let dev persistence affect the request path
-        return
 
 
 _DEFAULT_DOWNLOAD_BYTES_WITH_LIMIT = _download_bytes_with_limit

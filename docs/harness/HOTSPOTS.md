@@ -78,7 +78,8 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 - `backend/learning/repo_submission_mapping.py` übernimmt seit Closeout v1.1 Submission-Row-Mapping, öffentliche Fehler-Sanitizer und deterministische MVP-Analyse-/Feedback-Stubs.
 - `backend/learning/repo_course_unit_queries.py` übernimmt seit Closeout v1.1 studentische Course-/Unit-Read-Queries für `list_courses_for_student` und `list_units_for_student_course`.
 - `backend/learning/repo_submission_summary_queries.py` übernimmt seit Closeout v1.1 die lightweight Latest-/Final-Submission-Summary pro Task für Learner-Taskkarten.
-- `backend/learning/repo_db.py` ist dadurch von 2425 auf 2158 LOC gesunken. C5 ist damit fortgeschritten, aber noch nicht abgeschlossen: Modular-Unit-Queries, Submission-Schreibfälle und Worker-nahe DB-Zugriffe müssen weiter getrennt werden.
+- `backend/learning/repo_modular_unit_queries.py` übernimmt seit Closeout v1.1 Modular-Unit-Graph, Modul-Content, freigegebene Sections, Material-/Task-Reads, H5P-Content-Access und den modularen Section-Unlock-Helfer.
+- `backend/learning/repo_db.py` ist dadurch von 2425 auf 1510 LOC gesunken. C5 ist damit fortgeschritten, aber noch nicht abgeschlossen: Submission-Schreibfälle, Finalize-Logik, Submission-History-Reads und Worker-nahe DB-Zugriffe müssen weiter getrennt werden.
 
 ## Regel
 Hotspots dürfen nicht ohne bewusst dokumentierten Grund wachsen. Kleine Extraktionen brauchen passende Contract- oder Komponententest-Abdeckung. Die monatliche Scorecard dokumentiert LOC-Veränderungen; relevantes Wachstum braucht entweder eine getestete Extraktion oder einen expliziten Tech-Debt-Eintrag mit Exit-Kriterium.

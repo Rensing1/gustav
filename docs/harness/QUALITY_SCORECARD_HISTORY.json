@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-06T17:24:30",
+      "generated": "2026-07-06T17:27:54",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -71,17 +71,17 @@
           "path": "frontend/src/routes/teaching/units/[unitId]/+page.svelte"
         },
         {
-          "delta_from_previous": -2094,
+          "delta_from_previous": 0,
           "loc": 1292,
           "path": "frontend/src/lib/styles/app.css"
         },
         {
-          "delta_from_previous": 1,
+          "delta_from_previous": 0,
           "loc": 2234,
           "path": "frontend/src/lib/styles/learning-unit.css"
         },
         {
-          "delta_from_previous": null,
+          "delta_from_previous": 0,
           "loc": 2096,
           "path": "frontend/src/lib/styles/teaching-workspace.css"
         },

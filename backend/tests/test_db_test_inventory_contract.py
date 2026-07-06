@@ -221,6 +221,20 @@ def test_db_test_inventory_treats_pytest_infrastructure_as_no_marker_needed(tmp_
         ),
         encoding="utf-8",
     )
+    db_env_helper = tmp_path / "db_env.py"
+    db_env_helper.write_text(
+        "\n".join(
+            [
+                "import os",
+                "import psycopg",
+                "",
+                "def ensure_db_env_defaults():",
+                "    dsn = os.getenv('DATABASE_URL')",
+                "    psycopg.connect(dsn).close()",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     records = db_test_inventory.scan_tests(tmp_path, repo_root=tmp_path)
     rows = {record.path: record for record in records}
@@ -229,6 +243,8 @@ def test_db_test_inventory_treats_pytest_infrastructure_as_no_marker_needed(tmp_
     assert rows["conftest.py"].marker_status == "no-db-marker-needed"
     assert rows["utils/db.py"].classification == "test-infra"
     assert rows["utils/db.py"].marker_status == "no-db-marker-needed"
+    assert rows["db_env.py"].classification == "test-infra"
+    assert rows["db_env.py"].marker_status == "no-db-marker-needed"
 
 
 def test_db_test_inventory_document_has_required_columns() -> None:

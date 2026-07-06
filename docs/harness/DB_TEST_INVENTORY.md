@@ -11,7 +11,7 @@ Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Te
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 119
+- Inventarisierte Dateien: 120
 - Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 0
 - Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 86
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
@@ -24,6 +24,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | Test file | Classification | Markers | Marker status | Signals | Recommended action |
 | --- | --- | --- | --- | --- | --- |
 | backend/tests/conftest.py | test-infra | - | no-db-marker-needed | env:DATABASE_URL, env:RLS_TEST_DSN, env:SUPABASE_SERVICE_ROLE_KEY, psycopg-connect, psycopg-import | Keep pytest infrastructure marker-free |
+| backend/tests/db_env.py | test-infra | - | no-db-marker-needed | psycopg-connect, psycopg-import | Keep pytest infrastructure marker-free |
 | backend/tests/learning_adapters/test_learning_worker_dspy_only_placeholder.py | real-db | db_write | marked-db | env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required | Keep marker and isolation visible |
 | backend/tests/learning_adapters/test_local_vision_remote_fetch.py | storage-or-config | - | no-db-marker-needed | psycopg-required, supabase | Keep service-free unless it reaches the real DB |
 | backend/tests/migration/test_ai_usage_events_security.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |

@@ -172,6 +172,8 @@ def _is_test_infra(path: Path, repo_root: Path) -> bool:
     relative_parts = path.relative_to(repo_root).parts
     if path.name == "conftest.py":
         return True
+    if path.name == "db_env.py":
+        return True
     if len(relative_parts) >= 2 and relative_parts[-2:] == ("utils", "db.py"):
         return True
     if len(relative_parts) >= 3 and relative_parts[:2] == ("backend", "tests") and relative_parts[2] == "utils":

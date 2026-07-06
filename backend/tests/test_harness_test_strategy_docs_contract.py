@@ -58,7 +58,7 @@ def test_harness_quality_gates_define_test_profiles() -> None:
 
 
 def test_harness_quality_gates_explain_backend_lint_rollout() -> None:
-    """C10 keeps the lint gate explicit while it is not yet part of verify."""
+    """C10 keeps the lint gate explicit and hard-wired into verify."""
 
     text = _read_doc("docs/harness/QUALITY_GATES.md")
 
@@ -66,7 +66,7 @@ def test_harness_quality_gates_explain_backend_lint_rollout() -> None:
         "make lint-backend",
         "Ruff",
         "Pyflakes",
-        "nicht Teil von `make verify`",
+        "Teil von `make verify`",
         "pyproject.toml",
     ):
         assert required_term in text

@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
+
 import LearningTaskCard from "./LearningTaskCard.svelte";
 import type { LearningTask } from "$lib/types/learning";
 
@@ -241,7 +243,7 @@ describe("LearningTaskCard", () => {
 
   it("styles the compact modular task row as a preview-plus-actions layout", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
     const designSystemCss = readFileSync(path.resolve(currentDir, "../../styles/design-system.css"), "utf8");
 
     expect(css).toMatch(
@@ -1164,7 +1166,7 @@ describe("LearningTaskCard", () => {
 
   it("uses theme tokens for the task prompt and summary areas instead of legacy intro panels", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
     const blockMatch = css.match(/\.learning-work-item--task \.markdown-prose\s*\{([^}]*)\}/);
 
     expect(blockMatch).not.toBeNull();
@@ -1179,7 +1181,7 @@ describe("LearningTaskCard", () => {
 
   it("styles the review tabs as technical text tabs instead of rounded pills", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
     const blockMatch = css.match(/\.learning-task-submission-summary__tabs \.workspace-tab\s*\{([^}]*)\}/);
     const activeBlockMatch = css.match(/\.learning-task-submission-summary__tabs \.workspace-tab--active\s*\{([^}]*)\}/);
 

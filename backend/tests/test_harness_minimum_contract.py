@@ -176,6 +176,20 @@ def test_tech_debt_inventory_has_no_open_entries_after_harness_hardening() -> No
     assert open_rows == []
 
 
+def test_quality_scorecard_tracks_split_frontend_and_static_css_hotspots() -> None:
+    """Large CSS surfaces should stay visible after they are split out of app.css."""
+
+    scorecard_source = _read("backend/tools/quality_scorecard.py")
+
+    for required_hotspot in (
+        "frontend/src/lib/styles/app.css",
+        "frontend/src/lib/styles/learning-unit.css",
+        "frontend/src/lib/styles/design-system.css",
+        "backend/web/static/css/gustav.css",
+    ):
+        assert required_hotspot in scorecard_source
+
+
 def test_plan_memory_documents_exist() -> None:
     """Agents need a small searchable planning memory before refactor work grows."""
 

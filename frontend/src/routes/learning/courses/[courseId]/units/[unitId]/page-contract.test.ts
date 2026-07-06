@@ -3,11 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
+
 describe("learning unit route contract", () => {
   it("uses the shared workspace settings menu instead of the local legacy layout menu", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
-    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
     const designSystemCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/design-system.css"), "utf8");
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
@@ -203,7 +205,7 @@ describe("learning unit route contract", () => {
 
   it("derives modular spacing from DESIGN.md instead of flattening modules into one continuous list", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
     const designSystemCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/design-system.css"), "utf8");
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
@@ -261,7 +263,7 @@ describe("learning unit route contract", () => {
 
   it("uses one subtle card per module while keeping the pane surface itself cardless", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
     const designSystemCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/design-system.css"), "utf8");
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
@@ -287,7 +289,7 @@ describe("learning unit route contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const packageJson = readFileSync(path.resolve(currentDir, "../../../../../../../../frontend/package.json"), "utf8");
     const markdownSource = readFileSync(path.resolve(currentDir, "../../../../../../lib/utils/markdown.ts"), "utf8");
-    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(packageJson).toContain('"markdown-it"');
@@ -312,7 +314,7 @@ describe("learning unit route contract", () => {
       path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningUnitContentWorkspace.svelte"),
       "utf8"
     );
-    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(designDoc).toContain("### 7.1 Spacing");
@@ -330,7 +332,7 @@ describe("learning unit route contract", () => {
 
   it("removes horizontal page separators while keeping task rows as the primary objects", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const appCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/app.css"), "utf8");
+    const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(designDoc).toContain("### 7.3 Flächen");

@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
+
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const editorSourcePath = path.resolve(currentDir, "MarkdownWysiwygEditor.svelte");
-const appCssPath = path.resolve(currentDir, "../../styles/app.css");
+const stylesDir = path.resolve(currentDir, "../../styles");
 
 describe("MarkdownWysiwygEditor", () => {
   it("exposes table editing but keeps image upload out of the learner toolbar", () => {
@@ -53,7 +55,7 @@ describe("MarkdownWysiwygEditor", () => {
   });
 
   it("keeps Toast UI's main editor area shrinkable and enables touch scrolling inside ProseMirror", () => {
-    const css = readFileSync(appCssPath, "utf8");
+    const css = readWorkspaceCssBundle(stylesDir);
     const mainRule = css.match(/\.learning-markdown-editor\s+\.toastui-editor-main\s*\{(?<body>[^}]*)\}/s);
 
     expect(mainRule?.groups?.body).toMatch(/min-height:\s*0(?:px)?\s*;/);

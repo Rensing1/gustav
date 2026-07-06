@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
+
 import LearningUnitContentWorkspace from "./LearningUnitContentWorkspace.svelte";
 import type { ContentGroup } from "$lib/learning-unit/workspace";
 
@@ -55,10 +57,12 @@ const contentGroups: ContentGroup[] = [
   }
 ];
 
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+
 describe("LearningUnitContentWorkspace", () => {
   it("uses a non-stretching vertical stack for pane items", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const appCss = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
     const designSystemCss = readFileSync(path.resolve(currentDir, "../../styles/design-system.css"), "utf8");
     const { container } = render(LearningUnitContentWorkspace, {
       props: {
@@ -320,7 +324,7 @@ describe("LearningUnitContentWorkspace", () => {
 
   it("renders modular groups as their own surface cards instead of one pane-wide card", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const appCss = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
 
     const { container } = render(LearningUnitContentWorkspace, {
       props: {
@@ -380,13 +384,9 @@ describe("LearningUnitContentWorkspace", () => {
   });
 
   it("renders modular groups as separate module blocks with materials before tasks", () => {
-    const cssPath = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "../../styles/app.css"
-    );
-    const css = readFileSync(cssPath, "utf8");
+    const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
     const designSystemCss = readFileSync(
-      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../styles/design-system.css"),
+      path.resolve(currentDir, "../../styles/design-system.css"),
       "utf8"
     );
     const { container } = render(LearningUnitContentWorkspace, {

@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-05T13:33:18",
+      "generated": "2026-07-06T17:17:24",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -32,27 +32,27 @@
         },
         {
           "delta_from_previous": 0,
-          "loc": 2499,
+          "loc": 382,
           "path": "backend/web/routes/app.py"
         },
         {
           "delta_from_previous": 0,
-          "loc": 2884,
+          "loc": 1476,
           "path": "backend/web/routes/learning.py"
         },
         {
           "delta_from_previous": 0,
-          "loc": 6146,
+          "loc": 811,
           "path": "backend/web/routes/teaching.py"
         },
         {
           "delta_from_previous": 0,
-          "loc": 2425,
+          "loc": 511,
           "path": "backend/learning/repo_db.py"
         },
         {
           "delta_from_previous": 0,
-          "loc": 4844,
+          "loc": 1487,
           "path": "backend/teaching/repo_db.py"
         },
         {
@@ -72,13 +72,23 @@
         },
         {
           "delta_from_previous": 0,
-          "loc": 5617,
+          "loc": 3386,
           "path": "frontend/src/lib/styles/app.css"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 2233,
+          "path": "frontend/src/lib/styles/learning-unit.css"
         },
         {
           "delta_from_previous": 0,
           "loc": 1903,
           "path": "frontend/src/lib/styles/design-system.css"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 2684,
+          "path": "backend/web/static/css/gustav.css"
         }
       ],
       "month": "2026-07",

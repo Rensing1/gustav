@@ -94,6 +94,21 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
     assert 'label: "Lehrenden-Welt"' not in src, "Teacher home should no longer be a primary teacher tab"
 
 
+def test_learner_unit_workspace_styles_are_split_from_app_shell() -> None:
+    layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
+    app_style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "app.css"
+    learner_style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "learning-unit.css"
+
+    layout_src = layout_path.read_text(encoding="utf-8")
+    app_src = app_style_path.read_text(encoding="utf-8")
+
+    assert 'import "$lib/styles/learning-unit.css";' in layout_src
+    assert learner_style_path.is_file(), f"Missing learner-unit stylesheet: {learner_style_path}"
+    assert ".learning-unit-space" not in app_src
+    assert ".learning-task-workspace" not in app_src
+    assert ".learning-submission-workspace" not in app_src
+
+
 def test_app_html_loads_nunito_font() -> None:
     package_path = REPO_ROOT / "frontend" / "package.json"
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"

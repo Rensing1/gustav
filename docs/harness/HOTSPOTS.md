@@ -24,6 +24,7 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 | `frontend/src/routes/teaching/units/[unitId]/+page.svelte` | 1210 | Teaching Workspace | Graph-State, Command-Bar und Node-Editor-Komposition trennen |
 | `frontend/src/lib/styles/app.css` | 5617 | App CSS | Komponentennahe Styles und Tokens auslagern |
 | `frontend/src/lib/styles/design-system.css` | 1903 | Design System CSS | Tokens, Layout-Utilities und Komponentenregeln schärfer trennen |
+| `backend/web/static/css/gustav.css` | 2684 | Active FastAPI Static CSS | aktive Shell-/Auth-/Legacy-UI-Referenzen prüfen und nicht unkontrolliert ausbauen |
 
 ## PR20 Fortschritt
 - `h5p-service/lib/finished_submission_context.mjs` übernimmt seit PR20 die Origin-/Referer-Auswertung und Idempotency-Key-Erzeugung für H5P-Finished-Data-Forwarding.
@@ -86,6 +87,10 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 - `backend/learning/repo_submission_command_queries.py` übernimmt seit Closeout v1.1 Submission-Create, Feedback-Deduplizierung, Finalize-Latest-Feedback und Queue-Job-Erzeugung.
 - `backend/learning/repo_history_worker_queries.py` übernimmt seit Closeout v1.1 Submission-History-Reads, `get_task_kind_for_student`, Queue-Table-Auflösung und `mark_extracted`.
 - `backend/learning/repo_db.py` ist dadurch von 2425 auf 511 LOC gesunken. C5 ist damit als Learning-Repo-Hotspot-Reduktion abgeschlossen; zukünftige Query-Gruppen gehören in fokussierte Learning-Repo-Module.
+- `frontend/src/lib/styles/learning-unit.css` übernimmt seit Closeout v1.1 die learner-unit-spezifischen Workspace-, Material-, Task-, Submission-, Markdown- und Learner-Graph-Regeln aus `frontend/src/lib/styles/app.css`. `frontend/src/routes/+layout.svelte` lädt das Stylesheet direkt nach `app.css`, damit die SvelteKit-Kaskade explizit bleibt. `frontend/src/lib/styles/app.css` ist dadurch von 5617 auf 3386 LOC gesunken; beide CSS-Flächen bleiben in der Scorecard sichtbar.
+- `backend/web/static/css/gustav.css` bleibt als aktive FastAPI-Static-CSS-Fläche klassifiziert, weil `backend/web/components/layout.py` und Auth-HTML sie referenzieren. Eine Entfernung oder weitere Aufteilung braucht zuerst einen Such- oder Testnachweis für die betroffene Legacy-/Shell-Fläche.
+- `frontend/src/lib/styles/design-system.css` bleibt als aktives Designsystem-Stylesheet klassifiziert. Lernraum-spezifische Designsystem-Overrides werden separat von den Basis-Shell-Regeln beobachtet, damit sie nicht wieder in `app.css` zurückwandern.
+- `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte`, `frontend/src/routes/teaching/units/[unitId]/+page.svelte` und `h5p-service/server.mjs` bleiben aktive, überwachte Hotspots. Weitere Extraktionen erfolgen nur mit passender Komponenten-, Route- oder Node-Testabdeckung.
 
 ## Regel
 Hotspots dürfen nicht ohne bewusst dokumentierten Grund wachsen. Kleine Extraktionen brauchen passende Contract- oder Komponententest-Abdeckung. Die monatliche Scorecard dokumentiert LOC-Veränderungen; relevantes Wachstum braucht entweder eine getestete Extraktion oder einen expliziten Tech-Debt-Eintrag mit Exit-Kriterium.

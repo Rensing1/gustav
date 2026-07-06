@@ -1100,6 +1100,9 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
 - Akzeptanz:
   - `docs/harness/HOTSPOTS.md` enthält für jede große CSS-/Static-/Svelte-Fläche einen aktuellen Status.
   - `npm run check`, relevante Vitest-Tests und `make test-frontend-h5p` bleiben grün.
+- Done in working tree: `frontend/src/lib/styles/learning-unit.css` übernimmt die learner-unit-spezifischen Workspace-, Material-, Task-, Submission-, Markdown- und Learner-Graph-Regeln aus `frontend/src/lib/styles/app.css`; `frontend/src/routes/+layout.svelte` lädt das neue Stylesheet explizit nach `app.css`.
+- Done in working tree: CSS-Contract-Tests lesen für Lernraum-Regeln jetzt den bewusst geladenen Workspace-CSS-Bundle statt zufällig nur `app.css`; ein Packaging-Contract schützt, dass learner-unit-spezifische Regeln nicht wieder in die globale App-Shell zurückwandern.
+- Done in working tree: `backend/tools/quality_scorecard.py`, `docs/harness/HOTSPOTS.md` und `docs/harness/QUALITY_SCORECARD.md` führen jetzt auch `frontend/src/lib/styles/learning-unit.css` und das aktive `backend/web/static/css/gustav.css` als sichtbare Hotspots. `frontend/src/lib/styles/app.css` liegt nach diesem Schnitt bei 3386 LOC.
 
 #### C7: H5P-Sidecar weiter stabilisieren, aber nicht überoptimieren
 - Problem: `h5p-service/server.mjs` wurde bereits verkleinert, bleibt aber ein sichtbarer Hotspot.

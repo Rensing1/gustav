@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { render, screen } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
 
+import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
+
 import LearningMaterialCard from "./LearningMaterialCard.svelte";
 
 describe("LearningMaterialCard", () => {
@@ -129,7 +131,7 @@ describe("LearningMaterialCard", () => {
 
   it("renders material accordions as non-transparent reading surfaces", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const css = readFileSync(path.resolve(currentDir, "../../styles/app.css"), "utf8");
+    const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
     const designSystemCss = readFileSync(path.resolve(currentDir, "../../styles/design-system.css"), "utf8");
 
     expect(css).toMatch(

@@ -46,6 +46,20 @@ def test_conftest_does_not_mutate_sys_path() -> None:
     assert _sys_path_mutations(CONFTEST) == []
 
 
+def test_conftest_delegates_environment_and_db_setup() -> None:
+    """Keep conftest focused on pytest hooks and fixtures, not env wiring internals."""
+
+    text = CONFTEST.read_text(encoding="utf-8")
+
+    assert "from backend.tests.environment import configure_pytest_environment" in text
+    assert "from backend.tests.environment import guard_against_prod_env_during_pytest" in text
+    assert "from backend.tests.environment import prune_external_wiring_env_by_default" in text
+    assert "from backend.tests.db_env import ensure_db_env_defaults" in text
+    assert "def _ensure_db_env_defaults" not in text
+    assert "def _guard_against_prod_env_during_pytest" not in text
+    assert "def _prune_external_wiring_env_by_default" not in text
+
+
 def test_central_import_path_helper_no_longer_mutates_sys_path() -> None:
     assert IMPORT_PATHS.exists(), "Missing central pytest import-path helper"
     text = IMPORT_PATHS.read_text(encoding="utf-8")

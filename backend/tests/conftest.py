@@ -14,13 +14,14 @@ import pytest
 from backend.tests.import_paths import configure_test_import_paths
 from backend.tests.import_paths import canonicalize_legacy_route_aliases
 from backend.tests.runtime_auth_helpers import install_session_store
-from backend.tests.utils.db import is_safe_db_test_dsn
+from backend.tests.environment import configure_pytest_environment
+from backend.tests.environment import guard_against_prod_env_during_pytest
+from backend.tests.environment import prune_external_wiring_env_by_default
+from backend.tests.environment import truthy_env as _truthy_env
+from backend.tests.db_env import ensure_db_env_defaults
 
 LEGACY_MIGRATION_MARKER = "legacy_migration"
 GLOBAL_PUBLIC_TRUNCATE_RE = re.compile(r"truncate\s+table\s+public\.", re.IGNORECASE)
-
-def _truthy_env(name: str) -> bool:
-    return (os.getenv(name) or "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _item_path(item: object) -> Path | None:
@@ -84,182 +85,17 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip_legacy)
 
 
-def _is_prod_like(env_value: str | None) -> bool:
-    return (env_value or "").strip().lower() in {"prod", "production", "stage", "staging"}
 
-
-def _guard_against_prod_env_during_pytest() -> None:
-    """Prevent import-time SystemExit when a developer exported prod-like env vars.
-
-    Why:
-        `backend/web/main.py` calls the startup security guard at import time.
-        If a developer has `GUSTAV_ENV=prod` exported in their shell, pytest
-        collection would abort unless *all* production secrets are configured.
-
-        For tests, we want deterministic, hermetic defaults. Individual tests
-        that validate prod guards explicitly set `GUSTAV_ENV=prod` themselves.
-    """
-    # Ensure application modules never auto-load `.env` during pytest collection.
-    # Integration suites that need `.env` load it explicitly in `pytest_configure`.
-    os.environ.setdefault("GUSTAV_ENABLE_DOTENV", "false")
-    if _is_prod_like(os.getenv("GUSTAV_ENV")):
-        os.environ["GUSTAV_ENV"] = "dev"
-
-
-def _prune_external_wiring_env_by_default() -> None:
-    """Keep the default unit/in-process suite independent from external services.
-
-    Why:
-        Several tests intentionally validate "storage unavailable" behaviour.
-        If a developer has Supabase env vars exported (or accidentally loads
-        `.env`) those tests would flip into the real storage adapter path and
-        fail in surprising ways.
-
-        Integration suites enable wiring explicitly via RUN_* flags and marker
-        selection (see Makefile targets).
-    """
-    if _truthy_env("RUN_E2E") or _truthy_env("RUN_SUPABASE_E2E") or _truthy_env("RUN_OPENAI_E2E"):
-        return
-    for var in (
-        "SUPABASE_URL",
-        "SUPABASE_PUBLIC_URL",
-        "SUPABASE_SERVICE_ROLE_KEY",
-    ):
-        os.environ.pop(var, None)
-    for var in (
-        "KC_BASE_URL",
-        "KC_PUBLIC_BASE_URL",
-    ):
-        os.environ.pop(var, None)
-
-
-_guard_against_prod_env_during_pytest()
-_prune_external_wiring_env_by_default()
+guard_against_prod_env_during_pytest()
+prune_external_wiring_env_by_default()
 
 
 def pytest_configure(config: pytest.Config) -> None:  # pragma: no cover
-    """Load `.env` only for explicitly selected integration suites.
-
-    Contract:
-        - Unit/in-process suite (`pytest` / `make test`) must not depend on `.env`.
-        - E2E (`make test-e2e`) requires RUN_E2E=1 and uses `-m e2e`.
-        - Supabase integration (`make test-supabase`) requires RUN_SUPABASE_E2E=1 and uses `-m supabase_integration`.
-        - OpenAI integration (`make test-openai`) requires RUN_OPENAI_E2E=1 and uses `-m openai_integration`.
-    """
-    markexpr = (getattr(config.option, "markexpr", "") or "").strip()
-
-    # Protect developers from the common "set RUN_E2E=1 and run full suite" pitfall.
-    # It mixes contradictory assumptions (external services wired vs deliberately unavailable tests).
-    if _truthy_env("RUN_E2E") and not markexpr:
-        raise pytest.UsageError("RUN_E2E=1 requires marker selection. Use `make test-e2e` or `pytest -m e2e`.")
-    if _truthy_env("RUN_SUPABASE_E2E") and not markexpr:
-        raise pytest.UsageError(
-            "RUN_SUPABASE_E2E=1 requires marker selection. Use `make test-supabase` or `pytest -m supabase_integration`."
-        )
-    if _truthy_env("RUN_OPENAI_E2E") and not markexpr:
-        raise pytest.UsageError(
-            "RUN_OPENAI_E2E=1 requires marker selection. Use `make test-openai` or `pytest -m openai_integration`."
-        )
-
-    # Load `.env` only when an integration suite is explicitly requested.
-    if not (_truthy_env("RUN_E2E") or _truthy_env("RUN_SUPABASE_E2E") or _truthy_env("RUN_OPENAI_E2E")):
-        return
-
-    try:
-        from dotenv import load_dotenv  # type: ignore
-
-        # Load `.env` as defaults; explicit env vars (e.g. Makefile overrides)
-        # must take precedence.
-        load_dotenv(override=False)
-    except Exception:
-        # `.env` loading is best-effort; integration tests will fail with a clear
-        # message when required vars are missing.
-        return
+    configure_pytest_environment(config)
 
 
-def _ensure_db_env_defaults() -> None:
-    """Set sensible defaults so pytest uses the local Postgres instance."""
 
-    # Prefer explicitly provided overrides (e.g., CI). Otherwise fall back to
-    # the host-exposed Supabase instance that Docker publishes on 127.0.0.1:54322.
-    host = os.getenv("TEST_DB_HOST", "127.0.0.1")
-    port = os.getenv("TEST_DB_PORT", "54322")
-    # Service-role DB access in local Supabase should default to `supabase_admin`.
-    # Newer local setups keep `postgres` without CREATE on `public`, which breaks
-    # migration-style tests that need to create/drop helper tables.
-    svc_user = os.getenv("TEST_DB_SUPERUSER") or os.getenv("DB_SUPERUSER") or "supabase_admin"
-    svc_password = os.getenv("TEST_DB_SUPERPASSWORD") or os.getenv("DB_SUPERPASSWORD") or "postgres"
-    preferred_service_dsn = f"postgresql://{svc_user}:{svc_password}@{host}:{port}/postgres"
-    legacy_service_dsn = f"postgresql://postgres:postgres@{host}:{port}/postgres"
-    app_user = os.getenv("APP_DB_USER", "gustav_app")
-    app_password = os.getenv("APP_DB_PASSWORD", "CHANGE_ME_DEV")
-    if not app_user or app_user == "gustav_limited":
-        raise RuntimeError(
-            "APP_DB_USER must point to the environment-specific login role "
-            "(e.g. gustav_app). Run `make db-login-user` to provision it."
-        )
-    login_dsn = f"postgresql://{app_user}:{app_password}@{host}:{port}/postgres"
-
-    def _with_connect_timeout(dsn: str, seconds: int = 5) -> str:
-        """Ensure the DSN enforces a connect timeout for robust tests.
-
-        Simple, dependency-free manipulation: append `connect_timeout` unless
-        already present. This bounds hangs when DB is slow/unreachable.
-        """
-        if not isinstance(dsn, str) or not dsn:
-            return dsn
-        if "connect_timeout=" in dsn:
-            return dsn
-        sep = "&" if "?" in dsn else "?"
-        return f"{dsn}{sep}connect_timeout={seconds}"
-
-    def _probe(dsn: str) -> bool:
-        try:
-            import psycopg  # type: ignore
-        except Exception:
-            return False
-        try:
-            with psycopg.connect(dsn, connect_timeout=5):  # type: ignore[arg-type]
-                return True
-        except Exception:
-            return False
-
-    # Ensure session tests use the real DB unless already configured.
-    def _assign_or_override(var: str, default: str) -> None:
-        current = os.getenv(var)
-        if not current or "supabase_db_gustav-alpha2" in current or not is_safe_db_test_dsn(current):
-            os.environ[var] = default
-
-    # Prefer the app login DSN (IN ROLE gustav_limited) for application traffic so every query is RLS-protected.
-    # Only export these when the local DB is reachable to avoid hard failures in optional live-DB tests.
-    if _probe(login_dsn):
-        _assign_or_override("RLS_TEST_DSN", _with_connect_timeout(login_dsn))
-        _assign_or_override("DATABASE_URL", _with_connect_timeout(login_dsn))
-    else:
-        os.environ.pop("RLS_TEST_DSN", None)
-        os.environ.pop("DATABASE_URL", None)
-
-    # Still expose service DSNs for dedicated tests when the host DB is reachable.
-    # Prefer a DSN with CREATE privileges on `public` (supabase_admin-first).
-    resolved_service_dsn = ""
-    for candidate in [preferred_service_dsn, legacy_service_dsn]:
-        if candidate and _probe(candidate):
-            resolved_service_dsn = candidate
-            break
-    if resolved_service_dsn:
-        _assign_or_override("RLS_TEST_SERVICE_DSN", _with_connect_timeout(resolved_service_dsn))
-        _assign_or_override("SERVICE_ROLE_DSN", _with_connect_timeout(resolved_service_dsn))
-        _assign_or_override("SESSION_TEST_DSN", _with_connect_timeout(resolved_service_dsn))
-    else:
-        os.environ.pop("SESSION_TEST_DSN", None)
-        os.environ.pop("RLS_TEST_SERVICE_DSN", None)
-        os.environ.pop("SERVICE_ROLE_DSN", None)
-
-    os.environ["SESSIONS_BACKEND"] = os.getenv("SESSIONS_BACKEND", "db")
-    os.environ.setdefault("AUTO_CREATE_STORAGE_BUCKETS", "true")
-
-
-_ensure_db_env_defaults()
+ensure_db_env_defaults()
 
 configure_test_import_paths()
 

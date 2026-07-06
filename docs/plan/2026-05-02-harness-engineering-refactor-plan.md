@@ -1125,6 +1125,8 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
 - Akzeptanz:
   - `conftest.py` ist kleiner oder seine verbliebenen globalen Reparaturen sind als bewusst akzeptierte Test-Harness-Schuld in `TECH_DEBT.md` dokumentiert.
   - `make verify` bleibt grün.
+- Done in working tree: `backend/tests/environment.py` übernimmt RUN_*-/Dotenv-/externes-Wiring-Gates aus `backend/tests/conftest.py`; `backend/tests/db_env.py` übernimmt lokale DB-DSN-Defaults und Service-DSN-Fallbacks. `conftest.py` bleibt damit stärker auf pytest-Hooks und Runtime-Reset-Fixtures fokussiert und liegt nach diesem Schnitt bei 541 LOC.
+- Done in working tree: `backend/tests/packaging/test_test_import_paths_contract.py` schützt, dass `conftest.py` diese Environment- und DB-Setup-Verantwortungen nicht wieder selbst besitzt; die bestehenden Environment-Guard-Tests bleiben grün.
 
 #### C9: Scorecard, Hotspots und Tech Debt ehrlich schließen
 - Problem: Der v1.0-Status meldet aktuell null offene Tech-Debt-Einträge, obwohl mehrere große Hotspots nur überwacht und noch nicht vollständig modularisiert sind.

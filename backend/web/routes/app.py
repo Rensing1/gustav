@@ -16,16 +16,22 @@ from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from backend.learning.usecases.courses import ListCoursesInput, ListCoursesUseCase
 from backend.identity_access.admin_client import AdminClient
 from backend.identity_access.cli_tokens import CLITokenRecord
 from backend.identity_access.tokens import verify_bearer_token
 from backend.web.auth_session import SESSION_COOKIE_NAME, app_session_ttl_seconds, set_session_cookie
 from backend.web.security.guards import has_any_role, has_role
 
-from backend.web.routes import learning as learning_routes
 from backend.web.routes import teaching as teaching_routes
 from backend.web.routes import teaching_guards
+from backend.web.routes.app_learner_view_routes import (
+    app_learner_view_router,
+    create_learner_concern_box_entry as create_learner_concern_box_entry,  # noqa: F401
+    get_learner_concern_box as get_learner_concern_box,  # noqa: F401
+    get_learner_home as get_learner_home,  # noqa: F401
+    _list_concern_box_courses_for_student as _list_concern_box_courses_for_student,  # noqa: F401
+    _list_learner_courses as _list_learner_courses,  # noqa: F401
+)
 from backend.web.routes.app_profile_helpers import (
     claims_email as _claims_email,  # noqa: F401
     normalized_attributes as _normalized_attributes,
@@ -61,13 +67,8 @@ from backend.web.routes.app_session_helpers import (
 
 
 app_router = APIRouter(tags=["App"])
+app_router.include_router(app_learner_view_router)
 app_router.include_router(app_profile_router)
-
-
-class ConcernBoxEntryCreatePayload(BaseModel):
-    course_id: str = Field(min_length=1)
-    message_text: str = Field(min_length=1)
-    anonymous: bool = True
 
 
 class BFFSessionSyncPayload(BaseModel):
@@ -200,24 +201,6 @@ def _update_profile_name(sub: str, first_name: str, last_name: str, request: Req
         "attributes": attributes,
     }
     client.update_user(user_id=sub, payload=payload)
-
-
-def _list_learner_courses(student_sub: str, limit: int, offset: int) -> list[dict]:
-    return ListCoursesUseCase(learning_routes._get_repo()).execute(  # type: ignore[attr-defined]
-        ListCoursesInput(student_sub=student_sub, limit=limit, offset=offset)
-    )
-
-
-def _list_concern_box_courses_for_student(student_sub: str, limit: int, offset: int) -> list[dict]:
-    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
-    return [
-        {
-            "id": str(_field_value(item, "id") or ""),
-            "title": str(_field_value(item, "title") or ""),
-        }
-        for item in (repo.list_courses_for_student(student_id=student_sub, limit=limit, offset=offset) or [])
-        if str(_field_value(item, "id") or "")
-    ]
 
 
 def _teacher_home_entries() -> list[dict[str, str]]:
@@ -871,84 +854,6 @@ async def delete_bff_session(request: Request):
     if session_id:
         _bff_session_store(request).delete(session_id)
     return Response(status_code=204, headers=_private_headers())
-
-
-@app_router.get("/api/learning/views/learner-home")
-async def get_learner_home(request: Request, limit: int = 12, offset: int = 0):
-    """Return the learner home read-model with the current student's courses."""
-    user = _current_user(request)
-    if user is None:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not has_role(user, "student"):
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-
-    items = _list_learner_courses(str(user.get("sub") or ""), limit=int(limit or 12), offset=int(offset or 0))
-    body = {
-        "user": _user_payload(user),
-        "courses": [
-            {
-                "id": str(item.get("id") or ""),
-                "title": str(item.get("title") or ""),
-                "href": f"/learning/courses/{item.get('id')}",
-            }
-            for item in items
-            if isinstance(item, dict)
-        ],
-    }
-    return JSONResponse(body, headers=_private_headers())
-
-
-@app_router.get("/api/learning/views/concern-box")
-async def get_learner_concern_box(request: Request, limit: int = 50, offset: int = 0):
-    """Return learner-visible courses for the concern box form."""
-    user = _current_user(request)
-    if user is None:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not has_role(user, "student"):
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-
-    courses = _list_concern_box_courses_for_student(
-        str(user.get("sub") or ""), limit=int(limit or 50), offset=int(offset or 0)
-    )
-    body = {
-        "user": _user_payload(user),
-        "courses": courses,
-    }
-    return JSONResponse(body, headers=_private_headers())
-
-
-@app_router.post("/api/learning/concern-box/entries")
-async def create_learner_concern_box_entry(request: Request, payload: ConcernBoxEntryCreatePayload):
-    """Create one concern box entry for the current learner."""
-    user = _current_user(request)
-    if user is None:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not has_role(user, "student"):
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-    csrf = teaching_guards._csrf_guard(request)
-    if csrf:
-        return csrf
-
-    student_sub = str(user.get("sub") or "")
-    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
-    if not teaching_routes._is_uuid_like(payload.course_id):  # type: ignore[attr-defined]
-        return JSONResponse({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400, headers=_private_headers())
-    if not repo.student_has_course(payload.course_id, student_sub):
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-
-    try:
-        created = repo.create_concern_box_entry(
-            course_id=payload.course_id,
-            student_sub=student_sub,
-            message_text=payload.message_text,
-            anonymous=payload.anonymous,
-        )
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_message_text"}, status_code=400, headers=_private_headers())
-
-    if created is None:
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-    return JSONResponse(created, status_code=201, headers=_private_headers())
 
 
 @app_router.get("/api/teaching/views/teacher-home")

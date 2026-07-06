@@ -77,7 +77,8 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 - `backend/web/routes/app_teacher_unit_routes.py` besitzt seit Closeout v1.1 Teacher-Units-Catalog und Teacher-Unit-Workspace inklusive Unit-Read-Model-Helfern, Course-Refs, Task-Id-/Submission-Pair-Helfern und Unit-Finder.
 - `backend/web/routes/app_teacher_node_editor_routes.py` besitzt seit Closeout v1.1 den Teacher-Unit-Node-Editor-Read-Model-Endpoint für Section- und Module-Knoten.
 - `backend/web/routes/app_diagnostics_routes.py` besitzt seit Closeout v1.1 Diagnostik-Course-Matrix, Learner-Profil und die zugehörigen Progress-Read-Model-Builder.
-- `backend/web/routes/app.py` ist dadurch von 2499 auf 836 LOC gesunken. C4 ist damit fortgeschritten, aber noch nicht abgeschlossen: Live-Matrix, Live-Course-Units, Live-Dashboard und Detail-Sheet-Read-Models müssen weiter getrennt werden.
+- `backend/web/routes/app_live_routes.py` besitzt seit Closeout v1.1 Live-Matrix, Live-Course-Units, Live-Dashboard, Detail-Sheet und die zugehörigen Live-Read-Model-Helfer.
+- `backend/web/routes/app.py` ist dadurch von 2499 auf 375 LOC gesunken. C4 ist damit als App-Hotspot-Reduktion abgeschlossen; zukünftiges Wachstum gehört in die fokussierten App-Route-Module statt zurück in die App-Fassade.
 - `backend/learning/repo_submission_mapping.py` übernimmt seit Closeout v1.1 Submission-Row-Mapping, öffentliche Fehler-Sanitizer und deterministische MVP-Analyse-/Feedback-Stubs.
 - `backend/learning/repo_course_unit_queries.py` übernimmt seit Closeout v1.1 studentische Course-/Unit-Read-Queries für `list_courses_for_student` und `list_units_for_student_course`.
 - `backend/learning/repo_submission_summary_queries.py` übernimmt seit Closeout v1.1 die lightweight Latest-/Final-Submission-Summary pro Task für Learner-Taskkarten.

@@ -14,7 +14,6 @@ from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse, Response
 
 from backend.learning.repo_db import DBLearningRepo
-from backend.learning.submission_kind_policy import validate_task_submission_kind
 from .security import _is_same_origin
 from backend.learning.usecases.sections import (
     ListSectionsInput,
@@ -29,10 +28,10 @@ from backend.learning.usecases.courses import (
     ListCourseUnitsUseCase,
 )
 from backend.learning.usecases.submissions import (
-    CreateSubmissionInput,
-    CreateSubmissionUseCase,
-    FinalizeLatestDraftInput,
-    FinalizeLatestDraftUseCase,
+    CreateSubmissionInput,  # noqa: F401 - kept for route module compatibility
+    CreateSubmissionUseCase,  # noqa: F401
+    FinalizeLatestDraftInput,  # noqa: F401
+    FinalizeLatestDraftUseCase,  # noqa: F401
     ListSubmissionsInput,  # noqa: F401 - kept for route module compatibility
     ListSubmissionsUseCase,  # noqa: F401
 )
@@ -48,11 +47,8 @@ except ModuleNotFoundError:  # pragma: no cover - container fallback when packag
 from backend.storage.learning_policy import (
     ALLOWED_FILE_MIME,  # noqa: F401 - kept for route module compatibility
     ALLOWED_IMAGE_MIME,  # noqa: F401
-    resolve_local_verify_root_from_env,
 )
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
-from backend.storage.submission_content_signatures import validate_submission_content_signature
-from backend.storage.mime_types import FILIUS_FLS_MIME, MAKECODE_HEX_MIME, PDF_MIME, SCRATCH_SB3_MIME
 from backend.web.routes.learning_material_file_routes import (
     get_material_file as get_material_file,  # noqa: F401 - kept for route module compatibility
     get_material_file_legacy_alias as get_material_file_legacy_alias,  # noqa: F401
@@ -77,20 +73,25 @@ from backend.web.routes.learning_material_files import (
 from backend.web.routes.learning_storage_validation import (
     download_bytes_with_limit as _download_bytes_with_limit,
     load_local_storage_bytes_for_validation as _load_local_storage_bytes_for_validation,  # noqa: F401
-    load_storage_bytes_for_validation as _load_storage_bytes_for_validation,
-    verify_storage_object as _verify_storage_object,
+    load_storage_bytes_for_validation as _load_storage_bytes_for_validation,  # noqa: F401
+    verify_storage_object as _verify_storage_object,  # noqa: F401
 )
 from backend.web.routes.learning_submission_files import (
-    attach_submission_files as _attach_submission_files,
+    attach_submission_files as _attach_submission_files,  # noqa: F401
     get_submission_file as get_submission_file,  # noqa: F401 - kept for route module compatibility
     learning_submission_files_router,
     list_submissions as list_submissions,  # noqa: F401
     normalize_download_disposition as _normalize_download_disposition,  # noqa: F401
     submission_file_href as _submission_file_href,  # noqa: F401
 )
+from backend.web.routes.learning_submission_commands import (
+    create_submission as create_submission,  # noqa: F401 - kept for route module compatibility
+    finalize_submission as finalize_submission,  # noqa: F401
+    learning_submission_commands_router,
+)
 from backend.web.routes.learning_submission_processing import (
-    dev_try_process_pdf as _dev_try_process_pdf,
-    validate_submission_payload as _validate_submission_payload,
+    dev_try_process_pdf as _dev_try_process_pdf,  # noqa: F401
+    validate_submission_payload as _validate_submission_payload,  # noqa: F401
 )
 from backend.web.routes.learning_upload_proxy import (
     decode_proxy_headers as _decode_proxy_headers,  # noqa: F401 - kept for route module compatibility
@@ -112,6 +113,7 @@ learning_router.include_router(learning_material_file_router)
 learning_router.include_router(learning_upload_intents_router)
 learning_router.include_router(learning_internal_upload_router)
 learning_router.include_router(learning_submission_files_router)
+learning_router.include_router(learning_submission_commands_router)
 logger = logging.getLogger("gustav.web.learning")
 
 # Compatibility note for source-level contract tests after upload-intent route
@@ -1117,360 +1119,6 @@ async def get_modular_unit_module_content(
         payload=payload,
     )
     return JSONResponse(payload, headers=_cache_headers_success())
-
-
-@learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")
-async def create_submission(request: Request, course_id: str, task_id: str, payload: dict[str, Any]):
-    """Create a student submission for a task.
-
-    Security:
-        Enforces same-origin using Origin or Referer; rejects cross-site POSTs.
-
-    Permissions:
-        Caller must be an enrolled student with access to the released task.
-    """
-    # CSRF defense: Always require Origin/Referer presence and same-origin.
-    # Unified policy (dev = prod): no fallback to non-strict mode.
-    if not _require_strict_same_origin(request):
-        return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())
-
-    # Authorization (student-only) after CSRF: prevents masking CSRF diagnostics
-    # with unrelated authorization errors.
-    user, error = _require_student(request)
-    if error:
-        return error
-
-    try:
-        UUID(course_id)
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
-    try:
-        UUID(task_id)
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
-
-    idempotency_key = request.headers.get("Idempotency-Key")
-    # Contract: Idempotency-Key must be ≤ 64 characters when provided
-    if idempotency_key is not None and len(idempotency_key) > 64:
-        return JSONResponse(
-            {"error": "bad_request", "detail": "invalid_input"},
-            status_code=400,
-            headers=_cache_headers_error(),
-        )
-    if idempotency_key is not None:
-        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", idempotency_key):
-            return JSONResponse(
-                {"error": "bad_request", "detail": "invalid_input"},
-                status_code=400,
-                headers=_cache_headers_error(),
-            )
-
-    try:
-        kind, clean_payload = _validate_submission_payload(payload)
-    except ValueError as exc:
-        detail = str(exc) if str(exc) else "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
-
-    # Optional storage integrity verification for image/PDF submissions.
-    # Enabled when STORAGE_VERIFY_ROOT is set; can be enforced with
-    # REQUIRE_STORAGE_VERIFY=true. Protects against mismatched size/hash.
-    if kind in ("image", "file"):
-        storage_key = clean_payload.get("storage_key")
-        sha256 = clean_payload.get("sha256")
-        size_bytes = clean_payload.get("size_bytes")
-        mime_type = clean_payload.get("mime_type")
-        try:
-            ok, _reason = _verify_storage_object(
-                str(storage_key), str(sha256), int(size_bytes), str(mime_type)
-            )
-        except Exception:
-            ok = False
-        if not ok:
-            detail = "invalid_image_payload" if kind == "image" else "invalid_file_payload"
-            return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
-
-    validation_bytes: bytes | None = None
-    task_kind_for_submission = "native"
-    task_kind_for_submission_normalized = "native"
-    if kind in ("image", "file"):
-        repo = _get_repo()
-        task_kind_reader = getattr(repo, "get_task_kind_for_student", None)
-        if callable(task_kind_reader):
-            try:
-                task_kind_for_submission = str(
-                    task_kind_reader(
-                        student_sub=str(user.get("sub", "")),
-                        course_id=str(course_id),
-                        task_id=str(task_id),
-                    )
-                )
-            except PermissionError:
-                return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
-            except LookupError:
-                return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-            except Exception:
-                return JSONResponse(
-                    {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
-                    status_code=503,
-                    headers=_cache_headers_error(),
-                )
-        task_kind_for_submission_normalized = str(task_kind_for_submission or "native").strip().lower()
-        try:
-            validate_task_submission_kind(
-                task_kind=task_kind_for_submission_normalized,
-                submission_kind=kind,
-                mime_type=str(clean_payload.get("mime_type") or ""),
-            )
-        except ValueError as exc:
-            return JSONResponse(
-                {"error": "bad_request", "detail": str(exc) or "invalid_input"},
-                status_code=400,
-                headers=_cache_headers_error(),
-            )
-        storage_key = str(clean_payload.get("storage_key") or "")
-        mime_type = str(clean_payload.get("mime_type") or "")
-        validation_bytes = await _load_storage_bytes_for_validation(storage_key=storage_key, max_bytes=_max_upload_bytes())
-        if not validation_bytes:
-            return JSONResponse(
-                {"error": "service_unavailable", "detail": "submission_validation_unavailable"},
-                status_code=503,
-                headers=_cache_headers_error(),
-            )
-        try:
-            validate_submission_content_signature(mime_type, validation_bytes)
-        except ValueError:
-            logger.info(
-                "learning_upload_content_signature_mismatch",
-                extra={
-                    "reason": "invalid_upload_content",
-                    "mime_type": str(mime_type).strip().lower(),
-                    "task_kind": task_kind_for_submission_normalized,
-                    "byte_count": len(validation_bytes),
-                },
-            )
-            return JSONResponse(
-                {"error": "bad_request", "detail": "invalid_upload_content"},
-                status_code=400,
-                headers=_cache_headers_error(),
-            )
-
-    # Scratch `.sb3` validation (fail early with stable detail codes).
-    if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == SCRATCH_SB3_MIME:
-        if task_kind_for_submission_normalized == "scratch":
-            sb3_bytes = validation_bytes
-            if not sb3_bytes:
-                return JSONResponse(
-                    {"error": "service_unavailable", "detail": "sb3_validation_unavailable"},
-                    status_code=503,
-                    headers=_cache_headers_error(),
-                )
-            from backend.storage.sb3_validation import SB3ValidationError, load_project_json
-
-            try:
-                _ = load_project_json(sb3_bytes)
-            except SB3ValidationError as exc:
-                return JSONResponse(
-                    {"error": "bad_request", "detail": str(exc.code)},
-                    status_code=400,
-                    headers=_cache_headers_error(),
-                )
-
-    # MakeCode `.hex` validation for Calliope tasks.
-    if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == MAKECODE_HEX_MIME:
-        if task_kind_for_submission_normalized == "calliope":
-            hex_bytes = validation_bytes
-            if not hex_bytes:
-                return JSONResponse(
-                    {"error": "service_unavailable", "detail": "hex_validation_unavailable"},
-                    status_code=503,
-                    headers=_cache_headers_error(),
-                )
-            from backend.storage.makecode_hex_validation import MakeCodeHexValidationError, extract_makecode_project_from_hex
-
-            try:
-                _ = extract_makecode_project_from_hex(hex_bytes)
-            except MakeCodeHexValidationError as exc:
-                if str(exc.code) in {"invalid_hex_file", "missing_makecode_source"}:
-                    logger.info(
-                        "calliope_hex_soft_extraction_error",
-                        extra={"detail": str(exc.code), "course_id": str(course_id), "task_id": str(task_id)},
-                    )
-                else:
-                    return JSONResponse(
-                        {"error": "bad_request", "detail": str(exc.code)},
-                        status_code=400,
-                        headers=_cache_headers_error(),
-                    )
-
-    # Filius `.fls` validation for Filius tasks (fail early with stable detail codes).
-    if kind == "file" and str(clean_payload.get("mime_type") or "").strip().lower() == FILIUS_FLS_MIME:
-        if task_kind_for_submission_normalized != "filius":
-            return JSONResponse(
-                {"error": "bad_request", "detail": "invalid_file_payload"},
-                status_code=400,
-                headers=_cache_headers_error(),
-            )
-
-        fls_bytes = validation_bytes
-        if not fls_bytes:
-            return JSONResponse(
-                {"error": "service_unavailable", "detail": "filius_validation_unavailable"},
-                status_code=503,
-                headers=_cache_headers_error(),
-            )
-        from backend.storage.filius_validation import FiliusValidationError, extract_configuration_xml_bytes
-
-        try:
-            _ = extract_configuration_xml_bytes(fls_bytes)
-        except FiliusValidationError as exc:
-            return JSONResponse(
-                {"error": "bad_request", "detail": str(exc.code)},
-                status_code=400,
-                headers=_cache_headers_error(),
-            )
-
-    submission_input = CreateSubmissionInput(
-        course_id=course_id,
-        task_id=task_id,
-        student_sub=str(user.get("sub", "")),
-        intent=str(clean_payload.get("intent") or "submit"),
-        kind=kind,
-        text_body=clean_payload.get("text_body"),
-        storage_key=clean_payload.get("storage_key"),
-        mime_type=clean_payload.get("mime_type"),
-        size_bytes=clean_payload.get("size_bytes"),
-        sha256=clean_payload.get("sha256"),
-        score_raw=clean_payload.get("score_raw"),
-        score_max=clean_payload.get("score_max"),
-        idempotency_key=idempotency_key,
-    )
-
-    try:
-        submission = CreateSubmissionUseCase(_get_repo()).execute(submission_input)
-    except PermissionError:
-        # Permission-denied at the use case layer (e.g., not enrolled or task
-        # not released). Attach a diagnostic header to distinguish from CSRF.
-        try:
-            raw_origin = str(request.headers.get("origin") or request.headers.get("referer") or "")
-            origin_hdr = _redact_origin_for_diag_log(raw_origin)
-            scheme = (request.url.scheme or "http").lower()
-            host_hdr = (request.headers.get("host") or request.url.hostname or "").lower()
-            if ":" in host_hdr:
-                host_only, port_str = host_hdr.rsplit(":", 1)
-                host = host_only
-                try:
-                    port = int(port_str)
-                except Exception:
-                    port = 443 if scheme == "https" else 80
-            else:
-                host = host_hdr
-                port = int(request.url.port) if request.url.port else (443 if scheme == "https" else 80)
-            default = 443 if scheme == "https" else 80
-            server_origin = f"{scheme}://{host}{(':' + str(port)) if port != default else ''}"
-            diag = f"reason=permission,env={_environment_for_request(request)},origin={origin_hdr},server={server_origin}"
-        except Exception:
-            diag = "reason=permission,env=?,origin=?,server=?"
-        try:
-            log_path = (os.getenv("CSRF_DIAG_LOG") or "").strip()
-            if log_path:
-                with open(log_path, "a", encoding="utf-8") as fp:
-                    fp.write(f"create_submission: {diag}\n")
-        except Exception:
-            pass
-        # Do not leak diagnostics to clients; log above when CSRF_DIAG_LOG set.
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-    except ValueError as exc:
-        detail = str(exc) or "invalid_input"
-        return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400, headers=_cache_headers_error())
-    except Exception:
-        # Fail closed: when persistence is unavailable, do not pretend success.
-        return JSONResponse(
-            {"error": "service_unavailable", "detail": "submission_persistence_unavailable"},
-            status_code=503,
-            headers=_cache_headers_error(),
-        )
-
-    # Opportunistic dev processing for PDF submissions (synchronous, MVP):
-    # In dev environments where a local validation root exists, attempt to
-    # read the uploaded PDF bytes directly and kick off the rendering pipeline.
-    # This is best-effort and must not block or affect the API response.
-    try:
-        if kind == "file" and str(clean_payload.get("mime_type")) == PDF_MIME:
-            root = resolve_local_verify_root_from_env() or ""
-            env = _environment_for_request(request)
-            prod_like = env in {"prod", "production", "stage", "staging"}
-            if root and (not prod_like):
-                _dev_try_process_pdf(
-                    root=root,
-                    storage_key=str(clean_payload.get("storage_key") or ""),
-                    submission_id=str(submission.get("id")),
-                    course_id=str(course_id),
-                    task_id=str(task_id),
-                    student_sub=str(user.get("sub", "")),
-                )
-    except Exception:
-        pass
-
-    # Response semantics:
-    # - H5P submissions are persisted synchronously (score only) → 201 Created.
-    # - Other kinds enter the async pipeline → 202 Accepted.
-    status_code = 201 if kind == "h5p" else 202
-    return JSONResponse(submission, status_code=status_code, headers=_cache_headers_success())
-
-
-@learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize")
-async def finalize_submission(request: Request, course_id: str, task_id: str, payload: dict[str, Any] | None = None):
-    """Create a final submission from the latest completed feedback draft."""
-    if not _require_strict_same_origin(request):
-        return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())
-
-    user, auth_error = _require_student(request)
-    if auth_error:
-        return auth_error
-
-    try:
-        UUID(course_id)
-        UUID(task_id)
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
-
-    idempotency_key = request.headers.get("Idempotency-Key")
-    if idempotency_key is not None and len(idempotency_key) > 64:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
-    if idempotency_key is not None and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", idempotency_key):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
-
-    finalize_input = FinalizeLatestDraftInput(
-        course_id=course_id,
-        task_id=task_id,
-        student_sub=str(user.get("sub", "")),
-        idempotency_key=idempotency_key,
-    )
-
-    try:
-        submission = FinalizeLatestDraftUseCase(_get_repo()).execute(finalize_input)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
-    except LookupError as exc:
-        detail = str(exc) or "not_found"
-        if detail == "draft_missing":
-            return JSONResponse({"error": "conflict", "detail": detail}, status_code=409, headers=_cache_headers_error())
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-    except RuntimeError as exc:
-        return JSONResponse({"error": "conflict", "detail": str(exc) or "draft_not_ready"}, status_code=409, headers=_cache_headers_error())
-    except ValueError as exc:
-        return JSONResponse({"error": "bad_request", "detail": str(exc) or "invalid_input"}, status_code=400, headers=_cache_headers_error())
-    except Exception:
-        return JSONResponse(
-            {"error": "service_unavailable", "detail": "submission_persistence_unavailable"},
-            status_code=503,
-            headers=_cache_headers_error(),
-        )
-
-    decorated = _attach_submission_files(submission, course_id=course_id, task_id=task_id)
-    return JSONResponse(decorated, status_code=201, headers=_cache_headers_success())
 
 
 _DEFAULT_DOWNLOAD_BYTES_WITH_LIMIT = _download_bytes_with_limit

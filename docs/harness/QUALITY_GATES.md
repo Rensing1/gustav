@@ -40,8 +40,8 @@ Initialer lokaler Befehl:
 Aktueller Status:
 - `make lint-backend` ist als expliziter Target vorhanden.
 - Das Profil prüft zunächst Pyflakes (`F`) für den gesamten Backend-Baum inklusive Tests und E2E-Tests.
-- Das Profil ist bewusst nicht Teil von `make verify`, bis Ruff-Format, Importordnung, Tests und Type-Checking als realistische Baseline bereinigt sind.
-- Wenn Closeout v1.1 ohne hartes Lint- oder Type-Gate abgeschlossen wird, muss der Restzustand in `docs/harness/TECH_DEBT.md` mit Owner, Review date, Risiko und Exit criterion dokumentiert werden.
+- Das Profil ist seit Closeout v1.1 Teil von `make verify`.
+- Ruff-Format, Importordnung und Type-Checking bleiben separate mögliche Gate-Erweiterungen; sie werden erst aktiviert, wenn eine realistische Baseline ohne große False-Positive-Last existiert.
 
 ### db-security
 Zweck: Datenbank-, RLS-, Authz-, CSRF- und Migration-Sicherheit sichtbar machen.

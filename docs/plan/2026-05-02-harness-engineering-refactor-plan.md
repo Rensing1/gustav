@@ -1156,6 +1156,7 @@ Der Auftrag ist kein Feature-Stream. Während Closeout v1.1 werden keine neuen P
 - Done in working tree: `pyproject.toml` definiert eine zentrale Ruff-Konfiguration; `backend/web/requirements.txt` installiert Ruff über die bestehende Python-Requirements-Datei.
 - Done in working tree: `make lint-backend` prüft zunächst Pyflakes (`F`) für den gesamten Backend-Baum inklusive Tests und E2E-Tests, damit Syntax-, Namens- und ungenutzte Import-/Variablenprobleme nicht weiter anwachsen.
 - Done in working tree: 38 produktive Pyflakes-Befunde wurden bereinigt oder als bewusst benötigter Kompatibilitätsalias markiert; `backend.web.main.SESSION_COOKIE_NAME` bleibt mit `# noqa: F401` als öffentlicher Test-/Kompatibilitätsalias erhalten.
+- Done in working tree: `make verify` ruft `make lint-backend` als hartes Gate auf. Ruff-Format, Importordnung und Type-Checking bleiben bewusst separate Gate-Erweiterungen, bis dafür eine realistische Baseline existiert.
 
 #### C11: Dead Code, Legacy-Reste und ungenutzte Assets entfernen
 - Problem: Nach Monolith-Splits bleiben leicht Wrapper, alte Helper, nicht mehr referenzierte Static-Dateien oder Legacy-Kompatibilitätspfade zurück. Solche Reste machen das Repo größer und schwerer erklärbar.

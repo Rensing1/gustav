@@ -165,8 +165,8 @@ def test_quality_scorecard_runs_docker_image_smoke_by_default() -> None:
     assert "--run-docker-check" in body
 
 
-def test_backend_lint_target_is_explicit_but_not_yet_part_of_verify() -> None:
-    """Closeout v1.1 adds a backend lint entry point without widening verify yet."""
+def test_backend_lint_target_is_part_of_verify() -> None:
+    """Closeout v1.1 makes the low-noise Ruff baseline a hard verify gate."""
 
     help_text = MAKEFILE.read_text(encoding="utf-8")
     lint_body = _target_body("lint-backend")
@@ -178,7 +178,7 @@ def test_backend_lint_target_is_explicit_but_not_yet_part_of_verify() -> None:
     assert "--exclude 'backend/tests/*'" not in lint_body
     assert "--exclude 'backend/tests_e2e/*'" not in lint_body
     assert "python -m ruff format --check backend" not in lint_body
-    assert "$(MAKE) lint-backend" not in verify_body
+    assert "$(MAKE) lint-backend" in verify_body
 
 
 def test_backend_lint_target_uses_central_ruff_configuration() -> None:

@@ -372,6 +372,7 @@ verify:
 	@$(MAKE) test-architecture-boundaries
 	@$(MAKE) test-route-map
 	@$(MAKE) test-db-inventory
+	@$(MAKE) lint-backend
 	@$(MAKE) test-docker-image-smoke
 	@REQUIRE_DB_TESTS=1 $(MAKE) test
 	@$(MAKE) test-frontend-h5p

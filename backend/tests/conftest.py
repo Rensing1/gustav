@@ -282,23 +282,27 @@ def _reset_auth_state_store():
         yield
         return
 
-    modules = []
-    for name in ("backend.web.main",):
-        mod = sys.modules.get(name)
-        if mod is None:
-            try:
-                mod = importlib.import_module(name)  # type: ignore[assignment]
-            except Exception:
-                continue
-        modules.append(mod)
+    def _replace_state_store() -> None:
+        modules = []
+        for name in ("backend.web.main",):
+            mod = sys.modules.get(name)
+            if mod is None:
+                try:
+                    mod = importlib.import_module(name)  # type: ignore[assignment]
+                except Exception:
+                    continue
+            modules.append(mod)
 
-    # Use a single shared instance for the package-oriented runtime module.
-    shared_state = StateStore()
-    for mod in modules:
-        runtime = getattr(mod, "RUNTIME", None)
-        if runtime is not None:
-            runtime.state_store = shared_state
+        # Use a single shared instance for the package-oriented runtime module.
+        shared_state = StateStore()
+        for mod in modules:
+            runtime = getattr(mod, "RUNTIME", None)
+            if runtime is not None:
+                runtime.state_store = shared_state
+
+    _replace_state_store()
     yield
+    _replace_state_store()
 
 
 @pytest.fixture(autouse=True)

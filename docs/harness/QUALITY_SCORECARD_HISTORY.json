@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-06T17:47:46",
+      "generated": "2026-07-06T21:54:17",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -37,12 +37,12 @@
         },
         {
           "delta_from_previous": 0,
-          "loc": 1476,
+          "loc": 1124,
           "path": "backend/web/routes/learning.py"
         },
         {
           "delta_from_previous": 0,
-          "loc": 811,
+          "loc": 734,
           "path": "backend/web/routes/teaching.py"
         },
         {
@@ -57,7 +57,7 @@
         },
         {
           "delta_from_previous": 0,
-          "loc": 1633,
+          "loc": 1394,
           "path": "h5p-service/server.mjs"
         },
         {
@@ -67,7 +67,7 @@
         },
         {
           "delta_from_previous": 0,
-          "loc": 1210,
+          "loc": 1106,
           "path": "frontend/src/routes/teaching/units/[unitId]/+page.svelte"
         },
         {

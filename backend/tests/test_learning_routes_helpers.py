@@ -23,6 +23,7 @@ UPLOAD_CONFIG_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "learning_u
 
 
 def test_upload_config_helpers_live_outside_learning_hotspot() -> None:
+    current_learning = importlib.import_module("backend.web.routes.learning")
     upload_config = importlib.import_module("backend.web.routes.learning_upload_config")
     learning_source = LEARNING_SOURCE.read_text(encoding="utf-8")
     upload_config_source = UPLOAD_CONFIG_SOURCE.read_text(encoding="utf-8")
@@ -35,10 +36,10 @@ def test_upload_config_helpers_live_outside_learning_hotspot() -> None:
     assert "def dev_upload_stub_enabled(" in upload_config_source
     assert "def upload_proxy_enabled(" in upload_config_source
     assert "def upload_proxy_timeout_seconds(" in upload_config_source
-    assert learning._upload_intent_ttl_seconds is upload_config.upload_intent_ttl_seconds
-    assert learning._dev_upload_stub_enabled is upload_config.dev_upload_stub_enabled
-    assert learning._upload_proxy_enabled is upload_config.upload_proxy_enabled
-    assert learning._upload_proxy_timeout_seconds is upload_config.upload_proxy_timeout_seconds
+    assert current_learning._upload_intent_ttl_seconds is upload_config.upload_intent_ttl_seconds
+    assert current_learning._dev_upload_stub_enabled is upload_config.dev_upload_stub_enabled
+    assert current_learning._upload_proxy_enabled is upload_config.upload_proxy_enabled
+    assert current_learning._upload_proxy_timeout_seconds is upload_config.upload_proxy_timeout_seconds
 
 
 def test_upload_config_helpers_keep_clamp_and_boolean_rules(monkeypatch: pytest.MonkeyPatch) -> None:

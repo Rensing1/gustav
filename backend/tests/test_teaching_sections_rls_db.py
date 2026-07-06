@@ -27,6 +27,7 @@ async def test_rls_repo_smoke_sections_methods_exist_and_rls_active():
         pytest.skip("No DSN set for DB tests")
 
     try:
+        import psycopg  # type: ignore
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
     except Exception:
         pytest.skip("DBTeachingRepo unavailable")
@@ -53,8 +54,11 @@ async def test_rls_repo_smoke_sections_methods_exist_and_rls_active():
     other = "teacher-rls-other"
 
     # Arrange: create a unit and one section as the author
-    unit = repo.create_unit(title="RLS Unit", summary=None, author_id=author)
-    sec = repo.create_section(unit_id=unit["id"], title="S1", author_id=author)
+    try:
+        unit = repo.create_unit(title="RLS Unit", summary=None, author_id=author)
+        sec = repo.create_section(unit_id=unit["id"], title="S1", author_id=author)
+    except psycopg.OperationalError as exc:  # type: ignore[attr-defined]
+        pytest.skip(f"DB repo cannot connect: {exc}")
 
     # Non-author cannot list or mutate
     assert repo.list_sections_for_author(unit["id"], other) == []

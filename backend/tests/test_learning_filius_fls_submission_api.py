@@ -8,11 +8,11 @@ Intent:
 
 from __future__ import annotations
 
-from hashlib import sha256
-import io
 import importlib
+import io
 import uuid
 import zipfile
+from hashlib import sha256
 
 import httpx
 import pytest
@@ -21,7 +21,6 @@ from httpx import ASGITransport
 from backend.tests.runtime_auth_helpers import install_session_store
 
 main = importlib.import_module("backend.web.main")
-learning = importlib.import_module("backend.web.routes.learning")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -35,15 +34,21 @@ VALID_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+def _learning_module():
+    return importlib.import_module("backend.web.routes.learning")
+
+
 @pytest.fixture(autouse=True)
 def restore_learning_route_state():
-    repo = learning.REPO
-    verify_storage_object = learning._verify_storage_object  # type: ignore[attr-defined]
-    load_storage_bytes = learning._load_storage_bytes_for_validation  # type: ignore[attr-defined]
+    current_learning = _learning_module()
+    repo = current_learning.REPO
+    verify_storage_object = current_learning._verify_storage_object  # type: ignore[attr-defined]
+    load_storage_bytes = current_learning._load_storage_bytes_for_validation  # type: ignore[attr-defined]
     yield
-    learning.set_repo(repo)  # type: ignore[arg-type]
-    learning._verify_storage_object = verify_storage_object  # type: ignore[attr-defined]
-    learning._load_storage_bytes_for_validation = load_storage_bytes  # type: ignore[attr-defined]
+    current_learning = _learning_module()
+    current_learning.set_repo(repo)  # type: ignore[arg-type]
+    current_learning._verify_storage_object = verify_storage_object  # type: ignore[attr-defined]
+    current_learning._load_storage_bytes_for_validation = load_storage_bytes  # type: ignore[attr-defined]
 
 
 class FakeLearningRepo:
@@ -82,7 +87,11 @@ def _student_session(monkeypatch: pytest.MonkeyPatch) -> str:
     return str(student.session_id)
 
 
-def _fls_with_config(config: bytes = VALID_XML, *, name: str = "projekt/konfiguration.xml") -> bytes:
+def _fls_with_config(
+    config: bytes = VALID_XML,
+    *,
+    name: str = "projekt/konfiguration.xml",
+) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(name, config)
@@ -96,13 +105,14 @@ async def _post_submission(
     task_kind: str = "filius",
 ) -> httpx.Response:
     repo = FakeLearningRepo(task_kind=task_kind)
-    learning.set_repo(repo)  # type: ignore[arg-type]
-    learning._verify_storage_object = lambda *args, **kwargs: (True, "ok")  # type: ignore[attr-defined]
+    current_learning = _learning_module()
+    current_learning.set_repo(repo)  # type: ignore[arg-type]
+    current_learning._verify_storage_object = lambda *args, **kwargs: (True, "ok")  # type: ignore[attr-defined]
 
     async def _load(*, storage_key: str, max_bytes: int):  # noqa: ANN001
         return fls_bytes
 
-    learning._load_storage_bytes_for_validation = _load  # type: ignore[attr-defined]
+    current_learning._load_storage_bytes_for_validation = _load  # type: ignore[attr-defined]
     body = fls_bytes or b"x"
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, _student_session(monkeypatch))
@@ -136,7 +146,9 @@ async def test_filius_submission_rejects_invalid_archive(monkeypatch: pytest.Mon
 
 
 @pytest.mark.anyio
-async def test_filius_submission_reports_unavailable_storage_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_filius_submission_reports_unavailable_storage_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     r = await _post_submission(monkeypatch, fls_bytes=None)
 
     assert r.status_code == 503

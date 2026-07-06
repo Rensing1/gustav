@@ -356,6 +356,7 @@ def test_state_store_reset_fixture_creates_session_state():
 
     rec = main.RUNTIME.state_store.create(code_verifier="verifier")
     assert rec.state, "Runtime state store should allow creating records inside a test"
+    getattr(main.RUNTIME.state_store, "_data", {}).clear()
 
 
 def test_state_store_reset_fixture_provides_fresh_store():

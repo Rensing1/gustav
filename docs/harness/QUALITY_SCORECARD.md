@@ -14,16 +14,16 @@ Review cadence: monatlich
 | backend/teaching/repo_db.py | 1487 | +0 |
 | backend/web/main.py | 93 | +0 |
 | backend/web/routes/app.py | 382 | +0 |
-| backend/web/routes/learning.py | 1476 | +0 |
-| backend/web/routes/teaching.py | 811 | +0 |
+| backend/web/routes/learning.py | 1124 | +0 |
+| backend/web/routes/teaching.py | 734 | +0 |
 | backend/web/static/css/gustav.css | 2684 | +0 |
 | frontend/src/lib/styles/app.css | 1292 | +0 |
 | frontend/src/lib/styles/design-system.css | 1903 | +0 |
 | frontend/src/lib/styles/learning-unit.css | 2234 | +0 |
 | frontend/src/lib/styles/teaching-workspace.css | 2096 | +0 |
 | frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte | 1644 | +0 |
-| frontend/src/routes/teaching/units/[unitId]/+page.svelte | 1210 | +0 |
-| h5p-service/server.mjs | 1633 | +0 |
+| frontend/src/routes/teaching/units/[unitId]/+page.svelte | 1106 | +0 |
+| h5p-service/server.mjs | 1394 | +0 |
 
 ### Security status
 - Security quick checks: pass (/home/felix/gustav-alpha2/.venv/bin/pytest -q backend/tests/test_config_security.py backend/tests/test_privacy_logging_contract.py backend/tests/test_csrf_tokens_contract.py)

@@ -21,9 +21,23 @@ def test_pure_teaching_validation_helpers_live_outside_teaching_hotspot() -> Non
 
     assert "def _canonical_uuid(" not in teaching_source
     assert "def canonical_uuid(" in helper_source
-    assert teaching._canonical_uuid is helpers.canonical_uuid
-    assert teaching._safe_int is helpers.safe_int
-    assert teaching._clamp_limit_offset is helpers.clamp_limit_offset
+    assert teaching._canonical_uuid.__module__ == helpers.canonical_uuid.__module__
+    assert teaching._safe_int.__module__ == helpers.safe_int.__module__
+    assert teaching._clamp_limit_offset.__module__ == helpers.clamp_limit_offset.__module__
+    assert teaching._safe_int("7") == helpers.safe_int("7")
+    assert teaching._clamp_limit_offset(
+        limit=0,
+        offset="-4",
+        default_limit=20,
+        max_limit=50,
+        zero_means_default=True,
+    ) == helpers.clamp_limit_offset(
+        limit=0,
+        offset="-4",
+        default_limit=20,
+        max_limit=50,
+        zero_means_default=True,
+    )
 
 
 def test_teaching_validation_helpers_keep_existing_behavior() -> None:

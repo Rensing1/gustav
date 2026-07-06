@@ -129,7 +129,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/test_teaching_sections_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_teaching_sections_concurrency_edge.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_teaching_sections_reorder_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
-| backend/tests/test_teaching_sections_rls_db.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_DSN, rls | Keep marker and isolation visible |
+| backend/tests/test_teaching_sections_rls_db.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_DSN, psycopg-import, rls | Keep marker and isolation visible |
 | backend/tests/test_teaching_tasks_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_teaching_tasks_h5p_visual_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_teaching_unit_phases_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |

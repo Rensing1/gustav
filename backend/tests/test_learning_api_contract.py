@@ -1240,22 +1240,13 @@ async def test_learning_material_file_routes_return_503_when_visibility_lookup_i
 
 
 @pytest.mark.anyio
-async def test_set_storage_adapter_updates_existing_learning_route_globals_after_reload(monkeypatch: pytest.MonkeyPatch):
-    """A fresh `backend.web.routes.learning` import must still retarget already-registered route globals."""
+async def test_set_storage_adapter_updates_existing_learning_helpers_after_reload():
+    """A fresh `learning.py` import must still retarget already-imported helper modules."""
 
-    def _find_finalize_endpoint():
-        from fastapi.routing import APIRoute
-
-        for route in main.app.routes:
-            if isinstance(route, APIRoute) and route.path == "/api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize":
-                return route.endpoint
-        raise AssertionError("finalize route not registered")
-
+    upload_intents = importlib.import_module("backend.web.routes.learning_upload_intents")
+    storage_validation = importlib.import_module("backend.web.routes.learning_storage_validation")
     original_learning = importlib.import_module("backend.web.routes.learning")
     original_adapter = original_learning.STORAGE_ADAPTER
-    endpoint = _find_finalize_endpoint()
-    original_globals = endpoint.__globals__
-    assert "STORAGE_ADAPTER" in original_globals
 
     for name in ("backend.web.routes.learning",):
         sys.modules.pop(name, None)
@@ -1271,10 +1262,30 @@ async def test_set_storage_adapter_updates_existing_learning_route_globals_after
     try:
         fresh_learning.set_storage_adapter(adapter)
         assert fresh_learning.STORAGE_ADAPTER is adapter
-        assert endpoint.__globals__["STORAGE_ADAPTER"] is adapter
+        assert upload_intents._current_storage_adapter() is adapter
+        assert storage_validation._current_storage_adapter() is adapter
     finally:
         fresh_learning.set_storage_adapter(original_adapter)
-        assert endpoint.__globals__["STORAGE_ADAPTER"] is original_adapter
+        assert upload_intents._current_storage_adapter() is original_adapter
+        assert storage_validation._current_storage_adapter() is original_adapter
+
+
+def test_learning_finalize_route_stays_storage_adapter_decoupled_after_command_split() -> None:
+    """The split submission command endpoint must resolve runtime state through the learning facade."""
+
+    from fastapi.routing import APIRoute
+
+    for route in main.app.routes:
+        if (
+            isinstance(route, APIRoute)
+            and route.path
+            == "/api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize"
+        ):
+            assert route.endpoint.__module__ == "backend.web.routes.learning_submission_commands"
+            assert "STORAGE_ADAPTER" not in route.endpoint.__globals__
+            return
+
+    raise AssertionError("finalize route not registered")
 
 
 @pytest.mark.anyio

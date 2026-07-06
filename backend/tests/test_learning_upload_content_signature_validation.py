@@ -19,21 +19,26 @@ import pytest
 from backend.tests.runtime_auth_helpers import install_session_store
 
 main = importlib.import_module("backend.web.main")
-learning = importlib.import_module("backend.web.routes.learning")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
+def _learning_module():
+    return importlib.import_module("backend.web.routes.learning")
+
+
 @pytest.fixture(autouse=True)
 def restore_learning_route_state():
-    repo = learning.REPO
-    verify_storage_object = learning._verify_storage_object  # type: ignore[attr-defined]
-    load_storage_bytes = learning._load_storage_bytes_for_validation  # type: ignore[attr-defined]
+    current_learning = _learning_module()
+    repo = current_learning.REPO
+    verify_storage_object = current_learning._verify_storage_object  # type: ignore[attr-defined]
+    load_storage_bytes = current_learning._load_storage_bytes_for_validation  # type: ignore[attr-defined]
     yield
-    learning.set_repo(repo)  # type: ignore[arg-type]
-    learning._verify_storage_object = verify_storage_object  # type: ignore[attr-defined]
-    learning._load_storage_bytes_for_validation = load_storage_bytes  # type: ignore[attr-defined]
+    current_learning = _learning_module()
+    current_learning.set_repo(repo)  # type: ignore[arg-type]
+    current_learning._verify_storage_object = verify_storage_object  # type: ignore[attr-defined]
+    current_learning._load_storage_bytes_for_validation = load_storage_bytes  # type: ignore[attr-defined]
 
 
 class FakeLearningRepo:
@@ -89,13 +94,14 @@ async def _post_upload_submission(
     task_kind: str = "visual",
 ) -> tuple[httpx.Response, FakeLearningRepo]:
     repo = FakeLearningRepo(task_kind=task_kind)
-    learning.set_repo(repo)  # type: ignore[arg-type]
-    learning._verify_storage_object = lambda *args, **kwargs: (True, "ok")  # type: ignore[attr-defined]
+    current_learning = _learning_module()
+    current_learning.set_repo(repo)  # type: ignore[arg-type]
+    current_learning._verify_storage_object = lambda *args, **kwargs: (True, "ok")  # type: ignore[attr-defined]
 
     async def _load(*, storage_key: str, max_bytes: int):  # noqa: ANN001
         return stored_bytes
 
-    learning._load_storage_bytes_for_validation = _load  # type: ignore[attr-defined]
+    current_learning._load_storage_bytes_for_validation = _load  # type: ignore[attr-defined]
 
     body = stored_bytes or b"x"
     async with (await _client()) as c:

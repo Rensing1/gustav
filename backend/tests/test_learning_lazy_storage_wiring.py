@@ -25,12 +25,49 @@ from backend.tests.runtime_auth_helpers import install_session_store
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-def _clear_web_modules(*, include_teaching: bool = False) -> None:
-    """Remove web modules that own startup-time storage wiring state."""
+def _is_reload_owned_module(name: str) -> bool:
+    return (
+        name == "backend.web.main"
+        or name == "backend.web.routes.learning"
+        or name.startswith("backend.web.routes.learning_")
+        or name == "backend.web.routes.teaching"
+        or name.startswith("backend.web.routes.teaching_")
+    )
 
-    module_names = {"backend.web.main", "backend.web.routes.learning"}
+
+@pytest.fixture(autouse=True)
+def restore_import_state_after_test():
+    """Keep deliberate route-module reloads from leaking into later tests."""
+
+    snapshot = {
+        name: module
+        for name, module in list(sys.modules.items())
+        if _is_reload_owned_module(name) or name == "supabase"
+    }
+    yield
+    for name in list(sys.modules):
+        if _is_reload_owned_module(name) or name == "supabase":
+            sys.modules.pop(name, None)
+    sys.modules.update(snapshot)
+
+
+def _clear_web_modules(*, include_teaching: bool = False) -> None:
+    """Remove web route modules that own startup-time storage wiring state."""
+
+    module_names = {
+        name
+        for name in sys.modules
+        if name == "backend.web.main"
+        or name == "backend.web.routes.learning"
+        or name.startswith("backend.web.routes.learning_")
+    }
     if include_teaching:
-        module_names.update({"backend.web.routes.teaching"})
+        module_names.update(
+            name
+            for name in sys.modules
+            if name == "backend.web.routes.teaching"
+            or name.startswith("backend.web.routes.teaching_")
+        )
     for name in module_names:
         sys.modules.pop(name, None)
 
@@ -237,6 +274,7 @@ async def test_teaching_upload_intent_lazy_rewire_on_first_request(monkeypatch):
     from backend.teaching.storage import NullStorageAdapter
 
     assert isinstance(teaching.STORAGE_ADAPTER, NullStorageAdapter)
+    teaching.set_repo(teaching._Repo())
 
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])

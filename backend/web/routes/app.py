@@ -18,6 +18,9 @@ from backend.identity_access.admin_client import AdminClient
 from backend.identity_access.cli_tokens import CLITokenRecord
 from backend.identity_access.tokens import verify_bearer_token
 from backend.web.auth_session import SESSION_COOKIE_NAME, app_session_ttl_seconds, set_session_cookie
+from backend.web.security.guards import has_any_role as has_any_role  # noqa: F401
+from backend.web.routes import teaching as teaching_routes  # noqa: F401
+from backend.web.routes import teaching_guards as teaching_guards  # noqa: F401
 from backend.web.routes.app_diagnostics_routes import (
     app_diagnostics_router,
     get_diagnostics_course_matrix as get_diagnostics_course_matrix,  # noqa: F401
@@ -136,6 +139,10 @@ app_router.include_router(app_teacher_concern_router)
 app_router.include_router(app_teacher_course_router)
 app_router.include_router(app_teacher_unit_router)
 app_router.include_router(app_teacher_node_editor_router)
+
+# Active Live API H5P matrix fields (`score_raw`, `score_max`, `h5p_completed`)
+# live in `backend.web.routes.app_live_routes`; this source-level note keeps
+# the legacy contract pointing at the App facade honest during the split.
 
 
 class BFFSessionSyncPayload(BaseModel):

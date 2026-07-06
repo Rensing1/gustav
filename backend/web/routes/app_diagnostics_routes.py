@@ -8,6 +8,8 @@ Why:
 
 from __future__ import annotations
 
+import sys as _sys
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -35,6 +37,18 @@ from backend.web.routes.app_teacher_unit_routes import (
 app_diagnostics_router = APIRouter(tags=["App"])
 
 
+_BOUND_APP_MODULE = _sys.modules.get("backend.web.routes.app")
+
+
+def _app_helper(name: str, fallback):
+    """Resolve patchable helpers through the app facade when available."""
+
+    app_module = _BOUND_APP_MODULE or _sys.modules.get("backend.web.routes.app")
+    if app_module is not None and hasattr(app_module, name):
+        return getattr(app_module, name)
+    return fallback
+
+
 def _build_diagnostics_course_matrix_rows(
     course_id: str,
     owner_sub: str,
@@ -42,15 +56,28 @@ def _build_diagnostics_course_matrix_rows(
     offset: int,
     units: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    members = _list_teacher_course_members(course_id, owner_sub, limit=limit, offset=offset)
+    members = _app_helper("_list_teacher_course_members", _list_teacher_course_members)(
+        course_id,
+        owner_sub,
+        limit=limit,
+        offset=offset,
+    )
     task_ids_by_unit = {
-        str(unit.get("id") or ""): _list_unit_task_ids(str(unit.get("id") or ""), owner_sub)
+        str(unit.get("id") or ""): _app_helper("_list_unit_task_ids", _list_unit_task_ids)(
+            str(unit.get("id") or ""),
+            owner_sub,
+        )
         for unit in units
         if str(unit.get("id") or "")
     }
     all_task_ids = sorted({task_id for unit_task_ids in task_ids_by_unit.values() for task_id in unit_task_ids})
     member_subs = [str(member.get("sub") or "") for member in members if str(member.get("sub") or "")]
-    submission_pairs = _list_submission_pairs_for_students(course_id, owner_sub, member_subs, all_task_ids)
+    submission_pairs = _app_helper("_list_submission_pairs_for_students", _list_submission_pairs_for_students)(
+        course_id,
+        owner_sub,
+        member_subs,
+        all_task_ids,
+    )
 
     rows: list[dict[str, object]] = []
     for member in members:
@@ -88,7 +115,12 @@ def _teacher_course_has_member(course_id: str, owner_sub: str, student_sub: str)
     try:
         return bool(repo.course_has_member(course_id, owner_sub, student_sub))
     except Exception:
-        members = _list_teacher_course_members(course_id, owner_sub, limit=200, offset=0)
+        members = _app_helper("_list_teacher_course_members", _list_teacher_course_members)(
+            course_id,
+            owner_sub,
+            limit=200,
+            offset=0,
+        )
         return any(str(member.get("sub") or "") == student_sub for member in members)
 
 
@@ -99,7 +131,11 @@ def _build_diagnostics_learner_profile_courses(
     offset: int,
 ) -> list[dict[str, object]]:
     courses: list[dict[str, object]] = []
-    for course in _list_teacher_courses(owner_sub, limit=limit, offset=offset):
+    for course in _app_helper("_list_teacher_courses", _list_teacher_courses)(
+        owner_sub,
+        limit=limit,
+        offset=offset,
+    ):
         course_id = str(course.get("id") or "")
         if not course_id or not _teacher_course_has_member(course_id, owner_sub, student_sub):
             continue
@@ -111,16 +147,24 @@ def _build_diagnostics_learner_profile_courses(
                 "position": int(item.get("position") or 0),
                 "href": f"/diagnostics/courses/{course_id}/units/{item.get('id')}",
             }
-            for item in _list_teacher_course_units(course_id, owner_sub)
+            for item in _app_helper("_list_teacher_course_units", _list_teacher_course_units)(course_id, owner_sub)
             if isinstance(item, dict)
         ]
         task_ids_by_unit = {
-            str(unit.get("id") or ""): _list_unit_task_ids(str(unit.get("id") or ""), owner_sub)
+            str(unit.get("id") or ""): _app_helper("_list_unit_task_ids", _list_unit_task_ids)(
+                str(unit.get("id") or ""),
+                owner_sub,
+            )
             for unit in units
             if str(unit.get("id") or "")
         }
         all_task_ids = sorted({task_id for unit_task_ids in task_ids_by_unit.values() for task_id in unit_task_ids})
-        submission_pairs = _list_submission_pairs_for_students(course_id, owner_sub, [student_sub], all_task_ids)
+        submission_pairs = _app_helper("_list_submission_pairs_for_students", _list_submission_pairs_for_students)(
+            course_id,
+            owner_sub,
+            [student_sub],
+            all_task_ids,
+        )
 
         unit_summaries: list[dict[str, object]] = []
         course_submitted_tasks = 0
@@ -174,7 +218,7 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
     if guard:
         return guard
 
-    course = _get_teacher_course(course_id, owner_sub)
+    course = _app_helper("_get_teacher_course", _get_teacher_course)(course_id, owner_sub)
     if course is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
@@ -185,18 +229,18 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
             "position": int(item.get("position") or 0),
             "href": f"/live/courses/{course_id}/units/{item.get('id')}",
         }
-        for item in _list_teacher_course_units(course_id, owner_sub)
+        for item in _app_helper("_list_teacher_course_units", _list_teacher_course_units)(course_id, owner_sub)
         if isinstance(item, dict)
     ]
     body = {
         "user": _user_payload(user),
         "course": {
-            "id": str(_field_value(course, "id") or ""),
-            "title": str(_field_value(course, "title") or ""),
+            "id": str(_app_helper("_field_value", _field_value)(course, "id") or ""),
+            "title": str(_app_helper("_field_value", _field_value)(course, "title") or ""),
             "href": f"/diagnostics/courses/{course_id}",
         },
         "units": units,
-        "rows": _build_diagnostics_course_matrix_rows(
+        "rows": _app_helper("_build_diagnostics_course_matrix_rows", _build_diagnostics_course_matrix_rows)(
             course_id,
             owner_sub,
             limit=int(limit or 25),
@@ -218,7 +262,10 @@ async def get_diagnostics_learner_profile(request: Request, student_sub: str, li
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
     owner_sub = str(user.get("sub") or "")
-    courses = _build_diagnostics_learner_profile_courses(
+    courses = _app_helper(
+        "_build_diagnostics_learner_profile_courses",
+        _build_diagnostics_learner_profile_courses,
+    )(
         student_sub,
         owner_sub,
         limit=int(limit or 50),

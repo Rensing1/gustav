@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import sys as _sys
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -31,6 +32,37 @@ from backend.web.routes.app_teacher_unit_routes import (
 
 
 app_live_router = APIRouter(tags=["App"])
+
+
+_BOUND_APP_MODULE = _sys.modules.get("backend.web.routes.app")
+
+
+def _app_helper(name: str, fallback):
+    """Resolve patchable helpers through the app facade when available."""
+
+    app_module = _BOUND_APP_MODULE or _sys.modules.get("backend.web.routes.app")
+    if app_module is not None and hasattr(app_module, name):
+        return getattr(app_module, name)
+    return fallback
+
+
+def _find_course_unit_with_patchable_list(course_id: str, owner_sub: str, unit_id: str) -> dict[str, object] | None:
+    """Find a unit through the patchable App facade course-unit helper."""
+
+    direct_finder = _app_helper("_find_course_unit", _find_course_unit)
+    app_module = _BOUND_APP_MODULE or _sys.modules.get("backend.web.routes.app")
+    if app_module is not None and direct_finder is not _find_course_unit:
+        try:
+            found = direct_finder(course_id, owner_sub, unit_id)
+            if found is not None:
+                return found
+        except Exception:
+            pass
+
+    for item in _app_helper("_list_teacher_course_units", _list_teacher_course_units)(course_id, owner_sub):
+        if isinstance(item, dict) and str(item.get("id") or "") == unit_id:
+            return item
+    return None
 
 
 def _decode_json_response_body(response: object) -> object:
@@ -66,11 +98,11 @@ async def get_live_unit_matrix(request: Request, course_id: str, unit_id: str, l
     if guard:
         return guard
 
-    course = _get_teacher_course(course_id, owner_sub)
+    course = _app_helper("_get_teacher_course", _get_teacher_course)(course_id, owner_sub)
     if course is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
-    unit = _find_course_unit(course_id, owner_sub, unit_id)
+    unit = _find_course_unit_with_patchable_list(course_id, owner_sub, unit_id)
     if unit is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
@@ -132,8 +164,8 @@ async def get_live_unit_matrix(request: Request, course_id: str, unit_id: str, l
     body = {
         "user": _user_payload(user),
         "course": {
-            "id": str(_field_value(course, "id") or ""),
-            "title": str(_field_value(course, "title") or ""),
+            "id": str(_app_helper("_field_value", _field_value)(course, "id") or ""),
+            "title": str(_app_helper("_field_value", _field_value)(course, "title") or ""),
             "href": f"/live/courses/{course_id}",
         },
         "unit": {
@@ -166,7 +198,7 @@ async def get_live_course_units(request: Request, course_id: str):
     if guard:
         return guard
 
-    course = _get_teacher_course(course_id, owner_sub)
+    course = _app_helper("_get_teacher_course", _get_teacher_course)(course_id, owner_sub)
     if course is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
@@ -177,15 +209,15 @@ async def get_live_course_units(request: Request, course_id: str):
             "position": int(item.get("position") or 0),
             "href": f"/live?course_id={course_id}&unit_id={item.get('id')}",
         }
-        for item in _list_teacher_course_units(course_id, owner_sub)
+        for item in _app_helper("_list_teacher_course_units", _list_teacher_course_units)(course_id, owner_sub)
         if isinstance(item, dict)
     ]
 
     body = {
         "user": _user_payload(user),
         "course": {
-            "id": str(_field_value(course, "id") or ""),
-            "title": str(_field_value(course, "title") or ""),
+            "id": str(_app_helper("_field_value", _field_value)(course, "id") or ""),
+            "title": str(_app_helper("_field_value", _field_value)(course, "title") or ""),
             "href": f"/live?course_id={course_id}",
         },
         "units": units,
@@ -272,11 +304,11 @@ async def get_live_unit_dashboard(
     if guard:
         return guard
 
-    course = _get_teacher_course(course_id, owner_sub)
+    course = _app_helper("_get_teacher_course", _get_teacher_course)(course_id, owner_sub)
     if course is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
-    unit = _find_course_unit(course_id, owner_sub, unit_id)
+    unit = _find_course_unit_with_patchable_list(course_id, owner_sub, unit_id)
     if unit is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
@@ -411,8 +443,8 @@ async def get_live_unit_dashboard(
     body = {
         "user": _user_payload(user),
         "course": {
-            "id": str(_field_value(course, "id") or ""),
-            "title": str(_field_value(course, "title") or ""),
+            "id": str(_app_helper("_field_value", _field_value)(course, "id") or ""),
+            "title": str(_app_helper("_field_value", _field_value)(course, "title") or ""),
             "href": f"/live?course_id={course_id}",
         },
         "unit": {
@@ -446,11 +478,11 @@ async def get_live_detail_sheet(request: Request, course_id: str, unit_id: str, 
     if guard:
         return guard
 
-    course = _get_teacher_course(course_id, owner_sub)
+    course = _app_helper("_get_teacher_course", _get_teacher_course)(course_id, owner_sub)
     if course is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
-    unit = _find_course_unit(course_id, owner_sub, unit_id)
+    unit = _find_course_unit_with_patchable_list(course_id, owner_sub, unit_id)
     if unit is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
@@ -474,8 +506,8 @@ async def get_live_detail_sheet(request: Request, course_id: str, unit_id: str, 
     body = {
         "user": _user_payload(user),
         "course": {
-            "id": str(_field_value(course, "id") or ""),
-            "title": str(_field_value(course, "title") or ""),
+            "id": str(_app_helper("_field_value", _field_value)(course, "id") or ""),
+            "title": str(_app_helper("_field_value", _field_value)(course, "title") or ""),
             "href": f"/live/courses/{course_id}",
         },
         "unit": {

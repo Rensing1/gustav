@@ -90,21 +90,25 @@ def test_h5p_internal_teacher_auth_is_secret_bound_and_skips_browser_csrf() -> N
     repo_root = Path(__file__).resolve().parents[2]
     server_path = repo_root / "h5p-service" / "server.mjs"
     helper_path = repo_root / "h5p-service" / "lib" / "internal_auth.mjs"
+    guards_path = repo_root / "h5p-service" / "lib" / "runtime_guards.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
     assert helper_path.is_file(), f"Missing H5P internal auth helper: {helper_path}"
+    assert guards_path.is_file(), f"Missing H5P runtime guards helper: {guards_path}"
     js = server_path.read_text(encoding="utf-8")
     helper_js = helper_path.read_text(encoding="utf-8")
+    guards_js = guards_path.read_text(encoding="utf-8")
 
     assert "h5pInternalSharedSecret" in js
-    assert "authenticateInternalTeacher(req, h5pInternalSharedSecret)" in js
+    assert "h5pInternalSharedSecret" in js
+    assert "authenticateInternalTeacher(req, h5pInternalSharedSecret)" in guards_js
     assert "x-gustav-h5p-internal-secret" in helper_js
     assert "x-gustav-user-sub" in helper_js
     assert "x-gustav-user-roles" in helper_js
     assert "req.gustavInternalAuth = true" in helper_js
 
     same_origin = _extract_block(
-        js,
-        start_token="function requireSameOrigin(req, res, next) {",
-        end_token="async function requireAuth(",
+        guards_js,
+        start_token="export function requireSameOrigin(req, res, next) {",
+        end_token="export function createRequireAuth(",
     )
     assert "isInternalAuth(req)" in same_origin

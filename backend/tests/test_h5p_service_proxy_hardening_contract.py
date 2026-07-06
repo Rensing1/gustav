@@ -45,14 +45,14 @@ def test_h5p_service_trust_proxy_is_bounded() -> None:
 
 def test_h5p_same_origin_expected_origin_considers_forwarded_port() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    server_path = repo_root / "h5p-service" / "server.mjs"
-    assert server_path.is_file(), f"Missing H5P service file: {server_path}"
-    js = server_path.read_text(encoding="utf-8")
+    guards_path = repo_root / "h5p-service" / "lib" / "runtime_guards.mjs"
+    assert guards_path.is_file(), f"Missing H5P runtime guards helper: {guards_path}"
+    js = guards_path.read_text(encoding="utf-8")
 
     block = _extract_block(
         js,
-        start_token="function getPublicOrigin(req) {",
-        end_token="function requireSameOrigin(req, res, next) {",
+        start_token="export function getPublicOrigin(req) {",
+        end_token="export function requireSameOrigin(req, res, next) {",
     )
 
     assert "x-forwarded-port" in block

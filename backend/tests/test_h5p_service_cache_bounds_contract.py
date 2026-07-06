@@ -40,13 +40,19 @@ def test_h5p_sendjson_sets_private_no_store() -> None:
 
 
 def test_h5p_auth_caches_are_bounded_and_swept() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    guards_path = repo_root / "h5p-service" / "lib" / "runtime_guards.mjs"
+    assert guards_path.is_file(), f"Missing H5P runtime guards helper: {guards_path}"
+    guards_js = guards_path.read_text(encoding="utf-8")
     js = _load_h5p_server_source()
 
     # Contract: explicit max-size knobs exist and are used for pruning.
     assert "AUTH_CACHE_MAX_ENTRIES" in js
     assert "H5P_AUTH_CACHE_MAX_ENTRIES" in js
-    assert "function pruneCacheToMaxEntries" in js
+    assert "export function pruneCacheToMaxEntries" in guards_js
 
     # Both caches must be pruned (TTL sweep + max-size cap).
-    assert "pruneCacheToMaxEntries(authCache" in js
+    assert "pruneCacheToMaxEntries(authCache" in guards_js
+    assert "authCacheMaxEntries" in guards_js
+    assert "authCacheMaxEntries: AUTH_CACHE_MAX_ENTRIES" in js
     assert "pruneCacheToMaxEntries(h5pContentAccessCache" in js

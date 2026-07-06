@@ -3,7 +3,7 @@
 ## Status
 - Date: 2026-05-02
 - Last updated: 2026-07-06
-- Status: Completed v1.1 / closeout verified. The harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, backend Ruff/Pyflakes linting, quality scorecard, public-repo safety, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, marks the harness documents as active, modularizes the large runtime hotspots that drove this plan, and records the remaining monitored large files in `docs/harness/HOTSPOTS.md` and `docs/harness/QUALITY_SCORECARD.md`. `docs/harness/TECH_DEBT.md` intentionally stays at zero open accepted debt entries because the remaining large files are either generated/vendor/test-fixture material, focused contract/security tests, import tooling, or monitored active surfaces rather than accepted unresolved implementation debt.
+- Status: Completed v1.1 / closeout verified; Closeout v1.2 planned for implementation. The harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, backend Ruff/Pyflakes linting, quality scorecard, public-repo safety, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, marks the harness documents as active, modularizes the large runtime hotspots that drove this plan, and records the remaining monitored large files in `docs/harness/HOTSPOTS.md` and `docs/harness/QUALITY_SCORECARD.md`. Closeout v1.2 is the next deliberate quality step: it further reduces active runtime/UI/H5P hotspots, adds offline supply-chain and license gates, introduces visual smoke checks for core UI surfaces, and removes remaining compatibility scaffolding only where tests prove it is no longer needed.
 - Time horizon: 3 months
 - Strategy: harness first, then refactor in small PRs
 - Gate strategy: security, public-repo hygiene, import boundaries, architecture boundaries, route map, API contract, DB inventory, Docker image parity, frontend/H5P, and full verification run as hard gates; `make harness-signals` remains advisory telemetry.
@@ -1267,6 +1267,135 @@ Abschlussnachweis vom 2026-07-06:
 - `make lint-backend`: grün und über `make verify` als hartes Backend-Gate aktiv.
 - `make verify`: grün; Backend-Pytest 1990 passed / 73 skipped, Frontend-Vitest 291 passed, H5P-Node-Tests 48 passed.
 
+### Closeout v1.2: Wartbarkeit, Supply Chain und UI-Sicherheit
+
+Closeout v1.2 gehört bewusst noch zu diesem großen Refactor-Vorhaben. v1.1 hat die wichtigsten Monolithen und Gates geschlossen; v1.2 entfernt die nächsten echten Wartbarkeitsrisiken, die beim Abschlussaudit sichtbar geblieben sind. Es geht nicht um kosmetische Kleinheit, sondern um nachweisbare Qualität: kleinere Verantwortungsgrenzen, reproduzierbare Supply-Chain-Transparenz, visuelle Kern-Smokes und weniger Kompatibilitätsballast.
+
+#### C17: Learning-Submission-Commands aus der Route-Fassade lösen
+- Problem: `backend/web/routes/learning.py` ist nach v1.1 deutlich kleiner, besitzt aber weiterhin die großen Command-Handler für Submission-Create und Submission-Finalize. Diese Handler bündeln CSRF, Auth, Idempotency, MIME-/Storage-Validierung, Spezialformat-Prüfung, Use-Case-Aufruf und Fehlerabbildung in einer Fassade.
+- Ziel: Learning-Submission-Commands liegen in einem fokussierten Routenmodul. `learning.py` bleibt Router-/Kompatibilitätsfassade, aber nicht Besitzer der Command-Handler-Implementierung.
+- Vorgehen:
+  - Vor der Extraktion einen Packaging-/Boundary-Test ergänzen, der verlangt, dass Create-/Finalize-Handler nicht in `learning.py` implementiert bleiben.
+  - `create_submission` und `finalize_submission` in ein eigenes Modul verschieben, ohne Pfade, Statuscodes, Error-Shapes, Cache-Header, CSRF-Policy oder Idempotency-Regeln zu ändern.
+  - Bestehende Monkeypatch-Punkte nur dort als Aliase erhalten, wo bestehende Tests oder aktive Aufrufer sie benötigen.
+  - Upload-, Storage-, SB3-, MakeCode-Hex-, Filius-FLS-, PDF-Dev-Processing- und Finalize-Fehlerpfade über fokussierte Tests grün halten.
+- Akzeptanz:
+  - `backend/web/routes/learning.py` enthält keine großen Submission-Command-Handler mehr.
+  - Existing Learning-Submission-, Upload-, CSRF-, Idempotency-, Privacy- und Error-Shape-Tests bleiben grün.
+  - `make test-api-contract-baseline` und `make test-route-map` bleiben grün.
+
+#### C18: Teaching-Provider- und Kompatibilitätslogik isolieren
+- Problem: `backend/web/routes/teaching.py` ist als Route-Monolith abgebaut, enthält aber noch viel Runtime-Provider-, Storage-Adapter-, Reload- und Monkeypatch-Kompatibilitätslogik. Diese Logik ist für Tests und schrittweise Migration nützlich, macht die Fassade aber schwer erklärbar.
+- Ziel: Provider-Sync, Repo-/Storage-Adapter-Zugriff und Reload-Kompatibilität liegen in einem eigenen Runtime-Provider-Modul. `teaching.py` bleibt öffentliche Fassade und Router-Komposition.
+- Vorgehen:
+  - Vor der Extraktion Contract-Tests ergänzen, die `set_repo`, `set_storage_adapter`, App-Reload-Synchronisation und bestehende Kompatibilitätsaliase schützen.
+  - Provider-Sync-Funktionen aus `teaching.py` verschieben und über eine klare kleine API nutzen.
+  - Aliase entfernen, wenn Suchnachweis und Tests zeigen, dass sie nicht mehr gebraucht werden.
+  - Course-Deletion-State und Live-Helper-Aliase nur mit Tests verschieben, wenn dadurch keine Testreihenfolge-Abhängigkeit entsteht.
+- Akzeptanz:
+  - `teaching.py` ist als Fassade verständlich und besitzt keine App-Routen-Global-Synchronisation mehr.
+  - Teaching-Route-, Storage-, Live-, Materials- und Course-Member-Tests bleiben grün.
+  - Neue Boundary-Tests verhindern, dass Provider-Sync wieder in `teaching.py` wächst.
+
+#### C19: H5P-Service in App-Komposition, Middleware und Routenmodule schneiden
+- Problem: `h5p-service/server.mjs` ist noch ein aktiver Hotspot. Er bündelt App-Aufbau, Storage-Probe, Auth, Role-Gates, Review-Impersonation, Static-Asset-Routen, Debug-Editor-HTML, H5P-Ajax und Produkt-Routen.
+- Ziel: Der H5P-Service hat klare Node-Module für App-Factory, Auth-/Role-Middleware, Static-Assets, Review-Impersonation, Debug-Editor und H5P-Routen. URLs und Security-Verhalten bleiben unverändert.
+- Vorgehen:
+  - Vor jedem Schnitt Node-Tests schreiben, die das gewünschte Verhalten über echte Helper/Middleware prüfen.
+  - `server.mjs` auf Start-/Composition-Code reduzieren.
+  - Auth-, Role- und Review-Token-Fail-Closed-Logik in Middleware-Module verschieben.
+  - Static-Asset-Cache-Header, Webcomponent-Overrides und Debug-Editor-Gating separat testbar machen.
+  - Keine Änderung an H5P-Content-IDs, H5P-URLs, Cookie-Namen, Review-Token-Claims oder Response-Header-Policy.
+- Akzeptanz:
+  - `h5p-service/server.mjs` ist kein Sammelmodul mehr und bleibt in `docs/harness/HOTSPOTS.md` mit neuer LOC-Baseline sichtbar.
+  - `npm test` im H5P-Service schützt Auth, Role-Gates, Review-Token, Static-Routes, Response-Header und Storage-Probe.
+  - `make test-frontend-h5p` bleibt grün.
+
+#### C20: Große Svelte-Workspace-Seiten weiter entlasten
+- Problem: Die Learner-Unit- und Teacher-Unit-Svelte-Seiten sind weiterhin aktive Hotspots. Sie enthalten noch viel Workspace-State, Submission-/Feedback-Flows, Graph-Auswahl, URL-Sync, Reorder-Logik und Dialog-State.
+- Ziel: Svelte-Seiten sind primär View-Komposition. Reine State-, URL-, Flow- und Graph-Helfer liegen in testbaren TypeScript-Modulen.
+- Vorgehen:
+  - Learner-Unit: Submission-/Feedback-Polling, Upload-Submission-Flow, Submission-History-State und Workspace-State-Helfer schrittweise auslagern.
+  - Teacher-Unit: Graph-Auswahl, URL-Sync, Reorder-Berechnung und Dialog-State-Helfer schrittweise auslagern.
+  - Für jede Auslagerung zuerst Vitest-Tests schreiben, die Zustandsübergänge, Fehlerfälle und URL-/Selection-Regeln prüfen.
+  - Svelte-Komponenten nicht visuell umbauen, außer die Extraktion erfordert kleine, getestete Prop-/Callback-Grenzen.
+- Akzeptanz:
+  - Die großen Svelte-Seiten verlieren echte Logik und bleiben als UI-Komposition verständlicher.
+  - Neue TypeScript-Module sind ohne DOM testbar.
+  - Frontend-Vitest und `npm run check` bleiben grün.
+
+#### C21: CSS- und Static-Flächen weiter ordnen
+- Problem: `learning-unit.css`, `teaching-workspace.css`, `design-system.css` und `backend/web/static/css/gustav.css` sind weiterhin groß. Sie sind jetzt sichtbar, aber nicht vollständig nach Verantwortung geschnitten.
+- Ziel: CSS-Regeln folgen klaren Zuständigkeiten: Designsystem/Tokens, App-Shell, Learner-Workspace, Teacher-Workspace, aktive FastAPI-/Auth-/Legacy-Shell.
+- Vorgehen:
+  - Vor jedem CSS-Schnitt Packaging- oder Contract-Tests ergänzen, die verhindern, dass Regeln in falsche Bundles zurückwandern.
+  - Designsystem-Regeln nur auslagern, wenn sie wiederverwendbare Basisregeln sind.
+  - Workspace-spezifische Regeln nicht in globale Shell-CSS zurückverschieben.
+  - `backend/web/static/css/gustav.css` nur teilen oder reduzieren, wenn Suchnachweis und Tests die aktiven FastAPI-/Auth-Referenzen abdecken.
+- Akzeptanz:
+  - CSS-Bundles haben dokumentierte Verantwortung.
+  - `docs/harness/HOTSPOTS.md` und Scorecard zeigen neue Baselines.
+  - Frontend- und relevante FastAPI-Static-Contracts bleiben grün.
+
+#### C22: Visuelle Smoke-Checks für Kernoberflächen einführen
+- Problem: Die Frontend- und H5P-Gates prüfen Typen, Unit-Tests und Node-Tests, aber sie sehen nicht, ob zentrale Oberflächen leer, stark verschoben oder offensichtlich defekt rendern.
+- Ziel: Ein kleines, deterministisches Visual-Smoke-Profil schützt Kernansichten ohne breite Pixel-Test-Wartung.
+- Vorgehen:
+  - Bestehendes Playwright-Setup im Frontend verwenden.
+  - Stabile Smokes für Login/Auth-Shell, Learner-Workspace, Teacher-Workspace und H5P-Player-/Editor-Shell ergänzen.
+  - Feste Viewports, deterministische Testdaten, reduzierte Animationen und stabile Selektoren verwenden.
+  - Den neuen Target `make test-visual-smoke` einführen.
+  - `test-visual-smoke` in `make test-full-prod-like` aufnehmen; erst nach Stabilitätsnachweis in ein schnelleres Gate aufnehmen.
+- Akzeptanz:
+  - Visual-Smokes prüfen, dass Kernansichten sichtbar rendern und zentrale Bedienelemente nicht fehlen.
+  - Kein großer Snapshot-Friedhof entsteht.
+  - Flaky Infrastruktur wird dokumentiert und nicht als stiller Erfolg behandelt.
+
+#### C23: Offline Supply-Chain- und Lizenzgate einführen
+- Problem: GUSTAV ist FOSS und enthält Python-, Frontend-, H5P- und vendored Abhängigkeiten. Die Lizenz- und Dependency-Transparenz ist dokumentiert, aber noch nicht als hartes, reproduzierbares Offline-Gate abgesichert.
+- Ziel: Supply-Chain-Transparenz wird maschinenprüfbar, ohne Netzwerkzugriff oder externe Vulnerability-Datenbanken als lokales Hartgate vorauszusetzen.
+- Vorgehen:
+  - Einen lokalen Dependency-Inventory-Generator ergänzen, der `backend/web/requirements.txt`, `frontend/package-lock.json` und `h5p-service/package-lock.json` auswertet.
+  - Eine maschinenlesbare Inventory-Datei und `THIRD_PARTY_NOTICES.md` synchron prüfen.
+  - Eine erlaubte Lizenzpolicy definieren; fehlende, unbekannte oder bewusst riskante Lizenzen erzeugen einen klaren Fehler oder einen dokumentierten Ausnahme-Eintrag.
+  - Den neuen Target `make supply-chain-check` einführen und in `make verify` aufnehmen.
+  - Netzwerkabhängige Vulnerability-Audits getrennt dokumentieren und nicht als lokales Standard-Hartgate erzwingen.
+- Akzeptanz:
+  - `make supply-chain-check` läuft offline reproduzierbar.
+  - `make verify` enthält `make supply-chain-check`.
+  - `docs/harness/SUPPLY_CHAIN.md`, `THIRD_PARTY_NOTICES.md` und das maschinenlesbare Inventory widersprechen einander nicht.
+
+#### C24: Qualitätsgates kontrolliert erweitern
+- Problem: v1.1 hat Ruff/Pyflakes als hartes Gate eingeführt. Weitere Ruff-Regeln, Importordnung, Format-Checks und Type-Checking können echte Wartbarkeit bringen, dürfen aber nicht als unkontrollierte Massenänderung in fachliche Refactors gemischt werden.
+- Ziel: Statische Qualität steigt schrittweise und nachvollziehbar.
+- Vorgehen:
+  - Ruff-Regeln in kleinen Batches erweitern, jeweils mit vorherigem Red-Test für Makefile-/Docs-Vertrag und anschließendem Green-Lauf.
+  - Importordnung und Format-Check nur in separaten mechanischen Commits aktivieren.
+  - Python-Type-Checking zunächst als advisory Target einführen; erst hart schalten, wenn eine realistische Baseline ohne große False-Positive-Last grün ist.
+  - Scorecard um Hotspot-Owner, Split-Trigger und letzte Review-Entscheidung erweitern.
+  - Dokumenttests auf strukturierte Zustände statt fragile Wortverbote ausrichten.
+- Akzeptanz:
+  - `make lint-backend` bleibt schnell und verständlich.
+  - Neue statische Gates sind in `docs/harness/QUALITY_GATES.md` dokumentiert.
+  - Harte Gates haben keine bekannte False-Positive-Baseline.
+
+#### Closeout v1.2 Verification
+Vor Abschluss von Closeout v1.2 müssen diese Befehle erfolgreich sein:
+- `git diff --check`
+- `make test-import-boundaries`
+- `make test-api-contract-baseline`
+- `make test-architecture-boundaries`
+- `make test-route-map`
+- `make test-db-inventory`
+- `make lint-backend`
+- `make supply-chain-check`
+- `make test-frontend-h5p`
+- `make test-visual-smoke`
+- `make quality-scorecard`
+- `make verify`
+
+Zusätzlich wird `make test-full-prod-like` ausgeführt, wenn die lokale Infrastruktur vollständig verfügbar ist. Wenn ein externer Dienst, Browser-E2E-Setup oder OpenAI-kompatibler Endpoint fehlt, muss der Abschlussbericht die konkrete Ursache und den ersatzweise ausgeführten Nachweis nennen. Ein nicht ausgeführter externer Smoke darf keinen grünen v1.2-Abschluss vortäuschen.
+
 ## Security, GDPR/Privacy, and FOSS Risks
 
 ### Security
@@ -1375,6 +1504,8 @@ Additional verification by risk:
 - Legacy HTML PRs: route-map entry, SvelteKit parity or intentional direct-backend result, and static-asset reference check.
 - Frontend PRs: `npm run check` and relevant frontend tests.
 - H5P PRs: H5P service tests and unchanged public H5P API behavior.
+- Supply-chain PRs: offline dependency inventory, license-policy test, `THIRD_PARTY_NOTICES.md` synchronization, and no network-only hard gate.
+- Visual-smoke PRs: deterministic Playwright scenarios with fixed test data, fixed viewport, stable selectors, and no broad screenshot churn.
 - DB/RLS PRs: migrations against the local Supabase structure, no special local-only paths.
 - Skill/harness PRs: skill inventory check, repo-visible `SKILL.md` source check, no unsafe tool permissions, no PII/secrets in examples, and at least one realistic manual forward-test entry in `SKILL_EVALS.md` for each active skill.
 

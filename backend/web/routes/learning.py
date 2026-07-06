@@ -50,13 +50,10 @@ from backend.storage.learning_policy import (
     ALLOWED_IMAGE_MIME,
     STORAGE_KEY_RE,
     resolve_local_verify_root_from_env,
-    verification_config_from_env,
 )
-from backend.storage.verification import verify_storage_object_integrity
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
 from backend.storage.submission_content_signatures import validate_submission_content_signature
 from backend.storage.mime_types import FILIUS_FLS_MIME, MAKECODE_HEX_MIME, PDF_MIME, SCRATCH_SB3_MIME
-from backend.web.routes import learning_downloads
 from backend.web.routes.learning_material_file_routes import (
     get_material_file as get_material_file,  # noqa: F401 - kept for route module compatibility
     get_material_file_legacy_alias as get_material_file_legacy_alias,  # noqa: F401
@@ -77,6 +74,12 @@ from backend.web.routes.learning_material_files import (
     material_file_href as _material_file_href,  # noqa: F401 - kept for route module compatibility
     resolve_student_material_file_url as _resolve_student_material_file_url,  # noqa: F401
     resolve_student_modular_material_file_url as _resolve_student_modular_material_file_url,  # noqa: F401
+)
+from backend.web.routes.learning_storage_validation import (
+    download_bytes_with_limit as _download_bytes_with_limit,
+    load_local_storage_bytes_for_validation as _load_local_storage_bytes_for_validation,  # noqa: F401
+    load_storage_bytes_for_validation as _load_storage_bytes_for_validation,
+    verify_storage_object as _verify_storage_object,
 )
 from backend.web.routes.learning_upload_proxy import (
     decode_proxy_headers as _decode_proxy_headers,  # noqa: F401 - kept for route module compatibility
@@ -1717,102 +1720,7 @@ def _dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, cou
         return
 
 
-def _verify_storage_object(storage_key: str, sha256: str, size_bytes: int, mime_type: str) -> tuple[bool, str]:
-    """
-    Validate that the referenced storage object matches the submission metadata.
-
-    Why:
-        Student submissions are finalised asynchronously; before accepting the
-        payload we must ensure that the object uploaded to Supabase (or the dev
-        stub directory) matches the declared checksum/size to prevent tampering.
-    Parameters:
-        storage_key: Relative object key within the learning bucket.
-        sha256: Hex-encoded checksum provided by the client after upload.
-        size_bytes: Expected object size from the upload intent.
-        mime_type: MIME recorded alongside the submission (not used here, passed
-            for future policy hooks).
-    Behavior:
-        Delegates to the shared verification helper which first attempts a
-        `HEAD` request via the configured storage adapter and, if allowed,
-        falls back to local filesystem verification. Returns (ok, reason).
-    Permissions:
-        Only callable from the authenticated backend flow; the caller must have
-        already ensured the student is authorised for the submission.
-    """
-
-    config = verification_config_from_env()
-    return verify_storage_object_integrity(
-        adapter=_current_storage_adapter(),
-        storage_key=storage_key,
-        expected_sha256=sha256,
-        expected_size=size_bytes,
-        mime_type=mime_type,
-        config=config,
-    )
-
-
-def _load_local_storage_bytes_for_validation(*, root: str, storage_key: str, max_bytes: int) -> bytes | None:
-    """Read a local file beneath STORAGE_VERIFY_ROOT with path containment checks."""
-    if not root or not storage_key:
-        return None
-    try:
-        from pathlib import Path
-
-        base = Path(root).resolve()
-        target = (base / storage_key).resolve()
-        common = os.path.commonpath([str(base), str(target)])
-    except Exception:
-        return None
-    if common != str(base) or (not target.exists()) or (not target.is_file()):
-        return None
-    try:
-        size = int(target.stat().st_size)
-    except Exception:
-        return None
-    if size <= 0 or size > int(max_bytes):
-        return None
-    try:
-        return target.read_bytes()
-    except Exception:
-        return None
-
-
-async def _download_bytes_with_limit(*, url: str, max_bytes: int, headers: dict[str, str] | None = None) -> bytes | None:
-    """Download bytes from a presigned URL with a hard cap (no redirects)."""
-
-    return await learning_downloads.download_bytes_with_limit(
-        url=url,
-        max_bytes=max_bytes,
-        headers=headers,
-        environment=_current_environment(),
-    )
-
-
 _DEFAULT_DOWNLOAD_BYTES_WITH_LIMIT = _download_bytes_with_limit
-
-
-async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int) -> bytes | None:
-    """Fetch bytes for validation either from local verify root or via presigned download."""
-    root = resolve_local_verify_root_from_env() or ""
-    local = _load_local_storage_bytes_for_validation(root=root, storage_key=storage_key, max_bytes=max_bytes)
-    if local is not None:
-        return local
-
-    bucket = _storage_bucket()
-    adapter = _current_storage_adapter()
-    if not bucket or isinstance(adapter, NullStorageAdapter):
-        return None
-    try:
-        presigned = adapter.presign_download(bucket=bucket, key=storage_key, expires_in=60, disposition="inline")
-    except Exception:
-        return None
-    url = str((presigned or {}).get("url") or "").strip()
-    headers = presigned.get("headers") if isinstance(presigned, dict) else None
-    try:
-        hdrs = {str(k): str(v) for k, v in dict(headers or {}).items() if k and v}
-    except Exception:
-        hdrs = None
-    return await _download_bytes_with_limit(url=url, max_bytes=max_bytes, headers=hdrs)
 
 
 @learning_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/submissions")

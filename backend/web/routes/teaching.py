@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio  # noqa: F401 - kept for route module compatibility
 import logging
-
 import os
 import sys as _sys
 import time
@@ -27,19 +26,24 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter
-from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 
-from backend.teaching.services.materials import MaterialFileSettings, MaterialsService
-from backend.teaching.services.live_student_overview import MAX_UNIT_IDS, StudentLiveOverviewService
-from backend.teaching.repo_row_mappers import compute_average_score_from_analysis  # noqa: F401
-from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol
-from backend.web.routes.teaching_shared import (
-    _is_uuid_like,
-    _private_error,
+from backend.storage.config import (
+    get_submissions_bucket,  # noqa: F401 - kept for route module compatibility
 )
-from backend.web.routes.teaching_task_services import (
-    configure_task_service_repo_provider,
+from backend.teaching.repo_row_mappers import compute_average_score_from_analysis  # noqa: F401
+from backend.teaching.services.live_student_overview import MAX_UNIT_IDS, StudentLiveOverviewService
+from backend.teaching.services.materials import MaterialFileSettings, MaterialsService
+from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol
+from backend.web.routes import (
+    teaching_course_state,
+    teaching_inmemory_repo,
+    teaching_payloads,
+    teaching_runtime_provider,
+    teaching_serialization,
+    teaching_storage_cleanup,
+    teaching_submission_files,
+    teaching_validation,
 )
 from backend.web.routes.teaching_authoring import (
     _is_signature_compat_type_error,
@@ -48,22 +52,21 @@ from backend.web.routes.teaching_authoring import (
 from backend.web.routes.teaching_guards import (
     configure_teaching_guard_repo_provider,
 )
-from backend.web.routes.teaching_validation import canonical_uuid as _canonical_uuid
-from backend.web.routes import (
-    teaching_course_state,
-    teaching_payloads,
-    teaching_serialization,
-    teaching_storage_cleanup,
-    teaching_submission_files,
-    teaching_validation,
-)
 from backend.web.routes.teaching_serialization import _serialize_task as _serialize_task
+from backend.web.routes.teaching_shared import (
+    _is_uuid_like,
+    _private_error,
+)
 from backend.web.routes.teaching_storage_cleanup import (
     metadata_page_keys as _metadata_page_keys,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.teaching_storage_cleanup import (
     unit_delete_storage_metadata_dsn as _unit_delete_storage_metadata_dsn,  # noqa: F401
 )
-from backend.storage.config import get_submissions_bucket  # noqa: F401 - kept for route module compatibility
-from backend.web.routes import teaching_inmemory_repo
+from backend.web.routes.teaching_task_services import (
+    configure_task_service_repo_provider,
+)
+from backend.web.routes.teaching_validation import canonical_uuid as _canonical_uuid
 
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
@@ -87,7 +90,9 @@ def _delete_unit_storage_objects(objects: list[tuple[str, str]]) -> None:
 
 # Optional storage wiring helper (lazy rewire for local Supabase E2E)
 try:  # pragma: no cover - simple import guard
-    from backend.web.storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
+    from backend.web.storage_wiring import (
+        wire_supabase_adapter_if_configured as _wire_storage,  # type: ignore
+    )
 except ModuleNotFoundError:  # pragma: no cover
     _wire_storage = None  # type: ignore
 
@@ -227,91 +232,6 @@ STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
 _STORAGE_ADAPTER_OVERRIDE_ACTIVE = False
 
 
-def _sync_teaching_route_globals(*, adapter: StorageAdapterProtocol, override_active: bool) -> None:
-    """Retarget already-registered Teaching route globals to the current adapter.
-
-    Why:
-        Some tests reload `backend.web.routes.teaching` while keeping the original FastAPI
-        app instance alive. Route callables still reference the globals of the
-        module instance they were created from. Without this sync, changing the
-        adapter on a freshly imported module leaves old endpoints bound to a
-        stale adapter and makes the suite order-dependent.
-    """
-
-    apps = []
-    for module_name in ("backend.web.main",):
-        main_module = _sys.modules.get(module_name)
-        app = getattr(main_module, "app", None) if main_module is not None else None
-        if app is not None:
-            apps.append(app)
-    try:
-        from backend.web.app_composition import iter_registered_apps
-
-        apps.extend(iter_registered_apps())
-    except Exception:
-        pass
-    seen_apps: set[int] = set()
-    for app in apps:
-        app_id = id(app)
-        if app_id in seen_apps:
-            continue
-        seen_apps.add(app_id)
-        routes = getattr(app, "routes", None)
-        if not routes:
-            continue
-        for route in routes:
-            if not isinstance(route, APIRoute):
-                continue
-            if not str(getattr(route, "path", "")).startswith("/api/teaching"):
-                continue
-            route_globals = getattr(route.endpoint, "__globals__", None)
-            if isinstance(route_globals, dict) and "STORAGE_ADAPTER" in route_globals:
-                route_globals["STORAGE_ADAPTER"] = adapter
-                route_globals["_STORAGE_ADAPTER_OVERRIDE_ACTIVE"] = override_active
-                bound_teaching = route_globals.get("teaching_routes")
-                if bound_teaching is not None:
-                    setattr(bound_teaching, "STORAGE_ADAPTER", adapter)
-                    setattr(bound_teaching, "_STORAGE_ADAPTER_OVERRIDE_ACTIVE", override_active)
-
-
-def _sync_teaching_route_repo(repo: Any) -> None:
-    """Retarget already-registered Teaching route globals to the current repo."""
-
-    apps = []
-    for module_name in ("backend.web.main",):
-        main_module = _sys.modules.get(module_name)
-        app = getattr(main_module, "app", None) if main_module is not None else None
-        if app is not None:
-            apps.append(app)
-    try:
-        from backend.web.app_composition import iter_registered_apps
-
-        apps.extend(iter_registered_apps())
-    except Exception:
-        pass
-    seen_apps: set[int] = set()
-    for app in apps:
-        app_id = id(app)
-        if app_id in seen_apps:
-            continue
-        seen_apps.add(app_id)
-        routes = getattr(app, "routes", None)
-        if not routes:
-            continue
-        for route in routes:
-            if not isinstance(route, APIRoute):
-                continue
-            if not str(getattr(route, "path", "")).startswith("/api/teaching"):
-                continue
-            route_globals = getattr(route.endpoint, "__globals__", None)
-            if isinstance(route_globals, dict) and "_REPO" in route_globals:
-                route_globals["_REPO"] = repo
-                route_globals["REPO"] = repo
-                bound_teaching = route_globals.get("teaching_routes")
-                if bound_teaching is not None:
-                    setattr(bound_teaching, "_REPO", repo)
-                    setattr(bound_teaching, "REPO", repo)
-
 def _get_materials_service() -> MaterialsService:
     return MaterialsService(_get_repo(), settings=MATERIAL_FILE_SETTINGS)
 
@@ -338,7 +258,7 @@ def set_repo(repo) -> None:
             continue
         setattr(module, "_REPO", repo)
         setattr(module, "REPO", repo)
-    _sync_teaching_route_repo(repo)
+    teaching_runtime_provider.sync_route_repo(repo)
 
 
 def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = True) -> None:
@@ -352,7 +272,10 @@ def set_storage_adapter(adapter: StorageAdapterProtocol, *, override: bool = Tru
             continue
         setattr(module, "STORAGE_ADAPTER", adapter)
         setattr(module, "_STORAGE_ADAPTER_OVERRIDE_ACTIVE", bool(override))
-    _sync_teaching_route_globals(adapter=adapter, override_active=_STORAGE_ADAPTER_OVERRIDE_ACTIVE)
+    teaching_runtime_provider.sync_route_storage_adapter(
+        adapter,
+        override_active=_STORAGE_ADAPTER_OVERRIDE_ACTIVE,
+    )
 
 
 # --- Request/Response models -----------------------------------------------------

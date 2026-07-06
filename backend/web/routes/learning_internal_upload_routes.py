@@ -71,6 +71,9 @@ async def _read_request_stream_with_limit(request: Request, limit: int) -> tuple
 
 
 def _current_async_forward_upload():
+    local_forwarder = globals().get("_async_forward_upload")
+    if callable(local_forwarder):
+        return local_forwarder
     return _learning_module()._current_async_forward_upload()
 
 

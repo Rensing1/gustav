@@ -17,6 +17,7 @@ Notes:
 
 from __future__ import annotations
 
+import asyncio  # noqa: F401 - kept for route module compatibility
 import logging
 
 import os
@@ -55,10 +56,12 @@ from backend.web.routes import (
     teaching_submission_files,
     teaching_validation,
 )
+from backend.web.routes.teaching_serialization import _serialize_task as _serialize_task
 from backend.web.routes.teaching_storage_cleanup import (
     metadata_page_keys as _metadata_page_keys,  # noqa: F401 - kept for route module compatibility
     unit_delete_storage_metadata_dsn as _unit_delete_storage_metadata_dsn,  # noqa: F401
 )
+from backend.storage.config import get_submissions_bucket  # noqa: F401 - kept for route module compatibility
 from backend.web.routes import teaching_inmemory_repo
 
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
@@ -108,7 +111,6 @@ _Repo = InMemoryTeachingRepo
 _serialize_unit = teaching_serialization._serialize_unit
 _serialize_section = teaching_serialization._serialize_section
 _serialize_material = teaching_serialization._serialize_material
-_serialize_task = teaching_serialization._serialize_task
 _serialize_unit_phase_public = teaching_serialization._serialize_unit_phase_public
 _serialize_unit_module = teaching_serialization._serialize_unit_module
 _serialize_unit_graph_edge = teaching_serialization._serialize_unit_graph_edge
@@ -118,6 +120,7 @@ UnitUpdatePayload = teaching_payloads.UnitUpdatePayload
 TaskCreatePayload = teaching_payloads.TaskCreatePayload
 TaskUpdatePayload = teaching_payloads.TaskUpdatePayload
 TaskReorderPayload = teaching_payloads.TaskReorderPayload
+AddMember = teaching_payloads.AddMember
 MaterialCreatePayload = teaching_payloads.MaterialCreatePayload
 MaterialFinalizePayload = teaching_payloads.MaterialFinalizePayload
 MaterialReorderPayload = teaching_payloads.MaterialReorderPayload
@@ -131,7 +134,6 @@ UnitPhaseCreatePayload = teaching_payloads.UnitPhaseCreatePayload
 UnitPhaseReorderPayload = teaching_payloads.UnitPhaseReorderPayload
 UnitPhaseUpdatePayload = teaching_payloads.UnitPhaseUpdatePayload
 _serialize_unit = teaching_serialization._serialize_unit
-_serialize_task = teaching_serialization._serialize_task
 _serialize_material = teaching_serialization._serialize_material
 _build_latest_submission_payload = teaching_serialization._build_latest_submission_payload
 _build_live_delta_cells = teaching_serialization._build_live_delta_cells
@@ -140,6 +142,7 @@ _serialize_unit_graph_edge = teaching_serialization._serialize_unit_graph_edge
 _serialize_unit_module = teaching_serialization._serialize_unit_module
 _serialize_unit_phase_public = teaching_serialization._serialize_unit_phase_public
 _safe_int = teaching_validation.safe_int
+_clamp_limit_offset = teaching_validation.clamp_limit_offset
 _download_bytes_with_limit = teaching_submission_files.download_bytes_with_limit
 _safe_download_filename = teaching_submission_files.safe_download_filename
 _teaching_submission_file_href = teaching_submission_files.teaching_submission_file_href

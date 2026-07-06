@@ -48,12 +48,13 @@ from backend.web.routes.teaching_validation import canonical_uuid as _canonical_
 
 
 teaching_unit_modules_router = APIRouter(tags=["Teaching"])
+_BOUND_TEACHING_MODULE = _sys.modules.get("backend.web.routes.teaching")
 
 
 def _get_repo():
     """Resolve the active Teaching repo provider after tests reload or monkeypatch it."""
 
-    teaching_module = _sys.modules.get("backend.web.routes.teaching")
+    teaching_module = _BOUND_TEACHING_MODULE or _sys.modules.get("backend.web.routes.teaching")
     if teaching_module is None:  # pragma: no cover - defensive import fallback
         teaching_module = importlib.import_module("backend.web.routes.teaching")
     return teaching_module._get_repo()

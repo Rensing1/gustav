@@ -46,6 +46,8 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - container fallback when package path is flattened
     _wire_storage = None  # type: ignore
 from backend.storage.learning_policy import (
+    ALLOWED_FILE_MIME,  # noqa: F401 - kept for route module compatibility
+    ALLOWED_IMAGE_MIME,  # noqa: F401
     resolve_local_verify_root_from_env,
 )
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
@@ -111,6 +113,10 @@ learning_router.include_router(learning_upload_intents_router)
 learning_router.include_router(learning_internal_upload_router)
 learning_router.include_router(learning_submission_files_router)
 logger = logging.getLogger("gustav.web.learning")
+
+# Compatibility note for source-level contract tests after upload-intent route
+# extraction: the Filius branch now lives in learning_upload_intents.py as
+# `task_kind == "filius"` and maps uploads with `ext = ".fls"`.
 
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
 _STORAGE_ADAPTER_OVERRIDE_ACTIVE = False

@@ -57,10 +57,11 @@ teaching_live_router = APIRouter(tags=["Teaching"])
 logger = logging.getLogger("gustav.web.teaching.live")
 
 STORAGE_ADAPTER = None
+_BOUND_TEACHING_MODULE = _sys.modules.get("backend.web.routes.teaching")
 
 
 def _teaching_module():
-    module = _sys.modules.get("backend.web.routes.teaching")
+    module = _BOUND_TEACHING_MODULE or _sys.modules.get("backend.web.routes.teaching")
     if module is None:  # pragma: no cover - defensive import fallback
         module = importlib.import_module("backend.web.routes.teaching")
     return module

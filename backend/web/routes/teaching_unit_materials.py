@@ -45,10 +45,11 @@ logger = logging.getLogger("gustav.web.teaching.materials")
 STORAGE_ADAPTER = None
 MATERIAL_FILE_SETTINGS = None
 _STORAGE_ADAPTER_OVERRIDE_ACTIVE = None
+_BOUND_TEACHING_MODULE = _sys.modules.get("backend.web.routes.teaching")
 
 
 def _teaching_module():
-    module = _sys.modules.get("backend.web.routes.teaching")
+    module = _BOUND_TEACHING_MODULE or _sys.modules.get("backend.web.routes.teaching")
     if module is None:  # pragma: no cover - defensive import fallback
         module = importlib.import_module("backend.web.routes.teaching")
     return module
@@ -75,6 +76,9 @@ def _storage_adapter():
 def _material_file_settings():
     """Return material storage settings, preferring route-global sync updates."""
 
+    facade_settings = getattr(_teaching_module(), "MATERIAL_FILE_SETTINGS", None)
+    if facade_settings is not None:
+        return facade_settings
     if MATERIAL_FILE_SETTINGS is not None:
         return MATERIAL_FILE_SETTINGS
     return _teaching_module().MATERIAL_FILE_SETTINGS

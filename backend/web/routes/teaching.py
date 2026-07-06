@@ -22,6 +22,7 @@ import logging
 
 import os
 import sys as _sys
+import time
 from datetime import datetime
 from typing import Any
 
@@ -756,9 +757,26 @@ def __getattr__(name: str) -> Any:
 
 
 _teacher_id_of = teaching_course_state.teacher_id_of
-_prune_recently_deleted = teaching_course_state.prune_recently_deleted
-_mark_recently_deleted = teaching_course_state.mark_recently_deleted
-_was_recently_deleted = teaching_course_state.was_recently_deleted
+_RECENTLY_DELETED_TTL_SECONDS = teaching_course_state.RECENTLY_DELETED_TTL_SECONDS
+
+
+def _sync_course_state_time() -> None:
+    teaching_course_state.time = time
+
+
+def _prune_recently_deleted(owner_id: str, *, now: float | None = None) -> None:
+    _sync_course_state_time()
+    teaching_course_state.prune_recently_deleted(owner_id, now=now)
+
+
+def _mark_recently_deleted(owner_id: str, course_id: str) -> None:
+    _sync_course_state_time()
+    teaching_course_state.mark_recently_deleted(owner_id, course_id)
+
+
+def _was_recently_deleted(owner_id: str, course_id: str) -> bool:
+    _sync_course_state_time()
+    return teaching_course_state.was_recently_deleted(owner_id, course_id)
 
 
 def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):

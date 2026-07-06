@@ -12,8 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
 from backend.web.routes import teaching_guards
-from backend.web.routes.teaching import _get_repo
-from backend.web.routes.teaching_course_state import mark_recently_deleted as _mark_recently_deleted
+from backend.web.routes.teaching import _get_repo, _mark_recently_deleted
 from backend.web.routes.teaching_payloads import CourseCreate, CourseUpdate
 from backend.web.routes.teaching_serialization import _serialize_course
 from backend.web.routes.teaching_shared import (

@@ -54,15 +54,17 @@ from backend.storage.learning_policy import (
 )
 from backend.storage.verification import verify_storage_object_integrity
 from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
-from backend.storage.keys import make_submission_key
 from backend.storage.submission_content_signatures import validate_submission_content_signature
-from backend.storage.upload_intents import normalize_upload_intent_headers
-from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
+from backend.storage.mime_types import FILIUS_FLS_MIME, MAKECODE_HEX_MIME, PDF_MIME, SCRATCH_SB3_MIME
 from backend.web.routes import learning_downloads
 from backend.web.routes.learning_material_file_routes import (
     get_material_file as get_material_file,  # noqa: F401 - kept for route module compatibility
     get_material_file_legacy_alias as get_material_file_legacy_alias,  # noqa: F401
     learning_material_file_router,
+)
+from backend.web.routes.learning_upload_intents import (
+    create_upload_intent as create_upload_intent,  # noqa: F401 - kept for route module compatibility
+    learning_upload_intents_router,
 )
 from backend.web.routes.learning_material_files import (
     attach_modular_material_files as _attach_modular_material_files,
@@ -73,14 +75,14 @@ from backend.web.routes.learning_material_files import (
 )
 from backend.web.routes.learning_upload_proxy import (
     decode_proxy_headers as _decode_proxy_headers,
-    encode_proxy_headers as _encode_proxy_headers,
+    encode_proxy_headers as _encode_proxy_headers,  # noqa: F401 - kept for route module compatibility
     filter_upload_proxy_headers as _filter_upload_proxy_headers,
     normalized_parts as _normalized_parts,
 )
 from backend.web.routes.learning_upload_proxy import async_forward_upload as _default_async_forward_upload
 from backend.web.routes.learning_upload_config import (
     dev_upload_stub_enabled as _dev_upload_stub_enabled,
-    upload_intent_ttl_seconds as _upload_intent_ttl_seconds,
+    upload_intent_ttl_seconds as _upload_intent_ttl_seconds,  # noqa: F401
     upload_proxy_enabled as _upload_proxy_enabled,
     upload_proxy_timeout_seconds as _upload_proxy_timeout_seconds,
 )
@@ -88,6 +90,7 @@ import httpx
 from urllib.parse import urlparse as _urlparse, quote as _quote
 learning_router = APIRouter(tags=["Learning"])
 learning_router.include_router(learning_material_file_router)
+learning_router.include_router(learning_upload_intents_router)
 logger = logging.getLogger("gustav.web.learning")
 
 STORAGE_ADAPTER: StorageAdapterProtocol = NullStorageAdapter()
@@ -1706,286 +1709,6 @@ def _dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, cou
     except Exception:
         # Never let dev persistence affect the request path
         return
-
-
-@learning_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents")
-async def create_upload_intent(request: Request, course_id: str, task_id: str, payload: dict[str, Any]):
-    """Create a short-lived upload intent for a submission asset (image/PDF/SB3).
-
-    Why:
-        Client-side uploads avoid sending large binaries through our API server.
-        We return a presigned target (stub in dev) and storage_key metadata;
-        the client PUTs the file there, then submits the finalized metadata via
-        the standard submissions endpoint.
-
-    Parameters:
-        request: FastAPI request with the caller's session.
-        course_id: UUID string of the course context (path).
-        task_id: UUID string of the task (path).
-        payload: JSON object with keys:
-            - kind: "image" | "file" (PDF or Scratch SB3, depending on Task.kind)
-            - filename: original filename for intent construction
-            - mime_type: declared content-type (validated against allowlist)
-            - size_bytes: integer size of the upload in bytes (≤ 10 MiB)
-
-    Returns:
-        200 JSON with fields: intent_id, storage_key, url, headers,
-        accepted_mime_types, max_size_bytes, expires_at. Clients must still
-        finish by POSTing to /submissions with storage metadata and sha256.
-
-    Security:
-        Same-origin required. Caller must have role "student". In the MVP,
-        membership/visibility checks are enforced when creating the submission
-        (defense at the DB boundary, RLS). We may move guards earlier later.
-    """
-    user = _current_user(request)
-    if not user:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_cache_headers_error())
-    roles = user.get("roles") or []
-    if not isinstance(roles, list) or "student" not in roles:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-    # Strict CSRF for browser-triggered POSTs: require Origin/Referer presence
-    # and same-origin (server-to-server calls should not use this endpoint).
-    if not _require_strict_same_origin(request):
-        return JSONResponse(
-            {"error": "forbidden", "detail": "csrf_violation"},
-            status_code=403,
-            headers=_cache_headers_error(),
-        )
-
-    # Basic path validation
-    try:
-        UUID(course_id)
-        UUID(task_id)
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
-
-    # Input validation
-    if not isinstance(payload, dict):
-        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
-    kind = payload.get("kind")
-    filename = str(payload.get("filename") or "").strip()
-    # Compare MIME types case-insensitively; normalize for downstream policy checks.
-    mime_type = str(payload.get("mime_type") or "").strip().lower()
-    size_bytes = payload.get("size_bytes")
-    try:
-        size_int = int(size_bytes)
-    except Exception:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
-    if not filename or len(filename) > 255:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
-    if size_int <= 0 or size_int > _max_upload_bytes():
-        return JSONResponse({"error": "bad_request", "detail": "size_exceeded"}, status_code=400, headers=_cache_headers_error())
-    if kind not in {"image", "file"}:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
-
-    # Authorization/visibility: ensure the caller is a member and the task is visible.
-    # We use the existing submissions read-path as an access check; the repo enforces
-    # membership and released visibility (RLS + helpers in the DB implementation).
-    try:
-        _ = ListSubmissionsUseCase(_get_repo()).execute(
-            ListSubmissionsInput(
-                course_id=str(course_id),
-                task_id=str(task_id),
-                student_sub=str(user.get("sub", "")),
-                limit=1,
-                offset=0,
-            )
-        )
-    except PermissionError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-    except LookupError:
-        # Task not visible (or course/unit mismatch) should not leak existence
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-    except Exception:
-        # Fail closed: without a reliable authorization check we must not hand out
-        # a presigned upload capability.
-        return JSONResponse(
-            {"error": "service_unavailable", "detail": "authorization_unavailable"},
-            status_code=503,
-            headers=_cache_headers_error(),
-        )
-
-    # Optional: fetch Task.kind for stricter per-task allowlists (e.g., Scratch is SB3-only).
-    task_kind = "native"
-    repo = _get_repo()
-    if callable(getattr(repo, "get_task_kind_for_student", None)):
-        try:
-            task_kind = str(
-                repo.get_task_kind_for_student(
-                    student_sub=str(user.get("sub", "")),
-                    course_id=str(course_id),
-                    task_id=str(task_id),
-                )
-            )
-        except PermissionError:
-            return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-        except LookupError:
-            return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-        except Exception:
-            return JSONResponse(
-                {"error": "service_unavailable", "detail": "authorization_unavailable"},
-                status_code=503,
-                headers=_cache_headers_error(),
-            )
-
-    task_kind = (task_kind or "native").strip().lower()
-    if task_kind == "scratch":
-        # Scratch is SB3-only (upload-only). We do not accept images/PDF here.
-        if kind != "file":
-            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-        if mime_type != SCRATCH_SB3_MIME:
-            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-        accepted = [SCRATCH_SB3_MIME]
-    elif task_kind == "calliope":
-        # Calliope MakeCode tasks are HEX-only (upload-only). We do not accept images/PDF here.
-        if kind != "file":
-            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-        if mime_type != MAKECODE_HEX_MIME:
-            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-        accepted = [MAKECODE_HEX_MIME]
-    elif task_kind == "filius":
-        # Filius tasks are FLS-only (upload-only). We do not accept images/PDF here.
-        if kind != "file":
-            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-        if mime_type != FILIUS_FLS_MIME:
-            return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-        accepted = [FILIUS_FLS_MIME]
-    else:
-        if kind == "image":
-            if mime_type not in ALLOWED_IMAGE_MIME:
-                return JSONResponse(
-                    {"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error()
-                )
-            accepted = sorted(list(ALLOWED_IMAGE_MIME))
-        else:  # kind == "file"
-            # Non-scratch tasks accept only PDFs in MVP.
-            if mime_type != PDF_MIME:
-                return JSONResponse({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error())
-            accepted = [PDF_MIME]
-
-    # Build a storage key (lowercase path, no traversal) — the value is later
-    # validated again at submission time with a strict regex.
-    import time as _time
-    from uuid import uuid4 as _uuid4
-    student_sub = str(user.get("sub", "student")).lower()
-    ts = int(_time.time() * 1000)
-    if mime_type == PNG_MIME:
-        ext = ".png"
-    elif mime_type == JPEG_MIME:
-        ext = ".jpg"
-    elif mime_type == SCRATCH_SB3_MIME:
-        ext = ".sb3"
-    elif mime_type == MAKECODE_HEX_MIME:
-        ext = ".hex"
-    elif mime_type == FILIUS_FLS_MIME:
-        ext = ".fls"
-    else:
-        ext = ".pdf"
-    storage_key = make_submission_key(
-        course_id=str(course_id),
-        task_id=str(task_id),
-        student_sub=str(student_sub),
-        ext=ext,
-        epoch_ms=ts,
-        uuid_hex=_uuid4().hex,
-    )
-
-    bucket = _storage_bucket()
-    adapter = _current_storage_adapter()
-    # Lazy wiring: if adapter is not ready, try wiring once now.
-    if isinstance(adapter, NullStorageAdapter):
-        try:
-            _wire_storage()
-        except Exception:
-            # Non-fatal; fall through to stub/503 handling.
-            pass
-        adapter = _current_storage_adapter()  # refresh after potential wiring
-
-    # Dev fallback when adapter remains unavailable.
-    if not bucket or isinstance(adapter, NullStorageAdapter):
-        if _dev_upload_stub_enabled():
-            presign_url = f"/api/learning/internal/upload-stub?storage_key={_quote(storage_key)}"
-            from datetime import datetime, timezone, timedelta
-            intent = {
-                "intent_id": str(_uuid4()),
-                "storage_key": storage_key,
-                "url": presign_url,
-                "headers": normalize_upload_intent_headers({}, fallback_content_type=mime_type),
-                "accepted_mime_types": accepted,
-                "max_size_bytes": _max_upload_bytes(),
-                "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=_upload_intent_ttl_seconds())).isoformat(timespec="seconds"),
-            }
-            return JSONResponse(intent, status_code=200, headers=_cache_headers_success())
-        return JSONResponse(
-            {"error": "service_unavailable", "detail": "storage_adapter_not_configured"},
-            status_code=503,
-            headers=_cache_headers_error(),
-        )
-
-    ttl_seconds = _upload_intent_ttl_seconds()
-    upload_headers = {"Content-Type": mime_type}
-    try:
-        presigned = adapter.presign_upload(
-            bucket=bucket,
-            key=storage_key,
-            expires_in=ttl_seconds,
-            headers=upload_headers,
-        )
-    except RuntimeError as exc:
-        if str(exc) == "storage_adapter_not_configured":
-            return JSONResponse(
-                {"error": "service_unavailable", "detail": "storage_adapter_not_configured"},
-                status_code=503,
-                headers=_cache_headers_error(),
-            )
-        raise
-
-    presign_url = presigned.get("url")
-    if not presign_url:
-        return JSONResponse(
-            {"error": "service_unavailable", "detail": "presign_failed"},
-            status_code=503,
-            headers=_cache_headers_error(),
-        )
-
-    from datetime import datetime, timezone, timedelta
-    url_out = str(presign_url)
-    # Apply same-origin proxy when enabled and the presign target host matches
-    # our configured SUPABASE_URL host. This keeps behavior stable for fakes
-    # in tests and avoids coupling to a specific adapter class name.
-    try:
-        headers_src: dict[str, Any] = dict(presigned.get("headers") or upload_headers)
-    except Exception:
-        headers_src = dict(upload_headers)
-    proxy_headers_token = _encode_proxy_headers(headers_src)
-
-    if _upload_proxy_enabled():
-        base = (os.getenv("SUPABASE_URL") or "").strip()
-        try:
-            parsed_target = _urlparse(str(presign_url))
-            parsed_base = _urlparse(base)
-            th = parsed_target.hostname or ""
-            bh = parsed_base.hostname or ""
-        except Exception:
-            th = bh = ""
-        if th and bh and th == bh:
-            # Same-origin proxy to avoid Storage CORS; target url is passed as query
-            url_out = f"/api/learning/internal/upload-proxy?url={_quote(str(presign_url))}"
-            if proxy_headers_token:
-                url_out += f"&headers={_quote(proxy_headers_token)}"
-    headers_out = normalize_upload_intent_headers(headers_src, fallback_content_type=mime_type)
-    intent = {
-        "intent_id": str(_uuid4()),
-        "storage_key": storage_key,
-        "url": url_out,
-        "headers": headers_out,
-        "accepted_mime_types": accepted,
-        "max_size_bytes": _max_upload_bytes(),
-        # Short-lived expiry (defense-in-depth): 10 minutes from now (UTC)
-        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat(timespec="seconds"),
-    }
-    return JSONResponse(intent, status_code=200, headers=_cache_headers_success())
 
 
 def _verify_storage_object(storage_key: str, sha256: str, size_bytes: int, mime_type: str) -> tuple[bool, str]:

@@ -27,51 +27,23 @@
   } from "$lib/graph/teacher-unit-flow";
   import type {
     TeacherUnitWorkspaceView,
-    TeacherUnitWorkspaceEdgeSelection,
-    TeacherUnitWorkspaceGraphPhase,
-    TeacherUnitWorkspaceModuleItem,
-    TeacherUnitWorkspaceSectionItem,
     TeacherUnitWorkspaceSelection
   } from "$lib/types/home";
+  import {
+    cloneWorkspace,
+    deriveEdgeSelection as deriveWorkspaceEdgeSelection,
+    deriveModuleSelection as deriveWorkspaceModuleSelection,
+    derivePhaseSelection as deriveWorkspacePhaseSelection,
+    deriveSectionSelection as deriveWorkspaceSectionSelection,
+    modularPhases as workspaceModularPhases,
+    workspaceGraphSignature
+  } from "$lib/teacher-unit-workspace/view-state";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
-  function plainWorkspace(workspace: TeacherUnitWorkspaceView): TeacherUnitWorkspaceView {
-    return JSON.parse(JSON.stringify(workspace)) as TeacherUnitWorkspaceView;
-  }
-
   function initialWorkspace(): TeacherUnitWorkspaceView {
-    return plainWorkspace(data.workspace);
-  }
-
-  function workspaceGraphSignature(workspace: TeacherUnitWorkspaceView): string {
-    if (workspace.graph.kind === "linear") {
-      return JSON.stringify({
-        unit: workspace.unit.id,
-        kind: workspace.graph.kind,
-        sections: (workspace.graph.nodes ?? []).map((section) => [section.id, section.title, section.position]),
-        edges: workspace.graph.edges
-      });
-    }
-
-    return JSON.stringify({
-      unit: workspace.unit.id,
-      kind: workspace.graph.kind,
-      phases: (workspace.graph.phases ?? []).map((phase) => [
-        phase.id,
-        phase.title,
-        phase.position,
-        phase.modules.map((module) => [
-          module.id,
-          module.title,
-          module.phase_id,
-          module.position_in_phase,
-          module.required_prereq_count
-        ])
-      ]),
-      edges: workspace.graph.edges
-    });
+    return cloneWorkspace(data.workspace);
   }
 
   let flowNodes = $state.raw<TeacherFlowNode[]>([]);
@@ -312,99 +284,23 @@
   }
 
   function modularPhases(workspace: TeacherUnitWorkspaceView = workspaceState) {
-    return workspace.graph.kind === "modular" ? (workspace.graph.phases ?? []) : [];
-  }
-
-  function graphSections(): TeacherUnitWorkspaceSectionItem[] {
-    return workspaceState.graph.kind === "linear" ? (workspaceState.graph.nodes ?? []) : [];
-  }
-
-  function allModules(): TeacherUnitWorkspaceModuleItem[] {
-    return modularPhases().flatMap((phase) => phase.modules);
-  }
-
-  function findPhaseById(phaseId: string): TeacherUnitWorkspaceGraphPhase | null {
-    return modularPhases().find((phase) => phase.id === phaseId) ?? null;
-  }
-
-  function findModuleById(moduleId: string): TeacherUnitWorkspaceModuleItem | null {
-    return allModules().find((module) => module.id === moduleId) ?? null;
-  }
-
-  function findSectionById(sectionId: string): TeacherUnitWorkspaceSectionItem | null {
-    return graphSections().find((section) => section.id === sectionId) ?? null;
-  }
-
-  function edgeExists(fromId: string, toId: string): boolean {
-    return (workspaceState.graph.edges ?? []).some((edge) => edge.from === fromId && edge.to === toId);
+    return workspaceModularPhases(workspace);
   }
 
   function deriveSectionSelection(sectionId: string): TeacherUnitWorkspaceSelection {
-    const section = findSectionById(sectionId);
-    if (!section) {
-      return { kind: "none" };
-    }
-    return {
-      kind: "section",
-      section: {
-        id: section.id,
-        title: section.title,
-        position: section.position,
-        editor_href: section.editor_href
-      }
-    };
+    return deriveWorkspaceSectionSelection(workspaceState, sectionId);
   }
 
   function derivePhaseSelection(phaseId: string): TeacherUnitWorkspaceSelection {
-    const phase = findPhaseById(phaseId);
-    if (!phase) {
-      return { kind: "none" };
-    }
-    return {
-      kind: "phase",
-      phase: {
-        id: phase.id,
-        title: phase.title,
-        position: phase.position
-      }
-    };
+    return deriveWorkspacePhaseSelection(workspaceState, phaseId);
   }
 
   function deriveModuleSelection(moduleId: string): TeacherUnitWorkspaceSelection {
-    const module = findModuleById(moduleId);
-    if (!module) {
-      return { kind: "none" };
-    }
-    return {
-      kind: "module",
-      module: {
-        id: module.id,
-        title: module.title,
-        phase_id: module.phase_id,
-        position_in_phase: module.position_in_phase,
-        required_prereq_count: module.required_prereq_count,
-        materials_count: module.materials_count,
-        tasks_count: module.tasks_count,
-        editor_href: module.editor_href
-      }
-    };
+    return deriveWorkspaceModuleSelection(workspaceState, moduleId);
   }
 
   function deriveEdgeSelection(fromId: string, toId: string): TeacherUnitWorkspaceSelection {
-    const fromModule = findModuleById(fromId);
-    const toModule = findModuleById(toId);
-    if (!fromModule || !toModule) {
-      return { kind: "none" };
-    }
-
-    const edge: TeacherUnitWorkspaceEdgeSelection = {
-      from_id: fromModule.id,
-      to_id: toModule.id,
-      from_title: fromModule.title,
-      to_title: toModule.title,
-      exists: edgeExists(fromId, toId)
-    };
-    return { kind: "edge", edge };
+    return deriveWorkspaceEdgeSelection(workspaceState, fromId, toId);
   }
 
   function syncSelectionUrl(selection: TeacherUnitWorkspaceSelection) {
@@ -574,7 +470,7 @@
       pendingViewportReset = true;
     }
     lastWorkspaceSignature = nextWorkspaceSignature;
-    const nextWorkspace = plainWorkspace(data.workspace);
+    const nextWorkspace = cloneWorkspace(data.workspace);
     workspaceState = nextWorkspace;
     localSelection = data.workspace.selection;
     openModulePropertiesId = null;

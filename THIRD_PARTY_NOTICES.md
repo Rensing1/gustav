@@ -4,9 +4,10 @@ This file documents third-party components that are **vendored into this
 repository** (i.e. committed to git), including their license and where the
 license text can be found.
 
-For dependencies installed via package managers (Python/Node), see the
-respective lock files (`package-lock.json`, Python deps) and run a license
-scanner as part of your release process.
+For dependencies installed via package managers (Python/Node), see
+`docs/harness/SUPPLY_CHAIN.md` and the generated
+`docs/harness/SUPPLY_CHAIN_INVENTORY.json`. Run `make supply-chain-check` before
+changing dependency manifests or publishing a release.
 
 ## H5P Core (static runtime assets)
 

@@ -1,0 +1,4515 @@
+{
+  "entries": [
+    {
+      "ecosystem": "python",
+      "license": "Apache Software License",
+      "name": "bleach",
+      "policy": "metadata-recorded",
+      "version": "6.1.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT License",
+      "name": "dspy-ai",
+      "policy": "metadata-recorded",
+      "version": "3.0.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "fastapi",
+      "policy": "metadata-recorded",
+      "version": "0.115.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "httpx",
+      "policy": "metadata-recorded",
+      "version": "0.27.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "jinja2",
+      "policy": "metadata-recorded",
+      "version": "3.1.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "markdown-it-py",
+      "policy": "metadata-recorded",
+      "version": "3.0.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "HPND",
+      "name": "pillow",
+      "policy": "metadata-recorded",
+      "version": "10.4.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "GNU Lesser General Public License v3 (LGPLv3)",
+      "name": "psycopg",
+      "policy": "metadata-recorded",
+      "version": "3.2.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "(Apache-2.0 OR BSD-3-Clause) AND LicenseRef-PdfiumThirdParty",
+      "name": "pypdfium2",
+      "policy": "metadata-recorded",
+      "version": "4.30.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "BSD-3-Clause",
+      "name": "python-dotenv",
+      "policy": "metadata-recorded",
+      "version": "1.0.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "python-jose",
+      "policy": "metadata-recorded",
+      "version": "3.3.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: Apache Software License",
+      "name": "python-multipart",
+      "policy": "metadata-recorded",
+      "version": "0.0.12"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "requests",
+      "policy": "metadata-recorded",
+      "version": "2.32.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "ruff",
+      "policy": "metadata-recorded",
+      "version": "0.15.20"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "supabase",
+      "policy": "metadata-recorded",
+      "version": "2.6.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "uvicorn",
+      "policy": "metadata-recorded",
+      "version": "0.32.0"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@adobe/css-tools",
+      "policy": "allowed",
+      "version": "4.4.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@asamuzakjp/css-color",
+      "policy": "allowed",
+      "version": "3.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@asamuzakjp/css-color",
+      "policy": "allowed",
+      "version": "5.1.8",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@asamuzakjp/dom-selector",
+      "policy": "allowed",
+      "version": "7.0.8",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@asamuzakjp/nwsapi",
+      "policy": "allowed",
+      "version": "2.3.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@babel/code-frame",
+      "policy": "allowed",
+      "version": "7.29.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@babel/helper-validator-identifier",
+      "policy": "allowed",
+      "version": "7.28.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@babel/runtime",
+      "policy": "allowed",
+      "version": "7.29.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@bramus/specificity",
+      "policy": "allowed",
+      "version": "2.4.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT-0",
+      "name": "@csstools/color-helpers",
+      "policy": "allowed",
+      "version": "5.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT-0",
+      "name": "@csstools/color-helpers",
+      "policy": "allowed",
+      "version": "6.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@csstools/css-calc",
+      "policy": "allowed",
+      "version": "2.1.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@csstools/css-calc",
+      "policy": "allowed",
+      "version": "3.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@csstools/css-color-parser",
+      "policy": "allowed",
+      "version": "3.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@csstools/css-color-parser",
+      "policy": "allowed",
+      "version": "4.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@csstools/css-parser-algorithms",
+      "policy": "allowed",
+      "version": "3.0.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@csstools/css-parser-algorithms",
+      "policy": "allowed",
+      "version": "4.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT-0",
+      "name": "@csstools/css-syntax-patches-for-csstree",
+      "policy": "allowed",
+      "version": "1.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@csstools/css-tokenizer",
+      "policy": "allowed",
+      "version": "3.0.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@csstools/css-tokenizer",
+      "policy": "allowed",
+      "version": "4.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/aix-ppc64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/aix-ppc64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/aix-ppc64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/android-arm",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/android-arm",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/android-arm",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/android-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/android-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/android-arm64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/android-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/android-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/android-x64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/darwin-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/darwin-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/darwin-arm64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/darwin-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/darwin-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/darwin-x64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/freebsd-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/freebsd-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/freebsd-arm64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/freebsd-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/freebsd-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/freebsd-x64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-arm",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-arm",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-arm",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-arm64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-ia32",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-ia32",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-ia32",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-loong64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-loong64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-loong64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-mips64el",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-mips64el",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-mips64el",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-ppc64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-ppc64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-ppc64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-riscv64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-riscv64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-riscv64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-s390x",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-s390x",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-s390x",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/linux-x64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/netbsd-arm64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/netbsd-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/netbsd-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/netbsd-x64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/openbsd-arm64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/openbsd-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/openbsd-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/openbsd-x64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/openharmony-arm64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/sunos-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/sunos-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/sunos-x64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/win32-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/win32-arm64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/win32-arm64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/win32-ia32",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/win32-ia32",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/win32-ia32",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/win32-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/win32-x64",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@esbuild/win32-x64",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@exodus/bytes",
+      "policy": "allowed",
+      "version": "1.15.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "OFL-1.1",
+      "name": "@fontsource/inter",
+      "policy": "allowed",
+      "version": "5.2.8",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "OFL-1.1",
+      "name": "@fontsource/manrope",
+      "policy": "allowed",
+      "version": "5.2.8",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "OFL-1.1",
+      "name": "@fontsource/nunito",
+      "policy": "allowed",
+      "version": "5.2.7",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "OFL-1.1",
+      "name": "@fontsource/space-grotesk",
+      "policy": "allowed",
+      "version": "5.2.10",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "OFL-1.1",
+      "name": "@fontsource/work-sans",
+      "policy": "allowed",
+      "version": "5.2.8",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@jridgewell/gen-mapping",
+      "policy": "allowed",
+      "version": "0.3.13",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@jridgewell/remapping",
+      "policy": "allowed",
+      "version": "2.3.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@jridgewell/resolve-uri",
+      "policy": "allowed",
+      "version": "3.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@jridgewell/sourcemap-codec",
+      "policy": "allowed",
+      "version": "1.5.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@jridgewell/trace-mapping",
+      "policy": "allowed",
+      "version": "0.3.31",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "@playwright/test",
+      "policy": "allowed",
+      "version": "1.59.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@polka/url",
+      "policy": "allowed",
+      "version": "1.0.0-next.29",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/plugin-commonjs",
+      "policy": "allowed",
+      "version": "29.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/plugin-json",
+      "policy": "allowed",
+      "version": "6.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/plugin-node-resolve",
+      "policy": "allowed",
+      "version": "16.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/pluginutils",
+      "policy": "allowed",
+      "version": "5.3.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-android-arm-eabi",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-android-arm64",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-darwin-arm64",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-darwin-x64",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-freebsd-arm64",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-freebsd-x64",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-arm-gnueabihf",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-arm-musleabihf",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-arm64-gnu",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-arm64-musl",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-loong64-gnu",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-loong64-musl",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-ppc64-gnu",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-ppc64-musl",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-riscv64-gnu",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-riscv64-musl",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-s390x-gnu",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-x64-gnu",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-linux-x64-musl",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-openbsd-x64",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-openharmony-arm64",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-win32-arm64-msvc",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-win32-ia32-msvc",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-win32-x64-gnu",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@rollup/rollup-win32-x64-msvc",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@standard-schema/spec",
+      "policy": "allowed",
+      "version": "1.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@svelte-put/shortcut",
+      "policy": "allowed",
+      "version": "4.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@sveltejs/acorn-typescript",
+      "policy": "allowed",
+      "version": "1.0.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@sveltejs/adapter-node",
+      "policy": "allowed",
+      "version": "5.5.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@sveltejs/kit",
+      "policy": "allowed",
+      "version": "2.55.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@sveltejs/vite-plugin-svelte",
+      "policy": "allowed",
+      "version": "5.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@sveltejs/vite-plugin-svelte-inspector",
+      "policy": "allowed",
+      "version": "4.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@testing-library/dom",
+      "policy": "allowed",
+      "version": "10.4.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@testing-library/jest-dom",
+      "policy": "allowed",
+      "version": "6.9.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@testing-library/svelte",
+      "policy": "allowed",
+      "version": "5.3.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@testing-library/svelte-core",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@toast-ui/editor",
+      "policy": "allowed",
+      "version": "3.2.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/aria-query",
+      "policy": "allowed",
+      "version": "5.0.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/cookie",
+      "policy": "allowed",
+      "version": "0.6.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-color",
+      "policy": "allowed",
+      "version": "3.1.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-drag",
+      "policy": "allowed",
+      "version": "3.0.7",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-interpolate",
+      "policy": "allowed",
+      "version": "3.0.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-selection",
+      "policy": "allowed",
+      "version": "3.0.11",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-transition",
+      "policy": "allowed",
+      "version": "3.0.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-zoom",
+      "policy": "allowed",
+      "version": "3.0.8",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/estree",
+      "policy": "allowed",
+      "version": "1.0.8",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/linkify-it",
+      "policy": "allowed",
+      "version": "5.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/markdown-it",
+      "policy": "allowed",
+      "version": "14.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/mdurl",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/node",
+      "policy": "allowed",
+      "version": "24.12.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/resolve",
+      "policy": "allowed",
+      "version": "1.20.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/trusted-types",
+      "policy": "allowed",
+      "version": "2.0.7",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@typescript-eslint/types",
+      "policy": "allowed",
+      "version": "8.57.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@vitest/expect",
+      "policy": "allowed",
+      "version": "2.1.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@vitest/mocker",
+      "policy": "allowed",
+      "version": "2.1.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@vitest/pretty-format",
+      "policy": "allowed",
+      "version": "2.1.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@vitest/runner",
+      "policy": "allowed",
+      "version": "2.1.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@vitest/snapshot",
+      "policy": "allowed",
+      "version": "2.1.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@vitest/spy",
+      "policy": "allowed",
+      "version": "2.1.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@vitest/utils",
+      "policy": "allowed",
+      "version": "2.1.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@xyflow/svelte",
+      "policy": "allowed",
+      "version": "1.5.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@xyflow/system",
+      "policy": "allowed",
+      "version": "0.0.76",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "acorn",
+      "policy": "allowed",
+      "version": "8.16.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "agent-base",
+      "policy": "allowed",
+      "version": "7.1.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ansi-regex",
+      "policy": "allowed",
+      "version": "5.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ansi-styles",
+      "policy": "allowed",
+      "version": "5.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Python-2.0",
+      "name": "argparse",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "aria-query",
+      "policy": "allowed",
+      "version": "5.3.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "aria-query",
+      "policy": "allowed",
+      "version": "5.3.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "aria-query",
+      "policy": "allowed",
+      "version": "5.3.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "assertion-error",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "axobject-query",
+      "policy": "allowed",
+      "version": "4.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "bidi-js",
+      "policy": "allowed",
+      "version": "1.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cac",
+      "policy": "allowed",
+      "version": "6.7.14",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "chai",
+      "policy": "allowed",
+      "version": "5.3.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "check-error",
+      "policy": "allowed",
+      "version": "2.1.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "chokidar",
+      "policy": "allowed",
+      "version": "4.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "clsx",
+      "policy": "allowed",
+      "version": "2.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "commondir",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cookie",
+      "policy": "allowed",
+      "version": "0.6.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "css-tree",
+      "policy": "allowed",
+      "version": "3.2.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "css.escape",
+      "policy": "allowed",
+      "version": "1.5.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cssstyle",
+      "policy": "allowed",
+      "version": "4.6.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-color",
+      "policy": "allowed",
+      "version": "3.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-dispatch",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-drag",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "d3-ease",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-interpolate",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-selection",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-timer",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-transition",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-zoom",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "data-urls",
+      "policy": "allowed",
+      "version": "5.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "data-urls",
+      "policy": "allowed",
+      "version": "7.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "debug",
+      "policy": "allowed",
+      "version": "4.4.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "decimal.js",
+      "policy": "allowed",
+      "version": "10.6.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "deep-eql",
+      "policy": "allowed",
+      "version": "5.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "deepmerge",
+      "policy": "allowed",
+      "version": "4.3.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "dequal",
+      "policy": "allowed",
+      "version": "2.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "devalue",
+      "policy": "allowed",
+      "version": "5.6.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "dom-accessibility-api",
+      "policy": "allowed",
+      "version": "0.5.16",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "dom-accessibility-api",
+      "policy": "allowed",
+      "version": "0.6.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "(MPL-2.0 OR Apache-2.0)",
+      "name": "dompurify",
+      "policy": "allowed",
+      "version": "2.5.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "(MPL-2.0 OR Apache-2.0)",
+      "name": "dompurify",
+      "policy": "allowed",
+      "version": "3.3.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "EPL-2.0",
+      "name": "elkjs",
+      "policy": "allowed",
+      "version": "0.11.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "entities",
+      "policy": "allowed",
+      "version": "4.5.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "entities",
+      "policy": "allowed",
+      "version": "6.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "es-module-lexer",
+      "policy": "allowed",
+      "version": "1.7.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "esbuild",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "esbuild",
+      "policy": "allowed",
+      "version": "0.21.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "esbuild",
+      "policy": "allowed",
+      "version": "0.25.12",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "esm-env",
+      "policy": "allowed",
+      "version": "1.2.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "esrap",
+      "policy": "allowed",
+      "version": "2.2.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "estree-walker",
+      "policy": "allowed",
+      "version": "2.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "estree-walker",
+      "policy": "allowed",
+      "version": "2.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "estree-walker",
+      "policy": "allowed",
+      "version": "3.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "expect-type",
+      "policy": "allowed",
+      "version": "1.3.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "fdir",
+      "policy": "allowed",
+      "version": "6.5.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "fsevents",
+      "policy": "allowed",
+      "version": "2.3.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "fsevents",
+      "policy": "allowed",
+      "version": "2.3.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "function-bind",
+      "policy": "allowed",
+      "version": "1.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "hasown",
+      "policy": "allowed",
+      "version": "2.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "html-encoding-sniffer",
+      "policy": "allowed",
+      "version": "4.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "html-encoding-sniffer",
+      "policy": "allowed",
+      "version": "6.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "http-proxy-agent",
+      "policy": "allowed",
+      "version": "7.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "https-proxy-agent",
+      "policy": "allowed",
+      "version": "7.0.6",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "iconv-lite",
+      "policy": "allowed",
+      "version": "0.6.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "indent-string",
+      "policy": "allowed",
+      "version": "4.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "is-core-module",
+      "policy": "allowed",
+      "version": "2.16.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "is-module",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "is-potential-custom-element-name",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "is-reference",
+      "policy": "allowed",
+      "version": "1.2.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "is-reference",
+      "policy": "allowed",
+      "version": "3.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "isomorphic-dompurify",
+      "policy": "allowed",
+      "version": "3.7.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "jose",
+      "policy": "allowed",
+      "version": "6.2.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "js-tokens",
+      "policy": "allowed",
+      "version": "4.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "jsdom",
+      "policy": "allowed",
+      "version": "26.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "jsdom",
+      "policy": "allowed",
+      "version": "29.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "kleur",
+      "policy": "allowed",
+      "version": "4.1.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "linkify-it",
+      "policy": "allowed",
+      "version": "5.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "locate-character",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "loupe",
+      "policy": "allowed",
+      "version": "3.2.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "lru-cache",
+      "policy": "allowed",
+      "version": "10.4.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BlueOak-1.0.0",
+      "name": "lru-cache",
+      "policy": "allowed",
+      "version": "11.3.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "lz-string",
+      "policy": "allowed",
+      "version": "1.5.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "magic-string",
+      "policy": "allowed",
+      "version": "0.30.21",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "markdown-it",
+      "policy": "allowed",
+      "version": "14.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "CC0-1.0",
+      "name": "mdn-data",
+      "policy": "allowed",
+      "version": "2.27.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "mdurl",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "min-indent",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "mri",
+      "policy": "allowed",
+      "version": "1.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "mrmime",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ms",
+      "policy": "allowed",
+      "version": "2.1.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "nanoid",
+      "policy": "allowed",
+      "version": "3.3.11",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "nwsapi",
+      "policy": "allowed",
+      "version": "2.2.23",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "orderedmap",
+      "policy": "allowed",
+      "version": "2.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "parse5",
+      "policy": "allowed",
+      "version": "7.3.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "parse5",
+      "policy": "allowed",
+      "version": "8.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "path-parse",
+      "policy": "allowed",
+      "version": "1.0.7",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "pathe",
+      "policy": "allowed",
+      "version": "1.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "pathval",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "picocolors",
+      "policy": "allowed",
+      "version": "1.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "picomatch",
+      "policy": "allowed",
+      "version": "4.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "picomatch",
+      "policy": "allowed",
+      "version": "4.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "picomatch",
+      "policy": "allowed",
+      "version": "4.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "picomatch",
+      "policy": "allowed",
+      "version": "4.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "playwright",
+      "policy": "allowed",
+      "version": "1.59.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "playwright-core",
+      "policy": "allowed",
+      "version": "1.59.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "postcss",
+      "policy": "allowed",
+      "version": "8.5.6",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "pretty-format",
+      "policy": "allowed",
+      "version": "27.5.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "prosemirror-commands",
+      "policy": "allowed",
+      "version": "1.7.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "prosemirror-history",
+      "policy": "allowed",
+      "version": "1.5.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "prosemirror-inputrules",
+      "policy": "allowed",
+      "version": "1.5.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "prosemirror-keymap",
+      "policy": "allowed",
+      "version": "1.2.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "prosemirror-model",
+      "policy": "allowed",
+      "version": "1.25.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "prosemirror-state",
+      "policy": "allowed",
+      "version": "1.4.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "prosemirror-transform",
+      "policy": "allowed",
+      "version": "1.12.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "prosemirror-view",
+      "policy": "allowed",
+      "version": "1.41.8",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "punycode",
+      "policy": "allowed",
+      "version": "2.3.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "punycode.js",
+      "policy": "allowed",
+      "version": "2.3.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "react-is",
+      "policy": "allowed",
+      "version": "17.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "readdirp",
+      "policy": "allowed",
+      "version": "4.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "redent",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "require-from-string",
+      "policy": "allowed",
+      "version": "2.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "resolve",
+      "policy": "allowed",
+      "version": "1.22.11",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "rollup",
+      "policy": "allowed",
+      "version": "4.59.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "rope-sequence",
+      "policy": "allowed",
+      "version": "1.3.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "rrweb-cssom",
+      "policy": "allowed",
+      "version": "0.8.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "sade",
+      "policy": "allowed",
+      "version": "1.8.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "safer-buffer",
+      "policy": "allowed",
+      "version": "2.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "saxes",
+      "policy": "allowed",
+      "version": "6.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "set-cookie-parser",
+      "policy": "allowed",
+      "version": "3.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "siginfo",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "sirv",
+      "policy": "allowed",
+      "version": "3.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "source-map-js",
+      "policy": "allowed",
+      "version": "1.2.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "stackback",
+      "policy": "allowed",
+      "version": "0.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "std-env",
+      "policy": "allowed",
+      "version": "3.10.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "strip-indent",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "supports-preserve-symlinks-flag",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "svelte",
+      "policy": "allowed",
+      "version": "5.55.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "svelte-check",
+      "policy": "allowed",
+      "version": "4.4.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "symbol-tree",
+      "policy": "allowed",
+      "version": "3.2.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tinybench",
+      "policy": "allowed",
+      "version": "2.9.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tinyexec",
+      "policy": "allowed",
+      "version": "0.3.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tinyglobby",
+      "policy": "allowed",
+      "version": "0.2.15",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tinypool",
+      "policy": "allowed",
+      "version": "1.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tinyrainbow",
+      "policy": "allowed",
+      "version": "1.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tinyspy",
+      "policy": "allowed",
+      "version": "3.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tldts",
+      "policy": "allowed",
+      "version": "6.1.86",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tldts",
+      "policy": "allowed",
+      "version": "7.0.28",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tldts-core",
+      "policy": "allowed",
+      "version": "6.1.86",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tldts-core",
+      "policy": "allowed",
+      "version": "7.0.28",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "totalist",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "tough-cookie",
+      "policy": "allowed",
+      "version": "5.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "tough-cookie",
+      "policy": "allowed",
+      "version": "6.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tr46",
+      "policy": "allowed",
+      "version": "5.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tr46",
+      "policy": "allowed",
+      "version": "6.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "typescript",
+      "policy": "allowed",
+      "version": "5.9.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "uc.micro",
+      "policy": "allowed",
+      "version": "2.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "undici",
+      "policy": "allowed",
+      "version": "7.24.7",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "undici-types",
+      "policy": "allowed",
+      "version": "7.16.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "vite",
+      "policy": "allowed",
+      "version": "5.4.21",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "vite",
+      "policy": "allowed",
+      "version": "5.4.21",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "vite",
+      "policy": "allowed",
+      "version": "6.4.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "vite-node",
+      "policy": "allowed",
+      "version": "2.1.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "vitefu",
+      "policy": "allowed",
+      "version": "1.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "vitest",
+      "policy": "allowed",
+      "version": "2.1.9",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "w3c-keyname",
+      "policy": "allowed",
+      "version": "2.2.8",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "w3c-xmlserializer",
+      "policy": "allowed",
+      "version": "5.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "webidl-conversions",
+      "policy": "allowed",
+      "version": "7.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "webidl-conversions",
+      "policy": "allowed",
+      "version": "8.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "whatwg-encoding",
+      "policy": "allowed",
+      "version": "3.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "whatwg-mimetype",
+      "policy": "allowed",
+      "version": "4.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "whatwg-mimetype",
+      "policy": "allowed",
+      "version": "5.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "whatwg-url",
+      "policy": "allowed",
+      "version": "14.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "whatwg-url",
+      "policy": "allowed",
+      "version": "16.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "why-is-node-running",
+      "policy": "allowed",
+      "version": "2.3.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ws",
+      "policy": "allowed",
+      "version": "8.20.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "xml-name-validator",
+      "policy": "allowed",
+      "version": "5.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "xmlchars",
+      "policy": "allowed",
+      "version": "2.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "zimmerframe",
+      "policy": "allowed",
+      "version": "1.1.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@emnapi/core",
+      "policy": "allowed",
+      "version": "1.7.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@emnapi/runtime",
+      "policy": "allowed",
+      "version": "1.7.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@emnapi/wasi-threads",
+      "policy": "allowed",
+      "version": "1.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "GPL-3.0-or-later",
+      "name": "@lumieducation/h5p-express",
+      "policy": "allowed",
+      "version": "10.0.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "GPL-3.0-or-later",
+      "name": "@lumieducation/h5p-server",
+      "policy": "allowed",
+      "version": "10.0.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "GPL-3.0-or-later",
+      "name": "@lumieducation/h5p-webcomponents",
+      "policy": "allowed",
+      "version": "10.0.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@napi-rs/wasm-runtime",
+      "policy": "allowed",
+      "version": "0.2.12",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-android-arm-eabi",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-android-arm64",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-darwin-arm64",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-darwin-x64",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-freebsd-x64",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-linux-arm-gnueabihf",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-linux-arm64-gnu",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-linux-arm64-musl",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-linux-x64-gnu",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-linux-x64-musl",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-wasm32-wasi",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-win32-arm64-msvc",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-win32-ia32-msvc",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@node-rs/crc32-win32-x64-msvc",
+      "policy": "allowed",
+      "version": "1.10.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@tybys/wasm-util",
+      "policy": "allowed",
+      "version": "0.10.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "accepts",
+      "policy": "allowed",
+      "version": "1.3.8",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "agent-base",
+      "policy": "allowed",
+      "version": "6.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ajv",
+      "policy": "allowed",
+      "version": "8.17.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ajv-keywords",
+      "policy": "allowed",
+      "version": "5.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "append-field",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "array-flatten",
+      "policy": "allowed",
+      "version": "1.1.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "async",
+      "policy": "allowed",
+      "version": "3.2.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "async-lock",
+      "policy": "allowed",
+      "version": "1.4.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "asynckit",
+      "policy": "allowed",
+      "version": "0.4.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "await-lock",
+      "policy": "allowed",
+      "version": "2.2.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "axios",
+      "policy": "allowed",
+      "version": "1.13.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "body-parser",
+      "policy": "allowed",
+      "version": "1.20.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "buffer-crc32",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "buffer-from",
+      "policy": "allowed",
+      "version": "1.1.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "busboy",
+      "policy": "allowed",
+      "version": "1.6.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "bytes",
+      "policy": "allowed",
+      "version": "3.1.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cache-manager",
+      "policy": "allowed",
+      "version": "4.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "call-bind-apply-helpers",
+      "policy": "allowed",
+      "version": "1.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "call-bound",
+      "policy": "allowed",
+      "version": "1.0.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "combined-stream",
+      "policy": "allowed",
+      "version": "1.0.8",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "concat-stream",
+      "policy": "allowed",
+      "version": "1.6.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "content-disposition",
+      "policy": "allowed",
+      "version": "0.5.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "content-type",
+      "policy": "allowed",
+      "version": "1.0.5",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cookie",
+      "policy": "allowed",
+      "version": "0.7.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cookie-signature",
+      "policy": "allowed",
+      "version": "1.0.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "core-util-is",
+      "policy": "allowed",
+      "version": "1.0.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "debug",
+      "policy": "allowed",
+      "version": "2.6.9",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "debug",
+      "policy": "allowed",
+      "version": "2.6.9",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "debug",
+      "policy": "allowed",
+      "version": "2.6.9",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "debug",
+      "policy": "allowed",
+      "version": "2.6.9",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "debug",
+      "policy": "allowed",
+      "version": "4.4.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "deep-is",
+      "policy": "allowed",
+      "version": "0.1.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "deepmerge",
+      "policy": "allowed",
+      "version": "4.3.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "define-data-property",
+      "policy": "allowed",
+      "version": "1.1.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "define-properties",
+      "policy": "allowed",
+      "version": "1.2.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "delayed-stream",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "depd",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "destroy",
+      "policy": "allowed",
+      "version": "1.2.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "dom-serializer",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "domelementtype",
+      "policy": "allowed",
+      "version": "2.3.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "domhandler",
+      "policy": "allowed",
+      "version": "5.0.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "domutils",
+      "policy": "allowed",
+      "version": "3.2.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "dunder-proto",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ee-first",
+      "policy": "allowed",
+      "version": "1.1.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "encodeurl",
+      "policy": "allowed",
+      "version": "1.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "encodeurl",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "entities",
+      "policy": "allowed",
+      "version": "4.5.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "es-define-property",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "es-errors",
+      "policy": "allowed",
+      "version": "1.3.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "es-object-atoms",
+      "policy": "allowed",
+      "version": "1.1.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "es-set-tostringtag",
+      "policy": "allowed",
+      "version": "2.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "escape-html",
+      "policy": "allowed",
+      "version": "1.0.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "escape-string-regexp",
+      "policy": "allowed",
+      "version": "4.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "escodegen",
+      "policy": "allowed",
+      "version": "1.14.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "esprima",
+      "policy": "allowed",
+      "version": "1.2.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "esprima",
+      "policy": "allowed",
+      "version": "4.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "estraverse",
+      "policy": "allowed",
+      "version": "4.3.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-2-Clause",
+      "name": "esutils",
+      "policy": "allowed",
+      "version": "2.0.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "etag",
+      "policy": "allowed",
+      "version": "1.8.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "express",
+      "policy": "allowed",
+      "version": "4.21.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "fast-deep-equal",
+      "policy": "allowed",
+      "version": "3.1.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "fast-levenshtein",
+      "policy": "allowed",
+      "version": "2.0.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "fast-uri",
+      "policy": "allowed",
+      "version": "3.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "finalhandler",
+      "policy": "allowed",
+      "version": "1.3.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "flat",
+      "policy": "allowed",
+      "version": "5.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "follow-redirects",
+      "policy": "allowed",
+      "version": "1.15.11",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "form-data",
+      "policy": "allowed",
+      "version": "4.0.5",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "forwarded",
+      "policy": "allowed",
+      "version": "0.2.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "fresh",
+      "policy": "allowed",
+      "version": "0.5.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "function-bind",
+      "policy": "allowed",
+      "version": "1.1.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "get-all-files",
+      "policy": "allowed",
+      "version": "5.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "get-intrinsic",
+      "policy": "allowed",
+      "version": "1.3.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "get-proto",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "globalthis",
+      "policy": "allowed",
+      "version": "1.0.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "gopd",
+      "policy": "allowed",
+      "version": "1.2.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "has-property-descriptors",
+      "policy": "allowed",
+      "version": "1.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "has-symbols",
+      "policy": "allowed",
+      "version": "1.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "has-tostringtag",
+      "policy": "allowed",
+      "version": "1.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "hasown",
+      "policy": "allowed",
+      "version": "2.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "htmlparser2",
+      "policy": "allowed",
+      "version": "8.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "http-errors",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "https-proxy-agent",
+      "policy": "allowed",
+      "version": "5.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "iconv-lite",
+      "policy": "allowed",
+      "version": "0.4.24",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "image-size",
+      "policy": "allowed",
+      "version": "1.2.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "inherits",
+      "policy": "allowed",
+      "version": "2.0.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ipaddr.js",
+      "policy": "allowed",
+      "version": "1.9.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "is-it-type",
+      "policy": "allowed",
+      "version": "5.1.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "is-plain-object",
+      "policy": "allowed",
+      "version": "5.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "isarray",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "json-schema-traverse",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "jsonpath",
+      "policy": "allowed",
+      "version": "1.1.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "levn",
+      "policy": "allowed",
+      "version": "0.3.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "lodash.clonedeep",
+      "policy": "allowed",
+      "version": "4.5.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "lru-cache",
+      "policy": "allowed",
+      "version": "7.18.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "math-intrinsics",
+      "policy": "allowed",
+      "version": "1.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "media-typer",
+      "policy": "allowed",
+      "version": "0.3.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "merge-descriptors",
+      "policy": "allowed",
+      "version": "1.0.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "methods",
+      "policy": "allowed",
+      "version": "1.1.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "mime",
+      "policy": "allowed",
+      "version": "1.6.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "mime-db",
+      "policy": "allowed",
+      "version": "1.52.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "mime-types",
+      "policy": "allowed",
+      "version": "2.1.35",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "minimist",
+      "policy": "allowed",
+      "version": "1.2.8",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "mkdirp",
+      "policy": "allowed",
+      "version": "0.5.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ms",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ms",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ms",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ms",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ms",
+      "policy": "allowed",
+      "version": "2.1.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "multer",
+      "policy": "allowed",
+      "version": "1.4.5-lts.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "nanoid",
+      "policy": "allowed",
+      "version": "3.3.11",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "negotiator",
+      "policy": "allowed",
+      "version": "0.6.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "node-machine-id",
+      "policy": "allowed",
+      "version": "1.1.12",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "object-assign",
+      "policy": "allowed",
+      "version": "4.1.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "object-inspect",
+      "policy": "allowed",
+      "version": "1.13.4",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "object-keys",
+      "policy": "allowed",
+      "version": "1.1.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "on-finished",
+      "policy": "allowed",
+      "version": "2.4.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "optionator",
+      "policy": "allowed",
+      "version": "0.8.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "parse-srcset",
+      "policy": "allowed",
+      "version": "1.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "parseurl",
+      "policy": "allowed",
+      "version": "1.3.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "path-to-regexp",
+      "policy": "allowed",
+      "version": "0.1.12",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "picocolors",
+      "policy": "allowed",
+      "version": "1.1.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "postcss",
+      "policy": "allowed",
+      "version": "8.5.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "prelude-ls",
+      "policy": "allowed",
+      "version": "1.1.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "process-nextick-args",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "promisepipe",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "proxy-addr",
+      "policy": "allowed",
+      "version": "2.0.7",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "proxy-from-env",
+      "policy": "allowed",
+      "version": "1.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "qs",
+      "policy": "allowed",
+      "version": "6.13.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "queue",
+      "policy": "allowed",
+      "version": "6.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "range-parser",
+      "policy": "allowed",
+      "version": "1.2.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "raw-body",
+      "policy": "allowed",
+      "version": "2.5.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "readable-stream",
+      "policy": "allowed",
+      "version": "2.3.8",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "require-from-string",
+      "policy": "allowed",
+      "version": "2.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "safe-buffer",
+      "policy": "allowed",
+      "version": "5.1.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "safe-buffer",
+      "policy": "allowed",
+      "version": "5.1.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "safe-buffer",
+      "policy": "allowed",
+      "version": "5.2.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "safer-buffer",
+      "policy": "allowed",
+      "version": "2.1.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "sanitize-html",
+      "policy": "allowed",
+      "version": "2.17.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "send",
+      "policy": "allowed",
+      "version": "0.19.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "serve-static",
+      "policy": "allowed",
+      "version": "1.16.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "setprototypeof",
+      "policy": "allowed",
+      "version": "1.2.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "side-channel",
+      "policy": "allowed",
+      "version": "1.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "side-channel-list",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "side-channel-map",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "side-channel-weakmap",
+      "policy": "allowed",
+      "version": "1.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "simple-invariant",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "source-map",
+      "policy": "allowed",
+      "version": "0.6.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "source-map-js",
+      "policy": "allowed",
+      "version": "1.2.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "static-eval",
+      "policy": "allowed",
+      "version": "2.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "statuses",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Unlicense",
+      "name": "stream-buffers",
+      "policy": "allowed",
+      "version": "3.0.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "streamsearch",
+      "policy": "allowed",
+      "version": "1.1.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "string_decoder",
+      "policy": "allowed",
+      "version": "1.1.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tmp",
+      "policy": "allowed",
+      "version": "0.2.5",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tmp-promise",
+      "policy": "allowed",
+      "version": "3.0.3",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "toidentifier",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "0BSD",
+      "name": "tslib",
+      "policy": "allowed",
+      "version": "2.8.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "type-check",
+      "policy": "allowed",
+      "version": "0.3.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "type-is",
+      "policy": "allowed",
+      "version": "1.6.18",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "typedarray",
+      "policy": "allowed",
+      "version": "0.0.6",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "underscore",
+      "policy": "allowed",
+      "version": "1.12.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "unpipe",
+      "policy": "allowed",
+      "version": "1.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "upath",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "util-deprecate",
+      "policy": "allowed",
+      "version": "1.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "utils-merge",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "vary",
+      "policy": "allowed",
+      "version": "1.1.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "word-wrap",
+      "policy": "allowed",
+      "version": "1.2.5",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "xtend",
+      "policy": "allowed",
+      "version": "4.0.2",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "yauzl-promise",
+      "policy": "allowed",
+      "version": "4.0.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "yazl",
+      "policy": "allowed",
+      "version": "3.3.1",
+      "workspace": "h5p-service"
+    }
+  ],
+  "policy": {
+    "allowed_licenses": [
+      "0BSD",
+      "Apache-2.0",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "BlueOak-1.0.0",
+      "CC0-1.0",
+      "EPL-2.0",
+      "GPL-3.0",
+      "GPL-3.0-or-later",
+      "ISC",
+      "MIT",
+      "MIT-0",
+      "MPL-2.0",
+      "OFL-1.1",
+      "Python-2.0",
+      "Unlicense"
+    ],
+    "mode": "offline-lockfile-and-installed-metadata",
+    "node_license_overrides": [
+      {
+        "license": "MIT",
+        "name": "busboy",
+        "workspace": "h5p-service"
+      },
+      {
+        "license": "BSD-2-Clause",
+        "name": "esprima",
+        "workspace": "h5p-service"
+      },
+      {
+        "license": "MIT",
+        "name": "prelude-ls",
+        "workspace": "h5p-service"
+      },
+      {
+        "license": "MIT",
+        "name": "streamsearch",
+        "workspace": "h5p-service"
+      }
+    ]
+  },
+  "schema_version": 1,
+  "sources": [
+    "backend/web/requirements.txt",
+    "frontend/package-lock.json",
+    "h5p-service/package-lock.json"
+  ],
+  "summary": {
+    "node_entries": 543,
+    "python_entries": 16,
+    "review_required_entries": 0,
+    "total_entries": 559
+  }
+}

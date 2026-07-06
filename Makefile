@@ -30,7 +30,9 @@ help:
 	@echo "  test-architecture-boundaries - Check Clean Architecture boundary debt"
 	@echo "  test-route-map     - Check generated route-surface inventory"
 	@echo "  test-db-inventory  - Check generated DB/RLS test inventory"
+	@echo "  supply-chain-check - Check offline dependency/license inventory"
 	@echo "  test-frontend-h5p  - Run frontend and H5P checks"
+	@echo "  test-visual-smoke  - Run deterministic Playwright visual smoke checks"
 	@echo "  test-full-prod-like - Run full prod-like verification profile"
 	@echo "  harness-minimum    - Run hard PR-1 harness safety gate"
 	@echo "  harness-signals    - Run warning-only harness signals"
@@ -217,11 +219,19 @@ test-route-map:
 test-db-inventory:
 	. ./.venv/bin/activate && python -m backend.tools.db_test_inventory --check docs/harness/DB_TEST_INVENTORY.md
 
+.PHONY: supply-chain-check
+supply-chain-check:
+	. ./.venv/bin/activate && python -m backend.tools.supply_chain_check --check
+
 .PHONY: test-frontend-h5p
 test-frontend-h5p:
 	@cd frontend && npm run check
 	@cd frontend && npm test
 	@$(MAKE) test-h5p
+
+.PHONY: test-visual-smoke
+test-visual-smoke:
+	@cd frontend && npm run test:e2e -- --grep @visual-smoke
 
 .PHONY: test-full-prod-like
 test-full-prod-like:
@@ -229,6 +239,7 @@ test-full-prod-like:
 	@$(MAKE) test-supabase
 	@$(MAKE) test-openai
 	@$(MAKE) test-e2e
+	@$(MAKE) test-visual-smoke
 
 .PHONY: harness-minimum
 harness-minimum:
@@ -372,6 +383,7 @@ verify:
 	@$(MAKE) test-architecture-boundaries
 	@$(MAKE) test-route-map
 	@$(MAKE) test-db-inventory
+	@$(MAKE) supply-chain-check
 	@$(MAKE) lint-backend
 	@$(MAKE) test-docker-image-smoke
 	@REQUIRE_DB_TESTS=1 $(MAKE) test

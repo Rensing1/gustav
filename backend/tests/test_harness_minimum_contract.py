@@ -13,6 +13,7 @@ REQUIRED_HARNESS_DOCS = (
     "docs/harness/QUALITY_GATES.md",
     "docs/harness/TEST_STRATEGY.md",
     "docs/harness/SECURITY_BASELINE.md",
+    "docs/harness/SUPPLY_CHAIN.md",
     "docs/harness/TEST_PORTFOLIO.md",
     "docs/harness/IMPORT_INVENTORY.md",
     "docs/harness/API_CONTRACTS.md",

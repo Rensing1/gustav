@@ -53,7 +53,15 @@ def test_harness_quality_gates_define_test_profiles() -> None:
 
     text = _read_doc("docs/harness/QUALITY_GATES.md")
 
-    for profile in ("fast", "backend-lint", "db-security", "frontend-h5p", "full-prod-like"):
+    for profile in (
+        "fast",
+        "backend-lint",
+        "db-security",
+        "frontend-h5p",
+        "visual-smoke",
+        "supply-chain",
+        "full-prod-like",
+    ):
         assert profile in text
 
 

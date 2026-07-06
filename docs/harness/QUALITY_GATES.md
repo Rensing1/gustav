@@ -193,6 +193,39 @@ Aktueller harter Inhalt:
 Bewusst opt-in:
 - Browser-E2E und visuelle Regressionen bleiben im `full-prod-like`-Profil.
 
+### visual-smoke
+Zweck: zentrale UI-Flächen sichtbar prüfen, ohne die schnelle Verify-Suite durch breite Browser-/Screenshot-Tests zu belasten.
+
+Geplanter Inhalt:
+- Playwright-Smokes mit stabilen Selektoren und festen Viewports.
+- Learner-Workspace, Teacher-Workspace, Login/Auth-Shell und H5P-Player-/Editor-Shell.
+- DOM-/Layout-Assertions und nur dort Screenshots, wo sie stabil und aussagekräftig sind.
+
+Initialer lokaler Befehl:
+- `make test-visual-smoke`
+
+Aktueller Status:
+- Als eigener Make-Target vorhanden.
+- Teil von `make test-full-prod-like`.
+- Nicht Teil von `make verify`, bis Stabilität und Laufzeit für lokale Standardverifikation belegt sind.
+
+### supply-chain
+Zweck: FOSS-, Lizenz- und Dependency-Transparenz reproduzierbar prüfen.
+
+Geplanter Inhalt:
+- Offline-Inventar für `backend/web/requirements.txt`, `frontend/package-lock.json` und `h5p-service/package-lock.json`.
+- Lizenzpolicy für Node-Lockfile-Einträge.
+- Synchronitätscheck für `docs/harness/SUPPLY_CHAIN_INVENTORY.json`.
+- Dokumentation der Beziehung zwischen Paketmanager-Abhängigkeiten und vendored Assets in `THIRD_PARTY_NOTICES.md`.
+
+Initialer lokaler Befehl:
+- `make supply-chain-check`
+
+Aktueller Status:
+- Als hartes Gate in `make verify` enthalten.
+- Läuft ohne Netzwerkzugriff.
+- Netzwerkabhängige Vulnerability-Audits bleiben getrennte Release- oder CI-Profile.
+
 ### full-prod-like
 Zweck: produktionsnahe Integrationen prüfen.
 
@@ -202,6 +235,7 @@ Geplanter Inhalt:
 - Docker/Compose-Smoke
 - Keycloak/Caddy/Web/H5P-E2E
 - wenige Playwright- oder pytest-E2E-Kernreisen
+- Visual-Smokes über `make test-visual-smoke`
 
 Initialer lokaler Befehl:
 - `make test-full-prod-like`

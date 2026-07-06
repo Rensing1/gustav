@@ -181,6 +181,33 @@ def test_backend_lint_target_is_part_of_verify() -> None:
     assert "$(MAKE) lint-backend" in verify_body
 
 
+def test_supply_chain_check_is_part_of_verify() -> None:
+    """Closeout v1.2 makes offline dependency/license inventory a hard gate."""
+
+    help_text = MAKEFILE.read_text(encoding="utf-8")
+    supply_body = _target_body("supply-chain-check")
+    verify_body = _target_body("verify")
+
+    assert "supply-chain-check" in help_text
+    assert "backend.tools.supply_chain_check" in supply_body
+    assert "--check" in supply_body
+    assert "$(MAKE) supply-chain-check" in verify_body
+
+
+def test_visual_smoke_target_is_full_prod_like_not_default_verify() -> None:
+    """Visual smoke tests are valuable but should stay outside deterministic verify."""
+
+    help_text = MAKEFILE.read_text(encoding="utf-8")
+    visual_body = _target_body("test-visual-smoke")
+    full_prod_body = _target_body("test-full-prod-like")
+    verify_body = _target_body("verify")
+
+    assert "test-visual-smoke" in help_text
+    assert "npm run test:e2e" in visual_body
+    assert "$(MAKE) test-visual-smoke" in full_prod_body
+    assert "$(MAKE) test-visual-smoke" not in verify_body
+
+
 def test_backend_lint_target_uses_central_ruff_configuration() -> None:
     """Ruff should be configured centrally so agents do not invent local style."""
 

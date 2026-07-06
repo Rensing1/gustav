@@ -52,7 +52,8 @@ describe("teacher unit graph route contract", () => {
 
     expect(source).toContain("workspaceForBuild: TeacherUnitWorkspaceView = workspaceState");
     expect(source).toContain("buildTeacherUnitFlow(workspaceForBuild, selection)");
-    expect(source).toContain("const nextWorkspace = plainWorkspace(data.workspace)");
+    expect(source).toContain('from "$lib/teacher-unit-workspace/view-state"');
+    expect(source).toContain("const nextWorkspace = cloneWorkspace(data.workspace)");
     expect(source).toContain("workspaceState = nextWorkspace");
     expect(source).toContain("function scheduleFlowRebuild");
     expect(source).toContain("queueMicrotask(() => {\n      void rebuildFlow(selection, workspaceForBuild);");

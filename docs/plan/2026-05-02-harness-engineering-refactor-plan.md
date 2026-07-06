@@ -1283,6 +1283,7 @@ Closeout v1.2 gehört bewusst noch zu diesem großen Refactor-Vorhaben. v1.1 hat
   - `backend/web/routes/learning.py` enthält keine großen Submission-Command-Handler mehr.
   - Existing Learning-Submission-, Upload-, CSRF-, Idempotency-, Privacy- und Error-Shape-Tests bleiben grün.
   - `make test-api-contract-baseline` und `make test-route-map` bleiben grün.
+- Done in working tree: `backend/web/routes/learning_submission_commands.py` besitzt die Create-/Finalize-Handler; `backend/tests/test_learning_submission_commands_route_split_contract.py` verhindert, dass diese Handler wieder in `learning.py` implementiert werden. `backend/web/routes/learning.py` ist dadurch auf 1124 LOC gesunken.
 
 #### C18: Teaching-Provider- und Kompatibilitätslogik isolieren
 - Problem: `backend/web/routes/teaching.py` ist als Route-Monolith abgebaut, enthält aber noch viel Runtime-Provider-, Storage-Adapter-, Reload- und Monkeypatch-Kompatibilitätslogik. Diese Logik ist für Tests und schrittweise Migration nützlich, macht die Fassade aber schwer erklärbar.
@@ -1296,6 +1297,7 @@ Closeout v1.2 gehört bewusst noch zu diesem großen Refactor-Vorhaben. v1.1 hat
   - `teaching.py` ist als Fassade verständlich und besitzt keine App-Routen-Global-Synchronisation mehr.
   - Teaching-Route-, Storage-, Live-, Materials- und Course-Member-Tests bleiben grün.
   - Neue Boundary-Tests verhindern, dass Provider-Sync wieder in `teaching.py` wächst.
+- Done in working tree: `backend/web/routes/teaching_runtime_provider.py` besitzt die Route-Global-Synchronisation für Repo und Storage-Adapter; `backend/tests/test_teaching_runtime_provider_split_contract.py` schützt die neue Grenze. `backend/web/routes/teaching.py` ist dadurch auf 734 LOC gesunken.
 
 #### C19: H5P-Service in App-Komposition, Middleware und Routenmodule schneiden
 - Problem: `h5p-service/server.mjs` ist noch ein aktiver Hotspot. Er bündelt App-Aufbau, Storage-Probe, Auth, Role-Gates, Review-Impersonation, Static-Asset-Routen, Debug-Editor-HTML, H5P-Ajax und Produkt-Routen.
@@ -1310,6 +1312,7 @@ Closeout v1.2 gehört bewusst noch zu diesem großen Refactor-Vorhaben. v1.1 hat
   - `h5p-service/server.mjs` ist kein Sammelmodul mehr und bleibt in `docs/harness/HOTSPOTS.md` mit neuer LOC-Baseline sichtbar.
   - `npm test` im H5P-Service schützt Auth, Role-Gates, Review-Token, Static-Routes, Response-Header und Storage-Probe.
   - `make test-frontend-h5p` bleibt grün.
+- Done in working tree: `h5p-service/lib/runtime_guards.mjs` besitzt Auth-, Role-, CSRF-, Public-Origin- und Cache-Pruning-Helfer; `h5p-service/lib/public_assets.mjs` besitzt die öffentlichen Webcomponent-/Theme-/Vendor-Mounts. Node-Tests und Source-Contracts wurden auf diese Modulgrenzen umgestellt. `h5p-service/server.mjs` ist dadurch auf 1394 LOC gesunken.
 
 #### C20: Große Svelte-Workspace-Seiten weiter entlasten
 - Problem: Die Learner-Unit- und Teacher-Unit-Svelte-Seiten sind weiterhin aktive Hotspots. Sie enthalten noch viel Workspace-State, Submission-/Feedback-Flows, Graph-Auswahl, URL-Sync, Reorder-Logik und Dialog-State.
@@ -1323,6 +1326,7 @@ Closeout v1.2 gehört bewusst noch zu diesem großen Refactor-Vorhaben. v1.1 hat
   - Die großen Svelte-Seiten verlieren echte Logik und bleiben als UI-Komposition verständlicher.
   - Neue TypeScript-Module sind ohne DOM testbar.
   - Frontend-Vitest und `npm run check` bleiben grün.
+- Done in working tree: `frontend/src/lib/teacher-unit-workspace/view-state.ts` besitzt reine Teacher-Unit-Workspace-Helfer für Graph-Signatur und Selektionsableitung; `frontend/src/lib/teacher-unit-workspace/view-state.test.ts` schützt die wichtigsten Zustandsregeln. `frontend/src/routes/teaching/units/[unitId]/+page.svelte` ist dadurch auf 1106 LOC gesunken.
 
 #### C21: CSS- und Static-Flächen weiter ordnen
 - Problem: `learning-unit.css`, `teaching-workspace.css`, `design-system.css` und `backend/web/static/css/gustav.css` sind weiterhin groß. Sie sind jetzt sichtbar, aber nicht vollständig nach Verantwortung geschnitten.
@@ -1336,6 +1340,7 @@ Closeout v1.2 gehört bewusst noch zu diesem großen Refactor-Vorhaben. v1.1 hat
   - CSS-Bundles haben dokumentierte Verantwortung.
   - `docs/harness/HOTSPOTS.md` und Scorecard zeigen neue Baselines.
   - Frontend- und relevante FastAPI-Static-Contracts bleiben grün.
+- Done in working tree: C21 bleibt bewusst ein Governance-/Contract-Schritt statt ein kosmetischer CSS-Umzug. Die bestehenden Contracts in `backend/tests/packaging/test_sveltekit_ui_shell_contract.py`, `frontend/src/routes/teaching/units/[unitId]/page-contract.test.ts`, `frontend/src/routes/teaching/units/[unitId]/nodes/[nodeId]/page-contract.test.ts`, `backend/tests/test_student_modular_unit_css_contract.py` und `backend/tests/test_harness_minimum_contract.py` schützen die aktuelle Bundle-Zuständigkeit; `docs/harness/HOTSPOTS.md` hält die CSS-Baselines sichtbar.
 
 #### C22: Visuelle Smoke-Checks für Kernoberflächen einführen
 - Problem: Die Frontend- und H5P-Gates prüfen Typen, Unit-Tests und Node-Tests, aber sie sehen nicht, ob zentrale Oberflächen leer, stark verschoben oder offensichtlich defekt rendern.
@@ -1350,6 +1355,7 @@ Closeout v1.2 gehört bewusst noch zu diesem großen Refactor-Vorhaben. v1.1 hat
   - Visual-Smokes prüfen, dass Kernansichten sichtbar rendern und zentrale Bedienelemente nicht fehlen.
   - Kein großer Snapshot-Friedhof entsteht.
   - Flaky Infrastruktur wird dokumentiert und nicht als stiller Erfolg behandelt.
+- Done in working tree: `frontend/e2e/visual-smoke.spec.ts` ergänzt `@visual-smoke`-Playwright-Smokes für anonyme Auth-Shells auf Desktop und Mobile. `backend/tests/test_visual_smoke_contract.py` verhindert, dass der Target ohne getaggte Smokes oder mit Snapshot-Friedhof existiert.
 
 #### C23: Offline Supply-Chain- und Lizenzgate einführen
 - Problem: GUSTAV ist FOSS und enthält Python-, Frontend-, H5P- und vendored Abhängigkeiten. Die Lizenz- und Dependency-Transparenz ist dokumentiert, aber noch nicht als hartes, reproduzierbares Offline-Gate abgesichert.
@@ -1364,6 +1370,7 @@ Closeout v1.2 gehört bewusst noch zu diesem großen Refactor-Vorhaben. v1.1 hat
   - `make supply-chain-check` läuft offline reproduzierbar.
   - `make verify` enthält `make supply-chain-check`.
   - `docs/harness/SUPPLY_CHAIN.md`, `THIRD_PARTY_NOTICES.md` und das maschinenlesbare Inventory widersprechen einander nicht.
+- Done in working tree: `backend/tools/supply_chain_check.py`, `docs/harness/SUPPLY_CHAIN_INVENTORY.json`, `docs/harness/SUPPLY_CHAIN.md`, `THIRD_PARTY_NOTICES.md` und `make supply-chain-check` bilden das neue Offline-Gate; `make verify` ruft es auf.
 
 #### C24: Qualitätsgates kontrolliert erweitern
 - Problem: v1.1 hat Ruff/Pyflakes als hartes Gate eingeführt. Weitere Ruff-Regeln, Importordnung, Format-Checks und Type-Checking können echte Wartbarkeit bringen, dürfen aber nicht als unkontrollierte Massenänderung in fachliche Refactors gemischt werden.
@@ -1378,6 +1385,7 @@ Closeout v1.2 gehört bewusst noch zu diesem großen Refactor-Vorhaben. v1.1 hat
   - `make lint-backend` bleibt schnell und verständlich.
   - Neue statische Gates sind in `docs/harness/QUALITY_GATES.md` dokumentiert.
   - Harte Gates haben keine bekannte False-Positive-Baseline.
+- Done in working tree: v1.2 erweitert harte Gates kontrolliert um `supply-chain-check` in `make verify` und hält `test-visual-smoke` bewusst in `test-full-prod-like`, bis die Browser-Smokes über mehrere Läufe stabil bleiben. Weitere Ruff-/Typing-Verschärfungen bleiben absichtlich separate mechanische Schritte, damit dieser Refactor keine Massenformatierung mit fachlichen Extraktionen mischt.
 
 #### Closeout v1.2 Verification
 Vor Abschluss von Closeout v1.2 müssen diese Befehle erfolgreich sein:

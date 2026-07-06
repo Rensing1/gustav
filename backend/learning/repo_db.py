@@ -8,6 +8,7 @@ import json
 import os
 import re
 from uuid import UUID, uuid5
+from backend.learning import repo_course_unit_queries as _repo_course_unit_queries
 from backend.learning.repo_submission_mapping import (
     build_analysis_payload as _build_analysis_payload,
     build_scores as _build_scores,
@@ -298,34 +299,13 @@ class DBLearningRepo:
             in mixed-role scenarios. RLS remains active via gustav_limited and
             app.current_sub.
         """
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                self._set_current_sub(cur, student_sub)
-                cur.execute(
-                    """
-                    select c.id::text, c.title, c.subject, c.grade_level, c.term
-                      from public.courses c
-                      join public.course_memberships m on m.course_id = c.id
-                     where m.student_id = %s
-                     order by c.title asc, c.id asc
-                     offset %s
-                     limit %s
-                    """,
-                    (student_sub, int(max(0, offset)), int(max(1, limit))),
-                )
-                rows = cur.fetchall()
-        items: List[dict] = []
-        for row in rows:
-            items.append(
-                {
-                    "id": row[0],
-                    "title": row[1],
-                    "subject": row[2],
-                    "grade_level": row[3],
-                    "term": row[4],
-                }
-            )
-        return items
+        return _repo_course_unit_queries.list_courses_for_student(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            student_sub=student_sub,
+            limit=limit,
+            offset=offset,
+        )
 
     def list_units_for_student_course(self, *, student_sub: str, course_id: str) -> List[dict]:
         """Return units for the student's course ordered by module position.
@@ -333,39 +313,12 @@ class DBLearningRepo:
         Raises LookupError when the course does not exist or the student is not
         a member (for 404 semantics in the API layer).
         """
-        course_uuid = str(UUID(course_id))
-        with psycopg.connect(self._dsn) as conn:
-            with conn.cursor() as cur:
-                self._set_current_sub(cur, student_sub)
-                # Membership check for strict 404 semantics
-                cur.execute(
-                    "select exists(select 1 from public.course_memberships where course_id=%s and student_id=%s)",
-                    (course_uuid, student_sub),
-                )
-                if not bool(cur.fetchone()[0]):
-                    raise LookupError("not_member_or_missing")
-                cur.execute(
-                    """
-                    select unit_id::text, title, summary, unit_type, module_position
-                      from public.get_course_units_for_student(%s, %s)
-                    """,
-                    (student_sub, course_uuid),
-                )
-                rows = cur.fetchall()
-        result: List[dict] = []
-        for row in rows:
-            result.append(
-                {
-                    "unit": {
-                        "id": row[0],
-                        "title": row[1],
-                        "summary": row[2],
-                        "unit_type": row[3],
-                    },
-                    "position": int(row[4]) if row[4] is not None else 1,
-                }
-            )
-        return result
+        return _repo_course_unit_queries.list_units_for_student_course(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            student_sub=student_sub,
+            course_id=course_id,
+        )
 
     # ------------------------------------------------------------------
     def get_modular_unit_graph(self, *, student_sub: str, course_id: str, unit_id: str) -> dict:

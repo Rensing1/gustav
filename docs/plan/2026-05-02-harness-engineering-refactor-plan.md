@@ -3,7 +3,7 @@
 ## Status
 - Date: 2026-05-02
 - Last updated: 2026-07-06
-- Status: Completed v1.1 / closeout verified; Closeout v1.2 planned for implementation. The harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, backend Ruff/Pyflakes linting, quality scorecard, public-repo safety, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, marks the harness documents as active, modularizes the large runtime hotspots that drove this plan, and records the remaining monitored large files in `docs/harness/HOTSPOTS.md` and `docs/harness/QUALITY_SCORECARD.md`. Closeout v1.2 is the next deliberate quality step: it further reduces active runtime/UI/H5P hotspots, adds offline supply-chain and license gates, introduces visual smoke checks for core UI surfaces, and removes remaining compatibility scaffolding only where tests prove it is no longer needed.
+- Status: Completed v1.2 / closeout verified. The harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, backend Ruff/Pyflakes linting, offline supply-chain/license checks, quality scorecard, public-repo safety, visual-smoke coverage for core auth shells, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, marks the harness documents as active, modularizes the large runtime hotspots that drove this plan, and records the remaining monitored large files in `docs/harness/HOTSPOTS.md` and `docs/harness/QUALITY_SCORECARD.md`. Closeout v1.2 further reduced active runtime/UI/H5P hotspots, added offline supply-chain and license gates, introduced visual smoke checks for core UI surfaces, and stabilized reload-heavy route contracts after the modularization.
 - Time horizon: 3 months
 - Strategy: harness first, then refactor in small PRs
 - Gate strategy: security, public-repo hygiene, import boundaries, architecture boundaries, route map, API contract, DB inventory, Docker image parity, frontend/H5P, and full verification run as hard gates; `make harness-signals` remains advisory telemetry.
@@ -1403,6 +1403,15 @@ Vor Abschluss von Closeout v1.2 müssen diese Befehle erfolgreich sein:
 - `make verify`
 
 Zusätzlich wird `make test-full-prod-like` ausgeführt, wenn die lokale Infrastruktur vollständig verfügbar ist. Wenn ein externer Dienst, Browser-E2E-Setup oder OpenAI-kompatibler Endpoint fehlt, muss der Abschlussbericht die konkrete Ursache und den ersatzweise ausgeführten Nachweis nennen. Ein nicht ausgeführter externer Smoke darf keinen grünen v1.2-Abschluss vortäuschen.
+
+Fresh closeout evidence from 2026-07-06:
+- `make verify`: pass, including DB preflight, import boundaries, OpenAPI baseline, architecture boundaries, route map, DB inventory, supply-chain check, backend Ruff/Pyflakes, Docker image smoke, backend pytest, Svelte check, frontend Vitest, and H5P Node tests.
+- Backend pytest inside `make verify`: 1999 passed, 73 skipped.
+- Frontend Vitest inside `make verify`: 75 files passed, 294 tests passed.
+- H5P Node tests inside `make verify`: 52 passed.
+- `make test-visual-smoke`: pass, 2 Chromium Playwright smoke tests passed for desktop and mobile auth shells.
+- `make quality-scorecard`: pass with Docker image smoke recorded as pass.
+- `git diff --check`: pass.
 
 ## Security, GDPR/Privacy, and FOSS Risks
 

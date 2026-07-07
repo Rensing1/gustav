@@ -38,6 +38,12 @@
     modularPhases as workspaceModularPhases,
     workspaceGraphSignature
   } from "$lib/teacher-unit-workspace/view-state";
+  import {
+    actionError,
+    actionValues,
+    asGraphActionSuccess,
+    graphActionSuccessFromResult
+  } from "$lib/teacher-unit-workspace/graph-action-result";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -87,55 +93,6 @@
       await update({ reset: false });
     };
   };
-
-  type GraphActionSuccess = {
-    ok: true;
-    message: string;
-    next?: Record<string, string | null>;
-  };
-
-  function asGraphActionSuccess(value: unknown): GraphActionSuccess | null {
-    if (!value || typeof value !== "object") {
-      return null;
-    }
-    const candidate = value as Partial<GraphActionSuccess>;
-    return candidate.ok ? (candidate as GraphActionSuccess) : null;
-  }
-
-  function graphActionSuccessFromResult(result: unknown): GraphActionSuccess | null {
-    if (!result || typeof result !== "object") {
-      return null;
-    }
-
-    const data = (result as { data?: unknown }).data;
-    if (!data || typeof data !== "object") {
-      return null;
-    }
-
-    for (const value of Object.values(data)) {
-      const success = asGraphActionSuccess(value);
-      if (success) {
-        return success;
-      }
-    }
-    return null;
-  }
-
-  function actionError(value: unknown): string | null {
-    if (!value || typeof value !== "object") {
-      return null;
-    }
-    const candidate = value as { error?: string };
-    return candidate.error ?? null;
-  }
-
-  function actionValues<T extends Record<string, string>>(value: unknown): Partial<T> {
-    if (!value || typeof value !== "object") {
-      return {};
-    }
-    const candidate = value as { values?: Partial<T> };
-    return candidate.values ?? {};
-  }
 
   function createPhaseValues() {
     return actionValues<{ title: string }>(form?.createPhase);

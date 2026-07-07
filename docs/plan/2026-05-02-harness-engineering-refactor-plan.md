@@ -1413,6 +1413,100 @@ Fresh closeout evidence from 2026-07-06:
 - `make quality-scorecard`: pass with Docker image smoke recorded as pass.
 - `git diff --check`: pass.
 
+### Closeout v1.3: CSS-Verantwortungen und visuelle Kern-Smokes
+
+Closeout v1.3 ist ein geplanter Folgeblock nach dem abgeschlossenen v1.2-Closeout. Der Block gehört fachlich noch zum großen Wartbarkeitsrefactor, darf den verifizierten v1.2-Status aber nicht rückwirkend öffnen. Ziel ist nicht, Dateien aus kosmetischen Gründen kleiner zu machen, sondern CSS-Verantwortungen und visuelle Kernrisiken so zu schneiden, dass zukünftige UI-Änderungen verständlicher, testbarer und weniger regressionsanfällig werden.
+
+#### C25: CSS-Schnittplan und Bundle-Contracts schärfen
+- Problem: Die großen CSS-Dateien sind sichtbar, aber die konkrete nächste Schnittfolge ist noch nicht verbindlich. Ohne vorherige Contracts können Regeln bei späteren UI-Änderungen wieder in globale Bundles zurückwandern.
+- Ziel: Vor produktiven CSS-Schnitten ist klar, welche Datei welche Verantwortung besitzt und welche Tests diese Grenze schützen.
+- Vorgehen:
+  - Einen CSS-Inventory-/Contract-Test ergänzen, der die aktiven SvelteKit-Stylesheets aus `frontend/src/routes/+layout.svelte` ausliest und die erwartete Lade-Reihenfolge absichert.
+  - `docs/harness/HOTSPOTS.md` um konkrete Split-Trigger für `design-system.css`, `learning-unit.css`, `teaching-workspace.css` und `backend/web/static/css/gustav.css` ergänzen.
+  - `docs/harness/QUALITY_SCORECARD.md` nach jedem CSS-Schnitt aktualisieren; relevante LOC-Zunahmen ohne Exit-Kriterium bleiben nicht unkommentiert.
+- Akzeptanz:
+  - CSS-Bundle-Verantwortungen sind im Plan und in `docs/harness/HOTSPOTS.md` eindeutig beschrieben.
+  - Ein Contract-Test verhindert, dass workspace-spezifische Regeln in `app.css` oder ein falsches Bundle zurückwandern.
+  - `npm run check`, relevante Frontend-Contract-Tests und `make quality-scorecard` bleiben grün.
+
+#### C26: `design-system.css` nach Verantwortungen teilen
+- Problem: `frontend/src/lib/styles/design-system.css` enthält aktuell Tokens/Theme, Typografie, Shell-Regeln, UI-Primitives und workspace-nahe Selektoren in einer Datei. Das ist der beste nächste CSS-Kandidat, weil diese Datei echte Querschnittsverantwortung trägt.
+- Ziel: Das Designsystem ist als wiederverwendbare Basis verständlich. Workspace- oder seitennahe Regeln liegen nicht mehr in der Designsystem-Basis.
+- Vorgehen:
+  - Zuerst Contract-Tests ergänzen, die prüfen, dass Theme-/Token-Regeln, Typografie und UI-Primitives weiterhin geladen werden.
+  - `design-system.css` in fokussierte Stylesheets aufteilen, beispielsweise `theme-tokens.css`, `typography.css` und `ui-primitives.css`; die finale Dateibenennung folgt der bestehenden `frontend/src/lib/styles/*`-Konvention.
+  - Workspace-nahe Regeln, die nur Learner- oder Teacher-Flächen betreffen, in die bestehenden Workspace-Bundles verschieben statt neue globale Abhängigkeiten zu schaffen.
+  - Import-Reihenfolge in `frontend/src/routes/+layout.svelte` bewusst halten: Tokens/Basis vor App-Shell, Workspace-Bundles nach der Shell.
+- Akzeptanz:
+  - `design-system.css` ist entweder deutlich kleiner oder als reine Import-/Kompatibilitätsfassade dokumentiert.
+  - Neue Basis-Stylesheets haben klare Kopfkommentare mit Verantwortung.
+  - Keine UI-Regel wird nur wegen der Dateigröße verschoben; jede Verschiebung folgt einer benannten Verantwortung.
+
+#### C27: Learner- und Teacher-Workspace-CSS nur entlang echter UI-Flächen schneiden
+- Problem: `learning-unit.css` und `teaching-workspace.css` sind groß, aber fachlich bereits stärker kohärent als das alte `app.css`. Ein blinder Split würde nur mehr Dateien erzeugen.
+- Ziel: Workspace-CSS wird nur dort geteilt, wo dadurch echte Wartbarkeit entsteht.
+- Vorgehen:
+  - Learner-CSS nur entlang stabiler UI-Flächen schneiden: Workspace-Layout, Material/Task-Karten, Submission/Feedback, Markdown/Prose und Learner-Graph.
+  - Teacher-CSS nur entlang stabiler UI-Flächen schneiden: Workspace-Outline, Graph, Node-Editor, Dialoge/Popover und Toolbar/Command-Flächen.
+  - Vor jedem Schnitt einen kleinen Contract- oder Komponenten-Test ergänzen, der zentrale Klassen/Controls in der betroffenen Fläche absichert.
+  - Keine visuellen Redesigns mit CSS-Splits mischen; Abweichungen müssen durch Visual-Smoke oder Komponenten-Test sichtbar sein.
+- Akzeptanz:
+  - Die großen Workspace-CSS-Dateien verlieren echte Verantwortungsblöcke, ohne dass die Kaskade schwerer nachvollziehbar wird.
+  - Die SvelteKit-Styles bleiben deterministisch geladen.
+  - Teacher- und Learner-Workspace-Tests bleiben grün.
+
+#### C28: `backend/web/static/css/gustav.css` erst nach Referenz-Audit teilen
+- Problem: `backend/web/static/css/gustav.css` ist groß, aber sie ist eine aktive FastAPI-/Auth-/Legacy-Static-Fläche. Ein voreiliger Split kann Login-, Keycloak-, Auth- oder retired-HTML-Flächen beschädigen.
+- Ziel: Die Datei wird nur reduziert oder geteilt, wenn bekannt ist, welche aktiven HTML-Flächen welche Regeln brauchen.
+- Vorgehen:
+  - Zuerst eine Referenzsuche und einen Static-Contract ergänzen, der die aktiven `gustav.css`-Referenzen in FastAPI-/Auth-/Keycloak-nahen Templates absichert.
+  - Regeln nach aktiver Shell, Auth/Keycloak-Theme, Utilities und retired/legacy Kandidaten klassifizieren.
+  - Nur eindeutig aktive Bereiche in fokussierte Dateien verschieben; retired Kandidaten bekommen ein Exit-Kriterium statt stiller Löschung.
+  - Die Änderung mit bestehenden Auth-/Security-Header- und E2E-Auth-Checks verifizieren.
+- Akzeptanz:
+  - Keine aktive Auth-/Login-/FastAPI-HTML-Fläche verliert ihr Stylesheet.
+  - Retired CSS wird nur mit Suchnachweis, Contract-Test oder dokumentiertem Exit-Kriterium entfernt.
+  - `backend/web/static/css/gustav.css` bleibt in der Scorecard sichtbar, solange sie aktiv ist.
+
+#### C29: Visual-Smoke-Testinfrastruktur ausbauen
+- Problem: `frontend/e2e/visual-smoke.spec.ts` prüft aktuell nur anonyme Auth-Shells. Für Teacher-, Learner- und H5P-Flächen fehlen gemeinsame, stabile Testdaten- und Login-Helfer.
+- Ziel: Visual-Smokes können echte Kernoberflächen öffnen, ohne lange Produkt-E2E-Flows oder Screenshot-Snapshots zu werden.
+- Vorgehen:
+  - Gemeinsame Playwright-Helfer unter `frontend/e2e/support/` extrahieren: `.env`-Defaults laden, Keycloak-Testnutzer anlegen, Login durchführen, API-Requests mit korrekten Origin-/Referer-Headern senden und deterministische Testdaten seeden.
+  - Vor der Extraktion bestehende `teacher-graph-module-actions.spec.ts`-Logik durch Contract- oder fokussierte Playwright-Smoke-Nutzung absichern, damit Login und Seeding nicht auseinanderdriften.
+  - Einen Layout-Sanity-Helfer einführen, der ohne Snapshot prüft: erwartete Überschrift/Region sichtbar, Body nicht leer, zentrale Controls vorhanden, keine globale Fehlerseite, keine offensichtlich leere Graph-/H5P-Fläche.
+  - Animations- und Timing-Flakiness reduzieren, indem feste Viewports, eindeutige Testdaten und Role-/Label-basierte Selektoren verwendet werden.
+- Akzeptanz:
+  - Auth-Smokes und bestehende Teacher-Graph-E2E-Tests verwenden wiederverwendbare Helfer statt kopierter Login-/Env-Logik.
+  - `backend/tests/test_visual_smoke_contract.py` verlangt weiterhin `@visual-smoke` und verbietet breite Snapshot-Nutzung.
+  - `make test-visual-smoke` bleibt lokal reproduzierbar gegen `WEB_BASE`.
+
+#### C30: Teacher-, Learner- und H5P-Visual-Smokes ergänzen
+- Problem: Die wichtigsten produktiven Oberflächen können durch CSS-, Layout- oder Komponentenänderungen leer oder unbenutzbar rendern, obwohl Unit- und Contract-Tests grün bleiben.
+- Ziel: Ein kleines visuelles Kernprofil erkennt offensichtliche Render-Regressions auf den wichtigsten Rollen- und Content-Flächen.
+- Vorgehen:
+  - Teacher-Smoke: Lehrer-Testnutzer anlegen, modulare Lerneinheit per API seeden, `/teaching/units/<unitId>` öffnen und prüfen, dass Toolbar, Graphfläche, mindestens ein Modul/Phase und zentrale Aktionsbuttons sichtbar sind.
+  - Learner-Smoke: Lehrer und Schüler anlegen, Kurs mit freigegebener Section, Material und Task per API seeden, Schüler einloggen und prüfen, dass Lernraum-Navigation, Material-/Task-Karte und Submission-/Feedback-Fläche sichtbar sind.
+  - H5P-Smoke: minimale H5P-Fixture aus `backend/tests_e2e/fixtures/h5p/minimal` verwenden oder per bestehendem H5P-Importpfad vorbereiten; Player-/Editor-Shell öffnen und prüfen, dass H5P-Container, relevante Controls und Theme-Styles sichtbar sind.
+  - Jeder Smoke läuft auf Desktop und mindestens einem mobilen Viewport, sofern die Oberfläche mobil unterstützt ist. Wenn eine Fläche bewusst nur Desktop-zentriert ist, wird das im Testnamen und Plan dokumentiert.
+- Akzeptanz:
+  - Visual-Smokes prüfen Kernansichten, nicht vollständige Produktworkflows.
+  - Tests erzeugen keine Pixel-Snapshot-Baseline und keinen Screenshot-Friedhof.
+  - Fehlende lokale Infrastruktur führt zu klarer Fehlermeldung oder dokumentiertem `test-full-prod-like`-Vorbedingungen, nicht zu stillem Erfolg.
+
+#### C31: Visual-Smoke- und CSS-Gates bewusst einordnen
+- Problem: Visual-Smokes und CSS-Splits sind wertvoll, können aber langsamer und anfälliger sein als reine Unit-/Contract-Gates. Ein zu frühes hartes Gate in `make verify` würde lokale Entwicklung unnötig bremsen.
+- Ziel: Die neuen Prüfungen sind sichtbar, reproduzierbar und ehrlich eingeordnet.
+- Vorgehen:
+  - `make test-visual-smoke` bleibt zunächst Teil von `make test-full-prod-like`, nicht von `make verify`.
+  - Nach mehreren stabilen Läufen wird entschieden, ob ein kleiner Auth-/Shell-Teil in ein schnelleres Gate wandert; Teacher-/Learner-/H5P-Smokes bleiben prod-like, solange sie Keycloak, seeded data oder laufende Services brauchen.
+  - `docs/harness/QUALITY_GATES.md` dokumentiert Vorbedingungen, Zweck, Laufzeitprofil und Failure-Policy der Visual-Smokes.
+  - `docs/harness/HOTSPOTS.md` dokumentiert CSS-Split-Entscheidungen und neue Baselines nach jedem Schnitt.
+- Akzeptanz:
+  - Entwickler wissen, wann `make test-visual-smoke`, `make test-full-prod-like` und `make verify` jeweils auszuführen sind.
+  - Ein grüner v1.3-Abschluss nennt explizit, welche Visual-Smokes wirklich gelaufen sind.
+  - CSS- und Visual-Smoke-Arbeit erzeugt keine unkontrollierte Massenformatierung.
+
 ## Security, GDPR/Privacy, and FOSS Risks
 
 ### Security

@@ -267,6 +267,38 @@ def test_harness_refactor_plan_includes_closeout_v14_maximal_sweep() -> None:
         assert required_term in text
 
 
+def test_closeout_v14_tracks_large_test_files_as_first_class_hotspots() -> None:
+    """Large test files should be visible and classified before cleanup work starts."""
+
+    scorecard_source = _read("backend/tools/quality_scorecard.py")
+    scorecard = _read("docs/harness/QUALITY_SCORECARD.md")
+    portfolio = _read("docs/harness/TEST_PORTFOLIO.md")
+
+    for required_test_hotspot in (
+        "backend/tests/test_learning_api_contract.py",
+        "backend/tests/test_learning_worker_jobs.py",
+        "backend/tests/test_teaching_live_unit_summary_api.py",
+        "backend/tests/test_teaching_live_detail_api.py",
+        "backend/tests/test_gustav_cli.py",
+        "frontend/src/lib/components/learning-unit/LearningTaskCard.test.ts",
+    ):
+        assert required_test_hotspot in scorecard_source
+        assert required_test_hotspot in scorecard
+        assert required_test_hotspot in portfolio
+
+    for required_decision in (
+        "v1.4 Testdatei-Entscheidungen",
+        "rewrite/split",
+        "retire-later",
+        "Tabu ohne Ersatz-Contract",
+        "Security/Auth",
+        "DB/RLS/Migration",
+        "Upload/Storage/Privacy",
+        "H5P-Sidecar-Security",
+    ):
+        assert required_decision in portfolio
+
+
 def test_plan_memory_documents_exist() -> None:
     """Agents need a small searchable planning memory before refactor work grows."""
 

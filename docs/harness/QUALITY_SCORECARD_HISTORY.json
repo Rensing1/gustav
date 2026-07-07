@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-07T09:21:31",
+      "generated": "2026-07-07T09:48:06",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -61,13 +61,13 @@
           "path": "h5p-service/server.mjs"
         },
         {
-          "delta_from_previous": 0,
-          "loc": 1644,
+          "delta_from_previous": -40,
+          "loc": 1604,
           "path": "frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte"
         },
         {
-          "delta_from_previous": 0,
-          "loc": 1106,
+          "delta_from_previous": -43,
+          "loc": 1063,
           "path": "frontend/src/routes/teaching/units/[unitId]/+page.svelte"
         },
         {
@@ -109,6 +109,36 @@
           "delta_from_previous": 0,
           "loc": 2684,
           "path": "backend/web/static/css/gustav.css"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 2326,
+          "path": "backend/tests/test_learning_api_contract.py"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 2009,
+          "path": "backend/tests/test_learning_worker_jobs.py"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 1219,
+          "path": "backend/tests/test_teaching_live_unit_summary_api.py"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 1184,
+          "path": "backend/tests/test_teaching_live_detail_api.py"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 1210,
+          "path": "backend/tests/test_gustav_cli.py"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 1202,
+          "path": "frontend/src/lib/components/learning-unit/LearningTaskCard.test.ts"
         }
       ],
       "month": "2026-07",

@@ -41,6 +41,29 @@ Dieses Dokument macht das Testportfolio steuerbar. Es ist bewusst ein Gruppeninv
 - Welche DB-Tests nutzen echte RLS-Pfade und welche prüfen nur API-Filter?
 - Welche Legacy-Tests schützen noch produktives Risiko und welche sind Archivwissen?
 
+## v1.4 Testdatei-Entscheidungen
+
+| Datei | LOC | Entscheidung | Begründung |
+| --- | ---: | --- | --- |
+| `backend/tests/test_learning_api_contract.py` | 2326 | rewrite/split | API-, DB- und Authz-Grenzen bleiben wichtig; die Datei soll nach Learning-Submissions, Upload/Finalize, Material/History und H5P Access geteilt werden. |
+| `backend/tests/test_learning_worker_jobs.py` | 2009 | rewrite/split | Worker-Semantik ist kritisch; Queue, Transaction Boundaries, Error Mapping und Privacy Logs sollen getrennte Testflächen werden. |
+| `backend/tests/test_teaching_live_unit_summary_api.py` | 1219 | rewrite/split | Summary-/Delta-/Owner-Grenzen bleiben tabu, aber die Datei ist zu breit für gezielte Live-Refactors. |
+| `backend/tests/test_teaching_live_detail_api.py` | 1184 | rewrite/split | Detail-, Relation-Guard- und H5P-Review-Token-Verhalten sollen klarer getrennt werden. |
+| `backend/tests/test_gustav_cli.py` | 1210 | rewrite/split | CLI-Sicherheitsregeln bleiben wichtig; Auth, Units/Sections, Materials/Tasks, H5P und Config-Schutz sollen getrennt werden. |
+| `frontend/src/lib/components/learning-unit/LearningTaskCard.test.ts` | 1202 | rewrite/split | Drafts, Review/History, Upload-Artefakte, H5P und Style-Contracts sollen getrennte Komponenten-/Contract-Tests werden. |
+| `backend/tests/migration/test_import_snapshot_backup.py` | 1094 | retire-later | Alpha1-/Snapshot-Wissen bleibt erhalten, bis der Legacy-Import als aktiver Produktpfad bewusst beendet ist. |
+| `backend/tests/learning_adapters/test_local_feedback_visual_pipeline.py` | 924 | merge | Vision-/DSPy-Fakes sollen mit verwandten Adaptertests geteilt werden; keine Abdeckung für Schüler-Submission-Integrität verlieren. |
+
+## Tabu ohne Ersatz-Contract
+
+Diese Gruppen werden nicht zusammengelegt, gekürzt oder retired, solange kein gleichwertiger Ersatz-Contract existiert:
+- Security/Auth: `backend/tests/test_auth_*`, `test_csrf_tokens_contract.py`, `test_bearer_jwt_auth_api.py`, `test_bff_authorization_session_api.py`, `test_session_bootstrap_api.py`.
+- DB/RLS/Migration: `backend/tests/test_learning_student_rls_policies.py`, `test_learning_rls_owners.py`, `test_teaching_rls_policies_optional.py`, `backend/tests/migration/test_*rls*`, `test_db_test_inventory_contract.py`.
+- API/OpenAPI/Architektur: `test_openapi_*`, `test_openapi_route_surface_baseline.py`, `test_import_boundary_gate_contract.py`, `test_architecture_boundary_gate_contract.py`, `test_route_map_inventory_contract.py`.
+- Upload/Storage/Privacy: `test_learning_internal_proxy_security.py`, `test_storage_verification_streaming_security.py`, `test_upload_llm_boundaries_contract.py`, `test_privacy_logging_contract.py`.
+- H5P-Sidecar-Security: `h5p-service/test/auth_forwarding.test.mjs`, `cookies.test.mjs`, `internal_auth.test.mjs`, `runtime_guards.test.mjs`, `security_headers.test.mjs`, `review_tokens.test.mjs`.
+- Frontend Auth/BFF: `frontend/src/lib/server/backend-auth.test.ts`, `bff-proxy.test.ts`, `session.test.ts`.
+
 ## Aktueller Befund
 - Das Repo hat bereits viele Tests und einige sinnvolle Opt-in-Guards.
 - DB/RLS-Kandidaten sind im generierten DB-Test-Inventar markiert oder als `test-infra` beziehungsweise opt-in klassifiziert.

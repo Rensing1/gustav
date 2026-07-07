@@ -39,6 +39,12 @@ DEFAULT_HOTSPOTS = [
     "frontend/src/lib/styles/teaching-workspace.css",
     "frontend/src/lib/styles/design-system.css",
     "backend/web/static/css/gustav.css",
+    "backend/tests/test_learning_api_contract.py",
+    "backend/tests/test_learning_worker_jobs.py",
+    "backend/tests/test_teaching_live_unit_summary_api.py",
+    "backend/tests/test_teaching_live_detail_api.py",
+    "backend/tests/test_gustav_cli.py",
+    "frontend/src/lib/components/learning-unit/LearningTaskCard.test.ts",
 ]
 
 

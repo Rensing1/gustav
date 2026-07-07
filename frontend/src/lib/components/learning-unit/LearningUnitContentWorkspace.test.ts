@@ -63,7 +63,7 @@ describe("LearningUnitContentWorkspace", () => {
   it("uses a non-stretching vertical stack for pane items", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
-    const designSystemCss = readFileSync(path.resolve(currentDir, "../../styles/design-system.css"), "utf8");
+    const designSystemCss = appCss;
     const { container } = render(LearningUnitContentWorkspace, {
       props: {
         titleLabel: "",
@@ -385,10 +385,7 @@ describe("LearningUnitContentWorkspace", () => {
 
   it("renders modular groups as separate module blocks with materials before tasks", () => {
     const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
-    const designSystemCss = readFileSync(
-      path.resolve(currentDir, "../../styles/design-system.css"),
-      "utf8"
-    );
+    const designSystemCss = css;
     const { container } = render(LearningUnitContentWorkspace, {
       props: {
         titleLabel: "",

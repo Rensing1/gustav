@@ -2232,3 +2232,261 @@
     align-items: start;
   }
 }
+
+/* Learner content-shell and response styles extracted from the design-system bundle. */
+
+.learning-task-inline-editor__copy,
+.learning-response-panel__body {
+  color: var(--color-text-muted);
+}
+
+.learning-unit-layout-frame {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.learning-unit-content-shell {
+  align-items: start;
+}
+
+.learning-unit-content-shell .workspace-outline {
+  position: sticky;
+  top: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+  background: var(--color-bg-surface);
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--color-border) 10%, transparent 90%);
+}
+
+.learning-unit-content-shell .learning-unit-pane-grid {
+  gap: var(--learning-unit-pane-gap);
+}
+
+.learning-unit-content-shell .learning-unit-workspace-surface {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  box-shadow: none;
+}
+
+.learning-unit-content-shell .learning-unit-pane__stack:not(.learning-unit-pane__stack--modules) {
+  gap: 0;
+}
+
+.learning-unit-content-shell .learning-work-item,
+.learning-unit-content-shell .history-entry {
+  border-bottom: 2px solid var(--color-border);
+}
+
+.learning-unit-content-shell .learning-work-item__toggle {
+  padding: 0.45rem 0;
+}
+
+.learning-unit-content-shell .learning-work-item--material .learning-work-item__toggle {
+  padding: var(--space-4) var(--space-5) var(--space-2);
+}
+
+.learning-unit-content-shell .learning-work-item__title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.learning-unit-content-shell .learning-work-item--material .learning-work-item__title {
+  font-size: calc(1.08rem * var(--learning-unit-font-scale));
+  font-weight: 600;
+  line-height: 1.18;
+}
+
+.learning-unit-content-shell .learning-work-item__body {
+  padding-bottom: 0.55rem;
+}
+
+.learning-unit-content-shell .learning-unit-module__header {
+  margin-bottom: var(--space-6);
+}
+
+.learning-unit-content-shell .learning-unit-module__copy {
+  gap: var(--space-2);
+}
+
+.learning-unit-content-shell .learning-unit-module__index {
+  color: color-mix(in srgb, var(--color-text) 62%, transparent 38%);
+}
+
+.learning-unit-content-shell .learning-unit-module__title {
+  color: var(--color-link);
+  font-size: calc(1.56rem * var(--learning-unit-headline-scale));
+  line-height: 1.06;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-wrap: balance;
+}
+
+.learning-unit-content-shell .learning-unit-pane-grid--split .learning-unit-module__title {
+  font-size: calc(1.34rem * var(--learning-unit-headline-scale));
+}
+
+.learning-unit-content-shell .learning-unit-module__meta {
+  color: color-mix(in srgb, var(--color-text) 54%, transparent 46%);
+  font-family: var(--font-technical);
+  font-size: calc(0.78rem * var(--learning-unit-label-scale));
+  letter-spacing: 0.08em;
+}
+
+.learning-unit-content-shell .learning-unit-module__section-head {
+  margin-bottom: var(--space-2);
+}
+
+.learning-unit-content-shell .learning-unit-module__section-head h5 {
+  padding-bottom: 0;
+  color: color-mix(in srgb, var(--color-text) 78%, transparent 22%);
+  font-family: var(--font-technical);
+  font-size: calc(0.82rem * var(--learning-unit-label-scale));
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.learning-unit-content-shell .learning-task-inline-editor,
+.learning-unit-content-shell .learning-response-panel {
+  box-shadow: 3px 3px 0 0 rgba(27, 27, 27, 0.98);
+}
+
+.learning-unit-content-shell .learning-response-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.learning-unit-content-shell .learning-response-panel summary::after {
+  content: "+";
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.learning-unit-content-shell .learning-response-panel[open] summary::after {
+  content: "−";
+}
+
+.learning-work-item__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.learning-work-item__header-copy {
+  display: grid;
+  gap: 0.18rem;
+  align-content: center;
+  min-height: 1.4rem;
+}
+
+.learning-work-item__kicker {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.learning-task-inline-editor {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-s);
+  background: var(--color-bg-surface);
+  display: grid;
+  gap: var(--space-4);
+  box-shadow: var(--color-shadow);
+}
+
+.learning-task-inline-editor__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.learning-task-inline-editor__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.learning-unit-content-shell .learning-task-inline-editor__statement {
+  margin-top: var(--space-2);
+  padding: 0;
+  border-left: 0;
+  background: transparent;
+}
+
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h1),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h2),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h3),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h4),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h5),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(h6) {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: calc(0.98rem * var(--learning-unit-font-scale));
+  line-height: 1.18;
+}
+
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(p),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(ul),
+.learning-unit-content-shell .learning-task-inline-editor__statement :global(ol) {
+  margin: var(--space-2) 0 0;
+}
+
+.learning-response-group {
+  margin-top: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.learning-response-panel {
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-s);
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+}
+
+.learning-response-panel[open] {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-bg-surface) 88%, var(--color-accent-soft) 12%);
+}
+
+.learning-response-panel summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.95rem 1rem;
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.learning-response-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.learning-response-panel__body {
+  padding: 0 1rem 1rem;
+}
+
+.learning-response-panel__body :first-child {
+  margin-top: 0;
+}
+
+.learning-response-panel__body :last-child {
+  margin-bottom: 0;
+}

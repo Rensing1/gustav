@@ -1,0 +1,56 @@
+:root {
+  --color-bg-base: #f9f9f9;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-muted: #f3f3f4;
+  --color-bg-soft: rgba(255, 81, 47, 0.08);
+  --color-text: #1a1c1c;
+  --color-text-muted: #5c5c5c;
+  --color-link: #b41f00;
+  --color-link-hover: #da3717;
+  --color-accent: #ff512f;
+  --color-accent-soft: rgba(255, 81, 47, 0.14);
+  --color-border: #1b1b1b;
+  --color-line: rgba(27, 27, 27, 0.14);
+  --color-success: #387f50;
+  --color-success-soft: rgba(56, 127, 80, 0.14);
+  --color-warning: #8d5a00;
+  --color-warning-soft: rgba(141, 90, 0, 0.14);
+  --color-danger: #ba1a1a;
+  --color-danger-soft: rgba(186, 26, 26, 0.14);
+  --color-shadow: 4px 4px 0 0 rgba(27, 27, 27, 0.98);
+  --font-display: "Space Grotesk", "Manrope", "Inter", sans-serif;
+  --font-reading: "Inter", "Work Sans", "Nunito", sans-serif;
+  --font-ui: "Space Grotesk", "Inter", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --radius-s: 0;
+  --radius-m: 0;
+  --radius-l: 2px;
+  --radius-xl: 4px;
+}
+
+[data-theme="dark"] {
+  --color-bg-base: #121212;
+  --color-bg-surface: #1a1a1a;
+  --color-bg-elevated: #1f1f1f;
+  --color-bg-muted: #1d1d1d;
+  --color-bg-soft: rgba(255, 81, 47, 0.1);
+  --color-text: #f0f1f1;
+  --color-text-muted: #c6c6c6;
+  --color-link: #ff866b;
+  --color-link-hover: #ffb4a4;
+  --color-accent: #ff512f;
+  --color-accent-soft: rgba(255, 81, 47, 0.2);
+  --color-border: #f0f1f1;
+  --color-line: rgba(240, 241, 241, 0.18);
+  --color-success: #8fc0aa;
+  --color-success-soft: rgba(143, 192, 170, 0.18);
+  --color-warning: #d6b170;
+  --color-warning-soft: rgba(214, 177, 112, 0.18);
+  --color-danger: #ffb4ab;
+  --color-danger-soft: rgba(255, 180, 171, 0.18);
+  --color-shadow: 4px 4px 0 0 rgba(240, 241, 241, 0.4);
+}
+

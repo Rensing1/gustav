@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
+import { readGlobalCssBundle } from "$lib/styles/test-css-bundle";
+
 import WorkspaceSettingsMenu from "./WorkspaceSettingsMenu.svelte";
 
 describe("WorkspaceSettingsMenu", () => {
@@ -47,11 +49,8 @@ describe("WorkspaceSettingsMenu", () => {
   });
 
   it("defines a fully themed control contract instead of relying on native browser chrome", () => {
-    const cssPath = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "../../styles/design-system.css"
-    );
-    const css = readFileSync(cssPath, "utf8");
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const css = readGlobalCssBundle(path.resolve(currentDir, "../../styles"));
 
     expect(css).toMatch(/\.workspace-settings-menu__checkbox\s*\{[^}]*appearance:\s*none;[^}]*background:\s*var\(--color-bg-surface\);/s);
     expect(css).toMatch(/\.workspace-settings-menu__checkbox:checked::after\s*\{[^}]*border-color:\s*#ffffff;/s);

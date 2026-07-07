@@ -1,0 +1,40 @@
+body {
+  font-family: var(--font-reading);
+  color: var(--color-text);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.workspace-heading h1,
+.design-auth-frame__title,
+.preview-heading h1,
+.page-action-head__copy h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.brand-copy strong,
+.nav-label,
+.workspace-label,
+.workspace-note,
+.account-name,
+.account-eyebrow,
+.identity-meta,
+.quiet-list-entry__meta,
+.breadcrumb-bar,
+.mode-switch,
+.preview-theme-toggle,
+.preview-card__eyebrow,
+.workspace-composer-copyline,
+.teacher-flow-phase-band__kicker,
+.teacher-flow-unit-node__copy span,
+.teacher-flow-unit-node__copy small,
+.learning-response-panel summary {
+  font-family: var(--font-mono);
+}
+

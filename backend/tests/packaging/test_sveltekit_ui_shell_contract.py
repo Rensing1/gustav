@@ -124,6 +124,43 @@ def test_teacher_workspace_styles_are_split_from_app_shell() -> None:
     assert ".workspace-unit-commandbar-popover" not in app_src
 
 
+def test_design_system_styles_are_split_into_ordered_responsibility_bundles() -> None:
+    """Design-system CSS must load as explicit responsibility bundles."""
+
+    layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
+    styles_dir = REPO_ROOT / "frontend" / "src" / "lib" / "styles"
+    layout_src = layout_path.read_text(encoding="utf-8")
+
+    expected_order = [
+        'import "$lib/styles/theme-tokens.css";',
+        'import "$lib/styles/typography.css";',
+        'import "$lib/styles/app.css";',
+        'import "$lib/styles/ui-primitives.css";',
+        'import "$lib/styles/learning-unit.css";',
+        'import "$lib/styles/teaching-workspace.css";',
+        'import "$lib/styles/auth-theme.css";',
+    ]
+    positions = [layout_src.index(import_line) for import_line in expected_order]
+    assert positions == sorted(positions)
+    assert 'import "$lib/styles/design-system.css";' not in layout_src
+
+    token_css = (styles_dir / "theme-tokens.css").read_text(encoding="utf-8")
+    typography_css = (styles_dir / "typography.css").read_text(encoding="utf-8")
+    primitive_css = (styles_dir / "ui-primitives.css").read_text(encoding="utf-8")
+    facade_css = (styles_dir / "design-system.css").read_text(encoding="utf-8")
+
+    assert ":root" in token_css
+    assert '[data-theme="dark"]' in token_css
+    assert "h1," in typography_css
+    assert ".workspace-heading h1" in typography_css
+    assert ".workspace-topbar-action" in primitive_css
+    assert ".workspace-outline" in primitive_css
+    assert ".learning-unit-content-shell" not in primitive_css
+    assert ".teacher-flow-unit-node" not in primitive_css
+    assert "Compatibility note" in facade_css
+    assert len(facade_css.splitlines()) < 40
+
+
 def test_app_html_loads_nunito_font() -> None:
     package_path = REPO_ROOT / "frontend" / "package.json"
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"

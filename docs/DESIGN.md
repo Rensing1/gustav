@@ -321,7 +321,8 @@ Verbindliche Familien:
 - Unterstützt werden mindestens: Überschriften, Fett, Kursiv, Listen,
   nummerierte Listen, Links, Tabellen, `<br>`
 - Lernraum-spezifische Overrides unter `.learning-unit-content-shell` gehören in
-  den finalen Designsystem-Layer in `frontend/src/lib/styles/design-system.css`,
+  das aktive Lernraum-CSS-Bundle (`frontend/src/lib/styles/learning-unit.css`
+  plus gemeinsame Primitives), nicht zurück in `frontend/src/lib/styles/design-system.css`,
   nicht nur in `app.css`, damit Surface-, Spacing- und Typografie-Regeln im
   Lernraum wirksam bleiben
 

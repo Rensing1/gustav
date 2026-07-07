@@ -244,7 +244,7 @@ describe("LearningTaskCard", () => {
   it("styles the compact modular task row as a preview-plus-actions layout", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
-    const designSystemCss = readFileSync(path.resolve(currentDir, "../../styles/design-system.css"), "utf8");
+    const designSystemCss = css;
 
     expect(css).toMatch(
       /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;[^}]*align-items:\s*center;/s

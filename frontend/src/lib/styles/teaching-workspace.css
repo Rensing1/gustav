@@ -2094,3 +2094,375 @@
 .workspace-unit-danger {
   padding-top: 0.85rem;
   border-top: 1px solid var(--color-line);
+}
+
+/* Teacher graph and command-bar styles extracted from the design-system bundle. */
+
+.teacher-flow-workspace--with-inspector .graph-inspector-panel {
+  position: sticky;
+  top: 1rem;
+}
+
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-link-action,
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-link-action--subtle,
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-link-action--danger {
+  justify-self: start;
+}
+
+.teacher-flow-workspace--with-inspector .graph-inspector-panel .workspace-unit-commandbar-popover__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.workspace-unit-commandbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.workspace-unit-commandbar-stack {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+}
+
+.workspace-unit-commandbar-heading {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.workspace-unit-commandbar-heading strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+
+.workspace-unit-commandbar .workspace-top-action {
+  min-height: 2.15rem;
+  padding: 0.4rem 0.82rem;
+  border-radius: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+  color: var(--color-text);
+}
+
+.workspace-unit-commandbar .workspace-top-action:hover,
+.workspace-unit-commandbar .workspace-top-action:focus-visible {
+  color: var(--color-text);
+}
+
+.workspace-top-action--active {
+  background: var(--color-accent) !important;
+  border-color: var(--color-border) !important;
+  color: #ffffff !important;
+}
+
+.workspace-unit-commandbar-popover,
+.teacher-flow-unit-node__popover,
+.teacher-flow-unit-node__quickedit {
+  width: min(24rem, calc(100vw - 2rem));
+  display: grid;
+  gap: 0.95rem;
+  padding: 0.95rem 1rem;
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+}
+
+.teacher-flow-unit-node__quickedit {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  left: 0;
+  width: min(19rem, calc(100vw - 3rem));
+  gap: 0.72rem;
+  z-index: 18;
+}
+
+.workspace-unit-commandbar-popover__header h2,
+.teacher-flow-unit-node__copy strong,
+.teacher-flow-phase-band__title {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.teacher-flow-phase-band__kicker,
+.teacher-flow-unit-node__copy span,
+.teacher-flow-unit-node__copy small {
+  letter-spacing: 0.16em;
+}
+
+.teacher-flow-phase-band__title {
+  color: var(--color-text);
+  text-transform: uppercase;
+}
+
+.teacher-flow-phase-band--selected .teacher-flow-phase-band__title,
+.teacher-flow-phase--context .teacher-flow-phase-band__title {
+  color: var(--color-accent);
+}
+
+.teacher-flow-unit-node {
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+}
+
+.teacher-flow-node--context .teacher-flow-unit-node {
+  border-color: var(--color-accent);
+  box-shadow: 4px 4px 0 0 rgba(255, 81, 47, 0.4);
+}
+
+.teacher-flow-unit-node:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 0 rgba(27, 27, 27, 0.98);
+}
+
+.teacher-flow-unit-node--selected,
+.teacher-flow-node--active .teacher-flow-unit-node {
+  border-color: var(--color-accent);
+  box-shadow: 4px 4px 0 0 rgba(255, 81, 47, 0.85);
+}
+
+.teacher-flow-unit-node__copy strong {
+  color: var(--color-text);
+}
+
+.teacher-flow-unit-node__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem 0.55rem;
+}
+
+.teacher-flow-unit-node__state {
+  justify-self: end;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.teacher-flow-unit-node--learner {
+  width: 100%;
+  height: 100%;
+  padding: 0.92rem 0.98rem 0.86rem;
+  appearance: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  background: var(--color-bg-surface);
+}
+
+.teacher-flow-unit-node--learner:disabled {
+  cursor: default;
+}
+
+.teacher-flow-unit-node--interactive {
+  cursor: pointer;
+}
+
+.teacher-flow-unit-node--learner:hover:enabled,
+.teacher-flow-unit-node--learner:focus-visible {
+  border-color: var(--color-accent);
+}
+
+.teacher-flow-unit-node__state--open {
+  color: var(--color-text-muted);
+}
+
+.teacher-flow-unit-node__state--done {
+  color: var(--color-success);
+}
+
+.teacher-flow-unit-node__state--locked {
+  color: var(--color-text-muted);
+}
+
+.teacher-flow-unit-node--learner-locked,
+.learning-flow-node--locked .teacher-flow-unit-node--learner {
+  border-color: color-mix(in srgb, var(--color-border) 84%, transparent 16%);
+  background: color-mix(in srgb, var(--color-bg-surface) 80%, var(--color-bg-base) 20%);
+  box-shadow: 1px 1px 0 0 rgba(27, 27, 27, 0.18);
+  opacity: 0.56;
+}
+
+.teacher-flow-unit-node--learner-open {
+  border-color: var(--color-border);
+  box-shadow: var(--color-shadow);
+}
+
+.teacher-flow-unit-node--learner-done {
+  border-color: var(--color-success);
+  box-shadow: var(--color-shadow);
+}
+
+.teacher-flow-unit-node--learner-done .teacher-flow-unit-node__copy strong,
+.teacher-flow-unit-node--learner-done .teacher-flow-unit-node__meta small,
+.teacher-flow-unit-node--learner-done .teacher-flow-unit-node__header-main span {
+  color: color-mix(in srgb, var(--color-success) 76%, var(--color-text) 24%);
+}
+
+.teacher-flow-unit-node--selected.teacher-flow-unit-node--learner,
+.teacher-flow-node--active .teacher-flow-unit-node--learner {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-bg-surface) 88%, var(--color-accent-soft) 12%);
+  box-shadow: 4px 4px 0 0 rgba(255, 81, 47, 0.85);
+}
+
+.teacher-flow-unit-node--selected.teacher-flow-unit-node--learner .teacher-flow-unit-node__copy strong,
+.teacher-flow-unit-node--selected.teacher-flow-unit-node--learner .teacher-flow-unit-node__meta small,
+.teacher-flow-unit-node--selected.teacher-flow-unit-node--learner .teacher-flow-unit-node__header-main span,
+.teacher-flow-node--active .teacher-flow-unit-node__copy strong,
+.teacher-flow-node--active .teacher-flow-unit-node__meta small,
+.teacher-flow-node--active .teacher-flow-unit-node__header-main span {
+  color: color-mix(in srgb, var(--color-accent) 74%, var(--color-text) 26%);
+}
+
+.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__copy strong,
+.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__meta small,
+.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__header-main span,
+.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__copy {
+  color: color-mix(in srgb, var(--color-text-muted) 82%, transparent 18%);
+}
+
+.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__copy strong,
+.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__meta small,
+.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__header-main span {
+  color: color-mix(in srgb, var(--color-text-muted) 82%, transparent 18%);
+}
+
+.teacher-flow-unit-node__editor,
+.teacher-flow-unit-node__popover-action {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.teacher-flow-unit-node__drag-handle {
+  border-radius: 0;
+}
+
+.teacher-flow-unit-node__quickedit-field input,
+.teacher-flow-unit-node__quickedit-field select,
+.teacher-flow-unit-node__quickedit-field textarea,
+.workspace-unit-commandbar-popover input,
+.workspace-unit-commandbar-popover select,
+.workspace-unit-commandbar-popover textarea,
+.graph-inspector-panel .workspace-field input,
+.graph-inspector-panel .workspace-field select,
+.graph-inspector-panel .workspace-field textarea {
+  min-height: 2.4rem;
+}
+
+.teacher-flow-unit-node__quickedit-close {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.teacher-flow-unit-node__quickedit-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.teacher-flow-unit-node__quickedit-header strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: -0.03em;
+}
+
+.teacher-flow-unit-node__quickedit-form,
+.teacher-flow-unit-node__quickedit-delete {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.teacher-flow-unit-node__quickedit-actions,
+.workspace-unit-commandbar-popover__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+}
+
+.teacher-flow-shell .svelte-flow__edge-path {
+  stroke: color-mix(in srgb, var(--color-border) 72%, transparent 28%);
+  stroke-width: 2;
+  opacity: 0.45;
+}
+
+.teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--related .svelte-flow__edge-path,
+.teacher-flow-shell .svelte-flow__edge.selected .svelte-flow__edge-path,
+.teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--selected .svelte-flow__edge-path,
+.teacher-flow-shell .svelte-flow__edge:hover .svelte-flow__edge-path {
+  stroke: var(--color-accent);
+  opacity: 1;
+}
+
+.teacher-flow-workspace {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.teacher-flow-workspace--with-inspector {
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+  align-items: start;
+}
+
+.teacher-flow-workspace__canvas {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .workspace-body {
+    width: 100%;
+  }
+
+  .preview-shell-sample__topbar,
+  .preview-workspace-grid,
+  .learning-work-item__start-card-actions,
+  .learning-task-inline-editor__header,
+  .page-action-head__main,
+  .workspace-frame-header__main,
+  .workspace-outline__group-head,
+  .graph-stage-frame__header,
+  .graph-inspector-panel__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .teacher-flow-workspace--with-inspector,
+  .preview-workspace-grid,
+  .preview-graph-sample__learner-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-unit-commandbar-popover {
+    width: min(100%, calc(100vw - 2rem));
+  }
+}

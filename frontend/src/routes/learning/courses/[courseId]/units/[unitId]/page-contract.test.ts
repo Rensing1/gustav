@@ -10,7 +10,7 @@ describe("learning unit route contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
     const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
-    const designSystemCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/design-system.css"), "utf8");
+    const designSystemCss = appCss;
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(routeSource).toContain('import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";');
@@ -29,7 +29,7 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("### 7.3 Flächen");
     expect(designDoc).toContain("### 11.3 Inhalte");
     expect(designDoc).toContain("Lernraum-spezifische Overrides unter `.learning-unit-content-shell` gehören in");
-    expect(designDoc).toContain("den finalen Designsystem-Layer in `frontend/src/lib/styles/design-system.css`");
+    expect(designDoc).toContain("das aktive Lernraum-CSS-Bundle (`frontend/src/lib/styles/learning-unit.css`");
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;/s);
     expect(designSystemCss).not.toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*background:\s*transparent;/s);
     expect(designSystemCss).not.toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*border:\s*0;/s);
@@ -206,7 +206,7 @@ describe("learning unit route contract", () => {
   it("derives modular spacing from DESIGN.md instead of flattening modules into one continuous list", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
-    const designSystemCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/design-system.css"), "utf8");
+    const designSystemCss = appCss;
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(designDoc).toContain("- `--space-4`: `1rem`");
@@ -264,7 +264,7 @@ describe("learning unit route contract", () => {
   it("uses one subtle card per module while keeping the pane surface itself cardless", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
-    const designSystemCss = readFileSync(path.resolve(currentDir, "../../../../../../lib/styles/design-system.css"), "utf8");
+    const designSystemCss = appCss;
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(designDoc).toContain("### 7.3 Flächen");

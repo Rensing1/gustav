@@ -3,11 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { readGlobalCssBundle } from "$lib/styles/test-css-bundle";
+
 describe("LearningGraphNode contract", () => {
   it("keeps the learner node status mapping and selected-state hook", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const componentSource = readFileSync(path.resolve(currentDir, "LearningGraphNode.svelte"), "utf8");
-    const css = readFileSync(path.resolve(currentDir, "../../styles/design-system.css"), "utf8");
+    const css = readGlobalCssBundle(path.resolve(currentDir, "../../styles"));
 
     expect(componentSource).toContain('class={`teacher-flow-unit-node teacher-flow-unit-node--learner teacher-flow-unit-node--learner-${data.status ?? "locked"}`}');
     expect(componentSource).toContain("class:teacher-flow-unit-node--selected={selected}");

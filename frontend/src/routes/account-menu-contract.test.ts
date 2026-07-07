@@ -3,6 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { readGlobalCssBundle } from "$lib/styles/test-css-bundle";
+
 describe("account menu contract", () => {
   it("renders the topbar tools as one group with a minimal account menu", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -69,13 +71,13 @@ describe("account menu contract", () => {
   it("defines a subtle dotted global background without overriding it in the shared themes", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const appCss = readFileSync(path.resolve(currentDir, "../lib/styles/app.css"), "utf8");
-    const designSystemCss = readFileSync(path.resolve(currentDir, "../lib/styles/design-system.css"), "utf8");
+    const globalCss = readGlobalCssBundle(path.resolve(currentDir, "../lib/styles"));
     const authThemeCss = readFileSync(path.resolve(currentDir, "../lib/styles/auth-theme.css"), "utf8");
 
     expect(appCss).toMatch(/--app-bg-dot-color:\s*rgba\([^)]+\);/);
     expect(appCss).toMatch(/html,\s*body\s*\{[^}]*background-color:\s*var\(--color-bg-base\);[^}]*radial-gradient\(circle,\s*var\(--app-bg-dot-color\)\s+1\.35px,\s*transparent\s+1\.5px\);[^}]*background-size:\s*1\.75rem 1\.75rem;/s);
     expect(appCss).toMatch(/\.app-shell\s*\{[^}]*background:\s*transparent;/s);
-    expect(designSystemCss).not.toMatch(/body\s*\{[^}]*background:\s*var\(--color-bg-base\);/s);
+    expect(globalCss).not.toMatch(/body\s*\{[^}]*background:\s*var\(--color-bg-base\);/s);
     expect(authThemeCss).toMatch(/\.design-auth-shell,[\s\S]*?\.kc-gustav\s*\{[^}]*radial-gradient\(circle,\s*var\(--app-bg-dot-color\)\s+1\.35px,\s*transparent\s+1\.5px\)/s);
   });
 });

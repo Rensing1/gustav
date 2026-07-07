@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
+import { readGlobalCssBundle } from "$lib/styles/test-css-bundle";
+
 import WorkspaceOutline from "./WorkspaceOutline.svelte";
 
 describe("WorkspaceOutline", () => {
@@ -58,15 +60,12 @@ describe("WorkspaceOutline", () => {
   });
 
   it("uses a denser, more technical stitch-like typography contract", () => {
-    const cssPath = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "../../styles/design-system.css"
-    );
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const designDocPath = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
+      currentDir,
       "../../../../../docs/DESIGN.md"
     );
-    const css = readFileSync(cssPath, "utf8");
+    const css = readGlobalCssBundle(path.resolve(currentDir, "../../styles"));
     const designDoc = readFileSync(designDocPath, "utf8");
 
     expect(designDoc).toContain("### 7.3 Flächen");

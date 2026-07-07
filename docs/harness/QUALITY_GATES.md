@@ -208,6 +208,9 @@ Aktueller Status:
 - Als eigener Make-Target vorhanden.
 - Teil von `make test-full-prod-like`.
 - Nicht Teil von `make verify`, bis Stabilität und Laufzeit für lokale Standardverifikation belegt sind.
+- Läuft gegen das produktionsnahe Compose-Setup mit Web, Keycloak, Caddy und H5P; fehlende Infrastruktur ist ein echter Gate-Fehler, kein stiller Skip.
+- Die Support-Schicht unter `frontend/e2e/support/` lädt lokale Env-Defaults, legt Keycloak-Teacher-/Student-User an, loggt über den echten Auth-Flow ein, seedet deterministische Teacher-/Learner-/H5P-Daten über die öffentlichen Teaching-APIs und prüft DOM-/Layout-Sanity ohne Screenshot-Snapshots.
+- Die Smokes prüfen Auth-Shells, Teacher-Graph-Workspace, Learner-Workspace und H5P-Task-Shell. Paketimport, FinishedData und tiefe H5P-Integration bleiben in den bestehenden H5P-E2E-Tests.
 
 ### supply-chain
 Zweck: FOSS-, Lizenz- und Dependency-Transparenz reproduzierbar prüfen.

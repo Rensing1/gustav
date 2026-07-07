@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-06T21:54:17",
+      "generated": "2026-07-07T09:21:31",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -77,17 +77,32 @@
         },
         {
           "delta_from_previous": 0,
-          "loc": 2234,
+          "loc": 56,
+          "path": "frontend/src/lib/styles/theme-tokens.css"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 40,
+          "path": "frontend/src/lib/styles/typography.css"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 1141,
+          "path": "frontend/src/lib/styles/ui-primitives.css"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 2492,
           "path": "frontend/src/lib/styles/learning-unit.css"
         },
         {
           "delta_from_previous": 0,
-          "loc": 2096,
+          "loc": 2468,
           "path": "frontend/src/lib/styles/teaching-workspace.css"
         },
         {
           "delta_from_previous": 0,
-          "loc": 1903,
+          "loc": 5,
           "path": "frontend/src/lib/styles/design-system.css"
         },
         {

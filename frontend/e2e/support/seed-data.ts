@@ -1,0 +1,151 @@
+import { type Page } from "@playwright/test";
+
+import { currentUserSub } from "./auth";
+import { apiHeaders, expectApiOk } from "./api";
+import { webBase } from "./e2e-env";
+
+export type TeacherVisualSmokeUnit = {
+  unitId: string;
+  title: string;
+};
+
+export type LearnerVisualSmokeCourse = {
+  courseId: string;
+  unitId: string;
+  sectionId: string;
+  taskId: string;
+  courseTitle: string;
+  unitTitle: string;
+};
+
+async function createCourse(page: Page, title: string): Promise<string> {
+  const response = await page.request.post(`${webBase}/api/teaching/courses`, {
+    headers: apiHeaders("/teaching/courses"),
+    data: { title }
+  });
+  await expectApiOk(response, 201);
+  const payload = await response.json();
+  return payload.id as string;
+}
+
+async function createUnit(page: Page, title: string, unitType: "linear" | "modular" = "linear"): Promise<string> {
+  const response = await page.request.post(`${webBase}/api/teaching/units`, {
+    headers: apiHeaders("/teaching/units"),
+    data: { title, unit_type: unitType }
+  });
+  await expectApiOk(response, 201);
+  const payload = await response.json();
+  return payload.id as string;
+}
+
+async function createSection(page: Page, unitId: string, title: string): Promise<string> {
+  const response = await page.request.post(`${webBase}/api/teaching/units/${unitId}/sections`, {
+    headers: apiHeaders(`/teaching/units/${unitId}`),
+    data: { title }
+  });
+  await expectApiOk(response, 201);
+  const payload = await response.json();
+  return payload.id as string;
+}
+
+async function createTask(page: Page, unitId: string, sectionId: string, data: Record<string, unknown>): Promise<string> {
+  const response = await page.request.post(`${webBase}/api/teaching/units/${unitId}/sections/${sectionId}/tasks`, {
+    headers: apiHeaders(`/teaching/units/${unitId}`),
+    data
+  });
+  await expectApiOk(response, 201);
+  const payload = await response.json();
+  return payload.id as string;
+}
+
+async function attachUnitToCourse(page: Page, courseId: string, unitId: string): Promise<string> {
+  const response = await page.request.post(`${webBase}/api/teaching/courses/${courseId}/modules`, {
+    headers: apiHeaders(`/teaching/courses/${courseId}`),
+    data: { unit_id: unitId }
+  });
+  await expectApiOk(response, 201);
+  const payload = await response.json();
+  return payload.id as string;
+}
+
+async function releaseSection(page: Page, courseId: string, moduleId: string, sectionId: string): Promise<void> {
+  const response = await page.request.patch(
+    `${webBase}/api/teaching/courses/${courseId}/modules/${moduleId}/sections/${sectionId}/visibility`,
+    {
+      headers: apiHeaders(`/teaching/courses/${courseId}`),
+      data: { visible: true }
+    }
+  );
+  await expectApiOk(response, 200);
+}
+
+async function addCurrentLearnerToCourse(page: Page, courseId: string, learnerSub: string): Promise<void> {
+  const response = await page.request.post(`${webBase}/api/teaching/courses/${courseId}/members`, {
+    headers: apiHeaders(`/teaching/courses/${courseId}`),
+    data: { student_sub: learnerSub }
+  });
+  if (![201, 204].includes(response.status())) {
+    await expectApiOk(response);
+  }
+}
+
+export async function seedTeacherVisualSmokeUnit(page: Page, title: string): Promise<TeacherVisualSmokeUnit> {
+  const unitId = await createUnit(page, title, "modular");
+
+  const phasesResponse = await page.request.get(`${webBase}/api/teaching/units/${unitId}/phases`);
+  await expectApiOk(phasesResponse);
+  const phases = await phasesResponse.json();
+  const phaseId = phases[0]?.id as string | undefined;
+
+  for (const moduleTitle of ["Startmodul", "Zielmodul"]) {
+    const moduleResponse = await page.request.post(`${webBase}/api/teaching/units/${unitId}/modules`, {
+      headers: apiHeaders(`/teaching/units/${unitId}`),
+      data: { title: moduleTitle, phase_id: phaseId }
+    });
+    await expectApiOk(moduleResponse, 201);
+  }
+
+  return { unitId, title };
+}
+
+export async function seedLearnerVisualSmokeCourse(
+  teacherPage: Page,
+  learnerPage: Page,
+  titlePrefix: string
+): Promise<LearnerVisualSmokeCourse> {
+  const learnerSub = await currentUserSub(learnerPage);
+  const courseTitle = `${titlePrefix} Kurs`;
+  const unitTitle = `${titlePrefix} Einheit`;
+  const courseId = await createCourse(teacherPage, courseTitle);
+  const unitId = await createUnit(teacherPage, unitTitle);
+  const sectionId = await createSection(teacherPage, unitId, "Start");
+  const taskId = await createTask(teacherPage, unitId, sectionId, {
+    instruction_md: "Beschreibe in zwei Sätzen, was du auf dieser Seite siehst.",
+    criteria: ["Antwort ist verständlich."]
+  });
+  const moduleId = await attachUnitToCourse(teacherPage, courseId, unitId);
+  await releaseSection(teacherPage, courseId, moduleId, sectionId);
+  await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
+  return { courseId, unitId, sectionId, taskId, courseTitle, unitTitle };
+}
+
+export async function seedH5pVisualSmokeUnit(
+  teacherPage: Page,
+  learnerPage: Page,
+  titlePrefix: string
+): Promise<LearnerVisualSmokeCourse> {
+  const learnerSub = await currentUserSub(learnerPage);
+  const courseTitle = `${titlePrefix} H5P-Kurs`;
+  const unitTitle = `${titlePrefix} H5P-Einheit`;
+  const courseId = await createCourse(teacherPage, courseTitle);
+  const unitId = await createUnit(teacherPage, unitTitle);
+  const sectionId = await createSection(teacherPage, unitId, "Interaktiv");
+  const taskId = await createTask(teacherPage, unitId, sectionId, {
+    instruction_md: "H5P-Aufgabe",
+    h5p: { content_id: null, display_options: {} }
+  });
+  const moduleId = await attachUnitToCourse(teacherPage, courseId, unitId);
+  await releaseSection(teacherPage, courseId, moduleId, sectionId);
+  await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
+  return { courseId, unitId, sectionId, taskId, courseTitle, unitTitle };
+}

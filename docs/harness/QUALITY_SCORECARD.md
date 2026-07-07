@@ -5,7 +5,7 @@ Owner: Produktverantwortlicher
 Related plan: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich
 
-## Snapshot 2026-07 (generated 2026-07-06)
+## Snapshot 2026-07 (generated 2026-07-07)
 
 ### Hotspot LOC trend
 | File | LOC | Delta vs previous month |
@@ -18,9 +18,12 @@ Review cadence: monatlich
 | backend/web/routes/teaching.py | 734 | +0 |
 | backend/web/static/css/gustav.css | 2684 | +0 |
 | frontend/src/lib/styles/app.css | 1292 | +0 |
-| frontend/src/lib/styles/design-system.css | 1903 | +0 |
-| frontend/src/lib/styles/learning-unit.css | 2234 | +0 |
-| frontend/src/lib/styles/teaching-workspace.css | 2096 | +0 |
+| frontend/src/lib/styles/design-system.css | 5 | +0 |
+| frontend/src/lib/styles/learning-unit.css | 2492 | +0 |
+| frontend/src/lib/styles/teaching-workspace.css | 2468 | +0 |
+| frontend/src/lib/styles/theme-tokens.css | 56 | +0 |
+| frontend/src/lib/styles/typography.css | 40 | +0 |
+| frontend/src/lib/styles/ui-primitives.css | 1141 | +0 |
 | frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte | 1644 | +0 |
 | frontend/src/routes/teaching/units/[unitId]/+page.svelte | 1106 | +0 |
 | h5p-service/server.mjs | 1394 | +0 |

@@ -184,12 +184,62 @@ def test_quality_scorecard_tracks_split_frontend_and_static_css_hotspots() -> No
 
     for required_hotspot in (
         "frontend/src/lib/styles/app.css",
+        "frontend/src/lib/styles/theme-tokens.css",
+        "frontend/src/lib/styles/typography.css",
+        "frontend/src/lib/styles/ui-primitives.css",
         "frontend/src/lib/styles/learning-unit.css",
         "frontend/src/lib/styles/teaching-workspace.css",
         "frontend/src/lib/styles/design-system.css",
         "backend/web/static/css/gustav.css",
     ):
         assert required_hotspot in scorecard_source
+
+
+def test_css_hotspot_docs_track_split_bundles_and_static_css_guardrails() -> None:
+    """Closeout v1.3 must document the active CSS split and the FastAPI static CSS guardrail."""
+
+    hotspots = _read("docs/harness/HOTSPOTS.md")
+    scorecard = _read("docs/harness/QUALITY_SCORECARD.md")
+
+    for required_term in (
+        "theme-tokens.css",
+        "typography.css",
+        "ui-primitives.css",
+        "Kompatibilitätsfassade",
+        "Split-Trigger",
+        "Referenznachweis",
+        "backend/web/components/layout.py",
+        "keycloak/themes/gustav",
+    ):
+        assert required_term in hotspots
+
+    for required_scorecard_row in (
+        "frontend/src/lib/styles/theme-tokens.css",
+        "frontend/src/lib/styles/typography.css",
+        "frontend/src/lib/styles/ui-primitives.css",
+        "frontend/src/lib/styles/design-system.css",
+        "backend/web/static/css/gustav.css",
+    ):
+        assert required_scorecard_row in scorecard
+
+
+def test_fastapi_static_gustav_css_references_are_documented_active_surfaces() -> None:
+    """The large FastAPI static CSS file is active and must not be split blindly."""
+
+    layout_source = _read("backend/web/components/layout.py")
+    auth_source = _read("backend/web/routes/auth.py")
+    keycloak_templates = [
+        path
+        for path in (REPO_ROOT / "keycloak" / "themes" / "gustav" / "login").glob("*.ftl")
+        if path.read_text(encoding="utf-8").count("gustav.css") > 0
+    ]
+
+    assert 'href="/static/css/gustav.css?v=' in layout_source
+    assert 'href="/static/css/gustav.css"' in auth_source
+    assert len(keycloak_templates) >= 5
+    for template_path in keycloak_templates:
+        template_source = template_path.read_text(encoding="utf-8")
+        assert 'gustav.css?v=${properties.gustavThemeVersion!"dev"}' in template_source
 
 
 def test_plan_memory_documents_exist() -> None:

@@ -2,8 +2,8 @@
 
 ## Status
 - Date: 2026-05-02
-- Last updated: 2026-07-06
-- Status: Completed v1.2 / closeout verified. The harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, backend Ruff/Pyflakes linting, offline supply-chain/license checks, quality scorecard, public-repo safety, visual-smoke coverage for core auth shells, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, marks the harness documents as active, modularizes the large runtime hotspots that drove this plan, and records the remaining monitored large files in `docs/harness/HOTSPOTS.md` and `docs/harness/QUALITY_SCORECARD.md`. Closeout v1.2 further reduced active runtime/UI/H5P hotspots, added offline supply-chain and license gates, introduced visual smoke checks for core UI surfaces, and stabilized reload-heavy route contracts after the modularization.
+- Last updated: 2026-07-07
+- Status: Completed v1.3 / verification in progress. The harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, backend Ruff/Pyflakes linting, offline supply-chain/license checks, quality scorecard, public-repo safety, visual-smoke coverage for core auth shells, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, marks the harness documents as active, modularizes the large runtime hotspots that drove this plan, and records the remaining monitored large files in `docs/harness/HOTSPOTS.md` and `docs/harness/QUALITY_SCORECARD.md`. Closeout v1.2 further reduced active runtime/UI/H5P hotspots, added offline supply-chain and license gates, introduced visual smoke checks for core UI surfaces, and stabilized reload-heavy route contracts after the modularization. Closeout v1.3 splits the SvelteKit designsystem CSS into explicit token, typography, and UI-primitive bundles, documents the still-active FastAPI static CSS guardrail, and expands visual smokes from anonymous auth shells to real Teacher-, Learner-, and H5P core surfaces.
 - Time horizon: 3 months
 - Strategy: harness first, then refactor in small PRs
 - Gate strategy: security, public-repo hygiene, import boundaries, architecture boundaries, route map, API contract, DB inventory, Docker image parity, frontend/H5P, and full verification run as hard gates; `make harness-signals` remains advisory telemetry.
@@ -1428,6 +1428,7 @@ Closeout v1.3 ist ein geplanter Folgeblock nach dem abgeschlossenen v1.2-Closeou
   - CSS-Bundle-Verantwortungen sind im Plan und in `docs/harness/HOTSPOTS.md` eindeutig beschrieben.
   - Ein Contract-Test verhindert, dass workspace-spezifische Regeln in `app.css` oder ein falsches Bundle zurückwandern.
   - `npm run check`, relevante Frontend-Contract-Tests und `make quality-scorecard` bleiben grün.
+- Done in working tree: `backend/tests/packaging/test_sveltekit_ui_shell_contract.py` schützt die aktive SvelteKit-CSS-Ladereihenfolge mit `theme-tokens.css`, `typography.css`, `ui-primitives.css`, `app.css`, `learning-unit.css` und `teaching-workspace.css`. `backend/tests/test_harness_minimum_contract.py` verlangt die neuen CSS-Hotspots in Scorecard und Hotspot-Dokumentation, inklusive Split-Triggern und FastAPI-Static-CSS-Guardrail.
 
 #### C26: `design-system.css` nach Verantwortungen teilen
 - Problem: `frontend/src/lib/styles/design-system.css` enthält aktuell Tokens/Theme, Typografie, Shell-Regeln, UI-Primitives und workspace-nahe Selektoren in einer Datei. Das ist der beste nächste CSS-Kandidat, weil diese Datei echte Querschnittsverantwortung trägt.
@@ -1441,6 +1442,7 @@ Closeout v1.3 ist ein geplanter Folgeblock nach dem abgeschlossenen v1.2-Closeou
   - `design-system.css` ist entweder deutlich kleiner oder als reine Import-/Kompatibilitätsfassade dokumentiert.
   - Neue Basis-Stylesheets haben klare Kopfkommentare mit Verantwortung.
   - Keine UI-Regel wird nur wegen der Dateigröße verschoben; jede Verschiebung folgt einer benannten Verantwortung.
+- Done in working tree: `frontend/src/lib/styles/design-system.css` ist auf eine kleine Kompatibilitätsfassade reduziert. Die aktiven Verantwortungen liegen in `theme-tokens.css` für Design Tokens und Theme-Overrides, `typography.css` für globale Schrift-/Heading-Regeln und `ui-primitives.css` für wiederverwendbare Shell-/Workspace-Primitives. Learner- und Teacher-nahe Designsystem-Overrides wurden in `learning-unit.css` beziehungsweise `teaching-workspace.css` verschoben, damit das Designsystem nicht erneut zum Sammelstylesheet wird.
 
 #### C27: Learner- und Teacher-Workspace-CSS nur entlang echter UI-Flächen schneiden
 - Problem: `learning-unit.css` und `teaching-workspace.css` sind groß, aber fachlich bereits stärker kohärent als das alte `app.css`. Ein blinder Split würde nur mehr Dateien erzeugen.
@@ -1454,6 +1456,7 @@ Closeout v1.3 ist ein geplanter Folgeblock nach dem abgeschlossenen v1.2-Closeou
   - Die großen Workspace-CSS-Dateien verlieren echte Verantwortungsblöcke, ohne dass die Kaskade schwerer nachvollziehbar wird.
   - Die SvelteKit-Styles bleiben deterministisch geladen.
   - Teacher- und Learner-Workspace-Tests bleiben grün.
+- Done in working tree: Dieser Block wurde bewusst nur als gezielter Schnitt umgesetzt. Die Workspace-Dateien wurden nicht blind weiter zerlegt; stattdessen nehmen sie jetzt die bisher im Designsystem liegenden Learner-/Teacher-spezifischen Regeln auf. `docs/harness/HOTSPOTS.md` dokumentiert als Split-Trigger, dass weitere Teilung erst entlang stabiler Flächen wie Material/Task/Submission, Learner-Graph, Teacher-Graph, Node-Editor oder Toolbar erfolgen soll und nur mit passenden Komponenten-, Route- oder Visual-Smoke-Contracts.
 
 #### C28: `backend/web/static/css/gustav.css` erst nach Referenz-Audit teilen
 - Problem: `backend/web/static/css/gustav.css` ist groß, aber sie ist eine aktive FastAPI-/Auth-/Legacy-Static-Fläche. Ein voreiliger Split kann Login-, Keycloak-, Auth- oder retired-HTML-Flächen beschädigen.
@@ -1467,6 +1470,7 @@ Closeout v1.3 ist ein geplanter Folgeblock nach dem abgeschlossenen v1.2-Closeou
   - Keine aktive Auth-/Login-/FastAPI-HTML-Fläche verliert ihr Stylesheet.
   - Retired CSS wird nur mit Suchnachweis, Contract-Test oder dokumentiertem Exit-Kriterium entfernt.
   - `backend/web/static/css/gustav.css` bleibt in der Scorecard sichtbar, solange sie aktiv ist.
+- Done in working tree: `backend/tests/test_harness_minimum_contract.py::test_fastapi_static_gustav_css_references_are_documented_active_surfaces` schützt die aktiven Referenzen aus `backend/web/components/layout.py`, `backend/web/routes/auth.py` und den Keycloak-Templates unter `keycloak/themes/gustav`. `gustav.css` wurde deshalb nicht geteilt; die Datei bleibt ein überwachter aktiver Static-CSS-Hotspot mit dokumentierter Referenzpflicht vor jeder späteren Reduktion.
 
 #### C29: Visual-Smoke-Testinfrastruktur ausbauen
 - Problem: `frontend/e2e/visual-smoke.spec.ts` prüft aktuell nur anonyme Auth-Shells. Für Teacher-, Learner- und H5P-Flächen fehlen gemeinsame, stabile Testdaten- und Login-Helfer.
@@ -1480,6 +1484,7 @@ Closeout v1.3 ist ein geplanter Folgeblock nach dem abgeschlossenen v1.2-Closeou
   - Auth-Smokes und bestehende Teacher-Graph-E2E-Tests verwenden wiederverwendbare Helfer statt kopierter Login-/Env-Logik.
   - `backend/tests/test_visual_smoke_contract.py` verlangt weiterhin `@visual-smoke` und verbietet breite Snapshot-Nutzung.
   - `make test-visual-smoke` bleibt lokal reproduzierbar gegen `WEB_BASE`.
+- Done in working tree: `frontend/e2e/support/` enthält jetzt wiederverwendbare Helfer für Env-Defaults, Keycloak-Testnutzer, echten Login über `/api/me`, API-Requests mit Browser-Headern, deterministisches Seeding und Layout-Sanity. `frontend/e2e/teacher-graph-module-actions.spec.ts` nutzt dieselben Helfer, damit Teacher-E2E und Visual-Smokes nicht auseinanderlaufen. `backend/tests/test_visual_smoke_contract.py` schützt die Support-Struktur und verbietet weiterhin Snapshot-basierte Visual-Smokes.
 
 #### C30: Teacher-, Learner- und H5P-Visual-Smokes ergänzen
 - Problem: Die wichtigsten produktiven Oberflächen können durch CSS-, Layout- oder Komponentenänderungen leer oder unbenutzbar rendern, obwohl Unit- und Contract-Tests grün bleiben.
@@ -1493,6 +1498,7 @@ Closeout v1.3 ist ein geplanter Folgeblock nach dem abgeschlossenen v1.2-Closeou
   - Visual-Smokes prüfen Kernansichten, nicht vollständige Produktworkflows.
   - Tests erzeugen keine Pixel-Snapshot-Baseline und keinen Screenshot-Friedhof.
   - Fehlende lokale Infrastruktur führt zu klarer Fehlermeldung oder dokumentiertem `test-full-prod-like`-Vorbedingungen, nicht zu stillem Erfolg.
+- Done in working tree: `frontend/e2e/visual-smoke.spec.ts` prüft jetzt Auth-Shells auf Desktop und Mobile sowie echte Teacher-, Learner- und H5P-Kernflächen gegen produktionsnahe Services. Der Teacher-Smoke seedet eine modulare Einheit und prüft Graphwerkzeuge und Module; der Learner-Smoke seedet Kurs, Mitgliedschaft und freigegebene Aufgabe; der H5P-Smoke öffnet die Learner-H5P-Task-Shell und prüft die “noch nicht bereit”-Shell ohne Pixel-Snapshot.
 
 #### C31: Visual-Smoke- und CSS-Gates bewusst einordnen
 - Problem: Visual-Smokes und CSS-Splits sind wertvoll, können aber langsamer und anfälliger sein als reine Unit-/Contract-Gates. Ein zu frühes hartes Gate in `make verify` würde lokale Entwicklung unnötig bremsen.
@@ -1506,6 +1512,21 @@ Closeout v1.3 ist ein geplanter Folgeblock nach dem abgeschlossenen v1.2-Closeou
   - Entwickler wissen, wann `make test-visual-smoke`, `make test-full-prod-like` und `make verify` jeweils auszuführen sind.
   - Ein grüner v1.3-Abschluss nennt explizit, welche Visual-Smokes wirklich gelaufen sind.
   - CSS- und Visual-Smoke-Arbeit erzeugt keine unkontrollierte Massenformatierung.
+- Done in working tree: `docs/harness/QUALITY_GATES.md` ordnet `make test-visual-smoke` weiterhin als prod-like Profil außerhalb von `make verify` ein und benennt Web, Keycloak, Caddy und H5P als echte Vorbedingungen. `docs/harness/HOTSPOTS.md` und `docs/harness/QUALITY_SCORECARD.md` enthalten die neuen CSS-Baselines und Split-Entscheidungen.
+
+#### Closeout v1.3 Verification
+Vor Abschluss von Closeout v1.3 müssen diese Befehle erfolgreich sein:
+- `.venv/bin/pytest -q backend/tests/test_visual_smoke_contract.py`
+- `.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py::test_quality_scorecard_tracks_split_frontend_and_static_css_hotspots backend/tests/test_harness_minimum_contract.py::test_css_hotspot_docs_track_split_bundles_and_static_css_guardrails backend/tests/test_harness_minimum_contract.py::test_fastapi_static_gustav_css_references_are_documented_active_surfaces`
+- `.venv/bin/pytest -q backend/tests/packaging/test_sveltekit_ui_shell_contract.py::test_design_system_styles_are_split_into_ordered_responsibility_bundles`
+- `cd frontend && npm run check`
+- `cd frontend && npm run test:e2e -- --grep "@visual-smoke h5p workspace"`
+- `make test-visual-smoke`
+- `make quality-scorecard`
+
+Aktueller Stand am 2026-07-07:
+- `cd frontend && npm run test:e2e -- --grep "@visual-smoke h5p workspace"`: grün, 1 Chromium Playwright smoke passed.
+- `make test-visual-smoke`: grün, 5 Chromium Playwright smoke tests passed für Auth desktop, Auth mobile, Teacher Workspace, Learner Workspace und H5P Workspace.
 
 ## Security, GDPR/Privacy, and FOSS Risks
 

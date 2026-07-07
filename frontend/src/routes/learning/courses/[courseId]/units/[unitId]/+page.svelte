@@ -58,6 +58,11 @@
     type LinearWorkspaceState,
     type ModularWorkspaceState
   } from "$lib/learning-unit/layout";
+  import {
+    learningUnitWorkspaceStorageKey,
+    readLearningUnitWorkspaceState,
+    serializeLearningUnitWorkspaceState
+  } from "$lib/learning-unit/workspace-storage";
   import { highlightedLearnerGraphModuleIds } from "$lib/learning-unit/graph-selection";
   import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type {
@@ -71,12 +76,6 @@
   import type { ActionData, PageData } from "./$types";
 
   type ModularRestoreState = "idle" | "restoring" | "ready" | "failed";
-  type StoredWorkspaceState = {
-    version: 11 | 12 | 13 | 14 | 15 | 16;
-    modular?: Partial<ModularWorkspaceState>;
-    linear?: Partial<LinearWorkspaceState>;
-    layout?: Partial<LayoutPreferences>;
-  };
   type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
   type UploadIntent = {
     storage_key: string;
@@ -122,7 +121,7 @@
   }
 
   function storageKey(): string {
-    return `gustav.learning.unit-workspace:${data.courseId}:${data.unitId}`;
+    return learningUnitWorkspaceStorageKey(data.courseId, data.unitId);
   }
 
   function plainModule(module: LearningModuleContent): LearningModuleContent {
@@ -157,51 +156,13 @@
     linear: LinearWorkspaceState;
     layout: LayoutPreferences;
   } {
-    if (!browser) {
-      return {
-        modular: defaultModularWorkspaceState(viewportWidth),
-        linear: defaultLinearWorkspaceState(viewportWidth),
-        layout: defaultLayoutPreferences(viewportWidth)
-      };
-    }
-
-    try {
-      const raw = window.localStorage.getItem(storageKey());
-      if (!raw) {
-        return {
-          modular: defaultModularWorkspaceState(viewportWidth),
-          linear: defaultLinearWorkspaceState(viewportWidth),
-          layout: defaultLayoutPreferences(viewportWidth)
-        };
-      }
-
-      const parsed = JSON.parse(raw) as StoredWorkspaceState | Partial<ModularWorkspaceState>;
-      if (
-        parsed &&
-        typeof parsed === "object" &&
-        "version" in parsed &&
-        (parsed.version === 11 || parsed.version === 12 || parsed.version === 13 || parsed.version === 14 || parsed.version === 15 || parsed.version === 16) &&
-        ("modular" in parsed || "linear" in parsed)
-      ) {
-        return {
-          modular: normalizeModularWorkspaceState(parsed.modular ?? null, openableModuleIds()),
-          linear: normalizeLinearWorkspaceState(parsed.linear ?? null),
-          layout: normalizeLayoutPreferences(parsed.layout ?? null, viewportWidth)
-        };
-      }
-
-      return {
-        modular: normalizeModularWorkspaceState(parsed, openableModuleIds()),
-        linear: defaultLinearWorkspaceState(viewportWidth),
-        layout: defaultLayoutPreferences(viewportWidth)
-      };
-    } catch {
-      return {
-        modular: defaultModularWorkspaceState(viewportWidth),
-        linear: defaultLinearWorkspaceState(viewportWidth),
-        layout: defaultLayoutPreferences(viewportWidth)
-      };
-    }
+    return readLearningUnitWorkspaceState({
+      storage: browser ? window.localStorage : null,
+      courseId: data.courseId,
+      unitId: data.unitId,
+      viewportWidth,
+      openableModuleIds: openableModuleIds()
+    });
   }
 
   function seedModularWorkspaceState(base: ModularWorkspaceState): ModularWorkspaceState {
@@ -1336,13 +1297,12 @@
       return;
     }
 
-    const payload: StoredWorkspaceState = {
-      version: 16,
+    const payload = serializeLearningUnitWorkspaceState({
       modular: modularWorkspace,
       linear: linearWorkspace,
       layout: layoutPreferences
-    };
-    window.localStorage.setItem(storageKey(), JSON.stringify(payload));
+    });
+    window.localStorage.setItem(storageKey(), payload);
   });
 
   $effect(() => {

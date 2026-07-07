@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import time
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -43,6 +42,7 @@ from backend.web.routes.teaching_serialization import (
     _build_live_delta_cells,
     _build_live_summary_rows,
 )
+from backend.web.routes.teaching_live_h5p_review import issue_h5p_review_token
 from backend.web.routes.teaching_shared import (
     _current_sub,
     _is_uuid_like,
@@ -669,56 +669,6 @@ async def get_latest_submission_detail(
         to the course (best-effort verification). Returns 204 when no
         submission exists.
     """
-    def _issue_h5p_review_token(
-        *,
-        owner_sub: str,
-        course_id_in: str,
-        task_id_in: str,
-        student_sub_in: str,
-        content_id_in: str,
-    ) -> Optional[str]:
-        """Return a short-lived, signed H5P review capability token.
-
-        Why:
-            The teacher review UI must load the student's H5P userState without
-            exposing a generic "impersonate user" query parameter. We therefore
-            issue a short-lived capability token that binds:
-              - teacher (owner_sub),
-              - student,
-              - course,
-              - task context,
-              - H5P content id.
-
-        Permissions:
-            Caller must already have verified course ownership (teacher-only).
-        """
-        secret = (os.getenv("H5P_REVIEW_TOKEN_SECRET") or "").strip()
-        if not secret:
-            return None
-        try:
-            import base64
-            import hashlib
-            import hmac
-            import json
-
-            now = int(time.time())
-            exp = now + 10 * 60
-            payload_obj = {
-                "teacher_sub": owner_sub,
-                "student_sub": student_sub_in,
-                "course_id": course_id_in,
-                "task_id": task_id_in,
-                "content_id": content_id_in,
-                "exp": exp,
-            }
-            raw_json = json.dumps(payload_obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
-            payload_b64 = base64.urlsafe_b64encode(raw_json).decode("ascii").rstrip("=")
-            sig = hmac.new(secret.encode("utf-8"), raw_json, hashlib.sha256).digest()
-            sig_b64 = base64.urlsafe_b64encode(sig).decode("ascii").rstrip("=")
-            return f"{payload_b64}.{sig_b64}"
-        except Exception:
-            return None
-
     repo = _get_repo()
     user, forbidden = _require_teacher(request)
     if forbidden:
@@ -844,12 +794,12 @@ async def get_latest_submission_detail(
                     ) = row
                     review_token = None
                     if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
-                        review_token = _issue_h5p_review_token(
+                        review_token = issue_h5p_review_token(
                             owner_sub=str(sub),
-                            course_id_in=str(course_id),
-                            task_id_in=str(task_id),
-                            student_sub_in=str(student_sub),
-                            content_id_in=str(task_h5p_content_id),
+                            course_id=str(course_id),
+                            task_id=str(task_id),
+                            student_sub=str(student_sub),
+                            content_id=str(task_h5p_content_id),
                         )
                     payload = _build_latest_submission_payload(
                         course_id=str(course_id),
@@ -961,12 +911,12 @@ async def get_latest_submission_detail(
                         ) = row
                         review_token = None
                         if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
-                            review_token = _issue_h5p_review_token(
+                            review_token = issue_h5p_review_token(
                                 owner_sub=str(sub),
-                                course_id_in=str(course_id),
-                                task_id_in=str(task_id),
-                                student_sub_in=str(student_sub),
-                                content_id_in=str(task_h5p_content_id),
+                                course_id=str(course_id),
+                                task_id=str(task_id),
+                                student_sub=str(student_sub),
+                                content_id=str(task_h5p_content_id),
                             )
                         payload = _build_latest_submission_payload(
                             course_id=str(course_id),

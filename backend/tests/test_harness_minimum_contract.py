@@ -299,6 +299,22 @@ def test_closeout_v14_tracks_large_test_files_as_first_class_hotspots() -> None:
         assert required_decision in portfolio
 
 
+def test_closeout_v14_tracks_runtime_hotspots_in_scorecard_and_hotspots_doc() -> None:
+    """The final sweep must monitor runtime files that still drive maintenance cost."""
+
+    scorecard_source = _read("backend/tools/quality_scorecard.py")
+    scorecard = _read("docs/harness/QUALITY_SCORECARD.md")
+    hotspots = _read("docs/harness/HOTSPOTS.md")
+
+    for required_runtime_hotspot in (
+        "backend/learning/workers/process_learning_submission_jobs.py",
+        "backend/web/routes/teaching_live.py",
+    ):
+        assert required_runtime_hotspot in scorecard_source
+        assert required_runtime_hotspot in scorecard
+        assert required_runtime_hotspot in hotspots
+
+
 def test_plan_memory_documents_exist() -> None:
     """Agents need a small searchable planning memory before refactor work grows."""
 

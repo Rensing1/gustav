@@ -23,7 +23,7 @@
           "ok": true
         }
       },
-      "generated": "2026-07-07T09:48:06",
+      "generated": "2026-07-07T09:59:12",
       "hotspots": [
         {
           "delta_from_previous": 0,
@@ -46,9 +46,19 @@
           "path": "backend/web/routes/teaching.py"
         },
         {
+          "delta_from_previous": null,
+          "loc": 1086,
+          "path": "backend/web/routes/teaching_live.py"
+        },
+        {
           "delta_from_previous": 0,
           "loc": 511,
           "path": "backend/learning/repo_db.py"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 1267,
+          "path": "backend/learning/workers/process_learning_submission_jobs.py"
         },
         {
           "delta_from_previous": 0,
@@ -56,17 +66,17 @@
           "path": "backend/teaching/repo_db.py"
         },
         {
-          "delta_from_previous": 0,
-          "loc": 1394,
+          "delta_from_previous": -74,
+          "loc": 1320,
           "path": "h5p-service/server.mjs"
         },
         {
-          "delta_from_previous": -40,
+          "delta_from_previous": 0,
           "loc": 1604,
           "path": "frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte"
         },
         {
-          "delta_from_previous": -43,
+          "delta_from_previous": 0,
           "loc": 1063,
           "path": "frontend/src/routes/teaching/units/[unitId]/+page.svelte"
         },
@@ -111,32 +121,32 @@
           "path": "backend/web/static/css/gustav.css"
         },
         {
-          "delta_from_previous": null,
+          "delta_from_previous": 0,
           "loc": 2326,
           "path": "backend/tests/test_learning_api_contract.py"
         },
         {
-          "delta_from_previous": null,
+          "delta_from_previous": 0,
           "loc": 2009,
           "path": "backend/tests/test_learning_worker_jobs.py"
         },
         {
-          "delta_from_previous": null,
+          "delta_from_previous": 0,
           "loc": 1219,
           "path": "backend/tests/test_teaching_live_unit_summary_api.py"
         },
         {
-          "delta_from_previous": null,
+          "delta_from_previous": 0,
           "loc": 1184,
           "path": "backend/tests/test_teaching_live_detail_api.py"
         },
         {
-          "delta_from_previous": null,
+          "delta_from_previous": 0,
           "loc": 1210,
           "path": "backend/tests/test_gustav_cli.py"
         },
         {
-          "delta_from_previous": null,
+          "delta_from_previous": 0,
           "loc": 1202,
           "path": "frontend/src/lib/components/learning-unit/LearningTaskCard.test.ts"
         }

@@ -18,7 +18,9 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 | `backend/web/routes/learning.py` | 2884 | Learning Web Adapter | Upload-/Storage-, Submission- und Material-Read-Grenzen klein halten |
 | `backend/web/routes/app.py` | 2499 | Browser-BFF und App-Routen | Profil-, Session- und View-Helfer klein halten |
 | `backend/learning/repo_db.py` | 2425 | Learning Repository | Read Models und Query-Gruppen schrittweise isolieren |
+| `backend/learning/workers/process_learning_submission_jobs.py` | 1331 | Learning Worker | Runtime-Konfiguration, Queue/Lease, Processing und Fehlerbehandlung trennen |
 | `backend/teaching/repo_db.py` | 4854 | Teaching Repository | Live-/Dashboard-Read-Models und Schreibfälle trennen |
+| `backend/web/routes/teaching_live.py` | 1136 | Teaching Live Web Adapter | Summary/Delta, Detail, H5P-Review und Datei-Proxy trennen |
 | `h5p-service/server.mjs` | 1633 | H5P Sidecar | Route-Handler klein halten |
 | `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` | 1644 | Learning Workspace | Loader- und View-Komponenten klein halten |
 | `frontend/src/routes/teaching/units/[unitId]/+page.svelte` | 1210 | Teaching Workspace | Graph-State, Command-Bar und Node-Editor-Komposition trennen |
@@ -105,6 +107,14 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 - `frontend/src/lib/teacher-unit-workspace/view-state.ts` übernimmt seit Closeout v1.2 reine Teacher-Unit-Workspace-Helfer für Workspace-Klon, Graph-Signatur, Phasen-/Modul-/Section-Finder und Selektionsableitung. `frontend/src/routes/teaching/units/[unitId]/+page.svelte` ist dadurch von 1210 auf 1106 LOC gesunken und bleibt wegen Graph-/Dialog-/Flow-Komposition weiter überwacht.
 - `frontend/e2e/visual-smoke.spec.ts` ergänzt seit Closeout v1.2 mit `@visual-smoke` markierte Playwright-Smokes für anonyme Auth-Shells auf Desktop und Mobile. Diese Smokes verwenden DOM-/Layout-Sanity statt Screenshot-Snapshots und laufen über `make test-visual-smoke`.
 - `backend/tools/supply_chain_check.py` und `docs/harness/SUPPLY_CHAIN_INVENTORY.json` ergänzen seit Closeout v1.2 ein offline reproduzierbares Supply-Chain-Gate. `make verify` führt `make supply-chain-check` aus.
+
+## Closeout v1.4 Fortschritt
+- `frontend/src/lib/learning-unit/workspace-storage.ts` übernimmt seit Closeout v1.4 den per Kurs/Einheit versionierten Workspace-Storage, Legacy-State-Normalisierung und Serialisierung. `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` ist dadurch von 1644 auf 1604 LOC gesunken und verliert Browser-Storage-Parsing aus der Route.
+- `frontend/src/lib/teacher-unit-workspace/graph-action-result.ts` übernimmt seit Closeout v1.4 Graph-Action-Success-, Fehler- und Formularwert-Normalisierung. `frontend/src/routes/teaching/units/[unitId]/+page.svelte` ist dadurch von 1106 auf 1063 LOC gesunken.
+- `backend/learning/workers/runtime_config.py` übernimmt seit Closeout v1.4 Worker-Backoff, Concurrency-Clamping, Lease-Dauer, Truthy-Env-Parsing und Worker-DSN-Sicherheitsguard. `backend/learning/workers/process_learning_submission_jobs.py` ist dadurch von 1331 auf 1267 LOC gesunken und bleibt als Queue-/Processing-Orchestrator überwacht.
+- `h5p-service/lib/review_mode_middleware.mjs` übernimmt seit Closeout v1.4 die teacher-only H5P-Review-Impersonation für GET-only `contentUserData`-Reads. `h5p-service/server.mjs` ist dadurch von 1394 auf 1320 LOC gesunken.
+- `backend/web/routes/teaching_live_h5p_review.py` übernimmt seit Closeout v1.4 die H5P-Review-Token-Erzeugung für Latest-Submission-Detail. `backend/web/routes/teaching_live.py` ist dadurch von 1136 auf 1086 LOC gesunken; Summary/Delta und Detail-Read-Modelle bleiben nächste Split-Kandidaten, aber wurden in v1.4 nicht als Big-Bang geschnitten.
+- `docs/harness/TEST_PORTFOLIO.md` klassifiziert seit Closeout v1.4 große Testdateien konkret als `rewrite/split`, `merge` oder `retire-later`; diese Testdateien sind zusätzlich in der Scorecard sichtbar.
 
 ## Regel
 Hotspots dürfen nicht ohne bewusst dokumentierten Grund wachsen. Kleine Extraktionen brauchen passende Contract- oder Komponententest-Abdeckung. Die monatliche Scorecard dokumentiert LOC-Veränderungen; relevantes Wachstum braucht entweder eine getestete Extraktion oder einen expliziten Tech-Debt-Eintrag mit Exit-Kriterium.

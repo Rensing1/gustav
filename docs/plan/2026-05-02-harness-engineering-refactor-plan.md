@@ -1551,6 +1551,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - Die Learning-Route verliert echte Orchestrierungsverantwortung, nicht nur Zeilen.
   - `npm run check`, relevante Learning-Vitest-Tests und `make test-visual-smoke` bleiben grün.
+- Done in working tree: `frontend/src/lib/learning-unit/workspace-storage.ts` übernimmt Storage-Key, Version 16, Legacy-State-Normalisierung und Serialisierung. Die Learning-Route nutzt nur noch `readLearningUnitWorkspaceState` und `serializeLearningUnitWorkspaceState`; gezielte Learning-Vitest-Tests und `npm run check` sind grün.
 
 #### C33: Frontend-Teaching-Route weiter modularisieren
 - Problem: `frontend/src/routes/teaching/units/[unitId]/+page.svelte` enthält weiterhin Dialog-State, Graph-Rebuild, Mutation-Commands, Reorder-Logik, URL-Selection-Sync und View-Komposition.
@@ -1562,6 +1563,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - Die Teaching-Route verliert echte Graph-/Command-Verantwortung.
   - `frontend/src/routes/teaching/units/[unitId]/page-contract.test.ts`, Teacher-Workspace-Vitest und `frontend/e2e/teacher-graph-module-actions.spec.ts` bleiben grün.
+- Done in working tree: `frontend/src/lib/teacher-unit-workspace/graph-action-result.ts` übernimmt Graph-Action-Success-, Fehler- und Formularwert-Normalisierung. Die Teaching-Route importiert diese Helfer; gezielte Teacher-Vitest-Tests und `npm run check` sind grün.
 
 #### C34: Workspace-CSS entlang echter UI-Flächen schneiden
 - Problem: `frontend/src/lib/styles/learning-unit.css` und `frontend/src/lib/styles/teaching-workspace.css` sind nach v1.3 fachlich kohärenter, aber weiterhin große Arbeitsflächen.
@@ -1573,6 +1575,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - CSS-Import-Reihenfolge ist durch Contract geschützt.
   - `docs/harness/HOTSPOTS.md`, `docs/harness/QUALITY_SCORECARD.md` und `backend/tools/quality_scorecard.py` zeigen die neuen Bundles.
+- Done in working tree: Nach v1.4-Audit wurde kein weiterer breiter CSS-Split durchgeführt. Begründung: `learning-unit.css` und `teaching-workspace.css` sind nach v1.3 fachlich kohärente Workspace-Bundles; ein zusätzlicher Schnitt ohne neue UI-Komponente würde vor allem Kaskadenkomplexität erzeugen. `docs/harness/HOTSPOTS.md` hält die Split-Trigger weiter sichtbar.
 
 #### C35: FastAPI-/Keycloak-Static-CSS auditieren und nur bei Nachweis teilen
 - Problem: `backend/web/static/css/gustav.css` ist groß, aber aktiv von FastAPI-, Auth- und Keycloak-Flächen referenziert.
@@ -1584,6 +1587,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - Keine Auth-/Login-/Keycloak-Fläche verliert Styles.
   - Wenn kein sicherer Split erfolgt, ist die Begründung in Hotspots und Plan dokumentiert.
+- Done in working tree: `backend/web/static/css/gustav.css` wurde nicht geteilt. Die aktive Referenzlage aus FastAPI/Auth/Keycloak bleibt durch den v1.3-Contract geschützt; v1.4 dokumentiert die bewusste Entscheidung gegen einen Blind-Split.
 
 #### C36: H5P-Sidecar-Komposition weiter reduzieren
 - Problem: `h5p-service/server.mjs` ist trotz v1.2-Schnitten weiter Route-Composition- und Handler-Hotspot.
@@ -1594,6 +1598,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - H5P-Node-Tests bleiben grün.
   - `make test-frontend-h5p` oder ein gezielter H5P-E2E-Smoke läuft nach relevanten H5P-Schnitten.
+- Done in working tree: `h5p-service/lib/review_mode_middleware.mjs` übernimmt die teacher-only H5P-Review-Impersonation für GET-only `contentUserData`-Reads. `server.mjs` mountet nur noch `createReviewModeMiddleware({ reviewTokenSecret })`; relevante Node- und Backend-H5P-Contracts sind grün.
 
 #### C37: Learning-Worker-Hotspot schneiden
 - Problem: `backend/learning/workers/process_learning_submission_jobs.py` bündelt Lease/Queue, Job-Processing, Fehlerbehandlung, AI-Usage, Vision-Cache, Retry/Nack und CLI/Runtime-Wiring.
@@ -1605,6 +1610,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - Relevante Worker-Tests bleiben grün.
   - Keine neue externe Dienstabhängigkeit in Standardtests.
+- Done in working tree: `backend/learning/workers/runtime_config.py` übernimmt Backoff, Concurrency-Clamping, Lease-Dauer, Truthy-Env-Parsing, DSN-Username und Worker-DSN-Sicherheitsguard. `process_learning_submission_jobs.py` behält Kompatibilitätswrapper für bestehende Tests; neue Runtime-Config-Tests und bestehende Worker-Security-Tests sind grün.
 
 #### C38: Backend-Learning-/Teaching-Live-/Repo-Resthotspots auditieren und schneiden
 - Problem: `backend/web/routes/learning.py`, `backend/web/routes/teaching_live.py` und `backend/teaching/repo_db.py` sind nach den großen Schnitten kleiner, aber weiterhin Resthotspots mit Fassade-, Provider-, Read-Model- und Kompatibilitätsverantwortung.
@@ -1616,6 +1622,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - Keine Kompatibilitätsaliase werden ohne Testnachweis entfernt.
   - Architektur- und Import-Boundary-Gates bleiben grün.
+- Done in working tree: `backend/web/routes/teaching_live_h5p_review.py` übernimmt die H5P-Review-Token-Erzeugung aus `teaching_live.py`. Die größeren Summary-/Delta-/Detail-Read-Model-Schnitte wurden nach Audit nicht als Big-Bang umgesetzt; `docs/harness/HOTSPOTS.md` hält sie als nächste Split-Kandidaten sichtbar. `learning.py` und `repo_db.py` bleiben bewusst stabil, weil sie bereits Fassaden mit hohen Kompatibilitätsrisiken sind.
 
 #### C39: Testportfolio-Hygiene statt Testmasse
 - Problem: Die Testsuite ist groß und enthält sehr große Testdateien. Viele Tests sind sinnvoll, aber Redundanz und Implementation-Detail-Tests können künftige Refactors bremsen.
@@ -1627,6 +1634,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - `docs/harness/TEST_PORTFOLIO.md` nennt konkrete v1.4-Entscheidungen für große Testdateien.
   - Neue oder geänderte Tests prüfen Verhalten, Verträge oder Sicherheitsgrenzen statt nur interne Implementierungsdetails.
+- Done in working tree: `docs/harness/TEST_PORTFOLIO.md` enthält konkrete v1.4-Entscheidungen für große Testdateien inklusive `rewrite/split`, `merge`, `retire-later` und `Tabu ohne Ersatz-Contract`. `backend/tools/quality_scorecard.py` und die Scorecard verfolgen diese Test-Hotspots.
 
 #### C40: Scorecard, Hotspots und Closeout ehrlich aktualisieren
 - Problem: Ein maximaler Sweep ist nur wertvoll, wenn die verbleibenden großen Dateien danach nicht wieder unsichtbar werden.
@@ -1637,6 +1645,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - `make quality-scorecard` ist grün.
   - Der v1.4-Abschluss listet die wirklich gelaufenen Checks.
+- Done in working tree: `backend/tools/quality_scorecard.py`, `docs/harness/HOTSPOTS.md`, `docs/harness/QUALITY_SCORECARD.md` und `docs/harness/QUALITY_SCORECARD_HISTORY.json` wurden um Runtime- und Test-Hotspots erweitert. `make quality-scorecard` ist grün.
 
 #### Closeout v1.4 Verification
 Vor Abschluss von Closeout v1.4 müssen diese Befehle erfolgreich sein:
@@ -1647,6 +1656,18 @@ Vor Abschluss von Closeout v1.4 müssen diese Befehle erfolgreich sein:
 - `make test-visual-smoke`
 - `make quality-scorecard`
 - `make verify`
+
+Aktueller Stand am 2026-07-07:
+- `cd frontend && npm run check`: grün nach Learning- und Teaching-Frontend-Schnitten.
+- `cd frontend && npm test -- --run src/lib/learning-unit/workspace-storage.test.ts src/lib/learning-unit/workspace.test.ts src/lib/learning-unit/layout.test.ts 'src/routes/learning/courses/[courseId]/units/[unitId]/page-contract.test.ts' src/lib/components/learning-unit/LearningUnitContentWorkspace.test.ts`: grün, 5 files passed, 45 tests passed.
+- `cd frontend && npm test -- --run src/lib/teacher-unit-workspace/graph-action-result.test.ts src/lib/teacher-unit-workspace/view-state.test.ts 'src/routes/teaching/units/[unitId]/page-contract.test.ts' src/lib/components/ui/TeacherGraphWorkspaceFrame.test.ts src/lib/components/ui/GraphInspectorPanel.test.ts`: grün, 5 files passed, 19 tests passed.
+- `.venv/bin/pytest -q backend/tests/test_learning_worker_runtime_config.py backend/tests/test_learning_worker_security.py`: grün, 8 passed, 4 skipped.
+- `cd h5p-service && npm test -- test/review_mode_middleware.test.mjs test/review_tokens.test.mjs test/internal_auth.test.mjs test/runtime_guards.test.mjs`: grün, 4 Node-Testdateien passed.
+- `.venv/bin/pytest -q backend/tests/test_h5p_review_player_endpoint_contract.py backend/tests/test_h5p_service_hardening_contract.py backend/tests/test_h5p_service_cache_bounds_contract.py`: grün, 8 passed.
+- `.venv/bin/pytest -q backend/tests/test_teaching_live_h5p_review_tokens.py backend/tests/test_teaching_live_detail_api.py::test_latest_detail_h5p_includes_score_and_review_token`: grün für den neuen Token-Unit-Test; DB-abhängiger Detailfall skippt lokal ohne DB-Voraussetzung.
+- `.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py::test_closeout_v14_tracks_large_test_files_as_first_class_hotspots backend/tests/test_harness_minimum_contract.py::test_harness_refactor_plan_includes_closeout_v14_maximal_sweep`: grün.
+- `.venv/bin/pytest -q backend/tests/test_harness_test_strategy_docs_contract.py`: grün, 4 passed.
+- `make quality-scorecard`: grün nach Ausführung außerhalb der Sandbox, weil der enthaltene Docker-Image-Smoke Docker-Daemon-Zugriff braucht.
 
 ## Security, GDPR/Privacy, and FOSS Risks
 

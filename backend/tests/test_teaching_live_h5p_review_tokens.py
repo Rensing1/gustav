@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import json
 
-from backend.web.routes.teaching_live_h5p_review import issue_h5p_review_token
+from backend.teaching.live_h5p_review import issue_h5p_review_token
 
 
 def _decode_token(token: str) -> tuple[dict, bytes, bytes]:

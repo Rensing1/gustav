@@ -1622,7 +1622,7 @@ Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. 
 - Akzeptanz:
   - Keine Kompatibilitätsaliase werden ohne Testnachweis entfernt.
   - Architektur- und Import-Boundary-Gates bleiben grün.
-- Done in working tree: `backend/web/routes/teaching_live_h5p_review.py` übernimmt die H5P-Review-Token-Erzeugung aus `teaching_live.py`. Die größeren Summary-/Delta-/Detail-Read-Model-Schnitte wurden nach Audit nicht als Big-Bang umgesetzt; `docs/harness/HOTSPOTS.md` hält sie als nächste Split-Kandidaten sichtbar. `learning.py` und `repo_db.py` bleiben bewusst stabil, weil sie bereits Fassaden mit hohen Kompatibilitätsrisiken sind.
+- Done in working tree: `backend/teaching/live_h5p_review.py` übernimmt die H5P-Review-Token-Erzeugung aus `teaching_live.py`. Die größeren Summary-/Delta-/Detail-Read-Model-Schnitte wurden nach Audit nicht als Big-Bang umgesetzt; `docs/harness/HOTSPOTS.md` hält sie als nächste Split-Kandidaten sichtbar. `learning.py` und `repo_db.py` bleiben bewusst stabil, weil sie bereits Fassaden mit hohen Kompatibilitätsrisiken sind.
 
 #### C39: Testportfolio-Hygiene statt Testmasse
 - Problem: Die Testsuite ist groß und enthält sehr große Testdateien. Viele Tests sind sinnvoll, aber Redundanz und Implementation-Detail-Tests können künftige Refactors bremsen.

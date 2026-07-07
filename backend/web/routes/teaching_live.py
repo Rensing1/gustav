@@ -42,7 +42,7 @@ from backend.web.routes.teaching_serialization import (
     _build_live_delta_cells,
     _build_live_summary_rows,
 )
-from backend.web.routes.teaching_live_h5p_review import issue_h5p_review_token
+from backend.teaching.live_h5p_review import issue_h5p_review_token
 from backend.web.routes.teaching_shared import (
     _current_sub,
     _is_uuid_like,

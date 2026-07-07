@@ -1,4 +1,4 @@
-"""H5P review-token helpers for Teaching live detail routes."""
+"""H5P review-token helpers for Teaching live detail read models."""
 
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 ## Status
 - Date: 2026-05-02
 - Last updated: 2026-07-07
-- Status: Completed v1.3 / closeout verified. The harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, backend Ruff/Pyflakes linting, offline supply-chain/license checks, quality scorecard, public-repo safety, visual-smoke coverage for core auth shells, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, marks the harness documents as active, modularizes the large runtime hotspots that drove this plan, and records the remaining monitored large files in `docs/harness/HOTSPOTS.md` and `docs/harness/QUALITY_SCORECARD.md`. Closeout v1.2 further reduced active runtime/UI/H5P hotspots, added offline supply-chain and license gates, introduced visual smoke checks for core UI surfaces, and stabilized reload-heavy route contracts after the modularization. Closeout v1.3 splits the SvelteKit designsystem CSS into explicit token, typography, and UI-primitive bundles, documents the still-active FastAPI static CSS guardrail, and expands visual smokes from anonymous auth shells to real Teacher-, Learner-, and H5P core surfaces.
+- Status: Closeout v1.4 in progress. The harness refactor is implemented in the working tree with hard gates for security, import boundaries, architecture boundaries, DB/RLS test inventory, API contracts, route maps, frontend/H5P checks, Docker image parity, backend Ruff/Pyflakes linting, offline supply-chain/license checks, quality scorecard, public-repo safety, visual-smoke coverage for core auth shells, and full verification. The v1 closeout removes the remaining flat import aliases, retires the active FastAPI shell pages `/` and `/about`, zeroes the architecture-boundary and import-boundary baselines, marks the harness documents as active, modularizes the large runtime hotspots that drove this plan, and records the remaining monitored large files in `docs/harness/HOTSPOTS.md` and `docs/harness/QUALITY_SCORECARD.md`. Closeout v1.2 further reduced active runtime/UI/H5P hotspots, added offline supply-chain and license gates, introduced visual smoke checks for core UI surfaces, and stabilized reload-heavy route contracts after the modularization. Closeout v1.3 splits the SvelteKit designsystem CSS into explicit token, typography, and UI-primitive bundles, documents the still-active FastAPI static CSS guardrail, and expands visual smokes from anonymous auth shells to real Teacher-, Learner-, and H5P core surfaces. Closeout v1.4 is the final Maximaler Sweep for the remaining high-cost maintainability hotspots before the refactor stream closes again.
 - Time horizon: 3 months
 - Strategy: harness first, then refactor in small PRs
 - Gate strategy: security, public-repo hygiene, import boundaries, architecture boundaries, route map, API contract, DB inventory, Docker image parity, frontend/H5P, and full verification run as hard gates; `make harness-signals` remains advisory telemetry.
@@ -1536,6 +1536,117 @@ Aktueller Stand am 2026-07-07:
 - `make test-visual-smoke`: grün, 5 Chromium Playwright smoke tests passed für Auth desktop, Auth mobile, Teacher Workspace, Learner Workspace und H5P Workspace.
 - `make quality-scorecard`: grün nach Ausführung außerhalb der Sandbox, weil der enthaltene Docker-Image-Smoke Docker-Daemon-Zugriff braucht.
 - `make verify`: grün; 2004 Backend-Tests passed, 73 skipped; 75 Frontend-Vitest files passed mit 294 Tests; 52 H5P-Node-Tests passed; Docker-Image-Smoke und Harness-Gates passed.
+
+### Closeout v1.4: Finaler Wartbarkeits-Sweep
+
+Closeout v1.4 ist der finale Maximaler Sweep dieses großen Refactor-Vorhabens. Die Entscheidung ist bewusst ambitioniert: Was jetzt nicht angegangen wird, bleibt wahrscheinlich lange liegen. Der Block darf trotzdem kein Big-Bang-Rewrite werden. Jede Änderung bleibt testgetrieben, klein commitbar und verhaltenswahrend. Ziel ist nicht, jede große Datei kosmetisch zu verkleinern, sondern die Rest-Hotspots zu schneiden, bei denen künftige Änderungen sonst teuer, riskant oder schwer verständlich bleiben.
+
+#### C32: Frontend-Learning-Route weiter modularisieren
+- Problem: `frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte` enthält weiterhin View-Komposition, Workspace-State, Modul-Laden, Submission-/Upload-Orchestrierung, Feedback-Polling und URL-/Storage-Restore in einer Datei.
+- Ziel: Die Route wird wieder primär Komposition. Reine Workspace- und Submission-Orchestrierung wandert in fokussierte TS-Module oder kleinere Komponenten unter `frontend/src/lib/learning-unit/`.
+- Vorgehen:
+  - Vor jeder Extraktion bestehende Route-/Komponenten-Contracts erweitern oder neue Vitest-Tests ergänzen.
+  - Workspace-State-, Modul-Loading-, Submission-History-, Upload- und Feedback-Polling-Logik nur entlang klarer Verantwortungsgrenzen extrahieren.
+  - Svelte-UI-Verhalten bleibt unverändert; keine Layout- oder Produktsemantikänderungen in diesem Schritt.
+- Akzeptanz:
+  - Die Learning-Route verliert echte Orchestrierungsverantwortung, nicht nur Zeilen.
+  - `npm run check`, relevante Learning-Vitest-Tests und `make test-visual-smoke` bleiben grün.
+
+#### C33: Frontend-Teaching-Route weiter modularisieren
+- Problem: `frontend/src/routes/teaching/units/[unitId]/+page.svelte` enthält weiterhin Dialog-State, Graph-Rebuild, Mutation-Commands, Reorder-Logik, URL-Selection-Sync und View-Komposition.
+- Ziel: Die Teaching-Route wird eine dünnere Workspace-Komposition. Graph- und Command-Orchestrierung wandert nach `frontend/src/lib/teacher-unit-workspace/` oder in bestehende Teacher-Graph-Komponenten.
+- Vorgehen:
+  - Zuerst Contracts für URL-/Selection-, Dialog- und Reorder-Verhalten prüfen oder ergänzen.
+  - Dialog-State, Graph-Action-Result-Normalisierung, API-Command-Helfer und Reorder-Helfer in fokussierte Module extrahieren.
+  - Bestehende Svelte-Flow-Interaktion und Teacher-Graph-E2E-Verhalten bleiben unverändert.
+- Akzeptanz:
+  - Die Teaching-Route verliert echte Graph-/Command-Verantwortung.
+  - `frontend/src/routes/teaching/units/[unitId]/page-contract.test.ts`, Teacher-Workspace-Vitest und `frontend/e2e/teacher-graph-module-actions.spec.ts` bleiben grün.
+
+#### C34: Workspace-CSS entlang echter UI-Flächen schneiden
+- Problem: `frontend/src/lib/styles/learning-unit.css` und `frontend/src/lib/styles/teaching-workspace.css` sind nach v1.3 fachlich kohärenter, aber weiterhin große Arbeitsflächen.
+- Ziel: CSS wird nur dort geteilt, wo die Verantwortung stabil und für künftige Arbeit verständlicher wird.
+- Vorgehen:
+  - Learner-CSS entlang Workspace-Shell, Material/Task-Karten, Submission/Feedback, Markdown/Prose und Learner-Graph schneiden.
+  - Teacher-CSS entlang Graph/Canvas, Node/Phase, Node-Editor, Dialog/Popover und Toolbar/Command-Flächen schneiden.
+  - `frontend/src/lib/styles/ui-primitives.css` bleibt shared und darf keine `.learning-unit-*`- oder `.teacher-flow-*`-Speziallogik aufnehmen.
+- Akzeptanz:
+  - CSS-Import-Reihenfolge ist durch Contract geschützt.
+  - `docs/harness/HOTSPOTS.md`, `docs/harness/QUALITY_SCORECARD.md` und `backend/tools/quality_scorecard.py` zeigen die neuen Bundles.
+
+#### C35: FastAPI-/Keycloak-Static-CSS auditieren und nur bei Nachweis teilen
+- Problem: `backend/web/static/css/gustav.css` ist groß, aber aktiv von FastAPI-, Auth- und Keycloak-Flächen referenziert.
+- Ziel: Die Datei wird nicht blind geteilt. Erst Referenzen und Selektorgruppen klassifizieren, dann aktive Teilflächen gezielt extrahieren oder bewusst als kohärent dokumentieren.
+- Vorgehen:
+  - Referenzen aus `backend/web/components/layout.py`, `backend/web/routes/auth.py` und `keycloak/themes/gustav` im Contract halten.
+  - CSS-Gruppen nach FastAPI-Shell, Auth, Keycloak, Utility und retired/legacy Kandidaten klassifizieren.
+  - Retired-Kandidaten nur entfernen, wenn Suchnachweis und Contract die aktive Oberfläche schützen.
+- Akzeptanz:
+  - Keine Auth-/Login-/Keycloak-Fläche verliert Styles.
+  - Wenn kein sicherer Split erfolgt, ist die Begründung in Hotspots und Plan dokumentiert.
+
+#### C36: H5P-Sidecar-Komposition weiter reduzieren
+- Problem: `h5p-service/server.mjs` ist trotz v1.2-Schnitten weiter Route-Composition- und Handler-Hotspot.
+- Ziel: `server.mjs` wird stärker App-Composition. Route-Mounts, Editor-/Player-/Ajax-/Import-/FinishedData-Handler und Debug-Seiten wandern in fokussierte Module, wenn dadurch Tests und Verantwortungen klarer werden.
+- Vorgehen:
+  - Vor jeder Node-Extraktion einen vorhandenen Node-Test erweitern oder einen fokussierten neuen Test anlegen.
+  - Keine H5P-Runtime-Semantik ändern; CSP, Auth, Cookie, FinishedData und Storage bleiben unverändert.
+- Akzeptanz:
+  - H5P-Node-Tests bleiben grün.
+  - `make test-frontend-h5p` oder ein gezielter H5P-E2E-Smoke läuft nach relevanten H5P-Schnitten.
+
+#### C37: Learning-Worker-Hotspot schneiden
+- Problem: `backend/learning/workers/process_learning_submission_jobs.py` bündelt Lease/Queue, Job-Processing, Fehlerbehandlung, AI-Usage, Vision-Cache, Retry/Nack und CLI/Runtime-Wiring.
+- Ziel: Der Worker wird in klarere Einheiten zerlegt, ohne Queue-Semantik, Fehlerklassifikation oder Datenschutzgrenzen zu verändern.
+- Vorgehen:
+  - Charakterisierungstests für Lease-, Retry-, Permanent-Error-, AI-Usage- und cached-Vision-Pfade nutzen oder ergänzen.
+  - Reine Helfer und Query-/Persistence-Gruppen in Module unter `backend/learning/workers/` extrahieren.
+  - `process_learning_submission_jobs.py` bleibt CLI-/Runtime-Entry und Orchestrator.
+- Akzeptanz:
+  - Relevante Worker-Tests bleiben grün.
+  - Keine neue externe Dienstabhängigkeit in Standardtests.
+
+#### C38: Backend-Learning-/Teaching-Live-/Repo-Resthotspots auditieren und schneiden
+- Problem: `backend/web/routes/learning.py`, `backend/web/routes/teaching_live.py` und `backend/teaching/repo_db.py` sind nach den großen Schnitten kleiner, aber weiterhin Resthotspots mit Fassade-, Provider-, Read-Model- und Kompatibilitätsverantwortung.
+- Ziel: Nur echte Mischverantwortungen weiter extrahieren. Kohärente Fassaden bleiben bestehen, werden aber begründet.
+- Vorgehen:
+  - `backend/web/routes/learning.py`: verbleibende Learning-Fassade, Student-Guards, Include-/UUID-Helper und modulare Read-Routen prüfen.
+  - `backend/web/routes/teaching_live.py`: Live-Summary/Delta, Student-Overview, Latest-Detail und File-Download nur schneiden, wenn Handler-Gruppen dadurch klarer werden.
+  - `backend/teaching/repo_db.py`: verbleibende DSN-/Connection-/Owner-Helfer prüfen und in bestehende Query-/Provider-Module verschieben, wenn dies die Repo-Fassade vereinfacht.
+- Akzeptanz:
+  - Keine Kompatibilitätsaliase werden ohne Testnachweis entfernt.
+  - Architektur- und Import-Boundary-Gates bleiben grün.
+
+#### C39: Testportfolio-Hygiene statt Testmasse
+- Problem: Die Testsuite ist groß und enthält sehr große Testdateien. Viele Tests sind sinnvoll, aber Redundanz und Implementation-Detail-Tests können künftige Refactors bremsen.
+- Ziel: Testqualität erhöhen, ohne Sicherheits-, API-, DB-, H5P-, Upload- oder Auth-Grenzen zu schwächen.
+- Vorgehen:
+  - Große Testdateien klassifizieren: `keep`, `merge`, `rewrite`, `retire-later`.
+  - Redundante Contract-Tests zusammenführen, wenn derselbe öffentliche Vertrag mehrfach auf Implementation-Details geprüft wird.
+  - Tests, die Security/API/DB/RLS/Upload/H5P schützen, bleiben tabu, außer ein besserer gleichwertiger Contract ersetzt sie.
+- Akzeptanz:
+  - `docs/harness/TEST_PORTFOLIO.md` nennt konkrete v1.4-Entscheidungen für große Testdateien.
+  - Neue oder geänderte Tests prüfen Verhalten, Verträge oder Sicherheitsgrenzen statt nur interne Implementierungsdetails.
+
+#### C40: Scorecard, Hotspots und Closeout ehrlich aktualisieren
+- Problem: Ein maximaler Sweep ist nur wertvoll, wenn die verbleibenden großen Dateien danach nicht wieder unsichtbar werden.
+- Ziel: Nach jedem v1.4-Schnitt sind Hotspots, Scorecard und Planstatus aktuell.
+- Vorgehen:
+  - `backend/tools/quality_scorecard.py`, `docs/harness/HOTSPOTS.md`, `docs/harness/QUALITY_SCORECARD.md` und `docs/harness/QUALITY_SCORECARD_HISTORY.json` nach neuen Splits aktualisieren.
+  - Für bewusst verbleibende große Dateien eine kurze Begründung und Split-Exit-Kriterium dokumentieren.
+- Akzeptanz:
+  - `make quality-scorecard` ist grün.
+  - Der v1.4-Abschluss listet die wirklich gelaufenen Checks.
+
+#### Closeout v1.4 Verification
+Vor Abschluss von Closeout v1.4 müssen diese Befehle erfolgreich sein:
+- `.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`
+- `cd frontend && npm run check`
+- gezielte Frontend-Vitest-Tests für berührte Learning-/Teaching-/CSS-Flächen
+- gezielte Backend-/Node-Tests für berührte Learning-, Teaching-, Worker- und H5P-Flächen
+- `make test-visual-smoke`
+- `make quality-scorecard`
+- `make verify`
 
 ## Security, GDPR/Privacy, and FOSS Risks
 

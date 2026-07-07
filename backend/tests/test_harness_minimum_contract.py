@@ -242,6 +242,31 @@ def test_fastapi_static_gustav_css_references_are_documented_active_surfaces() -
         assert 'gustav.css?v=${properties.gustavThemeVersion!"dev"}' in template_source
 
 
+def test_harness_refactor_plan_includes_closeout_v14_maximal_sweep() -> None:
+    """The final refactor sweep must be explicit before implementation starts."""
+
+    text = _read(HARNESS_REFACTOR_PLAN)
+
+    for required_term in (
+        "Closeout v1.4: Finaler Wartbarkeits-Sweep",
+        "Maximaler Sweep",
+        "frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte",
+        "frontend/src/routes/teaching/units/[unitId]/+page.svelte",
+        "frontend/src/lib/styles/learning-unit.css",
+        "frontend/src/lib/styles/teaching-workspace.css",
+        "backend/web/static/css/gustav.css",
+        "h5p-service/server.mjs",
+        "backend/learning/workers/process_learning_submission_jobs.py",
+        "backend/web/routes/teaching_live.py",
+        "backend/teaching/repo_db.py",
+        "Testportfolio-Hygiene",
+        "make test-visual-smoke",
+        "make quality-scorecard",
+        "make verify",
+    ):
+        assert required_term in text
+
+
 def test_plan_memory_documents_exist() -> None:
     """Agents need a small searchable planning memory before refactor work grows."""
 

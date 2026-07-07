@@ -17,7 +17,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import logging
 import os
-import re
 from typing import Optional, Sequence
 import inspect
 from dataclasses import dataclass
@@ -25,7 +24,7 @@ from uuid import uuid4
 from importlib import import_module
 from concurrent.futures import ThreadPoolExecutor
 
-from . import telemetry
+from . import runtime_config, telemetry
 from backend.learning.adapters.ports import (
     FeedbackAdapterProtocol,
     FeedbackInvalidAnalysisError,
@@ -90,10 +89,8 @@ class QueuedJob:
     payload: dict
 
 
-LEASE_SECONDS = int(os.getenv("WORKER_LEASE_SECONDS", "45"))
 MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", "3"))
-MAX_CONCURRENCY = 4  # hard cap to prevent overload from misconfigured WORKER_CONCURRENCY
-LEASE_MULTIPLIER = int(os.getenv("WORKER_LEASE_MULTIPLIER", "4"))
+MAX_CONCURRENCY = runtime_config.MAX_CONCURRENCY
 _FEEDBACK_PERMANENT_INPUT_ERROR_CODES = frozenset(
     {"input_corrupt", "input_unsupported", "input_too_large"}
 )
@@ -104,26 +101,12 @@ _FEEDBACK_PERMANENT_INPUT_ERROR_CODES = frozenset(
 
 def _backoff_seconds() -> int:
     """Return configured backoff seconds (>=1) with lenient parsing."""
-    raw = os.getenv("WORKER_BACKOFF_SECONDS", "10")
-    try:
-        value = int(raw)
-    except ValueError:
-        LOG.warning("Invalid WORKER_BACKOFF_SECONDS=%s, defaulting to 10 seconds", raw)
-        return 10
-    return max(1, value)
+    return runtime_config.backoff_seconds()
 
 
 def _concurrency_limit() -> int:
     """Parse WORKER_CONCURRENCY with sane lower/upper bounds."""
-    raw = os.getenv("WORKER_CONCURRENCY", "1")
-    try:
-        value = int(raw)
-    except ValueError:
-        LOG.warning("Invalid WORKER_CONCURRENCY=%s, defaulting to 1", raw)
-        return 1
-    if value > MAX_CONCURRENCY:
-        LOG.warning("WORKER_CONCURRENCY=%s capped to %s", value, MAX_CONCURRENCY)
-    return max(1, min(value, MAX_CONCURRENCY))
+    return runtime_config.concurrency_limit()
 
 
 def _feedback_permanent_error_code(exc: FeedbackPermanentError) -> str:
@@ -138,11 +121,7 @@ def _feedback_permanent_error_code(exc: FeedbackPermanentError) -> str:
 
 def _lease_duration_seconds() -> int:
     """Compute the effective lease window to cover long-running Vision/Feedback jobs."""
-    try:
-        multiplier = max(1, LEASE_MULTIPLIER)
-    except Exception:
-        multiplier = 4
-    return max(LEASE_SECONDS, LEASE_SECONDS * multiplier)
+    return runtime_config.lease_duration_seconds()
 
 
 def run_once(
@@ -1230,16 +1209,7 @@ def run_forever(
 
 
 def _dsn_username(dsn: str) -> str:
-    try:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(dsn)
-        if parsed.username:
-            return parsed.username
-    except Exception:
-        pass
-    match = re.match(r"^[a-z]+://(?P<user>[^:@/]+)", dsn or "")
-    return match.group("user") if match else ""
+    return runtime_config.dsn_username(dsn)
 
 
 def _resolve_worker_dsn() -> str:
@@ -1257,45 +1227,11 @@ def _resolve_worker_dsn() -> str:
           ALLOW_SERVICE_DSN_FOR_TESTING=true (opt-in for local debugging).
     """
 
-    def _truthy(env_name: str) -> bool:
-        return (os.getenv(env_name, "") or "").strip().lower() in {"1", "true", "yes", "on"}
-
-    candidates = [
-        os.getenv("LEARNING_WORKER_DATABASE_URL"),
-        os.getenv("LEARNING_WORKER_DB_URL"),
-        os.getenv("LEARNING_DATABASE_URL"),
-        os.getenv("LEARNING_DB_URL"),
-    ]
-    for candidate in candidates:
-        if candidate:
-            dsn = candidate
-            break
-    else:
-        host = os.getenv("TEST_DB_HOST", "127.0.0.1")
-        port = os.getenv("TEST_DB_PORT", "54322")
-        user = os.getenv("LEARNING_WORKER_DB_USER", "gustav_worker")
-        password = os.getenv("LEARNING_WORKER_DB_PASSWORD", "CHANGE_ME_DEV")
-        dsn = f"postgresql://{user}:{password}@{host}:{port}/postgres"
-
-    allow_service = _truthy("ALLOW_SERVICE_DSN_FOR_TESTING") or _truthy("RUN_E2E") or _truthy("RUN_SUPABASE_E2E")
-    user = _dsn_username(dsn)
-    if user in {"postgres", "service_role", "supabase_admin"} and not allow_service:
-        raise RuntimeError(
-            "Learning worker requires the gustav_worker login role. "
-            "Set LEARNING_WORKER_DATABASE_URL with the dedicated worker account or set "
-            "ALLOW_SERVICE_DSN_FOR_TESTING=true for temporary local debugging."
-        )
-    return dsn
-
-
-_TRUTHY = {"1", "true", "yes", "on"}
+    return runtime_config.resolve_worker_dsn()
 
 
 def _truthy_env(name: str, *, default: bool = False) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in _TRUTHY
+    return runtime_config.truthy_env(name, default=default)
 
 
 def main() -> None:

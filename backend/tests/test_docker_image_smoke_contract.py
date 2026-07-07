@@ -70,6 +70,55 @@ def test_docker_image_smoke_no_longer_imports_flat_main() -> None:
     assert "backend.web.main" in text
 
 
+def test_docker_image_smoke_uses_prod_like_runtime_configuration() -> None:
+    """The image smoke should exercise the same startup guard path as production."""
+
+    text = SMOKE_SCRIPT.read_text(encoding="utf-8")
+
+    for required in (
+        "GUSTAV_ENABLE_DOTENV=false",
+        "GUSTAV_ENV=prod",
+        "SESSIONS_BACKEND=db",
+        "CLI_TOKENS_BACKEND=db",
+        "SUPABASE_SERVICE_ROLE_KEY=REAL_NON_DUMMY",
+        "KC_ADMIN_CLIENT_SECRET=REAL_ADMIN_SECRET",
+        "BFF_INTERNAL_SHARED_SECRET=real-bff-secret",
+        "H5P_REVIEW_TOKEN_SECRET=real-h5p-review-secret",
+        "H5P_INTERNAL_SHARED_SECRET=real-h5p-internal-secret",
+        "APP_CSRF_TOKEN_SECRET=real-csrf-secret",
+        "REQUIRE_STORAGE_VERIFY=true",
+        "ENABLE_DEV_UPLOAD_STUB=false",
+        "ENABLE_STORAGE_UPLOAD_PROXY=false",
+        "AUTO_CREATE_STORAGE_BUCKETS=false",
+        "KC_PUBLIC_BASE_URL=https://id.example.com",
+        "DATABASE_URL=postgresql://gustav_app_login:",
+        "TEACHING_DATABASE_URL=postgresql://gustav_app_login:",
+        "LEARNING_DATABASE_URL=postgresql://gustav_app_login:",
+        "SESSION_DATABASE_URL=postgresql://gustav_session_login:",
+        "sslmode=require",
+    ):
+        assert required in text
+
+    assert "GUSTAV_ENV=dev" not in text
+    assert "SESSIONS_BACKEND=memory" not in text
+
+
+def test_docker_image_smoke_rejects_runtime_test_and_tooling_leaks() -> None:
+    """Runtime images must not ship tests, harness tooling, or Ruff."""
+
+    text = SMOKE_SCRIPT.read_text(encoding="utf-8")
+
+    for forbidden_path in (
+        "/app/backend/tests",
+        "/app/backend/tests_e2e",
+        "/app/backend/tools",
+    ):
+        assert forbidden_path in text
+
+    assert "find_spec('ruff')" in text or 'find_spec("ruff")' in text
+    assert "runtime-deps-ok" in text
+
+
 def test_verify_runs_docker_image_only_smoke_as_hard_gate() -> None:
     """PR 8 makes image-only packaging parity part of full verification."""
 

@@ -26,6 +26,35 @@ FORBIDDEN_TOP_LEVEL_PATHS = (
     "/app/teaching",
 )
 
+FORBIDDEN_RUNTIME_PATHS = (
+    "/app/backend/tests",
+    "/app/backend/tests_e2e",
+    "/app/backend/tools",
+)
+
+PROD_LIKE_ENV = (
+    "GUSTAV_ENABLE_DOTENV=false",
+    "GUSTAV_ENV=prod",
+    "SESSIONS_BACKEND=db",
+    "CLI_TOKENS_BACKEND=db",
+    "SUPABASE_SERVICE_ROLE_KEY=REAL_NON_DUMMY",
+    "KC_ADMIN_CLIENT_SECRET=REAL_ADMIN_SECRET",
+    "BFF_INTERNAL_SHARED_SECRET=real-bff-secret",
+    "H5P_REVIEW_TOKEN_SECRET=real-h5p-review-secret",
+    "H5P_INTERNAL_SHARED_SECRET=real-h5p-internal-secret",
+    "APP_CSRF_TOKEN_SECRET=real-csrf-secret",
+    "REQUIRE_STORAGE_VERIFY=true",
+    "ENABLE_DEV_UPLOAD_STUB=false",
+    "ENABLE_STORAGE_UPLOAD_PROXY=false",
+    "AUTO_CREATE_STORAGE_BUCKETS=false",
+    "KC_BASE_URL=http://keycloak:8080",
+    "KC_PUBLIC_BASE_URL=https://id.example.com",
+    "DATABASE_URL=postgresql://gustav_app_login:secret@db.example.com:5432/postgres?sslmode=require",
+    "TEACHING_DATABASE_URL=postgresql://gustav_app_login:secret@db.example.com:5432/postgres?sslmode=require",
+    "LEARNING_DATABASE_URL=postgresql://gustav_app_login:secret@db.example.com:5432/postgres?sslmode=require",
+    "SESSION_DATABASE_URL=postgresql://gustav_session_login:secret@db.example.com:5432/postgres?sslmode=require",
+)
+
 
 def _run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     printable = " ".join(args)
@@ -39,6 +68,13 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _env_args() -> list[str]:
+    args: list[str] = []
+    for assignment in PROD_LIKE_ENV:
+        args.extend(["-e", assignment])
+    return args
+
+
 def _check_imports(image_tag: str) -> None:
     code = (
         "import importlib; "
@@ -46,16 +82,25 @@ def _check_imports(image_tag: str) -> None:
         "[importlib.import_module(name) for name in mods]; "
         "print('imports-ok')"
     )
+    _run(["docker", "run", "--rm", "--entrypoint", "python", *_env_args(), image_tag, "-c", code])
+
+
+def _check_image_paths(image_tag: str) -> None:
+    code = (
+        "from pathlib import Path; "
+        f"forbidden={(FORBIDDEN_TOP_LEVEL_PATHS + FORBIDDEN_RUNTIME_PATHS)!r}; "
+        "existing=[path for path in forbidden if Path(path).exists()]; "
+        "assert not existing, f'forbidden runtime paths: {existing}'; "
+        "print('runtime-paths-ok')"
+    )
     _run(["docker", "run", "--rm", "--entrypoint", "python", image_tag, "-c", code])
 
 
-def _check_no_duplicate_package_roots(image_tag: str) -> None:
+def _check_runtime_dependencies(image_tag: str) -> None:
     code = (
-        "from pathlib import Path; "
-        f"forbidden={FORBIDDEN_TOP_LEVEL_PATHS!r}; "
-        "existing=[path for path in forbidden if Path(path).exists()]; "
-        "assert not existing, f'duplicate package roots: {existing}'; "
-        "print('package-roots-ok')"
+        "import importlib.util; "
+        "assert importlib.util.find_spec('ruff') is None, 'ruff must not be installed in runtime image'; "
+        "print('runtime-deps-ok')"
     )
     _run(["docker", "run", "--rm", "--entrypoint", "python", image_tag, "-c", code])
 
@@ -79,15 +124,20 @@ def _wait_for_health(port: int, *, timeout_seconds: float) -> None:
 def _check_health(image_tag: str, *, timeout_seconds: float) -> None:
     name = f"gustav-image-smoke-{uuid4().hex[:12]}"
     port = _free_port()
-    env = [
-        "-e",
-        "GUSTAV_ENV=dev",
-        "-e",
-        "SESSIONS_BACKEND=memory",
-        "-e",
-        "AUTO_CREATE_STORAGE_BUCKETS=false",
-    ]
-    _run(["docker", "run", "-d", "--rm", "--name", name, "-p", f"127.0.0.1:{port}:8000", *env, image_tag])
+    _run(
+        [
+            "docker",
+            "run",
+            "-d",
+            "--rm",
+            "--name",
+            name,
+            "-p",
+            f"127.0.0.1:{port}:8000",
+            *_env_args(),
+            image_tag,
+        ]
+    )
     try:
         _wait_for_health(port, timeout_seconds=timeout_seconds)
     finally:
@@ -102,7 +152,8 @@ def main(argv: list[str] | None = None) -> int:
 
     _run(["docker", "build", "-t", args.tag, "."])
     _check_imports(args.tag)
-    _check_no_duplicate_package_roots(args.tag)
+    _check_image_paths(args.tag)
+    _check_runtime_dependencies(args.tag)
     _check_health(args.tag, timeout_seconds=args.timeout_seconds)
     print("docker-image-smoke-ok")
     return 0

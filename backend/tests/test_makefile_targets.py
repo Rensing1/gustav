@@ -7,6 +7,7 @@ MAKEFILE = PROJECT_ROOT / "Makefile"
 FRONTEND_VITEST_CONFIG = PROJECT_ROOT / "frontend" / "vitest.config.ts"
 PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 BACKEND_REQUIREMENTS = PROJECT_ROOT / "backend/web/requirements.txt"
+BACKEND_HARNESS_REQUIREMENTS = PROJECT_ROOT / "backend/requirements-harness.txt"
 
 
 def _target_body(target: str) -> str:
@@ -173,7 +174,7 @@ def test_backend_lint_target_is_part_of_verify() -> None:
     verify_body = _target_body("verify")
 
     assert "lint-backend" in help_text
-    assert "backend/web/requirements.txt" in lint_body
+    assert "backend/requirements-harness.txt" in lint_body
     assert "python -m ruff check backend --select F" in lint_body
     assert "--exclude 'backend/tests/*'" not in lint_body
     assert "--exclude 'backend/tests_e2e/*'" not in lint_body
@@ -222,7 +223,20 @@ def test_backend_lint_target_uses_central_ruff_configuration() -> None:
     assert '"I"' in config
 
     backend_requirements = BACKEND_REQUIREMENTS.read_text(encoding="utf-8")
-    assert "ruff" in backend_requirements
+    harness_requirements = BACKEND_HARNESS_REQUIREMENTS.read_text(encoding="utf-8")
+    assert "ruff" not in backend_requirements
+    assert "-r web/requirements.txt" in harness_requirements
+    assert "ruff" in harness_requirements
+
+
+def test_runtime_requirements_do_not_include_harness_only_tools() -> None:
+    """The production image installs runtime dependencies, not local harness tools."""
+
+    backend_requirements = BACKEND_REQUIREMENTS.read_text(encoding="utf-8")
+    workflow = (PROJECT_ROOT / ".github/workflows/harness-minimum.yml").read_text(encoding="utf-8")
+
+    assert "ruff" not in backend_requirements
+    assert "backend/requirements-harness.txt" in workflow
 
 
 def test_frontend_vitest_uses_numeric_loopback_host() -> None:

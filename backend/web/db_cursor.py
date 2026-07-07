@@ -48,4 +48,3 @@ def open_repo_cursor(*, repo: object | None = None, dsn: str | None = None) -> I
     with psycopg.connect(conn_dsn) as conn:  # type: ignore[attr-defined]
         with conn.cursor() as cur:  # type: ignore[attr-defined]
             yield conn, cur
-

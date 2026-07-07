@@ -27,7 +27,17 @@ def test_root_dockerignore_exists_and_excludes_common_artifacts() -> None:
 
     content = dockerignore_path.read_text(encoding="utf-8")
     # Minimum set from the plan (F6).
-    for needle in ["node_modules", ".tmp", "tmp", ".venv", ".pytest_cache", "supabase/storage"]:
+    for needle in [
+        "node_modules",
+        ".tmp",
+        "tmp",
+        ".venv",
+        ".pytest_cache",
+        "supabase/storage",
+        "backend/tests/",
+        "backend/tests_e2e/",
+        "backend/tools/",
+    ]:
         assert needle in content, f"Expected `{needle}` to be excluded in {dockerignore_path}"
 
 

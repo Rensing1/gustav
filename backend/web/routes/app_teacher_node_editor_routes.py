@@ -143,5 +143,3 @@ async def get_teacher_unit_node_editor(request: Request, unit_id: str, node_id: 
     if node_kind == "module":
         body["node"]["backing_section_id"] = backing_section_id
     return JSONResponse(body, headers=_private_headers())
-
-

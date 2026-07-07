@@ -93,13 +93,6 @@
     },
     {
       "ecosystem": "python",
-      "license": "UNKNOWN",
-      "name": "ruff",
-      "policy": "metadata-recorded",
-      "version": "0.15.20"
-    },
-    {
-      "ecosystem": "python",
       "license": "MIT",
       "name": "supabase",
       "policy": "metadata-recorded",
@@ -4508,8 +4501,8 @@
   ],
   "summary": {
     "node_entries": 543,
-    "python_entries": 16,
+    "python_entries": 15,
     "review_required_entries": 0,
-    "total_entries": 559
+    "total_entries": 558
   }
 }

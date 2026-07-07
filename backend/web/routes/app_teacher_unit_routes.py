@@ -538,5 +538,3 @@ async def get_teacher_unit_workspace(
         "selection": selection,
     }
     return JSONResponse(body, headers=_private_headers())
-
-

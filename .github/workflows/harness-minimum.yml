@@ -23,7 +23,7 @@ jobs:
           python -m venv .venv
           . ./.venv/bin/activate
           python -m pip install --upgrade pip
-          python -m pip install -r backend/web/requirements.txt
+          python -m pip install -r backend/requirements-harness.txt
 
       - name: Prepare compose environment
         run: cp .env.example .env

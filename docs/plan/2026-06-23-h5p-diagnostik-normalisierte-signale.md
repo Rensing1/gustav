@@ -139,43 +139,43 @@ Die Migration ist die einzige Quelle der Wahrheit. Es darf keinen lokalen Sonder
 
 ### Szenario 1: Einzelantwort in einem QuestionSet
 
-Given eine H5P-Aufgabe vom Typ `H5P.QuestionSet` mit 10 Fragen  
-When GUSTAV ein beantwortetes Item mit `score_max = 1` erhält  
-Then speichert GUSTAV ein normalisiertes Ereignis `item_answered`  
+Given eine H5P-Aufgabe vom Typ `H5P.QuestionSet` mit 10 Fragen
+When GUSTAV ein beantwortetes Item mit `score_max = 1` erhält
+Then speichert GUSTAV ein normalisiertes Ereignis `item_answered`
 And wertet dieses Ereignis nicht als vollständige Aufgabenabgabe.
 
 ### Szenario 2: Abschluss eines QuestionSets
 
-Given eine H5P-Aufgabe vom Typ `H5P.QuestionSet` mit 10 Fragen  
-When GUSTAV ein abgeschlossenes Ereignis mit `score_max = 10` erhält  
-Then speichert GUSTAV ein normalisiertes Ereignis `attempt_completed`  
+Given eine H5P-Aufgabe vom Typ `H5P.QuestionSet` mit 10 Fragen
+When GUSTAV ein abgeschlossenes Ereignis mit `score_max = 10` erhält
+Then speichert GUSTAV ein normalisiertes Ereignis `attempt_completed`
 And die Diagnostik nutzt dieses Ereignis für den Aufgabenabschluss.
 
 ### Szenario 3: Einzelne MultiChoice-Aufgabe
 
-Given eine H5P-Aufgabe vom Typ `H5P.MultiChoice` ohne übergeordnetes QuestionSet  
-When GUSTAV ein abgeschlossenes Ereignis mit `score_max = 1` erhält  
+Given eine H5P-Aufgabe vom Typ `H5P.MultiChoice` ohne übergeordnetes QuestionSet
+When GUSTAV ein abgeschlossenes Ereignis mit `score_max = 1` erhält
 Then darf GUSTAV dieses Ereignis als `attempt_completed` speichern.
 
 ### Szenario 4: DragQuestion mit Zwischenständen
 
-Given eine H5P-Aufgabe vom Typ `H5P.DragQuestion`  
-When GUSTAV mehrere Zwischenstände und einen Abschluss erhält  
-Then speichert GUSTAV Zwischenstände als `interaction_progress`  
+Given eine H5P-Aufgabe vom Typ `H5P.DragQuestion`
+When GUSTAV mehrere Zwischenstände und einen Abschluss erhält
+Then speichert GUSTAV Zwischenstände als `interaction_progress`
 And nutzt den Abschluss als primäres Diagnoseereignis.
 
 ### Szenario 5: Unbekannter H5P-Content-Typ
 
-Given eine H5P-Aufgabe mit unbekanntem oder nicht unterstütztem Content-Typ  
-When GUSTAV ein Ereignis erhält  
-Then speichert GUSTAV nur ein minimales Ereignis mit niedriger `confidence`  
+Given eine H5P-Aufgabe mit unbekanntem oder nicht unterstütztem Content-Typ
+When GUSTAV ein Ereignis erhält
+Then speichert GUSTAV nur ein minimales Ereignis mit niedriger `confidence`
 And die Diagnostik kennzeichnet die Auswertung als eingeschränkt.
 
 ### Szenario 6: Nicht autorisierter Benutzer
 
-Given ein Benutzer ohne Zugriff auf den Kurs  
-When ein H5P-Ereignis für eine Kursaufgabe eingereicht wird  
-Then lehnt GUSTAV die Speicherung ab  
+Given ein Benutzer ohne Zugriff auf den Kurs
+When ein H5P-Ereignis für eine Kursaufgabe eingereicht wird
+Then lehnt GUSTAV die Speicherung ab
 And es entsteht kein Diagnoseereignis.
 
 ## Teststrategie

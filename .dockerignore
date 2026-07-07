@@ -40,6 +40,11 @@ frontend/*.tsbuildinfo
 tmp/
 supabase/storage/
 
+# Backend test and harness code must not be copied into runtime images.
+backend/tests/
+backend/tests_e2e/
+backend/tools/
+
 # OS / editor
 .DS_Store
 .vscode/

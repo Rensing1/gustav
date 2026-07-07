@@ -456,7 +456,7 @@ def test_ci_runs_same_harness_minimum_entry_point_as_local_development() -> None
     workflow = workflow_path.read_text(encoding="utf-8")
 
     assert "make harness-minimum" in workflow
-    assert "backend/web/requirements.txt" in workflow
+    assert "backend/requirements-harness.txt" in workflow
     assert "python-version: \"3.11\"" in workflow
     assert "cp .env.example .env" in workflow
 

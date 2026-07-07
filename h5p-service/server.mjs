@@ -47,6 +47,7 @@ import {
   ensureDivEmbedTypes,
   ensureThemeStylesLast,
 } from "./lib/model_helpers.mjs";
+import { createReviewModeMiddleware } from "./lib/review_mode_middleware.mjs";
 import { parseReviewToken } from "./lib/review_tokens.mjs";
 import { sendHtml, sendJson } from "./lib/response_helpers.mjs";
 import { mountPublicStaticAssets } from "./lib/public_assets.mjs";
@@ -349,82 +350,7 @@ async function main() {
   app.use(requireAuth);
   app.use(requireStudentOrTeacher);
 
-  // Teacher review "view as student" (read-only) for H5P user state.
-  //
-  // The embedded review player rewrites the `contentUserData` URL to include
-  // a short-lived `review_token`. For those requests we:
-  // - validate the token (fail-closed),
-  // - bind it to the authenticated teacher, and
-  // - impersonate the student for GET-only reads.
-  app.use((req, res, next) => {
-    const reviewToken = typeof req.query.review_token === "string" ? req.query.review_token : undefined;
-    if (!reviewToken) {
-      next();
-      return;
-    }
-    // The model endpoint validates the token separately and must see the real teacher user.
-    if (req.path === "/player/review") {
-      next();
-      return;
-    }
-
-    // Defense-in-depth: review is teacher-only.
-    if (!rolesAllowTeacher(req.gustavMe?.roles)) {
-      sendJson(res, 403, { error: "forbidden" });
-      return;
-    }
-
-    // Review token must be valid and match the authenticated teacher.
-    const payload = parseReviewToken(reviewToken, { secret: reviewTokenSecret });
-    if (!payload) {
-      sendJson(res, 403, { error: "forbidden" });
-      return;
-    }
-    if (payload.teacherSub !== req.user?.id) {
-      sendJson(res, 403, { error: "forbidden" });
-      return;
-    }
-
-    // Strict read-only: block all non-GET requests when a review token is present.
-    if (req.method !== "GET") {
-      sendJson(res, 403, { error: "forbidden" });
-      return;
-    }
-
-    // Fail-closed: only allow the token to be used for content user data reads.
-    const m = req.path.match(/\/contentUserData\/([^/]+)/);
-    const contentIdFromPath = m?.[1] ? String(m[1]) : "";
-    if (!contentIdFromPath) {
-      sendJson(res, 403, { error: "forbidden" });
-      return;
-    }
-    if (contentIdFromPath !== payload.contentId) {
-      sendJson(res, 403, { error: "forbidden" });
-      return;
-    }
-
-    // Optional context binding: enforce when the runtime forwards it.
-    const contextId =
-      typeof req.query.contextId === "string"
-        ? req.query.contextId
-        : typeof req.query.context_id === "string"
-          ? req.query.context_id
-          : "";
-    if (contextId && contextId !== payload.taskId) {
-      sendJson(res, 403, { error: "forbidden" });
-      return;
-    }
-
-    // Impersonate the student for GET reads so the runtime loads the student's state.
-    req.user = {
-      id: payload.studentSub,
-      name: payload.studentSub,
-      email: `${payload.studentSub}@local.invalid`,
-      type: "local",
-    };
-
-    next();
-  });
+  app.use(createReviewModeMiddleware({ reviewTokenSecret }));
 
   app.get("/auth/me", (req, res) => {
     sendJson(res, 200, req.gustavMe);

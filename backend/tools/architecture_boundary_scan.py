@@ -77,6 +77,37 @@ def _is_approved_web_infrastructure(path: Path) -> bool:
     return _relative_parts(path) in APPROVED_WEB_INFRASTRUCTURE
 
 
+def _import_bindings(tree: ast.AST) -> dict[str, str]:
+    """Map local import names to their canonical module or symbol names."""
+
+    bindings: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local_name = alias.asname or alias.name.split(".", 1)[0]
+                bindings[local_name] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                bindings[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+    return bindings
+
+
+def _canonical_call_name(func: ast.AST, bindings: dict[str, str]) -> str | None:
+    """Resolve a call target through `import as` and `from import as` aliases."""
+
+    if isinstance(func, ast.Name):
+        return bindings.get(func.id)
+    if not isinstance(func, ast.Attribute):
+        return None
+    chain = _attribute_chain(func)
+    if not chain:
+        return None
+    root = bindings.get(chain[0], chain[0])
+    return ".".join((root, *chain[1:]))
+
+
 def _scan_file(path: Path, findings: dict[str, list[str]]) -> None:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -85,6 +116,7 @@ def _scan_file(path: Path, findings: dict[str, list[str]]) -> None:
         findings.setdefault("parse_errors", []).append(f"{rel}:{exc.lineno or 0}")
         return
 
+    bindings = _import_bindings(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             if any(_is_fastapi_module(alias.name) for alias in node.names):
@@ -99,10 +131,10 @@ def _scan_file(path: Path, findings: dict[str, list[str]]) -> None:
                 if _is_service(path):
                     _record(findings, "service_fastapi_imports", path, node)
         elif isinstance(node, ast.Call) and _is_web_adapter(path) and not _is_approved_web_infrastructure(path):
-            func = node.func
-            if isinstance(func, ast.Attribute) and _attribute_chain(func) == ["psycopg", "connect"]:
+            canonical_name = _canonical_call_name(node.func, bindings)
+            if canonical_name == "psycopg.connect":
                 _record(findings, "web_direct_db_connects", path, node)
-            elif isinstance(func, ast.Name) and func.id == "create_client":
+            elif canonical_name == "supabase.create_client":
                 _record(findings, "web_direct_supabase_client_creates", path, node)
 
 

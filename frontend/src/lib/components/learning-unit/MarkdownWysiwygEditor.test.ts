@@ -11,11 +11,20 @@ const editorSourcePath = path.resolve(currentDir, "MarkdownWysiwygEditor.svelte"
 const stylesDir = path.resolve(currentDir, "../../styles");
 
 describe("MarkdownWysiwygEditor", () => {
-  it("exposes table editing but keeps image upload out of the learner toolbar", () => {
+  it("loads the maintained Tiptap adapter lazily and removes Toast UI", () => {
     const source = readFileSync(editorSourcePath, "utf8");
 
-    expect(source).toContain('"table"');
-    expect(source).not.toContain('"image"');
+    expect(source).toContain('import("./tiptap-markdown-editor")');
+    expect(source).not.toContain("@toast-ui/editor");
+  });
+
+  it("exposes visual table editing but keeps image and code controls out of the toolbar", () => {
+    const source = readFileSync(editorSourcePath, "utf8");
+
+    for (const action of ["insertTable", "addRowAfter", "deleteRow", "addColumnAfter", "deleteColumn", "deleteTable"]) {
+      expect(source).toContain(action);
+    }
+    expect(source).not.toMatch(/image|codeBlock/);
   });
 
   it("renders a textarea fallback for failed editor initialization and no-JS form submission", () => {
@@ -34,7 +43,7 @@ describe("MarkdownWysiwygEditor", () => {
     expect(source).toContain("value={fallbackValue}");
   });
 
-  it("synchronizes the Toast UI markdown into the form immediately before submission", () => {
+  it("synchronizes Tiptap markdown into the form immediately before submission", () => {
     const source = readFileSync(editorSourcePath, "utf8");
 
     expect(source).toContain('addEventListener("submit"');
@@ -44,30 +53,16 @@ describe("MarkdownWysiwygEditor", () => {
     expect(source).toContain("formData?.set(name, nextValue);");
   });
 
-  it("initializes Toast UI with pixel heights because the editor parses height values numerically", () => {
-    const source = readFileSync(editorSourcePath, "utf8");
-
-    expect(source).toMatch(/height:\s*"448px"/);
-    expect(source).toMatch(/minHeight:\s*"352px"/);
-    expect(source).toContain("Toast UI parses these values as pixel numbers internally");
-    expect(source).not.toMatch(/height:\s*"28rem"/);
-    expect(source).not.toMatch(/minHeight:\s*"22rem"/);
-  });
-
-  it("keeps Toast UI's main editor area shrinkable and enables touch scrolling inside ProseMirror", () => {
+  it("keeps the Tiptap surface scrollable on touch devices", () => {
     const css = readWorkspaceCssBundle(stylesDir);
-    const mainRule = css.match(/\.learning-markdown-editor\s+\.toastui-editor-main\s*\{(?<body>[^}]*)\}/s);
-
-    expect(mainRule?.groups?.body).toMatch(/min-height:\s*0(?:px)?\s*;/);
-    expect(mainRule?.groups?.body).not.toMatch(/min-height:\s*40rem\s*;/);
-
     const proseMirrorRules = Array.from(
-      css.matchAll(/\.learning-markdown-editor[^{}]*\.ProseMirror[^{}]*\{(?<body>[^}]*)\}/gs)
+      css.matchAll(/\.learning-markdown-editor[^{}]*\.tiptap[^{}]*\{(?<body>[^}]*)\}/gs)
     )
       .map((match) => match.groups?.body ?? "")
       .join("\n");
 
     expect(proseMirrorRules).toMatch(/overflow-y:\s*auto\s*;/);
     expect(proseMirrorRules).toMatch(/-webkit-overflow-scrolling:\s*touch\s*;/);
+    expect(proseMirrorRules).toMatch(/min-height:\s*22rem\s*;/);
   });
 });

@@ -31,8 +31,6 @@ services:
       - "host.docker.internal:host-gateway"
     # behind proxy; no direct host port mapping
     volumes:
-      # Live-Reload: mount backend as a package, matching the image layout.
-      - ./backend:/app/backend:z
       # Shared dev uploads directory for vision to access uploaded files
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z
       # Trust Caddy's local CA inside the container for prod-like HTTPS calls.
@@ -175,8 +173,6 @@ services:
       - "host.docker.internal:host-gateway"
     command: ["python", "-m", "backend.learning.workers.process_learning_submission_jobs"]
     volumes:
-      # Live-Reload: mount backend as one package, matching the image layout.
-      - ./backend:/app/backend:z
       # Shared dev uploads directory (same path as in web)
       - ./.tmp/dev_uploads:/app/.tmp/dev_uploads:z
     env_file:

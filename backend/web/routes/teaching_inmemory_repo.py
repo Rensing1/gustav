@@ -1,9 +1,9 @@
-"""In-memory fallback repository for Teaching routes.
+"""Explicit in-memory test repository for Teaching routes.
 
 Why:
-    The production Teaching API uses the database-backed repository. Tests and
-    offline local runs still need a deterministic fallback that mirrors the
-    same public repository methods without importing FastAPI route handlers.
+    The production Teaching API uses the database-backed repository. Tests
+    need a deterministic test double that mirrors the same public repository
+    methods without importing FastAPI route handlers.
 
 Responsibility:
     Keep in-memory Teaching state and simple validation rules only. HTTP
@@ -131,6 +131,11 @@ class ConcernBoxEntryData:
 
 
 class InMemoryTeachingRepo:
+    def check_readiness(self) -> None:
+        """Treat an explicitly injected in-memory test double as ready."""
+
+        return None
+
     def __init__(self) -> None:
         self.courses: Dict[str, Course] = {}
         # members[course_id] = { student_id: joined_at_iso }

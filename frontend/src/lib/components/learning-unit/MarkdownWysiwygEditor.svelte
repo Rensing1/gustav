@@ -1,9 +1,7 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { onDestroy, onMount } from "svelte";
-  import type { Editor as ToastEditor, EditorOptions } from "@toast-ui/editor";
-
-  import "@toast-ui/editor/dist/toastui-editor.css";
+  import type { TiptapMarkdownEditor } from "./tiptap-markdown-editor";
 
   let {
     name = "text_body",
@@ -18,12 +16,16 @@
   } = $props();
 
   let host = $state<HTMLDivElement | null>(null);
-  let editor = $state<ToastEditor | null>(null);
+  let editor = $state<TiptapMarkdownEditor | null>(null);
   let currentValue = $state("");
   let lastPropValue = $state("");
   let propValueInitialized = $state(false);
   let fallbackValue = $derived(propValueInitialized ? currentValue : String(value || ""));
   let editorReady = $state(false);
+  let editorRevision = $state(0);
+  let linkPanelOpen = $state(false);
+  let linkValue = $state("");
+  let linkError = $state("");
   let removeFormListeners: (() => void) | null = null;
 
   function setCurrentValue(nextValue: string, notify = true) {
@@ -50,9 +52,7 @@
       return;
     }
 
-    const handleSubmit = () => {
-      syncEditorValue();
-    };
+    const handleSubmit = () => syncEditorValue();
     const handleFormData = (event: Event) => {
       const nextValue = syncEditorValue();
       const formData = (event as Event & { formData?: FormData }).formData;
@@ -67,43 +67,49 @@
     };
   }
 
+  function run(command: (activeEditor: TiptapMarkdownEditor) => void) {
+    if (!editor) {
+      return;
+    }
+    command(editor);
+    editorRevision += 1;
+  }
+
+  function isActive(name: string, attributes?: Record<string, unknown>) {
+    void editorRevision;
+    return editor?.isActive(name, attributes) ?? false;
+  }
+
+  function applyLink() {
+    if (!editor?.setLink(linkValue)) {
+      linkError = "Bitte eine vollständige http- oder https-Adresse eingeben.";
+      return;
+    }
+    linkError = "";
+    linkPanelOpen = false;
+    editorRevision += 1;
+  }
+
   async function mountEditor() {
     if (!browser || !host || editor) {
       return;
     }
 
     try {
-      await import("@toast-ui/editor/dist/i18n/de-de");
-      const module = await import("@toast-ui/editor");
-      const EditorCtor = module.default;
-      const options: EditorOptions = {
-        el: host,
-        // Toast UI parses these values as pixel numbers internally, so keep them in px.
-        height: "448px",
-        minHeight: "352px",
-        initialValue: fallbackValue,
-        initialEditType: "wysiwyg",
-        hideModeSwitch: true,
-        usageStatistics: false,
-        autofocus: false,
-        language: "de-DE",
+      const { createTiptapMarkdownEditor } = await import("./tiptap-markdown-editor");
+      editor = createTiptapMarkdownEditor({
+        element: host,
+        content: fallbackValue,
         placeholder,
-        toolbarItems: [
-          ["heading", "bold", "italic", "table"],
-          ["ul", "ol", "link"]
-        ]
-      };
-      const instance = new EditorCtor(options);
-
-      instance.on("change", () => {
-        const nextValue = instance.getMarkdown();
-        if (nextValue === currentValue) {
-          return;
+        onUpdate: (nextValue) => {
+          if (nextValue !== currentValue) {
+            setCurrentValue(nextValue);
+          }
+        },
+        onStateChange: () => {
+          editorRevision += 1;
         }
-        setCurrentValue(nextValue);
       });
-
-      editor = instance;
       editorReady = true;
       wireFormSync();
     } catch {
@@ -129,12 +135,52 @@
     lastPropValue = nextValue;
     currentValue = nextValue;
     if (editor && editor.getMarkdown() !== nextValue) {
-      editor.setMarkdown(nextValue, false);
+      editor.setMarkdown(nextValue);
     }
   });
 </script>
 
 <div class="learning-markdown-editor">
+  {#if editorReady}
+    <div class="learning-markdown-editor__toolbar" role="toolbar" aria-label="Text formatieren">
+      <select
+        aria-label="Absatzformat"
+        onchange={(event) => {
+          const selected = Number((event.currentTarget as HTMLSelectElement).value);
+          run((activeEditor) => activeEditor.setBlockType(selected === 0 ? null : selected as 1 | 2 | 3));
+        }}
+      >
+        <option value="0">Absatz</option>
+        <option value="1">Überschrift 1</option>
+        <option value="2">Überschrift 2</option>
+        <option value="3">Überschrift 3</option>
+      </select>
+      <button type="button" class:active={isActive("bold")} aria-label="Fett" onclick={() => run((item) => item.toggleBold())}><strong>F</strong></button>
+      <button type="button" class:active={isActive("italic")} aria-label="Kursiv" onclick={() => run((item) => item.toggleItalic())}><em>K</em></button>
+      <button type="button" class:active={isActive("bulletList")} onclick={() => run((item) => item.toggleBulletList())}>Liste</button>
+      <button type="button" class:active={isActive("orderedList")} onclick={() => run((item) => item.toggleOrderedList())}>Nummerierung</button>
+      <button type="button" class:active={isActive("link")} onclick={() => { linkPanelOpen = !linkPanelOpen; linkError = ""; }}>Link</button>
+      <button type="button" onclick={() => run((item) => item.insertTable())}>Tabelle</button>
+      {#if isActive("table")}
+        <span class="learning-markdown-editor__table-actions" aria-label="Tabelle bearbeiten">
+          <button type="button" onclick={() => run((item) => item.addRowAfter())}>Zeile +</button>
+          <button type="button" onclick={() => run((item) => item.deleteRow())}>Zeile −</button>
+          <button type="button" onclick={() => run((item) => item.addColumnAfter())}>Spalte +</button>
+          <button type="button" onclick={() => run((item) => item.deleteColumn())}>Spalte −</button>
+          <button type="button" onclick={() => run((item) => item.deleteTable())}>Tabelle löschen</button>
+        </span>
+      {/if}
+    </div>
+    {#if linkPanelOpen}
+      <div class="learning-markdown-editor__link-panel">
+        <label for={`${name}-link`}>Link-Adresse</label>
+        <input id={`${name}-link`} type="url" bind:value={linkValue} placeholder="https://example.org" onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); applyLink(); } }} />
+        <button type="button" onclick={applyLink}>Übernehmen</button>
+        <button type="button" onclick={() => { linkValue = ""; applyLink(); }}>Entfernen</button>
+        {#if linkError}<span class="learning-markdown-editor__link-error">{linkError}</span>{/if}
+      </div>
+    {/if}
+  {/if}
   <div bind:this={host} class="learning-markdown-editor__surface"></div>
   <textarea
     aria-label={name}

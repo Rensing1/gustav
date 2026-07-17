@@ -3,7 +3,7 @@
 Status: Implemented in working tree
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_makefile_targets.py`, `make test-db-security`
-CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; `test-db-security` bleibt lokaler Hard-Gate-Baustein.
+CI status: Keine anbietergebundene CI erforderlich; `test-db-security` bleibt ein lokaler Hard-Gate-Baustein.
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: nach Abschluss von PR 3
 

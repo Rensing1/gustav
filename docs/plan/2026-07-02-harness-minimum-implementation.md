@@ -3,7 +3,7 @@
 Status: Implemented in working tree
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`, `make harness-minimum`
-CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`
+CI status: Keine anbietergebundene CI erforderlich; `make harness-minimum` ist der lokale Einstiegspunkt
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: nach Abschluss von PR 1
 
@@ -21,11 +21,11 @@ Als neuer GUSTAV-Agent oder Entwickler will ich innerhalb von fünf Minuten Rege
 
 ## Umsetzung
 - Rot: `backend/tests/test_harness_minimum_contract.py` beschreibt die fehlende Mindeststruktur.
-- Grün: Dokumente, Skills, Plan-Memory, Make-Ziele und CI-Workflow werden minimal ergänzt.
+- Grün: Dokumente, Skills, Plan-Memory und lokale Make-Ziele werden minimal ergänzt.
 - Refactor: Nach Grün werden Redundanzen und Gate-Beschreibungen geglättet.
 
 ## Evidenz
-Der erste Rotlauf zeigte sieben erwartete Fehlschläge: fehlende Harness-Dokumente, Plan-Memory, Skill-Quellen, Skill-Inventar, Make-Ziele und CI-Workflow.
+Der erste Rotlauf zeigte erwartete Fehlschläge für fehlende Harness-Dokumente, Plan-Memory, Skill-Quellen, Skill-Inventar und lokale Make-Ziele. Die früher zusätzlich eingeführte anbietergebundene Automatisierung wurde später als nicht erforderliche Fehlannahme zurückgenommen.
 
 Ausgeführte Checks:
 - `.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`: 8 passed.
@@ -44,7 +44,7 @@ Privacy-Hinweis:
 - Neu angelegte und berührte Harness-/Plan-Dateien wurden nach Klarnamen-Treffern durchsucht; die Suche fand keinen Treffer.
 
 Review-Fixes:
-- Der CI-Workflow kopiert `.env.example` nach `.env`, damit `docker compose config` im selben `make harness-minimum`-Pfad lauffähig ist.
+- Für `docker compose config` wird lokal dieselbe `.env.example`-Struktur verwendet; ein externer Automatisierungsdienst ist dafür nicht erforderlich.
 - `harness-minimum` und `harness-signals` vermeiden rekursive `$(MAKE)`-Aufrufe, damit `make -n` trocken bleibt.
 - `SKILL_EVALS.md` wird im Contract-Test abschnittsbasiert geprüft statt über feste String-Fenster.
-- `QUALITY_GATES.md` und die Dokumentköpfe beschreiben die Make-Targets und CI nicht mehr als nur geplant.
+- `QUALITY_GATES.md` und die Dokumentköpfe beschreiben die lokalen Make-Targets nicht mehr als nur geplant.

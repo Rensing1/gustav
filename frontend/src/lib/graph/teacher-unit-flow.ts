@@ -35,7 +35,16 @@ let elkPromise: Promise<ElkLike> | undefined;
 
 async function getElk(): Promise<ElkLike> {
   if (!elkPromise) {
-    elkPromise = import("elkjs/lib/elk.bundled.js").then((module) => new module.default() as unknown as ElkLike);
+    elkPromise = Promise.all([
+      import("elkjs/lib/elk-api.js"),
+      import("elkjs/lib/elk-worker.min.js?url")
+    ])
+      .then(([module, worker]) => new module.default({ workerUrl: worker.default }) as unknown as ElkLike)
+      .catch((error: unknown) => {
+        // A failed lazy load must remain retryable after a transient network error.
+        elkPromise = undefined;
+        throw error;
+      });
   }
   return elkPromise;
 }

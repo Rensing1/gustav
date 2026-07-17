@@ -94,6 +94,20 @@ def test_harness_minimum_documents_exist_and_have_contract_header() -> None:
             assert required_label in text, f"{relative_path} misses {required_label}"
 
 
+def test_active_harness_contracts_are_github_independent() -> None:
+    """Local verification must not require a provider-specific workflow."""
+
+    active_docs = (*REQUIRED_HARNESS_DOCS, *REQUIRED_PLAN_MEMORY_DOCS, HARNESS_REFACTOR_PLAN)
+    forbidden_terms = (".github/workflows", "GitHub Actions", "GitHub-Actions")
+
+    for relative_path in active_docs:
+        text = _read(relative_path)
+        for forbidden_term in forbidden_terms:
+            assert forbidden_term not in text, (
+                f"{relative_path} still requires provider-specific automation: {forbidden_term}"
+            )
+
+
 def test_harness_documents_are_active_after_refactor_closure() -> None:
     """Closed harness-plan documents should no longer look like draft working notes."""
 
@@ -384,7 +398,7 @@ def test_skill_governance_does_not_make_personal_skill_paths_authoritative() -> 
 
 
 def test_makefile_exposes_harness_minimum_and_signal_targets() -> None:
-    """Local and CI checks need stable Make entry points."""
+    """Local verification needs stable, provider-independent Make entry points."""
 
     makefile = _read("Makefile")
     for target in (
@@ -416,7 +430,7 @@ def test_harness_make_targets_are_safe_for_make_dry_run() -> None:
 
 
 def test_harness_minimum_runs_makefile_target_contracts() -> None:
-    """CI must catch accidental edits to the named harness gate composition."""
+    """Local verification must catch accidental edits to the harness gate composition."""
 
     makefile = _read("Makefile")
     body = _make_target_body(makefile, "harness-minimum")
@@ -448,26 +462,24 @@ def test_harness_minimum_runs_makefile_target_contracts() -> None:
     assert "backend/tests/test_teaching_live_h5p_matrix_cell_rendering.py" in body
 
 
-def test_ci_runs_same_harness_minimum_entry_point_as_local_development() -> None:
-    """PR-1 CI must not invent a separate path from local verification."""
+def test_repository_verification_does_not_require_github_automation() -> None:
+    """GUSTAV verification must stay usable without GitHub-hosted automation."""
 
-    workflow_path = REPO_ROOT / ".github/workflows/harness-minimum.yml"
-    assert workflow_path.exists(), "Missing harness minimum workflow"
-    workflow = workflow_path.read_text(encoding="utf-8")
+    workflows_dir = REPO_ROOT / ".github/workflows"
+    workflow_files = [] if not workflows_dir.exists() else list(workflows_dir.glob("*.y*ml"))
 
-    assert "make harness-minimum" in workflow
-    assert "backend/requirements-harness.txt" in workflow
-    assert "python-version: \"3.11\"" in workflow
-    assert "cp .env.example .env" in workflow
-
-    gitignore = _read(".gitignore")
-    assert ".env" in gitignore
+    assert workflow_files == []
+    assert not (REPO_ROOT / ".github/dependabot.yml").exists()
 
 
-def test_ci_makes_docker_image_smoke_visible() -> None:
-    """CI must expose image-only startup parity instead of relying on bind mounts."""
+def test_local_make_targets_keep_image_and_visual_smokes_available() -> None:
+    """Removing remote automation must not remove local production-like checks."""
 
-    workflow = _read(".github/workflows/harness-minimum.yml")
+    makefile = _read("Makefile")
 
-    assert "test-docker-image-smoke" in workflow
-    assert "make test-docker-image-smoke" in workflow
+    assert ".PHONY: test-docker-image-smoke" in makefile
+    assert ".PHONY: playwright-bootstrap" in makefile
+    assert ".PHONY: test-visual-smoke" in makefile
+    assert "tooling/check-playwright-browser.mjs" in _make_target_body(
+        makefile, "test-visual-smoke"
+    )

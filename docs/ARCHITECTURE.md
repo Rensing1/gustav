@@ -245,9 +245,8 @@ E2E‑Tests (Identity):
 ## Deployment & Betrieb
 - Containerisiert über `Dockerfile` und `docker-compose.yml`.
 - Reverse‑Proxy: Caddy (hostbasiertes Routing). Lokal ist Port `443` gemappt (TLS, `tls internal`).
-- Entwicklungsstart: `docker compose up --build` (Hot‑reload aktiv). Zugriff: `app.localhost` und `id.localhost`.
-- Healthcheck: `GET /health` für einfache Verfügbarkeitsprüfung; Antworten sind nicht cachebar
-  (`Cache-Control: no-store`).
+- Entwicklungsstart: `docker compose up --build`. Web und Learning-Worker laufen ohne Quellcode-Bind-Mount aus dem gebauten Image, damit lokal dasselbe Artefakt wie in Produktion geprüft wird. Zugriff: `app.localhost` und `id.localhost`.
+- Readiness: `GET /health` prüft die erforderliche Teaching-Datenbank. Solange der separat verwaltete Supabase-Stack nicht erreichbar ist, antwortet der Webdienst mit `503`; beim nächsten Aufruf wird die Verbindung ohne Web-Neustart erneut versucht. Antworten sind nicht cachebar (`Cache-Control: private, no-store`).
 
 #### Migration & Ops Notes
 - Hinweis: Dieses öffentliche Repo enthält keine produktionsspezifischen Runbooks/Ops-Skripte.

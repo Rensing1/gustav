@@ -27,6 +27,7 @@ from backend.web.main_auth_wiring import create_main_auth_wiring
 from backend.web.main_middleware_wiring import install_main_middlewares
 from backend.web.main_router_wiring import include_main_routers
 from backend.web.main_storage_wiring import initialize_main_storage
+from backend.web.runtime_errors import install_runtime_error_handlers
 
 bootstrap_runtime_environment()
 
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
 
     created_app = create_app_shell()
     created_app.state.main_module = _sys.modules[__name__]
+    install_runtime_error_handlers(created_app)
     mount_static_files(created_app, static_dir)
     runtime = auth_runtime.create_auth_runtime(running_under_pytest=_running_under_pytest())
     created_app.state.runtime = runtime

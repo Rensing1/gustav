@@ -3,7 +3,7 @@
 Status: Active
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_test_strategy_docs_contract.py`
-CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; `make verify` führt die produktionsnahen Gates aus.
+CI status: Keine anbietergebundene CI erforderlich; `make verify` führt die verbindlichen lokalen Gates aus.
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich
 
@@ -125,10 +125,10 @@ Regel: E2E-Smokes sind teuer und fragil. Sie schützen Vertrauen in die Integrat
 - `fast`: In-Process-, Domain-, Adapter- und Contract-Tests ohne externe Dienste.
 - `db-security`: echte DB-, RLS-, Migration-, Authz- und CSRF-relevante Tests.
 - `upload-llm-boundaries`: servicefreie Upload-, Storage-, Signatur-, Feedback-/DSPy- und Privacy-Contracts; keine inhaltliche Vorprüfung oder Veränderung von Schüler-Submissions.
-- `docker-image-smoke`: Web-Image ohne Compose-Bind-Mounts bauen, package-orientierten Start `backend.web.main:app` prüfen, kritische Imports prüfen und `/health` abfragen; Bestandteil von `make verify`.
+- `docker-image-smoke`: Web-Image ohne Compose-Bind-Mounts bauen, package-orientierten Start `backend.web.main:app` prüfen, kritische Imports prüfen und den erwarteten fail-closed Readiness-Status bei absichtlich unerreichbarer Datenbank nachweisen; Bestandteil von `make verify`.
 - `import-boundaries`: AST-basierter Baseline-Scan für flache Web-Imports, gemischte `backend.web.routes.*`-Imports und verstreute `sys.path`-Manipulationen.
 - `db-inventory`: generierte Übersicht in `docs/harness/DB_TEST_INVENTORY.md` für echte DB/RLS-Kandidaten, statische Migrationstests und Supabase-Storage-/Konfigurationsverträge; Bestandteil von `make verify` als Synchronitätscheck.
-- `frontend-h5p`: `npm run check`, Vitest und H5P Node tests; Bestandteil von `make verify`.
+- `frontend-h5p`: `npm run check`, Vitest einschließlich CSS-Syntaxvertrag, produktiver SvelteKit-Build und H5P-Node-Tests; Bestandteil von `make verify`.
 - `full-prod-like`: Supabase, OpenAI-kompatibler Endpunkt, Docker/Compose und E2E-Smokes.
 
 ## Marker-Regeln

@@ -3,7 +3,7 @@
 Status: Active
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_test_strategy_docs_contract.py`
-CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; `make verify` führt Import-, Architektur-, Route-, DB-, Docker-, Backend-, Frontend- und H5P-Gates lokal hart aus.
+CI status: Keine anbietergebundene CI erforderlich; `make verify` führt Import-, Architektur-, Route-, DB-, Docker-, Backend-, Frontend- und H5P-Gates lokal hart aus.
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich
 

@@ -2,8 +2,8 @@
 
 Status: Active
 Owner: Produktverantwortlicher
-Local checks: `make supply-chain-check`
-CI status: `make verify` führt `make supply-chain-check` aus
+Local checks: `make supply-chain-check`; online zusätzlich `make dependency-audit`
+CI status: Keine anbietergebundene CI erforderlich; `make verify` prüft das Offline-Inventar und `make dependency-audit` ergänzt lokal den aktuellen Online-Stand
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich
 
@@ -14,6 +14,7 @@ Dieses Dokument beschreibt das reproduzierbare Supply-Chain-Gate für GUSTAV. Da
 `make supply-chain-check` prüft offline:
 
 - `backend/web/requirements.txt`
+- `backend/requirements-harness.txt` einschließlich rekursiver `-r`-Verweise
 - `frontend/package-lock.json`
 - `h5p-service/package-lock.json`
 - `docs/harness/SUPPLY_CHAIN_INVENTORY.json`
@@ -25,10 +26,14 @@ Node-Abhängigkeiten aus den Lockfiles müssen eine erlaubte Lizenz oder eine ex
 
 Erlaubte Node-Lizenzformen sind die im Inventory unter `policy.allowed_licenses` dokumentierten FOSS-Lizenzen, darunter MIT, BSD, Apache-2.0, ISC, MPL-2.0, EPL-2.0, GPL-3.0-or-later, OFL-1.1, CC0-1.0 und kompatible Kurzformen.
 
-Python-Abhängigkeiten werden aus der bestehenden `backend/web/requirements.txt` und der installierten Paket-Metadatenbank inventarisiert. Diese Metadaten sind oft nicht SPDX-normalisiert; deshalb ist Python in v1.2 zunächst als `metadata-recorded` klassifiziert. Eine spätere Verschärfung darf erst hart werden, wenn sie ohne falsche Befunde grün ist.
+Python-Abhängigkeiten werden aus den Runtime- und Harness-Requirements sowie der installierten Paket-Metadatenbank inventarisiert. Lokale `-r`-Verweise werden rekursiv aufgelöst; Ruff ist für reproduzierbare lokale Läufe exakt gepinnt. Die Paket-Metadaten sind oft nicht SPDX-normalisiert; deshalb ist Python in v1.2 zunächst als `metadata-recorded` klassifiziert. Eine spätere Verschärfung darf erst hart werden, wenn sie ohne falsche Befunde grün ist.
 
 ## Vendored Assets
 Vendored Assets bleiben in `THIRD_PARTY_NOTICES.md` dokumentiert. Das Supply-Chain-Gate ersetzt diese Hinweise nicht, sondern ergänzt sie um Paketmanager-Abhängigkeiten. Wenn vendored Dateien aktualisiert werden, müssen Herkunft, Revision und Lizenzhinweis weiterhin in `THIRD_PARTY_NOTICES.md` gepflegt werden.
 
-## Keine Netzwerkpflicht
-Das harte Gate ruft keine externen Registries, CVE-Datenbanken oder Lizenzdienste auf. Netzwerkabhängige Audit-Werkzeuge können zusätzlich in Release- oder CI-Profilen laufen, dürfen aber nicht die lokale `make verify`-Reproduzierbarkeit ersetzen.
+## Offline-Reproduzierbarkeit und Online-Advisories
+Das harte `make verify`-Gate ruft keine externen Registries, CVE-Datenbanken oder Lizenzdienste auf. Dadurch bleibt es auch ohne Netzwerk reproduzierbar.
+
+`make dependency-audit` ergänzt dieses Inventar bewusst als separates lokales Online-Gate. Es führt im Frontend `npm audit --audit-level=low` und im H5P-Service `npm audit --omit=dev --audit-level=low` aus. Jeder bekannte Befund ab Schweregrad `low` ist ein Fehler. Der Befehl wird vor einem Release und nach jeder Lockfile-Aktualisierung ausgeführt.
+
+Die Node-Projekte deklarieren Node 22.13.0 als unterstützte Untergrenze. Docker-Images verwenden reproduzierbar Node 24.18.0. Direkte sicherheitsrelevante Abhängigkeiten sind exakt gepinnt; gezielte Overrides müssen durch Vertrags- und Regressionstests begründet bleiben.

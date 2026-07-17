@@ -6,13 +6,19 @@
     "test": "node --test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "dependencies": {
-    "@lumieducation/h5p-express": "10.0.4",
+    "@lumieducation/h5p-express": "10.0.5",
     "@lumieducation/h5p-server": "10.0.4",
     "@lumieducation/h5p-webcomponents": "10.0.4",
-    "express": "4.21.2",
+    "express": "4.22.2",
     "multer": "1.4.5-lts.1"
+  },
+  "overrides": {
+    "express": "4.22.2",
+    "path-to-regexp": "0.1.13",
+    "qs": "6.15.3",
+    "underscore": "1.13.8"
   }
 }

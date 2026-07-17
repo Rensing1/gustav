@@ -86,28 +86,48 @@ def _python_license_for(requirement_name: str) -> str:
     return "UNKNOWN"
 
 
-def _python_inventory() -> list[dict[str, Any]]:
-    requirements = REPO_ROOT / "backend/web/requirements.txt"
+def _requirement_files(manifest: Path, *, seen: set[Path] | None = None) -> list[Path]:
+    """Return a manifest and all local `-r` includes exactly once."""
+
+    resolved = manifest.resolve()
+    visited = seen if seen is not None else set()
+    if resolved in visited:
+        return []
+    visited.add(resolved)
+    files = [resolved]
+    for raw_line in resolved.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        match = re.match(r"^(?:-r|--requirement)\s+(.+)$", line)
+        if match:
+            files.extend(_requirement_files(resolved.parent / match.group(1).strip(), seen=visited))
+    return files
+
+
+def _python_inventory() -> tuple[list[dict[str, Any]], list[Path]]:
+    manifests = _requirement_files(REPO_ROOT / "backend/requirements-harness.txt")
     entries: list[dict[str, Any]] = []
-    for line in requirements.read_text(encoding="utf-8").splitlines():
-        name = _requirement_name(line)
-        if not name:
-            continue
-        try:
-            version = metadata.version(name)
-        except metadata.PackageNotFoundError:
-            version = "not-installed"
-        license_value = _python_license_for(name)
-        entries.append(
-            {
-                "ecosystem": "python",
-                "name": name,
-                "version": version,
-                "license": license_value,
-                "policy": "metadata-recorded",
-            }
-        )
-    return sorted(entries, key=lambda item: item["name"])
+    seen_names: set[str] = set()
+    for requirements in manifests:
+        for line in requirements.read_text(encoding="utf-8").splitlines():
+            name = _requirement_name(line)
+            if not name or name in seen_names:
+                continue
+            seen_names.add(name)
+            try:
+                version = metadata.version(name)
+            except metadata.PackageNotFoundError:
+                version = "not-installed"
+            license_value = _python_license_for(name)
+            entries.append(
+                {
+                    "ecosystem": "python",
+                    "name": name,
+                    "version": version,
+                    "license": license_value,
+                    "policy": "metadata-recorded",
+                }
+            )
+    return sorted(entries, key=lambda item: item["name"]), manifests
 
 
 def _node_package_name(package_path: str) -> str:
@@ -143,7 +163,7 @@ def _node_inventory(workspace: str, lockfile: Path) -> list[dict[str, Any]]:
 def build_inventory() -> dict[str, Any]:
     frontend = _node_inventory("frontend", REPO_ROOT / "frontend/package-lock.json")
     h5p = _node_inventory("h5p-service", REPO_ROOT / "h5p-service/package-lock.json")
-    python = _python_inventory()
+    python, python_manifests = _python_inventory()
     entries = [*python, *frontend, *h5p]
     review_required = [
         item
@@ -153,7 +173,7 @@ def build_inventory() -> dict[str, Any]:
     return {
         "schema_version": 1,
         "sources": [
-            "backend/web/requirements.txt",
+            *(path.relative_to(REPO_ROOT).as_posix() for path in python_manifests),
             "frontend/package-lock.json",
             "h5p-service/package-lock.json",
         ],

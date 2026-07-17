@@ -53,7 +53,31 @@ components:
           examples:
             default:
               value: { error: "forbidden" }
+    TeachingRepositoryUnavailable503:
+      description: Teaching database is temporarily unavailable
+      headers:
+        Cache-Control:
+          description: Security — responses are private and must not be stored.
+          schema:
+            type: string
+            example: private, no-store
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            default:
+              value:
+                error: service_unavailable
+                detail: teaching_repository_unavailable
   schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
     Role:
       type: string
       enum: [student, teacher, admin]
@@ -3368,12 +3392,19 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [status]
-                properties:
-                  status:
-                    type: string
-                    example: healthy
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Required Teaching database is unavailable
+          headers:
+            Cache-Control:
+              description: Security — not cacheable.
+              schema:
+                type: string
+                example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
   /h5p/healthz:
     get:
       tags: [H5P]
@@ -5346,6 +5377,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Release state entries for the module (can be empty).
           headers:
@@ -5430,6 +5462,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Ordered section list with visibility for this module.
           headers:
@@ -7032,6 +7065,7 @@ paths:
       security:
         - bearerAuth: []
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Teacher home payload
           headers:
@@ -7084,6 +7118,7 @@ paths:
             enum: [open, archived]
             default: open
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Teacher concern box payload
           headers:
@@ -7137,6 +7172,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '400':
           description: |
             Invalid input. detail codes:
@@ -7206,6 +7242,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '400':
           description: |
             Invalid input. detail codes:
@@ -7282,6 +7319,7 @@ paths:
             minimum: 0
             default: 0
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Teacher course list payload
           headers:
@@ -7333,6 +7371,7 @@ paths:
           schema:
             type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Teacher course context payload
           headers:
@@ -7430,6 +7469,7 @@ paths:
             minimum: 0
             default: 0
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Teacher course AI usage payload
           headers:
@@ -7506,6 +7546,7 @@ paths:
           schema:
             type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Teacher units catalog payload
           headers:
@@ -7589,6 +7630,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Teacher unit workspace payload
           headers:
@@ -7670,6 +7712,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Teacher node editor payload
           headers:
@@ -7743,6 +7786,7 @@ paths:
           schema:
             type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Diagnostics course matrix payload
           headers:
@@ -7805,6 +7849,7 @@ paths:
           schema:
             type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Diagnostics learner profile payload
           headers:
@@ -7872,6 +7917,7 @@ paths:
           schema:
             type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Live unit matrix payload
           headers:
@@ -7934,6 +7980,7 @@ paths:
           schema:
             type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Live course units payload
           headers:
@@ -8011,6 +8058,7 @@ paths:
           schema:
             type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Live unit dashboard payload
           headers:
@@ -8089,6 +8137,7 @@ paths:
           schema:
             type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Live detail sheet payload
           headers:
@@ -8192,6 +8241,7 @@ paths:
             minimum: 0
             default: 0
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: List of courses
           headers:
@@ -8224,6 +8274,7 @@ paths:
             schema:
               $ref: '#/components/schemas/CourseCreate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '201':
           description: Course created
           headers:
@@ -8279,6 +8330,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Course
           headers:
@@ -8328,6 +8380,7 @@ paths:
             schema:
               $ref: '#/components/schemas/CourseUpdate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Updated course
           headers:
@@ -8381,6 +8434,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '204':
           description: Deleted (no content)
           headers:
@@ -8432,6 +8486,7 @@ paths:
             minimum: 0
             default: 0
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Members
           content:
@@ -8476,6 +8531,7 @@ paths:
                 student_sub:
                   type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '201':
           description: Added
           headers:
@@ -8538,6 +8594,7 @@ paths:
           schema:
             type: string
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '204':
           description: Removed or not present (no content)
           headers:
@@ -8578,6 +8635,7 @@ paths:
             minimum: 0
             default: 0
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: List of authored learning units
           headers:
@@ -8681,6 +8739,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Learning unit owned by the caller
           headers:
@@ -8733,6 +8792,7 @@ paths:
             schema:
               $ref: '#/components/schemas/UnitUpdate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Updated learning unit
           headers:
@@ -9763,6 +9823,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: List of sections
           headers:
@@ -9826,6 +9887,7 @@ paths:
             schema:
               $ref: '#/components/schemas/SectionCreate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '201':
           description: Section created at the next position
           headers:
@@ -9878,6 +9940,7 @@ paths:
             schema:
               $ref: '#/components/schemas/SectionUpdate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Updated section
           headers:
@@ -9923,6 +9986,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '204':
           description: Deleted (no content)
           headers:
@@ -9982,6 +10046,7 @@ paths:
             schema:
               $ref: '#/components/schemas/SectionReorder'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Sections reordered successfully
           content:
@@ -10061,6 +10126,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: List of tasks
           headers:
@@ -10128,6 +10194,7 @@ paths:
             schema:
               $ref: '#/components/schemas/TaskCreate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '201':
           description: Task created
           headers:
@@ -10216,6 +10283,7 @@ paths:
             schema:
               $ref: '#/components/schemas/TaskUpdate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Updated task
           headers:
@@ -10300,6 +10368,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '204':
           description: Deleted (no content)
           headers:
@@ -10350,6 +10419,7 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: H5P editor model for the linked task content
           content:
@@ -10401,6 +10471,7 @@ paths:
             schema:
               $ref: '#/components/schemas/H5PContentSaveRequest'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Saved and linked H5P content
           content:
@@ -10461,6 +10532,7 @@ paths:
                   type: string
                   format: binary
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Imported and linked task
           content:
@@ -10509,6 +10581,7 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: H5P ZIP package
           content:
@@ -10559,6 +10632,7 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Updated task without linked H5P content
           content:
@@ -10875,6 +10949,7 @@ paths:
             schema:
               $ref: '#/components/schemas/TaskReorder'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Tasks reordered
           content:
@@ -10936,6 +11011,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: List of materials
           headers:
@@ -11007,6 +11083,7 @@ paths:
             schema:
               $ref: '#/components/schemas/MaterialCreate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '201':
           description: Material created at the next position
           headers:
@@ -11075,6 +11152,7 @@ paths:
             schema:
               $ref: '#/components/schemas/MaterialUpdate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Updated material
           headers:
@@ -11238,6 +11316,7 @@ paths:
             schema:
               $ref: '#/components/schemas/MaterialReorder'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Materials reordered successfully
           content:
@@ -11770,6 +11849,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Course modules ordered by position
           content:
@@ -11807,6 +11887,7 @@ paths:
             schema:
               $ref: '#/components/schemas/CourseModuleCreate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '201':
           description: Course module created
           headers:
@@ -11853,6 +11934,7 @@ paths:
             schema:
               $ref: '#/components/schemas/CourseModuleReorder'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Modules reordered successfully
           content:
@@ -11932,6 +12014,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '204':
           description: Module removed
           headers:
@@ -11993,6 +12076,7 @@ paths:
             schema:
               $ref: '#/components/schemas/ModuleSectionVisibilityUpdate'
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: Visibility state updated
           headers:
@@ -12673,6 +12757,7 @@ paths:
           schema: { type: integer, minimum: 0, default: 0 }
           description: Offset into the changeset; primarily for pagination in large classes.
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: OK
           headers:
@@ -12755,6 +12840,7 @@ paths:
             Sending only blank values such as `unit_ids=` expresses an explicit
             empty selection and returns zero units.
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           description: OK
           headers:
@@ -12836,6 +12922,7 @@ paths:
             Student subject identifier. Clients must URL-encode reserved path
             characters; the server accepts encoded slash-containing values.
       responses:
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
           headers:
             Cache-Control: { schema: { type: string, example: 'private, no-store' } }

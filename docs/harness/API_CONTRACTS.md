@@ -3,7 +3,7 @@
 Status: Active
 Owner: Produktverantwortlicher
 Local checks: `make test-api-contract-baseline`, `make harness-minimum`
-CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; `make verify` führt `make test-api-contract-baseline` als hartes Gate aus.
+CI status: Keine anbietergebundene CI erforderlich; `make verify` führt `make test-api-contract-baseline` lokal als hartes Gate aus.
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich
 

@@ -75,7 +75,7 @@ Als Produktverantwortlicher (Felix) möchte ich, dass die OIDC-Anmeldung über K
 
 ## Offene Fragen / TODO
 - Supabase CLI in CI: Wird `supabase start` genutzt oder individuelle Container?  
-- Wie werden Supabase-Service-Secrets sicher verwaltet (GitHub Actions Secrets vs. `.env.e2e`)?  
+- Wie werden Supabase-Service-Secrets sicher für lokale E2E-Läufe verwaltet (`.env.e2e` oder ein lokaler Secret-Store)?
 - Token-Refresh-Test: realer Ablauf (Timer vs. künstliches Manipulieren der `expires_at`-Claims).  
 - Logging/Artefakte: Keycloak- und Supabase-Logs bei Testfehlern sammeln.
 
@@ -83,5 +83,5 @@ Als Produktverantwortlicher (Felix) möchte ich, dass die OIDC-Anmeldung über K
 1. Supabase-Architektur studieren (Auth, RLS, CLI) und erforderliche Seeds/Config definieren.
 2. docker-compose-Datei um Supabase-Services und Test-Runner erweitern; Health-Wait-Skripte hinzufügen.
 3. E2E-Pytest implementieren (Szenarien 1–10), inklusive Fixtures für Keycloak/Supabase Sessions.
-4. Pipeline (GitHub Actions) erweitern: Compose hochfahren, Tests ausführen, Logs sichern.
+4. Lokales E2E-Profil erweitern: Compose hochfahren, Tests ausführen und Logs sichern.
 5. Dokumentation (README, ARCHITECTURE, CI-Anleitung) aktualisieren, Hinweise zu Secrets und Laufzeiten ergänzen.

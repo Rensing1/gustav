@@ -103,6 +103,16 @@ def test_docker_image_smoke_uses_prod_like_runtime_configuration() -> None:
     assert "SESSIONS_BACKEND=memory" not in text
 
 
+def test_docker_image_smoke_expects_fail_closed_readiness_without_database() -> None:
+    """The isolated image has an unreachable DSN and must therefore report 503."""
+
+    text = SMOKE_SCRIPT.read_text(encoding="utf-8")
+
+    assert "HTTPError" in text
+    assert "response.status == 503" in text
+    assert "readiness-unavailable-ok" in text
+
+
 def test_docker_image_smoke_rejects_runtime_test_and_tooling_leaks() -> None:
     """Runtime images must not ship tests, harness tooling, or Ruff."""
 

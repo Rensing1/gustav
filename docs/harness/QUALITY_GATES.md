@@ -3,12 +3,12 @@
 Status: Active
 Owner: Produktverantwortlicher
 Local checks: `.venv/bin/pytest -q backend/tests/test_harness_test_strategy_docs_contract.py`
-CI status: `make harness-minimum` läuft über `.github/workflows/harness-minimum.yml`; weitere Profile werden schrittweise ergänzt.
+CI status: Keine anbietergebundene CI erforderlich; alle verbindlichen Profile besitzen lokale Make-Ziele.
 Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich
 
 ## Zweck
-Dieses Dokument beschreibt die geplanten Gate-Profile für den Harness-Refactor. Die Profile sollen lokale Entwicklung und CI angleichen, ohne teure oder externe Suites versehentlich in schnelle Checks zu mischen.
+Dieses Dokument beschreibt die Gate-Profile für den Harness-Refactor. Die Profile bilden einen vollständigen lokalen Verifikationsweg, ohne teure oder externe Suites versehentlich in schnelle Checks zu mischen.
 
 ## Profile
 
@@ -105,7 +105,7 @@ Initialer lokaler Befehl:
 Aktueller Status:
 - Als hartes Gate in `make verify` enthalten.
 - In `harness-signals` warning-only sichtbar.
-- In CI als expliziter Schritt nach `make harness-minimum` sichtbar, damit Image-Parität nicht hinter Bind-Mounts verschwindet.
+- Lokal als expliziter Teil von `make verify` sichtbar, damit Image-Parität nicht hinter Bind-Mounts verschwindet.
 - Packaging-Contracts prüfen zusätzlich, dass Web und Learning-Worker das Backend lokal als ein Package unter `/app/backend` mounten und keine einzelnen Backend-Subpackages als zweite Wurzeln einhängen.
 
 ### import-boundaries
@@ -178,6 +178,7 @@ Zweck: Frontend- und H5P-Qualität als First-Class-Gate behandeln.
 Geplanter Inhalt:
 - `npm run check` im Frontend
 - Vitest im Frontend
+- Produktionsbuild und strikte CSS-Syntaxprüfung im Frontend
 - Node-Tests im H5P-Service
 - H5P-Verträge, soweit sie ohne Compose laufen
 
@@ -187,6 +188,7 @@ Initialer lokaler Befehl:
 Aktueller harter Inhalt:
 - `npm run check` im Frontend.
 - Frontend-Vitest.
+- `npm run build` mit einem 500-kB-Chunk-Gate, einer engen Warnungs-Allowlist und einem PostCSS-Syntaxvertrag für alle ausgelieferten globalen Stylesheets.
 - H5P-Node-Tests.
 - `make verify` ruft dieses Profil auf.
 
@@ -223,11 +225,12 @@ Geplanter Inhalt:
 
 Initialer lokaler Befehl:
 - `make supply-chain-check`
+- `make dependency-audit` für den aktuellen Online-Advisory-Stand
 
 Aktueller Status:
 - Als hartes Gate in `make verify` enthalten.
 - Läuft ohne Netzwerkzugriff.
-- Netzwerkabhängige Vulnerability-Audits bleiben getrennte Release- oder CI-Profile.
+- `make dependency-audit` prüft Frontend und H5P ab Advisory-Schweregrad `low` und bleibt wegen der Netzwerkpflicht ein eigener lokaler Schritt außerhalb von `make verify`.
 
 ### full-prod-like
 Zweck: produktionsnahe Integrationen prüfen.
@@ -244,7 +247,7 @@ Initialer lokaler Befehl:
 - `make test-full-prod-like`
 
 Regel:
-- Dieses Profil bleibt teuer und bewusst opt-in oder CI-staged.
+- Dieses Profil bleibt teuer und bewusst lokal opt-in.
 
 ### db-inventory
 Zweck: DB-, RLS-, Migrations- und Supabase-nahe Testdateien sichtbar machen, bevor `db_read` und `db_write` harte Marker werden.

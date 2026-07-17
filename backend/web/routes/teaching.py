@@ -10,9 +10,9 @@ Notes:
     - Clean Architecture: Keep business rules simple and independent of FastAPI.
     - Security: Only teachers may create/update/delete courses. Students can list
       courses they belong to (not covered in the initial test slice).
-    - Persistence: Prefers the Postgres-backed repo when psycopg and DSN are
-      available; falls back to an in-memory repo for tests/local offline work.
-      Tests can call `set_repo` to override the implementation for isolation.
+    - Persistence: Runtime requests require the Postgres-backed repository and
+      fail closed while it is unavailable. Tests can call `set_repo` to inject
+      an in-memory implementation explicitly for isolation.
 """
 
 from __future__ import annotations
@@ -67,6 +67,7 @@ from backend.web.routes.teaching_task_services import (
     configure_task_service_repo_provider,
 )
 from backend.web.routes.teaching_validation import canonical_uuid as _canonical_uuid
+from backend.web.runtime_errors import TeachingRepositoryUnavailable
 
 teaching_router = APIRouter(tags=["Teaching"])  # explicit paths below
 logger = logging.getLogger("gustav.web.teaching")
@@ -97,7 +98,7 @@ except ModuleNotFoundError:  # pragma: no cover
     _wire_storage = None  # type: ignore
 
 
-# --- In-memory persistence (MVP fallback) ---------------------------------------
+# --- In-memory persistence (explicit test double) -------------------------------
 
 _UNSET = teaching_inmemory_repo._UNSET
 _is_unset = teaching_inmemory_repo._is_unset
@@ -154,7 +155,7 @@ _safe_download_filename = teaching_submission_files.safe_download_filename
 _teaching_submission_file_href = teaching_submission_files.teaching_submission_file_href
 
 
-# Try to use DB-backed repo when available; fallback to in-memory for dev/tests
+# Import the required DB-backed repository lazily for lightweight tooling/tests.
 try:  # late import to avoid hard dependency during unit tests
     from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 except Exception as exc:  # pragma: no cover - import failures in dev/test envs
@@ -165,20 +166,21 @@ else:
 
 
 def _build_default_repo():
-    """Prefer DB-backed TeachingRepo; fall back to in-memory if unavailable.
+    """Build the required PostgreSQL repository or fail closed.
 
-    Matches the original project behavior so DB-based contract tests run when
-    a fake psycopg/test DSN is provided; otherwise we degrade gracefully.
+    The caller deliberately does not cache failures. A later request can
+    therefore recover after PostgreSQL becomes reachable without restarting
+    the web process. In-memory persistence is available only via `set_repo`.
     """
     if DBTeachingRepo is None:
         if _DB_REPO_IMPORT_ERROR:
-            logger.warning("Teaching repo import failed: %s", _DB_REPO_IMPORT_ERROR)
-        return _Repo()
+            logger.warning("Teaching repository adapter import failed")
+        raise TeachingRepositoryUnavailable() from _DB_REPO_IMPORT_ERROR
     try:
         return DBTeachingRepo()
-    except Exception as exc:  # pragma: no cover - exercised when DSN missing
-        logger.warning("Teaching repo unavailable (%s); using in-memory fallback", exc)
-        return _Repo()
+    except Exception as exc:
+        logger.warning("Teaching repository is unavailable; retrying on the next request")
+        raise TeachingRepositoryUnavailable() from exc
 
 
 """Lazy repo accessor to avoid import-time DB checks in tests."""

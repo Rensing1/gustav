@@ -2011,47 +2011,87 @@
   font-size: 0.95rem;
 }
 
-.learning-markdown-editor .toastui-editor-defaultUI {
-  border: 0;
-  background: transparent;
-  font-family: inherit;
-}
-
-.learning-markdown-editor .toastui-editor-defaultUI-toolbar {
+.learning-markdown-editor__toolbar,
+.learning-markdown-editor__link-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.48rem 0.55rem;
   border-bottom: 1px solid color-mix(in srgb, var(--color-border) 66%, white 34%);
   background: #f7f4ed;
 }
 
-.learning-markdown-editor .toastui-editor-toolbar-group {
-  gap: 0.12rem;
-}
-
-.learning-markdown-editor .toastui-editor-defaultUI-toolbar button {
+.learning-markdown-editor__toolbar button,
+.learning-markdown-editor__toolbar select,
+.learning-markdown-editor__link-panel button,
+.learning-markdown-editor__link-panel input {
+  min-height: 2rem;
+  border: 1px solid var(--color-border);
   border-radius: 0.2rem;
-  opacity: 0.88;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  font: inherit;
 }
 
-.learning-markdown-editor .toastui-editor-main {
-  min-height: 0;
+.learning-markdown-editor__toolbar button,
+.learning-markdown-editor__link-panel button {
+  padding: 0.28rem 0.5rem;
+  cursor: pointer;
 }
 
-.learning-markdown-editor .toastui-editor-ww-container .toastui-editor {
-  background: transparent;
+.learning-markdown-editor__toolbar button.active {
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent-soft);
 }
 
-.learning-markdown-editor .toastui-editor-ww-container .toastui-editor-contents,
-.learning-markdown-editor .toastui-editor-ww-container .ProseMirror {
+.learning-markdown-editor__table-actions {
+  display: contents;
+}
+
+.learning-markdown-editor__link-panel input {
+  min-width: min(22rem, 100%);
+  padding: 0.28rem 0.45rem;
+}
+
+.learning-markdown-editor__link-error {
+  width: 100%;
+  color: var(--color-danger, #9d1c16);
+  font-size: 0.84rem;
+}
+
+.learning-markdown-editor__surface .tiptap {
+  min-height: 22rem;
+  max-height: 28rem;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  padding: 1.25rem 1.35rem 1.6rem;
+  outline: 0;
   font-family: inherit;
   font-size: 1.02rem;
   line-height: 1.72;
   color: var(--color-text);
 }
 
-.learning-markdown-editor .toastui-editor-ww-container .ProseMirror {
-  padding: 1.25rem 1.35rem 1.6rem;
+.learning-markdown-editor__surface .tiptap p.is-editor-empty:first-child::before {
+  height: 0;
+  float: left;
+  color: var(--color-text-muted);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.learning-markdown-editor__surface .tiptap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.learning-markdown-editor__surface .tiptap th,
+.learning-markdown-editor__surface .tiptap td {
+  min-width: 5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border);
+  vertical-align: top;
 }
 
 .learning-submission-editor__actions {

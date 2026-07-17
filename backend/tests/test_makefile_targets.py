@@ -135,6 +135,15 @@ def test_verify_runs_frontend_h5p_profile() -> None:
     assert "$(MAKE) test-h5p" not in body
 
 
+def test_frontend_hard_gate_builds_the_production_artifact() -> None:
+    """Type and unit checks alone must not hide production bundler failures."""
+
+    body = _target_body("test-frontend-h5p")
+
+    assert "npm run build" in body
+    assert body.index("npm run check") < body.index("npm run build")
+
+
 def test_verify_keeps_external_smokes_out_of_default_gate() -> None:
     """`verify` should stay deterministic; external smokes live in full-prod-like."""
 
@@ -233,10 +242,11 @@ def test_runtime_requirements_do_not_include_harness_only_tools() -> None:
     """The production image installs runtime dependencies, not local harness tools."""
 
     backend_requirements = BACKEND_REQUIREMENTS.read_text(encoding="utf-8")
-    workflow = (PROJECT_ROOT / ".github/workflows/harness-minimum.yml").read_text(encoding="utf-8")
+    harness_requirements = BACKEND_HARNESS_REQUIREMENTS.read_text(encoding="utf-8")
 
     assert "ruff" not in backend_requirements
-    assert "backend/requirements-harness.txt" in workflow
+    assert "-r web/requirements.txt" in harness_requirements
+    assert "ruff==" in harness_requirements
 
 
 def test_frontend_vitest_uses_numeric_loopback_host() -> None:

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -22,13 +23,26 @@ class LayoutResponseBuilder(Protocol):
         ...
 
 
-def create_basic_pages_router(layout_response: LayoutResponseBuilder) -> APIRouter:
+def create_basic_pages_router(
+    layout_response: LayoutResponseBuilder,
+    *,
+    repo_provider: Callable[[], Any],
+) -> APIRouter:
     """Create the remaining basic runtime routes."""
 
     router = APIRouter()
 
     @router.get("/health")
     async def health_check():
+        try:
+            repo = repo_provider()
+            repo.check_readiness()
+        except Exception:
+            return JSONResponse(
+                {"status": "unhealthy"},
+                status_code=503,
+                headers={"Cache-Control": "private, no-store"},
+            )
         return JSONResponse({"status": "healthy"}, headers={"Cache-Control": "private, no-store"})
 
     return router

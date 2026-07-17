@@ -14,6 +14,10 @@ import re
 import subprocess
 import sys
 
+import pytest
+
+from backend.tools import architecture_boundary_scan
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = REPO_ROOT / "Makefile"
@@ -115,6 +119,50 @@ def test_architecture_boundary_scan_matches_current_baseline() -> None:
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "architecture-boundary-scan-ok" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("source", "category"),
+    (
+        ("import psycopg as pg\npg.connect('dsn')\n", "web_direct_db_connects"),
+        ("from psycopg import connect as db_connect\ndb_connect('dsn')\n", "web_direct_db_connects"),
+        ("import supabase as sb\nsb.create_client('url', 'key')\n", "web_direct_supabase_client_creates"),
+        (
+            "from supabase import create_client as make_client\nmake_client('url', 'key')\n",
+            "web_direct_supabase_client_creates",
+        ),
+    ),
+)
+def test_architecture_scan_resolves_forbidden_import_aliases(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    category: str,
+) -> None:
+    web_file = tmp_path / "backend/web/routes/example.py"
+    web_file.parent.mkdir(parents=True)
+    web_file.write_text(source, encoding="utf-8")
+    monkeypatch.setattr(architecture_boundary_scan, "_repo_root", lambda: tmp_path)
+    findings = {name: [] for name in architecture_boundary_scan.CATEGORIES}
+
+    architecture_boundary_scan._scan_file(web_file, findings)
+
+    assert findings[category] == ["backend/web/routes/example.py:2"]
+
+
+def test_architecture_scan_ignores_unrelated_create_client_symbol(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    web_file = tmp_path / "backend/web/routes/example.py"
+    web_file.parent.mkdir(parents=True)
+    web_file.write_text("from example_factory import create_client\ncreate_client()\n", encoding="utf-8")
+    monkeypatch.setattr(architecture_boundary_scan, "_repo_root", lambda: tmp_path)
+    findings = {name: [] for name in architecture_boundary_scan.CATEGORIES}
+
+    architecture_boundary_scan._scan_file(web_file, findings)
+
+    assert findings["web_direct_supabase_client_creates"] == []
 
 
 def test_architecture_rules_document_executable_boundaries() -> None:

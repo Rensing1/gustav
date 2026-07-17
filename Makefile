@@ -31,8 +31,10 @@ help:
 	@echo "  test-route-map     - Check generated route-surface inventory"
 	@echo "  test-db-inventory  - Check generated DB/RLS test inventory"
 	@echo "  supply-chain-check - Check offline dependency/license inventory"
+	@echo "  dependency-audit   - Check current npm advisories (requires network)"
 	@echo "  test-frontend-h5p  - Run frontend and H5P checks"
 	@echo "  test-visual-smoke  - Run deterministic Playwright visual smoke checks"
+	@echo "  playwright-bootstrap - Install the supported Playwright Chromium browser"
 	@echo "  test-full-prod-like - Run full prod-like verification profile"
 	@echo "  harness-minimum    - Run hard PR-1 harness safety gate"
 	@echo "  harness-signals    - Run warning-only harness signals"
@@ -223,15 +225,26 @@ test-db-inventory:
 supply-chain-check:
 	. ./.venv/bin/activate && python -m backend.tools.supply_chain_check --check
 
+.PHONY: dependency-audit
+dependency-audit:
+	@cd frontend && npm audit --audit-level=low
+	@cd h5p-service && npm audit --omit=dev --audit-level=low
+
 .PHONY: test-frontend-h5p
 test-frontend-h5p:
 	@cd frontend && npm run check
 	@cd frontend && npm test
+	@cd frontend && npm run build
 	@$(MAKE) test-h5p
 
 .PHONY: test-visual-smoke
 test-visual-smoke:
+	@cd frontend && node tooling/check-playwright-browser.mjs
 	@cd frontend && npm run test:e2e -- --grep @visual-smoke
+
+.PHONY: playwright-bootstrap
+playwright-bootstrap:
+	@cd frontend && npx playwright install chromium
 
 .PHONY: test-full-prod-like
 test-full-prod-like:
@@ -342,13 +355,13 @@ test-e2e:
 	fi
 	# Keep local Keycloak admin credentials deterministic after snapshot restores.
 	@$(MAKE) keycloak-admin-sync
-	# Optional: fail fast when the app isn't reachable yet (ignore TLS verification).
+	# Fail fast when the app is not ready, using the same Caddy CA as pytest.
 	@for i in {1..40}; do \
-	  curl -skf https://app.localhost/health >/dev/null 2>&1 && break; \
+	  curl --cacert .tmp/caddy-root.crt -sf https://app.localhost/health >/dev/null 2>&1 && break; \
 	  sleep 0.5; \
 	done
 	@set -a; [ -f .env ] && . ./.env; set +a; \
-	. ./.venv/bin/activate && RUN_E2E=1 REQUESTS_CA_BUNDLE=.tmp/caddy-root.crt E2E_READY_TIMEOUT_S=20 pytest -q -m e2e
+	. ./.venv/bin/activate && RUN_E2E=1 E2E_VERIFY_TLS=1 REQUESTS_CA_BUNDLE=.tmp/caddy-root.crt E2E_READY_TIMEOUT_S=20 pytest -q -m e2e
 
 .PHONY: supabase-status
 supabase-status:

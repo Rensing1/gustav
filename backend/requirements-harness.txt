@@ -4,4 +4,4 @@
 # Keep lint/test-only tools here so they do not become runtime packages.
 -r web/requirements.txt
 
-ruff>=0.8,<1
+ruff==0.15.20

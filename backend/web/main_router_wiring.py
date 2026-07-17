@@ -37,6 +37,7 @@ def include_main_routers(
     from backend.web.routes.app import app_router
     from backend.web.routes.auth import auth_router
     from backend.web.routes.basic_pages import create_basic_pages_router
+    from backend.web.routes.teaching import _get_repo as get_teaching_repo
     from backend.web.routes.teaching_courses import teaching_courses_router
     from backend.web.routes.teaching_course_modules import teaching_course_modules_router
     from backend.web.routes.teaching_course_members import teaching_course_members_router
@@ -54,7 +55,7 @@ def include_main_routers(
     include_core_routers(
         app,
         (
-            create_basic_pages_router(layout_response),
+            create_basic_pages_router(layout_response, repo_provider=get_teaching_repo),
             auth_router,
             app_router,
             learning_router,

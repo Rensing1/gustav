@@ -54,13 +54,15 @@ def test_route_map_document_has_required_inventory_columns() -> None:
         "Role",
         "Data Access",
         "Response Model",
-        "Existing Tests",
+        "Test Candidates (unverified)",
         "Risk",
         "Legacy Status",
         "Decision",
         "Target Layer",
     ):
         assert column in text
+
+    assert "Existing Tests" not in text
 
     for required_route in (
         "GET /api/learning/courses",

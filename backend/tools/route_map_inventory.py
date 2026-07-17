@@ -28,7 +28,7 @@ class RouteRecord:
     role: str
     data_access: str
     response_model: str
-    existing_tests: str
+    test_candidates: str
     risk: str
     legacy_status: str
     decision: str
@@ -137,7 +137,7 @@ def _data_access(path: str) -> str:
     return "none"
 
 
-def _tests(path: str) -> str:
+def _test_candidates(path: str) -> str:
     if path in {"/", "/about"}:
         return "backend/tests/test_navigation_roles_ui.py, backend/tests/test_app_composition_contract.py"
     if path == "/api/me":
@@ -247,7 +247,7 @@ def build_records(spec_path: Path) -> list[RouteRecord]:
                 role=_role(op.path),
                 data_access=_data_access(op.path),
                 response_model=_response_model(spec, op),
-                existing_tests=_tests(op.path),
+                test_candidates=_test_candidates(op.path),
                 risk=_risk(op),
                 legacy_status=_record_legacy_status(op.path, surface),
                 decision=_record_decision(op.path, surface),
@@ -281,7 +281,7 @@ def render_markdown(spec_path: Path) -> str:
         "",
         DOC_START,
         "",
-        "| Route/Endpoint | Surface | Role | Data Access | Response Model | Existing Tests | Risk | Legacy Status | Decision | Target Layer |",
+        "| Route/Endpoint | Surface | Role | Data Access | Response Model | Test Candidates (unverified) | Risk | Legacy Status | Decision | Target Layer |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for record in records:
@@ -296,7 +296,7 @@ def render_markdown(spec_path: Path) -> str:
                     record.role,
                     record.data_access,
                     record.response_model,
-                    record.existing_tests,
+                    record.test_candidates,
                     record.risk,
                     record.legacy_status,
                     record.decision,

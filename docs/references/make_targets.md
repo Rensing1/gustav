@@ -15,6 +15,9 @@ Status: Stable
 - `make test-openai` – OpenAI-kompatibler Endpoint Smoke-Tests (`-m openai_integration`)
 - `make test-e2e` – E2E (`-m e2e`, startet Dienste)
 - `make verify` – deterministische harte Gates (DB-Preflight, Import/API/Architektur/Route/Docker-Smokes, Python-Tests, Frontend und H5P), ohne echte externe OpenAI-/Browser-E2E-Smokes
+- `make dependency-audit` – Online-Prüfung der aktuellen npm-Advisories für Frontend und H5P; jeder Befund ab `low` schlägt fehl
+- `make playwright-bootstrap` – installiert den von Playwright unterstützten Chromium-Browser für lokale visuelle Smokes
+- `make test-visual-smoke` – prüft zuerst die Browserinstallation und führt danach die markierten produktnahen Chromium-Smokes aus
 - `make test-full-prod-like` – vollständiges produktionsnahes Profil (`verify` + Supabase-Smoke + OpenAI-Smoke + E2E)
 - `make supabase-status` – Supabase Status/URLs
 - `make docker-validate` – `docker compose config` (Syntax/ENV)

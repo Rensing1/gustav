@@ -1,5 +1,7 @@
 # Plan: Keycloak an Postgres anbinden (Compose) – statt Volume-Persistenz
 
+> Historischer Hinweis (2026-07-17): Die damalige optionale CI-Erwähnung begründet keine aktuelle Anforderung. Verbindliche Verifikation erfolgt anbieterunabhängig über lokale Make-Ziele.
+
 Status: Final (abgenommen, ready for implementation)
 
 ## Executive Summary

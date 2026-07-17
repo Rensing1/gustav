@@ -15,7 +15,7 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 
 <!-- route-map:generated:start -->
 
-| Route/Endpoint | Surface | Role | Data Access | Response Model | Existing Tests | Risk | Legacy Status | Decision | Target Layer |
+| Route/Endpoint | Surface | Role | Data Access | Response Model | Test Candidates (unverified) | Risk | Legacy Status | Decision | Target Layer |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | DELETE /api/app/profile/cli-tokens/{token_id} | BFF/internal | authenticated BFF | identity/session | empty/redirect | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
 | DELETE /api/teaching/courses/{course_id} | public API | teacher | teaching repo | empty/redirect | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
@@ -106,7 +106,7 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | GET /h5p/player | H5P service | admin | H5P storage/service | HTML | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
 | GET /h5p/player/model | H5P service | student/teacher | H5P storage/service | H5PPlayerModelResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
 | GET /h5p/player/review | H5P service | teacher/admin | H5P storage + review token | H5PPlayerModelResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
-| GET /health | health/ops | ops | service status | object | backend/tests/test_*health* | low | active | retain | ops adapter |
+| GET /health | health/ops | ops | service status | HealthStatus | backend/tests/test_*health* | low | active | retain | ops adapter |
 | GET /internal/health/learning-worker | health/ops | ops | service status | LearningWorkerHealth | backend/tests/test_*health* | low | active | retain | ops adapter |
 | GET /internal/health/openai | health/ops | ops | service status | OpenAIHealth | backend/tests/test_*health* | low | active | retain | ops adapter |
 | PATCH /api/app/profile/display-name | BFF/internal | authenticated BFF | identity/session | empty/redirect | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |

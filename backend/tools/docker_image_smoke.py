@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import time
+from urllib.error import HTTPError
 import urllib.request
 from uuid import uuid4
 
@@ -112,9 +113,14 @@ def _wait_for_health(port: int, *, timeout_seconds: float) -> None:
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(url, timeout=1.0) as response:
-                if 200 <= response.status < 300:
-                    print("health-ok")
+                if response.status == 503:
+                    print("readiness-unavailable-ok")
                     return
+        except HTTPError as response:
+            if response.status == 503:
+                print("readiness-unavailable-ok")
+                return
+            last_error = response
         except Exception as exc:  # pragma: no cover - diagnostic path
             last_error = exc
         time.sleep(0.5)

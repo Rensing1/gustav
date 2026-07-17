@@ -23,41 +23,21 @@ except Exception:
 
 
 def _configure_requests_tls_for_local_e2e() -> None:
-    """
-    E2E tests talk to `https://app.localhost` / `https://id.localhost` via Caddy.
+    """Require verified HTTPS for the production-like E2E profile.
 
-    In the default local setup, Caddy uses a locally-generated certificate which
-    is *not* trusted by Python's CA store inside the dev container.
-
-    To keep E2E tests runnable without manual CA installation, we default to
-    `verify=False` when RUN_E2E=1. If you do have a trusted CA bundle, set
-    `E2E_VERIFY_TLS=1` to re-enable certificate verification.
+    Caddy's local root CA is copied to the host by `make test-e2e`. Requests
+    reads it through `REQUESTS_CA_BUNDLE`; no process-wide monkeypatch is used.
     """
     if os.getenv("RUN_E2E", "0") != "1":
         return
-    if os.getenv("E2E_VERIFY_TLS", "0") == "1":
-        return
-    try:
-        import warnings
-        import urllib3  # type: ignore
-        from urllib3.exceptions import InsecureRequestWarning  # type: ignore
-        urllib3.disable_warnings(InsecureRequestWarning)
-        warnings.filterwarnings("ignore", category=InsecureRequestWarning)
-    except Exception:
-        pass
-    try:
-        from requests.sessions import Session  # type: ignore
-
-        original_request = Session.request
-
-        def request_with_insecure_default(self, method, url, **kwargs):  # type: ignore[no-untyped-def]
-            kwargs.setdefault("verify", False)
-            return original_request(self, method, url, **kwargs)
-
-        Session.request = request_with_insecure_default  # type: ignore[assignment]
-    except Exception:
-        # If requests isn't available, individual tests may fail with a clearer error.
-        return
+    if os.getenv("E2E_VERIFY_TLS") != "1":
+        raise pytest.UsageError("E2E_VERIFY_TLS=1 is required when RUN_E2E=1")
+    bundle = os.getenv("REQUESTS_CA_BUNDLE", "").strip()
+    bundle_path = Path(bundle) if bundle else None
+    if bundle_path is None or not bundle_path.is_file() or bundle_path.stat().st_size == 0:
+        raise pytest.UsageError(
+            "REQUESTS_CA_BUNDLE must point to the non-empty Caddy root CA; run `make test-e2e`"
+        )
 
 
 _configure_requests_tls_for_local_e2e()

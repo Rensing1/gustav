@@ -1080,8 +1080,6 @@ select {
   padding-bottom: 0;
 }
 
-}
-
 @media (max-width: 640px) {
   .workspace-section-header {
     flex-direction: column;

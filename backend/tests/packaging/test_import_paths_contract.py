@@ -63,10 +63,10 @@ def test_dockerfile_uses_package_oriented_web_entrypoint() -> None:
     assert "ENV PYTHONPATH=/app:/app/backend" not in dockerfile
 
 
-def test_compose_mounts_backend_once_without_package_duplicates() -> None:
+def test_compose_runs_backend_from_the_built_image() -> None:
     compose = (_repo_root() / "docker-compose.yml").read_text(encoding="utf-8")
 
-    assert "- ./backend:/app/backend:z" in compose
+    assert "./backend:/app/backend" not in compose
     assert "/app/identity_access" not in compose
     assert "/app/teaching" not in compose
     assert "- ./backend/web:/app:z" not in compose

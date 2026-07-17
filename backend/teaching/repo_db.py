@@ -154,7 +154,7 @@ class DBTeachingRepo:
             if user != "gustav_limited":
                 try:
                     import psycopg  # type: ignore
-                    with psycopg.connect(self._dsn) as _conn:
+                    with psycopg.connect(self._dsn, connect_timeout=3) as _conn:
                         with _conn.cursor() as _cur:
                             _cur.execute("select pg_has_role(current_user, 'gustav_limited', 'member')")
                             ok = bool((_cur.fetchone() or [False])[0])
@@ -167,6 +167,20 @@ class DBTeachingRepo:
                     raise RuntimeError(
                         f"TeachingRepo DSN verification failed: {e}. Ensure your DB user is IN ROLE gustav_limited."
                     )
+
+    def check_readiness(self) -> None:
+        """Verify that the required PostgreSQL database accepts connections.
+
+        The short timeout keeps the public readiness endpoint responsive while
+        Docker or Kubernetes waits for a separately managed Supabase stack.
+        No application data is read and the limited application role remains
+        subject to the same RLS configuration as normal repository calls.
+        """
+
+        with psycopg.connect(self._dsn, connect_timeout=3) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select 1")
+                cur.fetchone()
 
     @staticmethod
     def _service_fallback_allowed() -> bool:

@@ -98,7 +98,7 @@ def reload_backend_conftest_openai(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
-def reload_backend_e2e_conftest(monkeypatch: pytest.MonkeyPatch):
+def reload_backend_e2e_conftest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """
     Reload `backend.tests_e2e.conftest` and record load_dotenv invocations.
     """
@@ -119,12 +119,19 @@ def reload_backend_e2e_conftest(monkeypatch: pytest.MonkeyPatch):
             monkeypatch.delenv("RUN_E2E", raising=False)
         else:
             monkeypatch.setenv("RUN_E2E", run_e2e_value)
+        if run_e2e_value == "1":
+            ca_bundle = tmp_path / "caddy-root.crt"
+            ca_bundle.write_text("test-ca", encoding="utf-8")
+            monkeypatch.setenv("E2E_VERIFY_TLS", "1")
+            monkeypatch.setenv("REQUESTS_CA_BUNDLE", str(ca_bundle))
 
         importlib.import_module(module_name)
         return load_calls["count"]
 
     yield _reload
     monkeypatch.delenv("RUN_E2E", raising=False)
+    monkeypatch.delenv("E2E_VERIFY_TLS", raising=False)
+    monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
     sys.modules.pop("dotenv", None)
     importlib.import_module("backend.tests_e2e.conftest")
 

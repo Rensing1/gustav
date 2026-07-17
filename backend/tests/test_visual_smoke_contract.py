@@ -55,3 +55,17 @@ def test_visual_smoke_spec_uses_support_helpers_for_teacher_learner_and_h5p_surf
         assert required_surface in source
 
     assert "function expectVisiblePageShell" not in source
+
+
+def test_visual_smoke_has_reproducible_browser_bootstrap_and_preflight() -> None:
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    preflight = REPO_ROOT / "frontend" / "tooling" / "check-playwright-browser.mjs"
+
+    assert ".PHONY: playwright-bootstrap" in makefile
+    assert "npx playwright install chromium" in makefile
+    visual_body = makefile.split("test-visual-smoke:", 1)[1].split(".PHONY:", 1)[0]
+    assert "tooling/check-playwright-browser.mjs" in visual_body
+    assert preflight.exists()
+    source = preflight.read_text(encoding="utf-8")
+    assert "chromium.executablePath()" in source
+    assert "make playwright-bootstrap" in source

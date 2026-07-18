@@ -268,8 +268,8 @@ async def get_unit_live_summary(
                     raise
                 except Exception as exc:
                     logger.warning(
-                        "Unit summary bulk aggregate fallback: get_unit_latest_submission_aggregates_for_owner unavailable — %s",
-                        exc,
+                        "unit_summary_bulk_aggregate_fallback reason=unexpected_error error_type=%s",
+                        exc.__class__.__name__,
                         extra={"course_id": course_id, "unit_id": unit_id},
                     )
                     helper_rows: list[dict[str, Any]] = []
@@ -367,8 +367,8 @@ async def get_unit_live_summary(
                         raise
                     except Exception as legacy_exc:
                         logger.warning(
-                            "Unit summary fallback: get_unit_latest_submissions_for_owner unavailable — %s",
-                            legacy_exc,
+                            "unit_summary_fallback reason=unexpected_error error_type=%s",
+                            legacy_exc.__class__.__name__,
                             extra={"course_id": course_id, "unit_id": unit_id},
                         )
                         helper_rows = []
@@ -536,8 +536,8 @@ async def get_unit_live_delta(
                 raise
             except Exception as exc:
                 logger.warning(
-                    "Unit delta fallback: helper unavailable — %s",
-                    exc,
+                    "unit_delta_helper_fallback reason=unexpected_error error_type=%s",
+                    exc.__class__.__name__,
                     extra={"course_id": course_id, "unit_id": unit_id},
                 )
                 helper_rows = []
@@ -593,8 +593,8 @@ async def get_unit_live_delta(
         raise
     except Exception as exc:
         logger.warning(
-            "Unit delta query failed falling back to empty delta — %s",
-            exc,
+            "unit_delta_query_failed reason=unexpected_error error_type=%s",
+            exc.__class__.__name__,
             extra={"course_id": course_id, "unit_id": unit_id},
         )
 
@@ -727,245 +727,85 @@ async def get_latest_submission_detail(
         # Fail closed on relation check errors
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
 
-    # Query latest submission via SECURITY DEFINER helper (owner scope)
     try:
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+
         if isinstance(repo, DBTeachingRepo):
-            from backend.web.db_cursor import open_repo_cursor
+            projection = repo.get_latest_submission_for_owner(
+                owner_sub=sub,
+                course_id=course_id,
+                unit_id=unit_id,
+                task_id=task_id,
+                student_sub=student_sub,
+            )
+            if projection is None:
+                return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
 
-            dsn = getattr(repo, "_dsn", None)
-            if dsn:
-                with open_repo_cursor(dsn=dsn) as (_conn, cur):
-                    cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
-                    # Enforce task ∈ unit via explicit relation check (DB)
-                    cur.execute(
-                        """
-                        select t.kind::text,
-                               t.instruction_md,
-                               t.h5p_content_id::text
-                          from public.unit_tasks t
-                          join public.unit_sections s on s.id = t.section_id
-                          join public.course_modules m on m.unit_id = s.unit_id
-                         where m.course_id = %s
-                           and s.unit_id = %s::uuid
-                           and t.id = %s::uuid
-                         limit 1
-                        """,
-                        (course_id, unit_id, task_id),
-                    )
-                    task_row = cur.fetchone()
-                    if task_row is None:
-                        return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
-                    task_kind, task_instruction_md, task_h5p_content_id = task_row
-                    try:
-                        # SECURITY DEFINER helper encapsulates owner checks and RLS-aware access
-                        cur.execute(
-                            """
-                            select id::text,
-                                   task_id::text,
-                                   student_sub::text,
-                                   created_at,
-                                   completed_at,
-                                   kind,
-                                   score_raw,
-                                   score_max,
-                                   text_body,
-                                   mime_type,
-                                   size_bytes,
-                                   storage_key,
-                                   feedback_md,
-                                   analysis_json
-                              from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s)
-                            """,
-                            (sub, course_id, unit_id, task_id, student_sub),
-                        )
-                    except Exception as exc:
-                        logger.warning("latest submission helper unavailable — %s", exc)
-                        # Safe fallback under RLS with strict relation + owner scope; may still be restricted
-                        cur.execute(
-                            """
-                            select id::text, task_id::text, student_sub::text, created_at, completed_at, kind,
-                                   score_raw, score_max,
-                                   text_body, mime_type, size_bytes, storage_key, feedback_md, analysis_json
-                              from public.learning_submissions
-                             where course_id = %s
-                               and task_id = %s::uuid
-                               and student_sub = %s
-                             order by created_at desc, attempt_nr desc, id desc
-                             limit 1
-                            """,
-                            (course_id, task_id, student_sub),
-                        )
-                    row = cur.fetchone()
-                    if not row:
-                        return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
-                    (
-                        sid,
-                        tid,
-                        ssub,
-                        created_at,
-                        completed_at,
-                        kind,
-                        score_raw,
-                        score_max,
-                        text_body,
-                        mime_type,
-                        size_bytes,
-                        storage_key,
-                        feedback_md,
-                        analysis_json,
-                    ) = row
-                    review_token = None
-                    if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
-                        review_token = issue_h5p_review_token(
-                            owner_sub=str(sub),
-                            task_id=str(task_id),
-                            student_sub=str(student_sub),
-                            content_id=str(task_h5p_content_id),
-                        )
-                    payload = _build_latest_submission_payload(
-                        course_id=str(course_id),
-                        unit_id=str(unit_id),
-                        file_href_builder=_teaching_submission_file_href,
-                        sid=sid,
-                        tid=tid,
-                        ssub=ssub,
-                        instruction_md=task_instruction_md,
-                        created_at=created_at,
-                        completed_at=completed_at,
-                        kind=kind,
-                        score_raw=score_raw,
-                        score_max=score_max,
-                        h5p_content_id=(task_h5p_content_id if str(task_kind or "") == "h5p" else None),
-                        h5p_review_token=review_token,
-                        text_body=text_body,
-                        mime_type=mime_type,
-                        size_bytes=size_bytes,
-                        storage_key=storage_key,
-                        feedback_md=feedback_md,
-                        analysis_json=analysis_json,
-                        include_files=True,
-                    )
-                    return _json_private(payload, status_code=200, vary_origin=True)
+            row = projection["submission"]
+            if not row:
+                return Response(
+                    status_code=204,
+                    headers={"Cache-Control": "private, no-store", "Vary": "Origin"},
+                )
+            (
+                sid,
+                tid,
+                ssub,
+                created_at,
+                completed_at,
+                kind,
+                score_raw,
+                score_max,
+                text_body,
+                mime_type,
+                size_bytes,
+                storage_key,
+                feedback_md,
+                analysis_json,
+            ) = row
+            task_kind = projection["task_kind"]
+            task_instruction_md = projection["instruction_md"]
+            task_h5p_content_id = projection["h5p_content_id"]
+            review_token = None
+            if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
+                review_token = issue_h5p_review_token(
+                    owner_sub=str(sub),
+                    task_id=str(task_id),
+                    student_sub=str(student_sub),
+                    content_id=str(task_h5p_content_id),
+                )
+            payload = _build_latest_submission_payload(
+                course_id=str(course_id),
+                unit_id=str(unit_id),
+                file_href_builder=_teaching_submission_file_href,
+                sid=sid,
+                tid=tid,
+                ssub=ssub,
+                instruction_md=task_instruction_md,
+                created_at=created_at,
+                completed_at=completed_at,
+                kind=kind,
+                score_raw=score_raw,
+                score_max=score_max,
+                h5p_content_id=(task_h5p_content_id if str(task_kind or "") == "h5p" else None),
+                h5p_review_token=review_token,
+                text_body=text_body,
+                mime_type=mime_type,
+                size_bytes=size_bytes,
+                storage_key=storage_key,
+                feedback_md=feedback_md,
+                analysis_json=analysis_json,
+                include_files=True,
+            )
+            return _json_private(payload, status_code=200, vary_origin=True)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
-        logger.warning("latest submission query failed — %s", exc, extra={"course_id": course_id, "task_id": task_id})
-        # Defensive fallback: when helper or extended query fails (e.g. during migrations),
-        # try a minimal direct lookup that only relies on the core columns.
-        try:
-            from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-            if isinstance(repo, DBTeachingRepo):
-                from backend.web.db_cursor import open_repo_cursor
-
-                dsn = getattr(repo, "_dsn", None)
-                if dsn:
-                    with open_repo_cursor(dsn=dsn) as (_conn, cur):
-                        cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
-                        # Re-apply the strict task ∈ unit ∈ course relation check in the
-                        # fallback path as well so mismatched unit/task combinations still
-                        # fail with 404 instead of accidentally leaking submissions.
-                        cur.execute(
-                            """
-                            select t.kind::text,
-                                   t.instruction_md,
-                                   t.h5p_content_id::text
-                              from public.unit_tasks t
-                              join public.unit_sections s on s.id = t.section_id
-                              join public.course_modules m on m.unit_id = s.unit_id
-                             where m.course_id = %s
-                               and s.unit_id = %s::uuid
-                               and t.id = %s::uuid
-                             limit 1
-                            """,
-                            (course_id, unit_id, task_id),
-                        )
-                        task_row = cur.fetchone()
-                        if task_row is None:
-                            return _private_error(
-                                {"error": "not_found"}, status_code=404, vary_origin=True
-                            )
-                        task_kind, task_instruction_md, task_h5p_content_id = task_row
-                        cur.execute(
-                            """
-                            select id::text,
-                                   task_id::text,
-                                   student_sub::text,
-                                   created_at,
-                                   completed_at,
-                                   kind,
-                                   score_raw,
-                                   score_max,
-                                   text_body,
-                                   mime_type,
-                                   size_bytes,
-                                   storage_key,
-                                   feedback_md,
-                                   analysis_json
-                              from public.learning_submissions
-                             where course_id = %s
-                               and task_id = %s::uuid
-                               and student_sub = %s
-                             order by created_at desc, attempt_nr desc, id desc
-                             limit 1
-                            """,
-                            (course_id, task_id, student_sub),
-                        )
-                        row = cur.fetchone()
-                        if not row:
-                            return Response(
-                                status_code=204,
-                                headers={"Cache-Control": "private, no-store", "Vary": "Origin"},
-                            )
-                        (
-                            sid,
-                            tid,
-                            ssub,
-                            created_at,
-                            completed_at,
-                            kind,
-                            score_raw,
-                            score_max,
-                            text_body,
-                            mime_type,
-                            size_bytes,
-                            storage_key,
-                            feedback_md,
-                            analysis_json,
-                        ) = row
-                        review_token = None
-                        if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
-                            review_token = issue_h5p_review_token(
-                                owner_sub=str(sub),
-                                task_id=str(task_id),
-                                student_sub=str(student_sub),
-                                content_id=str(task_h5p_content_id),
-                            )
-                        payload = _build_latest_submission_payload(
-                            course_id=str(course_id),
-                            unit_id=str(unit_id),
-                            file_href_builder=_teaching_submission_file_href,
-                            sid=sid,
-                            tid=tid,
-                            ssub=ssub,
-                            instruction_md=task_instruction_md,
-                            created_at=created_at,
-                            completed_at=completed_at,
-                            kind=kind,
-                            score_raw=score_raw,
-                            score_max=score_max,
-                            h5p_content_id=(task_h5p_content_id if str(task_kind or "") == "h5p" else None),
-                            h5p_review_token=review_token,
-                            text_body=text_body,
-                            mime_type=mime_type,
-                            size_bytes=size_bytes,
-                            storage_key=storage_key,
-                            feedback_md=feedback_md,
-                            analysis_json=analysis_json,
-                            include_files=False,
-                        )
-                        return _json_private(payload, status_code=200, vary_origin=True)
-        except Exception:
-            # Conservatively fall through to 204 when even the direct lookup fails.
-            pass
+        logger.warning(
+            "latest_submission_query_failed reason=unexpected_error error_type=%s",
+            exc.__class__.__name__,
+            extra={"course_id": course_id, "task_id": task_id},
+        )
 
     # Fallback when DB path not available or no submission was found
     return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
@@ -1012,39 +852,13 @@ async def get_teaching_submission_file(
         if not isinstance(repo, DBTeachingRepo):
             return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
 
-        from backend.web.db_cursor import open_repo_cursor
-
-        dsn = getattr(repo, "_dsn", None)
-        if not dsn:
-            return _private_error({"error": "service_unavailable"}, status_code=503, vary_origin=True)
-
-        with open_repo_cursor(dsn=dsn) as (_conn, cur):
-            cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
-            cur.execute(
-                """
-                select exists(
-                         select 1
-                           from public.course_modules
-                          where course_id = %s
-                            and unit_id = %s::uuid
-                     )
-                """,
-                (course_id, unit_id),
-            )
-            if not bool((cur.fetchone() or [False])[0]):
-                return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
-            cur.execute(
-                """
-                select s.mime_type,
-                       s.size_bytes,
-                       s.storage_key
-                  from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s) s
-                 where s.id::text is not null
-                 limit 1
-                """,
-                (sub, course_id, unit_id, task_id, student_sub),
-            )
-            row = cur.fetchone()
+        row = repo.get_latest_submission_file_for_owner(
+            owner_sub=sub,
+            course_id=course_id,
+            unit_id=unit_id,
+            task_id=task_id,
+            student_sub=student_sub,
+        )
     except TeachingRepositoryUnavailable:
         raise
     except Exception:

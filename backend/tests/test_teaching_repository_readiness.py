@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import logging
 import time
 from types import SimpleNamespace
 
@@ -240,6 +241,66 @@ async def test_live_summary_propagates_repository_unavailable(monkeypatch: pytes
             _teacher_request(path="/api/teaching/live"),
             "00000000-0000-0000-0000-000000000001",
             "00000000-0000-0000-0000-000000000002",
+        )
+
+
+@pytest.mark.anyio
+async def test_latest_detail_translates_driver_outage_without_logging_details(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Latest detail must emit neither a false 204 nor the driver message."""
+
+    course_id = "00000000-0000-0000-0000-000000000001"
+    unit_id = "00000000-0000-0000-0000-000000000002"
+    task_id = "00000000-0000-0000-0000-000000000003"
+    repo = object.__new__(teaching_repo_db.DBTeachingRepo)
+    repo._dsn = "postgresql://gustav_app:secret@database.invalid/postgres"
+    monkeypatch.setattr(repo, "list_course_modules_for_owner", lambda *_args: [{"unit_id": unit_id}])
+    monkeypatch.setattr(teaching_live, "_get_repo", lambda: repo)
+    monkeypatch.setattr(teaching_live.teaching_guards, "_guard_course_owner", lambda *_args, **_kwargs: None)
+
+    sensitive_message = "private database host student-sensitive"
+
+    def fail_connect(*_args, **_kwargs):
+        raise psycopg.OperationalError(sensitive_message)
+
+    monkeypatch.setattr(teaching_repo_db.psycopg, "connect", fail_connect)
+    caplog.set_level(logging.WARNING, logger="gustav.web.teaching.live")
+
+    with pytest.raises(TeachingRepositoryUnavailable):
+        await teaching_live.get_latest_submission_detail(
+            _teacher_request(path="/api/teaching/live/latest"),
+            course_id,
+            unit_id,
+            task_id,
+            "student-sensitive",
+        )
+
+    assert sensitive_message not in caplog.text
+
+
+@pytest.mark.anyio
+async def test_latest_file_translates_driver_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The file route must not turn a PostgreSQL outage into 404."""
+
+    repo = object.__new__(teaching_repo_db.DBTeachingRepo)
+    repo._dsn = "postgresql://gustav_app:secret@database.invalid/postgres"
+    monkeypatch.setattr(teaching_live, "_get_repo", lambda: repo)
+    monkeypatch.setattr(teaching_live.teaching_guards, "_guard_course_owner", lambda *_args, **_kwargs: None)
+
+    def fail_connect(*_args, **_kwargs):
+        raise psycopg.OperationalError("private database host student-sensitive")
+
+    monkeypatch.setattr(teaching_repo_db.psycopg, "connect", fail_connect)
+
+    with pytest.raises(TeachingRepositoryUnavailable):
+        await teaching_live.get_teaching_submission_file(
+            _teacher_request(path="/api/teaching/live/latest/file"),
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-0000-0000-000000000002",
+            "00000000-0000-0000-0000-000000000003",
+            "student-sensitive",
         )
 
 

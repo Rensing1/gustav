@@ -144,6 +144,9 @@ test("review mode middleware rejects teacher, method, content and context mismat
       path: "/contentUserData/2",
     }),
     reviewRequest({
+      query: { review_mode: "true", review_id: REVIEW_ID_A },
+    }),
+    reviewRequest({
       query: { review_mode: "true", review_id: REVIEW_ID_A, contextId: "other-task" },
     }),
   ]) {

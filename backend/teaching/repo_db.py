@@ -949,6 +949,44 @@ class DBTeachingRepo:
             student_subs=student_subs,
         )
 
+    def get_latest_submission_for_owner(
+        self,
+        *,
+        owner_sub: str,
+        course_id: str,
+        unit_id: str,
+        task_id: str,
+        student_sub: str,
+    ) -> dict[str, Any] | None:
+        return _repo_live_queries.get_latest_submission_for_owner(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            owner_sub=owner_sub,
+            course_id=course_id,
+            unit_id=unit_id,
+            task_id=task_id,
+            student_sub=student_sub,
+        )
+
+    def get_latest_submission_file_for_owner(
+        self,
+        *,
+        owner_sub: str,
+        course_id: str,
+        unit_id: str,
+        task_id: str,
+        student_sub: str,
+    ) -> tuple[Any, Any, Any] | None:
+        return _repo_live_queries.get_latest_submission_file_for_owner(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            owner_sub=owner_sub,
+            course_id=course_id,
+            unit_id=unit_id,
+            task_id=task_id,
+            student_sub=student_sub,
+        )
+
     def list_unit_live_helper_rows(
         self,
         *,

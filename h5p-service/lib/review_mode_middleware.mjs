@@ -69,14 +69,9 @@ export function createReviewModeMiddleware({
       return;
     }
 
-    // Optional context binding: enforce when the runtime forwards it.
-    const contextId =
-      typeof req.query.contextId === "string"
-        ? req.query.contextId
-        : typeof req.query.context_id === "string"
-          ? req.query.context_id
-          : "";
-    if (contextId && contextId !== payload.taskId) {
+    // Lumi forwards this exact query name to its context-bound state store.
+    const contextId = typeof req.query.contextId === "string" ? req.query.contextId : "";
+    if (!contextId || contextId !== payload.taskId) {
       sendJsonImpl(res, 403, { error: "forbidden" });
       return;
     }

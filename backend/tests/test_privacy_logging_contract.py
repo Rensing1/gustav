@@ -46,6 +46,23 @@ def _contains_subject_identifier(node: ast.AST) -> bool:
     return any(isinstance(child, ast.Name) and child.id in subject_names for child in ast.walk(node))
 
 
+def _contains_raw_exception(node: ast.AST) -> bool:
+    """Detect exception values that logging would stringify with sensitive details."""
+
+    exception_names = {"exc", "legacy_exc", "err", "error"}
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr == "__name__"
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "__class__"
+    ):
+        return False
+    return any(
+        isinstance(child, ast.Name) and child.id in exception_names
+        for child in ast.walk(node)
+    )
+
+
 def test_teaching_routes_do_not_log_subject_identifiers() -> None:
     route_paths = sorted((_repo_root() / "backend" / "web" / "routes").glob("teaching*.py"))
 
@@ -57,6 +74,20 @@ def test_teaching_routes_do_not_log_subject_identifiers() -> None:
         tree = ast.parse(src, filename=str(path))
         for call in _logging_calls(tree):
             if _contains_subject_identifier(call):
+                offenders.append(f"{path.relative_to(_repo_root())}:{call.lineno}")
+
+    assert offenders == []
+
+
+def test_teaching_routes_do_not_log_raw_exception_values() -> None:
+    """Driver messages can contain PII, hosts, SQL fragments or credentials."""
+
+    offenders: list[str] = []
+    route_paths = sorted((_repo_root() / "backend" / "web" / "routes").glob("teaching*.py"))
+    for path in route_paths:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for call in _logging_calls(tree):
+            if any(_contains_raw_exception(argument) for argument in call.args[1:]):
                 offenders.append(f"{path.relative_to(_repo_root())}:{call.lineno}")
 
     assert offenders == []

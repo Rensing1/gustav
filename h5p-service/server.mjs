@@ -770,8 +770,7 @@ async function main() {
           u.searchParams.delete("review_token");
           u.searchParams.set("review_mode", "true");
           u.searchParams.set("review_id", reviewHandle);
-          // Optional: forward the task context for defense-in-depth checks.
-          u.searchParams.set("context_id", String(contextId));
+          u.searchParams.set("contextId", String(contextId));
           out.integration.ajax.contentUserData = `${u.pathname}${u.search || ""}`;
         } catch {
           // Do not fail model loading when URL parsing fails.

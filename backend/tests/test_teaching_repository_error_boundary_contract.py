@@ -51,3 +51,19 @@ def test_generic_repo_catches_preserve_teaching_repository_unavailable() -> None
                 offenders.append(f"{path.relative_to(_repo_root())}:{node.lineno}")
 
     assert offenders == []
+
+
+def test_teaching_live_route_does_not_open_database_cursors() -> None:
+    """SQL belongs to the Teaching adapter so driver errors are translated once."""
+
+    path = _repo_root() / "backend" / "web" / "routes" / "teaching_live.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    offenders = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "open_repo_cursor"
+    ]
+
+    assert offenders == []

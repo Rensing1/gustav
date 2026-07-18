@@ -23,7 +23,8 @@ def test_openapi_has_latest_submission_detail_path():
     get = paths[target].get("get", {})
     assert any(t == "Teaching" for t in get.get("tags", [])), "tag Teaching expected"
     responses = get.get("responses", {})
-    assert "200" in responses and "204" in responses and "403" in responses and "404" in responses
+    assert {"200", "204", "403", "404", "503"}.issubset(responses)
+    assert responses["503"]["$ref"] == "#/components/responses/TeachingRepositoryUnavailable503"
     # Schema reference present
     content = responses["200"].get("content", {}).get("application/json", {})
     schema = content.get("schema", {})
@@ -57,3 +58,19 @@ def test_teaching_latest_submission_schema_supports_h5p_review_fields():
     assert "instruction_md" in props
     required = sub.get("required") or []
     assert "instruction_md" in required
+
+
+def test_openapi_latest_submission_file_documents_repository_outage() -> None:
+    """The stable file route must distinguish a DB outage from a missing file."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((repo_root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    target = (
+        "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/"
+        "students/{student_sub}/submissions/latest/file"
+    )
+    responses = spec["paths"][target]["get"]["responses"]
+
+    unavailable = responses["503"]
+    schema = unavailable["content"]["application/json"]["schema"]
+    assert schema["$ref"] == "#/components/schemas/Error"

@@ -423,3 +423,155 @@ def get_statement_timestamp(*, dsn: str, psycopg_module, owner_sub: str) -> str 
     if row and row[0] is not None:
         return row[0].astimezone(timezone.utc).isoformat(timespec="microseconds")
     return None
+
+
+def get_latest_submission_for_owner(
+    *,
+    dsn: str,
+    psycopg_module,
+    owner_sub: str,
+    course_id: str,
+    unit_id: str,
+    task_id: str,
+    student_sub: str,
+) -> dict[str, Any] | None:
+    """Return the owner-scoped task and latest submission read projection.
+
+    Why:
+        The Teaching web adapter must not open database cursors itself. Keeping
+        this query at the repository boundary ensures PostgreSQL connection
+        failures are translated into ``TeachingRepositoryUnavailable`` by the
+        public ``DBTeachingRepo`` facade.
+
+    Permissions:
+        ``owner_sub`` must own ``course_id``. The task must belong to ``unit_id``
+        and the unit must be attached to the course. Database RLS remains active.
+    """
+
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+            cur.execute(
+                """
+                select t.kind::text,
+                       t.instruction_md,
+                       t.h5p_content_id::text
+                  from public.unit_tasks t
+                  join public.unit_sections s on s.id = t.section_id
+                  join public.course_modules m on m.unit_id = s.unit_id
+                 where m.course_id = %s
+                   and s.unit_id = %s::uuid
+                   and t.id = %s::uuid
+                 limit 1
+                """,
+                (course_id, unit_id, task_id),
+            )
+            task_row = cur.fetchone()
+            if task_row is None:
+                return None
+
+            params = (owner_sub, course_id, unit_id, task_id, student_sub)
+            helper_sql = """
+                select id::text,
+                       task_id::text,
+                       student_sub::text,
+                       created_at,
+                       completed_at,
+                       kind,
+                       score_raw,
+                       score_max,
+                       text_body,
+                       mime_type,
+                       size_bytes,
+                       storage_key,
+                       feedback_md,
+                       analysis_json
+                  from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s)
+            """
+            fallback_sql = """
+                select id::text,
+                       task_id::text,
+                       student_sub::text,
+                       created_at,
+                       completed_at,
+                       kind,
+                       score_raw,
+                       score_max,
+                       text_body,
+                       mime_type,
+                       size_bytes,
+                       storage_key,
+                       feedback_md,
+                       analysis_json
+                  from public.learning_submissions
+                 where course_id = %s
+                   and task_id = %s::uuid
+                   and student_sub = %s
+                 order by created_at desc, attempt_nr desc, id desc
+                 limit 1
+            """
+
+            cur.execute("savepoint latest_submission_helper")
+            try:
+                cur.execute(helper_sql, params)
+            except Exception:
+                # Compatibility only: relation and owner checks were repeated
+                # above, while RLS still applies to this direct read projection.
+                cur.execute("rollback to savepoint latest_submission_helper")
+                cur.execute(fallback_sql, (course_id, task_id, student_sub))
+            submission_row = cur.fetchone()
+
+    task_kind, instruction_md, h5p_content_id = task_row
+    return {
+        "task_kind": task_kind,
+        "instruction_md": instruction_md,
+        "h5p_content_id": h5p_content_id,
+        "submission": submission_row,
+    }
+
+
+def get_latest_submission_file_for_owner(
+    *,
+    dsn: str,
+    psycopg_module,
+    owner_sub: str,
+    course_id: str,
+    unit_id: str,
+    task_id: str,
+    student_sub: str,
+) -> tuple[Any, Any, Any] | None:
+    """Return owner-visible file metadata for the latest submission.
+
+    Permissions:
+        The caller must own the course. The SECURITY DEFINER helper validates
+        the course, unit, task and learner relation before returning metadata.
+    """
+
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+            cur.execute(
+                """
+                select exists(
+                         select 1
+                           from public.course_modules
+                          where course_id = %s
+                            and unit_id = %s::uuid
+                     )
+                """,
+                (course_id, unit_id),
+            )
+            if not bool((cur.fetchone() or [False])[0]):
+                return None
+            cur.execute(
+                """
+                select s.mime_type,
+                       s.size_bytes,
+                       s.storage_key
+                  from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s) s
+                 where s.id::text is not null
+                 limit 1
+                """,
+                (owner_sub, course_id, unit_id, task_id, student_sub),
+            )
+            return cur.fetchone()

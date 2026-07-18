@@ -992,9 +992,10 @@ async def test_summary_falls_back_when_helper_is_missing(monkeypatch, caplog):
         student_row = next(row for row in body["rows"] if row["student"]["sub"] == student.sub)
         assert any(cell["has_submission"] for cell in student_row["tasks"])
         assert any(
-            "Unit live helper row lookup failed" in msg and "get_unit_latest_submissions_for_owner" in msg
+            "unit_live_helper_row_lookup_failed" in msg and "error_type=UndefinedFunction" in msg
             for msg in caplog.messages
         )
+        assert "get_unit_latest_submissions_for_owner does not exist" not in caplog.text
 
 
 @pytest.mark.anyio
@@ -1109,7 +1110,11 @@ async def test_summary_falls_back_when_helper_score_columns_are_missing(monkeypa
         body = response.json()
         student_row = next(row for row in body["rows"] if row["student"]["sub"] == student.sub)
         assert any(cell["has_submission"] for cell in student_row["tasks"])
-        assert any("Unit live helper row lookup failed" in msg and "score_raw" in msg for msg in caplog.messages)
+        assert any(
+            "unit_live_helper_row_lookup_failed" in msg and "error_type=UndefinedColumn" in msg
+            for msg in caplog.messages
+        )
+        assert 'column "score_raw" does not exist' not in caplog.text
 
 
 @pytest.mark.anyio
@@ -1215,5 +1220,8 @@ async def test_summary_falls_back_when_bulk_aggregate_helper_is_missing(monkeypa
     body = response.json()
     student_row = next(row for row in body["rows"] if row["student"]["sub"] == student.sub)
     assert any(cell["has_submission"] for cell in student_row["tasks"])
-    assert any("bulk aggregate" in msg.lower() or "fallback" in msg.lower() for msg in caplog.messages)
-    assert any("get_unit_latest_submission_aggregates_for_owner" in msg for msg in caplog.messages)
+    assert any(
+        "unit_summary_bulk_aggregate_fallback" in msg and "error_type=UndefinedFunction" in msg
+        for msg in caplog.messages
+    )
+    assert "get_unit_latest_submission_aggregates_for_owner does not exist" not in caplog.text

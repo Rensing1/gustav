@@ -375,7 +375,10 @@ def _load_average_scores_by_submission_id(
     except TeachingRepositoryUnavailable:
         raise
     except Exception as exc:
-        logger.warning("Unit live average score lookup failed — %s", exc)
+        logger.warning(
+            "unit_live_average_score_lookup_failed reason=unexpected_error error_type=%s",
+            exc.__class__.__name__,
+        )
     return {}
 
 
@@ -399,7 +402,10 @@ def _load_latest_submission_state_by_task(
     except TeachingRepositoryUnavailable:
         raise
     except Exception as exc:
-        logger.warning("Unit live latest submission lookup failed — %s", exc)
+        logger.warning(
+            "unit_live_latest_submission_lookup_failed reason=unexpected_error error_type=%s",
+            exc.__class__.__name__,
+        )
     return {}
 
 
@@ -441,7 +447,10 @@ def _load_unit_live_helper_rows(
     except TeachingRepositoryUnavailable:
         raise
     except Exception as exc:
-        logger.warning("Unit live helper row lookup failed — %s", exc)
+        logger.warning(
+            "unit_live_helper_row_lookup_failed reason=unexpected_error error_type=%s",
+            exc.__class__.__name__,
+        )
     return []
 
 

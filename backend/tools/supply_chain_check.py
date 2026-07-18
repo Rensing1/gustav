@@ -65,6 +65,10 @@ def _requirement_name(line: str) -> str | None:
     without_comment = line.split("#", 1)[0].strip()
     if not without_comment:
         return None
+    # Requirement options (`-r`, `--index-url`, `-e`, ...) configure pip and
+    # are not package names. Included files are traversed separately above.
+    if without_comment.startswith("-"):
+        return None
     match = re.match(r"([A-Za-z0-9_.-]+)(?:\[[^\]]+\])?", without_comment)
     return match.group(1).lower().replace("_", "-") if match else None
 

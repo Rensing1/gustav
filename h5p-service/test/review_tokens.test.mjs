@@ -1,24 +1,28 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createCipheriv, createHash } from "node:crypto";
 import test from "node:test";
 
-import { parseReviewToken } from "../lib/review_tokens.mjs";
+import {
+  parseReviewToken,
+  reviewTokenFromAuthorizationHeader,
+} from "../lib/review_tokens.mjs";
 
 
-function signReviewPayload(payload, secret) {
+function encryptReviewPayload(payload, secret, nonce = Buffer.alloc(12, 7)) {
   const payloadBytes = Buffer.from(JSON.stringify(payload), "utf-8");
-  const payloadB64 = payloadBytes.toString("base64url");
-  const sigB64 = createHmac("sha256", secret).update(payloadBytes).digest("base64url");
-  return `${payloadB64}.${sigB64}`;
+  const key = createHash("sha256").update(secret, "utf-8").digest();
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
+  cipher.setAAD(Buffer.from("gustav-h5p-review-v1", "utf-8"));
+  const ciphertext = Buffer.concat([cipher.update(payloadBytes), cipher.final(), cipher.getAuthTag()]);
+  return `v1.${nonce.toString("base64url")}.${ciphertext.toString("base64url")}`;
 }
 
 
-test("parseReviewToken accepts a valid signed review token", () => {
-  const token = signReviewPayload(
+test("parseReviewToken accepts a valid encrypted review credential", () => {
+  const token = encryptReviewPayload(
     {
       teacher_sub: "teacher-1",
       student_sub: "student-1",
-      course_id: "course-1",
       task_id: "task-1",
       content_id: "content-1",
       exp: 200,
@@ -29,7 +33,6 @@ test("parseReviewToken accepts a valid signed review token", () => {
   assert.deepEqual(parseReviewToken(token, { secret: "secret", nowSeconds: 100 }), {
     teacherSub: "teacher-1",
     studentSub: "student-1",
-    courseId: "course-1",
     taskId: "task-1",
     contentId: "content-1",
     exp: 200,
@@ -37,12 +40,24 @@ test("parseReviewToken accepts a valid signed review token", () => {
 });
 
 
+test("parseReviewToken accepts a credential issued by the Python Teaching adapter", () => {
+  const pythonIssued = "v1.AAECAwQFBgcICQoL.0vTH5Ae3AO-1Cxf7JGZnXgQUiPqWj5g9pZHZoTRT8Jjp5NfcFMxHt8zJ0zoDwH-MAZHPGPmhU2r2O6W-TaCD5yAFFz0hAqHDWfXm5aeQheioWP2N38NsnI9br9F3Qblzs6OKCAqs8ijzlcQh1SU_TRLTGNbja1t-ahEP";
+
+  assert.deepEqual(parseReviewToken(pythonIssued, { secret: "secret", nowSeconds: 100 }), {
+    teacherSub: "teacher-1",
+    studentSub: "student-1",
+    taskId: "task-1",
+    contentId: "content-1",
+    exp: 700,
+  });
+});
+
+
 test("parseReviewToken rejects expired and unsigned tokens", () => {
-  const expired = signReviewPayload(
+  const expired = encryptReviewPayload(
     {
       teacher_sub: "teacher-1",
       student_sub: "student-1",
-      course_id: "course-1",
       task_id: "task-1",
       content_id: "content-1",
       exp: 99,
@@ -56,24 +71,25 @@ test("parseReviewToken rejects expired and unsigned tokens", () => {
 });
 
 
-test("parseReviewToken rejects tampered signatures and incomplete payloads", () => {
-  const valid = signReviewPayload(
+test("parseReviewToken rejects tampered ciphertext and incomplete payloads", () => {
+  const valid = encryptReviewPayload(
     {
       teacher_sub: "teacher-1",
       student_sub: "student-1",
-      course_id: "course-1",
       task_id: "task-1",
       content_id: "content-1",
       exp: 200,
     },
     "secret",
   );
-  const tampered = `${valid.split(".")[0]}.${signReviewPayload({ other: true }, "other-secret").split(".")[1]}`;
-  const incomplete = signReviewPayload(
+  const [version, nonce, ciphertext] = valid.split(".");
+  const tamperedBytes = Buffer.from(ciphertext, "base64url");
+  tamperedBytes[0] ^= 1;
+  const tampered = `${version}.${nonce}.${tamperedBytes.toString("base64url")}`;
+  const incomplete = encryptReviewPayload(
     {
       teacher_sub: "teacher-1",
       student_sub: "student-1",
-      course_id: "course-1",
       task_id: "task-1",
       exp: 200,
     },
@@ -82,4 +98,13 @@ test("parseReviewToken rejects tampered signatures and incomplete payloads", () 
 
   assert.equal(parseReviewToken(tampered, { secret: "secret", nowSeconds: 100 }), null);
   assert.equal(parseReviewToken(incomplete, { secret: "secret", nowSeconds: 100 }), null);
+});
+
+
+test("reviewTokenFromAuthorizationHeader accepts only a non-empty Bearer credential", () => {
+  assert.equal(reviewTokenFromAuthorizationHeader("Bearer encrypted-token"), "encrypted-token");
+  assert.equal(reviewTokenFromAuthorizationHeader("bearer encrypted-token"), "encrypted-token");
+  assert.equal(reviewTokenFromAuthorizationHeader("Basic encrypted-token"), null);
+  assert.equal(reviewTokenFromAuthorizationHeader("Bearer"), null);
+  assert.equal(reviewTokenFromAuthorizationHeader(""), null);
 });

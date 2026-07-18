@@ -20,6 +20,16 @@ def test_inventory_includes_recursive_harness_requirements() -> None:
     assert ruff[0]["version"] == "0.15.20"
 
 
+def test_inventory_does_not_treat_pip_directives_as_packages() -> None:
+    inventory = supply_chain_check.build_inventory()
+    python_names = {
+        entry["name"] for entry in inventory["entries"] if entry["ecosystem"] == "python"
+    }
+
+    assert all(not name.startswith("-") for name in python_names)
+    assert "-r" not in python_names
+
+
 def test_ruff_is_exactly_pinned_for_reproducible_ci() -> None:
     requirements = (ROOT / "backend/requirements-harness.txt").read_text(encoding="utf-8")
 

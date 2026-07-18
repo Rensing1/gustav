@@ -77,7 +77,7 @@ def default_roles_for_cli_sub(
 
         roles = AdminClient(oidc_config()).get_realm_roles(user_id=sub)
     except Exception as exc:
-        logger.warning("CLI role lookup failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
+        logger.warning("CLI role lookup failed reason=role_lookup_failed err=%s", exc.__class__.__name__)
         return []
     return [role for role in roles if role in ALLOWED_ROLES]
 

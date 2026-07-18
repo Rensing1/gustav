@@ -40,7 +40,22 @@ function runMiddleware(req, options = {}) {
 }
 
 
-test("review mode middleware ignores normal requests without review tokens", () => {
+function reviewRequest(overrides = {}) {
+  return {
+    query: { review_mode: "true", contextId: "task-1" },
+    path: "/contentUserData/1",
+    method: "GET",
+    user: { id: "teacher-1" },
+    gustavMe: { roles: ["teacher"] },
+    get(name) {
+      return String(name).toLowerCase() === "cookie" ? "__Secure-gustav_h5p_review=token" : "";
+    },
+    ...overrides,
+  };
+}
+
+
+test("review mode middleware ignores normal requests without an explicit review marker", () => {
   const req = {
     query: {},
     path: "/contentUserData/1",
@@ -56,9 +71,9 @@ test("review mode middleware ignores normal requests without review tokens", () 
 });
 
 
-test("review mode middleware lets the review model endpoint validate its own token", () => {
+test("review mode middleware lets the review model endpoint validate its bearer credential", () => {
   const req = {
-    query: { review_token: "token" },
+    query: {},
     path: "/player/review",
     method: "GET",
     user: { id: "teacher-1" },
@@ -74,27 +89,30 @@ test("review mode middleware lets the review model endpoint validate its own tok
 
 test("review mode middleware rejects non-teachers and invalid tokens", () => {
   const nonTeacher = runMiddleware(
-    {
-      query: { review_token: "token" },
-      path: "/contentUserData/1",
-      method: "GET",
+    reviewRequest({
       user: { id: "student-1" },
       gustavMe: { roles: ["student"] },
-    },
+    }),
     { rolesAllowTeacherImpl: () => false }
   );
   assert.equal(nonTeacher.nextCalled, false);
   assert.equal(nonTeacher.res.statusCode, 403);
 
-  const invalidToken = runMiddleware({
-    query: { review_token: "token" },
-    path: "/contentUserData/1",
-    method: "GET",
-    user: { id: "teacher-1" },
-    gustavMe: { roles: ["teacher"] },
-  });
+  const invalidToken = runMiddleware(reviewRequest());
   assert.equal(invalidToken.nextCalled, false);
   assert.equal(invalidToken.res.statusCode, 403);
+
+  const validPayload = {
+      teacherSub: "teacher-1",
+      studentSub: "student-1",
+      contentId: "1",
+      taskId: "task-1",
+  };
+  const missingCookie = runMiddleware(reviewRequest({ get: () => "" }), {
+    parseReviewTokenImpl: (token) => token ? validPayload : null,
+  });
+  assert.equal(missingCookie.nextCalled, false);
+  assert.equal(missingCookie.res.statusCode, 403);
 });
 
 
@@ -107,34 +125,18 @@ test("review mode middleware rejects teacher, method, content and context mismat
   };
 
   for (const req of [
-    {
-      query: { review_token: "token" },
-      path: "/contentUserData/1",
-      method: "GET",
+    reviewRequest({
       user: { id: "teacher-2" },
-      gustavMe: { roles: ["teacher"] },
-    },
-    {
-      query: { review_token: "token" },
-      path: "/contentUserData/1",
+    }),
+    reviewRequest({
       method: "POST",
-      user: { id: "teacher-1" },
-      gustavMe: { roles: ["teacher"] },
-    },
-    {
-      query: { review_token: "token" },
+    }),
+    reviewRequest({
       path: "/contentUserData/2",
-      method: "GET",
-      user: { id: "teacher-1" },
-      gustavMe: { roles: ["teacher"] },
-    },
-    {
-      query: { review_token: "token", contextId: "other-task" },
-      path: "/contentUserData/1",
-      method: "GET",
-      user: { id: "teacher-1" },
-      gustavMe: { roles: ["teacher"] },
-    },
+    }),
+    reviewRequest({
+      query: { review_mode: "true", contextId: "other-task" },
+    }),
   ]) {
     const result = runMiddleware(req, { payload });
     assert.equal(result.nextCalled, false);
@@ -144,13 +146,7 @@ test("review mode middleware rejects teacher, method, content and context mismat
 
 
 test("review mode middleware impersonates the reviewed student for valid user-data reads", () => {
-  const req = {
-    query: { review_token: "token", contextId: "task-1" },
-    path: "/contentUserData/1",
-    method: "GET",
-    user: { id: "teacher-1" },
-    gustavMe: { roles: ["teacher"] },
-  };
+  const req = reviewRequest();
 
   const result = runMiddleware(req, {
     payload: {

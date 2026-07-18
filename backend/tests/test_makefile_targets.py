@@ -165,6 +165,7 @@ def test_full_prod_like_runs_external_integration_smokes() -> None:
     assert "$(MAKE) test-supabase" in body
     assert "$(MAKE) test-openai" in body
     assert "$(MAKE) test-e2e" in body
+    assert "$(MAKE) dependency-audit" in body
 
 
 def test_quality_scorecard_runs_docker_image_smoke_by_default() -> None:

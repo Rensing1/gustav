@@ -33,7 +33,9 @@ def create_basic_pages_router(
     router = APIRouter()
 
     @router.get("/health")
-    async def health_check():
+    def health_check():
+        """Probe PostgreSQL in FastAPI's worker thread, not the async event loop."""
+
         try:
             repo = repo_provider()
             repo.check_readiness()

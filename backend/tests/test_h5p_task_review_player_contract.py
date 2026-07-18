@@ -1,11 +1,11 @@
 """
-Contract test: Teacher H5P review player JS must be read-only and token-based.
+Contract test: Teacher H5P review player JS must be read-only and URL-safe.
 
 Why:
     The student H5P player listens to xAPI and persists attempts. In the teacher
     review UI (live matrix detail pane) we must be strictly read-only:
     - load the player model via `/h5p/player/review`
-    - pass the server-issued `review_token`
+    - pass the server-issued encrypted credential in the Authorization header
     - never post learning submissions or finished data
 
 Note:
@@ -25,8 +25,11 @@ def test_h5p_task_review_player_js_contract() -> None:
     js = js_path.read_text(encoding="utf-8")
 
     assert "/h5p/player/review" in js
-    assert "review_token" in js
+    assert "Authorization" in js
+    assert "Bearer" in js
     assert "read_only_state" in js
+    assert "searchParams.set('review_token'" not in js
+    assert 'searchParams.set("review_token"' not in js
 
     # Must not persist attempts like the student player.
     assert "/api/learning" not in js

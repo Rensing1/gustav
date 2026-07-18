@@ -118,7 +118,7 @@ def _data_access(path: str) -> str:
         if path == "/h5p/auth/me":
             return "web /api/me principal bridge"
         if path == "/h5p/player/review":
-            return "H5P storage + review token"
+            return "H5P storage + encrypted review credential"
         if path in {"/h5p/ajax", "/h5p/finishedData"}:
             return "H5P storage + learning forwarding"
         return "H5P storage/service"

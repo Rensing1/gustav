@@ -11,6 +11,7 @@ Design:
 """
 from __future__ import annotations
 
+from functools import wraps
 import sys
 from typing import Any, List, Tuple, Optional, Dict, Sequence
 import os
@@ -30,6 +31,7 @@ from backend.teaching import repo_concern_box_queries as _repo_concern_box_queri
 from backend.teaching import repo_ai_usage_queries as _repo_ai_usage_queries
 from backend.teaching import repo_task_queries as _repo_task_queries
 from backend.teaching import repo_unit_module_queries as _repo_unit_module_queries
+from backend.teaching.errors import TeachingRepositoryUnavailable
 
 try:
     import psycopg
@@ -46,6 +48,8 @@ else:  # pragma: no cover - import errors handled above
         from psycopg.types.json import Json  # type: ignore
     except Exception:  # pragma: no cover - optional dependency
         Json = None  # type: ignore
+
+_DATABASE_OPERATIONAL_ERRORS = (psycopg.OperationalError,) if HAVE_PSYCOPG else ()
 
 LOG = logging.getLogger(__name__)
 _TASK_COLUMNS_SQL = _repo_row_mappers.TASK_COLUMNS_SQL
@@ -116,6 +120,31 @@ def _is_unset(value: object) -> bool:
             return True
     return False
 
+
+def _translate_database_failures(cls):
+    """Translate connection failures at the Teaching repository boundary.
+
+    DBTeachingRepo has many small public operations. Decorating those methods
+    centrally keeps every driver error inside the adapter without leaking a
+    PostgreSQL-specific exception into the web application.
+    """
+
+    for name, method in list(vars(cls).items()):
+        if name.startswith("_") or not callable(method):
+            continue
+
+        @wraps(method)
+        def guarded(*args, __method=method, **kwargs):
+            try:
+                return __method(*args, **kwargs)
+            except _DATABASE_OPERATIONAL_ERRORS as exc:
+                raise TeachingRepositoryUnavailable() from exc
+
+        setattr(cls, name, guarded)
+    return cls
+
+
+@_translate_database_failures
 class DBTeachingRepo:
     def __init__(self, dsn: Optional[str] = None) -> None:
         """Initialize a Postgres-backed repository with RLS-first safety.

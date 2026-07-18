@@ -62,3 +62,17 @@ def test_teaching_routes_do_not_log_raw_student_sub() -> None:
                 offenders.append(f"{path.relative_to(_repo_root())}:{call.lineno}")
 
     assert offenders == []
+
+
+def test_auth_middleware_does_not_log_subject_identifiers() -> None:
+    """Even truncated OIDC subjects remain stable, correlatable identifiers."""
+
+    path = _repo_root() / "backend" / "web" / "auth_middleware.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    offenders = [
+        call.lineno
+        for call in _logging_calls(tree)
+        if any(isinstance(child, ast.Name) and child.id == "sub" for child in ast.walk(call))
+    ]
+
+    assert offenders == []

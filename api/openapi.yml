@@ -30,6 +30,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    h5pReviewCredential:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-encrypted-review-credential
     cliTokenAuth:
       type: http
       scheme: bearer
@@ -2908,8 +2912,9 @@ components:
               type: string
               nullable: true
               description: >-
-                Short-lived, signed review capability token (teacher-only). Used by
-                `GET /h5p/player/review` to load the student state in strict read-only mode.
+                Short-lived, authenticated and encrypted review credential (teacher-only).
+                It is sent to `GET /h5p/player/review` as a Bearer credential and
+                must never be placed in a URL.
         text_body:
           type: string
           maxLength: 65536
@@ -3728,16 +3733,20 @@ paths:
         Returns the JSON model needed to render the H5P player for reviewing a
         student's latest state in strict read-only mode.
 
-        The request must include a short-lived `review_token` issued by the
-        teacher-only Teaching detail endpoint. The H5P service validates the
-        token fail-closed and renders the model "as the student" so the runtime
-        loads the student's userState. Write endpoints (e.g. finished data and
+        The request must include the short-lived encrypted review credential
+        issued by the teacher-only Teaching detail endpoint as an
+        `Authorization: Bearer` header. The H5P service validates it fail-closed,
+        stores it temporarily in a secure HttpOnly cookie and renders the model
+        "as the student" so the runtime loads the student's userState. Credentials
+        are never transported in URLs. Write endpoints (e.g. finished data and
         user data writes) are blocked in review mode.
       operationId: getH5PReviewPlayerModel
       security:
         - cookieAuth: []
+          h5pReviewCredential: []
       x-security-notes:
-        - "Teacher/admin only. Review token is validated server-side (fail-closed)."
+        - "Teacher/admin only. The encrypted review credential is validated server-side (fail-closed)."
+        - "Credential transport is URL-free: Bearer header followed by an HttpOnly review cookie."
         - "Strict read-only: write endpoints must be blocked in review mode."
       parameters:
         - in: query
@@ -3752,12 +3761,6 @@ paths:
           schema:
             type: string
           description: "Task context id (in GUSTAV: task_id) to isolate user state per task instance."
-        - in: query
-          name: review_token
-          required: true
-          schema:
-            type: string
-          description: Short-lived, signed capability token issued by the Teaching API.
         - in: query
           name: read_only_state
           required: false
@@ -3774,6 +3777,15 @@ paths:
               schema:
                 type: string
                 example: private, no-store
+            Referrer-Policy:
+              description: Prevent the review document from sending referrer data.
+              schema:
+                type: string
+                example: no-referrer
+            Set-Cookie:
+              description: Short-lived HttpOnly review cookie scoped to `/h5p`.
+              schema:
+                type: string
           content:
             application/json:
               schema:

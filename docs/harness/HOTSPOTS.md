@@ -34,7 +34,7 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 ## PR20 Fortschritt
 - `h5p-service/lib/finished_submission_context.mjs` übernimmt seit PR20 die Origin-/Referer-Auswertung und Idempotency-Key-Erzeugung für H5P-Finished-Data-Forwarding.
 - `h5p-service/test/finished_submission_context.test.mjs` schützt diese reine Forwarding-Kontextlogik mit Node-Contracts.
-- `h5p-service/lib/review_tokens.mjs` übernimmt seit PR20 die signierte Review-Token-Prüfung; `h5p-service/test/review_tokens.test.mjs` schützt gültige, abgelaufene, unvollständige und manipulierte Token.
+- `h5p-service/lib/review_tokens.mjs` übernimmt seit PR20 die Review-Credential-Prüfung; der aktuelle Vertrag nutzt AES-256-GCM statt eines lesbaren signierten Payloads. `h5p-service/test/review_tokens.test.mjs` schützt gültige, abgelaufene, unvollständige und manipulierte Credentials sowie die Python-/Node-Interoperabilität.
 - `h5p-service/lib/security_headers.mjs` übernimmt seit PR20 die H5P-CSP- und Security-Header-Policy; `h5p-service/test/security_headers.test.mjs` schützt Default-CSP, Debug-CSP und Header-Overrides.
 - `h5p-service/lib/model_helpers.mjs` übernimmt seit PR20 die reinen H5P-Response-Helfer für Theme-Styles und Embed-Types; `h5p-service/test/model_helpers.test.mjs` schützt Reihenfolge, Deduplikation und Fallbacks.
 - `h5p-service/lib/cookies.mjs` übernimmt seit PR20 auch das Cookie-Parsing für H5P-Session- und BFF-Session-Erkennung; `h5p-service/test/cookies.test.mjs` schützt Decoding, malformed Fallbacks und leere Cookie-Teile.
@@ -113,7 +113,7 @@ Dieses Dokument markiert Dateien, die im Refactor nicht weiter anwachsen sollen,
 - `frontend/src/lib/teacher-unit-workspace/graph-action-result.ts` übernimmt seit Closeout v1.4 Graph-Action-Success-, Fehler- und Formularwert-Normalisierung. `frontend/src/routes/teaching/units/[unitId]/+page.svelte` ist dadurch von 1106 auf 1063 LOC gesunken.
 - `backend/learning/workers/runtime_config.py` übernimmt seit Closeout v1.4 Worker-Backoff, Concurrency-Clamping, Lease-Dauer, Truthy-Env-Parsing und Worker-DSN-Sicherheitsguard. `backend/learning/workers/process_learning_submission_jobs.py` ist dadurch von 1331 auf 1267 LOC gesunken und bleibt als Queue-/Processing-Orchestrator überwacht.
 - `h5p-service/lib/review_mode_middleware.mjs` übernimmt seit Closeout v1.4 die teacher-only H5P-Review-Impersonation für GET-only `contentUserData`-Reads. `h5p-service/server.mjs` ist dadurch von 1394 auf 1320 LOC gesunken.
-- `backend/teaching/live_h5p_review.py` übernimmt seit Closeout v1.4 die H5P-Review-Token-Erzeugung für Latest-Submission-Detail. `backend/web/routes/teaching_live.py` ist dadurch von 1136 auf 1086 LOC gesunken; Summary/Delta und Detail-Read-Modelle bleiben nächste Split-Kandidaten, aber wurden in v1.4 nicht als Big-Bang geschnitten.
+- `backend/teaching/live_h5p_review.py` übernimmt seit Closeout v1.4 die H5P-Review-Credential-Erzeugung für Latest-Submission-Detail. Das Credential ist verschlüsselt und wird im H5P-Pfad ausschließlich per Bearer-Header und anschließendem HttpOnly-Cookie transportiert. `backend/web/routes/teaching_live.py` ist dadurch von 1136 auf 1086 LOC gesunken; Summary/Delta und Detail-Read-Modelle bleiben nächste Split-Kandidaten, aber wurden in v1.4 nicht als Big-Bang geschnitten.
 - `docs/harness/TEST_PORTFOLIO.md` klassifiziert seit Closeout v1.4 große Testdateien konkret als `rewrite/split`, `merge` oder `retire-later`; diese Testdateien sind zusätzlich in der Scorecard sichtbar.
 
 ## Regel

@@ -105,7 +105,7 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | GET /h5p/libraries | H5P service | teacher | H5P storage/service | H5PLibrariesResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
 | GET /h5p/player | H5P service | admin | H5P storage/service | HTML | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
 | GET /h5p/player/model | H5P service | student/teacher | H5P storage/service | H5PPlayerModelResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
-| GET /h5p/player/review | H5P service | teacher/admin | H5P storage + review token | H5PPlayerModelResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
+| GET /h5p/player/review | H5P service | teacher/admin | H5P storage + encrypted review credential | H5PPlayerModelResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
 | GET /health | health/ops | ops | service status | HealthStatus | backend/tests/test_*health* | low | active | retain | ops adapter |
 | GET /internal/health/learning-worker | health/ops | ops | service status | LearningWorkerHealth | backend/tests/test_*health* | low | active | retain | ops adapter |
 | GET /internal/health/openai | health/ops | ops | service status | OpenAIHealth | backend/tests/test_*health* | low | active | retain | ops adapter |

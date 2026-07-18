@@ -1,6 +1,7 @@
 import { rolesAllowTeacher } from "./internal_auth.mjs";
+import { parseCookies } from "./cookies.mjs";
 import { sendJson } from "./response_helpers.mjs";
-import { parseReviewToken } from "./review_tokens.mjs";
+import { parseReviewToken, REVIEW_COOKIE_NAME } from "./review_tokens.mjs";
 
 
 export function createReviewModeMiddleware({
@@ -10,14 +11,8 @@ export function createReviewModeMiddleware({
   sendJsonImpl = sendJson,
 } = {}) {
   return function reviewModeMiddleware(req, res, next) {
-    const reviewToken = typeof req.query.review_token === "string" ? req.query.review_token : undefined;
-    if (!reviewToken) {
-      next();
-      return;
-    }
-
-    // The model endpoint validates the token separately and must see the real teacher user.
-    if (req.path === "/player/review") {
+    const reviewMode = req.query.review_mode === "true";
+    if (!reviewMode) {
       next();
       return;
     }
@@ -28,7 +23,10 @@ export function createReviewModeMiddleware({
       return;
     }
 
-    // Review token must be valid and match the authenticated teacher.
+    // The credential arrives as an HttpOnly cookie set by the model endpoint.
+    // This keeps bearer material out of the user-state URL and browser scripts.
+    const cookieHeader = typeof req.get === "function" ? req.get("cookie") || "" : "";
+    const reviewToken = parseCookies(cookieHeader)[REVIEW_COOKIE_NAME];
     const payload = parseReviewTokenImpl(reviewToken, { secret: reviewTokenSecret });
     if (!payload) {
       sendJsonImpl(res, 403, { error: "forbidden" });

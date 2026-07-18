@@ -8,7 +8,7 @@
  * How:
  * - Embed Lumi's `<h5p-player>` webcomponent.
  * - Load the player model via `/h5p/player/review` (cookie-auth).
- * - Pass a short-lived `review_token` issued by the Teaching API.
+ * - Pass a short-lived encrypted review credential in the Authorization header.
  *
  * Security:
  * - Strict read-only: always requests `read_only_state=true`.
@@ -64,9 +64,11 @@
         url.searchParams.set('content_id', contentIdArg);
         const stableContextId = taskId || contextIdArg;
         if (stableContextId) url.searchParams.set('context_id', stableContextId);
-        url.searchParams.set('review_token', reviewToken);
         url.searchParams.set('read_only_state', 'true');
-        const r = await fetch(url.toString(), { credentials: 'include' });
+        const r = await fetch(url.toString(), {
+          credentials: 'include',
+          headers: { Authorization: `Bearer ${reviewToken}` },
+        });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
         return data;
@@ -93,4 +95,3 @@
     initAll(document);
   });
 })();
-

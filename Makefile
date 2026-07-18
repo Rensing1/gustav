@@ -249,6 +249,7 @@ playwright-bootstrap:
 .PHONY: test-full-prod-like
 test-full-prod-like:
 	@$(MAKE) verify
+	@$(MAKE) dependency-audit
 	@$(MAKE) test-supabase
 	@$(MAKE) test-openai
 	@$(MAKE) test-e2e

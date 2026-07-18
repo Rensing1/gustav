@@ -1,9 +1,9 @@
-"""Stable HTTP error mapping for required runtime dependencies.
+"""Stable HTTP error mapping for Teaching runtime dependencies.
 
 Why:
-    Web adapters must fail closed when PostgreSQL is unavailable. Keeping the
-    exception type outside reload-prone route modules also lets FastAPI retain
-    one stable handler identity during tests and application reloads.
+    The Teaching adapter translates PostgreSQL connection failures into its
+    context-owned error. Keeping the HTTP mapping outside reload-prone route
+    modules lets FastAPI retain one stable handler identity during reloads.
 """
 
 from __future__ import annotations
@@ -11,14 +11,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-try:
-    from psycopg import OperationalError as DatabaseOperationalError
-except ImportError:  # pragma: no cover - production images include psycopg
-    DatabaseOperationalError = None  # type: ignore[assignment,misc]
-
-
-class TeachingRepositoryUnavailable(RuntimeError):
-    """Signal that the required Teaching PostgreSQL repository is unavailable."""
+from backend.teaching.errors import TeachingRepositoryUnavailable
 
 
 def _service_unavailable_response() -> JSONResponse:
@@ -44,5 +37,3 @@ def install_runtime_error_handlers(app: FastAPI) -> None:
         return _service_unavailable_response()
 
     app.add_exception_handler(TeachingRepositoryUnavailable, repository_unavailable_handler)
-    if DatabaseOperationalError is not None:
-        app.add_exception_handler(DatabaseOperationalError, repository_unavailable_handler)

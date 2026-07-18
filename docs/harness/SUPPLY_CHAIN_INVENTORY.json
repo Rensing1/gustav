@@ -2,13 +2,6 @@
   "entries": [
     {
       "ecosystem": "python",
-      "license": "UNKNOWN",
-      "name": "-r",
-      "policy": "metadata-recorded",
-      "version": "not-installed"
-    },
-    {
-      "ecosystem": "python",
       "license": "Apache Software License",
       "name": "bleach",
       "policy": "metadata-recorded",
@@ -4276,8 +4269,8 @@
   ],
   "summary": {
     "node_entries": 513,
-    "python_entries": 17,
+    "python_entries": 16,
     "review_required_entries": 0,
-    "total_entries": 530
+    "total_entries": 529
   }
 }

@@ -8,9 +8,12 @@ Why:
 
 from __future__ import annotations
 
+import asyncio
 import importlib
+import time
 
 import httpx
+import psycopg
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport
@@ -23,6 +26,7 @@ from backend.web.runtime_errors import (
 
 teaching = importlib.import_module("backend.web.routes.teaching")
 basic_pages = importlib.import_module("backend.web.routes.basic_pages")
+teaching_repo_db = importlib.import_module("backend.teaching.repo_db")
 
 
 def test_default_repo_failure_is_not_replaced_or_cached(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -123,3 +127,79 @@ async def test_repository_unavailable_handler_returns_contract_error() -> None:
     }
     assert response.headers["Cache-Control"] == "private, no-store"
     assert "secret database host" not in response.text
+
+
+@pytest.mark.anyio
+async def test_non_teaching_operational_error_is_not_mapped_to_teaching_503() -> None:
+    """A global driver failure must not claim ownership by the Teaching context."""
+
+    app = FastAPI()
+    install_runtime_error_handlers(app)
+
+    @app.get("/api/learning/fails")
+    async def fail() -> None:
+        raise psycopg.OperationalError("private learning database host")
+
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/learning/fails")
+
+    assert response.status_code == 500
+    assert "teaching_repository_unavailable" not in response.text
+    assert "private learning database host" not in response.text
+
+
+def test_teaching_adapter_translates_operational_errors_at_its_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Teaching adapter owns translation from psycopg to its stable error."""
+
+    repo = object.__new__(teaching_repo_db.DBTeachingRepo)
+    repo._dsn = "postgresql://gustav_app:secret@database.invalid/postgres"
+
+    def fail_connect(*_args, **_kwargs):
+        raise psycopg.OperationalError("private teaching database host")
+
+    monkeypatch.setattr(teaching_repo_db.psycopg, "connect", fail_connect)
+
+    with pytest.raises(TeachingRepositoryUnavailable) as exc_info:
+        repo.check_readiness()
+
+    assert isinstance(exc_info.value.__cause__, psycopg.OperationalError)
+    assert "private teaching database host" not in str(exc_info.value)
+
+
+@pytest.mark.anyio
+async def test_health_readiness_does_not_block_parallel_async_requests() -> None:
+    """A slow synchronous DB probe must run outside the application event loop."""
+
+    events: list[str] = []
+
+    class SlowRepo:
+        def check_readiness(self) -> None:
+            events.append("health-start")
+            time.sleep(0.2)
+            events.append("health-end")
+
+    app = FastAPI()
+    app.include_router(
+        basic_pages.create_basic_pages_router(
+            lambda *_args, **_kwargs: None,
+            repo_provider=SlowRepo,
+        )
+    )
+
+    @app.get("/fast")
+    async def fast() -> dict[str, str]:
+        events.append("fast")
+        return {"status": "fast"}
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        health_task = asyncio.create_task(client.get("/health"))
+        await asyncio.sleep(0)
+        fast_response = await client.get("/fast")
+        health_response = await health_task
+
+    assert fast_response.status_code == 200
+    assert health_response.status_code == 200
+    assert events.index("fast") < events.index("health-end")

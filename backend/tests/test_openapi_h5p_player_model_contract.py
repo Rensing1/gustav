@@ -57,12 +57,20 @@ def test_h5p_player_model_contract_documents_course_id_student_requirement():
     assert "student" in desc and "require" in desc
 
 
-def test_h5p_review_player_contract_requires_review_token():
+def test_h5p_review_player_contract_requires_url_free_bearer_credential():
     spec = _load_spec()
     get_op = spec["paths"]["/h5p/player/review"]["get"]
     params = get_op.get("parameters") or []
     required = {p.get("name") for p in params if isinstance(p, dict) and p.get("required") is True}
-    assert {"content_id", "context_id", "review_token"}.issubset(required)
+    assert {"content_id", "context_id"}.issubset(required)
+    assert "review_token" not in {p.get("name") for p in params if isinstance(p, dict)}
+    assert get_op.get("security") == [{"cookieAuth": [], "h5pReviewCredential": []}]
+    scheme = spec["components"]["securitySchemes"]["h5pReviewCredential"]
+    assert scheme == {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque-encrypted-review-credential",
+    }
 
 
 def test_h5p_review_player_contract_defines_400_response():

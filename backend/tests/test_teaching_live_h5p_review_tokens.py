@@ -2,17 +2,26 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import json
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from backend.teaching.live_h5p_review import issue_h5p_review_token
 
 
-def _decode_token(token: str) -> tuple[dict, bytes, bytes]:
-    payload_b64, sig_b64 = token.split(".")
-    payload_bytes = base64.urlsafe_b64decode(payload_b64 + "=" * (-len(payload_b64) % 4))
-    sig_bytes = base64.urlsafe_b64decode(sig_b64 + "=" * (-len(sig_b64) % 4))
-    return json.loads(payload_bytes.decode("utf-8")), payload_bytes, sig_bytes
+def _decode_part(value: str) -> bytes:
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def _decrypt_token(token: str, *, secret: str) -> dict:
+    version, nonce_b64, ciphertext_b64 = token.split(".")
+    assert version == "v1"
+    plaintext = AESGCM(hashlib.sha256(secret.encode("utf-8")).digest()).decrypt(
+        _decode_part(nonce_b64),
+        _decode_part(ciphertext_b64),
+        b"gustav-h5p-review-v1",
+    )
+    return json.loads(plaintext.decode("utf-8"))
 
 
 def test_issue_h5p_review_token_returns_none_without_secret(monkeypatch):
@@ -21,7 +30,6 @@ def test_issue_h5p_review_token_returns_none_without_secret(monkeypatch):
     assert (
         issue_h5p_review_token(
             owner_sub="teacher-1",
-            course_id="course-1",
             task_id="task-1",
             student_sub="student-1",
             content_id="1",
@@ -31,10 +39,9 @@ def test_issue_h5p_review_token_returns_none_without_secret(monkeypatch):
     )
 
 
-def test_issue_h5p_review_token_binds_teacher_student_course_task_content_and_expiry():
+def test_issue_h5p_review_token_encrypts_minimal_bound_claims():
     token = issue_h5p_review_token(
         owner_sub="teacher-1",
-        course_id="course-1",
         task_id="task-1",
         student_sub="student-1",
         content_id="1",
@@ -43,14 +50,17 @@ def test_issue_h5p_review_token_binds_teacher_student_course_task_content_and_ex
     )
 
     assert isinstance(token, str)
-    payload, payload_bytes, sig_bytes = _decode_token(token)
+    payload = _decrypt_token(token, secret="review-secret")
     assert payload == {
         "teacher_sub": "teacher-1",
         "student_sub": "student-1",
-        "course_id": "course-1",
         "task_id": "task-1",
         "content_id": "1",
         "exp": 1600,
     }
-    expected_sig = hmac.new(b"review-secret", payload_bytes, hashlib.sha256).digest()
-    assert hmac.compare_digest(sig_bytes, expected_sig)
+
+    # Base64-decoding every public segment must not reveal stable subjects.
+    encoded_parts = token.split(".")[1:]
+    public_bytes = b"".join(_decode_part(part) for part in encoded_parts)
+    assert b"teacher-1" not in public_bytes
+    assert b"student-1" not in public_bytes

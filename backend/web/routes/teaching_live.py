@@ -796,7 +796,6 @@ async def get_latest_submission_detail(
                     if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
                         review_token = issue_h5p_review_token(
                             owner_sub=str(sub),
-                            course_id=str(course_id),
                             task_id=str(task_id),
                             student_sub=str(student_sub),
                             content_id=str(task_h5p_content_id),
@@ -913,7 +912,6 @@ async def get_latest_submission_detail(
                         if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
                             review_token = issue_h5p_review_token(
                                 owner_sub=str(sub),
-                                course_id=str(course_id),
                                 task_id=str(task_id),
                                 student_sub=str(student_sub),
                                 content_id=str(task_h5p_content_id),

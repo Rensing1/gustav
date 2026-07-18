@@ -48,7 +48,11 @@ import {
   ensureThemeStylesLast,
 } from "./lib/model_helpers.mjs";
 import { createReviewModeMiddleware } from "./lib/review_mode_middleware.mjs";
-import { parseReviewToken } from "./lib/review_tokens.mjs";
+import {
+  parseReviewToken,
+  reviewTokenFromAuthorizationHeader,
+  REVIEW_COOKIE_NAME,
+} from "./lib/review_tokens.mjs";
 import { sendHtml, sendJson } from "./lib/response_helpers.mjs";
 import { mountPublicStaticAssets } from "./lib/public_assets.mjs";
 import { applySecurityHeaders, CSP_DEBUG_HTML } from "./lib/security_headers.mjs";
@@ -695,8 +699,7 @@ async function main() {
       typeof req.query.content_id === "string" ? req.query.content_id : undefined;
     const contextId =
       typeof req.query.context_id === "string" ? req.query.context_id : undefined;
-    const reviewToken =
-      typeof req.query.review_token === "string" ? req.query.review_token : undefined;
+    const reviewToken = reviewTokenFromAuthorizationHeader(req.get("authorization"));
 
     if (!contentId || !contextId || !reviewToken) {
       sendJson(res, 400, { error: "invalid_request" });
@@ -751,13 +754,14 @@ async function main() {
         }
       }
 
-      // Ensure subsequent userState reads carry the review token so we can
-      // impersonate the student server-side (GET-only).
+      // Mark subsequent userState reads as review-mode requests. The encrypted
+      // credential itself stays in an HttpOnly cookie and never enters the URL.
       if (out?.integration?.ajax?.contentUserData) {
         try {
           const base = "http://local.invalid";
           const u = new URL(String(out.integration.ajax.contentUserData), base);
-          u.searchParams.set("review_token", String(reviewToken));
+          u.searchParams.delete("review_token");
+          u.searchParams.set("review_mode", "true");
           // Optional: forward the task context for defense-in-depth checks.
           u.searchParams.set("context_id", String(contextId));
           out.integration.ajax.contentUserData = `${u.pathname}${u.search || ""}`;
@@ -766,7 +770,16 @@ async function main() {
         }
       }
 
-      sendJson(res, 200, out);
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const maxAgeSeconds = Math.max(1, Math.min(10 * 60, Math.floor(payload.exp) - nowSeconds));
+      res.cookie(REVIEW_COOKIE_NAME, reviewToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        path: "/h5p",
+        maxAge: maxAgeSeconds * 1000,
+      });
+      sendJson(res, 200, out, { "Referrer-Policy": "no-referrer" });
     } catch (err) {
       if (err?.httpStatusCode === 404) {
         sendJson(res, 404, { error: "not_found" });

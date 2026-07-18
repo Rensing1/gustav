@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createReviewModeMiddleware } from "../lib/review_mode_middleware.mjs";
+import { reviewCookieName } from "../lib/review_tokens.mjs";
+
+
+const REVIEW_ID_A = Buffer.alloc(12, 7).toString("base64url");
+const REVIEW_ID_B = Buffer.alloc(12, 8).toString("base64url");
+const REVIEW_TOKEN_A = `v1.${REVIEW_ID_A}.ciphertext-a`;
+const REVIEW_TOKEN_B = `v1.${REVIEW_ID_B}.ciphertext-b`;
 
 
 function createResponseRecorder() {
@@ -42,13 +49,15 @@ function runMiddleware(req, options = {}) {
 
 function reviewRequest(overrides = {}) {
   return {
-    query: { review_mode: "true", contextId: "task-1" },
+    query: { review_mode: "true", review_id: REVIEW_ID_A, contextId: "task-1" },
     path: "/contentUserData/1",
     method: "GET",
     user: { id: "teacher-1" },
     gustavMe: { roles: ["teacher"] },
     get(name) {
-      return String(name).toLowerCase() === "cookie" ? "__Secure-gustav_h5p_review=token" : "";
+      return String(name).toLowerCase() === "cookie"
+        ? `${reviewCookieName(REVIEW_ID_A)}=${REVIEW_TOKEN_A}`
+        : "";
     },
     ...overrides,
   };
@@ -135,13 +144,62 @@ test("review mode middleware rejects teacher, method, content and context mismat
       path: "/contentUserData/2",
     }),
     reviewRequest({
-      query: { review_mode: "true", contextId: "other-task" },
+      query: { review_mode: "true", review_id: REVIEW_ID_A, contextId: "other-task" },
     }),
   ]) {
     const result = runMiddleware(req, { payload });
     assert.equal(result.nextCalled, false);
     assert.equal(result.res.statusCode, 403);
   }
+});
+
+
+test("review mode middleware rejects missing and mismatched review handles", () => {
+  const payload = {
+    teacherSub: "teacher-1",
+    studentSub: "student-1",
+    contentId: "1",
+    taskId: "task-1",
+  };
+
+  for (const req of [
+    reviewRequest({ query: { review_mode: "true", contextId: "task-1" } }),
+    reviewRequest({ query: { review_mode: "true", review_id: REVIEW_ID_B, contextId: "task-1" } }),
+  ]) {
+    const result = runMiddleware(req, {
+      parseReviewTokenImpl: (token) => token === REVIEW_TOKEN_A ? payload : null,
+    });
+    assert.equal(result.nextCalled, false);
+    assert.equal(result.res.statusCode, 403);
+  }
+});
+
+
+test("review mode middleware keeps two interleaved review cookies isolated", () => {
+  const cookies = [
+    `${reviewCookieName(REVIEW_ID_A)}=${REVIEW_TOKEN_A}`,
+    `${reviewCookieName(REVIEW_ID_B)}=${REVIEW_TOKEN_B}`,
+  ].join("; ");
+  const payloads = new Map([
+    [REVIEW_TOKEN_A, { teacherSub: "teacher-1", studentSub: "student-1", contentId: "1", taskId: "task-1" }],
+    [REVIEW_TOKEN_B, { teacherSub: "teacher-1", studentSub: "student-2", contentId: "2", taskId: "task-2" }],
+  ]);
+
+  const first = runMiddleware(reviewRequest({ get: () => cookies }), {
+    parseReviewTokenImpl: (token) => payloads.get(token) ?? null,
+  });
+  const second = runMiddleware(reviewRequest({
+    query: { review_mode: "true", review_id: REVIEW_ID_B, contextId: "task-2" },
+    path: "/contentUserData/2",
+    get: () => cookies,
+  }), {
+    parseReviewTokenImpl: (token) => payloads.get(token) ?? null,
+  });
+
+  assert.equal(first.nextCalled, true);
+  assert.equal(first.req.user.id, "student-1");
+  assert.equal(second.nextCalled, true);
+  assert.equal(second.req.user.id, "student-2");
 });
 
 

@@ -11,12 +11,14 @@ from __future__ import annotations
 import asyncio
 import importlib
 import time
+from types import SimpleNamespace
 
 import httpx
 import psycopg
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport
+from starlette.requests import Request
 
 from backend.web.runtime_errors import (
     TeachingRepositoryUnavailable,
@@ -27,6 +29,27 @@ from backend.web.runtime_errors import (
 teaching = importlib.import_module("backend.web.routes.teaching")
 basic_pages = importlib.import_module("backend.web.routes.basic_pages")
 teaching_repo_db = importlib.import_module("backend.teaching.repo_db")
+teaching_course_members = importlib.import_module("backend.web.routes.teaching_course_members")
+teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")
+teaching_live = importlib.import_module("backend.web.routes.teaching_live")
+teaching_units = importlib.import_module("backend.web.routes.teaching_units")
+
+
+def _teacher_request(*, method: str = "GET", path: str = "/") -> Request:
+    request = Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "headers": [],
+            "query_string": b"",
+        }
+    )
+    request.state.user = {
+        "sub": "teacher-sensitive-123456",
+        "roles": ["teacher"],
+    }
+    return request
 
 
 def test_default_repo_failure_is_not_replaced_or_cached(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -167,6 +190,84 @@ def test_teaching_adapter_translates_operational_errors_at_its_boundary(
 
     assert isinstance(exc_info.value.__cause__, psycopg.OperationalError)
     assert "private teaching database host" not in str(exc_info.value)
+
+
+@pytest.mark.anyio
+async def test_unit_list_propagates_repository_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A list route must not turn a database outage into a permission error."""
+
+    class UnavailableRepo:
+        def list_units_for_author(self, **_kwargs):
+            raise TeachingRepositoryUnavailable()
+
+    monkeypatch.setattr(teaching_units, "_get_repo", UnavailableRepo)
+
+    with pytest.raises(TeachingRepositoryUnavailable):
+        await teaching_units.list_units(_teacher_request(path="/api/teaching/units"))
+
+
+def test_course_owner_guard_propagates_repository_unavailable() -> None:
+    """Ownership checks must distinguish infrastructure failure from denial."""
+
+    class UnavailableRepo(teaching_repo_db.DBTeachingRepo):
+        def __init__(self) -> None:
+            pass
+
+        def course_exists_for_owner(self, *_args, **_kwargs):
+            raise TeachingRepositoryUnavailable()
+
+    with pytest.raises(TeachingRepositoryUnavailable):
+        teaching_guards._guard_course_owner(
+            "00000000-0000-0000-0000-000000000001",
+            "teacher-sensitive-123456",
+            repo_provider=UnavailableRepo,
+        )
+
+
+@pytest.mark.anyio
+async def test_live_summary_propagates_repository_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live reads must not present an outage as a missing Course-Unit relation."""
+
+    class UnavailableRepo:
+        def list_course_modules_for_owner(self, *_args, **_kwargs):
+            raise TeachingRepositoryUnavailable()
+
+    monkeypatch.setattr(teaching_live, "_get_repo", UnavailableRepo)
+    monkeypatch.setattr(teaching_live.teaching_guards, "_guard_course_owner", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(TeachingRepositoryUnavailable):
+        await teaching_live.get_unit_live_summary(
+            _teacher_request(path="/api/teaching/live"),
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-0000-0000-000000000002",
+        )
+
+
+@pytest.mark.anyio
+async def test_membership_write_propagates_repository_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Teaching writes must not disguise an outage as unknown ownership."""
+
+    class UnavailableRepo:
+        def get_course(self, _course_id):
+            return {"teacher_id": "teacher-sensitive-123456"}
+
+        def add_member(self, *_args, **_kwargs):
+            raise TeachingRepositoryUnavailable()
+
+    monkeypatch.setattr(teaching_course_members, "_get_repo", UnavailableRepo)
+    monkeypatch.setattr(teaching_course_members.teaching_guards, "_csrf_guard", lambda _request: None)
+    monkeypatch.setattr(
+        teaching_course_members,
+        "_resp_non_owner_or_unknown",
+        lambda *_args: object(),
+    )
+
+    with pytest.raises(TeachingRepositoryUnavailable):
+        await teaching_course_members.add_member(
+            _teacher_request(method="POST", path="/api/teaching/courses/course-1/members"),
+            "course-1",
+            SimpleNamespace(student_sub="student-1"),
+        )
 
 
 @pytest.mark.anyio

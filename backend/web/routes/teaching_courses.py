@@ -11,6 +11,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import _get_repo, _mark_recently_deleted
 from backend.web.routes.teaching_payloads import CourseCreate, CourseUpdate
@@ -94,6 +95,8 @@ async def get_course(request: Request, course_id: str):
             course = repo.get_course_for_owner(course_id, sub)
         else:
             course = repo.get_course(course_id)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         course = repo.get_course(course_id)
     if not course:
@@ -172,5 +175,7 @@ async def delete_course(request: Request, course_id: str):
         repo.delete_course(course_id)
         _mark_recently_deleted(sub, course_id)
         return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         return JSONResponse({"error": "forbidden"}, status_code=403)

@@ -21,7 +21,7 @@ Dieses Dokument beschreibt die aktuelle Architektur von GUSTAV (Stand: alpha‑2
   der Teaching‑Kontext nutzt standardmäßig eine Limited‑Role‑DSN (`gustav_limited`).
 - Legacy‑Code: `legacy-code-alpha1/` bleibt Referenz, wird aber nicht direkt erweitert.
  - Live‑Ansicht (Unterricht): Realtime via leichtgewichtigem Polling‑Delta statt SSE. Siehe `docs/references/teaching_live.md`. Delta überträgt nur Minimalstatus (IDs/Flags), keine Inhalte. Cursor‑Semantik ist robust gegenüber kleiner Clock‑Skew. Das Polling‑Intervall der Lehrer‑Live‑Ansicht ist über `GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS` (Sekunden, Default: 3) konfigurierbar; SSR und JS lesen denselben Wert (Konfiguration statt hartkodiertem Intervall). Ungültige Werte fallen defensiv auf 3 Sekunden zurück. Das SSR‑Delta‑Fragment setzt für alle Pfade (inkl. Fehler) `Cache-Control: private, no-store` und `Vary: Origin` und propagiert Upstream‑Fehler (z. B. 5xx) statt sie als „keine Änderungen“ zu verschleiern. Die Detailansicht der letzten Abgabe (`TeachingLatestSubmission`) stellt dabei die Trennung „Rückmeldung“ (`feedback_md`) vs. „Auswertung“ (`analysis_json` im Kriterien‑Schema) konsistent bereit.
- - H5P‑Review (Unterricht): Das read-only Review-Credential enthält ausschließlich die für Lehrkraft-, Schüler-, Aufgaben- und Inhaltsbindung nötigen Claims und ist mit AES-256-GCM verschlüsselt. Der Browser transportiert es nie in einer URL, sondern zunächst als Bearer-Header und danach in einem kurzlebigen, auf `/h5p` begrenzten HttpOnly-Cookie. Der H5P-Adapter prüft Ablauf und Bindungen fail-closed.
+ - H5P‑Review (Unterricht): Das read-only Review-Credential enthält ausschließlich die für Lehrkraft-, Schüler-, Aufgaben- und Inhaltsbindung nötigen Claims und ist mit AES-256-GCM verschlüsselt. Der Browser transportiert es nie in einer URL, sondern zunächst als Bearer-Header und danach in einem kurzlebigen, auf `/h5p` begrenzten, review-spezifischen HttpOnly-Cookie. Die nachgelagerte User-State-URL enthält nur eine opake `review_id`, die aus dem zufälligen AES-GCM-Nonce abgeleitet wird und den passenden Cookie auswählt. Dadurch bleiben parallele Reviews getrennt; Credential und Personenkennungen gelangen nicht in die URL. Der H5P-Adapter prüft Ablauf, Handle und fachliche Bindungen fail-closed.
 
 ## Schichten (Clean Architecture)
 1) Domain (geplant)
@@ -177,7 +177,7 @@ Fehlerbilder ist `docs/references/auth_sessions_and_cookies.md`.
 
 ## Datenbank & Migrationen
 - PostgreSQL (Supabase). Migrationen als versionierte SQL‑Dateien unter `supabase/migrations/`.
-- Infrastrukturfehler bleiben kontextgebunden: `DBTeachingRepo` übersetzt `psycopg.OperationalError` an seiner Adaptergrenze in `TeachingRepositoryUnavailable`; es gibt kein globales Mapping von Treiberfehlern auf einen Teaching-Detailcode.
+- Infrastrukturfehler bleiben kontextgebunden: `DBTeachingRepo` übersetzt `psycopg.OperationalError` an seiner Adaptergrenze in `TeachingRepositoryUnavailable`; Teaching-Router und Ownership-Guards reichen diesen Fehler unverändert an den zentralen HTTP-Handler weiter. Es gibt kein globales Mapping von Treiberfehlern auf einen Teaching-Detailcode.
 - Die synchrone PostgreSQL-Readiness-Prüfung von `/health` läuft als synchrone FastAPI-Route im Worker-Threadpool und blockiert dadurch keine parallelen Async-Requests.
 - Namenskonventionen: snake_case Tabellen/Spalten, Präfixe pro Kontext (z. B. `learning_submissions`).
 - Test‑DB: Separate Testumgebung für pytest, Transaktions‑Rollback/Fixture‑Strategie.

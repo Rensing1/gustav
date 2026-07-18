@@ -13,6 +13,7 @@ import sys as _sys
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import (
     _MODULAR_UNIT_CREATE_REQUIRED_METHODS,
@@ -58,8 +59,10 @@ async def list_units(request: Request, limit: int = 20, offset: int = 0):
     sub = _current_sub(user)
     try:
         units = _get_repo().list_units_for_author(author_id=sub, limit=limit, offset=offset)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
-        logger.warning("list_units failed for sub=%s err=%s", sub[-6:], exc.__class__.__name__)
+        logger.warning("list_units failed reason=unexpected_error err=%s", exc.__class__.__name__)
         return _private_error({"error": "forbidden"}, status_code=403)
     return _json_private([_serialize_unit(unit) for unit in units], status_code=200)
 
@@ -114,6 +117,8 @@ async def get_unit(request: Request, unit_id: str):
         return guard
     try:
         unit = repo.get_unit_for_author(unit_id, sub)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         unit = repo.get_unit_for_author(unit_id, sub)
     if not unit:
@@ -167,6 +172,8 @@ async def delete_unit(request: Request, unit_id: str):
         storage_objects = _current_collect_unit_delete_storage_objects()(repo, unit_id=unit_id)
         _current_delete_unit_storage_objects()(storage_objects)
         deleted = repo.delete_unit_owned(unit_id, sub)
+    except TeachingRepositoryUnavailable:
+        raise
     except RuntimeError as exc:
         detail = str(exc) or "storage_delete_failed"
         if detail in {"storage_adapter_not_configured", "storage_metadata_unavailable"}:

@@ -15,6 +15,7 @@ import sys as _sys
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import (
     _UNSET,
@@ -84,6 +85,8 @@ async def list_unit_phases(request: Request, unit_id: str):
         return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         raise
     return _json_private([_serialize_unit_phase_public(p) for p in items], status_code=200)
@@ -236,6 +239,8 @@ async def reorder_unit_phases(request: Request, unit_id: str, payload: UnitPhase
         return _private_error({"error": "not_found"}, status_code=404)
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
         if sqlstate == "23514":
@@ -421,6 +426,8 @@ async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitM
         return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
         if sqlstate == "23514":
@@ -679,6 +686,8 @@ async def reorder_unit_phase_modules(request: Request, unit_id: str, phase_id: s
         return _private_error({"error": "bad_request", "detail": "invalid_module_ids"}, status_code=400)
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
         if sqlstate == "23514":

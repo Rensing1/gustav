@@ -2,7 +2,32 @@ import { createDecipheriv, createHash } from "node:crypto";
 
 
 const REVIEW_CREDENTIAL_AAD = Buffer.from("gustav-h5p-review-v1", "utf-8");
-export const REVIEW_COOKIE_NAME = "__Secure-gustav_h5p_review";
+const REVIEW_COOKIE_PREFIX = "__Secure-gustav_h5p_review_";
+const REVIEW_HANDLE_PATTERN = /^[A-Za-z0-9_-]{16}$/;
+
+
+export function reviewHandleFromToken(token) {
+  // The public handle is the AES-GCM nonce: random, non-personal and not a
+  // credential. It only selects the matching HttpOnly cookie in this browser.
+  if (typeof token !== "string" || !token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== "v1") return null;
+  const reviewHandle = parts[1];
+  if (!REVIEW_HANDLE_PATTERN.test(reviewHandle)) return null;
+  try {
+    return Buffer.from(reviewHandle, "base64url").length === 12 ? reviewHandle : null;
+  } catch {
+    return null;
+  }
+}
+
+
+export function reviewCookieName(reviewHandle) {
+  // A strict alphabet prevents attacker-controlled cookie-name syntax.
+  return REVIEW_HANDLE_PATTERN.test(String(reviewHandle || ""))
+    ? `${REVIEW_COOKIE_PREFIX}${reviewHandle}`
+    : null;
+}
 
 
 export function reviewTokenFromAuthorizationHeader(value) {
@@ -20,6 +45,7 @@ export function parseReviewToken(token, { secret, nowSeconds = Math.floor(Date.n
   const parts = token.split(".");
   if (parts.length !== 3 || parts[0] !== "v1") return null;
   const [, nonceB64, ciphertextB64] = parts;
+  if (reviewHandleFromToken(token) !== nonceB64) return null;
   let nonce;
   let encrypted;
   try {

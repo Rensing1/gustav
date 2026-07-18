@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes.security import _is_same_origin
 from backend.web.routes.teaching_shared import _is_uuid_like, _private_error
 
@@ -50,6 +51,8 @@ def _guard_unit_author(
             if exists is False:
                 return _private_error({"error": "not_found"}, status_code=404)
             return _private_error({"error": "forbidden"}, status_code=403)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         return _private_error({"error": "forbidden"}, status_code=403)
 
@@ -85,6 +88,8 @@ def _guard_course_owner(
             if repo.course_exists(course_id) is False:
                 return _private_error({"error": "not_found"}, status_code=404)
             return _private_error({"error": "forbidden"}, status_code=403)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         return _private_error({"error": "forbidden"}, status_code=403)
 
@@ -101,6 +106,8 @@ def _guard_course_owner(
         if owner_id != owner_sub:
             return _private_error({"error": "forbidden"}, status_code=403)
         return None
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         return _private_error({"error": "forbidden"}, status_code=403)
 

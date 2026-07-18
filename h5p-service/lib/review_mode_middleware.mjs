@@ -1,7 +1,11 @@
 import { rolesAllowTeacher } from "./internal_auth.mjs";
 import { parseCookies } from "./cookies.mjs";
 import { sendJson } from "./response_helpers.mjs";
-import { parseReviewToken, REVIEW_COOKIE_NAME } from "./review_tokens.mjs";
+import {
+  parseReviewToken,
+  reviewCookieName,
+  reviewHandleFromToken,
+} from "./review_tokens.mjs";
 
 
 export function createReviewModeMiddleware({
@@ -23,10 +27,20 @@ export function createReviewModeMiddleware({
       return;
     }
 
-    // The credential arrives as an HttpOnly cookie set by the model endpoint.
-    // This keeps bearer material out of the user-state URL and browser scripts.
+    // The URL carries only a random selector. The credential remains in the
+    // matching HttpOnly cookie and never enters browser-visible URLs.
+    const reviewHandle = typeof req.query.review_id === "string" ? req.query.review_id : "";
+    const cookieName = reviewCookieName(reviewHandle);
+    if (!cookieName) {
+      sendJsonImpl(res, 403, { error: "forbidden" });
+      return;
+    }
     const cookieHeader = typeof req.get === "function" ? req.get("cookie") || "" : "";
-    const reviewToken = parseCookies(cookieHeader)[REVIEW_COOKIE_NAME];
+    const reviewToken = parseCookies(cookieHeader)[cookieName];
+    if (reviewHandleFromToken(reviewToken) !== reviewHandle) {
+      sendJsonImpl(res, 403, { error: "forbidden" });
+      return;
+    }
     const payload = parseReviewTokenImpl(reviewToken, { secret: reviewTokenSecret });
     if (!payload) {
       sendJsonImpl(res, 403, { error: "forbidden" });

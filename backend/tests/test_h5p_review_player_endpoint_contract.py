@@ -31,6 +31,8 @@ def test_h5p_service_has_review_player_route() -> None:
     assert "req.query.review_token" not in js
     assert 'searchParams.set("review_token"' not in js
     assert 'searchParams.set("review_mode"' in js
+    assert 'searchParams.set("review_id"' in js
+    assert "reviewCookieName" in js
     assert "Referrer-Policy" in js
     assert "httpOnly: true" in js
     assert "secure: true" in js

@@ -4,6 +4,8 @@ import test from "node:test";
 
 import {
   parseReviewToken,
+  reviewCookieName,
+  reviewHandleFromToken,
   reviewTokenFromAuthorizationHeader,
 } from "../lib/review_tokens.mjs";
 
@@ -107,4 +109,29 @@ test("reviewTokenFromAuthorizationHeader accepts only a non-empty Bearer credent
   assert.equal(reviewTokenFromAuthorizationHeader("Basic encrypted-token"), null);
   assert.equal(reviewTokenFromAuthorizationHeader("Bearer"), null);
   assert.equal(reviewTokenFromAuthorizationHeader(""), null);
+});
+
+
+test("review handles derive from the random nonce and create isolated secure cookie names", () => {
+  const token = encryptReviewPayload(
+    {
+      teacher_sub: "teacher-1",
+      student_sub: "student-1",
+      task_id: "task-1",
+      content_id: "content-1",
+      exp: 200,
+    },
+    "secret",
+    Buffer.alloc(12, 9),
+  );
+  const expectedHandle = Buffer.alloc(12, 9).toString("base64url");
+
+  assert.equal(reviewHandleFromToken(token), expectedHandle);
+  assert.equal(
+    reviewCookieName(expectedHandle),
+    `__Secure-gustav_h5p_review_${expectedHandle}`,
+  );
+  assert.equal(reviewHandleFromToken("not-a-token"), null);
+  assert.equal(reviewCookieName("../invalid"), null);
+  assert.equal(reviewCookieName(""), null);
 });

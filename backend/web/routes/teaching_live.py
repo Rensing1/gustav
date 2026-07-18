@@ -22,6 +22,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
 from backend.storage.config import get_submissions_bucket
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.teaching.storage import NullStorageAdapter
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import (
@@ -155,6 +156,8 @@ async def get_unit_live_summary(
             modules = repo.list_course_modules_for_owner(course_id, sub)
         else:
             modules = [asdict(m) if is_dataclass(m) else m for m in repo.list_course_modules_for_owner(course_id, sub)]
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         modules = []
     if str(unit_id) not in {str(m.get("unit_id")) for m in modules}:
@@ -197,6 +200,8 @@ async def get_unit_live_summary(
                         "position": int(td.position),
                         "kind": str(getattr(td, "kind", "native") or "native"),
                     })
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         tasks = []
 
@@ -211,6 +216,8 @@ async def get_unit_live_summary(
                 members = repo.members.get(course_id, {})
                 roster = sorted([(k, v) for k, v in members.items()], key=lambda kv: kv[1])
                 roster = roster[offset: offset + limit]
+        except TeachingRepositoryUnavailable:
+            raise
         except Exception:
             roster = []
         member_subs = [sid for sid, _ in roster]
@@ -257,6 +264,8 @@ async def get_unit_live_summary(
                         for row in aggregate_rows
                         if row.get("created_at_iso")
                     }
+                except TeachingRepositoryUnavailable:
+                    raise
                 except Exception as exc:
                     logger.warning(
                         "Unit summary bulk aggregate fallback: get_unit_latest_submission_aggregates_for_owner unavailable — %s",
@@ -354,6 +363,8 @@ async def get_unit_live_summary(
                                         has_map.add((sid, task_id))
                                         if created_at_iso:
                                             created_at_map[(sid, task_id)] = str(created_at_iso)
+                    except TeachingRepositoryUnavailable:
+                        raise
                     except Exception as legacy_exc:
                         logger.warning(
                             "Unit summary fallback: get_unit_latest_submissions_for_owner unavailable — %s",
@@ -361,6 +372,8 @@ async def get_unit_live_summary(
                             extra={"course_id": course_id, "unit_id": unit_id},
                         )
                         helper_rows = []
+        except TeachingRepositoryUnavailable:
+            raise
         except Exception:
             has_map = set()
             avg_map = {}
@@ -465,6 +478,8 @@ async def get_unit_live_delta(
             modules = repo.list_course_modules_for_owner(course_id, sub)
         else:
             modules = [asdict(m) if is_dataclass(m) else m for m in repo.list_course_modules_for_owner(course_id, sub)]
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         modules = []
     if str(unit_id) not in {str(m.get("unit_id")) for m in modules}:
@@ -517,6 +532,8 @@ async def get_unit_live_delta(
                     if submission_id:
                         submission_ids_by_student.setdefault(student_sub, []).append(submission_id)
                 avg_by_id = _load_average_scores_by_submission_id(repo, sub, submission_ids_by_student)
+            except TeachingRepositoryUnavailable:
+                raise
             except Exception as exc:
                 logger.warning(
                     "Unit delta fallback: helper unavailable — %s",
@@ -548,6 +565,8 @@ async def get_unit_live_delta(
                         limit=int(limit),
                         offset=int(offset),
                     )
+                except TeachingRepositoryUnavailable:
+                    raise
                 except Exception:
                     fallback_rows = []
                 for student_sub, task_id, changed_ts in fallback_rows:
@@ -570,6 +589,8 @@ async def get_unit_live_delta(
                         }
                     )
 
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         logger.warning(
             "Unit delta query failed falling back to empty delta — %s",
@@ -700,6 +721,8 @@ async def get_latest_submission_detail(
         attached_unit_ids = {str(m.get("unit_id")) for m in modules}
         if str(unit_id) not in attached_unit_ids:
             return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         # Fail closed on relation check errors
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
@@ -1022,6 +1045,8 @@ async def get_teaching_submission_file(
                 (sub, course_id, unit_id, task_id, student_sub),
             )
             row = cur.fetchone()
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         row = None
 

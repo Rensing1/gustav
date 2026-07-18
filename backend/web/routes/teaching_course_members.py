@@ -13,6 +13,7 @@ import logging
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import (
     _get_repo,
@@ -53,6 +54,8 @@ async def list_members(request: Request, course_id: str, limit: int = 10, offset
             if _teacher_id_of(course) != sub:
                 return _private_error({"error": "forbidden"}, status_code=403)
             pairs = repo.list_members(course_id, limit=limit, offset=offset)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         cid_tail = (course_id or "").replace("-", "")[-6:]
         logger.warning("list_members failed: cid_tail=%s err=%s", cid_tail, exc.__class__.__name__)
@@ -93,6 +96,8 @@ async def add_member(request: Request, course_id: str, payload: AddMember):
             if _teacher_id_of(course) != sub:
                 return _private_error({"error": "forbidden"}, status_code=403)
             created = repo.add_member(course_id, student_sub.strip())
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         return _resp_non_owner_or_unknown(course_id, sub)
     if created:
@@ -126,6 +131,8 @@ async def remove_member(request: Request, course_id: str, student_sub: str):
             if _teacher_id_of(course) != sub:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
             repo.remove_member(course_id, str(student_sub))
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         return _resp_non_owner_or_unknown(course_id, sub)
     return Response(status_code=204, headers={"Cache-Control": "private, no-store"})

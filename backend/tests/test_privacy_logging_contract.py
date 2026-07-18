@@ -5,7 +5,7 @@ Why:
     - Session IDs are bearer tokens and must not end up in CI/test logs.
     - `print()` statements in request code paths are hard to filter and can
       leak sensitive context to stdout.
-    - Debug logs should not emit raw student pseudonyms (`student_sub`).
+    - Logs must not emit complete or truncated OIDC subject identifiers.
 
 Note:
     These are cheap source-level guardrails; they do not execute the web app.
@@ -41,15 +41,13 @@ def _logging_calls(tree: ast.AST) -> list[ast.Call]:
     return calls
 
 
-def _contains_raw_student_sub(node: ast.AST) -> bool:
-    return any(isinstance(child, ast.Name) and child.id == "student_sub" for child in ast.walk(node))
+def _contains_subject_identifier(node: ast.AST) -> bool:
+    subject_names = {"sub", "student_sub", "teacher_sub", "owner_sub", "author_sub"}
+    return any(isinstance(child, ast.Name) and child.id in subject_names for child in ast.walk(node))
 
 
-def test_teaching_routes_do_not_log_raw_student_sub() -> None:
-    route_paths = [
-        _repo_root() / "backend" / "web" / "routes" / "teaching.py",
-        _repo_root() / "backend" / "web" / "routes" / "teaching_live.py",
-    ]
+def test_teaching_routes_do_not_log_subject_identifiers() -> None:
+    route_paths = sorted((_repo_root() / "backend" / "web" / "routes").glob("teaching*.py"))
 
     offenders: list[str] = []
     for path in route_paths:
@@ -58,7 +56,7 @@ def test_teaching_routes_do_not_log_raw_student_sub() -> None:
 
         tree = ast.parse(src, filename=str(path))
         for call in _logging_calls(tree):
-            if _contains_raw_student_sub(call):
+            if _contains_subject_identifier(call):
                 offenders.append(f"{path.relative_to(_repo_root())}:{call.lineno}")
 
     assert offenders == []

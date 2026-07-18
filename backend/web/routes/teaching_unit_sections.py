@@ -11,6 +11,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import _get_repo
 from backend.web.routes.teaching_payloads import SectionCreatePayload, SectionReorderPayload, SectionUpdatePayload
@@ -39,6 +40,8 @@ async def list_sections(request: Request, unit_id: str):
         return guard
     try:
         items = _get_repo().list_sections_for_author(unit_id, sub)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return _json_private([_serialize_section(section) for section in items], status_code=200)

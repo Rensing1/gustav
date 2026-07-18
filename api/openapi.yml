@@ -3736,17 +3736,20 @@ paths:
         The request must include the short-lived encrypted review credential
         issued by the teacher-only Teaching detail endpoint as an
         `Authorization: Bearer` header. The H5P service validates it fail-closed,
-        stores it temporarily in a secure HttpOnly cookie and renders the model
-        "as the student" so the runtime loads the student's userState. Credentials
-        are never transported in URLs. Write endpoints (e.g. finished data and
-        user data writes) are blocked in review mode.
+        stores it temporarily in a handle-specific secure HttpOnly cookie and
+        renders the model "as the student" so the runtime loads the student's
+        userState. The downstream userState URL contains only a random opaque
+        `review_id` that selects this per-review cookie; credentials and person
+        identifiers are never transported in URLs. Write endpoints (e.g.
+        finished data and user data writes) are blocked in review mode.
       operationId: getH5PReviewPlayerModel
       security:
         - cookieAuth: []
           h5pReviewCredential: []
       x-security-notes:
         - "Teacher/admin only. The encrypted review credential is validated server-side (fail-closed)."
-        - "Credential transport is URL-free: Bearer header followed by an HttpOnly review cookie."
+        - "Credential transport is URL-free: Bearer header followed by a handle-specific HttpOnly review cookie."
+        - "The downstream review_id is an opaque random selector, not a credential or person identifier."
         - "Strict read-only: write endpoints must be blocked in review mode."
       parameters:
         - in: query
@@ -3783,7 +3786,7 @@ paths:
                 type: string
                 example: no-referrer
             Set-Cookie:
-              description: Short-lived HttpOnly review cookie scoped to `/h5p`.
+              description: Short-lived per-review HttpOnly cookie scoped to `/h5p` and selected by an opaque review_id.
               schema:
                 type: string
           content:

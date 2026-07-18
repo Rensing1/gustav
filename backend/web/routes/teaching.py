@@ -178,6 +178,8 @@ def _build_default_repo():
         raise TeachingRepositoryUnavailable() from _DB_REPO_IMPORT_ERROR
     try:
         return DBTeachingRepo()
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         logger.warning("Teaching repository is unavailable; retrying on the next request")
         raise TeachingRepositoryUnavailable() from exc
@@ -370,6 +372,8 @@ def _load_average_scores_by_submission_id(
                 owner_sub=owner_sub,
                 submission_ids_by_student=submission_ids_by_student,
             )
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         logger.warning("Unit live average score lookup failed — %s", exc)
     return {}
@@ -392,6 +396,8 @@ def _load_latest_submission_state_by_task(
                 course_id=course_id,
                 task_ids_by_student=task_ids_by_student,
             )
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         logger.warning("Unit live latest submission lookup failed — %s", exc)
     return {}
@@ -432,6 +438,8 @@ def _load_unit_live_helper_rows(
                 limit=int(limit),
                 offset=int(offset),
             )
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         logger.warning("Unit live helper row lookup failed — %s", exc)
     return []
@@ -507,6 +515,8 @@ def _summary_snapshot_cursor(repo: Any, owner_sub: str | None = None) -> str | N
         if owner_sub is None:
             owner_sub = ""
         return repo.get_statement_timestamp(owner_sub=owner_sub)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         return None
     return None
@@ -723,6 +733,8 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
         return _private_error({"error": "not_found"}, status_code=404)
     try:
         ex = repo.course_exists(course_id)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         ex = None
     if ex is False:

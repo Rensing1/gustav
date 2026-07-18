@@ -50,8 +50,9 @@ import {
 import { createReviewModeMiddleware } from "./lib/review_mode_middleware.mjs";
 import {
   parseReviewToken,
+  reviewCookieName,
+  reviewHandleFromToken,
   reviewTokenFromAuthorizationHeader,
-  REVIEW_COOKIE_NAME,
 } from "./lib/review_tokens.mjs";
 import { sendHtml, sendJson } from "./lib/response_helpers.mjs";
 import { mountPublicStaticAssets } from "./lib/public_assets.mjs";
@@ -711,6 +712,12 @@ async function main() {
       sendJson(res, 403, { error: "forbidden" });
       return;
     }
+    const reviewHandle = reviewHandleFromToken(reviewToken);
+    const cookieName = reviewCookieName(reviewHandle);
+    if (!reviewHandle || !cookieName) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
     // Bind token to the authenticated teacher (prevents token re-use by other teachers).
     if (payload.teacherSub !== req.user?.id) {
       sendJson(res, 403, { error: "forbidden" });
@@ -762,6 +769,7 @@ async function main() {
           const u = new URL(String(out.integration.ajax.contentUserData), base);
           u.searchParams.delete("review_token");
           u.searchParams.set("review_mode", "true");
+          u.searchParams.set("review_id", reviewHandle);
           // Optional: forward the task context for defense-in-depth checks.
           u.searchParams.set("context_id", String(contextId));
           out.integration.ajax.contentUserData = `${u.pathname}${u.search || ""}`;
@@ -772,7 +780,7 @@ async function main() {
 
       const nowSeconds = Math.floor(Date.now() / 1000);
       const maxAgeSeconds = Math.max(1, Math.min(10 * 60, Math.floor(payload.exp) - nowSeconds));
-      res.cookie(REVIEW_COOKIE_NAME, reviewToken, {
+      res.cookie(cookieName, reviewToken, {
         httpOnly: true,
         secure: true,
         sameSite: "strict",

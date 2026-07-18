@@ -71,6 +71,9 @@ def test_h5p_review_player_contract_requires_url_free_bearer_credential():
         "scheme": "bearer",
         "bearerFormat": "opaque-encrypted-review-credential",
     }
+    description = str(get_op.get("description") or "")
+    assert "review_id" in description
+    assert "per-review cookie" in description
 
 
 def test_h5p_review_player_contract_defines_400_response():

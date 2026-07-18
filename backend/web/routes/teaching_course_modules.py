@@ -14,6 +14,7 @@ from dataclasses import asdict, is_dataclass
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import _get_repo
 from backend.web.routes.teaching_payloads import (
@@ -49,6 +50,8 @@ async def list_course_modules(request: Request, course_id: str):
         return guard
     try:
         modules = _get_repo().list_course_modules_for_owner(course_id, sub)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception as exc:
         logger.warning("list_course_modules failed cid=%s err=%s", course_id[-6:], exc.__class__.__name__)
         return JSONResponse({"error": "forbidden"}, status_code=403)
@@ -279,6 +282,8 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
             if str(module.get("id")) == str(module_id):
                 unit_id = str(module.get("unit_id") or "")
                 break
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         unit_id = None
     if not unit_id:
@@ -298,6 +303,8 @@ async def list_module_sections_with_visibility(request: Request, course_id: str,
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403, vary_origin=True)
+    except TeachingRepositoryUnavailable:
+        raise
     except Exception:
         sections, releases = [], []
 

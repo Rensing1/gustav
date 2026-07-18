@@ -64,7 +64,11 @@ def test_test_db_security_runs_authz_and_rls_baseline_regressions() -> None:
     ) in body
     assert (
         "backend/tests/test_teaching_live_detail_api.py::"
-        "test_latest_detail_fallback_respects_unit_relation"
+        "test_latest_detail_hides_submission_after_membership_removal"
+    ) in body
+    assert (
+        "backend/tests/test_teaching_live_detail_api.py::"
+        "test_latest_detail_relation_mismatch_is_rejected_by_submission_projection"
     ) in body
     assert "backend/tests/test_teaching_live_detail_api.py \\" not in body
 

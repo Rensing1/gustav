@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import json
 import logging
 import time
 from types import SimpleNamespace
@@ -302,6 +303,70 @@ async def test_latest_file_translates_driver_outage(monkeypatch: pytest.MonkeyPa
             "00000000-0000-0000-0000-000000000003",
             "student-sensitive",
         )
+
+
+@pytest.mark.anyio
+async def test_latest_detail_returns_private_500_for_unexpected_repo_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An internal defect must not be presented as an absent submission."""
+
+    course_id = "00000000-0000-0000-0000-000000000001"
+    unit_id = "00000000-0000-0000-0000-000000000002"
+    task_id = "00000000-0000-0000-0000-000000000003"
+    repo = object.__new__(teaching_repo_db.DBTeachingRepo)
+    repo._dsn = "postgresql://gustav_app:secret@database.invalid/postgres"
+    monkeypatch.setattr(repo, "list_course_modules_for_owner", lambda *_args: [{"unit_id": unit_id}])
+    monkeypatch.setattr(
+        repo,
+        "get_latest_submission_for_owner",
+        lambda **_kwargs: (_ for _ in ()).throw(ValueError("unexpected mapping failure")),
+    )
+    monkeypatch.setattr(teaching_live, "_get_repo", lambda: repo)
+    monkeypatch.setattr(teaching_live.teaching_guards, "_guard_course_owner", lambda *_args, **_kwargs: None)
+
+    response = await teaching_live.get_latest_submission_detail(
+        _teacher_request(path="/api/teaching/live/latest"),
+        course_id,
+        unit_id,
+        task_id,
+        "student-sensitive",
+    )
+
+    assert response.status_code == 500
+    assert json.loads(response.body) == {"error": "internal_error"}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert response.headers["Vary"] == "Origin"
+
+
+@pytest.mark.anyio
+async def test_latest_file_returns_private_500_for_unexpected_repo_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An internal defect must not be presented as a missing file."""
+
+    repo = object.__new__(teaching_repo_db.DBTeachingRepo)
+    repo._dsn = "postgresql://gustav_app:secret@database.invalid/postgres"
+    monkeypatch.setattr(
+        repo,
+        "get_latest_submission_file_for_owner",
+        lambda **_kwargs: (_ for _ in ()).throw(ValueError("unexpected mapping failure")),
+    )
+    monkeypatch.setattr(teaching_live, "_get_repo", lambda: repo)
+    monkeypatch.setattr(teaching_live.teaching_guards, "_guard_course_owner", lambda *_args, **_kwargs: None)
+
+    response = await teaching_live.get_teaching_submission_file(
+        _teacher_request(path="/api/teaching/live/latest/file"),
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003",
+        "student-sensitive",
+    )
+
+    assert response.status_code == 500
+    assert json.loads(response.body) == {"error": "internal_error"}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert response.headers["Vary"] == "Origin"
 
 
 @pytest.mark.anyio

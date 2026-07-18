@@ -178,6 +178,7 @@ Fehlerbilder ist `docs/references/auth_sessions_and_cookies.md`.
 ## Datenbank & Migrationen
 - PostgreSQL (Supabase). Migrationen als versionierte SQL‑Dateien unter `supabase/migrations/`.
 - Infrastrukturfehler bleiben kontextgebunden: `DBTeachingRepo` übersetzt `psycopg.OperationalError` an seiner Adaptergrenze in `TeachingRepositoryUnavailable`; Teaching-Router und Ownership-Guards reichen diesen Fehler unverändert an den zentralen HTTP-Handler weiter. Es gibt kein globales Mapping von Treiberfehlern auf einen Teaching-Detailcode.
+- Sicherheitskritische Teaching-Leseprojektionen verwenden ihre migrierten SECURITY-DEFINER-Helper als verbindlichen Schema-Vertrag. Fehlt ein erforderlicher Helper, übersetzt der Adapter dies ebenfalls in `TeachingRepositoryUnavailable` (`503`); ein direkter Tabellen-Fallback ist nicht zulässig, weil er je nach Datenbankrolle andere RLS-Sichtbarkeit besitzen könnte. Unerwartete Projektionsfehler werden als private `500 internal_error`-Antworten ausgegeben und nicht als fachliches „keine Abgabe“ oder „nicht gefunden“ verschleiert.
 - Die synchrone PostgreSQL-Readiness-Prüfung von `/health` läuft als synchrone FastAPI-Route im Worker-Threadpool und blockiert dadurch keine parallelen Async-Requests.
 - Namenskonventionen: snake_case Tabellen/Spalten, Präfixe pro Kontext (z. B. `learning_submissions`).
 - Test‑DB: Separate Testumgebung für pytest, Transaktions‑Rollback/Fixture‑Strategie.

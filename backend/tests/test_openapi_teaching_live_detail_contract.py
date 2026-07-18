@@ -23,7 +23,8 @@ def test_openapi_has_latest_submission_detail_path():
     get = paths[target].get("get", {})
     assert any(t == "Teaching" for t in get.get("tags", [])), "tag Teaching expected"
     responses = get.get("responses", {})
-    assert {"200", "204", "403", "404", "503"}.issubset(responses)
+    assert {"200", "204", "403", "404", "500", "503"}.issubset(responses)
+    assert responses["500"]["$ref"] == "#/components/responses/InternalServerError500"
     assert responses["503"]["$ref"] == "#/components/responses/TeachingRepositoryUnavailable503"
     # Schema reference present
     content = responses["200"].get("content", {}).get("application/json", {})
@@ -74,3 +75,28 @@ def test_openapi_latest_submission_file_documents_repository_outage() -> None:
     unavailable = responses["503"]
     schema = unavailable["content"]["application/json"]["schema"]
     assert schema["$ref"] == "#/components/schemas/Error"
+
+
+def test_latest_submission_endpoints_document_private_internal_errors() -> None:
+    """Unexpected failures must not masquerade as empty domain results."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load((repo_root / "api" / "openapi.yml").read_text(encoding="utf-8"))
+    component = spec["components"]["responses"]["InternalServerError500"]
+    assert component["headers"]["Cache-Control"]["schema"]["example"] == "private, no-store"
+    assert component["headers"]["Vary"]["schema"]["example"] == "Origin"
+    assert component["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/Error"
+    assert component["content"]["application/json"]["examples"]["default"]["value"] == {
+        "error": "internal_error"
+    }
+
+    targets = (
+        "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/"
+        "students/{student_sub}/submissions/latest",
+        "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/"
+        "students/{student_sub}/submissions/latest/file",
+    )
+    for target in targets:
+        assert spec["paths"][target]["get"]["responses"]["500"]["$ref"] == (
+            "#/components/responses/InternalServerError500"
+        )

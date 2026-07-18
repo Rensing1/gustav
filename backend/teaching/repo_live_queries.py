@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, List, Sequence
 
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.teaching.repo_row_mappers import compute_average_score_from_analysis as _compute_average_score_from_analysis
 
 
@@ -445,7 +446,13 @@ def get_latest_submission_for_owner(
 
     Permissions:
         ``owner_sub`` must own ``course_id``. The task must belong to ``unit_id``
-        and the unit must be attached to the course. Database RLS remains active.
+        and the unit must be attached to the course. The required SECURITY
+        DEFINER helper repeats those checks and verifies current membership.
+
+    Behavior:
+        A missing helper means that the required production migration is not
+        available. It is reported as ``TeachingRepositoryUnavailable`` instead
+        of bypassing the helper with a direct table query.
     """
 
     with psycopg_module.connect(dsn) as conn:
@@ -488,37 +495,13 @@ def get_latest_submission_for_owner(
                        analysis_json
                   from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s)
             """
-            fallback_sql = """
-                select id::text,
-                       task_id::text,
-                       student_sub::text,
-                       created_at,
-                       completed_at,
-                       kind,
-                       score_raw,
-                       score_max,
-                       text_body,
-                       mime_type,
-                       size_bytes,
-                       storage_key,
-                       feedback_md,
-                       analysis_json
-                  from public.learning_submissions
-                 where course_id = %s
-                   and task_id = %s::uuid
-                   and student_sub = %s
-                 order by created_at desc, attempt_nr desc, id desc
-                 limit 1
-            """
-
-            cur.execute("savepoint latest_submission_helper")
             try:
                 cur.execute(helper_sql, params)
-            except Exception:
-                # Compatibility only: relation and owner checks were repeated
-                # above, while RLS still applies to this direct read projection.
-                cur.execute("rollback to savepoint latest_submission_helper")
-                cur.execute(fallback_sql, (course_id, task_id, student_sub))
+            except psycopg_module.errors.UndefinedFunction as exc:
+                # The helper is part of the production schema contract. Falling
+                # back to the table would change authorization semantics under
+                # different database roles.
+                raise TeachingRepositoryUnavailable() from exc
             submission_row = cur.fetchone()
 
     task_kind, instruction_md, h5p_content_id = task_row
@@ -545,6 +528,10 @@ def get_latest_submission_file_for_owner(
     Permissions:
         The caller must own the course. The SECURITY DEFINER helper validates
         the course, unit, task and learner relation before returning metadata.
+
+    Behavior:
+        A missing helper is an unavailable required migration, matching the
+        detail projection's ``TeachingRepositoryUnavailable`` contract.
     """
 
     with psycopg_module.connect(dsn) as conn:
@@ -563,15 +550,18 @@ def get_latest_submission_file_for_owner(
             )
             if not bool((cur.fetchone() or [False])[0]):
                 return None
-            cur.execute(
-                """
-                select s.mime_type,
-                       s.size_bytes,
-                       s.storage_key
-                  from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s) s
-                 where s.id::text is not null
-                 limit 1
-                """,
-                (owner_sub, course_id, unit_id, task_id, student_sub),
-            )
+            try:
+                cur.execute(
+                    """
+                    select s.mime_type,
+                           s.size_bytes,
+                           s.storage_key
+                      from public.get_latest_submission_for_owner(%s, %s, %s, %s, %s) s
+                     where s.id::text is not null
+                     limit 1
+                    """,
+                    (owner_sub, course_id, unit_id, task_id, student_sub),
+                )
+            except psycopg_module.errors.UndefinedFunction as exc:
+                raise TeachingRepositoryUnavailable() from exc
             return cur.fetchone()

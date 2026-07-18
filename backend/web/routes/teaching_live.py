@@ -806,8 +806,9 @@ async def get_latest_submission_detail(
             exc.__class__.__name__,
             extra={"course_id": course_id, "task_id": task_id},
         )
+        return _private_error({"error": "internal_error"}, status_code=500, vary_origin=True)
 
-    # Fallback when DB path not available or no submission was found
+    # In-memory repositories do not expose the database projection yet.
     return Response(status_code=204, headers={"Cache-Control": "private, no-store", "Vary": "Origin"})
 
 
@@ -861,8 +862,13 @@ async def get_teaching_submission_file(
         )
     except TeachingRepositoryUnavailable:
         raise
-    except Exception:
-        row = None
+    except Exception as exc:
+        logger.warning(
+            "latest_submission_file_query_failed reason=unexpected_error error_type=%s",
+            exc.__class__.__name__,
+            extra={"course_id": course_id, "task_id": task_id},
+        )
+        return _private_error({"error": "internal_error"}, status_code=500, vary_origin=True)
 
     if not row:
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)

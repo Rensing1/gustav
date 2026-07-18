@@ -95,3 +95,5 @@ async def test_latest_submission_owner_helper_is_hardened() -> None:
                 r"teacher_id\s*=\s*coalesce\(\s*current_setting\('app\.current_sub'(::text)?,\s*true\)\s*,\s*''",
                 definition,
             ), definition
+            assert "from public.course_memberships" in definition.lower()
+            assert re.search(r"student_id\s*=\s*p_student_sub", definition, re.IGNORECASE), definition

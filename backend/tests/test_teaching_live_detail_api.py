@@ -19,6 +19,7 @@ os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 os.environ["H5P_REVIEW_TOKEN_SECRET"] = "test-secret"
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.teaching.errors import TeachingRepositoryUnavailable
 
 main = importlib.import_module("backend.web.main")
 
@@ -164,6 +165,70 @@ async def test_latest_detail_happy_path_and_no_content_cases():
         # For text submissions, expect a body
         if body["kind"] == "text":
             assert isinstance(body.get("text_body"), str) and len(body["text_body"]) > 0
+
+
+@pytest.mark.anyio
+async def test_latest_detail_hides_submission_after_membership_removal() -> None:
+    """A SECURITY DEFINER read must stop exposing submissions of former members.
+
+    Given:
+        - A learner submitted text while enrolled in the course.
+    When:
+        - The course owner removes that learner and requests the latest detail.
+    Then:
+        - The required helper returns no submission and the private API responds 204.
+    """
+    _require_db_or_skip()
+    teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
+    try:
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+        from backend.learning.repo_db import DBLearningRepo  # type: ignore
+
+        assert isinstance(learning.REPO, DBLearningRepo)
+    except Exception:
+        pytest.skip("DB-backed repos required for removed-member detail test")
+
+    owner = _session_store().create(sub="t-detail-removed-owner", name="Owner", roles=["teacher"])  # type: ignore
+    learner = _session_store().create(sub="s-detail-removed-learner", name="L", roles=["student"])  # type: ignore
+
+    async with (await _client()) as c_owner, (await _client()) as c_student:
+        c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        c_student.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+
+        course_id = await _create_course(c_owner, "Kurs ehemalige Mitglieder")
+        unit = await _create_unit(c_owner, "Einheit ehemalige Mitglieder")
+        section = await _create_section(c_owner, unit["id"], "S1")
+        task = await _create_task(c_owner, unit["id"], section["id"], "### Aufgabe")
+        module = await _attach_unit(c_owner, course_id, unit["id"])
+        await _add_member(c_owner, course_id, learner.sub)
+
+        visible = await c_owner.patch(
+            f"/api/teaching/courses/{course_id}/modules/{module['id']}/sections/{section['id']}/visibility",
+            json={"visible": True},
+        )
+        assert visible.status_code == 200
+        submission = await c_student.post(
+            f"/api/learning/courses/{course_id}/tasks/{task['id']}/submissions",
+            json={"kind": "text", "text_body": "Antwort vor Kursaustritt"},
+        )
+        assert submission.status_code in (200, 201, 202)
+
+        before_removal = await c_owner.get(
+            f"/api/teaching/courses/{course_id}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
+        )
+        assert before_removal.status_code == 200
+
+        removed = await c_owner.delete(f"/api/teaching/courses/{course_id}/members/{learner.sub}")
+        assert removed.status_code == 204
+        after_removal = await c_owner.get(
+            f"/api/teaching/courses/{course_id}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
+        )
+
+    assert after_removal.status_code == 204
+    assert after_removal.headers["Cache-Control"] == "private, no-store"
 
 
 @pytest.mark.anyio
@@ -892,19 +957,18 @@ async def test_latest_detail_omits_files_when_size_unknown():
 
 
 @pytest.mark.anyio
-async def test_latest_detail_falls_back_to_learning_submissions_when_primary_query_fails(
+async def test_latest_detail_required_helper_failure_returns_service_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Defensive DB fallback: still return a domain object when the primary query fails.
+    """A missing required helper must produce the private Teaching 503 contract.
 
     Given:
-        - A text submission with feedback_md and legacy-style analysis_json persisted in the DB.
-        - The first DB connection inside the teaching-detail endpoint fails (e.g. during a migration).
+        - A valid owner, course relation and persisted submission.
+        - The required latest-submission helper is unavailable.
     When:
         - The teacher calls the latest-detail endpoint.
     Then:
-        - The API falls back to public.learning_submissions, returns a complete domain object
-          (id, text_body, feedback_md, normalised analysis_json) and omits files[].
+        - The API returns the private 503 contract without a weaker table fallback.
     """
     _require_db_or_skip()
     teaching = importlib.import_module("backend.web.routes.teaching")
@@ -985,17 +1049,10 @@ async def test_latest_detail_falls_back_to_learning_submissions_when_primary_que
             )
         conn.commit()
 
-    # Patch psycopg.connect so that the first connection attempt in the teaching-detail endpoint fails.
-    original_connect = psycopg.connect
-    call_counter = {"n": 0}
+    def _missing_required_helper(_repo, **_kwargs):
+        raise TeachingRepositoryUnavailable()
 
-    def _failing_once_connect(*args, **kwargs):
-        call_counter["n"] += 1
-        if call_counter["n"] == 1:
-            raise Exception("simulate primary helper connection failure")
-        return original_connect(*args, **kwargs)
-
-    monkeypatch.setattr(psycopg, "connect", _failing_once_connect)
+    monkeypatch.setattr(DBTeachingRepo, "get_latest_submission_for_owner", _missing_required_helper)
 
     async with (await _client()) as c_owner:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -1003,32 +1060,27 @@ async def test_latest_detail_falls_back_to_learning_submissions_when_primary_que
             f"/api/teaching/courses/{cid}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
         )
 
-    assert r_detail.status_code == 200
-    body = r_detail.json()
-    assert body["id"] == submission_id
-    # Domain fields are kept intact
-    assert body.get("feedback_md", "").startswith("## Feedback")
-    analysis = body.get("analysis_json")
-    assert isinstance(analysis, dict)
-    assert analysis.get("schema") in ("criteria.v1", "criteria.v2")
-    results = analysis.get("criteria_results") or []
-    assert isinstance(results, list) and len(results) >= 1
-    # Fallback-Pfad baut keine Dateien (include_files=False im Fallback)
-    assert "files" not in body or body.get("files") in (None, [])
+    assert r_detail.status_code == 503
+    assert r_detail.json() == {
+        "error": "service_unavailable",
+        "detail": "teaching_repository_unavailable",
+    }
+    assert r_detail.headers["Cache-Control"] == "private, no-store"
 
 
 @pytest.mark.anyio
-async def test_latest_detail_fallback_respects_unit_relation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fallback path must not return submissions when task does not belong to the requested unit.
+async def test_latest_detail_relation_mismatch_is_rejected_by_submission_projection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The owner-scoped submission projection must reject a mismatched unit and task.
 
     Given:
         - Two units attached to the same course.
         - A submission for task A in unit A.
-        - The primary DB connection in the detail endpoint fails once, so the outer fallback is used.
     When:
         - The teacher requests the latest-detail endpoint with unit B and task A.
     Then:
-        - The endpoint must not return the submission for the mismatched unit and should respond 404.
+        - The endpoint invokes the real latest-submission projection and returns 404.
     """
     _require_db_or_skip()
     teaching = importlib.import_module("backend.web.routes.teaching")
@@ -1106,18 +1158,15 @@ async def test_latest_detail_fallback_respects_unit_relation(monkeypatch: pytest
             )
         conn.commit()
 
-    # Patch psycopg.connect so that the first connection attempt inside the endpoint fails
-    # and the outer fallback path is exercised.
-    original_connect = psycopg.connect
-    call_counter = {"n": 0}
+    original_lookup = DBTeachingRepo.get_latest_submission_for_owner
+    lookup_calls = 0
 
-    def _failing_once_connect(*args, **kwargs):
-        call_counter["n"] += 1
-        if call_counter["n"] == 1:
-            raise Exception("simulate primary helper connection failure (relation test)")
-        return original_connect(*args, **kwargs)
+    def _tracked_lookup(repo, **kwargs):
+        nonlocal lookup_calls
+        lookup_calls += 1
+        return original_lookup(repo, **kwargs)
 
-    monkeypatch.setattr(psycopg, "connect", _failing_once_connect)
+    monkeypatch.setattr(DBTeachingRepo, "get_latest_submission_for_owner", _tracked_lookup)
 
     async with (await _client()) as c_owner:
         c_owner.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
@@ -1127,6 +1176,7 @@ async def test_latest_detail_fallback_respects_unit_relation(monkeypatch: pytest
         )
 
     assert r_detail.status_code == 404
+    assert lookup_calls == 1
 
 
 @pytest.mark.anyio

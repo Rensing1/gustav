@@ -157,7 +157,8 @@ test-db-security:
 	  backend/tests/test_bff_authorization_session_api.py \
 	  backend/tests/test_session_bootstrap_api.py \
 	  backend/tests/test_teaching_live_detail_api.py::test_latest_detail_requires_owner_and_valid_ids \
-	  backend/tests/test_teaching_live_detail_api.py::test_latest_detail_fallback_respects_unit_relation \
+	  backend/tests/test_teaching_live_detail_api.py::test_latest_detail_hides_submission_after_membership_removal \
+	  backend/tests/test_teaching_live_detail_api.py::test_latest_detail_relation_mismatch_is_rejected_by_submission_projection \
 	  backend/tests/test_teaching_live_detail_relation_guard.py \
 	  backend/tests/test_learning_student_rls_policies.py \
 	  backend/tests/test_learning_rls_owners.py \

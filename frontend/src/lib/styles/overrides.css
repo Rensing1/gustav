@@ -1,0 +1,25 @@
+/*
+ * Cross-layer composition belongs here only when a shell element embeds a
+ * reusable primitive. Keeping these rules explicit avoids specificity races
+ * between the base shell and later component layers.
+ */
+
+.app-topbar-tools :is(.theme-toggle, .account-trigger) {
+  border-radius: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  box-shadow: 2px 2px 0 0 color-mix(in srgb, var(--color-border) 72%, transparent 28%);
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease;
+}
+
+.app-topbar-tools :is(.theme-toggle, .account-trigger):hover,
+.app-topbar-tools :is(.theme-toggle, .account-trigger):focus-visible,
+.account-menu[open] .account-trigger {
+  transform: translate(0.5px, 0.5px);
+  box-shadow: 1px 1px 0 0 color-mix(in srgb, var(--color-border) 92%, transparent 8%);
+}

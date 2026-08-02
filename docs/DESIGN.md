@@ -7,16 +7,13 @@ von GUSTAV. Es ersetzt `docs/UI-UX-Leitfaden.md` fachlich vollständig. Die
 Preview-Route unter `/ui-lab` dient als visuelle Referenzfläche; Stitch-Projekt
 `7234666190356643774` ist die kanonische visuelle Quelle für diese Fassung.
 
-Primäre Stitch-Referenzen:
-
-- `GUSTAV Task Redesign - Mistral Style Base`
-- `GUSTAV Graph-Übersicht - Mistral Style Base`
-- Designsystem `Gustav Logic`
+Primäre Stitch-Referenzen sind die Task- und Graph-Referenzflächen sowie das
+Designsystem `Gustav Logic` im oben genannten Projekt.
 
 ## 1. Produktbild
 
-GUSTAV folgt jetzt einer `Mistral`-artigen Produktsprache. Das Produkt wirkt
-präzise, kontrastreich, technisch-scharf und bewusst gestaltet. Es ist kein
+GUSTAV folgt einer präzisen, kontrastreichen und technisch-scharfen
+Produktsprache. Es ist kein
 freundlich-rundes EdTech-Produkt und keine warme Editorial-Oberfläche mehr.
 
 Verbindliche Zielwahrnehmung:
@@ -289,7 +286,7 @@ Verbindliche Familien:
 
 - Die Modi heißen `Übersicht / Inhalte`
 - Der Wechsel bleibt ein echter Moduswechsel
-- Die Mistral-Task-Fläche ist der stilistische Primäranker
+- Die kontrastreiche Task-Fläche ist der stilistische Primäranker
 
 ### 11.2 Übersicht
 
@@ -340,3 +337,28 @@ Verbindliche Familien:
 - diffuse Schatten
 - pillige Modusumschalter als Default
 - generische Card-Haufen ohne klare Objektlogik
+
+## 14. Technische Pflege des Designsystems
+
+`frontend/src/lib/styles/index.css` ist der einzige globale CSS-Einstiegspunkt. Er ordnet die Stylesheets mit CSS Cascade Layers in folgender Reihenfolge:
+
+1. `reset`
+2. `tokens`
+3. `base`
+4. `typography`
+5. `primitives`
+6. `learning`
+7. `teaching`
+8. `auth`
+9. `overrides`
+
+Verbindliche Regeln:
+
+- `theme-tokens.css` ist die einzige Quelle für globale `--color-*`, `--font-*`, `--space-*` und `--radius-*`-Variablen.
+- Fachliche Stylesheets dürfen globale Tokens verwenden, aber nicht neu definieren.
+- Eindeutig fachlich benannte, komponentenlokale Variablen bleiben erlaubt.
+- Neue globale Stylesheets werden nicht direkt in `+layout.svelte` importiert, sondern einer Schicht in `index.css` zugeordnet.
+- Benachbarte Bedienelemente mit derselben Funktionsebene teilen gemeinsame Chrom-Regeln; Theme- und Account-Schalter der Top-Bar sind die Referenz dafür.
+- Die ehemalige warme Papier-/Petrolpalette darf nicht lokal über hart codierte Werte zurückkehren.
+
+Das UI-Labor besitzt freigegebene Light- und Dark-Referenzbilder für Desktop und Mobil. `make test-visual-smoke` vergleicht sie, während `make update-visual-baselines` ausschließlich für eine beabsichtigte und anschließend visuell geprüfte Designänderung verwendet wird.

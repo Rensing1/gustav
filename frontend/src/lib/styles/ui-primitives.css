@@ -560,6 +560,8 @@
 .preview-page {
   display: grid;
   gap: var(--space-6);
+  background: var(--color-bg-base);
+  color: var(--color-text);
 }
 
 .preview-heading {

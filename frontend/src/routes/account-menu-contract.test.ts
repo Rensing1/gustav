@@ -30,8 +30,9 @@ describe("account menu contract", () => {
   it("styles the account trigger and panel with hard edges", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const cssSource = readFileSync(path.resolve(currentDir, "../lib/styles/app.css"), "utf8");
+    const overrideSource = readFileSync(path.resolve(currentDir, "../lib/styles/overrides.css"), "utf8");
 
-    expect(cssSource).toMatch(/\.account-trigger\s*\{[^}]*border-radius:\s*0;/s);
+    expect(overrideSource).toMatch(/\.app-topbar-tools :is\(\.theme-toggle, \.account-trigger\)\s*\{[^}]*border-radius:\s*0;/s);
     expect(cssSource).toMatch(/\.account-menu__panel\s*\{[^}]*border-radius:\s*0;/s);
     expect(cssSource).toMatch(/\.account-menu__action\s*\{[^}]*border-top:\s*1px solid var\(--color-border\);/s);
     expect(cssSource).not.toMatch(/\.account-trigger\s*\{[^}]*border-radius:\s*999px;/s);
@@ -59,23 +60,25 @@ describe("account menu contract", () => {
 
   it("reduces the 3d effect for topbar tools without flattening them", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const cssSource = readFileSync(path.resolve(currentDir, "../lib/styles/app.css"), "utf8");
+    const cssSource = readFileSync(path.resolve(currentDir, "../lib/styles/overrides.css"), "utf8");
 
-    expect(cssSource).toMatch(/\.app-topbar-tools \.theme-toggle\s*\{[^}]*box-shadow:\s*2px 2px 0 0 rgba\(27, 27, 27, 0\.72\);/s);
-    expect(cssSource).toMatch(/\.account-trigger\s*\{[^}]*box-shadow:\s*2px 2px 0 0 rgba\(27, 27, 27, 0\.72\);/s);
-    expect(cssSource).toMatch(/\.account-trigger:hover,[\s\S]*?box-shadow:\s*1px 1px 0 0 rgba\(27, 27, 27, 0\.92\);/s);
-    expect(cssSource).not.toMatch(/\.app-topbar-tools \.theme-toggle\s*\{[^}]*box-shadow:\s*var\(--color-shadow\);/s);
-    expect(cssSource).not.toMatch(/\.account-trigger\s*\{[^}]*box-shadow:\s*var\(--color-shadow\);/s);
+    expect(cssSource).toMatch(/\.app-topbar-tools :is\(\.theme-toggle, \.account-trigger\)\s*\{[^}]*box-shadow:\s*2px 2px 0 0 color-mix\(in srgb, var\(--color-border\) 72%, transparent 28%\);/s);
+    expect(cssSource).toMatch(/\.app-topbar-tools :is\(\.theme-toggle, \.account-trigger\):hover,[\s\S]*?box-shadow:\s*1px 1px 0 0 color-mix\(in srgb, var\(--color-border\) 92%, transparent 8%\);/s);
+    expect(cssSource).not.toMatch(/\.app-topbar-tools :is\(\.theme-toggle, \.account-trigger\)\s*\{[^}]*box-shadow:\s*var\(--color-shadow\);/s);
   });
 
   it("defines a subtle dotted global background without overriding it in the shared themes", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const appCss = readFileSync(path.resolve(currentDir, "../lib/styles/app.css"), "utf8");
+    const tokenCss = readFileSync(path.resolve(currentDir, "../lib/styles/theme-tokens.css"), "utf8");
     const globalCss = readGlobalCssBundle(path.resolve(currentDir, "../lib/styles"));
     const authThemeCss = readFileSync(path.resolve(currentDir, "../lib/styles/auth-theme.css"), "utf8");
 
-    expect(appCss).toMatch(/--app-bg-dot-color:\s*rgba\([^)]+\);/);
-    expect(appCss).toMatch(/html,\s*body\s*\{[^}]*background-color:\s*var\(--color-bg-base\);[^}]*radial-gradient\(circle,\s*var\(--app-bg-dot-color\)\s+1\.35px,\s*transparent\s+1\.5px\);[^}]*background-size:\s*1\.75rem 1\.75rem;/s);
+    expect(tokenCss).toMatch(/--app-bg-dot-color:\s*rgba\([^)]+\);/);
+    expect(tokenCss).toContain("--app-bg-dot-size: 1.35px;");
+    expect(tokenCss).toContain("--app-bg-dot-fade-size: 1.5px;");
+    expect(tokenCss).toContain("--app-bg-dot-spacing: 1.75rem;");
+    expect(appCss).toMatch(/html,\s*body\s*\{[^}]*background-color:\s*var\(--color-bg-base\);[^}]*radial-gradient\([\s\S]*?var\(--app-bg-dot-color\) var\(--app-bg-dot-size\),[\s\S]*?transparent var\(--app-bg-dot-fade-size\)[\s\S]*?background-size:\s*var\(--app-bg-dot-spacing\) var\(--app-bg-dot-spacing\);/s);
     expect(appCss).toMatch(/\.app-shell\s*\{[^}]*background:\s*transparent;/s);
     expect(globalCss).not.toMatch(/body\s*\{[^}]*background:\s*var\(--color-bg-base\);/s);
     expect(authThemeCss).toMatch(/\.design-auth-shell,[\s\S]*?\.kc-gustav\s*\{[^}]*radial-gradient\(circle,\s*var\(--app-bg-dot-color\)\s+1\.35px,\s*transparent\s+1\.5px\)/s);

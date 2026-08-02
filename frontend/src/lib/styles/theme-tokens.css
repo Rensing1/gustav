@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --color-bg-base: #f9f9f9;
   --color-bg-surface: #ffffff;
   --color-bg-elevated: #ffffff;
@@ -12,6 +13,7 @@
   --color-accent-soft: rgba(255, 81, 47, 0.14);
   --color-border: #1b1b1b;
   --color-line: rgba(27, 27, 27, 0.14);
+  --color-rail-active: #ffffff;
   --color-success: #387f50;
   --color-success-soft: rgba(56, 127, 80, 0.14);
   --color-warning: #8d5a00;
@@ -23,15 +25,26 @@
   --font-reading: "Inter", "Work Sans", "Nunito", sans-serif;
   --font-ui: "Space Grotesk", "Inter", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
   --space-7: 3rem;
   --space-8: 4rem;
   --radius-s: 0;
   --radius-m: 0;
   --radius-l: 2px;
   --radius-xl: 4px;
+  --app-bg-dot-color: rgba(121, 128, 135, 0.38);
+  --app-bg-dot-size: 1.35px;
+  --app-bg-dot-fade-size: 1.5px;
+  --app-bg-dot-spacing: 1.75rem;
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --color-bg-base: #121212;
   --color-bg-surface: #1a1a1a;
   --color-bg-elevated: #1f1f1f;
@@ -45,6 +58,7 @@
   --color-accent-soft: rgba(255, 81, 47, 0.2);
   --color-border: #f0f1f1;
   --color-line: rgba(240, 241, 241, 0.18);
+  --color-rail-active: #1f1f1f;
   --color-success: #8fc0aa;
   --color-success-soft: rgba(143, 192, 170, 0.18);
   --color-warning: #d6b170;
@@ -52,4 +66,5 @@
   --color-danger: #ffb4ab;
   --color-danger-soft: rgba(255, 180, 171, 0.18);
   --color-shadow: 4px 4px 0 0 rgba(240, 241, 241, 0.4);
+  --app-bg-dot-color: rgba(240, 241, 241, 0.2);
 }

@@ -1714,19 +1714,20 @@
 .submit-form textarea {
   min-height: 8rem;
   padding: 0.75rem;
-  border-radius: 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
-  background: rgba(255, 253, 249, 0.96);
+  border-radius: var(--radius-s);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
   color: var(--color-text);
 }
 
 .submit-form button {
   width: fit-content;
-  border: 0;
-  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-s);
   padding: 0.75rem 1.1rem;
-  background: var(--color-link);
-  color: #fffaf3;
+  background: var(--color-accent);
+  color: #ffffff;
+  box-shadow: var(--color-shadow);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -2226,9 +2227,7 @@
 
 .learning-flow-unit-node--selected {
   border-color: color-mix(in srgb, var(--color-link) 28%, var(--color-border) 72%);
-  box-shadow:
-    0 14px 28px rgba(35, 41, 45, 0.08),
-    0 0 0 4px rgba(42, 101, 113, 0.08);
+  box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--color-accent) 85%, transparent 15%);
 }
 
 .learning-flow-unit-node--locked {

@@ -145,7 +145,7 @@
     </p>
     <p class="preview-heading__meta">Angemeldet als {userName}</p>
     <div class="preview-reference-banner">
-      <p class="workspace-label">Mistral Referenz</p>
+      <p class="workspace-label">Designreferenz</p>
       <strong>Taskfläche zuerst, Graph daraus abgeleitet.</strong>
     </div>
     <div class="preview-theme-toggle">

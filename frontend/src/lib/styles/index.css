@@ -1,0 +1,17 @@
+/*
+ * This is the only global stylesheet entrypoint.
+ *
+ * The declared order makes ownership visible: product tokens are defined once,
+ * foundations come before reusable primitives, and bounded-context styles may
+ * refine those primitives without depending on Svelte import order.
+ */
+@layer reset, tokens, base, typography, primitives, learning, teaching, auth, overrides;
+
+@import "./theme-tokens.css" layer(tokens);
+@import "./app.css" layer(base);
+@import "./typography.css" layer(typography);
+@import "./ui-primitives.css" layer(primitives);
+@import "./learning-unit.css" layer(learning);
+@import "./teaching-workspace.css" layer(teaching);
+@import "./auth-theme.css" layer(auth);
+@import "./overrides.css" layer(overrides);

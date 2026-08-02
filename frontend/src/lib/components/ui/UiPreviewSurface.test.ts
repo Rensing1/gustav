@@ -14,7 +14,7 @@ describe("UiPreviewSurface", () => {
 
     expect(screen.getByRole("heading", { name: "Designsystem-Vorschau für GUSTAV" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Dark" })).toBeInTheDocument();
-    expect(screen.getByText("Mistral Referenz")).toBeInTheDocument();
+    expect(screen.getByText("Designreferenz")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Programmieren mit Scratch" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Zurück zu Lerneinheiten" })).toHaveAttribute("href", "/teaching/units");
     expect(screen.getByRole("heading", { name: "Inhaltsverzeichnis" })).toBeInTheDocument();

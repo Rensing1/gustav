@@ -10,6 +10,7 @@ Why:
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -17,21 +18,14 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 def test_frontend_contains_shared_ui_shell_stylesheet() -> None:
     style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "app.css"
+    token_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "theme-tokens.css"
 
     assert style_path.is_file(), f"Missing shared app stylesheet: {style_path}"
 
     src = style_path.read_text(encoding="utf-8")
+    token_src = token_path.read_text(encoding="utf-8")
 
     for needle in (
-        "--color-bg-base",
-        "--color-bg-surface",
-        "--color-link",
-        "--color-link-hover",
-        "--color-accent",
-        "--color-text",
-        "--space-4",
-        "--radius-m",
-        '[data-theme="dark"]',
         ".app-shell",
         ".app-topbar",
         ".app-topbar-inner",
@@ -51,6 +45,19 @@ def test_frontend_contains_shared_ui_shell_stylesheet() -> None:
     ):
         assert needle in src, f"Expected shared UI shell token/class {needle!r} in {style_path}"
 
+    for needle in (
+        "--color-bg-base",
+        "--color-bg-surface",
+        "--color-link",
+        "--color-link-hover",
+        "--color-accent",
+        "--color-text",
+        "--space-4",
+        "--radius-m",
+        '[data-theme="dark"]',
+    ):
+        assert needle in token_src, f"Expected global design token {needle!r} in {token_path}"
+
 
 def test_root_layout_uses_alpha3_shell_primitives() -> None:
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
@@ -58,7 +65,7 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
     src = layout_path.read_text(encoding="utf-8")
 
     for needle in (
-        'import "$lib/styles/app.css";',
+        'import "$lib/styles/index.css";',
         'class="app-shell"',
         'class="app-topbar"',
         'class="app-topbar-inner"',
@@ -95,14 +102,14 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
 
 
 def test_learner_unit_workspace_styles_are_split_from_app_shell() -> None:
-    layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
+    entrypoint_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "index.css"
     app_style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "app.css"
     learner_style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "learning-unit.css"
 
-    layout_src = layout_path.read_text(encoding="utf-8")
+    entrypoint_src = entrypoint_path.read_text(encoding="utf-8")
     app_src = app_style_path.read_text(encoding="utf-8")
 
-    assert 'import "$lib/styles/learning-unit.css";' in layout_src
+    assert '@import "./learning-unit.css" layer(learning);' in entrypoint_src
     assert learner_style_path.is_file(), f"Missing learner-unit stylesheet: {learner_style_path}"
     assert ".learning-unit-space" not in app_src
     assert ".learning-task-workspace" not in app_src
@@ -110,14 +117,14 @@ def test_learner_unit_workspace_styles_are_split_from_app_shell() -> None:
 
 
 def test_teacher_workspace_styles_are_split_from_app_shell() -> None:
-    layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
+    entrypoint_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "index.css"
     app_style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "app.css"
     teacher_style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "teaching-workspace.css"
 
-    layout_src = layout_path.read_text(encoding="utf-8")
+    entrypoint_src = entrypoint_path.read_text(encoding="utf-8")
     app_src = app_style_path.read_text(encoding="utf-8")
 
-    assert 'import "$lib/styles/teaching-workspace.css";' in layout_src
+    assert '@import "./teaching-workspace.css" layer(teaching);' in entrypoint_src
     assert teacher_style_path.is_file(), f"Missing teacher workspace stylesheet: {teacher_style_path}"
     assert ".teacher-flow-unit-node" not in app_src
     assert ".workspace-node-editor" not in app_src
@@ -125,13 +132,15 @@ def test_teacher_workspace_styles_are_split_from_app_shell() -> None:
 
 
 def test_design_system_styles_are_split_into_ordered_responsibility_bundles() -> None:
-    """Design-system CSS must load as explicit responsibility bundles."""
+    """The layout must load one explicit, layered design-system entrypoint."""
 
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
     styles_dir = REPO_ROOT / "frontend" / "src" / "lib" / "styles"
     layout_src = layout_path.read_text(encoding="utf-8")
+    entrypoint_path = styles_dir / "index.css"
 
-    expected_order = [
+    assert 'import "$lib/styles/index.css";' in layout_src
+    for old_import in (
         'import "$lib/styles/theme-tokens.css";',
         'import "$lib/styles/typography.css";',
         'import "$lib/styles/app.css";',
@@ -139,8 +148,23 @@ def test_design_system_styles_are_split_into_ordered_responsibility_bundles() ->
         'import "$lib/styles/learning-unit.css";',
         'import "$lib/styles/teaching-workspace.css";',
         'import "$lib/styles/auth-theme.css";',
+    ):
+        assert old_import not in layout_src
+
+    assert entrypoint_path.is_file(), f"Missing design-system entrypoint: {entrypoint_path}"
+    entrypoint_src = entrypoint_path.read_text(encoding="utf-8")
+    expected_lines = [
+        "@layer reset, tokens, base, typography, primitives, learning, teaching, auth, overrides;",
+        '@import "./theme-tokens.css" layer(tokens);',
+        '@import "./app.css" layer(base);',
+        '@import "./typography.css" layer(typography);',
+        '@import "./ui-primitives.css" layer(primitives);',
+        '@import "./learning-unit.css" layer(learning);',
+        '@import "./teaching-workspace.css" layer(teaching);',
+        '@import "./auth-theme.css" layer(auth);',
+        '@import "./overrides.css" layer(overrides);',
     ]
-    positions = [layout_src.index(import_line) for import_line in expected_order]
+    positions = [entrypoint_src.index(line) for line in expected_lines]
     assert positions == sorted(positions)
     assert 'import "$lib/styles/design-system.css";' not in layout_src
 
@@ -161,17 +185,117 @@ def test_design_system_styles_are_split_into_ordered_responsibility_bundles() ->
     assert len(facade_css.splitlines()) < 40
 
 
-def test_app_html_loads_nunito_font() -> None:
+def test_app_html_loads_approved_product_fonts() -> None:
     package_path = REPO_ROOT / "frontend" / "package.json"
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
     package_src = package_path.read_text(encoding="utf-8")
     layout_src = layout_path.read_text(encoding="utf-8")
 
-    assert "@fontsource/nunito" in package_src
-    assert '@fontsource/nunito' in layout_src
-    assert "font-family: var(--font-ui);" in (
-        REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "app.css"
+    assert "@fontsource/inter" in package_src
+    assert "@fontsource/space-grotesk" in package_src
+    assert '@fontsource/inter' in layout_src
+    assert '@fontsource/space-grotesk' in layout_src
+    typography_src = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "typography.css"
     ).read_text(encoding="utf-8")
+    assert "font-family: var(--font-reading);" in typography_src
+    assert "font-family: var(--font-display);" in typography_src
+
+
+def test_global_design_tokens_have_one_owner() -> None:
+    """Global product tokens may only be declared by theme-tokens.css.
+
+    Component-scoped custom properties remain valid. The test deliberately
+    inspects only global `:root` and theme blocks so feature styles can keep
+    local variables without becoming another product-theme source.
+    """
+
+    styles_dir = REPO_ROOT / "frontend" / "src" / "lib" / "styles"
+    token_path = styles_dir / "theme-tokens.css"
+    global_token = re.compile(r"--(?:color|font|space|radius)-[a-z0-9-]+\s*:")
+    css_block = re.compile(r"(?P<selectors>[^{}]+)\{(?P<body>[^{}]*)\}", re.DOTALL)
+    offenders: list[str] = []
+
+    for style_path in sorted(styles_dir.glob("*.css")):
+        if style_path == token_path:
+            continue
+        source = style_path.read_text(encoding="utf-8")
+        for match in css_block.finditer(source):
+            selectors = match.group("selectors")
+            if ":root" not in selectors and '[data-theme="' not in selectors:
+                continue
+            for declaration in global_token.findall(match.group("body")):
+                offenders.append(f"{style_path.name}: {declaration.rstrip(':')}")
+
+    assert offenders == [], "Global design tokens must live in theme-tokens.css:\n" + "\n".join(offenders)
+
+
+def test_theme_tokens_keep_the_approved_contrast_contract() -> None:
+    token_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "theme-tokens.css"
+    src = token_path.read_text(encoding="utf-8")
+
+    for declaration in (
+        "--color-bg-base: #f9f9f9;",
+        "--color-bg-surface: #ffffff;",
+        "--color-text: #1a1c1c;",
+        "--color-link: #b41f00;",
+        "--color-accent: #ff512f;",
+        "--color-border: #1b1b1b;",
+        "--color-shadow: 4px 4px 0 0 rgba(27, 27, 27, 0.98);",
+        '--font-display: "Space Grotesk", "Manrope", "Inter", sans-serif;',
+        '--font-reading: "Inter", "Work Sans", "Nunito", sans-serif;',
+        "--radius-s: 0;",
+        "--radius-m: 0;",
+    ):
+        assert declaration in src
+
+
+def test_topbar_theme_and_account_controls_share_one_chrome_rule() -> None:
+    """Adjacent top-bar controls must not drift into different visual chrome."""
+
+    style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "overrides.css"
+    src = style_path.read_text(encoding="utf-8")
+
+    shared_selector = ".app-topbar-tools :is(.theme-toggle, .account-trigger)"
+    assert shared_selector in src
+    shared_rule = re.search(rf"{re.escape(shared_selector)}\s*\{{(?P<body>[^}}]+)\}}", src)
+    assert shared_rule is not None
+    body = shared_rule.group("body")
+    for declaration in (
+        "border-radius: 0;",
+        "border: 1px solid var(--color-border);",
+        "background: var(--color-bg-surface);",
+        "box-shadow:",
+    ):
+        assert declaration in body
+
+
+def test_frontend_styles_do_not_reintroduce_the_retired_soft_palette() -> None:
+    """The warm paper and teal palette must not return through local CSS."""
+
+    styles_dir = REPO_ROOT / "frontend" / "src" / "lib" / "styles"
+    retired_values = (
+        "#f6f0e7",
+        "#fffaf3",
+        "#2a6571",
+        "#214f59",
+        "#92b19a",
+        "#a4c4ae",
+        "#c1d8c4",
+        "#262c2f",
+        "#323a3f",
+        "rgba(255, 253, 249, 0.96)",
+        "rgba(42, 101, 113, 0.08)",
+    )
+    offenders: list[str] = []
+
+    for style_path in sorted(styles_dir.glob("*.css")):
+        source = style_path.read_text(encoding="utf-8").lower()
+        for value in retired_values:
+            if value in source:
+                offenders.append(f"{style_path.name}: {value}")
+
+    assert offenders == [], "Retired soft-design colors found:\n" + "\n".join(offenders)
 
 
 def test_room_pages_use_shared_workspace_primitives() -> None:

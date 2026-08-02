@@ -13,13 +13,7 @@
   import "@fontsource/work-sans/latin-400.css";
   import "@fontsource/work-sans/latin-500.css";
   import "@fontsource/work-sans/latin-600.css";
-  import "$lib/styles/theme-tokens.css";
-  import "$lib/styles/typography.css";
-  import "$lib/styles/app.css";
-  import "$lib/styles/ui-primitives.css";
-  import "$lib/styles/learning-unit.css";
-  import "$lib/styles/teaching-workspace.css";
-  import "$lib/styles/auth-theme.css";
+  import "$lib/styles/index.css";
   import BreadcrumbBar from "$lib/components/ui/BreadcrumbBar.svelte";
   import ThemeToggle from "$lib/components/ui/ThemeToggle.svelte";
   import { syncDocumentTheme } from "$lib/theme/client";

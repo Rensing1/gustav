@@ -56,6 +56,7 @@ def _serialize_task(t) -> dict:
         data["scratch"] = None
         data["calliope"] = None
         data["filius"] = None
+        data["dialog"] = None
     elif kind == "visual":
         visual_cfg = data.get("visual")
         data["visual"] = visual_cfg if isinstance(visual_cfg, dict) else {}
@@ -63,6 +64,7 @@ def _serialize_task(t) -> dict:
         data["scratch"] = None
         data["calliope"] = None
         data["filius"] = None
+        data["dialog"] = None
     elif kind == "scratch":
         scratch_cfg = data.get("scratch")
         data["scratch"] = scratch_cfg if isinstance(scratch_cfg, dict) else {}
@@ -70,6 +72,7 @@ def _serialize_task(t) -> dict:
         data["visual"] = None
         data["calliope"] = None
         data["filius"] = None
+        data["dialog"] = None
     elif kind == "calliope":
         calliope_cfg = data.get("calliope")
         data["calliope"] = calliope_cfg if isinstance(calliope_cfg, dict) else {}
@@ -77,6 +80,7 @@ def _serialize_task(t) -> dict:
         data["visual"] = None
         data["scratch"] = None
         data["filius"] = None
+        data["dialog"] = None
     elif kind == "filius":
         filius_cfg = data.get("filius")
         data["filius"] = filius_cfg if isinstance(filius_cfg, dict) else {}
@@ -84,12 +88,22 @@ def _serialize_task(t) -> dict:
         data["visual"] = None
         data["scratch"] = None
         data["calliope"] = None
+        data["dialog"] = None
+    elif kind == "dialog":
+        dialog_cfg = data.get("dialog")
+        data["dialog"] = dialog_cfg if isinstance(dialog_cfg, dict) else None
+        data["h5p"] = None
+        data["visual"] = None
+        data["scratch"] = None
+        data["calliope"] = None
+        data["filius"] = None
     else:
         data.setdefault("h5p", None)
         data.setdefault("visual", None)
         data.setdefault("scratch", None)
         data.setdefault("calliope", None)
         data.setdefault("filius", None)
+        data.setdefault("dialog", None)
     # Do not expose internal storage columns; the API uses nested objects.
     data.pop("h5p_content_id", None)
     data.pop("h5p_display_options", None)

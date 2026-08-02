@@ -788,6 +788,7 @@ class DBTeachingRepo:
         kind: str,
         h5p_content_id: str | None,
         h5p_display_options: dict[str, Any],
+        dialog_config: dict[str, Any] | None = None,
     ) -> dict:
         return _repo_task_queries.create_task(
             dsn=self._dsn,
@@ -804,6 +805,7 @@ class DBTeachingRepo:
             kind=kind,
             h5p_content_id=h5p_content_id,
             h5p_display_options=h5p_display_options,
+            dialog_config=dialog_config,
         )
 
     def update_task(
@@ -821,6 +823,7 @@ class DBTeachingRepo:
         kind=_UNSET,
         h5p_content_id=_UNSET,
         h5p_display_options=_UNSET,
+        dialog_config=_UNSET,
     ) -> Optional[dict]:
         return _repo_task_queries.update_task(
             dsn=self._dsn,
@@ -838,6 +841,7 @@ class DBTeachingRepo:
             kind=kind,
             h5p_content_id=h5p_content_id,
             h5p_display_options=h5p_display_options,
+            dialog_config=dialog_config,
         )
 
     def delete_task(self, unit_id: str, section_id: str, task_id: str, author_id: str) -> bool:
@@ -848,6 +852,21 @@ class DBTeachingRepo:
             section_id=section_id,
             task_id=task_id,
             author_id=author_id,
+        )
+
+    def get_dialog_task_for_author(self, unit_id: str, task_id: str, author_id: str) -> dict[str, Any] | None:
+        return _repo_task_queries.get_dialog_task_for_author(
+            dsn=self._dsn, psycopg_module=psycopg, unit_id=unit_id, task_id=task_id, author_id=author_id
+        )
+
+    def get_dialog_submission_for_owner(self, **kwargs: Any) -> dict[str, Any] | None:
+        return _repo_task_queries.get_dialog_submission_for_owner(
+            dsn=self._dsn, psycopg_module=psycopg, **kwargs
+        )
+
+    def record_dialog_preview_usage(self, **kwargs: Any) -> None:
+        _repo_task_queries.record_dialog_preview_usage(
+            dsn=self._dsn, psycopg_module=psycopg, **kwargs
         )
 
     def reorder_section_tasks(

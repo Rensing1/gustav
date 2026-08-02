@@ -116,6 +116,7 @@ class TaskData:
     kind: str = "native"
     h5p_content_id: Optional[str] | None = None
     h5p_display_options: Dict[str, Any] | None = None
+    dialog: Dict[str, Any] | None = None
 
 
 @dataclass
@@ -758,6 +759,7 @@ class InMemoryTeachingRepo:
         kind: str = "native",
         h5p_content_id: str | None = None,
         h5p_display_options: Dict[str, Any] | None = None,
+        dialog_config: Dict[str, Any] | None = None,
     ) -> TaskData:
         if not self.section_exists_for_author(unit_id, section_id, author_id):
             raise PermissionError("section_forbidden")
@@ -791,6 +793,7 @@ class InMemoryTeachingRepo:
             kind=kind,
             h5p_content_id=h5p_content_id,
             h5p_display_options=dict(h5p_display_options or {}),
+            dialog=dict(dialog_config) if dialog_config is not None else None,
         )
         self.tasks[tid] = task
         bucket = self.task_ids_by_section.setdefault(section_id, [])
@@ -812,6 +815,7 @@ class InMemoryTeachingRepo:
         kind=_UNSET,
         h5p_content_id=_UNSET,
         h5p_display_options=_UNSET,
+        dialog_config=_UNSET,
     ) -> TaskData | None:
         task = self.tasks.get(task_id)
         if not task or task.unit_id != unit_id or task.section_id != section_id:
@@ -849,6 +853,8 @@ class InMemoryTeachingRepo:
             task.h5p_content_id = None if h5p_content_id is None else str(h5p_content_id)
         if h5p_display_options is not _UNSET:
             task.h5p_display_options = dict(h5p_display_options or {})
+        if dialog_config is not _UNSET:
+            task.dialog = dict(dialog_config) if dialog_config is not None else None
         task.updated_at = datetime.now(timezone.utc).isoformat()
         self.tasks[task_id] = task
         return task
@@ -864,6 +870,27 @@ class InMemoryTeachingRepo:
         self.task_ids_by_section[section_id] = ids
         self._resequence_tasks(section_id)
         return True
+
+    def get_dialog_task_for_author(self, unit_id: str, task_id: str, author_id: str) -> dict[str, Any] | None:
+        task = self.tasks.get(task_id)
+        unit = self.units.get(unit_id)
+        if not task or not unit or unit.author_id != author_id or task.unit_id != unit_id or task.kind != "dialog":
+            return None
+        config = dict(task.dialog or {})
+        config.update(
+            {
+                "instruction_md": task.instruction_md,
+                "teacher_context_md": task.teacher_context_md,
+                "turns": [],
+            }
+        )
+        return config
+
+    def get_dialog_submission_for_owner(self, **_kwargs: Any) -> dict[str, Any] | None:
+        return None
+
+    def record_dialog_preview_usage(self, **_kwargs: Any) -> None:
+        return None
 
     def reorder_section_tasks(
         self,

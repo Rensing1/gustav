@@ -8,6 +8,7 @@ import json
 import os
 import re
 from backend.learning import repo_course_unit_queries as _repo_course_unit_queries
+from backend.learning import repo_dialog_queries as _repo_dialog_queries
 from backend.learning import repo_history_worker_queries as _repo_history_worker_queries
 from backend.learning import repo_modular_unit_queries as _repo_modular_unit_queries
 from backend.learning import repo_submission_command_queries as _repo_submission_command_queries
@@ -160,6 +161,9 @@ class DBLearningRepo:
     _image_text_stub = staticmethod(_image_text_stub)
     _pdf_text_stub = staticmethod(_pdf_text_stub)
     _row_to_submission = staticmethod(_row_to_submission)
+    _psycopg = psycopg
+    _sql = sql
+    _json_adapter = Json
 
     def __init__(self, dsn: Optional[str] = None) -> None:
         if not HAVE_PSYCOPG:
@@ -494,6 +498,47 @@ class DBLearningRepo:
             course_id=course_id,
             task_id=task_id,
         )
+
+    # ------------------------------------------------------------------
+    # AI dialog tasks
+    def start_or_resume(self, **kwargs: Any) -> dict[str, Any]:
+        return _repo_dialog_queries.start_or_resume(self, **kwargs)
+
+    def get_session(self, **kwargs: Any) -> dict[str, Any]:
+        return _repo_dialog_queries.get_session(self, **kwargs)
+
+    def set_initial_starters(self, **kwargs: Any) -> dict[str, Any]:
+        return _repo_dialog_queries.set_initial_starters(self, **kwargs)
+
+    def claim_initial_starters(self, **kwargs: Any) -> bool:
+        return _repo_dialog_queries.claim_initial_starters(self, **kwargs)
+
+    def fail_initial_starters(self, **kwargs: Any) -> None:
+        _repo_dialog_queries.fail_initial_starters(self, **kwargs)
+
+    def generation_context(self, **kwargs: Any) -> dict[str, Any]:
+        return _repo_dialog_queries.generation_context(self, **kwargs)
+
+    def begin_turn(self, **kwargs: Any) -> dict[str, Any]:
+        return _repo_dialog_queries.begin_turn(self, **kwargs)
+
+    def begin_retry(self, **kwargs: Any) -> dict[str, Any]:
+        return _repo_dialog_queries.begin_retry(self, **kwargs)
+
+    def complete_turn(self, **kwargs: Any) -> dict[str, Any]:
+        return _repo_dialog_queries.complete_turn(self, **kwargs)
+
+    def fail_turn(self, **kwargs: Any) -> None:
+        _repo_dialog_queries.fail_turn(self, **kwargs)
+
+    def complete_session(self, **kwargs: Any) -> dict[str, Any]:
+        return _repo_dialog_queries.complete_session(self, **kwargs)
+
+    def abandon_session(self, **kwargs: Any) -> dict[str, Any]:
+        return _repo_dialog_queries.abandon_session(self, **kwargs)
+
+    def record_usage_events(self, **kwargs: Any) -> None:
+        _repo_dialog_queries.record_usage_events(self, **kwargs)
 
     def _resolve_queue_table(self, cur) -> str:
         """Ensure the canonical worker queue exists before inserting jobs."""

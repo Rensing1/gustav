@@ -438,6 +438,18 @@ def get_modular_module_content(
                             "updated_at": r[10],
                         }
                     )
+                dialog_configs = _load_learning_dialog_configs(
+                    cur,
+                    student_sub=student_sub,
+                    course_id=course_uuid,
+                    task_ids=[str(task["id"]) for task in tasks if task["kind"] == "dialog"],
+                )
+                for task in tasks:
+                    dialog_config = dialog_configs.get(str(task["id"]))
+                    task["dialog"] = _public_dialog_config(dialog_config)
+                    task["active_dialog_session_id"] = (
+                        dialog_config.get("active_session_id") if dialog_config else None
+                    )
 
             if include_tasks and tasks:
                 summaries = repo._task_submission_summary_map(
@@ -587,6 +599,12 @@ def fetch_tasks(repo, conn: Connection, student_sub: str, course_id: str, sectio
             (student_sub, course_id, section_id),
         )
         rows = cur.fetchall()
+        dialog_configs = _load_learning_dialog_configs(
+            cur,
+            student_sub=student_sub,
+            course_id=course_id,
+            task_ids=[str(row[0]) for row in rows if str(row[5] or "native") == "dialog"],
+        )
     tasks: list[dict] = []
     for row in rows:
         kind = str(row[5] or "native")
@@ -599,6 +617,7 @@ def fetch_tasks(repo, conn: Connection, student_sub: str, course_id: str, sectio
             h5p = {"content_id": (str(h5p_content_id) if h5p_content_id is not None else None), "display_options": display_options}
         elif kind == "visual":
             visual = {}
+        dialog_config = dialog_configs.get(str(row[0]))
         tasks.append(
             {
                 "id": row[0],
@@ -609,6 +628,10 @@ def fetch_tasks(repo, conn: Connection, student_sub: str, course_id: str, sectio
                 "kind": kind,
                 "h5p": h5p,
                 "visual": visual,
+                "dialog": _public_dialog_config(dialog_config),
+                "active_dialog_session_id": (
+                    dialog_config.get("active_session_id") if dialog_config else None
+                ),
                 "position": int(row[8]) if row[8] is not None else None,
                 "created_at": row[9],
                 "updated_at": row[10],
@@ -796,3 +819,37 @@ def is_h5p_content_released_for_student(repo, *, psycopg_module, student_sub: st
                         return True
 
             return False
+# Learners receive only this safe projection. Internal role, learning goal and
+# teacher context stay behind the security-definer snapshot boundary.
+def _load_learning_dialog_configs(cur, *, student_sub: str, course_id: str, task_ids: list[str]) -> dict[str, dict]:
+    if not task_ids:
+        return {}
+    cur.execute(
+        """
+        select task_id::text, partner_name, partner_description_md,
+               opening_message_md, response_mode, max_rounds,
+               closing_prompt_md, active_session_id::text
+          from public.learning_get_visible_dialog_configs(%s, %s::uuid, %s::uuid[])
+        """,
+        (student_sub, course_id, task_ids),
+    )
+    return {
+        row[0]: {
+            "partner_name": row[1],
+            "partner_description_md": row[2],
+            "opening_message_md": row[3],
+            "response_mode": row[4],
+            "max_rounds": int(row[5]),
+            "closing_prompt_md": row[6],
+            "active_session_id": row[7],
+        }
+        for row in (cur.fetchall() or [])
+    }
+
+
+def _public_dialog_config(config: dict | None) -> dict | None:
+    """Return learner-visible task configuration without session metadata."""
+
+    if config is None:
+        return None
+    return {key: value for key, value in config.items() if key != "active_session_id"}

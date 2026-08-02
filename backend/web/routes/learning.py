@@ -89,6 +89,7 @@ from backend.web.routes.learning_submission_commands import (
     finalize_submission as finalize_submission,  # noqa: F401
     learning_submission_commands_router,
 )
+from backend.web.routes.learning_dialogs import learning_dialog_router
 from backend.web.routes.learning_submission_processing import (
     dev_try_process_pdf as _dev_try_process_pdf,  # noqa: F401
     validate_submission_payload as _validate_submission_payload,  # noqa: F401
@@ -114,6 +115,7 @@ learning_router.include_router(learning_upload_intents_router)
 learning_router.include_router(learning_internal_upload_router)
 learning_router.include_router(learning_submission_files_router)
 learning_router.include_router(learning_submission_commands_router)
+learning_router.include_router(learning_dialog_router)
 logger = logging.getLogger("gustav.web.learning")
 
 # Compatibility note for source-level contract tests after upload-intent route

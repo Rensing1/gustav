@@ -359,6 +359,7 @@ class TaskCreatePayload(BaseModel):
     scratch: object | None = None
     calliope: object | None = None
     filius: object | None = None
+    dialog: object | None = None
 
 
 class TaskUpdatePayload(BaseModel):
@@ -372,6 +373,7 @@ class TaskUpdatePayload(BaseModel):
     scratch: object | None = None
     calliope: object | None = None
     filius: object | None = None
+    dialog: object | None = None
 
 
 class TaskReorderPayload(BaseModel):

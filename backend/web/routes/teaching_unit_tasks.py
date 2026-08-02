@@ -13,6 +13,7 @@ from typing import Dict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
+from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_authoring, teaching_guards
 from backend.web.routes.teaching import _get_repo
 from backend.web.routes.teaching_payloads import TaskCreatePayload, TaskReorderPayload, TaskUpdatePayload
@@ -25,6 +26,8 @@ from backend.web.routes.teaching_shared import (
     _require_teacher,
 )
 from backend.web.routes.teaching_task_services import _get_tasks_service
+from backend.learning.usecases.dialogs import _message as _dialog_message, _starters as _dialog_starters
+from backend.web.routes.learning_dialogs import _public_payload as _public_dialog_payload
 
 
 teaching_unit_tasks_router = APIRouter(tags=["Teaching"])
@@ -40,8 +43,46 @@ _TASK_VALIDATION_DETAILS = {
     "invalid_scratch_config",
     "invalid_calliope_config",
     "invalid_filius_config",
+    "invalid_dialog_config",
     "invalid_task_kind_config",
 }
+
+
+def _dialog_generator():
+    from backend.learning.adapters.local_dialog import build
+
+    return build()
+
+
+def _record_preview_usage(
+    generator,
+    *,
+    unit_id: str,
+    task_id: str,
+    author_sub: str,
+    error_code: str | None = None,
+) -> None:
+    """Persist content-free preview telemetry without changing the preview result."""
+
+    pop_usage = getattr(generator, "pop_usage_events", None)
+    if not callable(pop_usage):
+        return
+    try:
+        events = list(pop_usage() or [])
+        if error_code is not None:
+            for event in events:
+                event.error_code = error_code
+        _get_repo().record_dialog_preview_usage(
+            unit_id=unit_id,
+            task_id=task_id,
+            author_id=author_sub,
+            events=events,
+        )
+    except TeachingRepositoryUnavailable:
+        raise
+    except Exception:
+        # Telemetry contains no pedagogical state and must not hide a valid preview.
+        return
 
 
 def _task_bad_request(exc: ValueError):
@@ -111,6 +152,7 @@ async def create_section_task(
             scratch=payload.scratch,
             calliope=payload.calliope,
             filius=payload.filius,
+            dialog=payload.dialog,
         )
     except LookupError:
         return _private_error({"error": "not_found"}, status_code=404)
@@ -162,6 +204,7 @@ async def update_section_task(
         "scratch",
         "calliope",
         "filius",
+        "dialog",
     ):
         if key in raw_updates:
             kwargs[key] = raw_updates[key]
@@ -174,6 +217,106 @@ async def update_section_task(
     except PermissionError:
         return _private_error({"error": "forbidden"}, status_code=403)
     return _json_private(_serialize_task(updated), status_code=200)
+
+
+@teaching_unit_tasks_router.post("/api/teaching/units/{unit_id}/tasks/{task_id}/dialog-preview")
+async def preview_dialog_task(request: Request, unit_id: str, task_id: str, payload: dict):
+    """Generate one stateless response from the latest saved configuration."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if (csrf := teaching_guards._csrf_guard(request)) is not None:
+        return csrf
+    if not _is_uuid_like(unit_id) or not _is_uuid_like(task_id):
+        return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400)
+    author_sub = _current_sub(user)
+    task = _get_repo().get_dialog_task_for_author(unit_id, task_id, author_sub)
+    if not task:
+        return _private_error({"error": "not_found"}, status_code=404)
+    operation = payload.get("operation")
+    messages = payload.get("messages")
+    if operation not in {"initial_starters", "reply"} or not isinstance(messages, list) or len(messages) > 24:
+        return _private_error({"error": "bad_request", "detail": "invalid_dialog_preview"}, status_code=400)
+    completed_turns: list[dict] = []
+    pending_student: str | None = None
+    current_student: str | None = None
+    try:
+        for item in messages:
+            if not isinstance(item, dict) or item.get("role") not in {"student", "assistant"}:
+                raise ValueError("invalid_dialog_preview")
+            content = _dialog_message(item.get("body_md"))
+            if item["role"] == "student":
+                pending_student = content
+            elif pending_student is not None:
+                completed_turns.append({"student_message": pending_student, "ai_message": content})
+                pending_student = None
+        task["turns"] = completed_turns
+        if operation == "reply":
+            current_student = _dialog_message(payload.get("student_message_md") or pending_student)
+    except ValueError as exc:
+        return _private_error({"error": "bad_request", "detail": str(exc)}, status_code=400)
+
+    generator = _dialog_generator()
+    try:
+        if operation == "initial_starters":
+            starters = _dialog_starters(generator.initial_starters(context=task))
+            result = {"reply_md": None, "sentence_starters": starters}
+        else:
+            generated = generator.partner_reply(
+                context=task,
+                turn={"student_message": current_student},
+            )
+            result = {
+                "reply_md": _dialog_message(generated.get("message")),
+                "sentence_starters": _dialog_starters(generated.get("starters")),
+            }
+        _record_preview_usage(
+            generator, unit_id=unit_id, task_id=task_id, author_sub=author_sub
+        )
+    except Exception:
+        _record_preview_usage(
+            generator,
+            unit_id=unit_id,
+            task_id=task_id,
+            author_sub=author_sub,
+            error_code="dialog_ai_unavailable",
+        )
+        return _private_error(
+            {"error": "service_unavailable", "detail": "dialog_ai_unavailable"}, status_code=503
+        )
+    return _json_private(result, status_code=200)
+
+
+@teaching_unit_tasks_router.get(
+    "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/{submission_id}/dialog"
+)
+async def get_dialog_submission_transcript(
+    request: Request,
+    course_id: str,
+    unit_id: str,
+    task_id: str,
+    student_sub: str,
+    submission_id: str,
+):
+    """Return a completed transcript without frozen internal instructions."""
+
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not all(_is_uuid_like(value) for value in (course_id, unit_id, task_id, submission_id)):
+        return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400)
+    transcript = _get_repo().get_dialog_submission_for_owner(
+        course_id=course_id,
+        unit_id=unit_id,
+        task_id=task_id,
+        student_sub=student_sub,
+        submission_id=submission_id,
+        author_id=_current_sub(user),
+    )
+    if transcript is None:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _json_private(_public_dialog_payload(transcript), status_code=200)
 
 
 @teaching_unit_tasks_router.delete("/api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}")

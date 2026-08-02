@@ -112,6 +112,7 @@ def task_row_to_dict(row: tuple) -> dict[str, Any]:
         "scratch": scratch,
         "calliope": calliope,
         "filius": filius,
+        "dialog": None,
     }
 
 

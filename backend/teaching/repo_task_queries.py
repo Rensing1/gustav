@@ -27,6 +27,145 @@ def _is_unset(value: object) -> bool:
     return value.__class__ is object
 
 
+def _dialog_config_row_to_dict(row: Sequence[object]) -> dict[str, Any]:
+    """Map a dialog config row without exposing persistence metadata."""
+
+    return {
+        "partner_name": row[1],
+        "partner_description_md": row[2],
+        "role_md": row[3],
+        "learning_goal_md": row[4],
+        "opening_message_md": row[5],
+        "response_mode": row[6],
+        "max_rounds": int(row[7]),
+        "closing_prompt_md": row[8],
+    }
+
+
+def _load_dialog_configs(cur, task_ids: Sequence[str]) -> dict[str, dict[str, Any]]:
+    """Load all dialog configs for a task list in one query (avoids N+1)."""
+
+    if not task_ids:
+        return {}
+    cur.execute(
+        """
+        select task_id::text, partner_name, partner_description_md, role_md,
+               learning_goal_md, opening_message_md, response_mode,
+               max_rounds, closing_prompt_md
+        from public.unit_task_dialog_configs
+        where task_id = any(%s::uuid[])
+        """,
+        (list(task_ids),),
+    )
+    return {str(row[0]): _dialog_config_row_to_dict(row) for row in (cur.fetchall() or [])}
+
+
+def _store_dialog_config(cur, task_id: str, config: dict[str, Any]) -> None:
+    """Persist the validated 1:1 dialog configuration in the current transaction."""
+
+    cur.execute(
+        """
+        insert into public.unit_task_dialog_configs (
+          task_id, partner_name, partner_description_md, role_md,
+          learning_goal_md, opening_message_md, response_mode,
+          max_rounds, closing_prompt_md
+        ) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        on conflict (task_id) do update set
+          partner_name = excluded.partner_name,
+          partner_description_md = excluded.partner_description_md,
+          role_md = excluded.role_md,
+          learning_goal_md = excluded.learning_goal_md,
+          opening_message_md = excluded.opening_message_md,
+          response_mode = excluded.response_mode,
+          max_rounds = excluded.max_rounds,
+          closing_prompt_md = excluded.closing_prompt_md,
+          updated_at = now()
+        """,
+        (
+            task_id,
+            config["partner_name"],
+            config["partner_description_md"],
+            config["role_md"],
+            config["learning_goal_md"],
+            config["opening_message_md"],
+            config["response_mode"],
+            config["max_rounds"],
+            config.get("closing_prompt_md"),
+        ),
+    )
+
+
+def get_dialog_task_for_author(*, dsn: str, psycopg_module, unit_id: str, task_id: str, author_id: str) -> dict[str, Any] | None:
+    """Return the latest saved dialog config for a stateless author preview."""
+
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+            cur.execute(
+                """
+                select d.task_id::text, d.partner_name, d.partner_description_md,
+                       d.role_md, d.learning_goal_md, d.opening_message_md,
+                       d.response_mode, d.max_rounds, d.closing_prompt_md,
+                       t.instruction_md, t.teacher_context_md
+                  from public.unit_task_dialog_configs d
+                  join public.unit_tasks t on t.id=d.task_id
+                 where d.task_id=%s::uuid and t.unit_id=%s::uuid and t.kind='dialog'
+                """,
+                (task_id, unit_id),
+            )
+            row = cur.fetchone()
+    if not row:
+        return None
+    config = _dialog_config_row_to_dict(row[:9])
+    config.update({"instruction_md": row[9], "teacher_context_md": row[10], "turns": []})
+    return config
+
+
+def get_dialog_submission_for_owner(*, dsn: str, psycopg_module, course_id: str, unit_id: str, task_id: str, student_sub: str, submission_id: str, author_id: str) -> dict[str, Any] | None:
+    """Return a safe completed transcript; the DB function performs owner checks."""
+
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+            cur.execute(
+                "select public.teaching_get_dialog_submission(%s::uuid,%s::uuid,%s::uuid,%s,%s::uuid)",
+                (course_id, unit_id, task_id, student_sub, submission_id),
+            )
+            row = cur.fetchone()
+    if not row or row[0] is None:
+        return None
+    parsed = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+    return dict(parsed) if isinstance(parsed, dict) else None
+
+
+def record_dialog_preview_usage(*, dsn: str, psycopg_module, unit_id: str, task_id: str, author_id: str, events: Sequence[Any]) -> None:
+    """Store content-free preview usage for an authored dialog task."""
+
+    if not events:
+        return
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+            for event in events:
+                cur.execute(
+                    """
+                    insert into public.dialog_ai_usage_events (
+                      event_key, unit_id, task_id, actor_sub, actor_role, stage,
+                      model, usage_known, input_tokens, output_tokens,
+                      total_tokens, unknown_reason, error_code
+                    ) values (%s::uuid,%s::uuid,%s::uuid,%s,'teacher','preview',%s,%s,%s,%s,%s,%s,%s)
+                    on conflict (event_key) do nothing
+                    """,
+                    (
+                        event.event_key, unit_id, task_id, author_id, event.model,
+                        event.usage_known, event.input_tokens, event.output_tokens,
+                        event.total_tokens, event.unknown_reason,
+                        getattr(event, "error_code", None),
+                    ),
+                )
+            conn.commit()
+
+
 def list_tasks_for_section_owned(*, dsn: str, psycopg_module, unit_id: str, section_id: str, author_id: str) -> List[dict]:
     """Return ordered tasks for a section authored by the caller."""
     with psycopg_module.connect(dsn) as conn:
@@ -43,7 +182,11 @@ def list_tasks_for_section_owned(*, dsn: str, psycopg_module, unit_id: str, sect
                 (unit_id, section_id),
             )
             rows = cur.fetchall() or []
-    return [_task_row_to_dict(r) for r in rows]
+            tasks = [_task_row_to_dict(row) for row in rows]
+            configs = _load_dialog_configs(cur, [task["id"] for task in tasks if task["kind"] == "dialog"])
+            for task in tasks:
+                task["dialog"] = configs.get(task["id"])
+    return tasks
 
 def create_task(
     *,
@@ -61,6 +204,7 @@ def create_task(
     kind: str,
     h5p_content_id: str | None,
     h5p_display_options: dict[str, Any],
+    dialog_config: dict[str, Any] | None = None,
 ) -> dict:
     """Create a task at the next position within the section."""
     if not instruction_md or not isinstance(instruction_md, str):
@@ -122,8 +266,14 @@ def create_task(
             row = cur.fetchone()
             if not row:
                 raise RuntimeError("unit_tasks insert returned no row")
+            task = _task_row_to_dict(row)
+            if kind == "dialog":
+                if dialog_config is None:
+                    raise ValueError("invalid_dialog_config")
+                _store_dialog_config(cur, task["id"], dialog_config)
+                task["dialog"] = dict(dialog_config)
             conn.commit()
-    return _task_row_to_dict(row)
+    return task
 
 def update_task(
     *,
@@ -142,6 +292,7 @@ def update_task(
     kind=_UNSET,
     h5p_content_id=_UNSET,
     h5p_display_options=_UNSET,
+    dialog_config=_UNSET,
 ) -> Optional[dict]:
     """Update mutable task fields when owned by the caller."""
     with psycopg_module.connect(dsn) as conn:
@@ -189,45 +340,54 @@ def update_task(
                 params.append(
                     json_adapter(h5p_display_options) if json_adapter is not None else json.dumps(h5p_display_options)
                 )
-            if not updates:
-                conn.rollback()
-                return _task_row_to_dict(existing)
-            try:
-                _sql = psycopg_module.sql
+            row = existing
+            if updates:
+                try:
+                    _sql = psycopg_module.sql
 
-                assignments = [_sql.SQL("{} = %s").format(_sql.Identifier(col)) for col in updates]
-                params.extend([task_id, unit_id, section_id])
-                stmt = _sql.SQL(
-                    f"""
-                    update public.unit_tasks
-                    set {{assign}}
-                    where id = %s
-                      and unit_id = %s
-                      and section_id = %s
-                    returning {_TASK_COLUMNS_SQL}
-                    """
-                ).format(assign=_sql.SQL(", ").join(assignments))
-                cur.execute(stmt, params)
-            except Exception:
-                params = list(params[:-3]) + [task_id, unit_id, section_id]
-                cols = ", ".join([f"{col} = %s" for col in updates])
-                cur.execute(
-                    f"""
-                    update public.unit_tasks
-                    set {cols}
-                    where id = %s
-                      and unit_id = %s
-                      and section_id = %s
-                    returning {_TASK_COLUMNS_SQL}
-                    """,
-                    params,
-                )
-            row = cur.fetchone()
-            if not row:
-                conn.rollback()
-                return None
+                    assignments = [_sql.SQL("{} = %s").format(_sql.Identifier(col)) for col in updates]
+                    params.extend([task_id, unit_id, section_id])
+                    stmt = _sql.SQL(
+                        f"""
+                        update public.unit_tasks
+                        set {{assign}}
+                        where id = %s
+                          and unit_id = %s
+                          and section_id = %s
+                        returning {_TASK_COLUMNS_SQL}
+                        """
+                    ).format(assign=_sql.SQL(", ").join(assignments))
+                    cur.execute(stmt, params)
+                except Exception:
+                    params = list(params[:-3]) + [task_id, unit_id, section_id]
+                    cols = ", ".join([f"{col} = %s" for col in updates])
+                    cur.execute(
+                        f"""
+                        update public.unit_tasks
+                        set {cols}
+                        where id = %s
+                          and unit_id = %s
+                          and section_id = %s
+                        returning {_TASK_COLUMNS_SQL}
+                        """,
+                        params,
+                    )
+                row = cur.fetchone()
+                if not row:
+                    conn.rollback()
+                    return None
+            task = _task_row_to_dict(row)
+            if not _is_unset(dialog_config):
+                if dialog_config is None:
+                    cur.execute("delete from public.unit_task_dialog_configs where task_id = %s", (task_id,))
+                else:
+                    _store_dialog_config(cur, task_id, dialog_config)
+            elif not _is_unset(kind) and kind != "dialog":
+                cur.execute("delete from public.unit_task_dialog_configs where task_id = %s", (task_id,))
+            if task["kind"] == "dialog":
+                task["dialog"] = _load_dialog_configs(cur, [task_id]).get(task_id)
             conn.commit()
-    return _task_row_to_dict(row)
+    return task
 
 def delete_task(*, dsn: str, psycopg_module, unit_id: str, section_id: str, task_id: str, author_id: str) -> bool:
     """Delete a task and resequence remaining positions."""

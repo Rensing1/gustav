@@ -433,6 +433,74 @@ def _process_job(
     conn.commit()
 
     # ---------------------------------------------------------------------
+    # Dialog tasks: keep learner performance and AI context typed separately.
+    # ---------------------------------------------------------------------
+    if analysis_mode == "dialog":
+        try:
+            analyze_dialog = getattr(feedback_adapter, "analyze_dialog", None)
+            if not callable(analyze_dialog):
+                raise FeedbackPermanentError("missing_dialog_feedback_adapter")
+            feedback_result = analyze_dialog(
+                student_performance=dict(payload.get("student_performance") or {}),
+                conversation_context=dict(payload.get("conversation_context") or {}),
+                criteria=list(payload.get("criteria") or []),
+                instruction_md=str(instruction_md or ""),
+            )
+        except FeedbackPermanentError as exc:
+            _set_current_sub(conn, student_sub)
+            _persist_ai_usage_events(
+                conn=conn,
+                submission_id=job.submission_id,
+                usage_events=_usage_events_from_exception(exc),
+            )
+            _handle_feedback_error(
+                conn=conn,
+                job=job,
+                submission_id=job.submission_id,
+                now=now,
+                message=str(exc),
+                error_code=_feedback_permanent_error_code(exc),
+                transient=False,
+            )
+            conn.commit()
+            return
+        except FeedbackTransientError as exc:
+            _set_current_sub(conn, student_sub)
+            _persist_ai_usage_events(
+                conn=conn,
+                submission_id=job.submission_id,
+                usage_events=_usage_events_from_exception(exc),
+            )
+            _handle_feedback_error(
+                conn=conn,
+                job=job,
+                submission_id=job.submission_id,
+                now=now,
+                message=str(exc),
+                transient=True,
+            )
+            conn.commit()
+            return
+
+        _set_current_sub(conn, student_sub)
+        _persist_ai_usage_events(
+            conn=conn,
+            submission_id=job.submission_id,
+            usage_events=list(getattr(feedback_result, "usage_events", []) or []),
+        )
+        _update_submission_completed(
+            conn=conn,
+            submission_id=job.submission_id,
+            text_md=None,
+            analysis_json=feedback_result.analysis_json,
+            feedback_md=feedback_result.feedback_md,
+        )
+        telemetry.increment_counter("ai_worker_processed_total", status="completed")
+        _delete_job(conn, job_id=job.id)
+        conn.commit()
+        return
+
+    # ---------------------------------------------------------------------
     # Visual tasks: evaluate directly from image/PDF (no OCR pipeline)
     # ---------------------------------------------------------------------
     if analysis_mode == "visual_direct":
@@ -728,8 +796,10 @@ def _resolve_analysis_mode(
         payloads, persisted metadata, and legacy fallbacks.
     """
     explicit = str(payload.get("analysis_mode") or internal_metadata.get("analysis_mode") or "").strip().lower()
-    if explicit in {"text_direct", "visual_direct", "ocr_text"}:
+    if explicit in {"text_direct", "visual_direct", "ocr_text", "dialog"}:
         return explicit
+    if submission_kind == "dialog" or task_kind == "dialog":
+        return "dialog"
     if submission_kind == "text":
         return "text_direct"
     if task_kind in {"native", "visual"}:

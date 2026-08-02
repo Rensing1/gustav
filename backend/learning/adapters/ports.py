@@ -37,6 +37,7 @@ class TokenUsageEvent:
         usage_known: Whether token counters are known for this response.
         input_tokens/output_tokens/total_tokens: Optional provider counters.
         unknown_reason: Stable technical code when usage is unknown.
+        error_code: Stable content-free code when the model call failed.
     """
 
     event_key: str
@@ -49,6 +50,7 @@ class TokenUsageEvent:
     output_tokens: int | None = None
     total_tokens: int | None = None
     unknown_reason: str | None = None
+    error_code: str | None = None
 
 
 @dataclass
@@ -95,6 +97,16 @@ class FeedbackAdapterProtocol(Protocol):
     """Feedback adapter generates formative feedback for Markdown text."""
 
     def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
+        ...
+
+    def analyze_dialog(
+        self,
+        *,
+        student_performance: dict,
+        conversation_context: dict,
+        criteria: Sequence[str],
+        instruction_md: str,
+    ) -> FeedbackResult:
         ...
 
 

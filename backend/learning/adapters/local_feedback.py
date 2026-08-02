@@ -428,6 +428,31 @@ class _LocalFeedbackAdapter:
         )
         return self._visual_analysis_lm
 
+    def analyze_dialog(
+        self,
+        *,
+        student_performance: dict,
+        conversation_context: dict,
+        criteria: Sequence[str],
+        instruction_md: str,
+    ):
+        """Assess learner contributions separately from AI conversation context."""
+
+        try:
+            from backend.learning.adapters.dspy.dialog_assessment_program import analyze_dialog
+
+            return analyze_dialog(
+                student_performance=student_performance,
+                conversation_context=conversation_context,
+                criteria=criteria,
+                instruction_md=instruction_md,
+                lm=self._get_text_analysis_lm(),
+            )
+        except (FeedbackPermanentError, FeedbackTransientError):
+            raise
+        except Exception as exc:
+            _raise_feedback_error_for_exception(exc, default_transient_code="feedback_failed")
+
     def _get_visual_synthesis_lm(self):  # type: ignore[no-untyped-def]
         if self._visual_synthesis_lm is not None:
             return self._visual_synthesis_lm

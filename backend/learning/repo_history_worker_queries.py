@@ -97,7 +97,8 @@ def list_submissions(
                        to_char(feedback_last_attempt_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                        feedback_last_error,
                        to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                       to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
+                       to_char(completed_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                       dialog_session_id::text
                   from public.learning_submissions
                  where course_id = %s
                    and task_id = %s
@@ -109,7 +110,12 @@ def list_submissions(
             )
             rows = cur.fetchall()
 
-    return [repo._row_to_submission(row) for row in rows]
+    submissions = []
+    for row in rows:
+        submission = repo._row_to_submission(row[:21])
+        submission["dialog_session_id"] = row[21]
+        submissions.append(submission)
+    return submissions
 
 def get_task_kind_for_student(
     repo,

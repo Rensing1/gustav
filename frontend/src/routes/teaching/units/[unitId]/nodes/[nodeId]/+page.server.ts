@@ -215,6 +215,8 @@ function taskPayloadFromForm(
   const dueAtRaw = asText(formData.get("due_at"));
   const maxAttemptsRaw = asText(formData.get("max_attempts"));
   const h5pContentId = asText(formData.get("h5p_content_id"));
+  const dialogMaxRoundsRaw = asText(formData.get("dialog_max_rounds")) || "8";
+  const dialogMaxRounds = Number.parseInt(dialogMaxRoundsRaw, 10);
 
   const values = {
     task_kind: taskKind,
@@ -223,7 +225,15 @@ function taskPayloadFromForm(
     teacher_context_md: teacherContextMdRaw,
     due_at: dueAtRaw,
     max_attempts: maxAttemptsRaw,
-    h5p_content_id: h5pContentId
+    h5p_content_id: h5pContentId,
+    dialog_partner_name: asBody(formData.get("dialog_partner_name")),
+    dialog_partner_description_md: asBody(formData.get("dialog_partner_description_md")),
+    dialog_role_md: asBody(formData.get("dialog_role_md")),
+    dialog_learning_goal_md: asBody(formData.get("dialog_learning_goal_md")),
+    dialog_opening_message_md: asBody(formData.get("dialog_opening_message_md")),
+    dialog_response_mode: asText(formData.get("dialog_response_mode")) || "free_text",
+    dialog_max_rounds: dialogMaxRoundsRaw,
+    dialog_closing_prompt_md: asBody(formData.get("dialog_closing_prompt_md"))
   };
 
   if (taskKind !== "h5p" && !instructionMd) {
@@ -238,6 +248,9 @@ function taskPayloadFromForm(
   const maxAttempts = parseOptionalPositiveInt(maxAttemptsRaw);
   if (maxAttempts === INVALID_NUMBER) {
     return { ok: false, error: "Bitte gib eine gültige Anzahl an Versuchen ein.", values };
+  }
+  if (taskKind === "dialog" && (!Number.isInteger(dialogMaxRounds) || dialogMaxRounds < 1 || dialogMaxRounds > 12)) {
+    return { ok: false, error: "Bitte wähle zwischen 1 und 12 Dialogrunden.", values };
   }
 
   const payload: Record<string, unknown> = {
@@ -261,6 +274,17 @@ function taskPayloadFromForm(
     payload.calliope = {};
   } else if (taskKind === "filius") {
     payload.filius = {};
+  } else if (taskKind === "dialog") {
+    payload.dialog = {
+      partner_name: asText(formData.get("dialog_partner_name")),
+      partner_description_md: asBody(formData.get("dialog_partner_description_md")).trim(),
+      role_md: asBody(formData.get("dialog_role_md")).trim(),
+      learning_goal_md: asBody(formData.get("dialog_learning_goal_md")).trim(),
+      opening_message_md: asBody(formData.get("dialog_opening_message_md")).trim(),
+      response_mode: asText(formData.get("dialog_response_mode")) || "free_text",
+      max_rounds: dialogMaxRounds,
+      closing_prompt_md: asBody(formData.get("dialog_closing_prompt_md")).trim() || null
+    };
   }
 
   return { ok: true, payload, values };

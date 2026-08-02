@@ -4,7 +4,7 @@ import type { PageServerLoad } from "./$types";
 
 import { requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
-import type { LiveCourseUnitsView, LiveDetailSheetView, LiveSummaryPayload } from "$lib/types/home";
+import type { LiveCourseUnitsView, LiveDetailSheetView, LiveDialogTranscript, LiveSummaryPayload } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 import { buildLivePageHref, normalizeLiveSelection } from "./page-state";
 
@@ -87,6 +87,18 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
         `/api/live/views/courses/${selectedCourseId}/units/${selectedUnitId}/detail-sheet?${query.toString()}`,
         { authRedirectPath }
       );
+      if (detail.submission?.kind === "dialog") {
+        const transcript = await requireBackendJson<LiveDialogTranscript>(
+          fetch,
+          cookies,
+          `/api/teaching/courses/${encodeURIComponent(selectedCourseId)}/units/${encodeURIComponent(selectedUnitId)}/tasks/${encodeURIComponent(normalizedSelection.taskId)}/students/${encodeURIComponent(normalizedSelection.studentSub)}/submissions/${encodeURIComponent(detail.submission.id)}/dialog`,
+          { authRedirectPath }
+        );
+        detail = {
+          ...detail,
+          submission: { ...detail.submission, dialog: transcript }
+        };
+      }
     }
   }
 

@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
   import { enhance } from "$app/forms";
   import H5PTaskPlayer from "$lib/components/H5PTaskPlayer.svelte";
+  import LearningDialogWorkspace from "$lib/components/learning-unit/LearningDialogWorkspace.svelte";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
@@ -616,7 +617,9 @@
               <p class="workspace-note">{feedbackPendingMessage()}</p>
             {/if}
 
-            {#if task.kind === "h5p"}
+            {#if task.kind === "dialog"}
+              <LearningDialogWorkspace {courseId} {task} onCompleted={onProgressPersisted} />
+            {:else if task.kind === "h5p"}
               {#if task.h5p?.content_id}
                 <H5PTaskPlayer {courseId} taskId={task.id} contentId={task.h5p.content_id} {onProgressPersisted} />
               {:else}
@@ -867,7 +870,9 @@
 
               <div class="learning-task-submission-summary__panel" role="tabpanel" aria-label={summaryPanelLabel(activeSummaryTab)}>
                 {#if activeSummaryTab === "submission"}
-                  {#if latestSubmission() && submittedArtifact()}
+                  {#if task.kind === "dialog" && latestSubmission()?.dialog_session_id}
+                    <LearningDialogWorkspace {courseId} {task} existingSessionId={latestSubmission()?.dialog_session_id ?? null} readOnly={true} />
+                  {:else if latestSubmission() && submittedArtifact()}
                     <LearningSubmissionArtifactView submission={latestSubmissionOrThrow()} />
                   {:else if latestSubmission() && latestSubmissionOrThrow().text_body}
                     <div class="markdown-prose">

@@ -213,7 +213,7 @@ export type TeacherUnitNodeEditorTask = {
   due_at?: string | null;
   max_attempts?: number | null;
   position: number;
-  kind: "native" | "h5p" | "visual" | "scratch" | "calliope" | "filius";
+  kind: "native" | "h5p" | "visual" | "scratch" | "calliope" | "filius" | "dialog";
   h5p?: {
     content_id?: string | null;
     display_options?: Record<string, unknown> | null;
@@ -222,6 +222,16 @@ export type TeacherUnitNodeEditorTask = {
   scratch?: Record<string, never> | null;
   calliope?: Record<string, never> | null;
   filius?: Record<string, never> | null;
+  dialog?: {
+    partner_name: string;
+    partner_description_md: string;
+    role_md: string;
+    learning_goal_md: string;
+    opening_message_md: string;
+    response_mode: "free_text" | "hybrid";
+    max_rounds: number;
+    closing_prompt_md?: string | null;
+  } | null;
 };
 
 export type TeacherUnitWorkspaceSelectionSection = {
@@ -518,6 +528,29 @@ export type LiveDetailTask = {
   href: string;
 };
 
+export type LiveDialogTranscript = {
+  id: string;
+  status: "completed";
+  round_count: number;
+  dialog: {
+    partner_name: string;
+    partner_description_md: string;
+    opening_message_md: string;
+    response_mode: "free_text" | "hybrid";
+    max_rounds: number;
+    closing_prompt_md?: string | null;
+  };
+  turns: Array<{
+    id: string;
+    round_nr: number;
+    student_message_md: string;
+    used_sentence_starter_md?: string | null;
+    used_sentence_starter_source?: string | null;
+    assistant_reply_md: string;
+  }>;
+  closing_answer_md?: string | null;
+};
+
 export type LiveDetailSubmission = {
   id: string;
   task_id: string;
@@ -546,6 +579,7 @@ export type LiveDetailSubmission = {
     }>;
   } | null;
   files?: Array<{ mime?: string; size?: number; url?: string }>;
+  dialog?: LiveDialogTranscript | null;
 };
 
 export type LiveDetailSheetView = {

@@ -33,11 +33,20 @@ export type LearningTask = {
   latest_submission_created_at?: string | null;
   latest_final_submission_at?: string | null;
   position?: number | null;
-  kind: "native" | "h5p" | "visual" | "scratch" | "calliope" | "filius";
+  kind: "native" | "h5p" | "visual" | "scratch" | "calliope" | "filius" | "dialog";
   h5p?: {
     content_id?: string | null;
   } | null;
   max_attempts?: number | null;
+  active_dialog_session_id?: string | null;
+  dialog?: {
+    partner_name: string;
+    partner_description_md: string;
+    opening_message_md: string;
+    response_mode: "free_text" | "hybrid";
+    max_rounds: number;
+    closing_prompt_md?: string | null;
+  } | null;
 };
 
 export type LearningSection = {
@@ -61,7 +70,8 @@ export type LearningSubmission = {
   }>;
   id: string;
   attempt_nr: number;
-  kind: "text" | "image" | "file" | "h5p";
+  kind: "text" | "image" | "file" | "h5p" | "dialog";
+  dialog_session_id?: string | null;
   created_at: string;
   analysis_status: "pending" | "extracted" | "completed" | "failed";
   error_code?: string | null;

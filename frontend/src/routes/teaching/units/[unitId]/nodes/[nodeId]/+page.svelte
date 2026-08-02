@@ -3,6 +3,7 @@
   import { tick } from "svelte";
 
   import { prepareBrowserStorageUpload } from "$lib/utils/browser-storage-upload";
+  import { renderMarkdown } from "$lib/utils/markdown";
   import TeacherH5PTaskEditor from "$lib/components/TeacherH5PTaskEditor.svelte";
   import TeacherNodeEditorProperties from "$lib/components/teacher-node-editor/TeacherNodeEditorProperties.svelte";
   import TeacherNodeEditorSection from "$lib/components/teacher-node-editor/TeacherNodeEditorSection.svelte";
@@ -41,6 +42,14 @@
     due_at: string;
     max_attempts: string;
     h5p_content_id: string;
+    dialog_partner_name: string;
+    dialog_partner_description_md: string;
+    dialog_role_md: string;
+    dialog_learning_goal_md: string;
+    dialog_opening_message_md: string;
+    dialog_response_mode: string;
+    dialog_max_rounds: string;
+    dialog_closing_prompt_md: string;
   };
 
   function plainEditor(editor: TeacherUnitNodeEditorView): TeacherUnitNodeEditorView {
@@ -98,7 +107,7 @@
   let showCreateMaterial = $state(false);
   let showCreateTask = $state(false);
   let createMaterialKind = $state<"markdown" | "file">("markdown");
-  let createTaskKind = $state<"native" | "h5p" | "visual" | "scratch" | "calliope" | "filius">("native");
+  let createTaskKind = $state<"native" | "h5p" | "visual" | "scratch" | "calliope" | "filius" | "dialog">("native");
   let handledForm: ActionData | undefined = undefined;
   let createMaterialCard = $state<HTMLElement | null>(null);
   let createTaskCard = $state<HTMLElement | null>(null);
@@ -107,6 +116,27 @@
   let createMaterialClientError = $state<string | null>(null);
   let createMaterialUploadPending = $state(false);
   let editorMessage = $state<{ tone: "success"; text: string } | null>(null);
+  let dialogPreviewInputs = $state<Record<string, string>>({});
+  let dialogPreviews = $state<Record<string, { pending: boolean; error: string | null; reply: string | null; starters: string[] }>>({});
+
+  async function previewDialog(task: TeacherUnitNodeEditorTask) {
+    const studentMessage = (dialogPreviewInputs[task.id] ?? "").trim();
+    if (!studentMessage) return;
+    dialogPreviews[task.id] = { pending: true, error: null, reply: null, starters: [] };
+    try {
+      const response = await fetch(`/api/teaching/units/${encodeURIComponent(editorState.unit.id)}/tasks/${encodeURIComponent(task.id)}/dialog-preview`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ operation: "reply", messages: [], student_message_md: studentMessage })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.detail || "Vorschau nicht verfügbar");
+      dialogPreviews[task.id] = { pending: false, error: null, reply: payload.reply_md ?? null, starters: payload.sentence_starters ?? [] };
+    } catch (caught) {
+      dialogPreviews[task.id] = { pending: false, error: caught instanceof Error ? caught.message : "Vorschau nicht verfügbar", reply: null, starters: [] };
+    }
+  }
 
   const enhanceEditorForm = () => {
     return async ({ update }: { update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void> }) => {
@@ -292,6 +322,8 @@
         return "Calliope";
       case "filius":
         return "Filius";
+      case "dialog":
+        return "KI-Dialog";
       default:
         return "Aufgabe";
     }
@@ -729,6 +761,7 @@
               <option value="scratch">Scratch</option>
               <option value="calliope">Calliope</option>
               <option value="filius">Filius</option>
+              <option value="dialog">KI-Dialog</option>
             </select>
           </label>
 
@@ -758,6 +791,22 @@
               <span>Lehrkraft-Kontext</span>
               <textarea name="teacher_context_md" rows="4">{createTaskValues().teacher_context_md ?? ""}</textarea>
             </label>
+
+            {#if createTaskKind === "dialog"}
+              <p class="workspace-note">Interne Rolle, Lernziel und Lehrkraft-Kontext werden Lernenden nicht angezeigt.</p>
+              <div class="workspace-node-editor-grid">
+                <label class="workspace-field"><span>Name des KI-Partners</span><input name="dialog_partner_name" maxlength="120" value={createTaskValues().dialog_partner_name ?? ""} /></label>
+                <label class="workspace-field"><span>Antwortmodus</span><select name="dialog_response_mode"><option value="free_text">Freitext</option><option value="hybrid">Freitext mit Satzanfängen</option></select></label>
+              </div>
+              <label class="workspace-field"><span>Sichtbare Kurzbeschreibung</span><textarea name="dialog_partner_description_md" rows="3">{createTaskValues().dialog_partner_description_md ?? ""}</textarea></label>
+              <label class="workspace-field"><span>Interne Rolleninstruktion</span><textarea name="dialog_role_md" rows="4">{createTaskValues().dialog_role_md ?? ""}</textarea></label>
+              <label class="workspace-field"><span>Internes Lernziel</span><textarea name="dialog_learning_goal_md" rows="3">{createTaskValues().dialog_learning_goal_md ?? ""}</textarea></label>
+              <label class="workspace-field"><span>Eröffnungsnachricht</span><textarea name="dialog_opening_message_md" rows="3">{createTaskValues().dialog_opening_message_md ?? ""}</textarea></label>
+              <div class="workspace-node-editor-grid">
+                <label class="workspace-field"><span>Max. Schülerantworten</span><input name="dialog_max_rounds" min="1" max="12" type="number" value={createTaskValues().dialog_max_rounds ?? "8"} /></label>
+              </div>
+              <label class="workspace-field"><span>Optionaler Abschlussauftrag</span><textarea name="dialog_closing_prompt_md" rows="3">{createTaskValues().dialog_closing_prompt_md ?? ""}</textarea></label>
+            {/if}
           {/if}
 
           <div class="workspace-node-editor-grid">
@@ -860,6 +909,29 @@
                       <span>Lehrkraft-Kontext</span>
                       <textarea name="teacher_context_md" rows="4">{taskTeacherContextValue(task)}</textarea>
                     </label>
+
+                    {#if task.kind === "dialog"}
+                      <p class="workspace-note">Interne Rolle, Lernziel und Lehrkraft-Kontext werden Lernenden nicht angezeigt. Die Vorschau nutzt die zuletzt gespeicherte Fassung.</p>
+                      <div class="workspace-node-editor-grid">
+                        <label class="workspace-field"><span>Name des KI-Partners</span><input name="dialog_partner_name" maxlength="120" value={taskValues(task).dialog_partner_name ?? task.dialog?.partner_name ?? ""} /></label>
+                        <label class="workspace-field"><span>Antwortmodus</span><select name="dialog_response_mode" value={taskValues(task).dialog_response_mode ?? task.dialog?.response_mode ?? "free_text"}><option value="free_text">Freitext</option><option value="hybrid">Freitext mit Satzanfängen</option></select></label>
+                      </div>
+                      <label class="workspace-field"><span>Sichtbare Kurzbeschreibung</span><textarea name="dialog_partner_description_md" rows="3">{taskValues(task).dialog_partner_description_md ?? task.dialog?.partner_description_md ?? ""}</textarea></label>
+                      <label class="workspace-field"><span>Interne Rolleninstruktion</span><textarea name="dialog_role_md" rows="4">{taskValues(task).dialog_role_md ?? task.dialog?.role_md ?? ""}</textarea></label>
+                      <label class="workspace-field"><span>Internes Lernziel</span><textarea name="dialog_learning_goal_md" rows="3">{taskValues(task).dialog_learning_goal_md ?? task.dialog?.learning_goal_md ?? ""}</textarea></label>
+                      <label class="workspace-field"><span>Eröffnungsnachricht</span><textarea name="dialog_opening_message_md" rows="3">{taskValues(task).dialog_opening_message_md ?? task.dialog?.opening_message_md ?? ""}</textarea></label>
+                      <label class="workspace-field"><span>Max. Schülerantworten</span><input name="dialog_max_rounds" min="1" max="12" type="number" value={taskValues(task).dialog_max_rounds ?? String(task.dialog?.max_rounds ?? 8)} /></label>
+                      <label class="workspace-field"><span>Optionaler Abschlussauftrag</span><textarea name="dialog_closing_prompt_md" rows="3">{taskValues(task).dialog_closing_prompt_md ?? task.dialog?.closing_prompt_md ?? ""}</textarea></label>
+                      <section class="workspace-note" aria-label="Dialogvorschau">
+                        <strong>Gespeicherte Konfiguration testen</strong>
+                        <p>Die Vorschau wird nicht gespeichert. Speichere Änderungen zuerst.</p>
+                        <label class="workspace-field"><span>Probeantwort eines Schülers</span><textarea rows="3" value={dialogPreviewInputs[task.id] ?? ""} oninput={(event) => (dialogPreviewInputs[task.id] = event.currentTarget.value)}></textarea></label>
+                        <button class="workspace-link-action" type="button" disabled={dialogPreviews[task.id]?.pending || !(dialogPreviewInputs[task.id] ?? "").trim()} onclick={() => previewDialog(task)}>KI-Antwort testen</button>
+                        {#if dialogPreviews[task.id]?.error}<p class="workspace-note workspace-note--error">{dialogPreviews[task.id].error}</p>{/if}
+                        {#if dialogPreviews[task.id]?.reply}<div class="markdown-prose">{@html renderMarkdown(dialogPreviews[task.id].reply ?? "")}</div>{/if}
+                        {#if dialogPreviews[task.id]?.starters.length}<p>Satzanfänge: {dialogPreviews[task.id].starters.join(" · ")}</p>{/if}
+                      </section>
+                    {/if}
 
                     {#if task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius"}
                       <p class="workspace-note">

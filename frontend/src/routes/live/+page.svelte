@@ -3,7 +3,7 @@
   import { goto } from "$app/navigation";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import type { LearningSubmission } from "$lib/types/learning";
-  import type { LiveDetailSubmission, LiveSummaryPayload, LiveUnitDashboardRow, LiveUnitDashboardView } from "$lib/types/home";
+  import type { LiveDetailSubmission, LiveDialogTranscript, LiveSummaryPayload, LiveUnitDashboardRow, LiveUnitDashboardView } from "$lib/types/home";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -239,7 +239,24 @@
       throw new Error(`live_detail_fetch_failed_${response.status}`);
     }
     const payload = (await response.json()) as { submission?: LiveDetailSubmission | null };
-    return payload.submission ?? null;
+    const submission = payload.submission ?? null;
+    if (!submission || submission.kind !== "dialog") {
+      return submission;
+    }
+    const transcriptResponse = await fetch(
+      `/api/teaching/courses/${encodeURIComponent(selection.courseId)}/units/${encodeURIComponent(selection.unitId)}/tasks/${encodeURIComponent(selection.taskId)}/students/${encodeURIComponent(selection.studentSub)}/submissions/${encodeURIComponent(submission.id)}/dialog`,
+      { cache: "no-store", credentials: "include" }
+    );
+    if (handleBrowserAuthRecovery(transcriptResponse)) {
+      throw new Error("auth_recovery_started");
+    }
+    if (!transcriptResponse.ok) {
+      throw new Error(`dialog_transcript_fetch_failed_${transcriptResponse.status}`);
+    }
+    return {
+      ...submission,
+      dialog: (await transcriptResponse.json()) as LiveDialogTranscript
+    };
   }
 
   async function fetchLiveDeltaState(args: { courseId: string; unitId: string; cursor: string }) {
@@ -724,7 +741,31 @@
                   {#if activePanelTab === "submission"}
                     <section class="live-panel-block">
                       <p class="workspace-label">Abgabe</p>
-                      {#if selectedArtifact}
+                      {#if selectedSubmission.kind === "dialog" && selectedSubmission.dialog}
+                        <div class="live-dialog-transcript">
+                          <article class="live-dialog-message live-dialog-message--ai">
+                            <strong>{selectedSubmission.dialog.dialog.partner_name}</strong>
+                            <div class="markdown-prose">{@html renderMarkdown(selectedSubmission.dialog.dialog.opening_message_md)}</div>
+                          </article>
+                          {#each selectedSubmission.dialog.turns as turn}
+                            <article class="live-dialog-message live-dialog-message--student">
+                              <strong>Schülerbeitrag {turn.round_nr}</strong>
+                              <div class="markdown-prose">{@html renderMarkdown(turn.student_message_md)}</div>
+                              {#if turn.used_sentence_starter_md}<small>Mit Satzanfang-Hilfe: {turn.used_sentence_starter_md}</small>{/if}
+                            </article>
+                            <article class="live-dialog-message live-dialog-message--ai">
+                              <strong>{selectedSubmission.dialog.dialog.partner_name}</strong>
+                              <div class="markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div>
+                            </article>
+                          {/each}
+                          {#if selectedSubmission.dialog.closing_answer_md}
+                            <article class="live-dialog-message live-dialog-message--closing">
+                              <strong>Abschlussantwort</strong>
+                              <div class="markdown-prose">{@html renderMarkdown(selectedSubmission.dialog.closing_answer_md)}</div>
+                            </article>
+                          {/if}
+                        </div>
+                      {:else if selectedArtifact}
                         <LearningSubmissionArtifactView submission={artifactSubmission} />
                       {:else if isSubmissionSchemaPayload(selectedSubmission.text_body)}
                         <pre class="learning-task-submission-summary__plain">{stripSubmissionSchemaHeader(selectedSubmission.text_body)}</pre>
@@ -975,6 +1016,24 @@
   .live-panel-summary,
   .live-panel-summary__panel {
     min-width: 0;
+  }
+
+  .live-dialog-transcript {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .live-dialog-message {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--color-line, rgba(27, 27, 27, 0.14));
+    background: var(--color-bg-muted, #f3f3f4);
+  }
+
+  .live-dialog-message--student,
+  .live-dialog-message--closing {
+    border-left: 3px solid var(--color-accent, #ff512f);
   }
 
   .live-panel__copy h3,

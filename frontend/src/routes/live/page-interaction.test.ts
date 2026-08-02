@@ -93,11 +93,22 @@ describe("live workspace controller", () => {
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
     expect(routeSource).toContain('import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";');
-    expect(routeSource.match(/handleBrowserAuthRecovery\(response\)/g)?.length).toBe(3);
+    expect(routeSource.match(/handleBrowserAuthRecovery\(/g)?.length).toBe(4);
     expect(routeSource).toContain('throw new Error("auth_recovery_started")');
     expect(routeSource).not.toContain("live_summary_fetch_failed_401");
     expect(routeSource).not.toContain("live_detail_fetch_failed_401");
     expect(routeSource).not.toContain("live_delta_fetch_failed_401");
+  });
+
+  it("loads and renders the safe transcript for a dialog submission", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const serverSource = readFileSync(path.resolve(currentDir, "+page.server.ts"), "utf8");
+
+    expect(routeSource).toContain("/submissions/${encodeURIComponent(submission.id)}/dialog");
+    expect(routeSource).toContain("Mit Satzanfang-Hilfe");
+    expect(routeSource).toContain("Abschlussantwort");
+    expect(serverSource).toContain("/submissions/${encodeURIComponent(detail.submission.id)}/dialog");
   });
 
   it("derives row and task links locally from the current live selection", () => {

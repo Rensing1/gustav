@@ -214,11 +214,15 @@ def test_visual_smoke_target_is_full_prod_like_not_default_verify() -> None:
 
     help_text = MAKEFILE.read_text(encoding="utf-8")
     visual_body = _target_body("test-visual-smoke")
+    update_body = _target_body("update-visual-baselines")
     full_prod_body = _target_body("test-full-prod-like")
     verify_body = _target_body("verify")
 
     assert "test-visual-smoke" in help_text
+    assert "update-visual-baselines" in help_text
     assert "npm run test:e2e" in visual_body
+    assert "@design-system" in update_body
+    assert "--update-snapshots" in update_body
     assert "$(MAKE) test-visual-smoke" in full_prod_body
     assert "$(MAKE) test-visual-smoke" not in verify_body
 

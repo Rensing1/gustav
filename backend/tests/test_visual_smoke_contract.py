@@ -6,16 +6,28 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_frontend_visual_smoke_specs_are_tagged_and_not_snapshot_based() -> None:
+def test_frontend_visual_smoke_specs_include_approved_design_snapshots() -> None:
     e2e_dir = REPO_ROOT / "frontend" / "e2e"
     specs = sorted(e2e_dir.glob("*.spec.ts"))
     visual_specs = [path for path in specs if "@visual-smoke" in path.read_text(encoding="utf-8")]
 
     assert visual_specs, "Expected at least one Playwright spec tagged with @visual-smoke"
 
-    combined = "\n".join(path.read_text(encoding="utf-8") for path in visual_specs)
-    assert "toHaveScreenshot" not in combined
-    assert "toMatchSnapshot" not in combined
+    design_spec = e2e_dir / "design-system.spec.ts"
+    design_source = design_spec.read_text(encoding="utf-8")
+    assert "@design-system" in design_source
+    assert "toHaveScreenshot" in design_source
+    assert "document.fonts.ready" in design_source
+    assert 'animations: "disabled"' in design_source
+    assert "toMatchSnapshot" not in design_source
+
+    snapshot_dir = e2e_dir / "design-system.spec.ts-snapshots"
+    expected_snapshots = {
+        f"ui-lab-{theme}-{viewport}-chromium-linux.png"
+        for theme in ("light", "dark")
+        for viewport in ("desktop", "mobile")
+    }
+    assert {path.name for path in snapshot_dir.glob("*.png")} == expected_snapshots
 
 
 def test_visual_smoke_support_helpers_cover_auth_seed_and_layout_sanity() -> None:

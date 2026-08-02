@@ -211,8 +211,11 @@ Aktueller Status:
 - Teil von `make test-full-prod-like`.
 - Nicht Teil von `make verify`, bis Stabilität und Laufzeit für lokale Standardverifikation belegt sind.
 - Läuft gegen das produktionsnahe Compose-Setup mit Web, Keycloak, Caddy und H5P; fehlende Infrastruktur ist ein echter Gate-Fehler, kein stiller Skip.
-- Die Support-Schicht unter `frontend/e2e/support/` lädt lokale Env-Defaults, legt Keycloak-Teacher-/Student-User an, loggt über den echten Auth-Flow ein, seedet deterministische Teacher-/Learner-/H5P-Daten über die öffentlichen Teaching-APIs und prüft DOM-/Layout-Sanity ohne Screenshot-Snapshots.
-- Die Smokes prüfen Auth-Shells, Teacher-Graph-Workspace, Learner-Workspace und H5P-Task-Shell. Paketimport, FinishedData und tiefe H5P-Integration bleiben in den bestehenden H5P-E2E-Tests.
+- Die Support-Schicht unter `frontend/e2e/support/` lädt lokale Env-Defaults, legt Keycloak-Teacher-/Student-User an, loggt über den echten Auth-Flow ein und seedet deterministische Teacher-/Learner-/H5P-Daten über die öffentlichen Teaching-APIs.
+- Die Smokes prüfen Auth-Shells, Teacher-Graph-Workspace, Learner-Workspace und H5P-Task-Shell mit DOM-/Layout-Sanity.
+- Das UI-Labor wird zusätzlich über berechnete kontrastreiche Stilwerte und vier freigegebene Screenshot-Baselines geprüft: Light und Dark bei 1440×900 sowie 390×844 Pixeln.
+- `make update-visual-baselines` aktualisiert ausschließlich die UI-Labor-Baselines. Das Ergebnis muss vor Übernahme visuell geprüft werden.
+- Paketimport, FinishedData und tiefe H5P-Integration bleiben in den bestehenden H5P-E2E-Tests.
 
 ### supply-chain
 Zweck: FOSS-, Lizenz- und Dependency-Transparenz reproduzierbar prüfen.

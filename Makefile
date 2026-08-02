@@ -34,6 +34,7 @@ help:
 	@echo "  dependency-audit   - Check current npm advisories (requires network)"
 	@echo "  test-frontend-h5p  - Run frontend and H5P checks"
 	@echo "  test-visual-smoke  - Run deterministic Playwright visual smoke checks"
+	@echo "  update-visual-baselines - Review and update UI-lab screenshot baselines"
 	@echo "  playwright-bootstrap - Install the supported Playwright Chromium browser"
 	@echo "  test-full-prod-like - Run full prod-like verification profile"
 	@echo "  harness-minimum    - Run hard PR-1 harness safety gate"
@@ -242,6 +243,11 @@ test-frontend-h5p:
 test-visual-smoke:
 	@cd frontend && node tooling/check-playwright-browser.mjs
 	@cd frontend && npm run test:e2e -- --grep @visual-smoke
+
+.PHONY: update-visual-baselines
+update-visual-baselines:
+	@cd frontend && node tooling/check-playwright-browser.mjs
+	@cd frontend && npm run test:e2e -- --grep @design-system --update-snapshots
 
 .PHONY: playwright-bootstrap
 playwright-bootstrap:

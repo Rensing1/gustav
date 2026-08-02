@@ -78,7 +78,15 @@ def test_teacher_unit_node_editor_contract_exists() -> None:
     assert task["required"] == ["id", "instruction_md", "criteria", "kind", "position"]
     assert task["properties"]["instruction_md"]["type"] == "string"
     assert task["properties"]["criteria"]["type"] == "array"
-    assert task["properties"]["kind"]["enum"] == ["native", "h5p", "visual", "scratch", "calliope", "filius"]
+    assert task["properties"]["kind"]["enum"] == [
+        "native",
+        "h5p",
+        "visual",
+        "scratch",
+        "calliope",
+        "filius",
+        "dialog",
+    ]
     assert task["properties"]["position"]["type"] == "integer"
     assert task["properties"]["teacher_context_md"]["nullable"] is True
     assert task["properties"]["due_at"]["nullable"] is True

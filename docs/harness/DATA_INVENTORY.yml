@@ -140,6 +140,62 @@ entities:
       technical_packaging_allowed: true
       content_rewriting_allowed: false
 
+  learning_dialog_transcript:
+    description: Pausierbare KI-Dialoge mit unveränderlichen Schüler- und KI-Nachrichten, Hilfestellungsmarkern und optionaler Abschlussantwort.
+    personal_data:
+      - student_subject_id
+      - course_id
+      - task_id
+      - student_messages
+      - ai_messages
+      - sentence_starter_provenance
+      - optional_closing_answer
+      - timestamps
+    purpose:
+      - dialog_task_delivery
+      - formative_feedback
+      - teacher_review
+    access:
+      student: own_dialogs
+      teacher: completed_dialogs_in_owned_courses
+      admin: administrative_support
+    retention: same_as_student_submission
+    export: complete_safe_transcript_and_feedback
+    deletion: delete_or_anonymize_with_submission_after_policy
+    llm_usage:
+      sent_to_llm: true
+      technical_packaging_allowed: true
+      content_filtering_allowed: false
+      content_moderation_allowed: false
+      content_rewriting_allowed: false
+      internal_teacher_instructions_exposed_to_student: false
+
+  dialog_ai_usage_event:
+    description: Inhaltsfreie Verbrauchs- und Fehlerdaten für Dialogzüge und Lehrkraftvorschauen.
+    personal_data:
+      - actor_subject_id
+      - course_id_if_student
+      - unit_id
+      - task_id
+      - model
+      - processing_stage
+      - token_counts_if_available
+      - stable_error_code_if_failed
+      - occurred_at
+    purpose:
+      - cost_monitoring
+      - reliability_monitoring
+      - privacy_preserving_diagnostics
+    access:
+      student: none
+      teacher: own_units_and_courses
+      admin: administrative_support
+    retention: configured_technical_telemetry_policy
+    export: content_free_usage_metadata
+    deletion: delete_with_related_unit_course_or_session
+    llm_usage:
+      sent_to_llm: false
+
   learning_analytics_event:
     description: Ereignisse und Aggregationen für Lernfortschritt, Live-Dashboard und Diagnoseansichten.
     personal_data:

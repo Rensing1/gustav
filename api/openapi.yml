@@ -868,7 +868,7 @@ components:
           minimum: 1
         kind:
           type: string
-          enum: [native, h5p, visual, scratch, calliope, filius]
+          enum: [native, h5p, visual, scratch, calliope, filius, dialog]
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
           nullable: true
@@ -883,6 +883,9 @@ components:
           nullable: true
         filius:
           $ref: '#/components/schemas/FiliusTaskConfig'
+          nullable: true
+        dialog:
+          $ref: '#/components/schemas/DialogTaskConfig'
           nullable: true
     TeacherUnitWorkspaceSelectionSection:
       type: object
@@ -2285,6 +2288,136 @@ components:
         submissions are rejected (400 invalid_input). Other `kind=file` MIME
         types (e.g. application/pdf) are rejected (400 invalid_file_payload).
         Empty object in MVP.
+    DialogTaskConfig:
+      type: object
+      additionalProperties: false
+      required: [partner_name, partner_description_md, role_md, learning_goal_md, opening_message_md, response_mode, max_rounds]
+      properties:
+        partner_name: { type: string, minLength: 1, maxLength: 120 }
+        partner_description_md:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Learner-visible description of the dialog partner.
+        role_md:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: Internal role instructions. Never exposed to learners.
+        learning_goal_md:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Internal learning goal. Never exposed to learners.
+        opening_message_md: { type: string, minLength: 1, maxLength: 2000 }
+        response_mode: { type: string, enum: [free_text, hybrid] }
+        max_rounds: { type: integer, minimum: 1, maximum: 12, default: 8 }
+        closing_prompt_md: { type: string, minLength: 1, maxLength: 2000, nullable: true }
+    LearningDialogTaskConfig:
+      type: object
+      additionalProperties: false
+      required: [partner_name, partner_description_md, opening_message_md, response_mode, max_rounds]
+      properties:
+        partner_name: { type: string, maxLength: 120 }
+        partner_description_md: { type: string, maxLength: 2000 }
+        opening_message_md: { type: string, maxLength: 2000 }
+        response_mode: { type: string, enum: [free_text, hybrid] }
+        max_rounds: { type: integer, minimum: 1, maximum: 12 }
+        closing_prompt_md: { type: string, maxLength: 2000, nullable: true }
+    LearningDialogTurn:
+      type: object
+      additionalProperties: false
+      required: [id, round_nr, student_message_md, status, sentence_starters, generation_attempts, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        round_nr: { type: integer, minimum: 1, maximum: 12 }
+        student_message_md: { type: string, minLength: 1, maxLength: 2000 }
+        used_sentence_starter_md: { type: string, maxLength: 240, nullable: true }
+        used_sentence_starter_source: { type: string, maxLength: 80, nullable: true }
+        status: { type: string, enum: [generating, completed, failed] }
+        assistant_reply_md: { type: string, minLength: 1, maxLength: 2000, nullable: true }
+        sentence_starters:
+          type: array
+          maxItems: 3
+          items: { type: string, minLength: 1, maxLength: 240 }
+        generation_attempts: { type: integer, minimum: 1, maximum: 3 }
+        error_code: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+    LearningDialogSession:
+      type: object
+      additionalProperties: false
+      required: [id, course_id, task_id, status, round_count, dialog, initial_sentence_starters, initial_starters_status, turns, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        course_id: { type: string, format: uuid }
+        task_id: { type: string, format: uuid }
+        status: { type: string, enum: [active, completed, abandoned] }
+        round_count: { type: integer, minimum: 0, maximum: 12 }
+        dialog: { $ref: '#/components/schemas/LearningDialogTaskConfig' }
+        initial_sentence_starters:
+          type: array
+          maxItems: 3
+          items: { type: string, minLength: 1, maxLength: 240 }
+        initial_starters_status: { type: string, enum: [not_required, pending, generating, completed, failed] }
+        initial_starters_error_code: { type: string, nullable: true }
+        initial_generation_attempts: { type: integer, minimum: 0, maximum: 3 }
+        turns:
+          type: array
+          maxItems: 12
+          items: { $ref: '#/components/schemas/LearningDialogTurn' }
+        closing_answer_md: { type: string, maxLength: 2000, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+    DialogTurnCreate:
+      type: object
+      additionalProperties: false
+      required: [student_message_md]
+      properties:
+        student_message_md: { type: string, minLength: 1, maxLength: 2000 }
+        used_sentence_starter_md: { type: string, minLength: 1, maxLength: 240, nullable: true }
+        used_sentence_starter_source: { type: string, minLength: 1, maxLength: 80, nullable: true }
+    DialogSessionComplete:
+      type: object
+      additionalProperties: false
+      properties:
+        closing_answer_md: { type: string, minLength: 1, maxLength: 2000, nullable: true }
+    DialogSessionCompletionResult:
+      type: object
+      additionalProperties: false
+      required: [session, submission]
+      properties:
+        session: { $ref: '#/components/schemas/LearningDialogSession' }
+        submission: { $ref: '#/components/schemas/LearningSubmission' }
+    DialogPreviewMessage:
+      type: object
+      additionalProperties: false
+      required: [role, body_md]
+      properties:
+        role: { type: string, enum: [assistant, student] }
+        body_md: { type: string, minLength: 1, maxLength: 2000 }
+    DialogPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [operation, messages]
+      properties:
+        operation: { type: string, enum: [initial_starters, reply] }
+        messages:
+          type: array
+          maxItems: 24
+          items: { $ref: '#/components/schemas/DialogPreviewMessage' }
+        student_message_md: { type: string, minLength: 1, maxLength: 2000, nullable: true }
+    DialogGeneration:
+      type: object
+      additionalProperties: false
+      required: [reply_md, sentence_starters]
+      properties:
+        reply_md: { type: string, maxLength: 2000, nullable: true }
+        sentence_starters:
+          type: array
+          maxItems: 3
+          items: { type: string, minLength: 1, maxLength: 240 }
     Task:
       type: object
       required: [id, unit_id, section_id, instruction_md, criteria, position, created_at, updated_at]
@@ -2328,9 +2461,9 @@ components:
           type: string
           readOnly: true
           default: native
-          enum: [native, h5p, visual, scratch, calliope, filius]
+          enum: [native, h5p, visual, scratch, calliope, filius, dialog]
           description: >-
-            Task type (native|h5p|visual|scratch|calliope|filius). This field is read-only and must not
+            Task type (native|h5p|visual|scratch|calliope|filius|dialog). This field is read-only and must not
             be provided by clients.
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
@@ -2346,6 +2479,9 @@ components:
           nullable: true
         filius:
           $ref: '#/components/schemas/FiliusTaskConfig'
+          nullable: true
+        dialog:
+          $ref: '#/components/schemas/DialogTaskConfig'
           nullable: true
         created_at:
           type: string
@@ -2401,6 +2537,10 @@ components:
           $ref: '#/components/schemas/FiliusTaskConfig'
           nullable: true
           description: Optional. When set, creates a Filius task. Mutually exclusive with `h5p`, `visual`, `scratch`, and `calliope`.
+        dialog:
+          $ref: '#/components/schemas/DialogTaskConfig'
+          nullable: true
+          description: Optional. When set, creates a dialog task and is mutually exclusive with every other task-kind configuration.
     TaskUpdate:
       type: object
       properties:
@@ -2446,6 +2586,10 @@ components:
           $ref: '#/components/schemas/FiliusTaskConfig'
           nullable: true
           description: Optional. When set, updates the Filius configuration. Mutually exclusive with `h5p`, `visual`, `scratch`, and `calliope`.
+        dialog:
+          $ref: '#/components/schemas/DialogTaskConfig'
+          nullable: true
+          description: Optional. When set, updates the dialog configuration and is mutually exclusive with every other task-kind configuration.
     TaskReorder:
       type: object
       required: [task_ids]
@@ -2635,7 +2779,7 @@ components:
           description: Creation timestamp of the learner's newest final submission (`intent=submit`) for this task.
         kind:
           type: string
-          enum: [native, h5p, visual, scratch, calliope, filius]
+          enum: [native, h5p, visual, scratch, calliope, filius, dialog]
           description: Backend task type identifier.
         h5p:
           $ref: '#/components/schemas/H5PTaskConfig'
@@ -2652,6 +2796,14 @@ components:
         filius:
           $ref: '#/components/schemas/FiliusTaskConfig'
           nullable: true
+        dialog:
+          $ref: '#/components/schemas/LearningDialogTaskConfig'
+          nullable: true
+        active_dialog_session_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Active resumable dialog session for this learner, course and task.
     LearningSection:
       type: object
       required: [section, materials, tasks]
@@ -2789,7 +2941,12 @@ components:
               description: Distinguishes informal feedback requests from formal submissions.
             kind:
               type: string
-              enum: [text, image, file, h5p]
+              enum: [text, image, file, h5p, dialog]
+            dialog_session_id:
+              type: string
+              format: uuid
+              nullable: true
+              description: Completed dialog session backing a `kind=dialog` submission.
             score_raw:
               type: integer
               nullable: true
@@ -2904,7 +3061,11 @@ components:
           nullable: true
         kind:
           type: string
-          enum: [text, image, pdf, file, h5p]
+          enum: [text, image, pdf, file, h5p, dialog]
+        dialog_session_id:
+          type: string
+          format: uuid
+          nullable: true
         instruction_md:
           type: string
           description: Task instruction rendered in teacher detail views above the submission content.
@@ -3305,7 +3466,7 @@ components:
           type: integer
         kind:
           type: string
-          enum: [native, h5p, visual, scratch, calliope, filius]
+          enum: [native, h5p, visual, scratch, calliope, filius, dialog]
         has_submission:
           type: boolean
         h5p_completed:
@@ -5569,6 +5730,197 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  /api/teaching/units/{unit_id}/tasks/{task_id}/dialog-preview:
+    post:
+      tags: [Teaching]
+      summary: Generate a stateless author preview for a saved dialog task
+      operationId: previewTeachingDialogTask
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required for the cookie-authenticated preview."
+        - "No preview transcript, learner progress or submission is persisted."
+      parameters:
+        - { in: path, name: unit_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DialogPreviewRequest' } } }
+      responses:
+        '200':
+          description: Stateless preview generation
+          content: { application/json: { schema: { $ref: '#/components/schemas/DialogGeneration' } } }
+        '400': { description: Invalid preview transcript, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Dialog task not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Dialog generation unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/{submission_id}/dialog:
+    get:
+      tags: [Teaching]
+      summary: Return a completed dialog transcript for the course owner
+      operationId: getTeachingDialogSubmission
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: teacher, ownerOnly: true }
+      parameters:
+        - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: unit_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: student_sub, required: true, schema: { type: string } }
+        - { in: path, name: submission_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Completed dialog transcript without internal instructions
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningDialogSession' } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Dialog submission not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Teaching repository unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions:
+    post:
+      tags: [Learning]
+      summary: Start or resume the learner's active dialog session
+      operationId: startLearningDialogSession
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required for this cookie-authenticated mutation."
+        - "RLS: course membership, task release and learner ownership are enforced."
+        - "Internal role, learning-goal and teacher-context snapshots are never serialized."
+      parameters:
+        - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Existing active session
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningDialogSession' } } }
+        '201':
+          description: New active session
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningDialogSession' } } }
+        '400': { description: Invalid input or task kind, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Task not visible, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Dialog generation unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}:
+    get:
+      tags: [Learning]
+      summary: Return the learner-visible dialog transcript
+      operationId: getLearningDialogSession
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes:
+        - "RLS: only the authenticated learner may read this safe transcript projection."
+      parameters:
+        - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Learner-owned dialog session
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningDialogSession' } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '404': { description: Session not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}/turns:
+    post:
+      tags: [Learning]
+      summary: Persist a learner message and generate one dialog reply
+      operationId: createLearningDialogTurn
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required for this cookie-authenticated mutation."
+        - "RLS: the session and persisted learner message are scoped to the authenticated student."
+      parameters:
+        - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+        - { in: header, name: Idempotency-Key, required: true, schema: { type: string, maxLength: 64, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DialogTurnCreate' } } }
+      responses:
+        '200':
+          description: Updated dialog session containing the completed turn
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningDialogSession' } } }
+        '400': { description: Invalid message or max rounds reached, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '404': { description: Session not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Previous turn is not complete, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Reply generation failed after the learner message was saved, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}/turns/{turn_id}/retry:
+    post:
+      tags: [Learning]
+      summary: Retry the failed generation for an existing dialog turn
+      operationId: retryLearningDialogTurn
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required for this cookie-authenticated mutation."
+        - "RLS: only the authenticated learner may retry the unchanged failed turn."
+      parameters:
+        - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: turn_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Updated dialog session containing the retried turn
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningDialogSession' } } }
+        '400': { description: Retry limit reached, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '404': { description: Session or turn not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Turn is not retryable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Reply generation failed again, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}/complete:
+    post:
+      tags: [Learning]
+      summary: Complete a dialog session as one final submission
+      operationId: completeLearningDialogSession
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required for this cookie-authenticated mutation."
+        - "The session completion and final submission are persisted atomically."
+      parameters:
+        - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+        - { in: header, name: Idempotency-Key, required: true, schema: { type: string, maxLength: 64, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DialogSessionComplete' } } }
+      responses:
+        '200':
+          description: Completed session and final dialog submission queued for feedback
+          content: { application/json: { schema: { $ref: '#/components/schemas/DialogSessionCompletionResult' } } }
+        '400': { description: Session cannot be completed, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '404': { description: Session not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: A dialog turn is incomplete, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}/abandon:
+    post:
+      tags: [Learning]
+      summary: Abandon an empty or terminally failed dialog without consuming an attempt
+      operationId: abandonLearningDialogSession
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required for this cookie-authenticated mutation."
+        - "Abandoning is allowed only without a learner message or after a terminal generation failure."
+      parameters:
+        - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Abandoned session without a submission
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningDialogSession' } } }
+        '400': { description: Session may not be abandoned, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '404': { description: Session not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/learning/courses/{course_id}/tasks/{task_id}/submissions:
     get:
@@ -12701,7 +13053,7 @@ paths:
                         position: { type: integer }
                         kind:
                           type: string
-                          enum: [native, h5p, visual, scratch, calliope, filius]
+                          enum: [native, h5p, visual, scratch, calliope, filius, dialog]
                           description: Backend task type identifier.
                   rows:
                     type: array

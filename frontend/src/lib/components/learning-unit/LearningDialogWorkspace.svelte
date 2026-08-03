@@ -26,10 +26,12 @@
     turns: DialogTurn[];
   };
 
-  let { courseId, task, existingSessionId = null, readOnly = false, onCompleted = null }: { courseId: string; task: LearningTask; existingSessionId?: string | null; readOnly?: boolean; onCompleted?: (() => void | Promise<void>) | null } = $props();
+  let { learnerSub = null, courseId, task, existingSessionId = null, readOnly = false, onCompleted = null }: { learnerSub?: string | null; courseId: string; task: LearningTask; existingSessionId?: string | null; readOnly?: boolean; onCompleted?: (() => void | Promise<void>) | null } = $props();
   let session = $state<DialogSession | null>(null);
   let message = $state("");
   let closingAnswer = $state("");
+  let closingPhase = $state(false);
+  let restoredSessionId = $state<string | null>(null);
   let selectedStarter = $state<{ text: string; source: string } | null>(null);
   let pending = $state(false);
   let error = $state<string | null>(null);
@@ -37,6 +39,66 @@
   function baseUrl(): string {
     return `/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(task.id)}/dialog-sessions`;
   }
+
+  function closingDraftKey(sessionId: string): string | null {
+    if (!learnerSub) return null;
+    return `gustav.learning.dialog-closing-draft:${encodeURIComponent(learnerSub)}:${courseId}:${task.id}:${sessionId}`;
+  }
+
+  function clearClosingDraft(value: DialogSession) {
+    const key = closingDraftKey(value.id);
+    if (key) window.sessionStorage.removeItem(key);
+  }
+
+  function restoreClosingDraft(value: DialogSession) {
+    if (restoredSessionId === value.id) return;
+    restoredSessionId = value.id;
+    if (value.status !== "active") {
+      clearClosingDraft(value);
+      closingPhase = false;
+      closingAnswer = value.closing_answer_md ?? "";
+      return;
+    }
+    const key = closingDraftKey(value.id);
+    if (!key) return;
+    try {
+      const stored = JSON.parse(window.sessionStorage.getItem(key) ?? "null") as { phase?: unknown; closingAnswer?: unknown } | null;
+      if (!stored) return;
+      closingPhase = stored.phase === "closing" && value.round_count > 0;
+      closingAnswer = typeof stored.closingAnswer === "string" ? stored.closingAnswer : "";
+    } catch {
+      window.sessionStorage.removeItem(key);
+    }
+  }
+
+  function acceptSession(value: DialogSession) {
+    session = value;
+    restoreClosingDraft(value);
+  }
+
+  function beginClosing() {
+    if (!session || session.round_count < 1 || session.turns.some((turn) => turn.status !== "completed")) return;
+    closingPhase = true;
+  }
+
+  function continueDialog() {
+    closingPhase = false;
+  }
+
+  $effect(() => {
+    const current = session;
+    if (!current || current.status !== "active" || restoredSessionId !== current.id) return;
+    const key = closingDraftKey(current.id);
+    if (!key) return;
+    if (!closingPhase && !closingAnswer) {
+      window.sessionStorage.removeItem(key);
+      return;
+    }
+    window.sessionStorage.setItem(
+      key,
+      JSON.stringify({ phase: closingPhase ? "closing" : "conversation", closingAnswer })
+    );
+  });
 
   async function request(path: string, options: RequestInit = {}): Promise<DialogSession> {
     const response = await fetch(`${baseUrl()}${path}`, { credentials: "include", cache: "no-store", ...options });
@@ -49,7 +111,7 @@
     pending = true;
     error = null;
     try {
-      session = await request("", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      acceptSession(await request("", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
     } catch (caught) {
       error = caught instanceof Error ? caught.message : "Der Dialog konnte nicht gestartet werden.";
     } finally {
@@ -72,11 +134,11 @@
     pending = true;
     error = null;
     try {
-      session = await request(`/${session.id}/turns`, {
+      acceptSession(await request(`/${session.id}/turns`, {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({ student_message_md: message, used_sentence_starter_md: selectedStarter?.text, used_sentence_starter_source: selectedStarter?.source })
-      });
+      }));
       message = "";
       selectedStarter = null;
     } catch (caught) {
@@ -89,12 +151,12 @@
 
   async function load() {
     if (!session) return;
-    try { session = await request(`/${session.id}`); } catch { /* keep current safe state */ }
+    try { acceptSession(await request(`/${session.id}`)); } catch { /* keep current safe state */ }
   }
 
   async function loadExisting(sessionId: string) {
     pending = true;
-    try { session = await request(`/${sessionId}`); }
+    try { acceptSession(await request(`/${sessionId}`)); }
     catch (caught) { error = caught instanceof Error ? caught.message : "Der Dialogverlauf konnte nicht geladen werden."; }
     finally { pending = false; }
   }
@@ -103,7 +165,7 @@
     if (!session) return;
     pending = true;
     error = null;
-    try { session = await request(`/${session.id}/turns/${turn.id}/retry`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); }
+    try { acceptSession(await request(`/${session.id}/turns/${turn.id}/retry`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })); }
     catch (caught) { error = caught instanceof Error ? caught.message : "Die Wiederholung ist fehlgeschlagen."; }
     finally { pending = false; }
   }
@@ -113,11 +175,13 @@
     pending = true;
     error = null;
     try {
-      session = await request(`/${session.id}/complete`, {
+      const completed = await request(`/${session.id}/complete`, {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({ closing_answer_md: closingAnswer || null })
       });
+      clearClosingDraft(completed);
+      acceptSession(completed);
       await onCompleted?.();
     } catch (caught) { error = caught instanceof Error ? caught.message : "Der Abschluss ist fehlgeschlagen."; }
     finally { pending = false; }
@@ -126,7 +190,11 @@
   async function abandon() {
     if (!session) return;
     pending = true;
-    try { session = await request(`/${session.id}/abandon`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); }
+    try {
+      const abandoned = await request(`/${session.id}/abandon`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      clearClosingDraft(abandoned);
+      acceptSession(abandoned);
+    }
     catch (caught) { error = caught instanceof Error ? caught.message : "Der Dialog konnte nicht abgebrochen werden."; }
     finally { pending = false; }
   }
@@ -155,19 +223,47 @@
       {/each}
     </div>
     {#if session.status === "active" && !readOnly}
-      {#if session.dialog.response_mode === "hybrid" && session.initial_starters_status === "failed" && session.initial_generation_attempts < 3}
-        <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={start}>Erste Satzanfänge erneut erzeugen</button>
+      {#if closingPhase}
+        <section class="dialog-closing" aria-labelledby="dialog-closing-title">
+          <header>
+            <p class="workspace-label">Abschluss</p>
+            <h6 id="dialog-closing-title">Abschluss vorbereiten</h6>
+          </header>
+          {#if session.dialog.closing_prompt_md}
+            <label class="workspace-field"><span>{session.dialog.closing_prompt_md}</span><textarea bind:value={closingAnswer} maxlength="2000" rows="4"></textarea></label>
+          {:else}
+            <p class="workspace-note">Mit der Abgabe wird der Dialog endgültig abgeschlossen und ein Versuch verbraucht.</p>
+          {/if}
+          <div class="dialog-actions">
+            <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={continueDialog}>Zurück zum Dialog</button>
+            <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
+            <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || Boolean(session.dialog.closing_prompt_md && !closingAnswer.trim())} onclick={complete}>Endgültig abgeben</button>
+          </div>
+        </section>
+      {:else}
+        <section class="dialog-composer" aria-label="Dialog fortsetzen">
+          {#if session.dialog.response_mode === "hybrid" && session.initial_starters_status === "failed" && session.initial_generation_attempts < 3}
+            <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={start}>Erste Satzanfänge erneut erzeugen</button>
+          {/if}
+          {#if availableStarters().length}<div class="dialog-starters" aria-label="Satzanfänge">{#each availableStarters() as starter}<button type="button" onclick={() => chooseStarter(starter)}>{starter}</button>{/each}</div>{/if}
+          {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
+            <label class="workspace-field"><span>Deine Antwort ({session.round_count}/{session.dialog.max_rounds})</span><textarea bind:value={message} maxlength="2000" rows="5"></textarea></label>
+          {:else if session.round_count >= session.dialog.max_rounds}
+            <p class="workspace-note">Maximale Rundenzahl erreicht.</p>
+          {/if}
+          <div class="dialog-actions">
+            {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
+              <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || !message.trim()} onclick={send}>Antwort senden</button>
+            {/if}
+            {#if session.round_count > 0}
+              <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>Dialog beenden</button>
+            {:else}
+              <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
+            {/if}
+            <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
+          </div>
+        </section>
       {/if}
-      {#if availableStarters().length}<div class="dialog-starters" aria-label="Satzanfänge">{#each availableStarters() as starter}<button type="button" onclick={() => chooseStarter(starter)}>{starter}</button>{/each}</div>{/if}
-      {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
-        <label class="workspace-field"><span>Deine Antwort ({session.round_count}/{session.dialog.max_rounds})</span><textarea bind:value={message} maxlength="2000" rows="5"></textarea></label>
-        <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || !message.trim()} onclick={send}>Antwort senden</button>
-      {/if}
-      {#if session.round_count > 0}
-        {#if session.dialog.closing_prompt_md}<label class="workspace-field"><span>{session.dialog.closing_prompt_md}</span><textarea bind:value={closingAnswer} maxlength="2000" rows="4"></textarea></label>{/if}
-        <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || Boolean(session.dialog.closing_prompt_md && !closingAnswer.trim())} onclick={complete}>Dialog abschließen und abgeben</button>
-      {:else}<button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>{/if}
-      <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Dialog pausieren</a>
     {:else if session.status === "completed"}<p class="workspace-note">Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.</p>{/if}
   {/if}
 </section>

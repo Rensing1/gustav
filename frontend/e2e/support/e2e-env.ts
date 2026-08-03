@@ -34,7 +34,20 @@ export const adminClientId = process.env.KC_ADMIN_CLIENT_ID ?? "gustav-admin-cli
 export const adminClientSecret = (process.env.KC_ADMIN_CLIENT_SECRET ?? "").trim();
 export const adminUser = process.env.KEYCLOAK_ADMIN ?? "admin";
 export const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD ?? "admin";
+export const e2eDatabaseUrl = hostAccessibleDatabaseUrl(
+  (process.env.E2E_DATABASE_URL ?? process.env.SESSION_DATABASE_URL ?? "").trim()
+);
 export const emailDomain = deriveEmailDomain();
+
+function hostAccessibleDatabaseUrl(value: string): string {
+  if (!value) return "";
+  const parsed = new URL(value);
+  if (parsed.hostname.startsWith("supabase_db_")) {
+    parsed.hostname = "127.0.0.1";
+    parsed.port = process.env.SUPABASE_DB_PORT?.trim() || "54322";
+  }
+  return parsed.toString();
+}
 
 function deriveEmailDomain(): string {
   const explicit = process.env.E2E_EMAIL_DOMAIN?.trim();

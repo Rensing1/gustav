@@ -161,6 +161,37 @@ export async function seedLearnerVisualSmokeCourse(
   return { courseId, unitId, sectionId, taskId, courseTitle, unitTitle };
 }
 
+export async function seedLearnerDialogCourse(
+  teacherPage: Page,
+  learnerPage: Page,
+  titlePrefix: string
+): Promise<LearnerVisualSmokeCourse> {
+  const learnerSub = await currentUserSub(learnerPage);
+  const courseTitle = `${titlePrefix} Kurs`;
+  const unitTitle = `${titlePrefix} Einheit`;
+  const courseId = await createCourse(teacherPage, courseTitle);
+  const unitId = await createUnit(teacherPage, unitTitle);
+  const sectionId = await createSection(teacherPage, unitId, "Dialog");
+  const taskId = await createTask(teacherPage, unitId, sectionId, {
+    instruction_md: "Untersuche die Quelle im Gespräch und begründe deine Beobachtung.",
+    criteria: [],
+    dialog: {
+      partner_name: "Archivarin Ada",
+      partner_description_md: "Ada hilft dir, die Quelle genau zu untersuchen.",
+      role_md: "Frage sachlich nach Belegen in der Quelle.",
+      learning_goal_md: "Der Schüler begründet eine Beobachtung an der Quelle.",
+      opening_message_md: "Welche Beobachtung möchtest du zuerst untersuchen?",
+      response_mode: "free_text",
+      max_rounds: 2,
+      closing_prompt_md: "Fasse deine wichtigste Erkenntnis zusammen."
+    }
+  });
+  const moduleId = await attachUnitToCourse(teacherPage, courseId, unitId);
+  await releaseSection(teacherPage, courseId, moduleId, sectionId);
+  await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
+  return { courseId, unitId, sectionId, taskId, courseTitle, unitTitle };
+}
+
 export async function seedH5pVisualSmokeUnit(
   teacherPage: Page,
   learnerPage: Page,

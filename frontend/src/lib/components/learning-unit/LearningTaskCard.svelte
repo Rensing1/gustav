@@ -604,13 +604,15 @@
                   <p class="learning-task-inline-editor__copy">Die Bearbeitung bleibt Teil derselben Arbeitsfläche.</p>
                 {/if}
               </div>
-              <button
-                class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
-                type="button"
-                onclick={() => onExitSubmissionWorkspace?.()}
-              >
-                Pausieren
-              </button>
+              {#if task.kind !== "dialog"}
+                <button
+                  class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
+                  type="button"
+                  onclick={() => onExitSubmissionWorkspace?.()}
+                >
+                  Pausieren
+                </button>
+              {/if}
             </header>
 
             {#if showInlinePendingNote()}
@@ -618,7 +620,7 @@
             {/if}
 
             {#if task.kind === "dialog"}
-              <LearningDialogWorkspace {courseId} {task} onCompleted={onProgressPersisted} />
+              <LearningDialogWorkspace {learnerSub} {courseId} {task} onCompleted={onProgressPersisted} />
             {:else if task.kind === "h5p"}
               {#if task.h5p?.content_id}
                 <H5PTaskPlayer {courseId} taskId={task.id} contentId={task.h5p.content_id} {onProgressPersisted} />
@@ -871,7 +873,7 @@
               <div class="learning-task-submission-summary__panel" role="tabpanel" aria-label={summaryPanelLabel(activeSummaryTab)}>
                 {#if activeSummaryTab === "submission"}
                   {#if task.kind === "dialog" && latestSubmission()?.dialog_session_id}
-                    <LearningDialogWorkspace {courseId} {task} existingSessionId={latestSubmission()?.dialog_session_id ?? null} readOnly={true} />
+                    <LearningDialogWorkspace {learnerSub} {courseId} {task} existingSessionId={latestSubmission()?.dialog_session_id ?? null} readOnly={true} />
                   {:else if latestSubmission() && submittedArtifact()}
                     <LearningSubmissionArtifactView submission={latestSubmissionOrThrow()} />
                   {:else if latestSubmission() && latestSubmissionOrThrow().text_body}

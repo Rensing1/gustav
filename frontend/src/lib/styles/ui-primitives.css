@@ -608,10 +608,9 @@
   margin-bottom: var(--space-4);
 }
 
-.preview-dialog-grid {
+.preview-dialog-stack {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-5);
+  gap: var(--space-7);
 }
 
 .preview-dialog-state {
@@ -620,12 +619,6 @@
 
 .preview-dialog-state > h2 {
   margin-bottom: var(--space-4);
-}
-
-@media (max-width: 960px) {
-  .preview-dialog-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .preview-token-grid {

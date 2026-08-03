@@ -25,13 +25,21 @@ def test_frontend_visual_smoke_specs_include_approved_design_snapshots() -> None
     expected_snapshots = {
         f"ui-lab-{theme}-{viewport}-chromium-linux.png"
         for theme in ("light", "dark")
-        for viewport in ("desktop", "mobile")
+        for viewport in ("desktop", "tablet", "mobile")
     } | {
         f"dialog-states-{theme}-{viewport}-chromium-linux.png"
         for theme in ("light", "dark")
-        for viewport in ("desktop", "mobile")
+        for viewport in ("desktop", "tablet", "mobile")
     }
     assert {path.name for path in snapshot_dir.glob("*.png")} == expected_snapshots
+
+
+def test_ui_lab_requests_the_wide_shell_for_responsive_component_references() -> None:
+    source = (
+        REPO_ROOT / "frontend" / "src" / "routes" / "ui-lab" / "+page.server.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "wideWorkspaceShell: true" in source
 
 
 def test_visual_smoke_support_helpers_cover_auth_seed_and_layout_sanity() -> None:

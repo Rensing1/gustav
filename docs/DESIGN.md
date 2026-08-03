@@ -335,21 +335,34 @@ Verbindliche Regeln:
 
 - Der Abschlussauftrag wird erst nach der bewussten Aktion `Dialog beenden`
   sichtbar.
-- Gesprächsverlauf und Eingabebereich sind eigenständige, kantig gerahmte
-  Arbeitsflächen.
+- Partnerkontext und Sitzungsaktionen bilden eine gemeinsame Komponentenfamilie.
+  `Pausieren`, `Dialog ohne Abgabe abbrechen` und `Dialog beenden` stehen nur in
+  diesem Bereich.
+- `Antwort senden` steht ausschließlich unmittelbar beim Eingabefeld. In der
+  Abschlussphase stehen `Zurück zum Dialog` und `Endgültig abgeben` beim
+  Abschlussfeld; `Pausieren` verbleibt im Partnerkontext.
+- Der Gesprächsverlauf besitzt keinen schweren Außenrahmen. Der Eingabe- und der
+  Abschlussbereich bleiben dagegen klar und kantig gerahmt.
 - KI-Beiträge stehen links und verwenden den Erfolgsakzent; Schülerbeiträge
   stehen rechts und verwenden den Produktakzent.
 - Sprecher werden technisch und eindeutig bezeichnet. Verwendete Satzanfänge
   bleiben als Hilfestellung sichtbar.
 - Satzanfänge sind rechteckige Sekundäraktionen, keine Chatblasen oder Pills.
-- Auf schmalen Viewports nutzen Nachrichten und Aktionen die volle verfügbare
-  Breite.
+- Die Arbeitsfläche reagiert über Container Queries auf ihre eigene Breite, nicht
+  nur auf den Viewport. Ab `64rem` steht ein etwa `18rem` breiter, sichtbarer
+  Partnerbereich links neben dem Gespräch. Zwischen `42.5rem` und `64rem` wird
+  er zum horizontalen Kopf. Darunter ist die Struktur vollständig gestapelt.
+- Auf Smartphonebreite nutzen Nachrichten und `Antwort senden` die volle
+  verfügbare Breite. Sitzungsaktionen stehen nebeneinander und werden erst unter
+  `22rem` Containerbreite gestapelt.
+- Ohne Container-Query-Unterstützung bleibt der einspaltige Grundaufbau nutzbar;
+  große, nicht geteilte Lernansichten erhalten einen Viewport-Fallback.
 - Der Sicherheitshinweis bleibt eine schmale, klar konturierte Hinweiszeile.
 - Alle produktiven `.dialog-*`-Regeln liegen in der Cascade-Layer `learning` in
   `frontend/src/lib/styles/learning-unit.css` und verwenden ausschließlich die
   zentralen Design-Tokens.
-- Das UI-Labor zeigt Gespräch und Abschluss in Light und Dark sowie auf Desktop
-  und Mobil als freigegebene Referenzzustände.
+- Das UI-Labor zeigt Gespräch und Abschluss jeweils als vollwertige
+  Referenzfläche in Light und Dark sowie auf Desktop, Tablet und Smartphone.
 
 ## 12. Auth und Preview
 

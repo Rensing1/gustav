@@ -35,6 +35,26 @@ describe("UiPreviewSurface", () => {
     expect(screen.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Erfolgreich abgemeldet" })).toBeInTheDocument();
 
+    const conversation = screen.getByTestId("preview-dialog-conversation");
+    const conversationPartner = within(conversation).getByRole("complementary", {
+      name: "Dialogpartner und Sitzungsaktionen"
+    });
+    const conversationComposer = within(conversation).getByRole("region", { name: "Beispielhafte Dialogeingabe" });
+    expect(within(conversationPartner).getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
+    expect(within(conversationPartner).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(within(conversationComposer).getByRole("button", { name: "Antwort senden" })).toBeInTheDocument();
+    expect(within(conversationComposer).queryByRole("button", { name: "Pausieren" })).toBeNull();
+
+    const completion = screen.getByTestId("preview-dialog-completion");
+    const completionPartner = within(completion).getByRole("complementary", {
+      name: "Dialogpartner und Sitzungsaktionen"
+    });
+    const completionField = within(completion).getByRole("region", { name: "Abschluss vorbereiten" });
+    expect(within(completionPartner).getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
+    expect(within(completionField).getByRole("button", { name: "Zurück zum Dialog" })).toBeInTheDocument();
+    expect(within(completionField).getByRole("button", { name: "Endgültig abgeben" })).toBeInTheDocument();
+    expect(within(completionField).queryByRole("button", { name: "Pausieren" })).toBeNull();
+
     const learnerGraphCard = screen.getByText("Übersicht", { selector: ".preview-card__eyebrow" }).closest(".preview-card");
     expect(learnerGraphCard).not.toBeNull();
     if (!(learnerGraphCard instanceof HTMLElement)) {

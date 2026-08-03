@@ -93,31 +93,68 @@ async function expectContrastDesignContract(page: Page): Promise<void> {
   expect(topbarControls.theme).toEqual(topbarControls.account);
 }
 
-async function expectDialogDesignContract(page: Page, viewportWidth: number): Promise<void> {
+async function expectDialogDesignContract(page: Page, layoutMode: "desktop" | "tablet" | "mobile"): Promise<void> {
   const contract = await page.getByTestId("preview-dialog-conversation").evaluate((workspace) => {
+    const layout = workspace.querySelector(".dialog-layout");
+    const sidebar = workspace.querySelector(".dialog-sidebar");
+    const main = workspace.querySelector(".dialog-main");
     const transcript = workspace.querySelector(".dialog-transcript");
     const aiMessage = workspace.querySelector(".dialog-message--ai");
     const studentMessage = workspace.querySelector(".dialog-message--student");
     const starter = workspace.querySelector(".dialog-starter");
+    const sessionActions = workspace.querySelector(".dialog-session-actions");
+    const composer = workspace.querySelector(".dialog-composer");
+    const sendButton = workspace.querySelector(".dialog-composer__actions .workspace-top-action--accent");
     if (
+      !(layout instanceof HTMLElement) ||
+      !(sidebar instanceof HTMLElement) ||
+      !(main instanceof HTMLElement) ||
       !(transcript instanceof HTMLElement) ||
       !(aiMessage instanceof HTMLElement) ||
       !(studentMessage instanceof HTMLElement) ||
-      !(starter instanceof HTMLElement)
+      !(starter instanceof HTMLElement) ||
+      !(sessionActions instanceof HTMLElement) ||
+      !(composer instanceof HTMLElement) ||
+      !(sendButton instanceof HTMLElement)
     ) {
       throw new Error("UI lab is missing a representative dialog element");
     }
 
+    const layoutStyle = getComputedStyle(layout);
+    const sidebarStyle = getComputedStyle(sidebar);
     const transcriptStyle = getComputedStyle(transcript);
     const aiStyle = getComputedStyle(aiMessage);
     const studentStyle = getComputedStyle(studentMessage);
     const starterStyle = getComputedStyle(starter);
+    const workspaceBox = workspace.getBoundingClientRect();
+    const layoutBox = layout.getBoundingClientRect();
+    const sidebarBox = sidebar.getBoundingClientRect();
+    const mainBox = main.getBoundingClientRect();
+    const sessionActionsBox = sessionActions.getBoundingClientRect();
+    const composerBox = composer.getBoundingClientRect();
+    const sendButtonBox = sendButton.getBoundingClientRect();
     const transcriptContentWidth =
       transcript.clientWidth -
       Number.parseFloat(transcriptStyle.paddingLeft) -
       Number.parseFloat(transcriptStyle.paddingRight);
 
     return {
+      workspaceWidth: workspaceBox.width,
+      layoutColumns: layoutStyle.gridTemplateColumns,
+      sidebarAreas: sidebarStyle.gridTemplateAreas,
+      sidebarPosition: sidebarStyle.position,
+      layoutBox: { x: layoutBox.x, y: layoutBox.y, width: layoutBox.width, height: layoutBox.height },
+      sidebarBox: { x: sidebarBox.x, y: sidebarBox.y, width: sidebarBox.width, height: sidebarBox.height },
+      mainBox: { x: mainBox.x, y: mainBox.y, width: mainBox.width, height: mainBox.height },
+      sessionActionsBox: {
+        x: sessionActionsBox.x,
+        y: sessionActionsBox.y,
+        width: sessionActionsBox.width,
+        height: sessionActionsBox.height
+      },
+      composerContentWidth: composerBox.width - 2 * Number.parseFloat(getComputedStyle(composer).borderLeftWidth) -
+        Number.parseFloat(getComputedStyle(composer).paddingLeft) - Number.parseFloat(getComputedStyle(composer).paddingRight),
+      sendButtonWidth: sendButtonBox.width,
       transcriptBorderStyle: transcriptStyle.borderTopStyle,
       transcriptBorderWidth: transcriptStyle.borderTopWidth,
       transcriptRadius: transcriptStyle.borderRadius,
@@ -133,21 +170,43 @@ async function expectDialogDesignContract(page: Page, viewportWidth: number): Pr
     };
   });
 
-  expect(contract.transcriptBorderStyle).toBe("solid");
-  expect(contract.transcriptBorderWidth).toBe("2px");
+  expect(contract.transcriptBorderStyle).toBe("none");
+  expect(contract.transcriptBorderWidth).toBe("0px");
   expect(contract.transcriptRadius).toBe("0px");
-  expect(contract.aiBackground).not.toBe(contract.studentBackground);
+  expect(contract.aiBackground).toBe(contract.studentBackground);
   expect(contract.aiLeftBorderWidth).toBe("4px");
   expect(contract.studentRightBorderWidth).toBe("4px");
   expect(contract.studentJustify).toBe("end");
   expect(contract.starterRadius).toBe("0px");
 
-  if (viewportWidth <= 760) {
-    expect(Math.abs(contract.aiWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
-    expect(Math.abs(contract.studentWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
-  } else {
+  if (layoutMode === "desktop") {
+    expect(contract.workspaceWidth).toBeGreaterThanOrEqual(1024);
+    expect(contract.mainBox.x).toBeGreaterThan(contract.sidebarBox.x + contract.sidebarBox.width - 1);
+    expect(contract.sidebarPosition).toBe("sticky");
+    expect(contract.layoutColumns.split(" ")).toHaveLength(2);
+    expect(contract.sidebarBox.y).toBe(contract.mainBox.y);
+    expect(contract.sidebarBox.y + contract.sidebarBox.height - contract.sessionActionsBox.y - contract.sessionActionsBox.height).toBeLessThanOrEqual(17);
     expect(contract.aiWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.studentWidth).toBeLessThan(contract.transcriptContentWidth);
+    expect(contract.sendButtonWidth).toBeLessThan(contract.composerContentWidth);
+  } else if (layoutMode === "tablet") {
+    expect(contract.workspaceWidth).toBeGreaterThanOrEqual(680);
+    expect(contract.workspaceWidth).toBeLessThan(1024);
+    expect(contract.mainBox.y).toBeGreaterThan(contract.sidebarBox.y + contract.sidebarBox.height - 1);
+    expect(contract.sidebarAreas).toContain("context meta actions");
+    expect(contract.aiWidth).toBeLessThan(contract.transcriptContentWidth);
+    expect(contract.studentWidth).toBeLessThan(contract.transcriptContentWidth);
+    expect(contract.sendButtonWidth).toBeLessThan(contract.composerContentWidth);
+  } else {
+    expect(contract.workspaceWidth).toBeLessThan(680);
+    expect(contract.mainBox.y).toBeGreaterThan(contract.sidebarBox.y + contract.sidebarBox.height - 1);
+    expect(contract.sidebarAreas).toContain("context");
+    expect(Math.abs(contract.aiWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
+    expect(Math.abs(contract.studentWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(contract.sendButtonWidth - contract.composerContentWidth),
+      `mobile dialog geometry: ${JSON.stringify(contract)}`
+    ).toBeLessThanOrEqual(1);
   }
 
   const closingShadow = await page.getByTestId("preview-dialog-completion").locator(".dialog-closing").evaluate((closing) => {
@@ -172,12 +231,13 @@ async function expectDialogStatesScreenshot(page: Page, name: string): Promise<v
 test.describe("@visual-smoke @design-system contrast design contract", () => {
   for (const viewport of [
     { name: "desktop", width: 1440, height: 900 },
+    { name: "tablet", width: 1024, height: 768 },
     { name: "mobile", width: 390, height: 844 }
-  ]) {
+  ] as const) {
     test(`keeps approved light and dark baselines on ${viewport.name}`, async ({ page }) => {
       await openUiLab(page, viewport);
       await expectContrastDesignContract(page);
-      await expectDialogDesignContract(page, viewport.width);
+      await expectDialogDesignContract(page, viewport.name);
       await expect(page).toHaveScreenshot(`ui-lab-light-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide"
@@ -201,7 +261,7 @@ test.describe("@visual-smoke @design-system contrast design contract", () => {
       expect(darkContract.border).toBe("#f0f1f1");
       expect(darkContract.shadow).toContain("4px 4px 0 0");
       expect(darkContract.shadow).toContain("240, 241, 241");
-      await expectDialogDesignContract(page, viewport.width);
+      await expectDialogDesignContract(page, viewport.name);
       await expect(page).toHaveScreenshot(`ui-lab-dark-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide"

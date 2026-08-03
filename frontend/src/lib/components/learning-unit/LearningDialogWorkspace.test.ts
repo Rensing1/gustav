@@ -282,10 +282,18 @@ describe("LearningDialogWorkspace", () => {
 
     expect(source).not.toMatch(/<style(?:\s|>)/);
     expect(dialogBlocks).toContain(".dialog-workspace");
+    expect(dialogBlocks).toContain(".dialog-sidebar");
+    expect(dialogBlocks).toContain(".dialog-main");
     expect(dialogBlocks).toContain(".dialog-message--ai");
     expect(dialogBlocks).toContain(".dialog-message--student");
-    expect(dialogBlocks).toContain("var(--color-success-soft)");
-    expect(dialogBlocks).toContain("var(--color-accent-soft)");
+    expect(css).toContain("container-type: inline-size");
+    expect(css).toContain("container-name: learning-dialog");
+    expect(css).toContain("@container learning-dialog (min-width: 42.5rem)");
+    expect(css).toContain("@container learning-dialog (min-width: 64rem)");
+    expect(css).toContain("@container learning-dialog (max-width: 21.999rem)");
+    expect(css).toContain("@supports not (container-type: inline-size)");
+    expect(dialogBlocks).not.toContain("var(--color-success-soft)");
+    expect(dialogBlocks).not.toContain("var(--color-accent-soft)");
     expect(dialogBlocks).not.toMatch(/#[0-9a-f]{3,8}/i);
   });
 });

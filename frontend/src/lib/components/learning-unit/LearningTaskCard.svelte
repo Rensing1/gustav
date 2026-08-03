@@ -7,7 +7,7 @@
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
-  import type { LearningSubmission, LearningTask } from "$lib/types/learning";
+  import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
 
   let {
@@ -32,12 +32,26 @@
     initialSubmissionMode = null,
     reviewPanelOpen = false,
     compactLayout = false,
+    workspaceOnly = false,
+    dialogCompactSurface = "task",
+    dialogContextMaterials = [],
+    dialogContextEntries = [],
+    dialogReadingContextKey = null,
+    dialogContextPickerOpen = false,
+    dialogExpandedContextModuleIds = [],
+    dialogContextModules = [],
     enhanceSubmit = undefined,
     onToggle = null,
     onToggleReviewPanel = null,
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
     onExitSubmissionWorkspace = null,
+    onSetDialogCompactSurface = null,
+    onOpenDialogContext = null,
+    onCloseDialogContext = null,
+    onToggleDialogContextPicker = null,
+    onToggleDialogContextModule = null,
+    onAddDialogContextReference = null,
     onSubmitUploadFeedback = null,
     onProgressPersisted = null
   }: {
@@ -62,12 +76,56 @@
     initialSubmissionMode?: "text" | "upload" | null;
     reviewPanelOpen?: boolean;
     compactLayout?: boolean;
+    workspaceOnly?: boolean;
+    dialogCompactSurface?: "task" | "materials";
+    dialogContextMaterials?: LearningMaterial[];
+    dialogContextEntries?: Array<{
+      key: string;
+      kind: "material" | "submission";
+      label: string;
+      title: string;
+      bodyMd: string | null;
+      meta: string | null;
+      fileUrl?: string | null;
+    }>;
+    dialogReadingContextKey?: string | null;
+    dialogContextPickerOpen?: boolean;
+    dialogExpandedContextModuleIds?: string[];
+    dialogContextModules?: Array<{
+      id: string;
+      title: string;
+      current: boolean;
+      loaded: boolean;
+      loading: boolean;
+      error: string | null;
+      options: Array<{
+        key: string;
+        kind: "material" | "submission";
+        id: string;
+        moduleId: string | null;
+        taskId: string | null;
+        title: string;
+        added: boolean;
+      }>;
+    }>;
     enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
     onToggleReviewPanel?: (() => void) | null;
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
     onExitSubmissionWorkspace?: (() => void) | null;
+    onSetDialogCompactSurface?: ((surface: "task" | "materials") => void) | null;
+    onOpenDialogContext?: ((key: string) => void | Promise<void>) | null;
+    onCloseDialogContext?: (() => void) | null;
+    onToggleDialogContextPicker?: (() => void) | null;
+    onToggleDialogContextModule?: ((moduleId: string) => void | Promise<void>) | null;
+    onAddDialogContextReference?: ((reference: {
+      key: string;
+      kind: "material" | "submission";
+      id: string;
+      moduleId: string | null;
+      taskId: string | null;
+    }) => void) | null;
     onSubmitUploadFeedback?: ((payload: {
       taskId: string;
       taskKind: UploadTaskKind;
@@ -484,10 +542,11 @@
 <article
   class:learning-work-item--collapsed={!expanded && !usesCompactTaskLayout()}
   class:learning-work-item--task-compact={usesCompactTaskLayout()}
+  class:learning-work-item--workspace-only={workspaceOnly}
   class="learning-work-item learning-work-item--task"
   id={domId}
 >
-  {#if usesCompactTaskLayout()}
+  {#if !workspaceOnly && usesCompactTaskLayout()}
     <section
       class:learning-task-row--active={compactRowActive()}
       class:learning-task-row--draft={compactTaskTone() === "draft"}
@@ -550,7 +609,7 @@
         {/if}
       </div>
     </section>
-  {:else}
+  {:else if !workspaceOnly}
     <button
       class:learning-work-item__toggle--collapsed={!expanded}
       class="learning-work-item__toggle"
@@ -573,7 +632,7 @@
       </button>
   {/if}
 
-    {#if expanded || usesCompactTaskLayout()}
+    {#if workspaceOnly || expanded || usesCompactTaskLayout()}
       <div class="learning-work-item__body">
         {#if !usesCompactTaskLayout()}
           <div class="markdown-prose">
@@ -593,7 +652,8 @@
 
         {#if submissionFocused}
           <section class="learning-task-inline-editor">
-            <header class="learning-task-inline-editor__header">
+            {#if !workspaceOnly}
+              <header class="learning-task-inline-editor__header">
               <div>
                 <h5 class="learning-task-inline-editor__title">{taskTitle}</h5>
                 {#if usesCompactTaskLayout()}
@@ -613,14 +673,34 @@
                   Pausieren
                 </button>
               {/if}
-            </header>
+              </header>
+            {/if}
 
             {#if showInlinePendingNote()}
               <p class="workspace-note">{feedbackPendingMessage()}</p>
             {/if}
 
             {#if task.kind === "dialog"}
-              <LearningDialogWorkspace {learnerSub} {courseId} {task} onCompleted={onProgressPersisted} />
+              <LearningDialogWorkspace
+                {learnerSub}
+                {courseId}
+                {task}
+                compactSurface={dialogCompactSurface}
+                contextMaterials={dialogContextMaterials}
+                contextEntries={dialogContextEntries}
+                readingContextKey={dialogReadingContextKey}
+                contextPickerOpen={dialogContextPickerOpen}
+                expandedContextModuleIds={dialogExpandedContextModuleIds}
+                contextModules={dialogContextModules}
+                onSetCompactSurface={onSetDialogCompactSurface}
+                onOpenContext={onOpenDialogContext}
+                onCloseContext={onCloseDialogContext}
+                onToggleContextPicker={onToggleDialogContextPicker}
+                onToggleContextModule={onToggleDialogContextModule}
+                onAddContextReference={onAddDialogContextReference}
+                onPause={onExitSubmissionWorkspace}
+                onCompleted={onProgressPersisted}
+              />
             {:else if task.kind === "h5p"}
               {#if task.h5p?.content_id}
                 <H5PTaskPlayer {courseId} taskId={task.id} contentId={task.h5p.content_id} {onProgressPersisted} />

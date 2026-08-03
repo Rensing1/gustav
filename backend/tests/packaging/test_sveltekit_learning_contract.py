@@ -16,9 +16,10 @@ def test_learning_sveltekit_routes_exist() -> None:
     h5p_component = REPO_ROOT / "frontend" / "src" / "lib" / "components" / "H5PTaskPlayer.svelte"
     h5p_runtime_loader = REPO_ROOT / "frontend" / "src" / "lib" / "runtime" / "h5p-webcomponents.ts"
     task_card = REPO_ROOT / "frontend" / "src" / "lib" / "components" / "learning-unit" / "LearningTaskCard.svelte"
+    learner_workspace = REPO_ROOT / "frontend" / "src" / "lib" / "components" / "learning-unit" / "LearnerContentWorkspace.svelte"
     h5p_bridge = REPO_ROOT / "frontend" / "src" / "routes" / "bff" / "h5p" / "submissions" / "+server.ts"
 
-    for path in (course_loader, course_page, unit_loader, unit_page, h5p_component, h5p_runtime_loader, task_card, h5p_bridge):
+    for path in (course_loader, course_page, unit_loader, unit_page, h5p_component, h5p_runtime_loader, task_card, learner_workspace, h5p_bridge):
         assert path.is_file(), f"Missing learner-space artifact: {path}"
 
     loader_src = unit_loader.read_text(encoding="utf-8")
@@ -29,7 +30,7 @@ def test_learning_sveltekit_routes_exist() -> None:
 
     assert "/api/learning/courses/" in loader_src
     assert "/submissions" in loader_src
-    assert "LearningUnitContentWorkspace" in page_src
+    assert "LearnerContentWorkspace" in page_src
     assert "/upload-intents" in page_src
     assert "H5PTaskPlayer" in task_card_src
     assert "/h5p/player/model" in component_src

@@ -73,7 +73,7 @@ describe("learning unit layout helpers", () => {
     });
     expect(defaultLayoutPreferences(1280)).toEqual({
       tocWidth: 16.25,
-      workspaceWidth: 64,
+      workspaceWidth: 77,
       splitRatio: 50,
       tocGap: 1.1,
       paneGap: 1.1,

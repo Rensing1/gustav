@@ -19,6 +19,7 @@ describe("learner workspace state", () => {
       context: {
         compactSurface: "task",
         manualReferences: [],
+        pickerOpen: false,
         readingReferenceKey: null
       },
       preferences: {
@@ -74,6 +75,8 @@ describe("learner workspace state", () => {
           { key: "material:material-a", kind: "material", id: "material-a", moduleId: "module-a", taskId: null }
         ],
         expandedReferenceKeys: ["material:material-a"],
+        pickerOpen: false,
+        expandedModuleIds: [],
         readingReferenceKey: "material:material-a",
         scrollTop: 420
       },
@@ -112,6 +115,8 @@ describe("learner workspace state", () => {
             { key: "material:locked", kind: "material", id: "locked", moduleId: "module-locked", taskId: null }
           ],
           expandedReferenceKeys: ["material:allowed", "material:locked"],
+          pickerOpen: false,
+          expandedModuleIds: ["module-open", "module-locked"],
           readingReferenceKey: "material:locked",
           scrollTop: 100
         }
@@ -164,6 +169,8 @@ describe("learner workspace state", () => {
         context: {
           compactSurface: "materials",
           expandedReferenceKeys: ["material:allowed"],
+          pickerOpen: true,
+          expandedModuleIds: ["module-open"],
           readingReferenceKey: "material:allowed",
           scrollTop: 80
         },
@@ -187,5 +194,35 @@ describe("learner workspace state", () => {
     expect(restored.openedModuleIds).toEqual(["module-open"]);
     expect(restored.preferences).toEqual({ navigationVisible: false, fontSize: "large" });
     expect(restored.context.readingReferenceKey).toBe("material:allowed");
+  });
+
+  it("keeps references from accessible modules before their content is loaded", () => {
+    const normalized = normalizeLearnerWorkspaceState(
+      {
+        context: {
+          manualReferences: [
+            {
+              key: "material:later",
+              kind: "material",
+              id: "later",
+              moduleId: "module-open",
+              taskId: null
+            },
+            {
+              key: "material:locked",
+              kind: "material",
+              id: "locked",
+              moduleId: "module-locked",
+              taskId: null
+            }
+          ]
+        }
+      },
+      {
+        openableModuleIds: new Set(["module-open"])
+      }
+    );
+
+    expect(normalized.context.manualReferences.map((entry) => entry.key)).toEqual(["material:later"]);
   });
 });

@@ -2,54 +2,23 @@
   let {
     open = false,
     tocOpen,
-    splitView,
-    showSplitToggle = true,
-    tocWidth,
-    workspaceWidth,
-    splitRatio,
-    tocGap,
-    paneGap,
     fontScale,
     onToggleMenu,
     onToggleToc,
-    onToggleSplitView,
     onResetLayout,
-    onUpdateTocWidth,
-    onPreviewWorkspaceWidth,
-    onCommitWorkspaceWidth,
-    onPreviewFontScale,
-    onCommitFontScale,
-    onUpdateSplitRatio,
-    onUpdateTocGap,
-    onUpdatePaneGap
+    onCommitFontScale
   }: {
     open?: boolean;
     tocOpen: boolean;
-    splitView: boolean;
-    showSplitToggle?: boolean;
-    tocWidth: number;
-    workspaceWidth: number;
-    splitRatio: number;
-    tocGap: number;
-    paneGap: number;
     fontScale: number;
     onToggleMenu: () => void;
     onToggleToc: () => void;
-    onToggleSplitView: () => void;
     onResetLayout: () => void;
-    onUpdateTocWidth: (value: number) => void;
-    onPreviewWorkspaceWidth: (value: number) => void;
-    onCommitWorkspaceWidth: (value: number) => void;
-    onPreviewFontScale: (value: number) => void;
     onCommitFontScale: (value: number) => void;
-    onUpdateSplitRatio: (value: number) => void;
-    onUpdateTocGap: (value: number) => void;
-    onUpdatePaneGap: (value: number) => void;
   } = $props();
 
-  function numericValue(event: Event): number {
-    const next = Number((event.currentTarget as HTMLInputElement).value);
-    return Number.isFinite(next) ? next : 0;
+  function fontOptionActive(value: number): boolean {
+    return Math.abs(fontScale - value) < 0.02;
   }
 </script>
 
@@ -78,85 +47,27 @@
         <input class="workspace-settings-menu__checkbox" checked={tocOpen} type="checkbox" onchange={onToggleToc} />
       </label>
 
-      {#if showSplitToggle}
-        <label class="workspace-settings-menu__toggle">
-          <span>Zwei Ansichten</span>
-          <input class="workspace-settings-menu__checkbox" checked={splitView} type="checkbox" onchange={onToggleSplitView} />
-        </label>
-      {/if}
-
-      <label class="workspace-settings-menu__field">
-        <span class="workspace-settings-menu__field-head">
-          <span>Breite Inhaltsverzeichnis</span>
-          <span class="workspace-settings-menu__value">{tocWidth.toFixed(2)} rem</span>
-        </span>
-        <div class="workspace-settings-menu__field-controls">
-          <input class="workspace-settings-menu__range" type="range" min="0" max="120" step="0.25" value={tocWidth} oninput={(event) => onUpdateTocWidth(numericValue(event))} />
-          <input class="workspace-settings-menu__number" type="number" min="0" max="120" step="0.25" value={tocWidth} oninput={(event) => onUpdateTocWidth(numericValue(event))} />
-        </div>
-      </label>
-
-      <label class="workspace-settings-menu__field">
-        <span class="workspace-settings-menu__field-head">
-          <span>Breite Arbeitsrahmen</span>
-          <span class="workspace-settings-menu__value">{workspaceWidth.toFixed(1)} rem</span>
-        </span>
-        <div class="workspace-settings-menu__field-controls">
-          <input class="workspace-settings-menu__range" type="range" min="16" max="320" step="0.5" value={workspaceWidth} oninput={(event) => onPreviewWorkspaceWidth(numericValue(event))} onchange={(event) => onCommitWorkspaceWidth(numericValue(event))} />
-          <input class="workspace-settings-menu__number" type="number" min="16" max="320" step="0.5" value={workspaceWidth} oninput={(event) => onPreviewWorkspaceWidth(numericValue(event))} onchange={(event) => onCommitWorkspaceWidth(numericValue(event))} />
-        </div>
-      </label>
-
-      <label class="workspace-settings-menu__field">
-        <span class="workspace-settings-menu__field-head">
-          <span>Schriftgröße</span>
-          <span class="workspace-settings-menu__value">{fontScale.toFixed(2)}x</span>
-        </span>
-        <div class="workspace-settings-menu__field-controls">
-          <input class="workspace-settings-menu__range" type="range" min="0.1" max="4" step="0.05" value={fontScale} oninput={(event) => onPreviewFontScale(numericValue(event))} onchange={(event) => onCommitFontScale(numericValue(event))} />
-          <input class="workspace-settings-menu__number" type="number" min="0.1" max="4" step="0.05" value={fontScale} oninput={(event) => onPreviewFontScale(numericValue(event))} onchange={(event) => onCommitFontScale(numericValue(event))} />
-        </div>
-      </label>
-
-      <label class="workspace-settings-menu__field">
-        <span class="workspace-settings-menu__field-head">
-          <span>Aufteilung links / rechts</span>
-          <span class="workspace-settings-menu__value">{splitRatio.toFixed(0)} / {(100 - splitRatio).toFixed(0)}</span>
-        </span>
-        <div class="workspace-settings-menu__field-controls">
-          <input class="workspace-settings-menu__range" disabled={!splitView} type="range" min="0" max="100" step="1" value={splitRatio} oninput={(event) => onUpdateSplitRatio(numericValue(event))} />
-          <input class="workspace-settings-menu__number" disabled={!splitView} type="number" min="0" max="100" step="1" value={splitRatio} oninput={(event) => onUpdateSplitRatio(numericValue(event))} />
-        </div>
-      </label>
-
       <div class="workspace-settings-menu__section">
-        <p class="workspace-settings-menu__section-title">Abstände</p>
-
-        <label class="workspace-settings-menu__field">
-          <span class="workspace-settings-menu__field-head">
-            <span>Abstand Inhaltsverzeichnis</span>
-            <span class="workspace-settings-menu__value">{tocGap.toFixed(1)} rem</span>
-          </span>
-          <div class="workspace-settings-menu__field-controls">
-            <input class="workspace-settings-menu__range" type="range" min="0" max="40" step="0.1" value={tocGap} oninput={(event) => onUpdateTocGap(numericValue(event))} />
-            <input class="workspace-settings-menu__number" type="number" min="0" max="40" step="0.1" value={tocGap} oninput={(event) => onUpdateTocGap(numericValue(event))} />
-          </div>
-        </label>
-
-        <label class="workspace-settings-menu__field">
-          <span class="workspace-settings-menu__field-head">
-            <span>Abstand Arbeitsflächen</span>
-            <span class="workspace-settings-menu__value">{paneGap.toFixed(1)} rem</span>
-          </span>
-          <div class="workspace-settings-menu__field-controls">
-            <input class="workspace-settings-menu__range" type="range" min="0" max="40" step="0.1" value={paneGap} oninput={(event) => onUpdatePaneGap(numericValue(event))} />
-            <input class="workspace-settings-menu__number" type="number" min="0" max="40" step="0.1" value={paneGap} oninput={(event) => onUpdatePaneGap(numericValue(event))} />
-          </div>
-        </label>
+        <p class="workspace-settings-menu__section-title">Schriftgröße</p>
+        <div class="workspace-settings-menu__font-options" role="group" aria-label="Schriftgröße">
+          {#each [
+            { label: "Klein", value: 0.9 },
+            { label: "Standard", value: 1 },
+            { label: "Groß", value: 1.15 }
+          ] as option}
+            <button
+              class:workspace-settings-menu__font-option--active={fontOptionActive(option.value)}
+              class="workspace-settings-menu__font-option"
+              type="button"
+              aria-pressed={fontOptionActive(option.value)}
+              onclick={() => onCommitFontScale(option.value)}
+            >{option.label}</button>
+          {/each}
+        </div>
       </div>
 
       <button class="workspace-settings-menu__reset" type="button" onclick={onResetLayout}>
-        Standardlayout wiederherstellen
+        Darstellung zurücksetzen
       </button>
     </div>
   {/if}

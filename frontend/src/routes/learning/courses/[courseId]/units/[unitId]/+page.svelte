@@ -5,7 +5,7 @@
 
   import ModeSwitch from "$lib/components/ui/ModeSwitch.svelte";
   import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";
-  import LearningUnitContentWorkspace from "$lib/components/learning-unit/LearningUnitContentWorkspace.svelte";
+  import LearnerContentWorkspace from "$lib/components/learning-unit/LearnerContentWorkspace.svelte";
   import LearningUnitOverview from "$lib/components/learning-unit/LearningUnitOverview.svelte";
   import {
     buildLearningUnitFlow,
@@ -27,6 +27,7 @@
     emptyReviewFocus,
     emptySubmissionFocus,
     flattenContentGroups,
+    moduleContentItems,
     type LearningUnitViewState,
     type ModularWorkspaceSnapshot,
     orderedOpenModules,
@@ -63,6 +64,15 @@
     readLearningUnitWorkspaceState,
     serializeLearningUnitWorkspaceState
   } from "$lib/learning-unit/workspace-storage";
+  import {
+    defaultLearnerWorkspaceState,
+    learnerWorkspaceStorageKeys,
+    readLearnerWorkspaceState,
+    serializeLearnerWorkspacePersistentState,
+    serializeLearnerWorkspaceTabState,
+    type LearnerContextReference,
+    type LearnerWorkspaceState
+  } from "$lib/learning-unit/learner-workspace-state";
   import { highlightedLearnerGraphModuleIds } from "$lib/learning-unit/graph-selection";
   import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type {
@@ -92,6 +102,7 @@
   let graphState = $state<LearningUnitGraph | null>(null);
   let modularWorkspace = $state<ModularWorkspaceState>(defaultModularWorkspaceState(currentViewportWidth()));
   let linearWorkspace = $state<LinearWorkspaceState>(defaultLinearWorkspaceState(currentViewportWidth()));
+  let learnerWorkspace = $state<LearnerWorkspaceState>(defaultLearnerWorkspaceState());
   let moduleCache = $state.raw<Record<string, LearningModuleContent>>({});
   let moduleLoading = $state.raw<Record<string, boolean>>({});
   let moduleErrors = $state.raw<Record<string, string | null>>({});
@@ -205,6 +216,40 @@
     return flattenContentGroups(contentGroups());
   }
 
+  function contextModuleOptions(): Array<{
+    id: string;
+    title: string;
+    current: boolean;
+    loaded: boolean;
+    loading: boolean;
+    error: string | null;
+    items: LearningContentItem[];
+  }> {
+    if (!isModularUnit()) {
+      return contentGroups().map((group) => ({
+        id: group.id,
+        title: group.title ?? "Abschnitt",
+        current: group.items.some((item) => item.key === learnerWorkspace.activeTask?.itemKey),
+        loaded: true,
+        loading: false,
+        error: null,
+        items: group.items
+      }));
+    }
+
+    return (graphState?.modules ?? [])
+      .filter((module) => module.status === "open" || module.status === "done")
+      .map((module) => ({
+        id: module.id,
+        title: module.title,
+        current: module.id === learnerWorkspace.activeTask?.moduleId,
+        loaded: Boolean(moduleCache[module.id]),
+        loading: Boolean(moduleLoading[module.id]),
+        error: moduleErrors[module.id] ?? null,
+        items: moduleContentItems(moduleCache[module.id] ?? null)
+      }));
+  }
+
   function currentPaneStacks(): PaneStacks {
     const items = currentContentItems();
     const itemKeys = items.map((item) => item.key);
@@ -255,6 +300,187 @@
 
   function taskItemKey(taskId: string): string {
     return `task:${taskId}`;
+  }
+
+  function learnerStorageKeys() {
+    return learnerWorkspaceStorageKeys(data.user?.sub ?? null, data.courseId, data.unitId);
+  }
+
+  function setLearnerWorkspaceState(next: LearnerWorkspaceState) {
+    learnerWorkspace = next;
+  }
+
+  function beginTaskWorkspace(itemKey: string, editorMode: "text" | "upload") {
+    const item = currentContentItems().find((candidate) => candidate.key === itemKey && candidate.task);
+    if (!item?.task) {
+      return;
+    }
+
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      mode: "working",
+      activeTask: {
+        itemKey,
+        taskId: item.task.id,
+        moduleId: item.moduleId ?? null,
+        status: "editing",
+        editorMode
+      },
+      context: {
+        ...learnerWorkspace.context,
+        compactSurface: "task"
+      },
+      returnPosition: {
+        moduleId: item.moduleId ?? null,
+        scrollY: browser ? window.scrollY : 0,
+        focusId: `task-row-${item.task.id}`
+      }
+    });
+  }
+
+  async function leaveTaskWorkspace() {
+    const position = learnerWorkspace.returnPosition;
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      mode: "orienting",
+      activeTask: null,
+      context: {
+        ...learnerWorkspace.context,
+        compactSurface: "task",
+        readingReferenceKey: null
+      }
+    });
+
+    await tick();
+    if (!browser || !position) {
+      return;
+    }
+    window.scrollTo({ top: position.scrollY, behavior: "auto" });
+    if (position.focusId) {
+      document.getElementById(position.focusId)?.focus({ preventScroll: true });
+    }
+  }
+
+  function setCompactSurface(surface: "task" | "materials") {
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        compactSurface: surface
+      }
+    });
+  }
+
+  function toggleContextPicker() {
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        pickerOpen: !learnerWorkspace.context.pickerOpen
+      }
+    });
+  }
+
+  async function toggleContextModule(moduleId: string) {
+    const expanded = learnerWorkspace.context.expandedModuleIds.includes(moduleId);
+    const expandedModuleIds = expanded
+      ? learnerWorkspace.context.expandedModuleIds.filter((id) => id !== moduleId)
+      : [...learnerWorkspace.context.expandedModuleIds, moduleId];
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        expandedModuleIds
+      }
+    });
+    if (!expanded && isModularUnit()) {
+      await ensureModuleLoaded(moduleId);
+    }
+  }
+
+  function addContextReference(reference: LearnerContextReference) {
+    if (learnerWorkspace.context.manualReferences.some((entry) => entry.key === reference.key)) {
+      return;
+    }
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        manualReferences: [...learnerWorkspace.context.manualReferences, reference]
+      }
+    });
+  }
+
+  function removeContextReference(referenceKey: string) {
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        manualReferences: learnerWorkspace.context.manualReferences.filter(
+          (reference) => reference.key !== referenceKey
+        ),
+        expandedReferenceKeys: learnerWorkspace.context.expandedReferenceKeys.filter(
+          (key) => key !== referenceKey
+        ),
+        readingReferenceKey:
+          learnerWorkspace.context.readingReferenceKey === referenceKey
+            ? null
+            : learnerWorkspace.context.readingReferenceKey
+      }
+    });
+  }
+
+  async function openContextReference(referenceKey: string) {
+    const reference = learnerWorkspace.context.manualReferences.find((entry) => entry.key === referenceKey);
+    if (reference?.kind === "submission" && reference.taskId) {
+      await ensureSubmissionHistoryLoaded(reference.taskId);
+    }
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        compactSurface: "materials",
+        readingReferenceKey: referenceKey,
+        scrollTop: 0
+      }
+    });
+  }
+
+  function closeContextReader() {
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        readingReferenceKey: null,
+        scrollTop: 0
+      }
+    });
+  }
+
+  function rememberContextScroll(scrollTop: number) {
+    if (Math.abs(learnerWorkspace.context.scrollTop - scrollTop) < 1) {
+      return;
+    }
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        scrollTop: Math.max(0, scrollTop)
+      }
+    });
+  }
+
+  function markActiveTaskResult(taskId: string) {
+    if (learnerWorkspace.activeTask?.taskId !== taskId) {
+      return;
+    }
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      activeTask: {
+        ...learnerWorkspace.activeTask,
+        status: "result"
+      }
+    });
   }
 
   function sanitizeDomToken(raw: string): string {
@@ -566,17 +792,25 @@
   }
 
   function toggleToc() {
+    const nextVisible = !learnerWorkspace.preferences.navigationVisible;
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      preferences: {
+        ...learnerWorkspace.preferences,
+        navigationVisible: nextVisible
+      }
+    });
     if (isModularUnit()) {
       setModularWorkspaceState({
         ...modularWorkspace,
-        tocOpen: !modularWorkspace.tocOpen
+        tocOpen: nextVisible
       });
       return;
     }
 
     setLinearWorkspaceState({
       ...linearWorkspace,
-      tocOpen: !linearWorkspace.tocOpen
+      tocOpen: nextVisible
     });
   }
 
@@ -879,6 +1113,9 @@
           feedbackStatusMessage = null;
           pendingSubmissionIntent = null;
           applyTaskDetailState(setPaneReviewFocus(submissionFocusState(), reviewFocusByPane, paneId, taskItemKey(taskId)));
+          if (intent === "submit") {
+            markActiveTaskResult(taskId);
+          }
           await refreshModularGraph().catch(() => undefined);
           return;
         }
@@ -992,6 +1229,11 @@
   }
 
   async function handleProgressPersisted() {
+    const activeTaskId = learnerWorkspace.activeTask?.taskId ?? null;
+    if (activeTaskId) {
+      await ensureSubmissionHistoryLoaded(activeTaskId);
+      markActiveTaskResult(activeTaskId);
+    }
     await refreshModularGraph().catch(() => undefined);
   }
 
@@ -1032,6 +1274,7 @@
             feedbackStatusTaskId = null;
             pendingSubmissionIntent = null;
             feedbackStatusMessage = null;
+            markActiveTaskResult(payload.finalizedTaskId);
             await refreshModularGraph().catch(() => undefined);
             return;
           }
@@ -1095,6 +1338,10 @@
       openTabs,
       activeTab: moduleId
     });
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      openedModuleIds: openTabs
+    });
     modularRestoreState = "ready";
     modularRestoreMessage = null;
     syncModularWorkspaceUrl("content", moduleId);
@@ -1127,6 +1374,14 @@
       ...modularWorkspace,
       openTabs: remaining,
       activeTab: nextActive
+    });
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      openedModuleIds: remaining,
+      mode:
+        learnerWorkspace.activeTask?.moduleId === moduleId ? "orienting" : learnerWorkspace.mode,
+      activeTask:
+        learnerWorkspace.activeTask?.moduleId === moduleId ? null : learnerWorkspace.activeTask
     });
     syncModularWorkspaceUrl(nextActive ? "content" : "overview", nextActive);
   }
@@ -1170,9 +1425,16 @@
   }
 
   function commitFontScale(value: number) {
-    const nextScale = clamp(value, 0.1, 4);
+    const nextScale = value <= 0.95 ? 0.9 : value >= 1.1 ? 1.15 : 1;
     applyFontScale(nextScale);
     updateLayoutPreferences({ fontScale: nextScale });
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      preferences: {
+        ...learnerWorkspace.preferences,
+        fontSize: nextScale === 0.9 ? "small" : nextScale === 1.15 ? "large" : "standard"
+      }
+    });
   }
 
   function resetLayoutPreferences() {
@@ -1183,6 +1445,13 @@
     layoutPreferences = layoutDefaults;
     applyWorkspaceWidth(layoutDefaults.workspaceWidth);
     applyFontScale(layoutDefaults.fontScale);
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      preferences: {
+        navigationVisible: chromeDefaults.tocOpen,
+        fontSize: "standard"
+      }
+    });
 
     if (isModularUnit()) {
       setModularWorkspaceState({
@@ -1250,7 +1519,6 @@
 
   onMount(() => {
     const viewportWidth = currentViewportWidth();
-    const stored = readStoredWorkspaceState(viewportWidth);
     graphState = data.graph ? plainGraph(data.graph) : null;
 
     if (data.activeModule) {
@@ -1259,22 +1527,51 @@
       };
     }
 
+    const stored = readLearnerWorkspaceState({
+      localStorage: window.localStorage,
+      sessionStorage: window.sessionStorage,
+      learnerSub: data.user?.sub ?? null,
+      courseId: data.courseId,
+      unitId: data.unitId,
+      openableModuleIds: openableModuleIds(),
+      accessibleTaskKeys: isModularUnit()
+        ? undefined
+        : new Set(currentContentItems().filter((item) => item.kind === "task").map((item) => item.key)),
+      accessibleReferenceKeys: isModularUnit()
+        ? undefined
+        : new Set(currentContentItems().filter((item) => item.kind === "material").map((item) => item.key))
+    });
+    setLearnerWorkspaceState(stored);
+    const layoutDefaults = defaultLayoutPreferences(viewportWidth);
+    layoutPreferences = {
+      ...layoutDefaults,
+      fontScale: stored.preferences.fontSize === "small" ? 0.9 : stored.preferences.fontSize === "large" ? 1.15 : 1
+    };
+
     if (isModularUnit()) {
-      const seeded = seedModularWorkspaceState(stored.modular);
+      const seeded = seedModularWorkspaceState({
+        ...defaultModularWorkspaceState(viewportWidth),
+        view: data.initialView,
+        openTabs: stored.openedModuleIds,
+        activeTab: data.activeModule?.module.id ?? stored.openedModuleIds[0] ?? null,
+        tocOpen: stored.preferences.navigationVisible
+      });
       setModularWorkspaceState(seeded);
-      layoutPreferences = stored.layout;
+      setLearnerWorkspaceState({ ...stored, openedModuleIds: seeded.openTabs });
       if (seeded.view === "content" && seeded.openTabs.length > 0) {
         void restoreOpenModules(seeded.openTabs);
       } else {
         modularRestoreState = "idle";
       }
     } else {
-      setLinearWorkspaceState(stored.linear);
-      layoutPreferences = stored.layout;
+      setLinearWorkspaceState({
+        ...defaultLinearWorkspaceState(viewportWidth),
+        tocOpen: stored.preferences.navigationVisible
+      });
     }
 
-    applyWorkspaceWidth(stored.layout.workspaceWidth);
-    applyFontScale(stored.layout.fontScale);
+    applyWorkspaceWidth(layoutPreferences.workspaceWidth);
+    applyFontScale(layoutPreferences.fontScale);
     workspaceReady = true;
     if (!isModularUnit()) {
       restoreHistoryContext();
@@ -1297,12 +1594,12 @@
       return;
     }
 
-    const payload = serializeLearningUnitWorkspaceState({
-      modular: modularWorkspace,
-      linear: linearWorkspace,
-      layout: layoutPreferences
-    });
-    window.localStorage.setItem(storageKey(), payload);
+    const keys = learnerStorageKeys();
+    if (!keys) {
+      return;
+    }
+    window.localStorage.setItem(keys.persistent, serializeLearnerWorkspacePersistentState(learnerWorkspace));
+    window.sessionStorage.setItem(keys.tab, serializeLearnerWorkspaceTabState(learnerWorkspace));
   });
 
   $effect(() => {
@@ -1333,7 +1630,21 @@
       return;
     }
 
-    setSubmissionWorkspace("left", itemKey, null);
+    const item = currentContentItems().find((candidate) => candidate.key === itemKey);
+    if (!item?.task) {
+      return;
+    }
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      mode: "working",
+      activeTask: {
+        itemKey,
+        taskId: item.task.id,
+        moduleId: item.moduleId ?? null,
+        status: "result",
+        editorMode: null
+      }
+    });
   });
 
   $effect(() => {
@@ -1350,6 +1661,25 @@
     }
     if (rightInvalid) {
       setSubmissionWorkspace("right", null);
+    }
+  });
+
+  $effect(() => {
+    if (!workspaceReady || !learnerWorkspace.activeTask) {
+      return;
+    }
+    if (isModularUnit() && modularRestoreState !== "ready") {
+      return;
+    }
+    const availableTaskKeys = new Set(
+      currentContentItems().filter((item) => item.kind === "task").map((item) => item.key)
+    );
+    if (!availableTaskKeys.has(learnerWorkspace.activeTask.itemKey)) {
+      setLearnerWorkspaceState({
+        ...learnerWorkspace,
+        mode: "orienting",
+        activeTask: null
+      });
     }
   });
 </script>
@@ -1412,28 +1742,13 @@
               <WorkspaceSettingsMenu
                 open={modularSettingsMenuOpen}
                 tocOpen={workspaceTocOpen()}
-                splitView={workspaceSplitView()}
-                showSplitToggle={true}
-                tocWidth={layoutPreferences.tocWidth}
-                workspaceWidth={layoutPreferences.workspaceWidth}
-                splitRatio={layoutPreferences.splitRatio}
-                tocGap={layoutPreferences.tocGap}
-                paneGap={layoutPreferences.paneGap}
                 fontScale={layoutPreferences.fontScale}
                 onToggleMenu={() => {
                   modularSettingsMenuOpen = !modularSettingsMenuOpen;
                 }}
                 onToggleToc={toggleToc}
-                onToggleSplitView={() => setSplitView(!workspaceSplitView())}
                 onResetLayout={resetLayoutPreferences}
-                onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
-                onPreviewWorkspaceWidth={previewWorkspaceWidth}
-                onCommitWorkspaceWidth={commitWorkspaceWidth}
-                onPreviewFontScale={previewFontScale}
                 onCommitFontScale={commitFontScale}
-                onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
-                onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
-                onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
               />
             </div>
           {/if}
@@ -1471,20 +1786,24 @@
                 </button>
               </section>
             {:else}
-              <LearningUnitContentWorkspace
-                titleLabel=""
-                title=""
-                meta={null}
+              <LearnerContentWorkspace
                 learnerSub={data.user?.sub ?? null}
                 courseId={data.courseId}
+                unitTitle={data.selectedUnit?.unit.title ?? "Lerneinheit"}
                 unitType="modular"
-                moduleId={modularWorkspace.activeTab}
-                tocOpen={workspaceTocOpen()}
-                splitView={workspaceSplitView()}
-                activePane={workspaceActivePane()}
-                visiblePaneIds={visiblePaneIds()}
                 contentGroups={contentGroups()}
-                paneItems={paneItemsById()}
+                mode={learnerWorkspace.mode}
+                activeTaskKey={learnerWorkspace.activeTask?.itemKey ?? null}
+                activeEditorMode={learnerWorkspace.activeTask?.editorMode ?? null}
+                workStatus={learnerWorkspace.activeTask?.status ?? "editing"}
+                compactSurface={learnerWorkspace.context.compactSurface}
+                navigationVisible={learnerWorkspace.preferences.navigationVisible}
+                contextModules={contextModuleOptions()}
+                manualContextReferences={learnerWorkspace.context.manualReferences}
+                contextPickerOpen={learnerWorkspace.context.pickerOpen}
+                expandedContextModuleIds={learnerWorkspace.context.expandedModuleIds}
+                readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
+                contextScrollTop={learnerWorkspace.context.scrollTop}
                 historyByTask={submissionHistoryByTask}
                 historyStateByTask={submissionHistoryStateByTask}
                 submittedTaskId={data.submittedTaskId}
@@ -1495,39 +1814,21 @@
                 {feedbackStatusTaskId}
                 {feedbackStatusMessage}
                 {pendingSubmissionIntent}
-                submissionFocusByPane={workspaceSubmissionFocus()}
-                submissionModeByPane={workspaceSubmissionModes()}
-                {reviewFocusByPane}
-                {enhanceTaskForm}
-                onSubmitUploadFeedback={submitUploadFeedback}
-                showSplitToggle={false}
-                layoutMenuEnabled={false}
-                tocWidth={layoutPreferences.tocWidth}
-                workspaceWidth={layoutPreferences.workspaceWidth}
-                splitRatio={layoutPreferences.splitRatio}
-                tocGap={layoutPreferences.tocGap}
-                paneGap={layoutPreferences.paneGap}
-                fontScale={layoutPreferences.fontScale}
-                {itemDomId}
-                onToggleToc={toggleToc}
-                onToggleSplitView={() => setSplitView(!workspaceSplitView())}
-                onResetLayout={resetLayoutPreferences}
-                onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
-                onPreviewWorkspaceWidth={previewWorkspaceWidth}
-                onCommitWorkspaceWidth={commitWorkspaceWidth}
-                onPreviewFontScale={previewFontScale}
-                onCommitFontScale={commitFontScale}
-                onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
-                onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
-                onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
-                onSetActivePane={setActivePane}
-                onOpenItem={openItemFromToc}
-                onRemoveGroup={removeOpenModule}
-                onToggleItem={togglePaneItem}
-                onToggleReviewPanel={toggleReviewPanel}
-                onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
-                onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
-                onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
+                enhanceTaskForm={(taskId) => enhanceTaskForm(taskId, "left")}
+                onSubmitUploadFeedback={(payload) => submitUploadFeedback({ ...payload, paneId: "left" })}
+                onBeginTask={beginTaskWorkspace}
+                onPauseTask={leaveTaskWorkspace}
+                onCloseModule={removeOpenModule}
+                onSetCompactSurface={setCompactSurface}
+                onToggleMaterial={(itemKey) => togglePaneItem("left", itemKey)}
+                onToggleContextPicker={toggleContextPicker}
+                onToggleContextModule={toggleContextModule}
+                onAddContextReference={addContextReference}
+                onRemoveContextReference={removeContextReference}
+                onOpenContextReference={openContextReference}
+                onCloseContextReader={closeContextReader}
+                onContextScroll={rememberContextScroll}
+                onToggleReviewPanel={(taskId) => toggleReviewPanel("left", taskId)}
                 onProgressPersisted={handleProgressPersisted}
               />
             {/if}
@@ -1539,20 +1840,24 @@
     <div class="learning-unit-layout-rail">
       <div class="learning-unit-layout-frame">
         <section class="learning-unit-stage learning-unit-stage--content">
-          <LearningUnitContentWorkspace
-            titleLabel="Lerneinheit"
-            title={data.selectedUnit?.unit.title ?? "Lerneinheit"}
-            meta={null}
+          <LearnerContentWorkspace
             learnerSub={data.user?.sub ?? null}
             courseId={data.courseId}
+            unitTitle={data.selectedUnit?.unit.title ?? "Lerneinheit"}
             unitType="linear"
-            moduleId={null}
-            tocOpen={workspaceTocOpen()}
-            splitView={workspaceSplitView()}
-            activePane={workspaceActivePane()}
-            visiblePaneIds={visiblePaneIds()}
             contentGroups={contentGroups()}
-            paneItems={paneItemsById()}
+            mode={learnerWorkspace.mode}
+            activeTaskKey={learnerWorkspace.activeTask?.itemKey ?? null}
+            activeEditorMode={learnerWorkspace.activeTask?.editorMode ?? null}
+            workStatus={learnerWorkspace.activeTask?.status ?? "editing"}
+            compactSurface={learnerWorkspace.context.compactSurface}
+            navigationVisible={learnerWorkspace.preferences.navigationVisible}
+            contextModules={contextModuleOptions()}
+            manualContextReferences={learnerWorkspace.context.manualReferences}
+            contextPickerOpen={learnerWorkspace.context.pickerOpen}
+            expandedContextModuleIds={learnerWorkspace.context.expandedModuleIds}
+            readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
+            contextScrollTop={learnerWorkspace.context.scrollTop}
             historyByTask={submissionHistoryByTask}
             historyStateByTask={submissionHistoryStateByTask}
             submittedTaskId={data.submittedTaskId}
@@ -1563,38 +1868,21 @@
             {feedbackStatusTaskId}
             {feedbackStatusMessage}
             {pendingSubmissionIntent}
-            submissionFocusByPane={workspaceSubmissionFocus()}
-            submissionModeByPane={workspaceSubmissionModes()}
-            {reviewFocusByPane}
-            {enhanceTaskForm}
-            onSubmitUploadFeedback={submitUploadFeedback}
-            showSplitToggle={true}
-            layoutMenuEnabled={true}
-            tocWidth={layoutPreferences.tocWidth}
-            workspaceWidth={layoutPreferences.workspaceWidth}
-            splitRatio={layoutPreferences.splitRatio}
-            tocGap={layoutPreferences.tocGap}
-            paneGap={layoutPreferences.paneGap}
-            fontScale={layoutPreferences.fontScale}
-            {itemDomId}
-            onToggleToc={toggleToc}
-            onToggleSplitView={() => setSplitView(!workspaceSplitView())}
-            onResetLayout={resetLayoutPreferences}
-            onUpdateTocWidth={(value) => updateLayoutPreferences({ tocWidth: value })}
-            onPreviewWorkspaceWidth={previewWorkspaceWidth}
-            onCommitWorkspaceWidth={commitWorkspaceWidth}
-            onPreviewFontScale={previewFontScale}
-            onCommitFontScale={commitFontScale}
-            onUpdateSplitRatio={(value) => updateLayoutPreferences({ splitRatio: value })}
-            onUpdateTocGap={(value) => updateLayoutPreferences({ tocGap: value })}
-            onUpdatePaneGap={(value) => updateLayoutPreferences({ paneGap: value })}
-            onSetActivePane={setActivePane}
-            onOpenItem={openItemFromToc}
-            onToggleItem={togglePaneItem}
-            onToggleReviewPanel={toggleReviewPanel}
-            onEnterSubmissionWorkspace={(paneId, itemKey, mode) => setSubmissionWorkspace(paneId, itemKey, mode ?? "text")}
-            onEnterUploadWorkspace={(paneId, itemKey) => setSubmissionWorkspace(paneId, itemKey, "upload")}
-            onExitSubmissionWorkspace={(paneId) => setSubmissionWorkspace(paneId, null)}
+            enhanceTaskForm={(taskId) => enhanceTaskForm(taskId, "left")}
+            onSubmitUploadFeedback={(payload) => submitUploadFeedback({ ...payload, paneId: "left" })}
+            onBeginTask={beginTaskWorkspace}
+            onPauseTask={leaveTaskWorkspace}
+            onCloseModule={() => {}}
+            onSetCompactSurface={setCompactSurface}
+            onToggleMaterial={(itemKey) => togglePaneItem("left", itemKey)}
+            onToggleContextPicker={toggleContextPicker}
+            onToggleContextModule={toggleContextModule}
+            onAddContextReference={addContextReference}
+            onRemoveContextReference={removeContextReference}
+            onOpenContextReference={openContextReference}
+            onCloseContextReader={closeContextReader}
+            onContextScroll={rememberContextScroll}
+            onToggleReviewPanel={(taskId) => toggleReviewPanel("left", taskId)}
             onProgressPersisted={handleProgressPersisted}
           />
         </section>

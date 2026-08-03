@@ -112,7 +112,7 @@ export function defaultLayoutPreferences(viewportWidth = 1280): LayoutPreference
   if (bucket === "medium") {
     return {
       tocWidth: 15,
-      workspaceWidth: viewportWorkspaceWidth(viewportWidth, 64),
+      workspaceWidth: viewportWorkspaceWidth(viewportWidth, 112),
       splitRatio: 50,
       tocGap: 0.9,
       paneGap: 0.9,
@@ -122,7 +122,7 @@ export function defaultLayoutPreferences(viewportWidth = 1280): LayoutPreference
   if (bucket === "wide") {
     return {
       tocWidth: 16.25,
-      workspaceWidth: viewportWorkspaceWidth(viewportWidth, 64),
+      workspaceWidth: viewportWorkspaceWidth(viewportWidth, 112),
       splitRatio: 50,
       tocGap: 1.1,
       paneGap: 1.1,
@@ -131,7 +131,7 @@ export function defaultLayoutPreferences(viewportWidth = 1280): LayoutPreference
   }
   return {
     tocWidth: 17,
-    workspaceWidth: viewportWorkspaceWidth(viewportWidth, 64),
+    workspaceWidth: viewportWorkspaceWidth(viewportWidth, 112),
     splitRatio: 50,
     tocGap: 1.25,
     paneGap: 1.25,

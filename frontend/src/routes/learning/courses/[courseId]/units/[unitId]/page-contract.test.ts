@@ -14,10 +14,13 @@ describe("learning unit route contract", () => {
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(routeSource).toContain('import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";');
+    expect(routeSource).toContain('import LearnerContentWorkspace from "$lib/components/learning-unit/LearnerContentWorkspace.svelte";');
     expect(routeSource).toContain("<WorkspaceSettingsMenu");
     expect(routeSource).toContain('class="learning-unit-toolbar__utility"');
     expect(routeSource).toContain('class="learning-unit-layout-frame learning-unit-layout-frame--toolbar"');
-    expect(routeSource).toContain("layoutMenuEnabled={false}");
+    expect(routeSource).toContain("mode={learnerWorkspace.mode}");
+    expect(routeSource).not.toContain("showSplitToggle=");
+    expect(routeSource).not.toContain("onToggleSplitView=");
     expect(routeSource).toContain("modularSettingsMenuOpen = !modularSettingsMenuOpen");
     expect(routeSource).toContain('!target.closest("[data-layout-menu-root]")');
     expect(routeSource).toContain('if (event.key === "Escape")');
@@ -49,26 +52,23 @@ describe("learning unit route contract", () => {
     expect(appCss).toMatch(/\.learning-unit-toolbar__utility \.workspace-top-action--quiet\s*\{[^}]*border-color:\s*color-mix\(in srgb,\s*var\(--color-border\) 38%,\s*transparent 62%\);/s);
   });
 
-  it("keeps pane item lists intact while tracking a single inline submission focus", () => {
+  it("uses one learner-scoped work state instead of exposing split-pane controls", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
-    expect(routeSource).toContain("function setSubmissionWorkspace");
-    expect(routeSource).toContain("let reviewFocusByPane = $state<ReviewFocusByPane>(emptyReviewFocus())");
-    expect(routeSource).toContain("togglePaneSubmissionFocus");
-    expect(routeSource).toContain("togglePaneReviewFocus");
-    expect(routeSource).toContain("setPaneReviewFocus");
-    expect(routeSource).toContain("function toggleReviewPanel(paneId: PaneId, taskId: string)");
-    expect(routeSource).not.toContain("reviewPanelOpenByTask");
-    expect(routeSource).not.toContain("focus.left.itemKey ? leftEntries.filter");
-    expect(routeSource).not.toContain("focus.right.itemKey ? rightEntries.filter");
+    expect(routeSource).toContain("let learnerWorkspace = $state<LearnerWorkspaceState>");
+    expect(routeSource).toContain("function beginTaskWorkspace");
+    expect(routeSource).toContain("function leaveTaskWorkspace");
+    expect(routeSource).toContain("learnerWorkspaceStorageKeys(data.user?.sub ?? null");
+    expect(routeSource).not.toContain("showSplitToggle=");
+    expect(routeSource).not.toContain("onToggleSplitView=");
   });
 
   it("passes the authenticated learner id to inline task draft persistence", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
     const workspaceSource = readFileSync(
-      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningUnitContentWorkspace.svelte"),
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearnerContentWorkspace.svelte"),
       "utf8"
     );
     const taskCardSource = readFileSync(
@@ -123,7 +123,7 @@ describe("learning unit route contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
     const workspaceSource = readFileSync(
-      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningUnitContentWorkspace.svelte"),
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearnerContentWorkspace.svelte"),
       "utf8"
     );
     const taskCardSource = readFileSync(
@@ -135,18 +135,14 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain("function historyForTask(taskId: string): LearningSubmission[]");
     expect(routeSource).not.toContain("let historyState = $state<LearningSubmission[]>(data.history)");
     expect(workspaceSource).toContain("historyByTask");
-    expect(workspaceSource).toContain("history={historyByTask[task.id] ?? []}");
+    expect(workspaceSource).toContain("history={taskHistory(task.id)}");
     expect(workspaceSource).toContain("compactLayout={true}");
-    expect(workspaceSource).toContain('class="learning-unit-module"');
-    expect(workspaceSource).toContain('class="learning-unit-module__index"');
-    expect(workspaceSource).toContain('class="learning-unit-module__meta"');
-    expect(workspaceSource).toContain('class="learning-unit-module__materials"');
-    expect(workspaceSource).toContain('class="learning-unit-module__tasks"');
-    expect(workspaceSource).toContain("moduleDisplayIndex(groupIndex)");
-    expect(workspaceSource).toContain("moduleMetaText(group)");
-    expect(workspaceSource).not.toContain('<p class="workspace-label">Modul</p>');
-    expect(workspaceSource).toContain("{#if group.materials.length}");
-    expect(workspaceSource).toContain('class="learning-unit-workspace-surface"');
+    expect(workspaceSource).toContain('class="learner-orientation__module"');
+    expect(workspaceSource).toContain('class="learner-orientation__materials"');
+    expect(workspaceSource).toContain('class="learner-orientation__tasks"');
+    expect(workspaceSource).toContain("moduleMeta(group)");
+    expect(workspaceSource).toContain('class="learner-task-workbench"');
+    expect(workspaceSource).toContain('workspaceOnly={true}');
     expect(taskCardSource).toContain("learning-task-row__preview");
     expect(taskCardSource).toContain("taskPreviewLine()");
     expect(taskCardSource).toContain("return `${taskTitle} beginnen`;");
@@ -253,7 +249,7 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile");
     expect(designDoc).toContain("Status wird primär über Balken und Tönung getragen");
     expect(designDoc).toContain("Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline");
-    expect(designDoc).toContain("`Meine Abgabe` und Bearbeitung sind pro Pane exklusiv und erneut klickbar");
+    expect(designDoc).toContain("Die Aufgabenbearbeitung ist ein eigener Fokusraum");
     expect(designDoc).toContain("`accent` für Primäraktionen");
     expect(designDoc).toContain("`quiet` für normale Sekundäraktionen");
     expect(designDoc).toContain("`subtle` für kleine, nicht-dominante Nebenaktionen");
@@ -311,7 +307,7 @@ describe("learning unit route contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
     const workspaceSource = readFileSync(
-      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearningUnitContentWorkspace.svelte"),
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearnerContentWorkspace.svelte"),
       "utf8"
     );
     const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));

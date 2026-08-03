@@ -31,6 +31,8 @@ export type LearnerWorkspaceState = {
     compactSurface: LearnerCompactSurface;
     manualReferences: LearnerContextReference[];
     expandedReferenceKeys: string[];
+    pickerOpen: boolean;
+    expandedModuleIds: string[];
     readingReferenceKey: string | null;
     scrollTop: number;
   };
@@ -53,7 +55,7 @@ type ReadableStorage = {
 type WorkspaceAccess = {
   openableModuleIds: Set<string>;
   accessibleTaskKeys?: Set<string>;
-  accessibleReferenceKeys: Set<string>;
+  accessibleReferenceKeys?: Set<string>;
 };
 
 export function defaultLearnerWorkspaceState(): LearnerWorkspaceState {
@@ -66,6 +68,8 @@ export function defaultLearnerWorkspaceState(): LearnerWorkspaceState {
       compactSurface: "task",
       manualReferences: [],
       expandedReferenceKeys: [],
+      pickerOpen: false,
+      expandedModuleIds: [],
       readingReferenceKey: null,
       scrollTop: 0
     },
@@ -145,10 +149,12 @@ export function normalizeLearnerWorkspaceState(
 ): LearnerWorkspaceState {
   const defaults = defaultLearnerWorkspaceState();
   const candidate = raw && typeof raw === "object" ? (raw as Partial<LearnerWorkspaceState>) : {};
-  const rawContext = candidate.context && typeof candidate.context === "object" ? candidate.context : {};
-  const rawPreferences =
+  const rawContext: Partial<LearnerWorkspaceState["context"]> =
+    candidate.context && typeof candidate.context === "object" ? candidate.context : {};
+  const rawPreferences: Partial<LearnerWorkspaceState["preferences"]> =
     candidate.preferences && typeof candidate.preferences === "object" ? candidate.preferences : {};
-  const rawReturn = candidate.returnPosition && typeof candidate.returnPosition === "object"
+  const rawReturn: Partial<NonNullable<LearnerWorkspaceState["returnPosition"]>> | null =
+    candidate.returnPosition && typeof candidate.returnPosition === "object"
     ? candidate.returnPosition
     : null;
 
@@ -156,8 +162,12 @@ export function normalizeLearnerWorkspaceState(
   const manualReferences = (Array.isArray(rawContext.manualReferences) ? rawContext.manualReferences : [])
     .map(normalizeReference)
     .filter((entry): entry is LearnerContextReference => Boolean(entry))
-    .filter((entry) => access.accessibleReferenceKeys.has(entry.key));
-  const referenceKeys = new Set(manualReferences.map((entry) => entry.key));
+    .filter((entry) => !entry.moduleId || access.openableModuleIds.has(entry.moduleId))
+    .filter((entry) => !access.accessibleReferenceKeys || access.accessibleReferenceKeys.has(entry.key));
+  const referenceKeys = new Set([
+    ...manualReferences.map((entry) => entry.key),
+    ...(access.accessibleReferenceKeys ?? [])
+  ]);
   const expandedReferenceKeys = uniqueStrings(rawContext.expandedReferenceKeys).filter((key) =>
     referenceKeys.has(key)
   );
@@ -187,6 +197,10 @@ export function normalizeLearnerWorkspaceState(
       compactSurface: rawContext.compactSurface === "materials" ? "materials" : "task",
       manualReferences,
       expandedReferenceKeys,
+      pickerOpen: rawContext.pickerOpen === true,
+      expandedModuleIds: uniqueStrings(rawContext.expandedModuleIds).filter((id) =>
+        access.openableModuleIds.has(id)
+      ),
       readingReferenceKey: readingCandidate && referenceKeys.has(readingCandidate) ? readingCandidate : null,
       scrollTop:
         typeof rawContext.scrollTop === "number" && Number.isFinite(rawContext.scrollTop)
@@ -260,7 +274,7 @@ export function readLearnerWorkspaceState({
   unitId: string;
   openableModuleIds: Set<string>;
   accessibleTaskKeys?: Set<string>;
-  accessibleReferenceKeys: Set<string>;
+  accessibleReferenceKeys?: Set<string>;
 }): LearnerWorkspaceState {
   const keys = learnerWorkspaceStorageKeys(learnerSub, courseId, unitId);
   if (!keys) {
@@ -311,6 +325,8 @@ export function serializeLearnerWorkspaceTabState(state: LearnerWorkspaceState):
     context: {
       compactSurface: state.context.compactSurface,
       expandedReferenceKeys: state.context.expandedReferenceKeys,
+      pickerOpen: state.context.pickerOpen,
+      expandedModuleIds: state.context.expandedModuleIds,
       readingReferenceKey: state.context.readingReferenceKey,
       scrollTop: state.context.scrollTop
     },

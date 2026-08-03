@@ -14,49 +14,48 @@ describe("WorkspaceSettingsMenu", () => {
       props: {
         open: true,
         tocOpen: true,
-        splitView: false,
-        showSplitToggle: true,
-        tocWidth: 17,
-        workspaceWidth: 64,
-        splitRatio: 50,
-        tocGap: 1.3,
-        paneGap: 1.3,
         fontScale: 1,
         onToggleMenu: vi.fn(),
         onToggleToc: vi.fn(),
-        onToggleSplitView: vi.fn(),
         onResetLayout: vi.fn(),
-        onUpdateTocWidth: vi.fn(),
-        onPreviewWorkspaceWidth: vi.fn(),
-        onCommitWorkspaceWidth: vi.fn(),
-        onPreviewFontScale: vi.fn(),
-        onCommitFontScale: vi.fn(),
-        onUpdateSplitRatio: vi.fn(),
-        onUpdateTocGap: vi.fn(),
-        onUpdatePaneGap: vi.fn()
+        onCommitFontScale: vi.fn()
       }
     });
   }
 
-  it("renders styled controls for toggles, ranges and number inputs", () => {
+  it("offers only navigation, three font sizes and reset", () => {
     const { container } = renderMenu();
 
     expect(screen.getByRole("dialog", { name: "Layout-Einstellungen" })).toBeInTheDocument();
-    expect(container.querySelectorAll(".workspace-settings-menu__checkbox")).toHaveLength(2);
-    expect(container.querySelectorAll(".workspace-settings-menu__range")).toHaveLength(6);
-    expect(container.querySelectorAll(".workspace-settings-menu__number")).toHaveLength(6);
-    expect(container.querySelector(".workspace-settings-menu__number:disabled")).not.toBeNull();
+    expect(container.querySelectorAll(".workspace-settings-menu__checkbox")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Klein" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Standard" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Groß" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Darstellung zurücksetzen" })).toBeInTheDocument();
+    expect(screen.queryByText("Zwei Ansichten")).not.toBeInTheDocument();
+    expect(screen.queryByText("Breite Arbeitsrahmen")).not.toBeInTheDocument();
+    expect(container.querySelector(".workspace-settings-menu__range")).toBeNull();
+    expect(container.querySelector(".workspace-settings-menu__number")).toBeNull();
   });
 
-  it("defines a fully themed control contract instead of relying on native browser chrome", () => {
+  it("does not expose retired split or spacing controls in its component contract", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(path.resolve(currentDir, "WorkspaceSettingsMenu.svelte"), "utf8");
+
+    expect(source).not.toContain("splitView");
+    expect(source).not.toContain("workspaceWidth");
+    expect(source).not.toContain("splitRatio");
+    expect(source).not.toContain("paneGap");
+    expect(source).not.toContain("tocGap");
+  });
+
+  it("defines themed checkbox and discrete font controls", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readGlobalCssBundle(path.resolve(currentDir, "../../styles"));
 
     expect(css).toMatch(/\.workspace-settings-menu__checkbox\s*\{[^}]*appearance:\s*none;[^}]*background:\s*var\(--color-bg-surface\);/s);
     expect(css).toMatch(/\.workspace-settings-menu__checkbox:checked::after\s*\{[^}]*border-color:\s*#ffffff;/s);
-    expect(css).toMatch(/\.workspace-settings-menu__range\s*\{[^}]*appearance:\s*none;[^}]*background:\s*transparent;/s);
-    expect(css).toMatch(/\.workspace-settings-menu__range::-webkit-slider-thumb\s*\{[^}]*border:\s*2px solid var\(--color-accent\);[^}]*background:\s*var\(--color-bg-surface\);/s);
-    expect(css).toMatch(/\.workspace-settings-menu__number\s*\{[^}]*background:\s*var\(--color-bg-surface\);[^}]*color:\s*var\(--color-text\);/s);
-    expect(css).toMatch(/\[data-theme="dark"\] \.workspace-settings-menu__number\s*\{[^}]*background:\s*var\(--color-bg-elevated\);/s);
+    expect(css).toMatch(/\.workspace-settings-menu__font-option\s*\{[^}]*border:/s);
+    expect(css).toMatch(/\.workspace-settings-menu__font-option--active\s*\{[^}]*background:\s*var\(--color-text\);/s);
   });
 });

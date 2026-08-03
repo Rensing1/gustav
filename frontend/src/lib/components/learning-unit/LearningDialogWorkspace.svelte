@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
-  import type { LearningTask } from "$lib/types/learning";
+  import type { LearningMaterial, LearningTask } from "$lib/types/learning";
 
   type DialogTurn = {
     id: string;
@@ -25,8 +25,83 @@
     initial_generation_attempts: number;
     turns: DialogTurn[];
   };
+  type DialogContextEntry = {
+    key: string;
+    kind: "material" | "submission";
+    label: string;
+    title: string;
+    bodyMd: string | null;
+    meta: string | null;
+    fileUrl?: string | null;
+  };
+  type DialogContextOption = {
+    key: string;
+    kind: "material" | "submission";
+    id: string;
+    moduleId: string | null;
+    taskId: string | null;
+    title: string;
+    added: boolean;
+  };
+  type DialogContextModule = {
+    id: string;
+    title: string;
+    current: boolean;
+    loaded: boolean;
+    loading: boolean;
+    error: string | null;
+    options: DialogContextOption[];
+  };
 
-  let { learnerSub = null, courseId, task, existingSessionId = null, readOnly = false, onCompleted = null }: { learnerSub?: string | null; courseId: string; task: LearningTask; existingSessionId?: string | null; readOnly?: boolean; onCompleted?: (() => void | Promise<void>) | null } = $props();
+  let {
+    learnerSub = null,
+    courseId,
+    task,
+    existingSessionId = null,
+    readOnly = false,
+    compactSurface = "task",
+    contextMaterials = [],
+    contextEntries = [],
+    readingContextKey = null,
+    contextPickerOpen = false,
+    expandedContextModuleIds = [],
+    contextModules = [],
+    onSetCompactSurface = null,
+    onOpenContext = null,
+    onCloseContext = null,
+    onToggleContextPicker = null,
+    onToggleContextModule = null,
+    onAddContextReference = null,
+    onPause = null,
+    onCompleted = null
+  }: {
+    learnerSub?: string | null;
+    courseId: string;
+    task: LearningTask;
+    existingSessionId?: string | null;
+    readOnly?: boolean;
+    compactSurface?: "task" | "materials";
+    contextMaterials?: LearningMaterial[];
+    contextEntries?: DialogContextEntry[];
+    readingContextKey?: string | null;
+    contextPickerOpen?: boolean;
+    expandedContextModuleIds?: string[];
+    contextModules?: DialogContextModule[];
+    onSetCompactSurface?: ((surface: "task" | "materials") => void) | null;
+    onOpenContext?: ((key: string) => void | Promise<void>) | null;
+    onCloseContext?: (() => void) | null;
+    onToggleContextPicker?: (() => void) | null;
+    onToggleContextModule?: ((moduleId: string) => void | Promise<void>) | null;
+    onAddContextReference?: ((reference: {
+      key: string;
+      kind: "material" | "submission";
+      id: string;
+      moduleId: string | null;
+      taskId: string | null;
+    }) => void) | null;
+    onPause?: (() => void | Promise<void>) | null;
+    onCompleted?: (() => void | Promise<void>) | null;
+  } = $props();
   let session = $state<DialogSession | null>(null);
   let message = $state("");
   let closingAnswer = $state("");
@@ -35,6 +110,7 @@
   let selectedStarter = $state<{ text: string; source: string } | null>(null);
   let pending = $state(false);
   let error = $state<string | null>(null);
+  const activeContextEntry = $derived(contextEntries.find((entry) => entry.key === readingContextKey) ?? null);
 
   function baseUrl(): string {
     return `/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(task.id)}/dialog-sessions`;
@@ -194,6 +270,7 @@
       const abandoned = await request(`/${session.id}/abandon`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
       clearClosingDraft(abandoned);
       acceptSession(abandoned);
+      await onPause?.();
     }
     catch (caught) { error = caught instanceof Error ? caught.message : "Der Dialog konnte nicht abgebrochen werden."; }
     finally { pending = false; }
@@ -212,28 +289,148 @@
   {#if pending && !session}<p>Lädt …</p>{/if}
   {#if error}<p class="flash flash-error">{error}</p>{/if}
   {#if session}
-    <div class="dialog-layout" data-phase={closingPhase ? "closing" : "conversation"}>
-      <aside class="dialog-sidebar" aria-label="Dialogpartner und Sitzungsaktionen">
-        <header class="dialog-context">
-          <p class="workspace-label">KI-Dialogpartner</p>
-          <h5>{session.dialog.partner_name}</h5>
-          <div class="dialog-context__description markdown-prose">{@html renderMarkdown(session.dialog.partner_description_md)}</div>
-        </header>
+    <nav class="dialog-workspace__switch" aria-label="Arbeitsbereich wählen">
+      <button
+        class:dialog-workspace__switch-button--active={compactSurface === "task"}
+        class="dialog-workspace__switch-button"
+        type="button"
+        aria-pressed={compactSurface === "task"}
+        onclick={() => onSetCompactSurface?.("task")}
+      >Aufgabe</button>
+      <button
+        class:dialog-workspace__switch-button--active={compactSurface === "materials"}
+        class="dialog-workspace__switch-button"
+        type="button"
+        aria-pressed={compactSurface === "materials"}
+        onclick={() => onSetCompactSurface?.("materials")}
+      >Materialien</button>
+    </nav>
+    <div class="dialog-layout" data-compact-surface={compactSurface} data-phase={closingPhase ? "closing" : "conversation"}>
+      <aside class="dialog-sidebar" data-dialog-surface="materials" aria-label="Dialogpartner und Sitzungsaktionen">
+        {#if activeContextEntry}
+          <article class="dialog-context-reader" aria-label="Kontext lesen">
+            <button class="learner-context-reader__back" type="button" onclick={() => onCloseContext?.()}>
+              Zur Kontextliste
+            </button>
+            <p class="workspace-label">{activeContextEntry.label}</p>
+            <h5>{activeContextEntry.title}</h5>
+            {#if activeContextEntry.meta}<p class="dialog-context-reader__meta">{activeContextEntry.meta}</p>{/if}
+            {#if activeContextEntry.bodyMd}
+              <div class="dialog-context-reader__body">{@html renderMarkdown(activeContextEntry.bodyMd)}</div>
+            {:else if activeContextEntry.fileUrl}
+              <a href={activeContextEntry.fileUrl} target="_blank" rel="noreferrer">Material öffnen</a>
+            {:else}
+              <p class="workspace-note">Dieser Kontext wird geladen …</p>
+            {/if}
+          </article>
+        {:else}
+          <header class="dialog-task-context">
+            <p class="workspace-label">Aufgabe · KI-Dialog</p>
+            <div class="dialog-task-context__instruction">{@html renderMarkdown(task.instruction_md)}</div>
+          </header>
+          <header class="dialog-context">
+            <p class="workspace-label">KI-Dialogpartner</p>
+            <h5>{session.dialog.partner_name}</h5>
+            <div class="dialog-context__description markdown-prose">{@html renderMarkdown(session.dialog.partner_description_md)}</div>
+          </header>
 
-        <p class="dialog-context__meta" aria-label="Dialogstatus">
-          <span>KI</span>
-          <span>{session.dialog.response_mode === "hybrid" ? "Mit Satzanfängen" : "Freitext"}</span>
-          <span>Runde {session.round_count}/{session.dialog.max_rounds}</span>
-        </p>
+          <p class="dialog-context__meta" aria-label="Dialogstatus">
+            <span>KI</span>
+            <span>{session.dialog.response_mode === "hybrid" ? "Mit Satzanfängen" : "Freitext"}</span>
+            <span>Runde {session.round_count}/{session.dialog.max_rounds}</span>
+          </p>
 
-        <div class="dialog-notice" role="note">
-          <strong>Hinweis zur KI</strong>
-          <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
-        </div>
+          <div class="dialog-notice" role="note">
+            <strong>Hinweis zur KI</strong>
+            <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
+          </div>
+
+        {#if contextEntries.length}
+          <section class="dialog-context-materials" aria-labelledby="dialog-context-entries-title">
+            <h6 id="dialog-context-entries-title">Aufgabe & Kontext</h6>
+            {#each contextEntries as entry}
+              <button class="dialog-context-entry" type="button" onclick={() => onOpenContext?.(entry.key)}>
+                <span>{entry.meta ?? entry.label}</span>
+                <strong>{entry.title}</strong>
+              </button>
+            {/each}
+          </section>
+        {:else if contextMaterials.length}
+          <section class="dialog-context-materials" aria-labelledby="dialog-context-materials-title">
+            <h6 id="dialog-context-materials-title">Materialien</h6>
+            {#each contextMaterials as material}
+              <details class="dialog-context-material">
+                <summary>{material.title}</summary>
+                {#if material.kind === "markdown" && material.body_md}
+                  <div class="dialog-context-material__body">{@html renderMarkdown(material.body_md)}</div>
+                {:else}
+                  <p class="workspace-note">{material.filename_original ?? "Dateimaterial"}</p>
+                {/if}
+              </details>
+            {/each}
+          </section>
+        {/if}
+
+        <button
+          class="learner-task-context__add"
+          type="button"
+          aria-expanded={contextPickerOpen}
+          onclick={() => onToggleContextPicker?.()}
+        >+ Kontext hinzufügen</button>
+
+        {#if contextPickerOpen}
+          <section class="learner-context-picker" aria-label="Dialogkontext auswählen">
+            {#each contextModules as contextModule}
+              <div class="learner-context-picker__module">
+                <button
+                  class="learner-context-picker__module-toggle"
+                  type="button"
+                  aria-expanded={expandedContextModuleIds.includes(contextModule.id)}
+                  onclick={() => onToggleContextModule?.(contextModule.id)}
+                >
+                  <span>{contextModule.current ? "Aktuelles Modul" : "Weiteres Modul"}</span>
+                  <strong>{contextModule.title}</strong>
+                </button>
+                {#if expandedContextModuleIds.includes(contextModule.id)}
+                  <div class="learner-context-picker__module-body">
+                    {#if contextModule.loading}
+                      <p class="workspace-note">Inhalte werden geladen …</p>
+                    {:else if contextModule.error}
+                      <p class="workspace-note workspace-note--error">{contextModule.error}</p>
+                    {:else if contextModule.loaded}
+                      {#each contextModule.options as option}
+                        <button
+                          class="learner-context-picker__add-item"
+                          type="button"
+                          disabled={option.added}
+                          onclick={() => onAddContextReference?.({
+                            key: option.key,
+                            kind: option.kind,
+                            id: option.id,
+                            moduleId: option.moduleId,
+                            taskId: option.taskId
+                          })}
+                        >
+                          <span>{option.kind === "material" ? "Material" : "Eigene frühere Abgabe"}</span>
+                          <strong>{option.title}</strong>
+                        </button>
+                      {/each}
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </section>
+        {/if}
+        {/if}
 
         {#if session.status === "active" && !readOnly}
           <nav class="dialog-session-actions" aria-label="Sitzungsaktionen">
-            <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
+            {#if onPause}
+              <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={() => onPause?.()}>Pausieren</button>
+            {:else}
+              <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
+            {/if}
             {#if !closingPhase}
               {#if session.round_count > 0}
                 <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>Dialog beenden</button>
@@ -245,7 +442,7 @@
         {/if}
       </aside>
 
-      <div class="dialog-main">
+      <div class="dialog-main" data-dialog-surface="task">
         <div class="dialog-transcript" role="log" aria-label="Dialogverlauf" aria-live="polite">
           <article class="dialog-message dialog-message--ai">
             <p class="dialog-message__speaker">KI · {session.dialog.partner_name}</p>

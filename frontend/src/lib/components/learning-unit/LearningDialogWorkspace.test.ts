@@ -254,6 +254,89 @@ describe("LearningDialogWorkspace", () => {
     expect(pause).toHaveAttribute("href", "/learning/courses/course-1");
   });
 
+  it("keeps pinned materials and prior submissions readable in the partner context", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ session: answeredSession() })));
+    render(LearningDialogWorkspace, {
+      props: {
+        learnerSub: "student-1",
+        courseId: "course-1",
+        task: dialogTask,
+        contextEntries: [
+          {
+            key: "material:source",
+            kind: "material",
+            label: "Material",
+            title: "Lange Quelle",
+            bodyMd: "Ein langer Quellentext.",
+            meta: "Weiteres Modul"
+          },
+          {
+            key: "submission:task-old",
+            kind: "submission",
+            label: "Eigene frühere Abgabe",
+            title: "Frühere Analyse",
+            bodyMd: "Meine frühere Begründung.",
+            meta: "Versuch 1"
+          }
+        ],
+        readingContextKey: "submission:task-old"
+      }
+    });
+
+    const context = await screen.findByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    expect(within(context).getByText("Frühere Analyse")).toBeInTheDocument();
+    expect(within(context).getByText("Meine frühere Begründung.")).toBeInTheDocument();
+    expect(within(context).getByRole("button", { name: "Zur Kontextliste" })).toBeInTheDocument();
+  });
+
+  it("adds individual accessible context from the dialog sidebar", async () => {
+    const onToggleContextPicker = vi.fn();
+    const onToggleContextModule = vi.fn();
+    const onAddContextReference = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ session: answeredSession() })));
+    render(LearningDialogWorkspace, {
+      props: {
+        learnerSub: "student-1",
+        courseId: "course-1",
+        task: dialogTask,
+        contextPickerOpen: true,
+        expandedContextModuleIds: ["module-2"],
+        contextModules: [
+          {
+            id: "module-2",
+            title: "Vertiefung",
+            current: false,
+            loaded: true,
+            loading: false,
+            error: null,
+            options: [
+              {
+                key: "material:source-2",
+                kind: "material",
+                id: "source-2",
+                moduleId: "module-2",
+                taskId: null,
+                title: "Gegenposition",
+                added: false
+              }
+            ]
+          }
+        ],
+        onToggleContextPicker,
+        onToggleContextModule,
+        onAddContextReference
+      }
+    });
+
+    await screen.findByText("Archivarin");
+    await fireEvent.click(screen.getByRole("button", { name: /Gegenposition/ }));
+    expect(onAddContextReference).toHaveBeenCalledWith(expect.objectContaining({
+      key: "material:source-2",
+      kind: "material",
+      moduleId: "module-2"
+    }));
+  });
+
   it("hides all session actions in the completed read-only view", async () => {
     const current = answeredSession({ status: "completed", closing_answer_md: "Fazit" });
     const fetchMock = vi.fn(async () => jsonResponse({ session: current }));
@@ -289,7 +372,8 @@ describe("LearningDialogWorkspace", () => {
     expect(css).toContain("container-type: inline-size");
     expect(css).toContain("container-name: learning-dialog");
     expect(css).toContain("@container learning-dialog (min-width: 42.5rem)");
-    expect(css).toContain("@container learning-dialog (min-width: 64rem)");
+    expect(css).toContain("@container learning-dialog (min-width: 72rem)");
+    expect(css).not.toContain("@container learning-dialog (min-width: 64rem)");
     expect(css).toContain("@container learning-dialog (max-width: 21.999rem)");
     expect(css).toContain("@supports not (container-type: inline-size)");
     expect(dialogBlocks).not.toContain("var(--color-success-soft)");

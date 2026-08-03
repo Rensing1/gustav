@@ -1,4 +1,4 @@
-import { type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 import { currentUserSub } from "./auth";
 import { apiHeaders, expectApiOk } from "./api";
@@ -7,6 +7,12 @@ import { webBase } from "./e2e-env";
 export type TeacherVisualSmokeUnit = {
   unitId: string;
   title: string;
+  moduleIds: string[];
+};
+
+export type TeacherDialogAuthoringUnit = {
+  unitId: string;
+  moduleId: string;
 };
 
 export type LearnerVisualSmokeCourse = {
@@ -91,6 +97,7 @@ async function addCurrentLearnerToCourse(page: Page, courseId: string, learnerSu
 
 export async function seedTeacherVisualSmokeUnit(page: Page, title: string): Promise<TeacherVisualSmokeUnit> {
   const unitId = await createUnit(page, title, "modular");
+  const moduleIds: string[] = [];
 
   const phasesResponse = await page.request.get(`${webBase}/api/teaching/units/${unitId}/phases`);
   await expectApiOk(phasesResponse);
@@ -103,9 +110,34 @@ export async function seedTeacherVisualSmokeUnit(page: Page, title: string): Pro
       data: { title: moduleTitle, phase_id: phaseId }
     });
     await expectApiOk(moduleResponse, 201);
+    const modulePayload = await moduleResponse.json();
+    moduleIds.push(modulePayload.id as string);
   }
 
-  return { unitId, title };
+  return { unitId, title, moduleIds };
+}
+
+export async function seedTeacherDialogAuthoringUnit(
+  page: Page,
+  title: string
+): Promise<TeacherDialogAuthoringUnit> {
+  const seeded = await seedTeacherVisualSmokeUnit(page, title);
+  const moduleId = seeded.moduleIds[0];
+  expect(moduleId).toBeTruthy();
+
+  const sectionResponse = await page.request.get(
+    `${webBase}/api/teaching/units/${seeded.unitId}/modules/${moduleId}/content-target`
+  );
+  await expectApiOk(sectionResponse);
+  const sectionPayload = await sectionResponse.json();
+  const sectionId = sectionPayload.section_id as string;
+
+  await createTask(page, seeded.unitId, sectionId, {
+    instruction_md: "Bereits vorhandene Aufgabe",
+    criteria: []
+  });
+
+  return { unitId: seeded.unitId, moduleId };
 }
 
 export async function seedLearnerVisualSmokeCourse(

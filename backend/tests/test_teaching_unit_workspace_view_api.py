@@ -258,6 +258,29 @@ async def test_teacher_unit_node_editor_returns_linear_section_content(
         )
         assert task.status_code == 201
 
+        dialog_config = {
+            "partner_name": "Dr. Dialog",
+            "partner_description_md": "Eine sichtbare Kurzbeschreibung.",
+            "role_md": "Stelle präzise Rückfragen.",
+            "learning_goal_md": "Argumente begründet prüfen.",
+            "opening_message_md": "Welche Position vertrittst du?",
+            "response_mode": "hybrid",
+            "max_rounds": 7,
+            "closing_prompt_md": "Fasse dein Ergebnis zusammen.",
+        }
+        dialog_task = await client.post(
+            f"/api/teaching/units/{unit_id}/sections/{node_id}/tasks",
+            json={
+                "instruction_md": "Führe einen prüfenden Dialog.",
+                "criteria": ["Begründete Antworten"],
+                "teacher_context_md": "Interner Fachkontext.",
+                "max_attempts": 3,
+                "dialog": dialog_config,
+            },
+            headers={"Origin": "http://test"},
+        )
+        assert dialog_task.status_code == 201
+
         response = await client.get(
             f"/api/teaching/views/units/{unit_id}/nodes/{node_id}/editor",
             headers=headers,
@@ -309,7 +332,25 @@ async def test_teacher_unit_node_editor_returns_linear_section_content(
             "visual": None,
             "scratch": {},
             "calliope": None,
-        }
+            "filius": None,
+            "dialog": None,
+        },
+        {
+            "id": dialog_task.json()["id"],
+            "instruction_md": "Führe einen prüfenden Dialog.",
+            "criteria": ["Begründete Antworten"],
+            "teacher_context_md": "Interner Fachkontext.",
+            "due_at": None,
+            "max_attempts": 3,
+            "position": 2,
+            "kind": "dialog",
+            "h5p": None,
+            "visual": None,
+            "scratch": None,
+            "calliope": None,
+            "filius": None,
+            "dialog": dialog_config,
+        },
     ]
     assert payload["settings"]["kind"] == "section"
 
@@ -409,6 +450,8 @@ async def test_teacher_unit_node_editor_returns_modular_module_content(
             "visual": None,
             "scratch": None,
             "calliope": None,
+            "filius": None,
+            "dialog": None,
         }
     ]
     assert payload["settings"] == {

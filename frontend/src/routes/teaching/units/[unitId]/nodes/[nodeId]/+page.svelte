@@ -464,7 +464,7 @@
 
   $effect(() => {
     const taskKind = createTaskValues().task_kind;
-    if (taskKind === "h5p" || taskKind === "visual" || taskKind === "scratch" || taskKind === "calliope" || taskKind === "filius") {
+    if (taskKind === "h5p" || taskKind === "visual" || taskKind === "scratch" || taskKind === "calliope" || taskKind === "filius" || taskKind === "dialog") {
       createTaskKind = taskKind;
       return;
     }
@@ -796,7 +796,7 @@
               <p class="workspace-note">Interne Rolle, Lernziel und Lehrkraft-Kontext werden Lernenden nicht angezeigt.</p>
               <div class="workspace-node-editor-grid">
                 <label class="workspace-field"><span>Name des KI-Partners</span><input name="dialog_partner_name" maxlength="120" value={createTaskValues().dialog_partner_name ?? ""} /></label>
-                <label class="workspace-field"><span>Antwortmodus</span><select name="dialog_response_mode"><option value="free_text">Freitext</option><option value="hybrid">Freitext mit Satzanfängen</option></select></label>
+                <label class="workspace-field"><span>Antwortmodus</span><select name="dialog_response_mode" value={createTaskValues().dialog_response_mode ?? "free_text"}><option value="free_text">Freitext</option><option value="hybrid">Freitext mit Satzanfängen</option></select></label>
               </div>
               <label class="workspace-field"><span>Sichtbare Kurzbeschreibung</span><textarea name="dialog_partner_description_md" rows="3">{createTaskValues().dialog_partner_description_md ?? ""}</textarea></label>
               <label class="workspace-field"><span>Interne Rolleninstruktion</span><textarea name="dialog_role_md" rows="4">{createTaskValues().dialog_role_md ?? ""}</textarea></label>
@@ -922,15 +922,15 @@
                       <label class="workspace-field"><span>Eröffnungsnachricht</span><textarea name="dialog_opening_message_md" rows="3">{taskValues(task).dialog_opening_message_md ?? task.dialog?.opening_message_md ?? ""}</textarea></label>
                       <label class="workspace-field"><span>Max. Schülerantworten</span><input name="dialog_max_rounds" min="1" max="12" type="number" value={taskValues(task).dialog_max_rounds ?? String(task.dialog?.max_rounds ?? 8)} /></label>
                       <label class="workspace-field"><span>Optionaler Abschlussauftrag</span><textarea name="dialog_closing_prompt_md" rows="3">{taskValues(task).dialog_closing_prompt_md ?? task.dialog?.closing_prompt_md ?? ""}</textarea></label>
-                      <section class="workspace-note" aria-label="Dialogvorschau">
-                        <strong>Gespeicherte Konfiguration testen</strong>
+                      <details class="workspace-note" aria-label="Dialogvorschau">
+                        <summary>Gespeicherte Konfiguration testen</summary>
                         <p>Die Vorschau wird nicht gespeichert. Speichere Änderungen zuerst.</p>
                         <label class="workspace-field"><span>Probeantwort eines Schülers</span><textarea rows="3" value={dialogPreviewInputs[task.id] ?? ""} oninput={(event) => (dialogPreviewInputs[task.id] = event.currentTarget.value)}></textarea></label>
                         <button class="workspace-link-action" type="button" disabled={dialogPreviews[task.id]?.pending || !(dialogPreviewInputs[task.id] ?? "").trim()} onclick={() => previewDialog(task)}>KI-Antwort testen</button>
                         {#if dialogPreviews[task.id]?.error}<p class="workspace-note workspace-note--error">{dialogPreviews[task.id].error}</p>{/if}
                         {#if dialogPreviews[task.id]?.reply}<div class="markdown-prose">{@html renderMarkdown(dialogPreviews[task.id].reply ?? "")}</div>{/if}
                         {#if dialogPreviews[task.id]?.starters.length}<p>Satzanfänge: {dialogPreviews[task.id].starters.join(" · ")}</p>{/if}
-                      </section>
+                      </details>
                     {/if}
 
                     {#if task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius"}

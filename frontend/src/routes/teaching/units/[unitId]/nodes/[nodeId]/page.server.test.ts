@@ -264,6 +264,48 @@ describe("teacher node editor server helpers", () => {
     expect(parsed.payload).not.toHaveProperty("calliope");
   });
 
+  it("creates dialog tasks with every configured authoring field", () => {
+    const formData = new FormData();
+    formData.set("task_kind", "dialog");
+    formData.set("instruction_md", "Führe einen prüfenden Dialog.");
+    formData.append("criteria[]", "Antworten sind begründet");
+    formData.set("teacher_context_md", "Interner Fachkontext.");
+    formData.set("dialog_partner_name", "Dr. Dialog");
+    formData.set("dialog_partner_description_md", "Eine sichtbare Kurzbeschreibung.");
+    formData.set("dialog_role_md", "Stelle präzise Rückfragen.");
+    formData.set("dialog_learning_goal_md", "Argumente begründet prüfen.");
+    formData.set("dialog_opening_message_md", "Welche Position vertrittst du?");
+    formData.set("dialog_response_mode", "hybrid");
+    formData.set("dialog_max_rounds", "7");
+    formData.set("dialog_closing_prompt_md", "Fasse dein Ergebnis zusammen.");
+
+    const parsed = __testables.taskPayloadFromForm(formData, {
+      allowImplicitInstructionForH5P: true
+    });
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      return;
+    }
+    expect(parsed.payload).toEqual({
+      instruction_md: "Führe einen prüfenden Dialog.",
+      criteria: ["Antworten sind begründet"],
+      teacher_context_md: "Interner Fachkontext.",
+      due_at: null,
+      max_attempts: null,
+      dialog: {
+        partner_name: "Dr. Dialog",
+        partner_description_md: "Eine sichtbare Kurzbeschreibung.",
+        role_md: "Stelle präzise Rückfragen.",
+        learning_goal_md: "Argumente begründet prüfen.",
+        opening_message_md: "Welche Position vertrittst du?",
+        response_mode: "hybrid",
+        max_rounds: 7,
+        closing_prompt_md: "Fasse dein Ergebnis zusammen."
+      }
+    });
+  });
+
   it("rejects raw file posts without prepared upload metadata", async () => {
     const form = new FormData();
     form.set("section_id", "section-1");

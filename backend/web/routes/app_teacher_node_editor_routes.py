@@ -134,6 +134,8 @@ async def get_teacher_unit_node_editor(request: Request, unit_id: str, node_id: 
                 "visual": item.get("visual"),
                 "scratch": item.get("scratch"),
                 "calliope": item.get("calliope"),
+                "filius": item.get("filius"),
+                "dialog": item.get("dialog"),
             }
             for item in tasks
             if str(item.get("id") or "")

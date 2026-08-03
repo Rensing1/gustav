@@ -124,6 +124,95 @@ describe("teacher node editor page", () => {
     expect(within(tasksSection).getByText("Lernende reichen hier ein Filius-Projekt als `.fls` ein.")).toBeInTheDocument();
   });
 
+  it("shows every saved dialog field while keeping the preview closed", async () => {
+    render(Page, {
+      props: {
+        data: {
+          ...sampleData,
+          editor: {
+            ...sampleData.editor,
+            tasks: [
+              {
+                id: "task-dialog",
+                kind: "dialog",
+                instruction_md: "Führe einen prüfenden Dialog.",
+                criteria: ["Antworten sind begründet"],
+                teacher_context_md: "Interner Fachkontext.",
+                due_at: null,
+                max_attempts: 3,
+                position: 1,
+                dialog: {
+                  partner_name: "Dr. Dialog",
+                  partner_description_md: "Eine sichtbare Kurzbeschreibung.",
+                  role_md: "Stelle präzise Rückfragen.",
+                  learning_goal_md: "Argumente begründet prüfen.",
+                  opening_message_md: "Welche Position vertrittst du?",
+                  response_mode: "hybrid",
+                  max_rounds: 7,
+                  closing_prompt_md: "Fasse dein Ergebnis zusammen."
+                }
+              }
+            ]
+          }
+        },
+        form: {} as never
+      }
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: /Führe einen prüfenden Dialog/i }));
+
+    expect(screen.getByLabelText("Anweisung & Beschreibung")).toHaveValue("Führe einen prüfenden Dialog.");
+    expect(screen.getByLabelText("Lehrkraft-Kontext")).toHaveValue("Interner Fachkontext.");
+    expect(screen.getByLabelText("Name des KI-Partners")).toHaveValue("Dr. Dialog");
+    expect(screen.getByLabelText("Sichtbare Kurzbeschreibung")).toHaveValue("Eine sichtbare Kurzbeschreibung.");
+    expect(screen.getByLabelText("Interne Rolleninstruktion")).toHaveValue("Stelle präzise Rückfragen.");
+    expect(screen.getByLabelText("Internes Lernziel")).toHaveValue("Argumente begründet prüfen.");
+    expect(screen.getByLabelText("Eröffnungsnachricht")).toHaveValue("Welche Position vertrittst du?");
+    expect(screen.getByLabelText("Antwortmodus")).toHaveValue("hybrid");
+    expect(screen.getByLabelText("Max. Schülerantworten")).toHaveValue(7);
+    expect(screen.getByLabelText("Optionaler Abschlussauftrag")).toHaveValue("Fasse dein Ergebnis zusammen.");
+
+    expect(screen.getByLabelText("Probeantwort eines Schülers")).not.toBeVisible();
+    await fireEvent.click(screen.getByText("Gespeicherte Konfiguration testen"));
+    expect(screen.getByLabelText("Probeantwort eines Schülers")).toBeVisible();
+  });
+
+  it("restores dialog task fields after a failed create action", () => {
+    render(Page, {
+      props: {
+        data: sampleData,
+        form: {
+          createTask: {
+            error: "Bitte wähle zwischen 1 und 12 Dialogrunden.",
+            values: {
+              task_kind: "dialog",
+              instruction_md: "Dialoganweisung",
+              criteria_items: [],
+              teacher_context_md: "Kontext",
+              due_at: "",
+              max_attempts: "",
+              h5p_content_id: "",
+              dialog_partner_name: "Gesprächspartner",
+              dialog_partner_description_md: "Beschreibung",
+              dialog_role_md: "Rolle",
+              dialog_learning_goal_md: "Lernziel",
+              dialog_opening_message_md: "Eröffnung",
+              dialog_response_mode: "hybrid",
+              dialog_max_rounds: "13",
+              dialog_closing_prompt_md: "Abschluss"
+            }
+          }
+        } as never
+      }
+    });
+
+    expect(screen.getByLabelText("Aufgabentyp")).toHaveValue("dialog");
+    expect(screen.getByLabelText("Name des KI-Partners")).toHaveValue("Gesprächspartner");
+    expect(screen.getByLabelText("Antwortmodus")).toHaveValue("hybrid");
+    expect(screen.getByLabelText("Max. Schülerantworten")).toHaveValue(13);
+    expect(screen.getByText("Bitte wähle zwischen 1 und 12 Dialogrunden.")).toBeInTheDocument();
+  });
+
   it("shows a success message and the created material immediately after a successful create action", () => {
     render(Page, {
       props: {

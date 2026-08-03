@@ -1,7 +1,7 @@
 # Verbindliche Browser-Feature-Abnahme und Dialogeditor-Korrektur
 
 **Stand:** 03.08.2026
-**Status:** In Umsetzung
+**Status:** Implementiert und mit `make verify-feature` verifiziert
 
 ## User Story
 

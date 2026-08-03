@@ -165,7 +165,7 @@ def test_full_prod_like_runs_external_integration_smokes() -> None:
 
     body = _target_body("test-full-prod-like")
 
-    assert "$(MAKE) verify" in body
+    assert "$(MAKE) verify-feature" in body
     assert "$(MAKE) test-supabase" in body
     assert "$(MAKE) test-openai" in body
     assert "$(MAKE) test-e2e" in body

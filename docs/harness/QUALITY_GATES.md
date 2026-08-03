@@ -195,6 +195,23 @@ Aktueller harter Inhalt:
 Bewusst opt-in:
 - Browser-E2E und visuelle Regressionen bleiben im `full-prod-like`-Profil.
 
+### feature-acceptance
+Zweck: Den vollständigen authentifizierten Browser-Rundlauf neuer nutzerseitiger Features verbindlich prüfen.
+
+Initialer lokaler Befehl:
+- `make verify-feature`
+
+Harter Inhalt:
+- Zuerst alle deterministischen Prüfungen aus `make verify`.
+- Danach alle mit `@feature-acceptance` markierten Playwright-Kernreisen gegen das produktionsnahe Setup.
+- Mindestens ein Test durchläuft echte Anmeldung, Oberfläche, Server und Datenhaltung.
+- BDD-Szenarien und konkrete Testnachweise werden im jeweiligen Implementierungsplan einander zugeordnet.
+
+Regel:
+- Nutzerseitige Features dürfen erst nach erfolgreichem `make verify-feature` als abgeschlossen gelten und committed werden.
+- Änderungen ohne nutzerseitigen Ablauf dürfen beim schnelleren `make verify` bleiben, wenn der Implementierungsplan den Verzicht auf eine Browser-Feature-Abnahme begründet.
+- `make test-full-prod-like` enthält dieses Gate ebenfalls.
+
 ### visual-smoke
 Zweck: zentrale UI-Flächen sichtbar prüfen, ohne die schnelle Verify-Suite durch breite Browser-/Screenshot-Tests zu belasten.
 

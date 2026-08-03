@@ -121,6 +121,15 @@ Kernreisen:
 
 Regel: E2E-Smokes sind teuer und fragil. Sie schützen Vertrauen in die Integration, nicht Detailabdeckung.
 
+### Feature-Abnahme
+Zweck: Für jedes neue nutzerseitige Feature mindestens eine vollständige Kernreise über echte Oberfläche, Authentifizierung, Server und produktionsnahe Datenhaltung nachweisen.
+
+Regeln:
+- Die User Story und ihre BDD-Szenarien werden im Implementierungsplan konkreten Tests zugeordnet.
+- Mindestens ein Playwright-Test trägt den Marker `@feature-acceptance` und enthält einen authentifizierten Browser-Rundlauf.
+- Ein Verzicht ist nur bei Änderungen ohne nutzerseitigen Ablauf zulässig und muss im Plan begründet werden.
+- `make verify-feature` ist das verbindliche Abschlussprofil: Es führt zuerst die deterministischen Prüfungen und anschließend die Browser-Feature-Abnahme aus.
+
 ## Testprofile
 - `fast`: In-Process-, Domain-, Adapter- und Contract-Tests ohne externe Dienste.
 - `db-security`: echte DB-, RLS-, Migration-, Authz- und CSRF-relevante Tests.
@@ -129,10 +138,11 @@ Regel: E2E-Smokes sind teuer und fragil. Sie schützen Vertrauen in die Integrat
 - `import-boundaries`: AST-basierter Baseline-Scan für flache Web-Imports, gemischte `backend.web.routes.*`-Imports und verstreute `sys.path`-Manipulationen.
 - `db-inventory`: generierte Übersicht in `docs/harness/DB_TEST_INVENTORY.md` für echte DB/RLS-Kandidaten, statische Migrationstests und Supabase-Storage-/Konfigurationsverträge; Bestandteil von `make verify` als Synchronitätscheck.
 - `frontend-h5p`: `npm run check`, Vitest einschließlich CSS-Syntaxvertrag, produktiver SvelteKit-Build und H5P-Node-Tests; Bestandteil von `make verify`.
-- `full-prod-like`: Supabase, OpenAI-kompatibler Endpunkt, Docker/Compose und E2E-Smokes.
+- `feature-acceptance`: `make verify-feature` kombiniert `make verify` mit den durch `@feature-acceptance` markierten authentifizierten Browser-Kernreisen; verbindlich für nutzerseitige Features.
+- `full-prod-like`: Feature-Abnahme, Supabase, OpenAI-kompatibler Endpunkt, Docker/Compose und weitere E2E-Smokes.
 
 ## Marker-Regeln
-- `e2e`, `supabase_integration`, `openai_integration` und `legacy_migration` bleiben opt-in.
+- `e2e`, `supabase_integration`, `openai_integration` und `legacy_migration` bleiben im schnellen Standardprofil opt-in. Die mit `@feature-acceptance` markierten Playwright-Tests sind für nutzerseitige Features über `make verify-feature` verpflichtend.
 - `db_read` und `db_write` werden erst dann als Strategie-Marker akzeptiert, wenn die `missing-db-marker`-Einträge aus `docs/harness/DB_TEST_INVENTORY.md` geprüft und bereinigt wurden.
 - Tests mit echten externen Diensten dürfen nicht durch zufällig gesetzte ENV-Variablen in der Standardsuite landen.
 - Tests mit globalen DB-Mutationen brauchen ein eigenes Gate oder bleiben aus der Standardsuite ausgeschlossen.

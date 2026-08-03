@@ -33,6 +33,8 @@ help:
 	@echo "  supply-chain-check - Check offline dependency/license inventory"
 	@echo "  dependency-audit   - Check current npm advisories (requires network)"
 	@echo "  test-frontend-h5p  - Run frontend and H5P checks"
+	@echo "  test-feature-acceptance - Run authenticated Playwright feature journeys"
+	@echo "  verify-feature     - Run deterministic checks and mandatory feature acceptance"
 	@echo "  test-visual-smoke  - Run deterministic Playwright visual smoke checks"
 	@echo "  update-visual-baselines - Review and update UI-lab screenshot baselines"
 	@echo "  playwright-bootstrap - Install the supported Playwright Chromium browser"
@@ -244,6 +246,16 @@ test-visual-smoke:
 	@cd frontend && node tooling/check-playwright-browser.mjs
 	@cd frontend && npm run test:e2e -- --grep @visual-smoke
 
+.PHONY: test-feature-acceptance
+test-feature-acceptance:
+	@cd frontend && node tooling/check-playwright-browser.mjs
+	@cd frontend && npm run test:e2e -- --grep @feature-acceptance
+
+.PHONY: verify-feature
+verify-feature:
+	@$(MAKE) verify
+	@$(MAKE) test-feature-acceptance
+
 .PHONY: update-visual-baselines
 update-visual-baselines:
 	@cd frontend && node tooling/check-playwright-browser.mjs
@@ -255,7 +267,7 @@ playwright-bootstrap:
 
 .PHONY: test-full-prod-like
 test-full-prod-like:
-	@$(MAKE) verify
+	@$(MAKE) verify-feature
 	@$(MAKE) dependency-audit
 	@$(MAKE) test-supabase
 	@$(MAKE) test-openai

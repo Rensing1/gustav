@@ -13,6 +13,11 @@ def _json(relative_path: str) -> dict:
     return json.loads((REPO_ROOT / relative_path).read_text(encoding="utf-8"))
 
 
+def _make_target_body(makefile: str, target: str) -> str:
+    marker = f".PHONY: {target}\n{target}:"
+    return makefile.split(marker, maxsplit=1)[1].split(".PHONY:", maxsplit=1)[0]
+
+
 def test_frontend_uses_the_maintained_markdown_editor_and_exact_security_pins() -> None:
     package = _json("frontend/package.json")
     dependencies = package["dependencies"]
@@ -83,7 +88,7 @@ def test_build_and_online_audit_gates_are_explicit_and_narrow() -> None:
     assert "UNUSED_EXTERNAL_IMPORT" in (REPO_ROOT / "frontend/tooling/build-warning-gate.ts").read_text(encoding="utf-8")
     assert "npm audit --audit-level=low" in makefile
     assert "npm audit --omit=dev --audit-level=low" in makefile
-    assert "$(MAKE) dependency-audit" not in makefile.split(".PHONY: verify", maxsplit=1)[1].split("# ---", maxsplit=1)[0]
+    assert "$(MAKE) dependency-audit" not in _make_target_body(makefile, "verify")
     assert 'elkjs/lib/elk-api.js' in flow_source
     assert 'elkjs/lib/elk-worker.min.js?url' in flow_source
     assert "elk.bundled.js" not in flow_source

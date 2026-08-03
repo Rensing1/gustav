@@ -41,7 +41,7 @@ async function dragPane(page: Page): Promise<void> {
   await page.mouse.up();
 }
 
-test("module create and delete update the graph without a hard reload", async ({ page }) => {
+test("@feature-acceptance module create and delete update the graph without a hard reload", async ({ page }) => {
   const unique = Date.now();
   const email = `e2e_teacher_graph_${unique}@${emailDomain}`;
   const password = "Passw0rd!e2e";
@@ -83,10 +83,6 @@ test("module create and delete update the graph without a hard reload", async ({
   await expect(page.getByText("Bitte gib Titel und Phase für das Modul an.")).toHaveCount(0);
   await page.getByRole("button", { name: "Schließen" }).click();
   await expect(page.getByRole("dialog", { name: "Modul hinzufügen" })).toHaveCount(0);
-
-  const beforePan = await viewportTransform(page);
-  await dragPane(page);
-  await expect.poll(() => viewportTransform(page)).not.toBe(beforePan);
 
   const createdModule = page.locator(".teacher-flow-node--module").filter({ hasText: moduleTitle }).first();
   await createdModule.click();

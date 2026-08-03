@@ -1,8 +1,15 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import LearningDialogWorkspace from "./LearningDialogWorkspace.svelte";
 import type { LearningTask } from "$lib/types/learning";
+import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 const dialogTask: LearningTask = {
   id: "task-dialog",
@@ -228,5 +235,19 @@ describe("LearningDialogWorkspace", () => {
 
     const pause = await screen.findByRole("link", { name: "Pausieren" });
     expect(pause).toHaveAttribute("href", "/learning/courses/course-1");
+  });
+
+  it("keeps dialog presentation in the layered learner stylesheet without hard-coded colors", () => {
+    const source = readFileSync(path.resolve(currentDir, "LearningDialogWorkspace.svelte"), "utf8");
+    const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
+    const dialogBlocks = Array.from(css.matchAll(/\.dialog-[^{}]+\{[^{}]*\}/g), (match) => match[0]).join("\n");
+
+    expect(source).not.toMatch(/<style(?:\s|>)/);
+    expect(dialogBlocks).toContain(".dialog-workspace");
+    expect(dialogBlocks).toContain(".dialog-message--ai");
+    expect(dialogBlocks).toContain(".dialog-message--student");
+    expect(dialogBlocks).toContain("var(--color-success-soft)");
+    expect(dialogBlocks).toContain("var(--color-accent-soft)");
+    expect(dialogBlocks).not.toMatch(/#[0-9a-f]{3,8}/i);
   });
 });

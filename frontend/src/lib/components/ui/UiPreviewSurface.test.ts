@@ -29,6 +29,10 @@ describe("UiPreviewSurface", () => {
     expect(screen.getAllByText("Property inspector").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Abschnitt bearbeiten" })).toBeInTheDocument();
     expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "KI-Dialog · Gespräch" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "KI-Dialog · Abschluss" })).toBeInTheDocument();
+    expect(screen.getAllByText("Archivarin Ada").length).toBeGreaterThan(0);
+    expect(screen.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Erfolgreich abgemeldet" })).toBeInTheDocument();
 
     const learnerGraphCard = screen.getByText("Übersicht", { selector: ".preview-card__eyebrow" }).closest(".preview-card");

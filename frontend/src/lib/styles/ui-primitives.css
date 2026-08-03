@@ -608,6 +608,26 @@
   margin-bottom: var(--space-4);
 }
 
+.preview-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+.preview-dialog-state {
+  min-width: 0;
+}
+
+.preview-dialog-state > h2 {
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 960px) {
+  .preview-dialog-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .preview-token-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));

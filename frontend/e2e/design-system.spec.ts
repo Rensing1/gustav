@@ -93,6 +93,82 @@ async function expectContrastDesignContract(page: Page): Promise<void> {
   expect(topbarControls.theme).toEqual(topbarControls.account);
 }
 
+async function expectDialogDesignContract(page: Page, viewportWidth: number): Promise<void> {
+  const contract = await page.getByTestId("preview-dialog-conversation").evaluate((workspace) => {
+    const transcript = workspace.querySelector(".dialog-transcript");
+    const aiMessage = workspace.querySelector(".dialog-message--ai");
+    const studentMessage = workspace.querySelector(".dialog-message--student");
+    const starter = workspace.querySelector(".dialog-starter");
+    if (
+      !(transcript instanceof HTMLElement) ||
+      !(aiMessage instanceof HTMLElement) ||
+      !(studentMessage instanceof HTMLElement) ||
+      !(starter instanceof HTMLElement)
+    ) {
+      throw new Error("UI lab is missing a representative dialog element");
+    }
+
+    const transcriptStyle = getComputedStyle(transcript);
+    const aiStyle = getComputedStyle(aiMessage);
+    const studentStyle = getComputedStyle(studentMessage);
+    const starterStyle = getComputedStyle(starter);
+    const transcriptContentWidth =
+      transcript.clientWidth -
+      Number.parseFloat(transcriptStyle.paddingLeft) -
+      Number.parseFloat(transcriptStyle.paddingRight);
+
+    return {
+      transcriptBorderStyle: transcriptStyle.borderTopStyle,
+      transcriptBorderWidth: transcriptStyle.borderTopWidth,
+      transcriptRadius: transcriptStyle.borderRadius,
+      transcriptContentWidth,
+      aiBackground: aiStyle.backgroundColor,
+      aiLeftBorderWidth: aiStyle.borderLeftWidth,
+      aiWidth: aiMessage.getBoundingClientRect().width,
+      studentBackground: studentStyle.backgroundColor,
+      studentRightBorderWidth: studentStyle.borderRightWidth,
+      studentJustify: studentStyle.justifySelf,
+      studentWidth: studentMessage.getBoundingClientRect().width,
+      starterRadius: starterStyle.borderRadius
+    };
+  });
+
+  expect(contract.transcriptBorderStyle).toBe("solid");
+  expect(contract.transcriptBorderWidth).toBe("2px");
+  expect(contract.transcriptRadius).toBe("0px");
+  expect(contract.aiBackground).not.toBe(contract.studentBackground);
+  expect(contract.aiLeftBorderWidth).toBe("4px");
+  expect(contract.studentRightBorderWidth).toBe("4px");
+  expect(contract.studentJustify).toBe("end");
+  expect(contract.starterRadius).toBe("0px");
+
+  if (viewportWidth <= 760) {
+    expect(Math.abs(contract.aiWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
+    expect(Math.abs(contract.studentWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
+  } else {
+    expect(contract.aiWidth).toBeLessThan(contract.transcriptContentWidth);
+    expect(contract.studentWidth).toBeLessThan(contract.transcriptContentWidth);
+  }
+
+  const closingShadow = await page.getByTestId("preview-dialog-completion").locator(".dialog-closing").evaluate((closing) => {
+    return getComputedStyle(closing).boxShadow;
+  });
+  expect(closingShadow).toContain("4px 4px 0px");
+}
+
+async function expectDialogStatesScreenshot(page: Page, name: string): Promise<void> {
+  // The sticky product top bar would otherwise cover the isolated component after Playwright scrolls it into view.
+  const isolationStyle = await page.addStyleTag({ content: ".app-topbar { display: none !important; }" });
+  try {
+    await expect(page.getByTestId("preview-dialog-states")).toHaveScreenshot(name, {
+      animations: "disabled",
+      caret: "hide"
+    });
+  } finally {
+    await isolationStyle.evaluate((style) => style.remove());
+  }
+}
+
 test.describe("@visual-smoke @design-system contrast design contract", () => {
   for (const viewport of [
     { name: "desktop", width: 1440, height: 900 },
@@ -101,6 +177,7 @@ test.describe("@visual-smoke @design-system contrast design contract", () => {
     test(`keeps approved light and dark baselines on ${viewport.name}`, async ({ page }) => {
       await openUiLab(page, viewport);
       await expectContrastDesignContract(page);
+      await expectDialogDesignContract(page, viewport.width);
       await expect(page).toHaveScreenshot(`ui-lab-light-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide"
@@ -124,10 +201,18 @@ test.describe("@visual-smoke @design-system contrast design contract", () => {
       expect(darkContract.border).toBe("#f0f1f1");
       expect(darkContract.shadow).toContain("4px 4px 0 0");
       expect(darkContract.shadow).toContain("240, 241, 241");
+      await expectDialogDesignContract(page, viewport.width);
       await expect(page).toHaveScreenshot(`ui-lab-dark-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide"
       });
+      await expectDialogStatesScreenshot(page, `dialog-states-dark-${viewport.name}.png`);
+
+      await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+      await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "light");
+      await page.getByRole("button", { name: "Light", exact: true }).click();
+      await expect(page.locator(".preview-page")).toHaveAttribute("data-theme", "light");
+      await expectDialogStatesScreenshot(page, `dialog-states-light-${viewport.name}.png`);
     });
   }
 });

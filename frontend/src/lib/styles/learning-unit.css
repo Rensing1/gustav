@@ -2486,6 +2486,219 @@
   margin: var(--space-2) 0 0;
 }
 
+/* The dialog workspace keeps the task statement compact and separates conversation from submission. */
+.dialog-workspace {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.dialog-context {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-success);
+  border-radius: var(--radius-s);
+  background: var(--color-bg-muted);
+}
+
+.dialog-context__heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.dialog-context__heading h5,
+.dialog-closing h6 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
+.dialog-context__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dialog-context__meta span + span::before {
+  margin-inline-end: var(--space-2);
+  color: var(--color-success);
+  content: "·";
+}
+
+.dialog-context__description :first-child,
+.dialog-message .markdown-prose :first-child {
+  margin-top: 0;
+}
+
+.dialog-context__description :last-child,
+.dialog-message .markdown-prose :last-child {
+  margin-bottom: 0;
+}
+
+.dialog-notice {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-s);
+  background: var(--color-warning-soft);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.dialog-notice strong {
+  flex: 0 0 auto;
+  color: var(--color-warning);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dialog-transcript {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-s);
+  background: var(--color-bg-surface);
+}
+
+.dialog-message {
+  width: min(84%, 42rem);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-s);
+  color: var(--color-text);
+}
+
+.dialog-message--ai {
+  justify-self: start;
+  border-left: 4px solid var(--color-success);
+  background: var(--color-success-soft);
+}
+
+.dialog-message--student {
+  justify-self: end;
+  border-right: 4px solid var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.dialog-message__speaker,
+.dialog-starters__label {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dialog-message--ai .dialog-message__speaker {
+  color: var(--color-success);
+}
+
+.dialog-message--student .dialog-message__speaker {
+  color: var(--color-link);
+}
+
+.dialog-message__help {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+}
+
+.dialog-retry {
+  justify-self: start;
+}
+
+.dialog-composer,
+.dialog-closing {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-s);
+  background: var(--color-bg-muted);
+}
+
+.dialog-closing {
+  border: 2px solid var(--color-accent);
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+}
+
+.dialog-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.dialog-starters__label {
+  flex-basis: 100%;
+}
+
+.dialog-starter {
+  max-width: 100%;
+  text-align: left;
+  white-space: normal;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dialog-actions .workspace-top-action--accent {
+  margin-inline-start: auto;
+}
+
+@media (max-width: 760px) {
+  .dialog-context__heading,
+  .dialog-notice {
+    display: grid;
+  }
+
+  .dialog-context__meta {
+    justify-content: start;
+  }
+
+  .dialog-message {
+    width: 100%;
+  }
+
+  .dialog-actions {
+    display: grid;
+  }
+
+  .dialog-actions .workspace-top-action,
+  .dialog-actions .workspace-top-action--accent {
+    width: 100%;
+    margin-inline-start: 0;
+    text-align: center;
+  }
+}
+
 .learning-response-group {
   margin-top: var(--space-4);
   display: grid;

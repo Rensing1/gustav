@@ -278,6 +278,7 @@ Verbindliche Familien:
 - `TeacherGraphCommandBar`
 - `GraphPhaseBand`
 - `GraphModuleNode`
+- `LearningDialogWorkspace`
 - `LearningResponseGroup`
 
 ## 11. Lernraum und Lerneinheit
@@ -322,6 +323,33 @@ Verbindliche Familien:
   plus gemeinsame Primitives), nicht zurück in `frontend/src/lib/styles/design-system.css`,
   nicht nur in `app.css`, damit Surface-, Spacing- und Typografie-Regeln im
   Lernraum wirksam bleiben
+
+### 11.4 Dialogarbeitsbereich
+
+KI-Dialogaufgaben trennen das Gespräch sichtbar von der endgültigen Abgabe. Die
+Aufgabenstellung bleibt als kompakter Kopf der aktiven Aufgabe erhalten. Direkt
+darunter folgen Partnername, KI-Kennzeichnung, Beschreibung, Modus und
+Rundenzähler.
+
+Verbindliche Regeln:
+
+- Der Abschlussauftrag wird erst nach der bewussten Aktion `Dialog beenden`
+  sichtbar.
+- Gesprächsverlauf und Eingabebereich sind eigenständige, kantig gerahmte
+  Arbeitsflächen.
+- KI-Beiträge stehen links und verwenden den Erfolgsakzent; Schülerbeiträge
+  stehen rechts und verwenden den Produktakzent.
+- Sprecher werden technisch und eindeutig bezeichnet. Verwendete Satzanfänge
+  bleiben als Hilfestellung sichtbar.
+- Satzanfänge sind rechteckige Sekundäraktionen, keine Chatblasen oder Pills.
+- Auf schmalen Viewports nutzen Nachrichten und Aktionen die volle verfügbare
+  Breite.
+- Der Sicherheitshinweis bleibt eine schmale, klar konturierte Hinweiszeile.
+- Alle produktiven `.dialog-*`-Regeln liegen in der Cascade-Layer `learning` in
+  `frontend/src/lib/styles/learning-unit.css` und verwenden ausschließlich die
+  zentralen Design-Tokens.
+- Das UI-Labor zeigt Gespräch und Abschluss in Light und Dark sowie auf Desktop
+  und Mobil als freigegebene Referenzzustände.
 
 ## 12. Auth und Preview
 

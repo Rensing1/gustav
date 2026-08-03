@@ -209,17 +209,49 @@
 </script>
 
 <section class="dialog-workspace" aria-label="KI-Dialog">
-  <div class="dialog-notice"><strong>KI-Dialog</strong> · Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</div>
-  {#if task.dialog}<div class="markdown-prose">{@html renderMarkdown(task.dialog.partner_description_md)}</div>{/if}
   {#if pending && !session}<p>Lädt …</p>{/if}
   {#if error}<p class="flash flash-error">{error}</p>{/if}
   {#if session}
-    <div class="dialog-transcript">
-      <article class="dialog-message dialog-message--ai"><strong>{session.dialog.partner_name}</strong><div class="markdown-prose">{@html renderMarkdown(session.dialog.opening_message_md)}</div></article>
+    <header class="dialog-context">
+      <div class="dialog-context__heading">
+        <div>
+          <p class="workspace-label">KI-Dialogpartner</p>
+          <h5>{session.dialog.partner_name}</h5>
+        </div>
+        <p class="dialog-context__meta">
+          <span>KI</span>
+          <span>{session.dialog.response_mode === "hybrid" ? "Mit Satzanfängen" : "Freitext"}</span>
+          <span>Runde {session.round_count}/{session.dialog.max_rounds}</span>
+        </p>
+      </div>
+      <div class="dialog-context__description markdown-prose">{@html renderMarkdown(session.dialog.partner_description_md)}</div>
+    </header>
+
+    <div class="dialog-notice" role="note">
+      <strong>Hinweis zur KI</strong>
+      <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
+    </div>
+
+    <div class="dialog-transcript" role="log" aria-label="Dialogverlauf" aria-live="polite">
+      <article class="dialog-message dialog-message--ai">
+        <p class="dialog-message__speaker">KI · {session.dialog.partner_name}</p>
+        <div class="markdown-prose">{@html renderMarkdown(session.dialog.opening_message_md)}</div>
+      </article>
       {#each session.turns as turn}
-        <article class="dialog-message dialog-message--student"><strong>Du</strong><div class="markdown-prose">{@html renderMarkdown(turn.student_message_md)}</div>{#if turn.used_sentence_starter_md}<small>Mit Satzanfang-Hilfe</small>{/if}</article>
-        {#if turn.assistant_reply_md}<article class="dialog-message dialog-message--ai"><strong>{session.dialog.partner_name}</strong><div class="markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div></article>{/if}
-        {#if turn.status === "failed"}<button type="button" disabled={pending || turn.generation_attempts >= 3} onclick={() => retry(turn)}>KI-Antwort erneut versuchen</button>{/if}
+        <article class="dialog-message dialog-message--student">
+          <p class="dialog-message__speaker">Schüler · Du</p>
+          <div class="markdown-prose">{@html renderMarkdown(turn.student_message_md)}</div>
+          {#if turn.used_sentence_starter_md}<small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>{/if}
+        </article>
+        {#if turn.assistant_reply_md}
+          <article class="dialog-message dialog-message--ai">
+            <p class="dialog-message__speaker">KI · {session.dialog.partner_name}</p>
+            <div class="markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div>
+          </article>
+        {/if}
+        {#if turn.status === "failed"}
+          <button class="workspace-top-action workspace-top-action--quiet dialog-retry" type="button" disabled={pending || turn.generation_attempts >= 3} onclick={() => retry(turn)}>KI-Antwort erneut versuchen</button>
+        {/if}
       {/each}
     </div>
     {#if session.status === "active" && !readOnly}
@@ -245,7 +277,14 @@
           {#if session.dialog.response_mode === "hybrid" && session.initial_starters_status === "failed" && session.initial_generation_attempts < 3}
             <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={start}>Erste Satzanfänge erneut erzeugen</button>
           {/if}
-          {#if availableStarters().length}<div class="dialog-starters" aria-label="Satzanfänge">{#each availableStarters() as starter}<button type="button" onclick={() => chooseStarter(starter)}>{starter}</button>{/each}</div>{/if}
+          {#if availableStarters().length}
+            <div class="dialog-starters" aria-label="Satzanfang-Hilfen">
+              <p class="dialog-starters__label">Hilfestellung · Satzanfänge</p>
+              {#each availableStarters() as starter}
+                <button class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle dialog-starter" type="button" onclick={() => chooseStarter(starter)}>{starter}</button>
+              {/each}
+            </div>
+          {/if}
           {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
             <label class="workspace-field"><span>Deine Antwort ({session.round_count}/{session.dialog.max_rounds})</span><textarea bind:value={message} maxlength="2000" rows="5"></textarea></label>
           {:else if session.round_count >= session.dialog.max_rounds}
@@ -267,7 +306,3 @@
     {:else if session.status === "completed"}<p class="workspace-note">Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.</p>{/if}
   {/if}
 </section>
-
-<style>
-  .dialog-workspace,.dialog-transcript{display:grid;gap:1rem}.dialog-notice{padding:.8rem 1rem;border-radius:.75rem;background:#fff4d6;color:#563d00}.dialog-message{max-width:82%;padding:.8rem 1rem;border-radius:1rem;background:var(--color-surface-muted,#f1f4f8)}.dialog-message--student{justify-self:end;background:#e4efff}.dialog-starters{display:flex;flex-wrap:wrap;gap:.5rem}.dialog-starters button{border:1px solid #9bb2d1;border-radius:999px;background:white;padding:.45rem .75rem}
-</style>

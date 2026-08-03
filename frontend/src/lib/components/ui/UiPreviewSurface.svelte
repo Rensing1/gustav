@@ -349,6 +349,119 @@
       />
     </article>
 
+    <article class="preview-card" data-testid="preview-dialog-states">
+      <p class="preview-card__eyebrow">Dialogarbeitsbereich</p>
+      <div class="preview-dialog-grid">
+        <section class="preview-dialog-state">
+          <h2>KI-Dialog · Gespräch</h2>
+          <div class="dialog-workspace" data-testid="preview-dialog-conversation">
+            <header class="dialog-context">
+              <div class="dialog-context__heading">
+                <div>
+                  <p class="workspace-label">KI-Dialogpartner</p>
+                  <h5>Archivarin Ada</h5>
+                </div>
+                <p class="dialog-context__meta">
+                  <span>KI</span>
+                  <span>Mit Satzanfängen</span>
+                  <span>Runde 1/3</span>
+                </p>
+              </div>
+              <div class="dialog-context__description markdown-prose">
+                <p>Eine sachkundige Gesprächspartnerin, die historische Quellen mit dir untersucht.</p>
+              </div>
+            </header>
+            <div class="dialog-notice" role="note">
+              <strong>Hinweis zur KI</strong>
+              <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
+            </div>
+            <div class="dialog-transcript" role="log" aria-label="Beispielhafter Dialogverlauf">
+              <article class="dialog-message dialog-message--ai">
+                <p class="dialog-message__speaker">KI · Archivarin Ada</p>
+                <div class="markdown-prose"><p>Welche Perspektive erkennst du in der Quelle?</p></div>
+              </article>
+              <article class="dialog-message dialog-message--student">
+                <p class="dialog-message__speaker">Schüler · Du</p>
+                <div class="markdown-prose"><p>Die Quelle stellt vor allem die Sicht der Regierung dar.</p></div>
+                <small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>
+              </article>
+              <article class="dialog-message dialog-message--ai">
+                <p class="dialog-message__speaker">KI · Archivarin Ada</p>
+                <div class="markdown-prose"><p>Woran machst du diese Perspektive sprachlich fest?</p></div>
+              </article>
+            </div>
+            <section class="dialog-composer" aria-label="Beispielhafte Dialogeingabe">
+              <div class="dialog-starters" aria-label="Satzanfang-Hilfen">
+                <p class="dialog-starters__label">Hilfestellung · Satzanfänge</p>
+                <button class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle dialog-starter" type="button">An der Wortwahl fällt mir auf …</button>
+                <button class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle dialog-starter" type="button">Ein Hinweis dafür ist …</button>
+              </div>
+              <label class="workspace-field">
+                <span>Deine Antwort (1/3)</span>
+                <textarea rows="3"></textarea>
+              </label>
+              <div class="dialog-actions">
+                <button class="workspace-top-action workspace-top-action--quiet" type="button">Dialog beenden</button>
+                <button class="workspace-top-action workspace-top-action--quiet" type="button">Pausieren</button>
+                <button class="workspace-top-action workspace-top-action--accent" type="button">Antwort senden</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="preview-dialog-state">
+          <h2>KI-Dialog · Abschluss</h2>
+          <div class="dialog-workspace" data-testid="preview-dialog-completion">
+            <header class="dialog-context">
+              <div class="dialog-context__heading">
+                <div>
+                  <p class="workspace-label">KI-Dialogpartner</p>
+                  <h5>Archivarin Ada</h5>
+                </div>
+                <p class="dialog-context__meta">
+                  <span>KI</span>
+                  <span>Mit Satzanfängen</span>
+                  <span>Runde 1/3</span>
+                </p>
+              </div>
+              <div class="dialog-context__description markdown-prose">
+                <p>Der Verlauf bleibt sichtbar, während du deine Abgabe vorbereitest.</p>
+              </div>
+            </header>
+            <div class="dialog-notice" role="note">
+              <strong>Hinweis zur KI</strong>
+              <span>Antworten können Fehler enthalten. Prüfe deine Schlussfolgerung selbst.</span>
+            </div>
+            <div class="dialog-transcript" role="log" aria-label="Dialogverlauf vor dem Abschluss">
+              <article class="dialog-message dialog-message--ai">
+                <p class="dialog-message__speaker">KI · Archivarin Ada</p>
+                <div class="markdown-prose"><p>Woran machst du diese Perspektive sprachlich fest?</p></div>
+              </article>
+              <article class="dialog-message dialog-message--student">
+                <p class="dialog-message__speaker">Schüler · Du</p>
+                <div class="markdown-prose"><p>Wertende Begriffe lassen die Regierung besonders kompetent erscheinen.</p></div>
+              </article>
+            </div>
+            <section class="dialog-closing" aria-labelledby="preview-dialog-closing-title">
+              <header>
+                <p class="workspace-label">Abschluss</p>
+                <h6 id="preview-dialog-closing-title">Abschluss vorbereiten</h6>
+              </header>
+              <label class="workspace-field">
+                <span>Fasse deine wichtigste Erkenntnis zusammen.</span>
+                <textarea rows="4">Die Wortwahl zeigt, dass die Quelle keine neutrale Perspektive einnimmt.</textarea>
+              </label>
+              <div class="dialog-actions">
+                <button class="workspace-top-action workspace-top-action--quiet" type="button">Zurück zum Dialog</button>
+                <button class="workspace-top-action workspace-top-action--quiet" type="button">Pausieren</button>
+                <button class="workspace-top-action workspace-top-action--accent" type="button">Endgültig abgeben</button>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </article>
+
     <article class="preview-card">
       <p class="preview-card__eyebrow">Lernpfad</p>
       <QuietList>

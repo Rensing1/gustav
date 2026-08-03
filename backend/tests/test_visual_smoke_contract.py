@@ -26,6 +26,10 @@ def test_frontend_visual_smoke_specs_include_approved_design_snapshots() -> None
         f"ui-lab-{theme}-{viewport}-chromium-linux.png"
         for theme in ("light", "dark")
         for viewport in ("desktop", "mobile")
+    } | {
+        f"dialog-states-{theme}-{viewport}-chromium-linux.png"
+        for theme in ("light", "dark")
+        for viewport in ("desktop", "mobile")
     }
     assert {path.name for path in snapshot_dir.glob("*.png")} == expected_snapshots
 

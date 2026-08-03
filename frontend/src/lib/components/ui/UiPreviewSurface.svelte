@@ -1,5 +1,5 @@
 <script lang="ts">
-  import LearningUnitContentWorkspace from "$lib/components/learning-unit/LearningUnitContentWorkspace.svelte";
+  import LearnerContentWorkspace from "$lib/components/learning-unit/LearnerContentWorkspace.svelte";
   import LearningResponseGroup from "$lib/components/learning-unit/LearningResponseGroup.svelte";
   import type { ContentGroup } from "$lib/learning-unit/workspace";
   import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
@@ -291,61 +291,51 @@
     </article>
 
     <article class="preview-card">
-      <p class="preview-card__eyebrow">Taskfläche</p>
-      <LearningUnitContentWorkspace
-        titleLabel="Taskfläche"
-        title="Erste Schritte"
-        meta="1 Modul geöffnet · Fokus auf Inhalte"
+      <p class="preview-card__eyebrow">Lernraum · Orientieren</p>
+      <LearnerContentWorkspace
+        learnerSub="preview-student"
         courseId="course-1"
+        unitTitle="Grundlagen der Europäischen Union"
         unitType="modular"
-        moduleId="module-1"
-        tocOpen={true}
-        splitView={false}
-        activePane="left"
-        visiblePaneIds={["left"]}
         contentGroups={previewContentGroups}
-        paneItems={{
-          left: previewContentGroups[0].items.map((item) => ({
-            item,
-            expanded: item.kind === "task"
-          })),
-          right: []
-        }}
+        mode="orienting"
+        navigationVisible={true}
         historyByTask={{ [previewTask.id]: [sampleSubmission] }}
-        submittedTaskId={previewTask.id}
-        submissionMessage="Aufgabe abgegeben."
-        submissionErrorTaskId={null}
-        submissionErrorMessage={null}
-        submissionFocusByPane={{ left: null, right: null }}
-        submissionModeByPane={{ left: null, right: null }}
-        reviewFocusByPane={{ left: `task:${previewTask.id}`, right: null }}
-        showSplitToggle={true}
-        layoutMenuEnabled={true}
-        tocWidth={16.25}
-        workspaceWidth={72}
-        splitRatio={50}
-        tocGap={1.1}
-        paneGap={1.1}
-        fontScale={1}
-        itemDomId={(paneId, itemKey) => `${paneId}-${itemKey}`}
-        onToggleToc={() => {}}
-        onToggleSplitView={() => {}}
-        onResetLayout={() => {}}
-        onUpdateTocWidth={() => {}}
-        onPreviewWorkspaceWidth={() => {}}
-        onCommitWorkspaceWidth={() => {}}
-        onPreviewFontScale={() => {}}
-        onCommitFontScale={() => {}}
-        onUpdateSplitRatio={() => {}}
-        onUpdateTocGap={() => {}}
-        onUpdatePaneGap={() => {}}
-        onSetActivePane={() => {}}
-        onOpenItem={() => {}}
-        onToggleItem={() => {}}
-        onEnterSubmissionWorkspace={() => {}}
-        onEnterUploadWorkspace={() => {}}
-        onExitSubmissionWorkspace={() => {}}
-        onToggleReviewPanel={() => {}}
+        onBeginTask={() => {}}
+        onPauseTask={() => {}}
+        onCloseModule={() => {}}
+        onSetCompactSurface={() => {}}
+        onToggleMaterial={() => {}}
+      />
+    </article>
+
+    <article class="preview-card">
+      <p class="preview-card__eyebrow">Lernraum · Bearbeiten</p>
+      <LearnerContentWorkspace
+        learnerSub="preview-student"
+        courseId="course-1"
+        unitTitle="Grundlagen der Europäischen Union"
+        unitType="modular"
+        contentGroups={previewContentGroups}
+        mode="working"
+        activeTaskKey="task:preview-task-1"
+        activeEditorMode="text"
+        compactSurface="task"
+        contextModules={previewContentGroups.map((group) => ({
+          id: group.id,
+          title: group.title ?? "Modul",
+          current: group.id === "module-1",
+          loaded: true,
+          loading: false,
+          error: null,
+          items: group.items
+        }))}
+        historyByTask={{ [previewTask.id]: [sampleSubmission] }}
+        onBeginTask={() => {}}
+        onPauseTask={() => {}}
+        onCloseModule={() => {}}
+        onSetCompactSurface={() => {}}
+        onToggleMaterial={() => {}}
       />
     </article>
 
@@ -355,8 +345,12 @@
         <section class="preview-dialog-state">
           <h2>KI-Dialog · Gespräch</h2>
           <div class="dialog-workspace" data-testid="preview-dialog-conversation">
-            <div class="dialog-layout" data-phase="conversation">
-              <aside class="dialog-sidebar" aria-label="Dialogpartner und Sitzungsaktionen">
+            <nav class="dialog-workspace__switch" aria-label="Arbeitsbereich wählen">
+              <button class="dialog-workspace__switch-button dialog-workspace__switch-button--active" type="button">Aufgabe</button>
+              <button class="dialog-workspace__switch-button" type="button">Materialien</button>
+            </nav>
+            <div class="dialog-layout" data-compact-surface="task" data-phase="conversation">
+              <aside class="dialog-sidebar" data-dialog-surface="materials" aria-label="Dialogpartner und Sitzungsaktionen">
                 <header class="dialog-context">
                   <p class="workspace-label">KI-Dialogpartner</p>
                   <h5>Archivarin Ada</h5>
@@ -378,7 +372,7 @@
                   <button class="workspace-top-action workspace-top-action--quiet" type="button">Dialog beenden</button>
                 </nav>
               </aside>
-              <div class="dialog-main">
+              <div class="dialog-main" data-dialog-surface="task">
                 <div class="dialog-transcript" role="log" aria-label="Beispielhafter Dialogverlauf">
                   <article class="dialog-message dialog-message--ai">
                     <p class="dialog-message__speaker">KI · Archivarin Ada</p>
@@ -416,8 +410,12 @@
         <section class="preview-dialog-state">
           <h2>KI-Dialog · Abschluss</h2>
           <div class="dialog-workspace" data-testid="preview-dialog-completion">
-            <div class="dialog-layout" data-phase="closing">
-              <aside class="dialog-sidebar" aria-label="Dialogpartner und Sitzungsaktionen">
+            <nav class="dialog-workspace__switch" aria-label="Arbeitsbereich wählen">
+              <button class="dialog-workspace__switch-button dialog-workspace__switch-button--active" type="button">Aufgabe</button>
+              <button class="dialog-workspace__switch-button" type="button">Materialien</button>
+            </nav>
+            <div class="dialog-layout" data-compact-surface="task" data-phase="closing">
+              <aside class="dialog-sidebar" data-dialog-surface="materials" aria-label="Dialogpartner und Sitzungsaktionen">
                 <header class="dialog-context">
                   <p class="workspace-label">KI-Dialogpartner</p>
                   <h5>Archivarin Ada</h5>
@@ -438,7 +436,7 @@
                   <button class="workspace-top-action workspace-top-action--quiet" type="button">Pausieren</button>
                 </nav>
               </aside>
-              <div class="dialog-main">
+              <div class="dialog-main" data-dialog-surface="task">
                 <div class="dialog-transcript" role="log" aria-label="Dialogverlauf vor dem Abschluss">
                   <article class="dialog-message dialog-message--ai">
                     <p class="dialog-message__speaker">KI · Archivarin Ada</p>

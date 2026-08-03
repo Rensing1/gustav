@@ -93,7 +93,7 @@ async function expectContrastDesignContract(page: Page): Promise<void> {
   expect(topbarControls.theme).toEqual(topbarControls.account);
 }
 
-async function expectDialogDesignContract(page: Page, layoutMode: "desktop" | "tablet" | "mobile"): Promise<void> {
+async function expectDialogDesignContract(page: Page): Promise<void> {
   const contract = await page.getByTestId("preview-dialog-conversation").evaluate((workspace) => {
     const layout = workspace.querySelector(".dialog-layout");
     const sidebar = workspace.querySelector(".dialog-sidebar");
@@ -102,6 +102,7 @@ async function expectDialogDesignContract(page: Page, layoutMode: "desktop" | "t
     const aiMessage = workspace.querySelector(".dialog-message--ai");
     const studentMessage = workspace.querySelector(".dialog-message--student");
     const starter = workspace.querySelector(".dialog-starter");
+    const switcher = workspace.querySelector(".dialog-workspace__switch");
     const sessionActions = workspace.querySelector(".dialog-session-actions");
     const composer = workspace.querySelector(".dialog-composer");
     const sendButton = workspace.querySelector(".dialog-composer__actions .workspace-top-action--accent");
@@ -113,6 +114,7 @@ async function expectDialogDesignContract(page: Page, layoutMode: "desktop" | "t
       !(aiMessage instanceof HTMLElement) ||
       !(studentMessage instanceof HTMLElement) ||
       !(starter instanceof HTMLElement) ||
+      !(switcher instanceof HTMLElement) ||
       !(sessionActions instanceof HTMLElement) ||
       !(composer instanceof HTMLElement) ||
       !(sendButton instanceof HTMLElement)
@@ -126,6 +128,8 @@ async function expectDialogDesignContract(page: Page, layoutMode: "desktop" | "t
     const aiStyle = getComputedStyle(aiMessage);
     const studentStyle = getComputedStyle(studentMessage);
     const starterStyle = getComputedStyle(starter);
+    const switcherStyle = getComputedStyle(switcher);
+    const mainStyle = getComputedStyle(main);
     const workspaceBox = workspace.getBoundingClientRect();
     const layoutBox = layout.getBoundingClientRect();
     const sidebarBox = sidebar.getBoundingClientRect();
@@ -142,7 +146,10 @@ async function expectDialogDesignContract(page: Page, layoutMode: "desktop" | "t
       workspaceWidth: workspaceBox.width,
       layoutColumns: layoutStyle.gridTemplateColumns,
       sidebarAreas: sidebarStyle.gridTemplateAreas,
+      sidebarDisplay: sidebarStyle.display,
       sidebarPosition: sidebarStyle.position,
+      mainDisplay: mainStyle.display,
+      switchDisplay: switcherStyle.display,
       layoutBox: { x: layoutBox.x, y: layoutBox.y, width: layoutBox.width, height: layoutBox.height },
       sidebarBox: { x: sidebarBox.x, y: sidebarBox.y, width: sidebarBox.width, height: sidebarBox.height },
       mainBox: { x: mainBox.x, y: mainBox.y, width: mainBox.width, height: mainBox.height },
@@ -179,28 +186,31 @@ async function expectDialogDesignContract(page: Page, layoutMode: "desktop" | "t
   expect(contract.studentJustify).toBe("end");
   expect(contract.starterRadius).toBe("0px");
 
-  if (layoutMode === "desktop") {
-    expect(contract.workspaceWidth).toBeGreaterThanOrEqual(1024);
+  if (contract.workspaceWidth >= 1152) {
     expect(contract.mainBox.x).toBeGreaterThan(contract.sidebarBox.x + contract.sidebarBox.width - 1);
-    expect(contract.sidebarPosition).toBe("sticky");
+    expect(contract.sidebarDisplay).toBe("grid");
+    expect(contract.mainDisplay).toBe("grid");
+    expect(contract.switchDisplay).toBe("none");
     expect(contract.layoutColumns.split(" ")).toHaveLength(2);
     expect(contract.sidebarBox.y).toBe(contract.mainBox.y);
     expect(contract.sidebarBox.y + contract.sidebarBox.height - contract.sessionActionsBox.y - contract.sessionActionsBox.height).toBeLessThanOrEqual(17);
     expect(contract.aiWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.studentWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.sendButtonWidth).toBeLessThan(contract.composerContentWidth);
-  } else if (layoutMode === "tablet") {
+  } else if (contract.workspaceWidth >= 680) {
     expect(contract.workspaceWidth).toBeGreaterThanOrEqual(680);
-    expect(contract.workspaceWidth).toBeLessThan(1024);
-    expect(contract.mainBox.y).toBeGreaterThan(contract.sidebarBox.y + contract.sidebarBox.height - 1);
-    expect(contract.sidebarAreas).toContain("context meta actions");
+    expect(contract.workspaceWidth).toBeLessThan(1152);
+    expect(contract.sidebarDisplay).toBe("none");
+    expect(contract.mainDisplay).toBe("grid");
+    expect(contract.switchDisplay).toBe("grid");
     expect(contract.aiWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.studentWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.sendButtonWidth).toBeLessThan(contract.composerContentWidth);
   } else {
     expect(contract.workspaceWidth).toBeLessThan(680);
-    expect(contract.mainBox.y).toBeGreaterThan(contract.sidebarBox.y + contract.sidebarBox.height - 1);
-    expect(contract.sidebarAreas).toContain("context");
+    expect(contract.sidebarDisplay).toBe("none");
+    expect(contract.mainDisplay).toBe("grid");
+    expect(contract.switchDisplay).toBe("grid");
     expect(Math.abs(contract.aiWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
     expect(Math.abs(contract.studentWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
     expect(
@@ -237,7 +247,7 @@ test.describe("@visual-smoke @design-system contrast design contract", () => {
     test(`keeps approved light and dark baselines on ${viewport.name}`, async ({ page }) => {
       await openUiLab(page, viewport);
       await expectContrastDesignContract(page);
-      await expectDialogDesignContract(page, viewport.name);
+      await expectDialogDesignContract(page);
       await expect(page).toHaveScreenshot(`ui-lab-light-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide"
@@ -261,7 +271,7 @@ test.describe("@visual-smoke @design-system contrast design contract", () => {
       expect(darkContract.border).toBe("#f0f1f1");
       expect(darkContract.shadow).toContain("4px 4px 0 0");
       expect(darkContract.shadow).toContain("240, 241, 241");
-      await expectDialogDesignContract(page, viewport.name);
+      await expectDialogDesignContract(page);
       await expect(page).toHaveScreenshot(`ui-lab-dark-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide"

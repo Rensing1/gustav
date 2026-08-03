@@ -64,6 +64,24 @@ async function createTask(page: Page, unitId: string, sectionId: string, data: R
   return payload.id as string;
 }
 
+async function createMarkdownMaterial(
+  page: Page,
+  unitId: string,
+  sectionId: string,
+  title: string,
+  bodyMd: string
+): Promise<string> {
+  const response = await page.request.post(
+    `${webBase}/api/teaching/units/${unitId}/sections/${sectionId}/materials`,
+    {
+      headers: apiHeaders(`/teaching/units/${unitId}`),
+      data: { title, body_md: bodyMd }
+    }
+  );
+  await expectApiOk(response, 201);
+  return (await response.json()).id as string;
+}
+
 async function attachUnitToCourse(page: Page, courseId: string, unitId: string): Promise<string> {
   const response = await page.request.post(`${webBase}/api/teaching/courses/${courseId}/modules`, {
     headers: apiHeaders(`/teaching/courses/${courseId}`),
@@ -151,6 +169,22 @@ export async function seedLearnerVisualSmokeCourse(
   const courseId = await createCourse(teacherPage, courseTitle);
   const unitId = await createUnit(teacherPage, unitTitle);
   const sectionId = await createSection(teacherPage, unitId, "Start");
+  await createMarkdownMaterial(
+    teacherPage,
+    unitId,
+    sectionId,
+    "Grundrechte und digitale Kommunikation",
+    [
+      "## Ausgangslage",
+      "Digitale Kommunikation berührt zugleich den Schutz von Kindern, die Privatsphäre und das Recht auf vertrauliche Gespräche.",
+      "## Perspektiven",
+      "Eine sorgfältige Abwägung unterscheidet zwischen legitimen Schutzzielen, der technischen Wirksamkeit und möglichen Eingriffen in Grundrechte.",
+      "## Prüfauftrag",
+      "Achte darauf, welche Annahmen belegt werden, welche Gruppen betroffen sind und ob mildere Mittel genannt werden.",
+      "## Vertiefung",
+      "Längere Materialien bleiben in einer eigenen Lesefläche mit begrenzter Zeilenlänge und unabhängigem Bildlauf verfügbar. So bleibt die Aufgabe gleichzeitig erhalten."
+    ].join("\n\n")
+  );
   const taskId = await createTask(teacherPage, unitId, sectionId, {
     instruction_md: "Beschreibe in zwei Sätzen, was du auf dieser Seite siehst.",
     criteria: ["Antwort ist verständlich."]

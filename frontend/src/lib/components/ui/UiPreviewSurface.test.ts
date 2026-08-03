@@ -18,14 +18,14 @@ describe("UiPreviewSurface", () => {
     expect(screen.getByRole("heading", { name: "Programmieren mit Scratch" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Zurück zu Lerneinheiten" })).toHaveAttribute("href", "/teaching/units");
     expect(screen.getByRole("heading", { name: "Inhaltsverzeichnis" })).toBeInTheDocument();
-    expect(screen.getByText("Was tut die Europäische Union für mich und wie verändert sie meinen Alltag?")).toBeInTheDocument();
-    expect(screen.getByText("Werte der Union")).toBeInTheDocument();
-    expect(screen.getByLabelText("Arbeitsfeld")).toBeInTheDocument();
+    expect(screen.getAllByText("Was tut die Europäische Union für mich und wie verändert sie meinen Alltag?").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Werte der Union").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Aufgabe bearbeiten").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Klasse 10a" })).toHaveAttribute("href", "/learning");
     expect(screen.getByRole("toolbar", { name: "Graphwerkzeuge" })).toBeInTheDocument();
     expect(screen.getAllByText("Phase hinzufügen").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Eigenschaften" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Taskfläche").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Taskfläche zuerst/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Property inspector").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Abschnitt bearbeiten" })).toBeInTheDocument();
     expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);

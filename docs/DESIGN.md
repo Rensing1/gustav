@@ -285,9 +285,15 @@ Verbindliche Familien:
 
 ### 11.1 Modi
 
-- Die Modi heißen `Übersicht / Inhalte`
-- Der Wechsel bleibt ein echter Moduswechsel
-- Die kontrastreiche Task-Fläche ist der stilistische Primäranker
+- Der Graph wechselt weiterhin zwischen `Übersicht / Inhalte`.
+- Innerhalb der Inhalte unterscheidet der Schüler-Lernraum klar zwischen
+  `Orientieren` und `Bearbeiten`.
+- `Orientieren` ist der Standard: geöffnete Module stehen einspaltig
+  untereinander und Aufgaben erscheinen als kompakte Startzeilen.
+- `Aufgabe beginnen` öffnet eine eigene Arbeitsfläche außerhalb der Modul- und
+  Aufgabenliste. Die Aufgabenzeile wird dort nicht wiederholt.
+- `Pausieren` stellt Modul-, Scroll- und Fokusposition wieder her. Nach einer
+  endgültigen Abgabe bleibt zunächst die Ergebnisansicht geöffnet.
 
 ### 11.2 Übersicht
 
@@ -298,8 +304,8 @@ Verbindliche Familien:
 
 ### 11.3 Inhalte
 
-- Task-Fläche bleibt Fokusraum
-- Bearbeitung bleibt inline
+- Die Aufgabenbearbeitung ist ein eigener Fokusraum und nicht mehr Teil einer
+  symmetrischen Zwei-Pane-Ansicht.
 - Der Modultitel ist der klare Einstiegspunkt eines Moduls
 - `MATERIALIEN` und `AUFGABEN` bleiben technische Marker, keine konkurrierenden
   Subheadlines
@@ -312,8 +318,15 @@ Verbindliche Familien:
   redundanter Status-/Titellabels
 - Status wird primär über Balken und Tönung getragen
 - Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline
-- Pro Pane ist in der kompakten Task-Zeile genau eine Detailansicht aktiv
-- `Meine Abgabe` und Bearbeitung sind pro Pane exklusiv und erneut klickbar
+- Auf breiten Flächen gibt es genau zwei funktionale Bereiche: links `Aufgabe &
+  Kontext`, rechts die Bearbeitung. Es gibt niemals eine dritte Spalte.
+- Ab `72rem` verfügbarer Komponentenbreite ist der Kontext
+  `clamp(20rem, 30cqw, 28rem)` breit. Darunter wechseln `Aufgabe` und
+  `Materialien` als montiert bleibende Vollbreitenansichten; unter `48rem`
+  werden Aktionsgruppen gestapelt.
+- Breiten und Abstände werden responsiv bestimmt. Nutzereinstellungen bieten
+  nur Navigation, `Klein | Standard | Groß` und das Zurücksetzen der
+  Darstellung.
 - Markdown im Schüler-Lernraum wird zentral über einen sanitizten GFM-Renderer
   ausgegeben
 - Unterstützt werden mindestens: Überschriften, Fett, Kursiv, Listen,
@@ -324,7 +337,26 @@ Verbindliche Familien:
   nicht nur in `app.css`, damit Surface-, Spacing- und Typografie-Regeln im
   Lernraum wirksam bleiben
 
-### 11.4 Dialogarbeitsbereich
+### 11.4 Aufgabe und Kontext
+
+- Materialien des aktuellen Abschnitts sind automatisch verfügbar. Weitere
+  zugängliche Materialien und eigene frühere Abgaben werden einzeln angeheftet,
+  nicht als vollständiges Modul.
+- Weitere Module werden erst beim Öffnen ihrer Gruppe geladen. Entzogene oder
+  gesperrte Inhalte werden beim Wiederherstellen verworfen beziehungsweise mit
+  einem sicheren Ladefehler angezeigt.
+- Lange Materialien und frühere Abgaben öffnen einen fokussierten Lesemodus in
+  derselben Kontextfläche. Seine Zeilenlänge bleibt auf `58ch` begrenzt; Bilder
+  und Medien schrumpfen auf die verfügbare Breite, Tabellen und Codeblöcke
+  scrollen nur horizontal innerhalb ihres Inhalts.
+- Die Kontextfläche besitzt einen eigenen vertikalen Scrollbereich. Leseposition,
+  ausgewählter Eintrag und Disclosure-Zustände bleiben im aktuellen Tab
+  erhalten; angeheftete IDs bleiben schüler-, kurs- und lernspezifisch über
+  Neuladen und Aufgabenwechsel hinweg erhalten.
+- Gespeichert werden ausschließlich IDs und Ansichtsstatus, niemals Material-
+  oder Abgabetexte.
+
+### 11.5 Dialogarbeitsbereich
 
 KI-Dialogaufgaben trennen das Gespräch sichtbar von der endgültigen Abgabe. Die
 Aufgabenstellung bleibt als kompakter Kopf der aktiven Aufgabe erhalten. Direkt
@@ -348,10 +380,13 @@ Verbindliche Regeln:
 - Sprecher werden technisch und eindeutig bezeichnet. Verwendete Satzanfänge
   bleiben als Hilfestellung sichtbar.
 - Satzanfänge sind rechteckige Sekundäraktionen, keine Chatblasen oder Pills.
-- Die Arbeitsfläche reagiert über Container Queries auf ihre eigene Breite, nicht
-  nur auf den Viewport. Ab `64rem` steht ein etwa `18rem` breiter, sichtbarer
-  Partnerbereich links neben dem Gespräch. Zwischen `42.5rem` und `64rem` wird
-  er zum horizontalen Kopf. Darunter ist die Struktur vollständig gestapelt.
+- Die Arbeitsfläche folgt demselben Kontextvertrag wie alle Aufgaben. Ab `72rem`
+  steht der Partner- und Kontextbereich mit `clamp(20rem, 30cqw, 28rem)` links
+  neben dem Gespräch. Darunter wechseln `Aufgabe` und `Materialien` als
+  Vollbreitenansichten; beide bleiben dabei montiert.
+- Aktuelle und angeheftete Materialien sowie eigene frühere Abgaben sind auch
+  während des Dialogs über den Partnerbereich auswählbar und in einem
+  fokussierten Lesemodus darstellbar.
 - Auf Smartphonebreite nutzen Nachrichten und `Antwort senden` die volle
   verfügbare Breite. Sitzungsaktionen stehen nebeneinander und werden erst unter
   `22rem` Containerbreite gestapelt.

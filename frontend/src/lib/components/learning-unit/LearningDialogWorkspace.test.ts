@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import LearningDialogWorkspace from "./LearningDialogWorkspace.svelte";
@@ -113,15 +113,27 @@ describe("LearningDialogWorkspace", () => {
     renderDialog(session());
 
     expect(await screen.findByText("Archivarin")).toBeInTheDocument();
+    const partnerContext = screen.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    const composer = screen.getByRole("region", { name: "Dialog fortsetzen" });
     expect(screen.getByLabelText("Deine Antwort (0/3)")).toBeInTheDocument();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(within(partnerContext).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
+    expect(within(partnerContext).getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeInTheDocument();
+    expect(within(partnerContext).queryByRole("button", { name: "Antwort senden" })).toBeNull();
+    expect(within(composer).getByRole("button", { name: "Antwort senden" })).toBeInTheDocument();
+    expect(within(composer).queryByRole("link", { name: "Pausieren" })).toBeNull();
   });
 
   it("offers a deliberate transition while keeping the closing prompt hidden", async () => {
     renderDialog(answeredSession());
 
-    expect(await screen.findByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    const partnerContext = await screen.findByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    const composer = screen.getByRole("region", { name: "Dialog fortsetzen" });
+    expect(within(partnerContext).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(within(partnerContext).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "Antwort senden" })).toBeInTheDocument();
+    expect(within(composer).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
     expect(screen.getByLabelText("Deine Antwort (1/3)")).toBeInTheDocument();
   });
@@ -132,9 +144,14 @@ describe("LearningDialogWorkspace", () => {
 
     await fireEvent.click(endButton);
 
+    const partnerContext = screen.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    const closing = screen.getByRole("region", { name: "Abschluss vorbereiten" });
     expect(screen.getByLabelText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Zurück zum Dialog" })).toBeInTheDocument();
+    expect(within(partnerContext).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
+    expect(within(partnerContext).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(within(closing).getByRole("button", { name: "Endgültig abgeben" })).toBeInTheDocument();
+    expect(within(closing).getByRole("button", { name: "Zurück zum Dialog" })).toBeInTheDocument();
+    expect(within(closing).queryByRole("link", { name: "Pausieren" })).toBeNull();
     expect(screen.queryByLabelText("Deine Antwort (1/3)")).toBeNull();
 
     await fireEvent.click(screen.getByRole("button", { name: "Zurück zum Dialog" }));
@@ -235,6 +252,27 @@ describe("LearningDialogWorkspace", () => {
 
     const pause = await screen.findByRole("link", { name: "Pausieren" });
     expect(pause).toHaveAttribute("href", "/learning/courses/course-1");
+  });
+
+  it("hides all session actions in the completed read-only view", async () => {
+    const current = answeredSession({ status: "completed", closing_answer_md: "Fazit" });
+    const fetchMock = vi.fn(async () => jsonResponse({ session: current }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(LearningDialogWorkspace, {
+      props: {
+        learnerSub: "student-1",
+        courseId: "course-1",
+        task: dialogTask,
+        existingSessionId: "session-1",
+        readOnly: true
+      }
+    });
+
+    expect(await screen.findByText("Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pausieren" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Antwort senden" })).toBeNull();
   });
 
   it("keeps dialog presentation in the layered learner stylesheet without hard-coded colors", () => {

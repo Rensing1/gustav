@@ -212,97 +212,109 @@
   {#if pending && !session}<p>Lädt …</p>{/if}
   {#if error}<p class="flash flash-error">{error}</p>{/if}
   {#if session}
-    <header class="dialog-context">
-      <div class="dialog-context__heading">
-        <div>
+    <div class="dialog-layout" data-phase={closingPhase ? "closing" : "conversation"}>
+      <aside class="dialog-sidebar" aria-label="Dialogpartner und Sitzungsaktionen">
+        <header class="dialog-context">
           <p class="workspace-label">KI-Dialogpartner</p>
           <h5>{session.dialog.partner_name}</h5>
-        </div>
-        <p class="dialog-context__meta">
+          <div class="dialog-context__description markdown-prose">{@html renderMarkdown(session.dialog.partner_description_md)}</div>
+        </header>
+
+        <p class="dialog-context__meta" aria-label="Dialogstatus">
           <span>KI</span>
           <span>{session.dialog.response_mode === "hybrid" ? "Mit Satzanfängen" : "Freitext"}</span>
           <span>Runde {session.round_count}/{session.dialog.max_rounds}</span>
         </p>
-      </div>
-      <div class="dialog-context__description markdown-prose">{@html renderMarkdown(session.dialog.partner_description_md)}</div>
-    </header>
 
-    <div class="dialog-notice" role="note">
-      <strong>Hinweis zur KI</strong>
-      <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
-    </div>
+        <div class="dialog-notice" role="note">
+          <strong>Hinweis zur KI</strong>
+          <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
+        </div>
 
-    <div class="dialog-transcript" role="log" aria-label="Dialogverlauf" aria-live="polite">
-      <article class="dialog-message dialog-message--ai">
-        <p class="dialog-message__speaker">KI · {session.dialog.partner_name}</p>
-        <div class="markdown-prose">{@html renderMarkdown(session.dialog.opening_message_md)}</div>
-      </article>
-      {#each session.turns as turn}
-        <article class="dialog-message dialog-message--student">
-          <p class="dialog-message__speaker">Schüler · Du</p>
-          <div class="markdown-prose">{@html renderMarkdown(turn.student_message_md)}</div>
-          {#if turn.used_sentence_starter_md}<small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>{/if}
-        </article>
-        {#if turn.assistant_reply_md}
+        {#if session.status === "active" && !readOnly}
+          <nav class="dialog-session-actions" aria-label="Sitzungsaktionen">
+            <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
+            {#if !closingPhase}
+              {#if session.round_count > 0}
+                <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>Dialog beenden</button>
+              {:else}
+                <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
+              {/if}
+            {/if}
+          </nav>
+        {/if}
+      </aside>
+
+      <div class="dialog-main">
+        <div class="dialog-transcript" role="log" aria-label="Dialogverlauf" aria-live="polite">
           <article class="dialog-message dialog-message--ai">
             <p class="dialog-message__speaker">KI · {session.dialog.partner_name}</p>
-            <div class="markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div>
+            <div class="markdown-prose">{@html renderMarkdown(session.dialog.opening_message_md)}</div>
           </article>
-        {/if}
-        {#if turn.status === "failed"}
-          <button class="workspace-top-action workspace-top-action--quiet dialog-retry" type="button" disabled={pending || turn.generation_attempts >= 3} onclick={() => retry(turn)}>KI-Antwort erneut versuchen</button>
-        {/if}
-      {/each}
-    </div>
-    {#if session.status === "active" && !readOnly}
-      {#if closingPhase}
-        <section class="dialog-closing" aria-labelledby="dialog-closing-title">
-          <header>
-            <p class="workspace-label">Abschluss</p>
-            <h6 id="dialog-closing-title">Abschluss vorbereiten</h6>
-          </header>
-          {#if session.dialog.closing_prompt_md}
-            <label class="workspace-field"><span>{session.dialog.closing_prompt_md}</span><textarea bind:value={closingAnswer} maxlength="2000" rows="4"></textarea></label>
+          {#each session.turns as turn}
+            <article class="dialog-message dialog-message--student">
+              <p class="dialog-message__speaker">Schüler · Du</p>
+              <div class="markdown-prose">{@html renderMarkdown(turn.student_message_md)}</div>
+              {#if turn.used_sentence_starter_md}<small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>{/if}
+            </article>
+            {#if turn.assistant_reply_md}
+              <article class="dialog-message dialog-message--ai">
+                <p class="dialog-message__speaker">KI · {session.dialog.partner_name}</p>
+                <div class="markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div>
+              </article>
+            {/if}
+            {#if turn.status === "failed"}
+              <button class="workspace-top-action workspace-top-action--quiet dialog-retry" type="button" disabled={pending || turn.generation_attempts >= 3} onclick={() => retry(turn)}>KI-Antwort erneut versuchen</button>
+            {/if}
+          {/each}
+        </div>
+
+        {#if session.status === "active" && !readOnly}
+          {#if closingPhase}
+            <section class="dialog-closing" aria-labelledby="dialog-closing-title">
+              <header>
+                <p class="workspace-label">Abschluss</p>
+                <h6 id="dialog-closing-title">Abschluss vorbereiten</h6>
+              </header>
+              {#if session.dialog.closing_prompt_md}
+                <label class="workspace-field"><span>{session.dialog.closing_prompt_md}</span><textarea bind:value={closingAnswer} maxlength="2000" rows="4"></textarea></label>
+              {:else}
+                <p class="workspace-note">Mit der Abgabe wird der Dialog endgültig abgeschlossen und ein Versuch verbraucht.</p>
+              {/if}
+              <div class="dialog-actions dialog-closing__actions">
+                <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={continueDialog}>Zurück zum Dialog</button>
+                <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || Boolean(session.dialog.closing_prompt_md && !closingAnswer.trim())} onclick={complete}>Endgültig abgeben</button>
+              </div>
+            </section>
           {:else}
-            <p class="workspace-note">Mit der Abgabe wird der Dialog endgültig abgeschlossen und ein Versuch verbraucht.</p>
+            <section class="dialog-composer" aria-label="Dialog fortsetzen">
+              {#if session.dialog.response_mode === "hybrid" && session.initial_starters_status === "failed" && session.initial_generation_attempts < 3}
+                <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={start}>Erste Satzanfänge erneut erzeugen</button>
+              {/if}
+              {#if availableStarters().length}
+                <div class="dialog-starters" aria-label="Satzanfang-Hilfen">
+                  <p class="dialog-starters__label">Hilfestellung · Satzanfänge</p>
+                  {#each availableStarters() as starter}
+                    <button class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle dialog-starter" type="button" onclick={() => chooseStarter(starter)}>{starter}</button>
+                  {/each}
+                </div>
+              {/if}
+              {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
+                <label class="workspace-field"><span>Deine Antwort ({session.round_count}/{session.dialog.max_rounds})</span><textarea bind:value={message} maxlength="2000" rows="5"></textarea></label>
+              {:else if session.round_count >= session.dialog.max_rounds}
+                <p class="workspace-note">Maximale Rundenzahl erreicht.</p>
+              {/if}
+              {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
+                <div class="dialog-actions dialog-composer__actions">
+                  <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || !message.trim()} onclick={send}>Antwort senden</button>
+                </div>
+              {/if}
+            </section>
           {/if}
-          <div class="dialog-actions">
-            <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={continueDialog}>Zurück zum Dialog</button>
-            <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
-            <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || Boolean(session.dialog.closing_prompt_md && !closingAnswer.trim())} onclick={complete}>Endgültig abgeben</button>
-          </div>
-        </section>
-      {:else}
-        <section class="dialog-composer" aria-label="Dialog fortsetzen">
-          {#if session.dialog.response_mode === "hybrid" && session.initial_starters_status === "failed" && session.initial_generation_attempts < 3}
-            <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={start}>Erste Satzanfänge erneut erzeugen</button>
-          {/if}
-          {#if availableStarters().length}
-            <div class="dialog-starters" aria-label="Satzanfang-Hilfen">
-              <p class="dialog-starters__label">Hilfestellung · Satzanfänge</p>
-              {#each availableStarters() as starter}
-                <button class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle dialog-starter" type="button" onclick={() => chooseStarter(starter)}>{starter}</button>
-              {/each}
-            </div>
-          {/if}
-          {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
-            <label class="workspace-field"><span>Deine Antwort ({session.round_count}/{session.dialog.max_rounds})</span><textarea bind:value={message} maxlength="2000" rows="5"></textarea></label>
-          {:else if session.round_count >= session.dialog.max_rounds}
-            <p class="workspace-note">Maximale Rundenzahl erreicht.</p>
-          {/if}
-          <div class="dialog-actions">
-            {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
-              <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || !message.trim()} onclick={send}>Antwort senden</button>
-            {/if}
-            {#if session.round_count > 0}
-              <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>Dialog beenden</button>
-            {:else}
-              <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
-            {/if}
-            <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
-          </div>
-        </section>
-      {/if}
-    {:else if session.status === "completed"}<p class="workspace-note">Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.</p>{/if}
+        {:else if session.status === "completed"}
+          <p class="workspace-note dialog-completed-note">Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.</p>
+        {/if}
+      </div>
+    </div>
   {/if}
 </section>

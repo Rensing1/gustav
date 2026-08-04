@@ -3367,6 +3367,123 @@
   display: grid;
 }
 
+.learner-task-context__document-row {
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--color-line);
+}
+
+.learner-reference-document {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+}
+
+.learner-reference-document__toggle {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-4) 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: start;
+  cursor: pointer;
+}
+
+.learner-reference-document__toggle > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.learner-reference-document__toggle small,
+.learner-reference-document__meta {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: calc(0.68rem * var(--learning-unit-label-scale));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.learner-reference-document__toggle strong {
+  overflow-wrap: anywhere;
+}
+
+.learner-reference-document__body,
+.learner-reference-document__file,
+.learner-reference-document__submission,
+.learner-reference-document__response,
+.learner-reference-document__criterion,
+.learner-reference-document__older-attempt {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.learner-reference-document__body {
+  padding-block-end: var(--space-4);
+}
+
+.learner-reference-document__prose {
+  max-width: 68ch;
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+}
+
+.learner-reference-document__prose > :first-child,
+.learner-reference-document__prose > :last-child,
+.learner-reference-document__meta {
+  margin-block: 0;
+}
+
+.learner-reference-document__image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  object-position: left top;
+}
+
+.learner-reference-document__pdf {
+  width: 100%;
+  min-height: min(32rem, 58svh);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+}
+
+.learner-reference-document__response {
+  padding-block: var(--space-3);
+  border-block-start: 1px solid var(--color-line);
+}
+
+.learner-reference-document__response summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.learner-reference-document__reader-action {
+  width: fit-content;
+  padding: var(--space-1) 0;
+  border: 0;
+  border-block-end: 1px solid currentColor;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-link);
+  font-family: var(--font-mono);
+  font-size: calc(0.7rem * var(--learning-unit-label-scale));
+  font-weight: 750;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
 .learner-task-context__material,
 .learner-task-context__opened-module {
   border-block-end: 1px solid var(--color-line);
@@ -3643,7 +3760,10 @@
 
 @container (min-width: 72rem) {
   .learner-task-workbench {
-    grid-template-columns: clamp(20rem, 30cqw, 28rem) minmax(0, 1fr);
+    height: calc(100svh - 7.25rem);
+    min-height: 36rem;
+    grid-template-columns: clamp(32rem, 44cqw, 38rem) minmax(0, 1fr);
+    align-items: stretch;
   }
 
   .learner-task-workbench__switch {
@@ -3659,14 +3779,15 @@
   }
 
   .learner-task-context {
-    position: sticky;
-    top: calc(4rem + 3.25rem + var(--space-2));
-    max-height: calc(100svh - 4rem - 3.25rem - var(--space-4));
-    min-height: min(42rem, calc(100svh - 4rem - 3.25rem - var(--space-4)));
+    height: 100%;
+    max-height: none;
+    min-height: 0;
     border-inline-end: 1px solid var(--color-border);
   }
 
   .learner-task-context__scroll {
+    height: 100%;
+    max-height: none;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -3674,7 +3795,11 @@
   }
 
   .learner-task-workbench__main {
-    min-height: min(42rem, calc(100svh - 9rem));
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
   }
 }
@@ -3729,7 +3854,7 @@
 
   @media (min-width: 80rem) {
     .learner-task-workbench {
-      grid-template-columns: minmax(20rem, 28rem) minmax(0, 1fr);
+      grid-template-columns: minmax(32rem, 38rem) minmax(0, 1fr);
     }
 
     .learner-task-workbench__switch {

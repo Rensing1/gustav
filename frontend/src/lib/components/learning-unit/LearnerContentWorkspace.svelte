@@ -1,5 +1,6 @@
 <script lang="ts">
   import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
+  import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
   import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
   import WorkspaceOutline from "$lib/components/ui/WorkspaceOutline.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -28,8 +29,10 @@
     manualContextReferences = [],
     contextPickerOpen = false,
     expandedContextModuleIds = [],
+    expandedReferenceKeys = [],
     readingReferenceKey = null,
     contextScrollTop = 0,
+    workScrollTop = 0,
     historyByTask,
     historyStateByTask = {},
     submittedTaskId = null,
@@ -51,9 +54,11 @@
     onToggleContextModule = null,
     onAddContextReference = null,
     onRemoveContextReference = null,
+    onToggleContextReference = null,
     onOpenContextReference = null,
     onCloseContextReader = null,
     onContextScroll = null,
+    onWorkScroll = null,
     onToggleReviewPanel = null,
     onProgressPersisted = null
   }: {
@@ -82,8 +87,10 @@
     manualContextReferences?: LearnerContextReference[];
     contextPickerOpen?: boolean;
     expandedContextModuleIds?: string[];
+    expandedReferenceKeys?: string[];
     readingReferenceKey?: string | null;
     contextScrollTop?: number;
+    workScrollTop?: number;
     historyByTask: Record<string, LearningSubmission[]>;
     historyStateByTask?: Record<string, HistoryState>;
     submittedTaskId?: string | null;
@@ -110,18 +117,27 @@
     onToggleContextModule?: ((moduleId: string) => void | Promise<void>) | null;
     onAddContextReference?: ((reference: LearnerContextReference) => void) | null;
     onRemoveContextReference?: ((referenceKey: string) => void) | null;
+    onToggleContextReference?: ((referenceKey: string) => void | Promise<void>) | null;
     onOpenContextReference?: ((referenceKey: string) => void | Promise<void>) | null;
     onCloseContextReader?: (() => void) | null;
     onContextScroll?: ((scrollTop: number) => void) | null;
+    onWorkScroll?: ((scrollTop: number) => void) | null;
     onToggleReviewPanel?: ((taskId: string) => void | Promise<void>) | null;
     onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
 
   let contextScrollSurface = $state<HTMLDivElement | null>(null);
+  let workScrollSurface = $state<HTMLElement | null>(null);
 
   $effect(() => {
     if (contextScrollSurface && contextScrollSurface.scrollTop !== contextScrollTop) {
       contextScrollSurface.scrollTop = contextScrollTop;
+    }
+  });
+
+  $effect(() => {
+    if (workScrollSurface && workScrollSurface.scrollTop !== workScrollTop) {
+      workScrollSurface.scrollTop = workScrollTop;
     }
   });
 
@@ -211,7 +227,50 @@
   }
 
   function referenceAlreadyAdded(key: string): boolean {
-    return manualContextReferences.some((reference) => reference.key === key);
+    return currentMaterials(activeItem).some((item) => item.key === key)
+      || manualContextReferences.some((reference) => reference.key === key);
+  }
+
+  function contextReferenceDocuments(item: LearningContentItem | null) {
+    const documents: Array<{
+      key: string;
+      label: string;
+      title: string;
+      material: LearningMaterial | null;
+      submissions: LearningSubmission[];
+      current: boolean;
+    }> = [];
+    const seen = new Set<string>();
+
+    for (const materialItem of currentMaterials(item)) {
+      if (!materialItem.material || seen.has(materialItem.key)) continue;
+      seen.add(materialItem.key);
+      documents.push({
+        key: materialItem.key,
+        label: "Material · Aktuelles Modul",
+        title: materialItem.title,
+        material: materialItem.material,
+        submissions: [],
+        current: true
+      });
+    }
+
+    for (const reference of manualContextReferences) {
+      if (seen.has(reference.key)) continue;
+      seen.add(reference.key);
+      const material = materialForReference(reference);
+      const taskItem = taskForReference(reference);
+      documents.push({
+        key: reference.key,
+        label: reference.kind === "material" ? "Angeheftetes Material" : "Eigene frühere Abgabe",
+        title: material?.title ?? taskItem?.title ?? reference.id,
+        material,
+        submissions: reference.taskId ? taskHistory(reference.taskId) : [],
+        current: false
+      });
+    }
+
+    return documents;
   }
 
   function dialogContextEntries(item: LearningContentItem | null) {
@@ -533,22 +592,33 @@
 
             <section class="learner-task-context__materials" aria-labelledby="learner-context-materials-title">
               <h3 id="learner-context-materials-title">Materialien</h3>
-              {#if currentMaterials(activeItem).length}
-                <div class="learner-task-context__list">
-                  {#each currentMaterials(activeItem) as materialItem}
-                    <details class="learner-task-context__material" open>
-                      <summary>{materialItem.title}</summary>
-                      {#if materialItem.material?.kind === "markdown"}
-                        <div class="learner-task-context__material-preview markdown-prose">
-                          {@html renderMarkdown(materialItem.material.body_md)}
-                        </div>
-                      {:else if materialItem.material}
-                        <p class="workspace-note">{materialItem.material.filename_original ?? "Dateimaterial"}</p>
+              {#if contextReferenceDocuments(activeItem).length}
+                <div class="learner-task-context__list" aria-label="Quellenstapel">
+                  {#each contextReferenceDocuments(activeItem) as document (document.key)}
+                    <div class="learner-task-context__document-row">
+                      <LearningReferenceDocument
+                        referenceKey={document.key}
+                        label={document.label}
+                        title={document.title}
+                        material={document.material}
+                        submissions={document.submissions}
+                        expanded={document.current
+                          ? !collapsedItemKeys.includes(document.key)
+                          : expandedReferenceKeys.includes(document.key)}
+                        onToggle={(referenceKey) => document.current
+                          ? onToggleMaterial(referenceKey)
+                          : onToggleContextReference?.(referenceKey)}
+                        onOpenReader={onOpenContextReference}
+                      />
+                      {#if !document.current}
+                        <button
+                          class="learner-task-context__remove"
+                          type="button"
+                          aria-label={`${document.title} aus dem Kontext entfernen`}
+                          onclick={() => onRemoveContextReference?.(document.key)}
+                        >Entfernen</button>
                       {/if}
-                      <button class="learner-context-reader__back" type="button" onclick={() => onOpenContextReference?.(materialItem.key)}>
-                        Fokussiert lesen
-                      </button>
-                    </details>
+                    </div>
                   {/each}
                 </div>
               {:else}
@@ -580,34 +650,6 @@
                         </div>
                       {/if}
                     </section>
-                  {/each}
-                </div>
-              {/if}
-
-              {#if manualContextReferences.length}
-                <div class="learner-task-context__pinned" aria-label="Angehefteter Kontext">
-                  <p class="workspace-label">Angeheftet</p>
-                  {#each manualContextReferences as reference}
-                    {@const referenceMaterial = materialForReference(reference)}
-                    {@const referenceTask = taskForReference(reference)}
-                    <div class="learner-task-context__pinned-row">
-                      <button
-                        class="learner-task-context__item"
-                        type="button"
-                        onclick={() => onOpenContextReference?.(reference.key)}
-                      >
-                        <span class="learner-task-context__item-type">
-                          {reference.kind === "material" ? "Material" : "Eigene frühere Abgabe"}
-                        </span>
-                        <strong>{referenceMaterial?.title ?? referenceTask?.title ?? reference.id}</strong>
-                      </button>
-                      <button
-                        class="learner-task-context__remove"
-                        type="button"
-                        aria-label="Kontext entfernen"
-                        onclick={() => onRemoveContextReference?.(reference.key)}
-                      >Entfernen</button>
-                    </div>
                   {/each}
                 </div>
               {/if}
@@ -685,7 +727,13 @@
       </aside>
       {/if}
 
-      <main class="learner-task-workbench__main" data-work-surface="task" aria-label="Bearbeitung">
+      <main
+        bind:this={workScrollSurface}
+        class="learner-task-workbench__main"
+        data-work-surface="task"
+        aria-label="Bearbeitung"
+        onscroll={(event) => onWorkScroll?.(event.currentTarget.scrollTop)}
+      >
         <LearningTaskCard
           {learnerSub}
           {courseId}

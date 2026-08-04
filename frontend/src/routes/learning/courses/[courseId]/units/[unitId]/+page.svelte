@@ -427,7 +427,7 @@
     }
   }
 
-  function addContextReference(reference: LearnerContextReference) {
+  async function addContextReference(reference: LearnerContextReference) {
     if (learnerWorkspace.context.manualReferences.some((entry) => entry.key === reference.key)) {
       return;
     }
@@ -442,6 +442,26 @@
         ]
       }
     });
+    if (reference.kind === "submission" && reference.taskId) {
+      await ensureSubmissionHistoryLoaded(reference.taskId);
+    }
+  }
+
+  async function toggleContextReference(referenceKey: string) {
+    const expanded = learnerWorkspace.context.expandedReferenceKeys.includes(referenceKey);
+    const reference = learnerWorkspace.context.manualReferences.find((entry) => entry.key === referenceKey);
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        expandedReferenceKeys: expanded
+          ? learnerWorkspace.context.expandedReferenceKeys.filter((key) => key !== referenceKey)
+          : [...learnerWorkspace.context.expandedReferenceKeys, referenceKey]
+      }
+    });
+    if (!expanded && reference?.kind === "submission" && reference.taskId) {
+      await ensureSubmissionHistoryLoaded(reference.taskId);
+    }
   }
 
   function removeContextReference(referenceKey: string) {
@@ -498,6 +518,19 @@
       context: {
         ...learnerWorkspace.context,
         bookScrollTop: Math.max(0, scrollTop)
+      }
+    });
+  }
+
+  function rememberWorkScroll(scrollTop: number) {
+    if (Math.abs(learnerWorkspace.context.workScrollTop - scrollTop) < 1) {
+      return;
+    }
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        workScrollTop: Math.max(0, scrollTop)
       }
     });
   }
@@ -1536,8 +1569,10 @@
                 manualContextReferences={learnerWorkspace.context.manualReferences}
                 contextPickerOpen={learnerWorkspace.context.pickerOpen}
                 expandedContextModuleIds={learnerWorkspace.context.expandedModuleIds}
+                expandedReferenceKeys={learnerWorkspace.context.expandedReferenceKeys}
                 readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
                 contextScrollTop={learnerWorkspace.context.bookScrollTop}
+                workScrollTop={learnerWorkspace.context.workScrollTop}
                 historyByTask={submissionHistoryByTask}
                 historyStateByTask={submissionHistoryStateByTask}
                 submittedTaskId={data.submittedTaskId}
@@ -1559,9 +1594,11 @@
                 onToggleContextModule={toggleContextModule}
                 onAddContextReference={addContextReference}
                 onRemoveContextReference={removeContextReference}
+                onToggleContextReference={toggleContextReference}
                 onOpenContextReference={openContextReference}
                 onCloseContextReader={closeContextReader}
                 onContextScroll={rememberContextScroll}
+                onWorkScroll={rememberWorkScroll}
                 onToggleReviewPanel={toggleReviewPanel}
                 onProgressPersisted={handleProgressPersisted}
               />
@@ -1591,8 +1628,10 @@
             manualContextReferences={learnerWorkspace.context.manualReferences}
             contextPickerOpen={learnerWorkspace.context.pickerOpen}
             expandedContextModuleIds={learnerWorkspace.context.expandedModuleIds}
+            expandedReferenceKeys={learnerWorkspace.context.expandedReferenceKeys}
             readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
             contextScrollTop={learnerWorkspace.context.bookScrollTop}
+            workScrollTop={learnerWorkspace.context.workScrollTop}
             historyByTask={submissionHistoryByTask}
             historyStateByTask={submissionHistoryStateByTask}
             submittedTaskId={data.submittedTaskId}
@@ -1614,9 +1653,11 @@
             onToggleContextModule={toggleContextModule}
             onAddContextReference={addContextReference}
             onRemoveContextReference={removeContextReference}
+            onToggleContextReference={toggleContextReference}
             onOpenContextReference={openContextReference}
             onCloseContextReader={closeContextReader}
             onContextScroll={rememberContextScroll}
+            onWorkScroll={rememberWorkScroll}
             onToggleReviewPanel={toggleReviewPanel}
             onProgressPersisted={handleProgressPersisted}
           />

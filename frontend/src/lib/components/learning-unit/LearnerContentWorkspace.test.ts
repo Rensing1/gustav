@@ -207,17 +207,36 @@ describe("LearnerContentWorkspace", () => {
     expect(props.onSetCompactSurface).toHaveBeenCalledWith("task");
   });
 
-  it("opens long material in a focused reader while keeping the task mounted", () => {
+  it("renders current and pinned references as one deduplicated document stack", async () => {
     const onContextScroll = vi.fn();
+    const onToggleContextReference = vi.fn();
+    const previousAnswer = "Meine ausführliche frühere Begründung mit mehreren Argumenten und Belegen.";
     const props = {
       ...baseProps(),
       mode: "working" as const,
       activeTaskKey: "task:task-1",
       activeEditorMode: "text" as const,
       compactSurface: "materials" as const,
-      readingReferenceKey: "material:material-1",
+      expandedReferenceKeys: ["submission:task-2"],
+      manualContextReferences: [
+        {
+          key: "material:material-1",
+          kind: "material" as const,
+          id: "material-1",
+          moduleId: "module-1",
+          taskId: null
+        },
+        {
+          key: "submission:task-2",
+          kind: "submission" as const,
+          id: "task-2",
+          moduleId: "module-2",
+          taskId: "task-2"
+        }
+      ],
       contextScrollTop: 240,
       onContextScroll,
+      onToggleContextReference,
       contextModules: [
         {
           id: "module-1",
@@ -227,14 +246,47 @@ describe("LearnerContentWorkspace", () => {
           loading: false,
           error: null,
           items: groups[0].items
+        },
+        {
+          id: "module-2",
+          title: "Argumente",
+          current: false,
+          loaded: true,
+          loading: false,
+          error: null,
+          items: [
+            {
+              key: "task:task-2",
+              kind: "task" as const,
+              title: "Frühere Analyse",
+              position: 1,
+              contextLabel: "Argumente",
+              moduleId: "module-2",
+              task: { id: "task-2", instruction_md: "Analysiere.", criteria: [], kind: "native" as const }
+            }
+          ]
         }
-      ]
+      ],
+      historyByTask: {
+        "task-2": [
+          {
+            id: "submission-1",
+            intent: "submit" as const,
+            attempt_nr: 1,
+            kind: "text" as const,
+            created_at: "2026-08-03T10:00:00+00:00",
+            analysis_status: "completed" as const,
+            text_body: previousAnswer
+          }
+        ]
+      }
     };
     const { container } = render(LearnerContentWorkspace, { props });
 
-    const reader = screen.getByRole("article", { name: "Kontext lesen" });
-    expect(within(reader).getByRole("heading", { name: "Grundrechte und Privatsphäre" })).toBeInTheDocument();
-    expect(within(reader).getByText("Ein längerer Materialtext.")).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: "Kontext lesen" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("article", { name: "Grundrechte und Privatsphäre" })).toHaveLength(1);
+    expect(screen.getByRole("article", { name: "Frühere Analyse" })).toBeInTheDocument();
+    expect(screen.getByText(previousAnswer)).toBeInTheDocument();
     expect(container.querySelector('[data-work-surface="task"]')).not.toBeNull();
     const scrollSurface = container.querySelector<HTMLElement>(".learner-task-context__scroll");
     expect(scrollSurface).not.toBeNull();
@@ -245,6 +297,9 @@ describe("LearnerContentWorkspace", () => {
       fireEvent.scroll(scrollSurface);
     }
     expect(onContextScroll).toHaveBeenCalledWith(410);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Frühere Analyse ein- oder ausklappen" }));
+    expect(onToggleContextReference).toHaveBeenCalledWith("submission:task-2");
   });
 
   it("loads module groups lazily and offers materials and own submissions individually", async () => {
@@ -303,48 +358,6 @@ describe("LearnerContentWorkspace", () => {
     );
   });
 
-  it("renders a long previous submission in the same focused reading surface", () => {
-    const previousAnswer = "Meine ausführliche frühere Begründung mit mehreren Argumenten und Belegen.";
-    const props = {
-      ...baseProps(),
-      mode: "working" as const,
-      activeTaskKey: "task:task-1",
-      compactSurface: "materials" as const,
-      readingReferenceKey: "submission:task-1",
-      manualContextReferences: [
-        {
-          key: "submission:task-1",
-          kind: "submission" as const,
-          id: "task-1",
-          moduleId: "module-1",
-          taskId: "task-1"
-        }
-      ],
-      historyByTask: {
-        "task-1": [
-          {
-            id: "submission-1",
-            intent: "submit" as const,
-            attempt_nr: 1,
-            kind: "text" as const,
-            created_at: "2026-08-03T10:00:00+00:00",
-            analysis_status: "completed" as const,
-            text_body: previousAnswer,
-            feedback_md: "Die Begründung ist nachvollziehbar.",
-            analysis_json: null
-          }
-        ]
-      }
-    };
-
-    render(LearnerContentWorkspace, { props });
-
-    const reader = screen.getByRole("article", { name: "Kontext lesen" });
-    expect(within(reader).getByText(previousAnswer)).toBeInTheDocument();
-    expect(within(reader).getByText("Rückmeldung")).toBeInTheDocument();
-    expect(within(reader).getByText(/Eigene Abgabe · Versuch 1/)).toBeInTheDocument();
-  });
-
   it("keeps the workbench flat and switches layout from its own available width", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(path.resolve(currentDir, "../../styles/learning-unit.css"), "utf8");
@@ -353,9 +366,9 @@ describe("LearnerContentWorkspace", () => {
     expect(css).toMatch(/\.learner-task-workbench-container\s*\{[^}]*grid-template-rows:\s*minmax\(3\.25rem,\s*auto\) auto;/s);
     expect(css).toMatch(/\.learner-task-workbench\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
     expect(css).toContain("@container (min-width: 72rem)");
-    expect(css).toMatch(/grid-template-columns:\s*clamp\(20rem,\s*30cqw,\s*28rem\) minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/grid-template-columns:\s*clamp\(32rem,\s*44cqw,\s*38rem\) minmax\(0,\s*1fr\)/);
     expect(css).not.toContain("@container learning-dialog (min-width: 64rem)");
     expect(css).toMatch(/\.learner-task-context__scroll\s*\{[^}]*overflow-y:\s*auto;/s);
-    expect(css).toMatch(/\.learner-context-reader__body\s*\{[^}]*max-width:\s*58ch;/s);
+    expect(css).toMatch(/\.learner-reference-document__prose\s*\{[^}]*max-width:\s*68ch;/s);
   });
 });

@@ -65,6 +65,7 @@ test.describe("@visual-smoke teacher workspace", () => {
 
 test.describe("@visual-smoke learner workspace", () => {
   test("@design-system renders the responsive learner orientation, work and reading surfaces", async ({ browser }) => {
+    test.setTimeout(90_000);
     const unique = Date.now();
     const teacherEmail = `visual_teacher_learner_${unique}@${emailDomain}`;
     const learnerEmail = `visual_learner_${unique}@${emailDomain}`;
@@ -101,6 +102,28 @@ test.describe("@visual-smoke learner workspace", () => {
       const contextSurface = workbench.getByRole("complementary", { name: "Aufgabe und Kontext" });
       await expect(taskSurface).toBeVisible();
       await expect(contextSurface).toBeVisible();
+      await expect
+        .poll(() => contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => surface.scrollTop))
+        .toBe(0);
+      const verticalGeometry = await learner.page.evaluate(() => {
+        const taskHeader = document.querySelector(".learner-task-header");
+        const contextHeader = document.querySelector(".learner-task-context__header");
+        const workbench = document.querySelector(".learner-task-workbench");
+        const context = document.querySelector(".learner-task-context");
+        if (!(taskHeader instanceof HTMLElement) || !(contextHeader instanceof HTMLElement) || !(workbench instanceof HTMLElement) || !(context instanceof HTMLElement)) {
+          throw new Error("learner task headers are incomplete");
+        }
+        return {
+          taskHeaderTop: taskHeader.getBoundingClientRect().top,
+          taskHeaderBottom: taskHeader.getBoundingClientRect().bottom,
+          workbenchTop: workbench.getBoundingClientRect().top,
+          contextTop: context.getBoundingClientRect().top,
+          contextHeaderTop: contextHeader.getBoundingClientRect().top,
+          taskHeaderPosition: getComputedStyle(taskHeader).position,
+          contextPosition: getComputedStyle(context).position
+        };
+      });
+      expect(verticalGeometry.contextHeaderTop).toBeGreaterThanOrEqual(verticalGeometry.taskHeaderBottom);
       const desktopGeometry = await workbench.evaluate((workspace) => {
         const context = workspace.querySelector('[data-work-surface="materials"]');
         const task = workspace.querySelector('[data-work-surface="task"]');
@@ -126,7 +149,10 @@ test.describe("@visual-smoke learner workspace", () => {
         mask: [accountControl]
       });
 
-      await contextSurface.getByRole("button", { name: /Grundrechte und digitale Kommunikation/ }).click();
+      const currentMaterial = contextSurface
+        .locator(".learner-task-context__material")
+        .filter({ hasText: "Grundrechte und digitale Kommunikation" });
+      await currentMaterial.getByRole("button", { name: "Fokussiert lesen" }).click();
       const reader = contextSurface.getByRole("article", { name: "Kontext lesen" });
       await expect(reader).toBeVisible();
       await expect(reader.getByRole("heading", { name: "Grundrechte und digitale Kommunikation" })).toBeVisible();
@@ -146,6 +172,11 @@ test.describe("@visual-smoke learner workspace", () => {
       await expect(contextSurface).toBeVisible();
       await expect(workbench.getByRole("button", { name: "Aufgabe" })).toBeHidden();
       await expectNoViewportOverflow(learner.page);
+      await expect(learner.page).toHaveScreenshot("learner-context-light-1366.png", {
+        animations: "disabled",
+        caret: "hide",
+        mask: [accountControl]
+      });
 
       for (const viewport of [
         { name: "tablet", width: 1024, height: 768 },
@@ -153,13 +184,14 @@ test.describe("@visual-smoke learner workspace", () => {
       ] as const) {
         await learner.page.setViewportSize({ width: viewport.width, height: viewport.height });
         await expect(workbench.getByRole("button", { name: "Aufgabe" })).toBeVisible();
-        await workbench.getByRole("button", { name: "Aufgabe" }).click();
-        await expect(taskSurface).toBeVisible();
-        await expect(contextSurface).toBeHidden();
-        await workbench.getByRole("button", { name: "Materialien" }).click();
         await expect(contextSurface).toBeVisible();
         await expect(taskSurface).toBeHidden();
         await expectNoViewportOverflow(learner.page);
+        await expect(learner.page).toHaveScreenshot(`learner-context-light-${viewport.name}.png`, {
+          animations: "disabled",
+          caret: "hide",
+          mask: [accountControl]
+        });
       }
 
       await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();

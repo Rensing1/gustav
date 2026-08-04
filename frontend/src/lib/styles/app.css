@@ -64,7 +64,7 @@ select {
 }
 
 .app-topbar-inner {
-  width: min(100%, 80rem);
+  width: min(100%, var(--layout-content-max));
   margin: 0 auto;
   min-height: 4.35rem;
   display: grid;
@@ -379,7 +379,7 @@ select {
 }
 
 .workspace-inner--learner-unit-wide {
-  width: min(100%, 144rem);
+  width: min(100%, var(--layout-content-max));
 }
 
 .workspace-header {

@@ -283,29 +283,40 @@ Verbindliche Familien:
 
 ## 11. Lernraum und Lerneinheit
 
-### 11.1 Modi
+### 11.1 Lernweg und URL
 
-- Der Graph wechselt weiterhin zwischen `Übersicht / Inhalte`.
-- Innerhalb der Inhalte unterscheidet der Schüler-Lernraum klar zwischen
-  `Orientieren` und `Bearbeiten`.
-- `Orientieren` ist der Standard: geöffnete Module stehen einspaltig
-  untereinander und Aufgaben erscheinen als kompakte Startzeilen.
-- `Aufgabe beginnen` öffnet eine eigene Arbeitsfläche außerhalb der Modul- und
-  Aufgabenliste. Die Aufgabenzeile wird dort nicht wiederholt.
-- `Pausieren` stellt Modul-, Scroll- und Fokusposition wieder her. Nach einer
-  endgültigen Abgabe bleibt zunächst die Ergebnisansicht geöffnet.
+- Der Lernraum folgt der Hierarchie `Lernpfad → Module lesen → Aufgabe bearbeiten`.
+- Modulare Lerneinheiten beginnen im Lernpfad; lineare Lerneinheiten beginnen
+  ohne künstliche Graphstufe in der Leseansicht.
+- Es gibt keine gleichrangigen Umschalter `Übersicht | Inhalte`. Ein Modulaufruf
+  wechselt aus dem Lernpfad in die Leseansicht, `Aufgabe beginnen` von dort in
+  den eigenen Aufgabenraum.
+- Die kanonische URL verwendet `module`, `task` und für die Ergebnisansicht
+  `panel=result`. Browser-Zurück und sichtbare Rückwege durchlaufen dieselben
+  Stufen. Alte `view`- und `history`-Links werden sicher normalisiert.
+- Die URL bestimmt nach einem Neuladen die sichtbare Stufe. Schülerbezogene
+  lokale Speicherung ergänzt nur geöffnete Module, Lesepositionen, Kontext und
+  Entwürfe.
 
-### 11.2 Übersicht
+### 11.2 Lernpfad
 
 - Graph bleibt Phasen-zentriert
 - Knoten sind harte, klar gerahmte Objekte
 - aktiver Status ist orange
 - gesperrte Zustände sind reduziert und monochrom
+- bereits geöffnete Module sind erkennbar markiert
+- ein Modul wird höchstens einmal geöffnet und in der Leseansicht nach seiner
+  didaktischen Graph- und Phasenposition eingeordnet
 
-### 11.3 Inhalte
+### 11.3 Leseansicht und Inhalte
 
 - Die Aufgabenbearbeitung ist ein eigener Fokusraum und nicht mehr Teil einer
   symmetrischen Zwei-Pane-Ansicht.
+- `← Zum Lernpfad` ist der eindeutige Rückweg. Das Inhaltsverzeichnis navigiert
+  ausschließlich innerhalb der geöffneten Module. Ab `64rem` ist es links
+  sticky, darunter eine kompakte Aufklappleiste oberhalb des Inhalts.
+- Kopfzeile, Toolbar und Lernraum verwenden dasselbe zentrale Raster von
+  höchstens `80rem`. Vollbreiten-Ausbrüche des Lernraums sind nicht zulässig.
 - Der Modultitel ist der klare Einstiegspunkt eines Moduls
 - `MATERIALIEN` und `AUFGABEN` bleiben technische Marker, keine konkurrierenden
   Subheadlines
@@ -316,8 +327,16 @@ Verbindliche Familien:
 - Rückmeldung und Bewertung erscheinen als technische Disclosure-Familie
 - kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile statt
   redundanter Status-/Titellabels
+- Lange Aufgaben dürfen in dieser Vorschau höchstens zwei Zeilen belegen. Unter
+  `48rem` steht die Startaktion darunter und nimmt die verfügbare Breite ein.
 - Status wird primär über Balken und Tönung getragen
 - Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline
+- Text-, Bild- und PDF-Materialien sind beim ersten Lesen geöffnet. Die gesamte
+  linksbündige Titelzeile klappt ein Material zugänglich ein oder aus und zeigt
+  `aria-expanded` sowie `aria-controls` an.
+- Materialtext beginnt auf derselben linken Achse und bleibt bei ungefähr
+  `68ch`. Bilder und PDF-Vorschauen laden verzögert, besitzen eine begrenzte
+  Vorschauhöhe und bieten eine Aktion zum separaten Öffnen.
 - Auf breiten Flächen gibt es genau zwei funktionale Bereiche: links `Aufgabe &
   Kontext`, rechts die Bearbeitung. Es gibt niemals eine dritte Spalte.
 - Ab `72rem` verfügbarer Komponentenbreite ist der Kontext
@@ -339,9 +358,16 @@ Verbindliche Familien:
 
 ### 11.4 Aufgabe und Kontext
 
-- Materialien des aktuellen Abschnitts sind automatisch verfügbar. Weitere
-  zugängliche Materialien und eigene frühere Abgaben werden einzeln angeheftet,
-  nicht als vollständiges Modul.
+- Ein sticky Aufgabenkopf zeigt `← Zurück zu Modul …`, Aufgabenbezeichnung und
+  Status. Dieser Rückweg stellt Scroll- und Fokusposition wieder her. Eine
+  endgültige Abgabe verbleibt als Ergebnis im Aufgabenraum.
+- Der Aufgabenraum bleibt flach: keine Modulkarte, keine wiederholte
+  Aufgabenzeile und keine vollständigen Rahmen um Kontext oder Bearbeitung.
+
+- Materialien des aktuellen Abschnitts sind automatisch offen verfügbar.
+  Materialien weiterer bereits geöffneter Module erscheinen automatisch als
+  eingeklappte Gruppen. Noch nicht geöffnete Materialien und eigene frühere
+  Abgaben werden einzeln angeheftet, nicht als vollständiges Modul.
 - Weitere Module werden erst beim Öffnen ihrer Gruppe geladen. Entzogene oder
   gesperrte Inhalte werden beim Wiederherstellen verworfen beziehungsweise mit
   einem sicheren Ladefehler angezeigt.
@@ -368,11 +394,12 @@ Verbindliche Regeln:
 - Der Abschlussauftrag wird erst nach der bewussten Aktion `Dialog beenden`
   sichtbar.
 - Partnerkontext und Sitzungsaktionen bilden eine gemeinsame Komponentenfamilie.
-  `Pausieren`, `Dialog ohne Abgabe abbrechen` und `Dialog beenden` stehen nur in
-  diesem Bereich.
+  `Dialog ohne Abgabe abbrechen` und `Dialog beenden` stehen nur in diesem
+  Bereich. Eine zusätzliche Aktion `Pausieren` entfällt; der gemeinsame
+  Aufgabenkopf übernimmt den Rückweg.
 - `Antwort senden` steht ausschließlich unmittelbar beim Eingabefeld. In der
   Abschlussphase stehen `Zurück zum Dialog` und `Endgültig abgeben` beim
-  Abschlussfeld; `Pausieren` verbleibt im Partnerkontext.
+  Abschlussfeld.
 - Der Gesprächsverlauf besitzt keinen schweren Außenrahmen. Der Eingabe- und der
   Abschlussbereich bleiben dagegen klar und kantig gerahmt.
 - KI-Beiträge stehen links und verwenden den Erfolgsakzent; Schülerbeiträge

@@ -83,7 +83,8 @@ async function loadPageData(
   const courseTitle =
     home.courses.find((course) => course.id === courseId)?.title ?? "Kursraum";
 
-  const historyTaskId = url.searchParams.get("history");
+  const legacyHistoryTaskId = url.searchParams.get("history");
+  const rawRequestedTaskId = url.searchParams.get("task") ?? legacyHistoryTaskId;
   const moduleId = moduleIdOverride ?? url.searchParams.get("module");
   const initialView = requestedInitialView(url, moduleId);
 
@@ -121,6 +122,17 @@ async function loadPageData(
     );
   }
 
+  const accessibleTasks = selectedUnit.unit.unit_type === "modular"
+    ? activeModule?.tasks ?? []
+    : sections.flatMap((section) => section.tasks);
+  const requestedTaskId = rawRequestedTaskId && accessibleTasks.some((task) => task.id === rawRequestedTaskId)
+    ? rawRequestedTaskId
+    : null;
+  const initialPanel = requestedTaskId && (url.searchParams.get("panel") === "result" || legacyHistoryTaskId)
+    ? "result"
+    : null;
+  const historyTaskId = legacyHistoryTaskId ?? (initialPanel === "result" ? requestedTaskId : null);
+
   let history: LearningSubmission[] = [];
   if (historyTaskId) {
     try {
@@ -148,6 +160,8 @@ async function loadPageData(
     graph,
     activeModule,
     initialView,
+    requestedTaskId,
+    initialPanel,
     historyTaskId,
     history,
     submittedTaskId: url.searchParams.get("submitted"),

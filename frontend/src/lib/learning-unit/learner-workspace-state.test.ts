@@ -11,11 +11,12 @@ import {
 } from "./learner-workspace-state";
 
 describe("learner workspace state", () => {
-  it("starts in orientation mode without a second work surface", () => {
+  it("starts in the reading surface without a second work surface", () => {
     expect(defaultLearnerWorkspaceState()).toMatchObject({
-      mode: "orienting",
+      surface: "reading",
       activeTask: null,
       openedModuleIds: [],
+      collapsedItemKeys: [],
       context: {
         compactSurface: "task",
         manualReferences: [],
@@ -60,7 +61,7 @@ describe("learner workspace state", () => {
   it("keeps persistent pins and tab-local reading state separate", () => {
     const state: LearnerWorkspaceState = {
       ...defaultLearnerWorkspaceState(),
-      mode: "working",
+      surface: "task",
       openedModuleIds: ["module-a"],
       activeTask: {
         itemKey: "task:task-a",
@@ -99,7 +100,7 @@ describe("learner workspace state", () => {
     const normalized = normalizeLearnerWorkspaceState(
       {
         ...defaultLearnerWorkspaceState(),
-        mode: "working",
+        surface: "task",
         openedModuleIds: ["module-locked", "module-open"],
         activeTask: {
           itemKey: "task:locked-task",
@@ -128,7 +129,7 @@ describe("learner workspace state", () => {
       }
     );
 
-    expect(normalized.mode).toBe("orienting");
+    expect(normalized.surface).toBe("reading");
     expect(normalized.openedModuleIds).toEqual(["module-open"]);
     expect(normalized.activeTask).toBeNull();
     expect(normalized.context.manualReferences.map((entry) => entry.key)).toEqual(["material:allowed"]);
@@ -158,7 +159,7 @@ describe("learner workspace state", () => {
       keys.tab,
       JSON.stringify({
         version: 1,
-        mode: "working",
+        surface: "task",
         activeTask: {
           itemKey: "task:task-open",
           taskId: "task-open",
@@ -189,7 +190,7 @@ describe("learner workspace state", () => {
       accessibleReferenceKeys: new Set(["material:allowed"])
     });
 
-    expect(restored.mode).toBe("working");
+    expect(restored.surface).toBe("task");
     expect(restored.activeTask?.status).toBe("result");
     expect(restored.openedModuleIds).toEqual(["module-open"]);
     expect(restored.preferences).toEqual({ navigationVisible: false, fontSize: "large" });

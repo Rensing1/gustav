@@ -105,6 +105,9 @@ function mockModularLoad() {
         ]
       };
     }
+    if (path === "/api/learning/courses/course-1/tasks/task-1/submissions?limit=10&offset=0") {
+      return [{ id: "submission-1", intent: "submit", attempt_nr: 1 }];
+    }
     throw new Error(`unexpected_path:${path}`);
   });
 }
@@ -369,6 +372,23 @@ describe("learning unit route load", () => {
     );
     expect(result.initialView).toBe("content");
     expect(result.activeModule?.module.id).toBe("module-7");
+  });
+
+  it("loads canonical task and result parameters without requiring legacy history links", async () => {
+    mockModularLoad();
+
+    const result = (await load({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof load>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      parent: vi.fn(async () => ({ bootstrap: null, appSessionActive: false, theme: "light" })) as Parameters<typeof load>[0]["parent"],
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1?module=module-7&task=task-1&panel=result")
+    } as Parameters<typeof load>[0])) as Exclude<Awaited<ReturnType<typeof load>>, void>;
+
+    expect(result.requestedTaskId).toBe("task-1");
+    expect(result.initialPanel).toBe("result");
+    expect(result.historyTaskId).toBe("task-1");
+    expect(result.history).toHaveLength(1);
   });
 
   it("passes the current page path to protected read-model calls for silent auth continuation", async () => {

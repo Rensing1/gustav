@@ -1,6 +1,6 @@
-export const LEARNER_WORKSPACE_STORAGE_VERSION = 1;
+export const LEARNER_WORKSPACE_STORAGE_VERSION = 2;
 
-export type LearnerWorkspaceMode = "orienting" | "working";
+export type LearnerWorkspaceSurface = "graph" | "reading" | "task";
 export type LearnerWorkStatus = "editing" | "result";
 export type LearnerEditorMode = "text" | "upload" | null;
 export type LearnerCompactSurface = "task" | "materials";
@@ -23,9 +23,9 @@ export type LearnerContextReference = {
 };
 
 export type LearnerWorkspaceState = {
-  mode: LearnerWorkspaceMode;
+  surface: LearnerWorkspaceSurface;
   openedModuleIds: string[];
-  expandedItemKeys: string[];
+  collapsedItemKeys: string[];
   activeTask: LearnerActiveTask | null;
   context: {
     compactSurface: LearnerCompactSurface;
@@ -60,9 +60,9 @@ type WorkspaceAccess = {
 
 export function defaultLearnerWorkspaceState(): LearnerWorkspaceState {
   return {
-    mode: "orienting",
+    surface: "reading",
     openedModuleIds: [],
-    expandedItemKeys: [],
+    collapsedItemKeys: [],
     activeTask: null,
     context: {
       compactSurface: "task",
@@ -182,16 +182,22 @@ export function normalizeLearnerWorkspaceState(
   }
 
   const readingCandidate = safeString(rawContext.readingReferenceKey);
-  const mode = candidate.mode === "working" && activeTask ? "working" : "orienting";
+  const legacyMode = (candidate as Partial<LearnerWorkspaceState> & { mode?: unknown }).mode;
+  const requestedSurface = candidate.surface ?? (legacyMode === "working" ? "task" : "reading");
+  const surface: LearnerWorkspaceSurface = requestedSurface === "task" && activeTask
+    ? "task"
+    : requestedSurface === "graph"
+      ? "graph"
+      : "reading";
   const fontSize: LearnerFontSize =
     rawPreferences.fontSize === "small" || rawPreferences.fontSize === "large"
       ? rawPreferences.fontSize
       : "standard";
 
   return {
-    mode,
+    surface,
     openedModuleIds,
-    expandedItemKeys: uniqueStrings(candidate.expandedItemKeys),
+    collapsedItemKeys: uniqueStrings(candidate.collapsedItemKeys),
     activeTask,
     context: {
       compactSurface: rawContext.compactSurface === "materials" ? "materials" : "task",
@@ -247,7 +253,8 @@ function parseVersioned(storage: ReadableStorage | null, key: string): Record<st
     if (
       parsed &&
       typeof parsed === "object" &&
-      (parsed as { version?: unknown }).version === LEARNER_WORKSPACE_STORAGE_VERSION
+      ((parsed as { version?: unknown }).version === LEARNER_WORKSPACE_STORAGE_VERSION ||
+        (parsed as { version?: unknown }).version === 1)
     ) {
       return parsed as Record<string, unknown>;
     }
@@ -289,9 +296,10 @@ export function readLearnerWorkspaceState({
 
   return normalizeLearnerWorkspaceState(
     {
+      surface: tab.surface,
       mode: tab.mode,
       openedModuleIds: persistent.openedModuleIds,
-      expandedItemKeys: tab.expandedItemKeys,
+      collapsedItemKeys: tab.collapsedItemKeys,
       activeTask: tab.activeTask,
       returnPosition: tab.returnPosition,
       preferences: persistent.preferences,
@@ -319,8 +327,8 @@ export function serializeLearnerWorkspacePersistentState(state: LearnerWorkspace
 export function serializeLearnerWorkspaceTabState(state: LearnerWorkspaceState): string {
   return JSON.stringify({
     version: LEARNER_WORKSPACE_STORAGE_VERSION,
-    mode: state.mode,
-    expandedItemKeys: state.expandedItemKeys,
+    surface: state.surface,
+    collapsedItemKeys: state.collapsedItemKeys,
     activeTask: state.activeTask,
     context: {
       compactSurface: state.context.compactSurface,

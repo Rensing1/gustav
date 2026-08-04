@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { createHash } from "node:crypto";
 
 import { currentUserSub } from "./auth";
 import { apiHeaders, expectApiOk } from "./api";
@@ -26,6 +27,18 @@ export type LearnerVisualSmokeCourse = {
 
 export type LearnerNavigationCourse = LearnerVisualSmokeCourse & {
   graphModuleId: string;
+  contextGraphModuleId: string;
+  contextImageAltText: string;
+  contextImageTitle: string;
+};
+
+export type LearnerBookWorkspaceCourse = LearnerVisualSmokeCourse & {
+  imageAltText: string;
+  pdfMaterialTitle: string;
+  longMaterialTitle: string;
+  previousTaskTitle: string;
+  previousTaskLabel: string;
+  previousSubmissionText: string;
 };
 
 async function createCourse(page: Page, title: string): Promise<string> {
@@ -84,6 +97,50 @@ async function createMarkdownMaterial(
   );
   await expectApiOk(response, 201);
   return (await response.json()).id as string;
+}
+
+async function createFileMaterial(
+  page: Page,
+  unitId: string,
+  sectionId: string,
+  input: { filename: string; mimeType: string; title: string; bytes: Buffer; altText?: string }
+): Promise<string> {
+  const basePath = `/teaching/units/${unitId}/sections/${sectionId}`;
+  const intentResponse = await page.request.post(
+    `${webBase}/api/teaching/units/${unitId}/sections/${sectionId}/materials/upload-intents`,
+    {
+      headers: apiHeaders(basePath),
+      data: { filename: input.filename, mime_type: input.mimeType, size_bytes: input.bytes.length }
+    }
+  );
+  await expectApiOk(intentResponse, 200);
+  const intent = await intentResponse.json() as {
+    intent_id: string;
+    material_id: string;
+    url: string;
+    headers: Record<string, string>;
+  };
+
+  const uploadResponse = await page.request.put(intent.url, {
+    headers: intent.headers,
+    data: input.bytes
+  });
+  expect(uploadResponse.ok()).toBeTruthy();
+
+  const finalizeResponse = await page.request.post(
+    `${webBase}/api/teaching/units/${unitId}/sections/${sectionId}/materials/finalize`,
+    {
+      headers: apiHeaders(basePath),
+      data: {
+        intent_id: intent.intent_id,
+        title: input.title,
+        sha256: createHash("sha256").update(input.bytes).digest("hex"),
+        alt_text: input.altText
+      }
+    }
+  );
+  await expectApiOk(finalizeResponse, 201);
+  return (await finalizeResponse.json()).id as string;
 }
 
 async function attachUnitToCourse(page: Page, courseId: string, unitId: string): Promise<string> {
@@ -166,18 +223,19 @@ export async function seedLearnerVisualSmokeCourse(
   teacherPage: Page,
   learnerPage: Page,
   titlePrefix: string
-): Promise<LearnerVisualSmokeCourse> {
+): Promise<LearnerBookWorkspaceCourse> {
   const learnerSub = await currentUserSub(learnerPage);
   const courseTitle = `${titlePrefix} Kurs`;
   const unitTitle = `${titlePrefix} Einheit`;
   const courseId = await createCourse(teacherPage, courseTitle);
   const unitId = await createUnit(teacherPage, unitTitle);
   const sectionId = await createSection(teacherPage, unitId, "Start");
+  const longMaterialTitle = "Grundrechte und digitale Kommunikation";
   await createMarkdownMaterial(
     teacherPage,
     unitId,
     sectionId,
-    "Grundrechte und digitale Kommunikation",
+    longMaterialTitle,
     [
       "## Ausgangslage",
       "Digitale Kommunikation berührt zugleich den Schutz von Kindern, die Privatsphäre und das Recht auf vertrauliche Gespräche.",
@@ -186,17 +244,65 @@ export async function seedLearnerVisualSmokeCourse(
       "## Prüfauftrag",
       "Achte darauf, welche Annahmen belegt werden, welche Gruppen betroffen sind und ob mildere Mittel genannt werden.",
       "## Vertiefung",
-      "Längere Materialien bleiben in einer eigenen Lesefläche mit begrenzter Zeilenlänge und unabhängigem Bildlauf verfügbar. So bleibt die Aufgabe gleichzeitig erhalten."
+      "Vertiefung für die Großansicht: Längere Materialien bleiben in einer eigenen Lesefläche mit begrenzter Zeilenlänge und unabhängigem Bildlauf verfügbar. So bleibt die Aufgabe gleichzeitig erhalten."
     ].join("\n\n")
   );
+  const imageAltText = "Diagramm mit drei Perspektiven auf digitale Kommunikation";
+  await createFileMaterial(teacherPage, unitId, sectionId, {
+    filename: "perspektiven.png",
+    mimeType: "image/png",
+    title: "Perspektiven im Überblick",
+    altText: imageAltText,
+    bytes: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAQ1BDQAAAABJRU5ErkJggg==",
+      "base64"
+    )
+  });
+  const pdfMaterialTitle = "Quellenblatt als PDF";
+  await createFileMaterial(teacherPage, unitId, sectionId, {
+    filename: "quellenblatt.pdf",
+    mimeType: "application/pdf",
+    title: pdfMaterialTitle,
+    bytes: Buffer.from("%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n")
+  });
   const taskId = await createTask(teacherPage, unitId, sectionId, {
     instruction_md: "Beschreibe in zwei Sätzen, was du auf dieser Seite siehst.",
     criteria: ["Antwort ist verständlich."]
   });
+  const previousTaskTitle = "Ordne eine frühere Position ein";
+  const previousTaskId = await createTask(teacherPage, unitId, sectionId, {
+    instruction_md: previousTaskTitle,
+    criteria: []
+  });
   const moduleId = await attachUnitToCourse(teacherPage, courseId, unitId);
   await releaseSection(teacherPage, courseId, moduleId, sectionId);
   await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
-  return { courseId, unitId, sectionId, taskId, courseTitle, unitTitle };
+  const previousSubmissionText = "Meine frühere Einordnung bleibt als eigene Abgabe verfügbar.";
+  const submissionResponse = await learnerPage.request.post(
+    `${webBase}/api/learning/courses/${courseId}/tasks/${previousTaskId}/submissions`,
+    {
+      headers: {
+        ...apiHeaders(`/learning/courses/${courseId}/units/${unitId}`),
+        "idempotency-key": `book-${Date.now()}`
+      },
+      data: { intent: "submit", kind: "text", text_body: previousSubmissionText }
+    }
+  );
+  expect(submissionResponse.ok()).toBeTruthy();
+  return {
+    courseId,
+    unitId,
+    sectionId,
+    taskId,
+    courseTitle,
+    unitTitle,
+    imageAltText,
+    pdfMaterialTitle,
+    longMaterialTitle,
+    previousTaskTitle,
+    previousTaskLabel: "Aufgabe 2",
+    previousSubmissionText
+  };
 }
 
 export async function seedLearnerNavigationCourse(
@@ -219,6 +325,15 @@ export async function seedLearnerNavigationCourse(
   });
   await expectApiOk(moduleResponse, 201);
   const graphModuleId = (await moduleResponse.json()).id as string;
+  const contextModuleResponse = await teacherPage.request.post(
+    `${webBase}/api/teaching/units/${unitId}/modules`,
+    {
+      headers: apiHeaders(`/teaching/units/${unitId}`),
+      data: { title: "Quellen", phase_id: phaseId }
+    }
+  );
+  await expectApiOk(contextModuleResponse, 201);
+  const contextGraphModuleId = (await contextModuleResponse.json()).id as string;
 
   const targetResponse = await teacherPage.request.get(
     `${webBase}/api/teaching/units/${unitId}/modules/${graphModuleId}/content-target`
@@ -237,10 +352,40 @@ export async function seedLearnerNavigationCourse(
     criteria: []
   });
 
+  const contextTargetResponse = await teacherPage.request.get(
+    `${webBase}/api/teaching/units/${unitId}/modules/${contextGraphModuleId}/content-target`
+  );
+  await expectApiOk(contextTargetResponse);
+  const contextSectionId = (await contextTargetResponse.json()).section_id as string;
+  const contextImageTitle = "Historische Übersicht";
+  const contextImageAltText = "Zeitleiste mit drei historischen Stationen";
+  await createFileMaterial(teacherPage, unitId, contextSectionId, {
+    filename: "zeitleiste.png",
+    mimeType: "image/png",
+    title: contextImageTitle,
+    altText: contextImageAltText,
+    bytes: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAQ1BDQAAAABJRU5ErkJggg==",
+      "base64"
+    )
+  });
+
   const courseModuleId = await attachUnitToCourse(teacherPage, courseId, unitId);
   await releaseSection(teacherPage, courseId, courseModuleId, sectionId);
+  await releaseSection(teacherPage, courseId, courseModuleId, contextSectionId);
   await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
-  return { courseId, unitId, sectionId, taskId, graphModuleId, courseTitle, unitTitle };
+  return {
+    courseId,
+    unitId,
+    sectionId,
+    taskId,
+    graphModuleId,
+    contextGraphModuleId,
+    contextImageAltText,
+    contextImageTitle,
+    courseTitle,
+    unitTitle
+  };
 }
 
 export async function seedLearnerDialogCourse(

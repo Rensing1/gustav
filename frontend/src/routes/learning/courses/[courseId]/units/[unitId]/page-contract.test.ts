@@ -192,6 +192,18 @@ describe("learning unit route contract", () => {
     expect(routeSource).not.toContain("`/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions?limit=10&offset=0`");
   });
 
+  it("reloads source modules for restored material references", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("async function ensureContextReferenceSourceLoaded");
+    expect(routeSource).toContain('reference.kind === "material" && reference.moduleId');
+    expect(routeSource).toContain("await ensureModuleLoaded(reference.moduleId)");
+    expect(routeSource).toContain("!moduleCache[reference.moduleId]");
+    expect(routeSource).toContain("!moduleLoading[reference.moduleId]");
+    expect(routeSource).toContain('(submissionHistoryStateByTask[reference.taskId] ?? "not_loaded") === "not_loaded"');
+  });
+
   it("handles direct browser fetch 401 responses through shared auth recovery before domain errors", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

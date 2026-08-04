@@ -94,6 +94,7 @@
   let workspaceRoot = $state<HTMLDivElement | null>(null);
   let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({});
   let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>({});
+  const pendingSubmissionHistoryLoads = new Map<string, Promise<LearningSubmission[]>>();
   let submissionMessageState = $state<string | null>(null);
   let clientSubmissionErrorTaskId = $state<string | null>(null);
   let clientSubmissionErrorMessage = $state<string | null>(null);
@@ -442,9 +443,7 @@
         ]
       }
     });
-    if (reference.kind === "submission" && reference.taskId) {
-      await ensureSubmissionHistoryLoaded(reference.taskId);
-    }
+    await ensureContextReferenceSourceLoaded(reference);
   }
 
   async function toggleContextReference(referenceKey: string) {
@@ -459,8 +458,8 @@
           : [...learnerWorkspace.context.expandedReferenceKeys, referenceKey]
       }
     });
-    if (!expanded && reference?.kind === "submission" && reference.taskId) {
-      await ensureSubmissionHistoryLoaded(reference.taskId);
+    if (!expanded && reference) {
+      await ensureContextReferenceSourceLoaded(reference);
     }
   }
 
@@ -485,8 +484,8 @@
 
   async function openContextReference(referenceKey: string) {
     const reference = learnerWorkspace.context.manualReferences.find((entry) => entry.key === referenceKey);
-    if (reference?.kind === "submission" && reference.taskId) {
-      await ensureSubmissionHistoryLoaded(reference.taskId);
+    if (reference) {
+      await ensureContextReferenceSourceLoaded(reference);
     }
     setLearnerWorkspaceState({
       ...learnerWorkspace,
@@ -725,6 +724,15 @@
     }
   }
 
+  async function ensureContextReferenceSourceLoaded(reference: LearnerContextReference) {
+    if (reference.kind === "material" && reference.moduleId && isModularUnit()) {
+      await ensureModuleLoaded(reference.moduleId);
+    }
+    if (reference.kind === "submission" && reference.taskId) {
+      await ensureSubmissionHistoryLoaded(reference.taskId);
+    }
+  }
+
   async function restoreOpenModules(moduleIds: string[]) {
     if (!browser || !isModularUnit()) {
       return;
@@ -901,26 +909,40 @@
       return currentEntries;
     }
 
-    setTaskHistoryState(taskId, "loading");
-    feedbackStatusTaskId = taskId;
-    feedbackStatusMessage = "Die Abgabe wird geladen ...";
+    const pendingLoad = pendingSubmissionHistoryLoads.get(taskId);
+    if (pendingLoad) {
+      return pendingLoad;
+    }
 
-    try {
-      const entries = await loadSubmissionHistory(taskId);
-      setTaskHistory(taskId, entries);
-      feedbackStatusTaskId = entries.length ? null : taskId;
-      feedbackStatusMessage = entries.length ? null : "Für diese Aufgabe gibt es noch keine gespeicherte Abgabe.";
-      return entries;
-    } catch (caught) {
-      const reason = caught instanceof Error ? caught.message : "history_failed";
-      setTaskHistoryState(taskId, "failed");
+    const load = (async () => {
+      setTaskHistoryState(taskId, "loading");
       feedbackStatusTaskId = taskId;
-      if (reason === "history_missing_context") {
-        feedbackStatusMessage = MISSING_SUBMISSION_HISTORY_CONTEXT_MESSAGE;
+      feedbackStatusMessage = "Die Abgabe wird geladen ...";
+
+      try {
+        const entries = await loadSubmissionHistory(taskId);
+        setTaskHistory(taskId, entries);
+        feedbackStatusTaskId = entries.length ? null : taskId;
+        feedbackStatusMessage = entries.length ? null : "Für diese Aufgabe gibt es noch keine gespeicherte Abgabe.";
+        return entries;
+      } catch (caught) {
+        const reason = caught instanceof Error ? caught.message : "history_failed";
+        setTaskHistoryState(taskId, "failed");
+        feedbackStatusTaskId = taskId;
+        if (reason === "history_missing_context") {
+          feedbackStatusMessage = MISSING_SUBMISSION_HISTORY_CONTEXT_MESSAGE;
+          return [];
+        }
+        feedbackStatusMessage = "Der Verlauf konnte nicht geladen werden. Bitte versuche es erneut.";
         return [];
       }
-      feedbackStatusMessage = "Der Verlauf konnte nicht geladen werden. Bitte versuche es erneut.";
-      return [];
+    })();
+    pendingSubmissionHistoryLoads.set(taskId, load);
+
+    try {
+      return await load;
+    } finally {
+      pendingSubmissionHistoryLoads.delete(taskId);
     }
   }
 
@@ -1412,6 +1434,15 @@
     if (!workspaceReady) return;
 
     for (const reference of learnerWorkspace.context.manualReferences) {
+      if (
+        reference.kind === "material" &&
+        reference.moduleId &&
+        isModularUnit() &&
+        !moduleCache[reference.moduleId] &&
+        !moduleLoading[reference.moduleId]
+      ) {
+        void ensureModuleLoaded(reference.moduleId);
+      }
       if (
         reference.kind === "submission" &&
         reference.taskId &&

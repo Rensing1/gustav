@@ -14,6 +14,7 @@ async function pageFor(browser: Browser): Promise<{ context: BrowserContext; pag
 }
 
 test("@feature-acceptance follows graph, reading and task as one authenticated learning path", async ({ browser }) => {
+  test.setTimeout(90_000);
   const unique = Date.now();
   const teacherEmail = `navigation_teacher_${unique}@${emailDomain}`;
   const learnerEmail = `navigation_learner_${unique}@${emailDomain}`;
@@ -39,6 +40,22 @@ test("@feature-acceptance follows graph, reading and task as one authenticated l
     );
     await expect(learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" })).toBeVisible();
     await expectNoViewportOverflow(learner.page);
+
+    const book = learner.page.getByRole("complementary", { name: "Aufgabe und Kontext" });
+    await book.getByRole("button", { name: "Kontext hinzufügen" }).click();
+    await book.getByRole("button", { name: /Weiteres Modul.*Quellen/ }).click();
+    const addContextImage = book.getByRole("button", {
+      name: new RegExp(`Material.*${seeded.contextImageTitle}`)
+    });
+    await expect(addContextImage).toBeVisible();
+    await addContextImage.click();
+    const contextImage = book.getByRole("img", { name: seeded.contextImageAltText });
+    await expect(contextImage).toBeVisible();
+    await expect.poll(() => contextImage.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
+
+    await learner.page.reload();
+    await expect(contextImage).toBeVisible();
+    await expect(book.getByRole("article", { name: seeded.contextImageTitle })).toBeVisible();
 
     await learner.page.goBack();
     await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.graphModuleId}$`));

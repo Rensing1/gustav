@@ -18,7 +18,9 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain("<WorkspaceSettingsMenu");
     expect(routeSource).toContain('class="learning-unit-toolbar__utility"');
     expect(routeSource).toContain('class="learning-unit-layout-frame learning-unit-layout-frame--toolbar"');
-    expect(routeSource).toContain("mode={learnerWorkspace.mode}");
+    expect(routeSource).toContain('learnerWorkspace.surface === "task" ? "working" : "orienting"');
+    expect(routeSource).not.toContain('import ModeSwitch from "$lib/components/ui/ModeSwitch.svelte";');
+    expect(routeSource).toContain("← Zum Lernpfad");
     expect(routeSource).not.toContain("showSplitToggle=");
     expect(routeSource).not.toContain("onToggleSplitView=");
     expect(routeSource).toContain("modularSettingsMenuOpen = !modularSettingsMenuOpen");
@@ -30,7 +32,7 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("## 7. Form, Raum und Bewegung");
     expect(designDoc).toContain("### 7.1 Spacing");
     expect(designDoc).toContain("### 7.3 Flächen");
-    expect(designDoc).toContain("### 11.3 Inhalte");
+    expect(designDoc).toContain("### 11.3 Leseansicht und Inhalte");
     expect(designDoc).toContain("Lernraum-spezifische Overrides unter `.learning-unit-content-shell` gehören in");
     expect(designDoc).toContain("das aktive Lernraum-CSS-Bundle (`frontend/src/lib/styles/learning-unit.css`");
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;/s);
@@ -57,11 +59,17 @@ describe("learning unit route contract", () => {
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
     expect(routeSource).toContain("let learnerWorkspace = $state<LearnerWorkspaceState>");
-    expect(routeSource).toContain("function beginTaskWorkspace");
+    expect(routeSource).toContain("async function beginTaskWorkspace");
     expect(routeSource).toContain("function leaveTaskWorkspace");
+    expect(routeSource).toContain('window.scrollTo({ top: 0, behavior: "auto" })');
+    expect(routeSource).toContain('document.getElementById("learner-task-back")?.focus');
     expect(routeSource).toContain("learnerWorkspaceStorageKeys(data.user?.sub ?? null");
     expect(routeSource).not.toContain("showSplitToggle=");
     expect(routeSource).not.toContain("onToggleSplitView=");
+    expect(routeSource).not.toMatch(/\b(paneStacks|splitView|activePane)\b/);
+    expect(routeSource).toContain('surface: "task"');
+    expect(routeSource).toContain('surface: "reading"');
+    expect(routeSource).toContain('surface: "graph"');
   });
 
   it("passes the authenticated learner id to inline task draft persistence", () => {
@@ -153,6 +161,10 @@ describe("learning unit route contract", () => {
   it("keeps review history reloads recoverable instead of treating empty local state as missing feedback", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const navigationSource = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/learning-unit/learner-navigation.ts"),
+      "utf8"
+    );
 
     expect(routeSource).toContain('type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable"');
     expect(routeSource).toContain("let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>({})");
@@ -163,7 +175,8 @@ describe("learning unit route contract", () => {
     expect(routeSource).not.toContain('window.location.assign(`/auth/continue?redirect=${encodeURIComponent(redirectPath)}`)');
     expect(routeSource).toContain("feedbackStatusMessage = \"Die Abgabe wird geladen ...\";");
     expect(routeSource).not.toContain("feedbackStatusMessage = \"Die Abgabe konnte nicht geladen werden.\";");
-    expect(routeSource).toContain("next.searchParams.delete(\"history\");");
+    expect(navigationSource).toContain('"history"');
+    expect(navigationSource).toContain("next.searchParams.delete(key)");
     expect(routeSource).not.toContain("const currentHistoryTaskId = next.searchParams.get(\"history\")");
   });
 
@@ -189,14 +202,13 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain('if (reason === "auth_recovery_started")');
   });
 
-  it("reopens modular materials on restore and module reopen instead of persisting them closed", () => {
+  it("stores only explicitly collapsed reading materials", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
-    expect(routeSource).toContain("reopenMaterialEntries");
-    expect(routeSource).toContain("function reopenModularMaterials");
-    expect(routeSource).toContain("reopenModularMaterials(moduleIds)");
-    expect(routeSource).toContain("reopenModularMaterials([moduleId])");
+    expect(routeSource).toContain("function toggleReadingMaterial");
+    expect(routeSource).toContain("learnerWorkspace.collapsedItemKeys.includes(itemKey)");
+    expect(routeSource).not.toContain("reopenMaterialEntries");
   });
 
   it("derives modular spacing from DESIGN.md instead of flattening modules into one continuous list", () => {
@@ -245,7 +257,7 @@ describe("learning unit route contract", () => {
     expect(appCss).toMatch(
       /\.learning-task-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;/s
     );
-    expect(appCss).toMatch(/\.learning-task-row__preview\s*\{[^}]*white-space:\s*nowrap;[^}]*text-overflow:\s*ellipsis;/s);
+    expect(appCss).toMatch(/\.learning-task-row__preview\s*\{[^}]*-webkit-line-clamp:\s*2;[^}]*white-space:\s*normal;[^}]*text-overflow:\s*ellipsis;/s);
     expect(designDoc).toContain("kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile");
     expect(designDoc).toContain("Status wird primär über Balken und Tönung getragen");
     expect(designDoc).toContain("Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline");
@@ -264,7 +276,7 @@ describe("learning unit route contract", () => {
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(designDoc).toContain("### 7.3 Flächen");
-    expect(designDoc).toContain("### 11.3 Inhalte");
+    expect(designDoc).toContain("### 11.3 Leseansicht und Inhalte");
     expect(designDoc).toContain("## 13. Verbotene Alt-Muster");
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-unit-workspace-surface\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
     expect(designSystemCss).toMatch(
@@ -303,7 +315,7 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("nummerierte Listen, Links, Tabellen, `<br>`");
   });
 
-  it("lets the learner workspace use the viewport width instead of capping the content area in the center", () => {
+  it("uses the same bounded content grid as the application header", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
     const workspaceSource = readFileSync(
@@ -314,12 +326,11 @@ describe("learning unit route contract", () => {
     const designDoc = readFileSync(path.resolve(currentDir, "../../../../../../../../docs/DESIGN.md"), "utf8");
 
     expect(designDoc).toContain("### 7.1 Spacing");
-    expect(designDoc).toContain("### 11.3 Inhalte");
+    expect(designDoc).toContain("### 11.3 Leseansicht und Inhalte");
     expect(appCss).not.toMatch(/\.learning-unit-pane-grid--single\s*\{[^}]*48rem/s);
-    expect(appCss).toMatch(
-      /\.learning-unit-space\.workspace-page--learner-unit-content\s*\{[^}]*width:\s*100vw;[^}]*margin-left:\s*calc\(50%\s*-\s*50vw\);/s
-    );
-    expect(appCss).toMatch(/\.learning-unit-layout-frame\s*\{[^}]*width:\s*min\(100%,\s*var\(--learning-unit-workspace-width\)\);/s);
+    expect(appCss).not.toMatch(/\.learning-unit-space\.workspace-page--learner-unit-content\s*\{[^}]*100vw/s);
+    expect(appCss).not.toMatch(/\.learning-unit-space\s*\{[^}]*--learning-unit-workspace-width:\s*112rem/s);
+    expect(appCss).toMatch(/\.learning-unit-layout-frame\s*\{[^}]*width:\s*min\(100%,\s*var\(--layout-content-max\)\);/s);
     expect(routeSource).toContain('class="learning-unit-layout-rail"');
     expect(routeSource).toContain('class="learning-unit-layout-frame"');
     expect(workspaceSource).not.toContain('class="learning-unit-layout-rail"');
@@ -354,7 +365,8 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain("Promise.race([restorePromise, timeoutPromise])");
     expect(routeSource).toContain("modularRestoreState = \"failed\"");
     expect(routeSource).toContain("graphState = data.graph ? plainGraph(data.graph) : null;");
-    expect(routeSource).toContain("modularRestoreMessage = \"Die Inhalte konnten nicht vollständig wiederhergestellt werden. Du kannst offene Module im Graph erneut öffnen.\"");
+    expect(routeSource).toContain("modularRestoreMessage = \"Die Inhalte konnten nicht vollständig wiederhergestellt werden. Du kannst die Module im Lernpfad erneut öffnen.\"");
+    expect(routeSource).toContain('{ surface: "graph", moduleId: null, taskId: null, panel: null }');
     expect(routeSource).not.toContain("view: \"overview\",\n        submissionFocus: emptySubmissionFocus()");
     expect(routeSource).not.toContain("if (!isModularUnit() || !workspaceReady || !modularWorkspace.openTabs.length)");
     expect(routeSource).not.toContain("for (const moduleId of modularWorkspace.openTabs)");

@@ -30,6 +30,8 @@
       (material.mime_type?.startsWith("image/") === true || material.mime_type === "application/pdf")
     );
   }
+
+  const bodyId = $derived(`material-body-${material.id}`);
 </script>
 
 <article class:learning-work-item--collapsed={!expanded} class="learning-work-item learning-work-item--material" id={domId}>
@@ -38,6 +40,8 @@
     class="learning-work-item__toggle"
     type="button"
     title={material.title}
+    aria-expanded={expanded}
+    aria-controls={bodyId}
     onclick={() => onToggle?.()}
   >
     <div class="learning-material-card__header-inner">
@@ -54,7 +58,7 @@
   </button>
 
   {#if expanded}
-    <div class="learning-work-item__body">
+    <div class="learning-work-item__body" id={bodyId}>
       <div class="learning-material-card__body-inner">
         {#if material.kind === "markdown"}
           <div class="markdown-prose learning-material-prose">
@@ -63,12 +67,13 @@
         {:else}
           <section class="learning-material-card__support learning-material-card__support--open">
             {#if hasPreviewUrl() && material.mime_type?.startsWith("image/")}
-              <img alt="Materialvorschau" class="learning-material-file__image" src={material.file_url ?? undefined} />
+              <img alt="Materialvorschau" class="learning-material-file__image" loading="lazy" src={material.file_url ?? undefined} />
             {:else if hasPreviewUrl() && material.mime_type === "application/pdf"}
               <iframe
                 class="learning-material-file__frame"
                 src={material.file_url ?? undefined}
                 title={`Material ${material.title}`}
+                loading="lazy"
               ></iframe>
             {/if}
             {#if !showsInlinePreview()}
@@ -76,6 +81,9 @@
             {/if}
             {#if hasPreviewUrl() && !showsInlinePreview()}
               <a class="learning-work-item__link" href={material.file_url ?? undefined}>Datei öffnen</a>
+            {/if}
+            {#if hasPreviewUrl() && showsInlinePreview()}
+              <a class="learning-work-item__link" href={material.file_url ?? undefined} target="_blank" rel="noreferrer">Separat öffnen</a>
             {/if}
           </section>
         {/if}

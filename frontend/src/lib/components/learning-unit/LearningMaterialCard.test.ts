@@ -27,6 +27,8 @@ describe("LearningMaterialCard", () => {
     const toggle = screen.getByRole("button", { name: /einführung/i });
     expect(toggle).toBeInTheDocument();
     expect(toggle).toHaveAttribute("title", "Einführung");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute("aria-controls", "material-body-material-1");
     expect(toggle.querySelector("h4")).toBeNull();
     expect(screen.queryByText("Material")).toBeNull();
     expect(screen.getByRole("heading", { name: "Überschrift" })).toBeInTheDocument();
@@ -58,6 +60,7 @@ describe("LearningMaterialCard", () => {
     const toggle = screen.getByRole("button", { name: /sehr langer materialtitel/i });
     expect(toggle).toBeInTheDocument();
     expect(toggle).toHaveAttribute("title", "Sehr langer Materialtitel für die kompakte Zeile");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle.querySelector("h4")).toBeNull();
     expect(document.querySelector(".learning-work-item__toggle--collapsed")).not.toBeNull();
     expect(screen.queryByText("Modul Graphen")).toBeNull();
@@ -84,7 +87,8 @@ describe("LearningMaterialCard", () => {
     expect(screen.getByRole("img", { name: "Materialvorschau" })).toBeInTheDocument();
     expect(screen.queryByText("Datei")).not.toBeInTheDocument();
     expect(screen.queryByText("schaubild.png")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Datei öffnen" })).toBeNull();
+    expect(screen.getByRole("img", { name: "Materialvorschau" })).toHaveAttribute("loading", "lazy");
+    expect(screen.getByRole("link", { name: "Separat öffnen" })).toHaveAttribute("target", "_blank");
   });
 
   it("renders an inline PDF preview for file materials when a preview URL exists", () => {
@@ -106,7 +110,8 @@ describe("LearningMaterialCard", () => {
     expect(document.querySelector(".learning-material-file__frame")).not.toBeNull();
     expect(screen.queryByText("Datei")).not.toBeInTheDocument();
     expect(screen.queryByText("arbeitsblatt.pdf")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Datei öffnen" })).toBeNull();
+    expect(document.querySelector(".learning-material-file__frame")).toHaveAttribute("loading", "lazy");
+    expect(screen.getByRole("link", { name: "Separat öffnen" })).toHaveAttribute("target", "_blank");
   });
 
   it("keeps material rows compact while leaving markdown content open", () => {
@@ -129,7 +134,7 @@ describe("LearningMaterialCard", () => {
     expect(document.querySelector(".learning-material-card__body-inner")).not.toBeNull();
   });
 
-  it("renders material accordions as non-transparent reading surfaces", () => {
+  it("aligns material titles and reading content to one left-hand axis", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
     const designSystemCss = css;
@@ -147,7 +152,7 @@ describe("LearningMaterialCard", () => {
       /\.learning-work-item--material\s+\.learning-work-item__body\s*\{[^}]*padding:\s*0\s+var\(--space-5\)\s+var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);/s
     );
     expect(css).toMatch(
-      /\.learning-work-item--material\s+\.learning-material-card__header-inner,\s*\.learning-work-item--material\s+\.learning-material-card__body-inner\s*\{[^}]*width:\s*var\(--learning-material-rail-width\);[^}]*margin-inline:\s*auto;/s
+      /\.learning-work-item--material\s+\.learning-material-card__header-inner,\s*\.learning-work-item--material\s+\.learning-material-card__body-inner\s*\{[^}]*width:\s*min\(100%,\s*68ch\);[^}]*margin-inline:\s*0;/s
     );
     expect(css).toMatch(
       /\.learning-work-item--material\s+\.learning-work-item__title\s*\{[^}]*font-size:\s*calc\(1\.08rem \* var\(--learning-unit-font-scale\)\);[^}]*font-weight:\s*600;[^}]*line-height:\s*1\.18;/s

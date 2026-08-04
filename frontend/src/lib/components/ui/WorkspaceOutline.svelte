@@ -25,11 +25,13 @@
 </script>
 
 <aside class="workspace-outline" aria-label={title}>
-  <header class="workspace-outline__header">
+  <details class="workspace-outline__disclosure" open>
+  <summary class="workspace-outline__header">
     <div class="workspace-outline__copy">
       <h2>{title}</h2>
     </div>
-  </header>
+    <span class="workspace-outline__chevron" aria-hidden="true">⌄</span>
+  </summary>
 
   <div class="workspace-outline__body">
     {#each groups as group}
@@ -68,4 +70,5 @@
       </section>
     {/each}
   </div>
+  </details>
 </aside>

@@ -339,8 +339,8 @@ Verbindliche Familien:
   Vorschauhöhe und bieten eine Aktion zum separaten Öffnen.
 - Auf breiten Flächen gibt es genau zwei funktionale Bereiche: links `Aufgabe &
   Kontext`, rechts die Bearbeitung. Es gibt niemals eine dritte Spalte.
-- Ab `72rem` verfügbarer Komponentenbreite ist der Kontext
-  `clamp(20rem, 30cqw, 28rem)` breit. Darunter wechseln `Aufgabe` und
+- Ab `72rem` verfügbarer Komponentenbreite ist die Buchseite
+  `clamp(32rem, 44cqw, 38rem)` breit. Darunter wechseln `Aufgabe` und
   `Materialien` als montiert bleibende Vollbreitenansichten; unter `48rem`
   werden Aktionsgruppen gestapelt.
 - Breiten und Abstände werden responsiv bestimmt. Nutzereinstellungen bieten
@@ -364,21 +364,36 @@ Verbindliche Familien:
 - Der Aufgabenraum bleibt flach: keine Modulkarte, keine wiederholte
   Aufgabenzeile und keine vollständigen Rahmen um Kontext oder Bearbeitung.
 
-- Materialien des aktuellen Abschnitts sind automatisch offen verfügbar.
-  Materialien weiterer bereits geöffneter Module erscheinen automatisch als
-  eingeklappte Gruppen. Noch nicht geöffnete Materialien und eigene frühere
-  Abgaben werden einzeln angeheftet, nicht als vollständiges Modul.
+- Die linke Fläche funktioniert als fortlaufende Buchseite: Auf die
+  Aufgabenstellung folgen Materialien des aktuellen Abschnitts in didaktischer
+  Reihenfolge und danach bewusst angeheftete Materialien oder eigene frühere
+  Abgaben in der Reihenfolge des Hinzufügens. Doppelte Referenzschlüssel werden
+  nicht erneut dargestellt.
+- Aktuelle und neu angeheftete Dokumente sind zunächst offen. Jedes Dokument
+  besitzt eine vollständig bedienbare Titelzeile mit `aria-expanded` und
+  `aria-controls`. Rückmeldung, Kriterienauswertung und ältere Versuche bleiben
+  innerhalb einer Abgabe zunächst eingeklappt.
+- Materialien weiterer bereits geöffneter Module erscheinen als kompakte
+  Auswahlgruppen. Noch nicht geöffnete Materialien und eigene frühere Abgaben
+  werden einzeln angeheftet, nicht als vollständiges Modul.
 - Weitere Module werden erst beim Öffnen ihrer Gruppe geladen. Entzogene oder
   gesperrte Inhalte werden beim Wiederherstellen verworfen beziehungsweise mit
   einem sicheren Ladefehler angezeigt.
-- Lange Materialien und frühere Abgaben öffnen einen fokussierten Lesemodus in
-  derselben Kontextfläche. Seine Zeilenlänge bleibt auf `58ch` begrenzt; Bilder
-  und Medien schrumpfen auf die verfügbare Breite, Tabellen und Codeblöcke
-  scrollen nur horizontal innerhalb ihres Inhalts.
-- Die Kontextfläche besitzt einen eigenen vertikalen Scrollbereich. Leseposition,
-  ausgewählter Eintrag und Disclosure-Zustände bleiben im aktuellen Tab
-  erhalten; angeheftete IDs bleiben schüler-, kurs- und lernspezifisch über
-  Neuladen und Aufgabenwechsel hinweg erhalten.
+- Ein normales Öffnen oder Hinzufügen ersetzt niemals den Dokumentstapel. Erst
+  die bewusste Aktion `Groß lesen` öffnet unter dem Aufgabenkopf eine
+  Vollbreiten-Leseansicht. Die Buchseite und das Arbeitsheft bleiben montiert,
+  sind dabei aber für Tastatur und Screenreader inaktiv. `Zurück zur Aufgabe`
+  stellt Fokus und beide Scrollpositionen wieder her, ohne URL oder
+  Browserhistorie zu ändern.
+- Fließtext bleibt auf ungefähr `68ch` begrenzt. Bilder erscheinen direkt im
+  Lesefluss, unverzerrt und unbeschnitten mit verständlichem Alternativtext.
+  PDFs besitzen eine begrenzte Vorschau sowie `Groß lesen` und `Separat öffnen`;
+  andere Dateien zeigen Dateityp, Größe und eine Öffnen-Aktion. Sichere
+  Dialogtranskripte werden als flacher Sprecherverlauf wiedergegeben.
+- Buchseite und Arbeitsheft besitzen auf breiten Flächen unabhängige vertikale
+  Scrollbereiche. Leseposition, ausgewählter Eintrag und Disclosure-Zustände
+  bleiben im aktuellen Tab erhalten; angeheftete IDs bleiben schüler-, kurs-
+  und lernspezifisch über Neuladen und Aufgabenwechsel hinweg erhalten.
 - Gespeichert werden ausschließlich IDs und Ansichtsstatus, niemals Material-
   oder Abgabetexte.
 
@@ -408,12 +423,13 @@ Verbindliche Regeln:
   bleiben als Hilfestellung sichtbar.
 - Satzanfänge sind rechteckige Sekundäraktionen, keine Chatblasen oder Pills.
 - Die Arbeitsfläche folgt demselben Kontextvertrag wie alle Aufgaben. Ab `72rem`
-  steht der Partner- und Kontextbereich mit `clamp(20rem, 30cqw, 28rem)` links
+  steht der Partner- und Kontextbereich mit `clamp(32rem, 44cqw, 38rem)` links
   neben dem Gespräch. Darunter wechseln `Aufgabe` und `Materialien` als
   Vollbreitenansichten; beide bleiben dabei montiert.
-- Aktuelle und angeheftete Materialien sowie eigene frühere Abgaben sind auch
-  während des Dialogs über den Partnerbereich auswählbar und in einem
-  fokussierten Lesemodus darstellbar.
+- Aktuelle und angeheftete Materialien sowie eigene frühere Abgaben stehen auch
+  während des Dialogs als fortlaufender Dokumentstapel im Partnerbereich. Der
+  bewusst geöffnete Vollbreiten-Lesemodus verwendet dieselbe Komponente wie
+  andere Aufgaben und lässt Gespräch und Eingabe montiert.
 - Auf Smartphonebreite nutzen Nachrichten und `Antwort senden` die volle
   verfügbare Breite. Sitzungsaktionen stehen nebeneinander und werden erst unter
   `22rem` Containerbreite gestapelt.

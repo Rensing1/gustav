@@ -158,7 +158,7 @@
   $effect(() => {
     if (readingReferenceKey && focusedReaderKey !== readingReferenceKey) {
       focusedReaderKey = readingReferenceKey;
-      void tick().then(() => document.getElementById("learner-reference-reader-heading")?.focus());
+      void tick().then(() => document.getElementById("learner-reference-reader-heading")?.focus({ preventScroll: true }));
     } else if (!readingReferenceKey) {
       focusedReaderKey = null;
     }

@@ -361,6 +361,7 @@ describe("LearnerContentWorkspace", () => {
   it("opens a deliberately selected document across the workbench while keeping the desk mounted", async () => {
     const onCloseContextReader = vi.fn();
     const onReaderScroll = vi.fn();
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
     const props = {
       ...baseProps(),
       mode: "working" as const,
@@ -385,6 +386,7 @@ describe("LearnerContentWorkspace", () => {
     const { container } = render(LearnerContentWorkspace, { props });
 
     const reader = screen.getByRole("region", { name: "Dokument groß lesen" });
+    await vi.waitFor(() => expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true }));
     expect(within(reader).getByRole("article", { name: "Grundrechte und Privatsphäre" })).toBeInTheDocument();
     expect(within(reader).getByText("Ein längerer Materialtext.")).toBeInTheDocument();
     expect(container.querySelector(".learner-task-workbench__desk")).toHaveAttribute("inert");

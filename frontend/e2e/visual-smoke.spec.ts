@@ -125,24 +125,22 @@ test.describe("@visual-smoke learner workspace", () => {
       });
       expect(verticalGeometry.contextHeaderTop).toBeGreaterThanOrEqual(verticalGeometry.taskHeaderBottom);
       const desktopGeometry = await workbench.evaluate((workspace) => {
+        const desk = workspace.querySelector(".learner-task-workbench__desk");
         const context = workspace.querySelector('[data-work-surface="materials"]');
         const task = workspace.querySelector('[data-work-surface="task"]');
-        if (!(context instanceof HTMLElement) || !(task instanceof HTMLElement)) {
+        if (!(desk instanceof HTMLElement) || !(context instanceof HTMLElement) || !(task instanceof HTMLElement)) {
           throw new Error("learner work surfaces are incomplete");
         }
         return {
           context: context.getBoundingClientRect().toJSON(),
           task: task.getBoundingClientRect().toJSON(),
-          columns: getComputedStyle(workspace).gridTemplateColumns
+          columns: getComputedStyle(desk).gridTemplateColumns
         };
       });
       expect(desktopGeometry.columns.split(" ")).toHaveLength(2);
       expect(desktopGeometry.task.x).toBeGreaterThan(
         desktopGeometry.context.x + desktopGeometry.context.width - 1
       );
-      await expect
-        .poll(() => contextSurface.evaluate((surface) => getComputedStyle(surface).position))
-        .toBe("sticky");
       await expect(learner.page).toHaveScreenshot("learner-work-light-desktop.png", {
         animations: "disabled",
         caret: "hide",
@@ -150,13 +148,13 @@ test.describe("@visual-smoke learner workspace", () => {
       });
 
       const currentMaterial = contextSurface
-        .locator(".learner-task-context__material")
+        .locator(".learner-reference-document")
         .filter({ hasText: "Grundrechte und digitale Kommunikation" });
-      await currentMaterial.getByRole("button", { name: "Fokussiert lesen" }).click();
-      const reader = contextSurface.getByRole("article", { name: "Kontext lesen" });
+      await currentMaterial.getByRole("button", { name: "Grundrechte und digitale Kommunikation groß lesen" }).click();
+      const reader = workbench.getByRole("region", { name: "Dokument groß lesen" });
       await expect(reader).toBeVisible();
       await expect(reader.getByRole("heading", { name: "Grundrechte und digitale Kommunikation" })).toBeVisible();
-      const readingMeasure = await reader.locator(".learner-context-reader__body").evaluate((body) => ({
+      const readingMeasure = await reader.locator(".learner-reference-document__prose").first().evaluate((body) => ({
         width: body.getBoundingClientRect().width,
         maxWidth: Number.parseFloat(getComputedStyle(body).maxWidth)
       }));
@@ -166,6 +164,7 @@ test.describe("@visual-smoke learner workspace", () => {
         caret: "hide",
         mask: [accountControl]
       });
+      await reader.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
 
       await learner.page.setViewportSize({ width: 1366, height: 768 });
       await expect(taskSurface).toBeVisible();

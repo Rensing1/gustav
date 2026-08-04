@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
   import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
@@ -33,6 +34,7 @@
     readingReferenceKey = null,
     contextScrollTop = 0,
     workScrollTop = 0,
+    readerScrollTop = 0,
     historyByTask,
     historyStateByTask = {},
     submittedTaskId = null,
@@ -59,6 +61,7 @@
     onCloseContextReader = null,
     onContextScroll = null,
     onWorkScroll = null,
+    onReaderScroll = null,
     onToggleReviewPanel = null,
     onProgressPersisted = null
   }: {
@@ -91,6 +94,7 @@
     readingReferenceKey?: string | null;
     contextScrollTop?: number;
     workScrollTop?: number;
+    readerScrollTop?: number;
     historyByTask: Record<string, LearningSubmission[]>;
     historyStateByTask?: Record<string, HistoryState>;
     submittedTaskId?: string | null;
@@ -122,12 +126,16 @@
     onCloseContextReader?: (() => void) | null;
     onContextScroll?: ((scrollTop: number) => void) | null;
     onWorkScroll?: ((scrollTop: number) => void) | null;
+    onReaderScroll?: ((scrollTop: number) => void) | null;
     onToggleReviewPanel?: ((taskId: string) => void | Promise<void>) | null;
     onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
 
   let contextScrollSurface = $state<HTMLDivElement | null>(null);
   let workScrollSurface = $state<HTMLElement | null>(null);
+  let readerScrollSurface = $state<HTMLElement | null>(null);
+  let deskSurface = $state<HTMLDivElement | null>(null);
+  let focusedReaderKey = $state<string | null>(null);
 
   $effect(() => {
     if (contextScrollSurface && contextScrollSurface.scrollTop !== contextScrollTop) {
@@ -138,6 +146,30 @@
   $effect(() => {
     if (workScrollSurface && workScrollSurface.scrollTop !== workScrollTop) {
       workScrollSurface.scrollTop = workScrollTop;
+    }
+  });
+
+  $effect(() => {
+    if (readerScrollSurface && readerScrollSurface.scrollTop !== readerScrollTop) {
+      readerScrollSurface.scrollTop = readerScrollTop;
+    }
+  });
+
+  $effect(() => {
+    if (readingReferenceKey && focusedReaderKey !== readingReferenceKey) {
+      focusedReaderKey = readingReferenceKey;
+      void tick().then(() => document.getElementById("learner-reference-reader-heading")?.focus());
+    } else if (!readingReferenceKey) {
+      focusedReaderKey = null;
+    }
+  });
+
+  $effect(() => {
+    if (!deskSurface) return;
+    if (readingReferenceKey) {
+      deskSurface.setAttribute("inert", "");
+    } else {
+      deskSurface.removeAttribute("inert");
     }
   });
 
@@ -238,6 +270,7 @@
       title: string;
       material: LearningMaterial | null;
       submissions: LearningSubmission[];
+      taskId: string | null;
       current: boolean;
     }> = [];
     const seen = new Set<string>();
@@ -251,6 +284,7 @@
         title: materialItem.title,
         material: materialItem.material,
         submissions: [],
+        taskId: null,
         current: true
       });
     }
@@ -266,6 +300,7 @@
         title: material?.title ?? taskItem?.title ?? reference.id,
         material,
         submissions: reference.taskId ? taskHistory(reference.taskId) : [],
+        taskId: reference.taskId,
         current: false
       });
     }
@@ -274,61 +309,20 @@
   }
 
   function dialogContextEntries(item: LearningContentItem | null) {
-    const entries: Array<{
-      key: string;
-      kind: "material" | "submission";
-      label: string;
-      title: string;
-      bodyMd: string | null;
-      meta: string | null;
-      fileUrl?: string | null;
-    }> = [];
-    const seen = new Set<string>();
-
-    for (const materialItem of currentMaterials(item)) {
-      if (!materialItem.material || seen.has(materialItem.key)) continue;
-      seen.add(materialItem.key);
-      entries.push({
-        key: materialItem.key,
-        kind: "material",
-        label: "Material",
-        title: materialItem.title,
-        bodyMd: materialItem.material.body_md ?? null,
-        meta: "Aktueller Abschnitt",
-        fileUrl: materialItem.material.file_url ?? null
-      });
-    }
-
-    for (const reference of manualContextReferences) {
-      if (seen.has(reference.key)) continue;
-      const material = materialForReference(reference);
-      const taskItem = taskForReference(reference);
-      if (material) {
-        seen.add(reference.key);
-        entries.push({
-          key: reference.key,
-          kind: "material",
-          label: "Material",
-          title: material.title,
-          bodyMd: material.body_md ?? null,
-          meta: "Angeheftet",
-          fileUrl: material.file_url ?? null
-        });
-      } else if (reference.kind === "submission" && reference.taskId) {
-        const submission = taskHistory(reference.taskId)[0] ?? null;
-        seen.add(reference.key);
-        entries.push({
-          key: reference.key,
-          kind: "submission",
-          label: "Eigene frühere Abgabe",
-          title: taskItem?.title ?? "Frühere Abgabe",
-          bodyMd: submission?.text_body ?? submission?.feedback_md ?? null,
-          meta: submission ? `Versuch ${submission.attempt_nr}` : "Wird geladen"
-        });
-      }
-    }
-
-    return entries;
+    return contextReferenceDocuments(item).map((document) => ({
+      key: document.key,
+      kind: document.material ? "material" as const : "submission" as const,
+      label: document.label,
+      title: document.title,
+      material: document.material,
+      submissions: document.submissions,
+      taskId: document.taskId,
+      current: document.current,
+      expanded: document.current
+        ? !collapsedItemKeys.includes(document.key)
+        : expandedReferenceKeys.includes(document.key),
+      removable: !document.current
+    }));
   }
 
   function dialogContextModuleOptions() {
@@ -383,6 +377,19 @@
   const readerMaterial = $derived.by(() => materialForReference(readerReference));
   const readerTaskItem = $derived.by(() => taskForReference(readerReference));
   const activeItem = $derived.by(() => activeTaskItem());
+
+  function safeReferenceKey(referenceKey: string): string {
+    return referenceKey.replace(/[^a-zA-Z0-9_-]+/g, "-");
+  }
+
+  async function closeReader(): Promise<void> {
+    const referenceKey = readingReferenceKey;
+    onCloseContextReader?.();
+    await tick();
+    if (referenceKey) {
+      document.getElementById(`reference-reader-trigger-${safeReferenceKey(referenceKey)}`)?.focus();
+    }
+  }
 </script>
 
 <div class:learner-surface--inactive={mode !== "orienting"} aria-hidden={mode !== "orienting"}>
@@ -500,7 +507,43 @@
         class:learner-task-workbench--dialog={task.kind === "dialog"}
         class="learner-task-workbench"
         data-compact-surface={compactSurface}
+        data-reader-active={readerReference ? "true" : "false"}
         aria-label="Aufgabe bearbeiten"
+      >
+      {#if readerReference}
+        <section
+          bind:this={readerScrollSurface}
+          class="learner-context-reader__scroll"
+          aria-label="Dokument groß lesen"
+          onscroll={(event) => onReaderScroll?.(event.currentTarget.scrollTop)}
+        >
+          <nav class="learner-context-reader__toolbar" aria-label="Lesemodus">
+            <button
+              class="learner-context-reader__back"
+              type="button"
+              aria-label="Zurück zur Aufgabe"
+              onclick={closeReader}
+            >
+              ← Zurück zur Aufgabe
+            </button>
+          </nav>
+          <LearningReferenceDocument
+            referenceKey={readerReference.key}
+            label={readerReference.kind === "material" ? "Material" : "Eigene frühere Abgabe"}
+            title={readerMaterial?.title ?? readerTaskItem?.title ?? readerReference.id}
+            material={readerMaterial}
+            submissions={readerReference.taskId ? taskHistory(readerReference.taskId) : []}
+            {courseId}
+            taskId={readerReference.taskId}
+            expanded={true}
+            readerMode={true}
+          />
+        </section>
+      {/if}
+      <div
+        bind:this={deskSurface}
+        class="learner-task-workbench__desk"
+        aria-hidden={readerReference ? "true" : undefined}
       >
       {#if task.kind !== "dialog"}
       <nav class="learner-task-workbench__switch" aria-label="Arbeitsbereich wählen">
@@ -526,63 +569,6 @@
           class="learner-task-context__scroll"
           onscroll={(event) => onContextScroll?.(event.currentTarget.scrollTop)}
         >
-          {#if readerReference}
-            <article class="learner-context-reader" aria-label="Kontext lesen">
-              <header class="learner-context-reader__header">
-                <button class="learner-context-reader__back" type="button" onclick={() => onCloseContextReader?.()}>
-                  ← Zur Kontextliste
-                </button>
-                <p class="workspace-label">
-                  {readerReference.kind === "material" ? "Material" : "Eigene frühere Abgabe"}
-                </p>
-                <h2>{readerMaterial?.title ?? readerTaskItem?.title ?? "Kontext"}</h2>
-              </header>
-
-              {#if readerMaterial?.kind === "markdown" && readerMaterial.body_md}
-                <div class="learner-context-reader__body">{@html renderMarkdown(readerMaterial.body_md)}</div>
-              {:else if readerMaterial}
-                <div class="learner-context-reader__file">
-                  <p>{readerMaterial.filename_original ?? "Dateimaterial"}</p>
-                  {#if readerMaterial.file_url}
-                    <a href={readerMaterial.file_url} target="_blank" rel="noreferrer">Material öffnen</a>
-                  {/if}
-                </div>
-              {:else if readerReference.kind === "submission" && readerReference.taskId}
-                {@const submission = taskHistory(readerReference.taskId)[0] ?? null}
-                {#if submission}
-                  <div class="learner-context-reader__submission">
-                    <p class="learner-context-reader__meta">
-                      Eigene Abgabe · Versuch {submission.attempt_nr} · {new Date(submission.created_at).toLocaleDateString("de-DE")}
-                    </p>
-                    {#if submission.text_body}
-                      <div class="learner-context-reader__body">{@html renderMarkdown(submission.text_body)}</div>
-                    {/if}
-                    {#if submission.feedback_md}
-                      <details class="learner-context-reader__response">
-                        <summary>Rückmeldung</summary>
-                        <div class="learner-context-reader__body">{@html renderMarkdown(submission.feedback_md)}</div>
-                      </details>
-                    {/if}
-                    {#if submission.analysis_json?.criteria_results?.length}
-                      <details class="learner-context-reader__response">
-                        <summary>Auswertung</summary>
-                        {#each submission.analysis_json.criteria_results as result}
-                          <section class="learner-context-reader__criterion">
-                            <strong>{result.criterion}</strong>
-                            {#if result.explanation_md}
-                              <div class="learner-context-reader__body">{@html renderMarkdown(result.explanation_md)}</div>
-                            {/if}
-                          </section>
-                        {/each}
-                      </details>
-                    {/if}
-                  </div>
-                {:else}
-                  <p class="workspace-note">Die frühere Abgabe wird geladen …</p>
-                {/if}
-              {/if}
-            </article>
-          {:else}
             <header class="learner-task-context__header">
               <p class="workspace-label">{activeItem.title} · {taskKindLabel(task)}</p>
               <div class="learner-task-context__instruction">
@@ -602,6 +588,8 @@
                         title={document.title}
                         material={document.material}
                         submissions={document.submissions}
+                        {courseId}
+                        taskId={document.taskId}
                         expanded={document.current
                           ? !collapsedItemKeys.includes(document.key)
                           : expandedReferenceKeys.includes(document.key)}
@@ -721,7 +709,6 @@
                 </section>
               {/if}
             </section>
-          {/if}
         </div>
 
       </aside>
@@ -751,7 +738,7 @@
           dialogCompactSurface={compactSurface}
           dialogContextMaterials={currentMaterialRecords(activeItem)}
           dialogContextEntries={dialogContextEntries(activeItem)}
-          dialogReadingContextKey={readingReferenceKey}
+          dialogExpandedReferenceKeys={expandedReferenceKeys}
           dialogContextPickerOpen={contextPickerOpen}
           dialogExpandedContextModuleIds={expandedContextModuleIds}
           dialogContextModules={dialogContextModuleOptions()}
@@ -769,7 +756,9 @@
           hideDialogPauseAction={true}
           onSetDialogCompactSurface={onSetCompactSurface}
           onOpenDialogContext={onOpenContextReference}
-          onCloseDialogContext={onCloseContextReader}
+          onToggleDialogMaterial={onToggleMaterial}
+          onToggleDialogContextReference={onToggleContextReference}
+          onRemoveDialogContextReference={onRemoveContextReference}
           onToggleDialogContextPicker={onToggleContextPicker}
           onToggleDialogContextModule={onToggleContextModule}
           onAddDialogContextReference={onAddContextReference}
@@ -778,6 +767,7 @@
           {onProgressPersisted}
         />
       </main>
+      </div>
       </section>
     </div>
   {:else}

@@ -358,6 +358,50 @@ describe("LearnerContentWorkspace", () => {
     );
   });
 
+  it("opens a deliberately selected document across the workbench while keeping the desk mounted", async () => {
+    const onCloseContextReader = vi.fn();
+    const onReaderScroll = vi.fn();
+    const props = {
+      ...baseProps(),
+      mode: "working" as const,
+      activeTaskKey: "task:task-1",
+      activeEditorMode: "text" as const,
+      readingReferenceKey: "material:material-1",
+      readerScrollTop: 120,
+      onCloseContextReader,
+      onReaderScroll,
+      contextModules: [
+        {
+          id: "module-1",
+          title: "Grundlagen",
+          current: true,
+          loaded: true,
+          loading: false,
+          error: null,
+          items: groups[0].items
+        }
+      ]
+    };
+    const { container } = render(LearnerContentWorkspace, { props });
+
+    const reader = screen.getByRole("region", { name: "Dokument groß lesen" });
+    expect(within(reader).getByRole("article", { name: "Grundrechte und Privatsphäre" })).toBeInTheDocument();
+    expect(within(reader).getByText("Ein längerer Materialtext.")).toBeInTheDocument();
+    expect(container.querySelector(".learner-task-workbench__desk")).toHaveAttribute("inert");
+    expect(container.querySelector(".learner-task-workbench__desk")).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector('[data-work-surface="task"]')).not.toBeNull();
+
+    const readerScroll = container.querySelector<HTMLElement>(".learner-context-reader__scroll");
+    expect(readerScroll?.scrollTop).toBe(120);
+    if (readerScroll) {
+      readerScroll.scrollTop = 260;
+      await fireEvent.scroll(readerScroll);
+    }
+    expect(onReaderScroll).toHaveBeenCalledWith(260);
+    await fireEvent.click(within(reader).getByRole("button", { name: "Zurück zur Aufgabe" }));
+    expect(onCloseContextReader).toHaveBeenCalledOnce();
+  });
+
   it("keeps the workbench flat and switches layout from its own available width", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(path.resolve(currentDir, "../../styles/learning-unit.css"), "utf8");

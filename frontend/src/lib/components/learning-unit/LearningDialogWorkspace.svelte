@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
-  import type { LearningMaterial, LearningTask } from "$lib/types/learning";
+  import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
 
   type DialogTurn = {
     id: string;
@@ -30,9 +31,12 @@
     kind: "material" | "submission";
     label: string;
     title: string;
-    bodyMd: string | null;
-    meta: string | null;
-    fileUrl?: string | null;
+    material: LearningMaterial | null;
+    submissions: LearningSubmission[];
+    taskId?: string | null;
+    current?: boolean;
+    expanded?: boolean;
+    removable?: boolean;
   };
   type DialogContextOption = {
     key: string;
@@ -62,13 +66,15 @@
     compactSurface = "task",
     contextMaterials = [],
     contextEntries = [],
-    readingContextKey = null,
+    expandedReferenceKeys = [],
     contextPickerOpen = false,
     expandedContextModuleIds = [],
     contextModules = [],
     onSetCompactSurface = null,
     onOpenContext = null,
-    onCloseContext = null,
+    onToggleCurrentMaterial = null,
+    onToggleContextReference = null,
+    onRemoveContextReference = null,
     onToggleContextPicker = null,
     onToggleContextModule = null,
     onAddContextReference = null,
@@ -84,13 +90,15 @@
     compactSurface?: "task" | "materials";
     contextMaterials?: LearningMaterial[];
     contextEntries?: DialogContextEntry[];
-    readingContextKey?: string | null;
+    expandedReferenceKeys?: string[];
     contextPickerOpen?: boolean;
     expandedContextModuleIds?: string[];
     contextModules?: DialogContextModule[];
     onSetCompactSurface?: ((surface: "task" | "materials") => void) | null;
     onOpenContext?: ((key: string) => void | Promise<void>) | null;
-    onCloseContext?: (() => void) | null;
+    onToggleCurrentMaterial?: ((key: string) => void) | null;
+    onToggleContextReference?: ((key: string) => void | Promise<void>) | null;
+    onRemoveContextReference?: ((key: string) => void) | null;
     onToggleContextPicker?: (() => void) | null;
     onToggleContextModule?: ((moduleId: string) => void | Promise<void>) | null;
     onAddContextReference?: ((reference: {
@@ -112,7 +120,6 @@
   let selectedStarter = $state<{ text: string; source: string } | null>(null);
   let pending = $state(false);
   let error = $state<string | null>(null);
-  const activeContextEntry = $derived(contextEntries.find((entry) => entry.key === readingContextKey) ?? null);
 
   function baseUrl(): string {
     return `/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(task.id)}/dialog-sessions`;
@@ -309,23 +316,6 @@
     </nav>
     <div class="dialog-layout" data-compact-surface={compactSurface} data-phase={closingPhase ? "closing" : "conversation"}>
       <aside class="dialog-sidebar" data-dialog-surface="materials" aria-label="Dialogpartner und Sitzungsaktionen">
-        {#if activeContextEntry}
-          <article class="dialog-context-reader" aria-label="Kontext lesen">
-            <button class="learner-context-reader__back" type="button" onclick={() => onCloseContext?.()}>
-              Zur Kontextliste
-            </button>
-            <p class="workspace-label">{activeContextEntry.label}</p>
-            <h5>{activeContextEntry.title}</h5>
-            {#if activeContextEntry.meta}<p class="dialog-context-reader__meta">{activeContextEntry.meta}</p>{/if}
-            {#if activeContextEntry.bodyMd}
-              <div class="dialog-context-reader__body">{@html renderMarkdown(activeContextEntry.bodyMd)}</div>
-            {:else if activeContextEntry.fileUrl}
-              <a href={activeContextEntry.fileUrl} target="_blank" rel="noreferrer">Material öffnen</a>
-            {:else}
-              <p class="workspace-note">Dieser Kontext wird geladen …</p>
-            {/if}
-          </article>
-        {:else}
           <header class="dialog-task-context">
             <p class="workspace-label">Aufgabe · KI-Dialog</p>
             <div class="dialog-task-context__instruction">{@html renderMarkdown(task.instruction_md)}</div>
@@ -350,25 +340,44 @@
         {#if contextEntries.length}
           <section class="dialog-context-materials" aria-labelledby="dialog-context-entries-title">
             <h6 id="dialog-context-entries-title">Aufgabe & Kontext</h6>
-            {#each contextEntries as entry}
-              <button class="dialog-context-entry" type="button" onclick={() => onOpenContext?.(entry.key)}>
-                <span>{entry.meta ?? entry.label}</span>
-                <strong>{entry.title}</strong>
-              </button>
+            {#each contextEntries as entry (entry.key)}
+              <div class="learner-task-context__document-row">
+                <LearningReferenceDocument
+                  referenceKey={entry.key}
+                  label={entry.label}
+                  title={entry.title}
+                  material={entry.material}
+                  submissions={entry.submissions}
+                  {courseId}
+                  taskId={entry.taskId}
+                  expanded={entry.expanded ?? expandedReferenceKeys.includes(entry.key)}
+                  onToggle={entry.current ? onToggleCurrentMaterial : onToggleContextReference}
+                  onOpenReader={onOpenContext}
+                />
+                {#if entry.removable}
+                  <button
+                    class="learner-task-context__remove"
+                    type="button"
+                    aria-label={`${entry.title} aus dem Kontext entfernen`}
+                    onclick={() => onRemoveContextReference?.(entry.key)}
+                  >Entfernen</button>
+                {/if}
+              </div>
             {/each}
           </section>
         {:else if contextMaterials.length}
           <section class="dialog-context-materials" aria-labelledby="dialog-context-materials-title">
             <h6 id="dialog-context-materials-title">Materialien</h6>
             {#each contextMaterials as material}
-              <details class="dialog-context-material">
-                <summary>{material.title}</summary>
-                {#if material.kind === "markdown" && material.body_md}
-                  <div class="dialog-context-material__body">{@html renderMarkdown(material.body_md)}</div>
-                {:else}
-                  <p class="workspace-note">{material.filename_original ?? "Dateimaterial"}</p>
-                {/if}
-              </details>
+              <LearningReferenceDocument
+                referenceKey={`material:${material.id}`}
+                label="Material · Aktuelles Modul"
+                title={material.title}
+                {material}
+                expanded={true}
+                onToggle={onToggleContextReference}
+                onOpenReader={onOpenContext}
+              />
             {/each}
           </section>
         {/if}
@@ -423,7 +432,6 @@
               </div>
             {/each}
           </section>
-        {/if}
         {/if}
 
         {#if session.status === "active" && !readOnly}

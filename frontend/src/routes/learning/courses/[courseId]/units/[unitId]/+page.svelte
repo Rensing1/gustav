@@ -535,6 +535,19 @@
     });
   }
 
+  function rememberReaderScroll(scrollTop: number) {
+    if (Math.abs(learnerWorkspace.context.readerScrollTop - scrollTop) < 1) {
+      return;
+    }
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      context: {
+        ...learnerWorkspace.context,
+        readerScrollTop: Math.max(0, scrollTop)
+      }
+    });
+  }
+
   function markActiveTaskResult(taskId: string) {
     if (learnerWorkspace.activeTask?.taskId !== taskId) {
       return;
@@ -1396,6 +1409,20 @@
   });
 
   $effect(() => {
+    if (!workspaceReady) return;
+
+    for (const reference of learnerWorkspace.context.manualReferences) {
+      if (
+        reference.kind === "submission" &&
+        reference.taskId &&
+        (submissionHistoryStateByTask[reference.taskId] ?? "not_loaded") === "not_loaded"
+      ) {
+        void ensureSubmissionHistoryLoaded(reference.taskId);
+      }
+    }
+  });
+
+  $effect(() => {
     if (!isModularUnit() || !workspaceReady) {
       return;
     }
@@ -1573,6 +1600,7 @@
                 readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
                 contextScrollTop={learnerWorkspace.context.bookScrollTop}
                 workScrollTop={learnerWorkspace.context.workScrollTop}
+                readerScrollTop={learnerWorkspace.context.readerScrollTop}
                 historyByTask={submissionHistoryByTask}
                 historyStateByTask={submissionHistoryStateByTask}
                 submittedTaskId={data.submittedTaskId}
@@ -1599,6 +1627,7 @@
                 onCloseContextReader={closeContextReader}
                 onContextScroll={rememberContextScroll}
                 onWorkScroll={rememberWorkScroll}
+                onReaderScroll={rememberReaderScroll}
                 onToggleReviewPanel={toggleReviewPanel}
                 onProgressPersisted={handleProgressPersisted}
               />
@@ -1632,6 +1661,7 @@
             readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
             contextScrollTop={learnerWorkspace.context.bookScrollTop}
             workScrollTop={learnerWorkspace.context.workScrollTop}
+            readerScrollTop={learnerWorkspace.context.readerScrollTop}
             historyByTask={submissionHistoryByTask}
             historyStateByTask={submissionHistoryStateByTask}
             submittedTaskId={data.submittedTaskId}
@@ -1658,6 +1688,7 @@
             onCloseContextReader={closeContextReader}
             onContextScroll={rememberContextScroll}
             onWorkScroll={rememberWorkScroll}
+            onReaderScroll={rememberReaderScroll}
             onToggleReviewPanel={toggleReviewPanel}
             onProgressPersisted={handleProgressPersisted}
           />

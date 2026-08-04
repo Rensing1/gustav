@@ -255,6 +255,7 @@ describe("LearningDialogWorkspace", () => {
   });
 
   it("keeps pinned materials and prior submissions readable in the partner context", async () => {
+    const onOpenContext = vi.fn();
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ session: answeredSession() })));
     render(LearningDialogWorkspace, {
       props: {
@@ -267,26 +268,44 @@ describe("LearningDialogWorkspace", () => {
             kind: "material",
             label: "Material",
             title: "Lange Quelle",
-            bodyMd: "Ein langer Quellentext.",
-            meta: "Weiteres Modul"
+            material: {
+              id: "source",
+              title: "Lange Quelle",
+              kind: "markdown",
+              body_md: "Ein langer Quellentext."
+            },
+            submissions: []
           },
           {
             key: "submission:task-old",
             kind: "submission",
             label: "Eigene frühere Abgabe",
             title: "Frühere Analyse",
-            bodyMd: "Meine frühere Begründung.",
-            meta: "Versuch 1"
+            material: null,
+            submissions: [{
+              id: "submission-old",
+              intent: "submit",
+              attempt_nr: 1,
+              kind: "text",
+              created_at: "2026-08-03T10:00:00+00:00",
+              analysis_status: "completed",
+              text_body: "Meine frühere Begründung."
+            }]
           }
         ],
-        readingContextKey: "submission:task-old"
+        expandedReferenceKeys: ["material:source", "submission:task-old"],
+        onOpenContext
       }
     });
 
     const context = await screen.findByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    expect(within(context).getByText("Lange Quelle")).toBeInTheDocument();
+    expect(within(context).getByText("Ein langer Quellentext.")).toBeInTheDocument();
     expect(within(context).getByText("Frühere Analyse")).toBeInTheDocument();
     expect(within(context).getByText("Meine frühere Begründung.")).toBeInTheDocument();
-    expect(within(context).getByRole("button", { name: "Zur Kontextliste" })).toBeInTheDocument();
+    expect(within(context).queryByRole("button", { name: "Zur Kontextliste" })).not.toBeInTheDocument();
+    await fireEvent.click(within(context).getByRole("button", { name: "Frühere Analyse groß lesen" }));
+    expect(onOpenContext).toHaveBeenCalledWith("submission:task-old");
   });
 
   it("adds individual accessible context from the dialog sidebar", async () => {

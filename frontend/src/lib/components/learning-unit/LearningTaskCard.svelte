@@ -36,7 +36,7 @@
     dialogCompactSurface = "task",
     dialogContextMaterials = [],
     dialogContextEntries = [],
-    dialogReadingContextKey = null,
+    dialogExpandedReferenceKeys = [],
     dialogContextPickerOpen = false,
     dialogExpandedContextModuleIds = [],
     dialogContextModules = [],
@@ -49,7 +49,9 @@
     onExitSubmissionWorkspace = null,
     onSetDialogCompactSurface = null,
     onOpenDialogContext = null,
-    onCloseDialogContext = null,
+    onToggleDialogMaterial = null,
+    onToggleDialogContextReference = null,
+    onRemoveDialogContextReference = null,
     onToggleDialogContextPicker = null,
     onToggleDialogContextModule = null,
     onAddDialogContextReference = null,
@@ -85,11 +87,14 @@
       kind: "material" | "submission";
       label: string;
       title: string;
-      bodyMd: string | null;
-      meta: string | null;
-      fileUrl?: string | null;
+      material: LearningMaterial | null;
+      submissions: LearningSubmission[];
+      taskId?: string | null;
+      current?: boolean;
+      expanded?: boolean;
+      removable?: boolean;
     }>;
-    dialogReadingContextKey?: string | null;
+    dialogExpandedReferenceKeys?: string[];
     dialogContextPickerOpen?: boolean;
     dialogExpandedContextModuleIds?: string[];
     dialogContextModules?: Array<{
@@ -118,7 +123,9 @@
     onExitSubmissionWorkspace?: (() => void) | null;
     onSetDialogCompactSurface?: ((surface: "task" | "materials") => void) | null;
     onOpenDialogContext?: ((key: string) => void | Promise<void>) | null;
-    onCloseDialogContext?: (() => void) | null;
+    onToggleDialogMaterial?: ((key: string) => void) | null;
+    onToggleDialogContextReference?: ((key: string) => void | Promise<void>) | null;
+    onRemoveDialogContextReference?: ((key: string) => void) | null;
     onToggleDialogContextPicker?: (() => void) | null;
     onToggleDialogContextModule?: ((moduleId: string) => void | Promise<void>) | null;
     onAddDialogContextReference?: ((reference: {
@@ -690,13 +697,15 @@
                 compactSurface={dialogCompactSurface}
                 contextMaterials={dialogContextMaterials}
                 contextEntries={dialogContextEntries}
-                readingContextKey={dialogReadingContextKey}
+                expandedReferenceKeys={dialogExpandedReferenceKeys}
                 contextPickerOpen={dialogContextPickerOpen}
                 expandedContextModuleIds={dialogExpandedContextModuleIds}
                 contextModules={dialogContextModules}
                 onSetCompactSurface={onSetDialogCompactSurface}
                 onOpenContext={onOpenDialogContext}
-                onCloseContext={onCloseDialogContext}
+                onToggleCurrentMaterial={onToggleDialogMaterial}
+                onToggleContextReference={onToggleDialogContextReference}
+                onRemoveContextReference={onRemoveDialogContextReference}
                 onToggleContextPicker={onToggleDialogContextPicker}
                 onToggleContextModule={onToggleDialogContextModule}
                 onAddContextReference={onAddDialogContextReference}

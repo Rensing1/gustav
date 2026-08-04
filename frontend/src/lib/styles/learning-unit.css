@@ -2987,14 +2987,20 @@
 }
 
 @container learning-dialog (min-width: 72rem) {
+  .dialog-workspace,
+  .dialog-layout {
+    height: 100%;
+    min-height: 0;
+  }
+
   .dialog-workspace__switch {
     display: none;
   }
 
   .dialog-layout {
     direction: ltr;
-    grid-template-columns: clamp(20rem, 30cqw, 28rem) minmax(0, 1fr);
-    align-items: start;
+    grid-template-columns: clamp(32rem, 44cqw, 38rem) minmax(0, 1fr);
+    align-items: stretch;
   }
 
   .dialog-sidebar {
@@ -3014,10 +3020,10 @@
   }
 
   .dialog-sidebar {
-    position: sticky;
-    top: var(--space-4);
-    max-height: calc(100svh - var(--space-8));
-    min-height: min(42rem, calc(100svh - var(--space-8)));
+    position: static;
+    height: 100%;
+    max-height: none;
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -3025,7 +3031,11 @@
   }
 
   .dialog-main {
-    min-height: min(42rem, calc(100svh - 9rem));
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
   }
 
@@ -3275,12 +3285,21 @@
   grid-column: 1;
   grid-row: 2;
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
+  display: block;
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.learner-task-workbench__desk {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.learner-task-workbench[data-reader-active="true"] .learner-task-workbench__desk {
+  display: none;
 }
 
 .learner-task-workbench__switch {
@@ -3482,6 +3501,71 @@
   font-weight: 750;
   text-transform: uppercase;
   cursor: pointer;
+}
+
+.learner-context-reader__scroll {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--space-5);
+  max-height: calc(100svh - 7.25rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: var(--space-5) clamp(var(--space-5), 7cqw, var(--space-9));
+}
+
+.learner-context-reader__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--color-border);
+  background: var(--color-bg-base);
+}
+
+.learner-reference-document--reader {
+  width: min(100%, 68rem);
+  margin-inline: auto;
+}
+
+.learner-reference-document__reader-header {
+  display: grid;
+  gap: var(--space-2);
+  padding-block-end: var(--space-5);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.learner-reference-document__reader-header h2 {
+  margin: 0;
+  font-size: calc(clamp(1.65rem, 3cqw, 2.5rem) * var(--learning-unit-headline-scale));
+  overflow-wrap: anywhere;
+}
+
+.learner-reference-transcript {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.learner-reference-transcript__message,
+.learner-reference-transcript__closing {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 68ch;
+  padding-inline-start: var(--space-4);
+  border-inline-start: 3px solid var(--color-success);
+}
+
+.learner-reference-transcript__message--student,
+.learner-reference-transcript__closing {
+  justify-self: end;
+  border-inline-start-color: var(--color-accent);
+}
+
+.learner-reference-transcript__message small {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: calc(0.68rem * var(--learning-unit-label-scale));
 }
 
 .learner-task-context__material,
@@ -3762,6 +3846,10 @@
   .learner-task-workbench {
     height: calc(100svh - 7.25rem);
     min-height: 36rem;
+  }
+
+  .learner-task-workbench__desk {
+    height: 100%;
     grid-template-columns: clamp(32rem, 44cqw, 38rem) minmax(0, 1fr);
     align-items: stretch;
   }
@@ -3801,6 +3889,11 @@
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
     padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+  }
+
+  .learner-context-reader__scroll {
+    height: 100%;
+    max-height: none;
   }
 }
 
@@ -3848,12 +3941,16 @@
 
 @supports not (container-type: inline-size) {
   .learner-task-workbench {
+    display: block;
+  }
+
+  .learner-task-workbench__desk {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
   }
 
   @media (min-width: 80rem) {
-    .learner-task-workbench {
+    .learner-task-workbench__desk {
       grid-template-columns: minmax(32rem, 38rem) minmax(0, 1fr);
     }
 
@@ -3877,9 +3974,17 @@
 }
 
 /* The dialog provides its own two surfaces, so the generic work area adds no frame or spacing. */
-.learner-task-workbench--dialog > .learner-task-workbench__main,
-.learner-task-workbench--dialog[data-compact-surface="materials"] > .learner-task-workbench__main,
-.learner-task-workbench--dialog[data-compact-surface="task"] > .learner-task-workbench__main {
+.learner-task-workbench--dialog > .learner-task-workbench__desk {
+  display: block;
+}
+
+.learner-task-workbench--dialog .learner-task-workbench__main,
+.learner-task-workbench--dialog[data-compact-surface="materials"] .learner-task-workbench__main,
+.learner-task-workbench--dialog[data-compact-surface="task"] .learner-task-workbench__main {
   display: block;
   padding: 0;
+}
+
+.learner-task-workbench--dialog[data-reader-active="true"] > .learner-task-workbench__desk {
+  display: none;
 }

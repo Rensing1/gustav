@@ -1,5 +1,6 @@
 <script lang="ts">
   import { renderMarkdown } from "$lib/utils/markdown";
+  import LearningDialogTranscriptDocument from "$lib/components/learning-unit/LearningDialogTranscriptDocument.svelte";
   import type { LearningMaterial, LearningSubmission } from "$lib/types/learning";
 
   let {
@@ -10,6 +11,8 @@
     submissions = [],
     expanded = true,
     readerMode = false,
+    courseId = null,
+    taskId = null,
     onToggle = null,
     onOpenReader = null
   }: {
@@ -20,6 +23,8 @@
     submissions?: LearningSubmission[];
     expanded?: boolean;
     readerMode?: boolean;
+    courseId?: string | null;
+    taskId?: string | null;
     onToggle?: ((referenceKey: string) => void) | null;
     onOpenReader?: ((referenceKey: string) => void) | null;
   } = $props();
@@ -142,6 +147,13 @@
           <p class="learner-reference-document__meta">
             Eigene Abgabe · Versuch {submission.attempt_nr} · {submissionDate(submission)}
           </p>
+          {#if submission.kind === "dialog" && submission.dialog_session_id && courseId && taskId}
+            <LearningDialogTranscriptDocument
+              {courseId}
+              {taskId}
+              sessionId={submission.dialog_session_id}
+            />
+          {/if}
           {#if submission.text_body}
             <div class="learner-reference-document__prose markdown-prose">
               {@html renderMarkdown(submission.text_body)}

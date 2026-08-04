@@ -40,6 +40,7 @@
     dialogContextPickerOpen = false,
     dialogExpandedContextModuleIds = [],
     dialogContextModules = [],
+    hideDialogPauseAction = false,
     enhanceSubmit = undefined,
     onToggle = null,
     onToggleReviewPanel = null,
@@ -108,6 +109,7 @@
         added: boolean;
       }>;
     }>;
+    hideDialogPauseAction?: boolean;
     enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
     onToggleReviewPanel?: (() => void) | null;
@@ -699,6 +701,7 @@
                 onToggleContextModule={onToggleDialogContextModule}
                 onAddContextReference={onAddDialogContextReference}
                 onPause={onExitSubmissionWorkspace}
+                showPauseAction={!hideDialogPauseAction}
                 onCompleted={onProgressPersisted}
               />
             {:else if task.kind === "h5p"}

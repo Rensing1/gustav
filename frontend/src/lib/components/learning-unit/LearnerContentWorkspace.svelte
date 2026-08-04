@@ -23,6 +23,7 @@
     workStatus = "editing",
     compactSurface = "task",
     navigationVisible = true,
+    collapsedItemKeys = [],
     contextModules = [],
     manualContextReferences = [],
     contextPickerOpen = false,
@@ -67,10 +68,12 @@
     workStatus?: "editing" | "result";
     compactSurface?: "task" | "materials";
     navigationVisible?: boolean;
+    collapsedItemKeys?: string[];
     contextModules?: Array<{
       id: string;
       title: string;
       current: boolean;
+      opened?: boolean;
       loaded: boolean;
       loading: boolean;
       error: string | null;
@@ -320,9 +323,10 @@
   const readerReference = $derived.by(() => referenceByKey(readingReferenceKey));
   const readerMaterial = $derived.by(() => materialForReference(readerReference));
   const readerTaskItem = $derived.by(() => taskForReference(readerReference));
+  const activeItem = $derived.by(() => activeTaskItem());
 </script>
 
-{#if mode === "orienting"}
+<div class:learner-surface--inactive={mode !== "orienting"} aria-hidden={mode !== "orienting"}>
   <section class="learner-orientation" aria-label="Orientieren">
     {#if navigationVisible}
       <WorkspaceOutline
@@ -333,7 +337,7 @@
           items: group.items.map((item) => ({ key: item.key, title: item.title }))
         }))}
         activeItemKeys={[]}
-        onOpenItem={() => {}}
+        onOpenItem={(itemKey) => document.getElementById(`orientation-${itemKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
       />
     {/if}
 
@@ -372,7 +376,7 @@
                     material={item.material}
                     domId={`orientation-${item.key}`}
                     contextLabel={null}
-                    expanded={false}
+                    expanded={!collapsedItemKeys.includes(item.key)}
                     onToggle={() => onToggleMaterial(item.key)}
                   />
                 {/if}
@@ -418,11 +422,21 @@
       {/each}
     </div>
   </section>
-{:else}
-  {@const activeItem = activeTaskItem()}
+ </div>
+
+<div class:learner-surface--inactive={mode !== "working"} aria-hidden={mode !== "working"}>
   {#if activeItem?.task}
     {@const task = activeItem.task}
     <div class="learner-task-workbench-container">
+      <header class="learner-task-header">
+        <button id="learner-task-back" class="learner-task-header__back" type="button" onclick={onPauseTask}>
+          ← Zurück zu Modul {groupForItem(activeItem)?.title ?? "Inhalte"}
+        </button>
+        <div class="learner-task-header__identity">
+          <strong>{activeItem.title}</strong>
+          <span>{workStatus === "result" ? "Ergebnis" : "In Bearbeitung"}</span>
+        </div>
+      </header>
       <section
         class:learner-task-workbench--dialog={task.kind === "dialog"}
         class="learner-task-workbench"
@@ -522,18 +536,52 @@
               {#if currentMaterials(activeItem).length}
                 <div class="learner-task-context__list">
                   {#each currentMaterials(activeItem) as materialItem}
-                    <button
-                      class="learner-task-context__item"
-                      type="button"
-                      onclick={() => onOpenContextReference?.(materialItem.key)}
-                    >
-                      <span class="learner-task-context__item-type">Aktueller Abschnitt</span>
-                      <strong>{materialItem.title}</strong>
-                    </button>
+                    <details class="learner-task-context__material" open>
+                      <summary>{materialItem.title}</summary>
+                      {#if materialItem.material?.kind === "markdown"}
+                        <div class="learner-task-context__material-preview markdown-prose">
+                          {@html renderMarkdown(materialItem.material.body_md)}
+                        </div>
+                      {:else if materialItem.material}
+                        <p class="workspace-note">{materialItem.material.filename_original ?? "Dateimaterial"}</p>
+                      {/if}
+                      <button class="learner-context-reader__back" type="button" onclick={() => onOpenContextReference?.(materialItem.key)}>
+                        Fokussiert lesen
+                      </button>
+                    </details>
                   {/each}
                 </div>
               {:else}
                 <p class="workspace-note">Für diesen Abschnitt sind keine Materialien hinterlegt.</p>
+              {/if}
+
+              {#if contextModules.some((module) => module.opened && !module.current)}
+                <div class="learner-task-context__opened" aria-label="Materialien aus geöffneten Modulen">
+                  <p class="workspace-label">Weitere geöffnete Module</p>
+                  {#each contextModules.filter((module) => module.opened && !module.current) as contextModule}
+                    <section class="learner-task-context__opened-module">
+                      <button
+                        class="learner-context-picker__module-toggle"
+                        type="button"
+                        aria-expanded={expandedContextModuleIds.includes(contextModule.id)}
+                        onclick={() => onToggleContextModule?.(contextModule.id)}
+                      >
+                        <span>Geöffnetes Modul</span>
+                        <strong>{contextModule.title}</strong>
+                      </button>
+                      {#if expandedContextModuleIds.includes(contextModule.id)}
+                        <div class="learner-context-picker__module-body">
+                          {#each contextModule.items.filter((item) => item.material) as materialItem}
+                            <button class="learner-task-context__item" type="button" onclick={() => onOpenContextReference?.(materialItem.key)}>
+                              <span class="learner-task-context__item-type">Material</span>
+                              <strong>{materialItem.title}</strong>
+                            </button>
+                          {/each}
+                        </div>
+                      {/if}
+                    </section>
+                  {/each}
+                </div>
               {/if}
 
               {#if manualContextReferences.length}
@@ -634,11 +682,6 @@
           {/if}
         </div>
 
-        <div class="learner-task-context__actions">
-          <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={onPauseTask}>
-            {workStatus === "result" ? "Zurück zu den Inhalten" : "Pausieren"}
-          </button>
-        </div>
       </aside>
       {/if}
 
@@ -674,7 +717,8 @@
           initialSubmissionMode={activeEditorMode}
           reviewPanelOpen={workStatus === "result"}
           enhanceSubmit={enhanceTaskForm?.(task.id)}
-          onExitSubmissionWorkspace={onPauseTask}
+          onExitSubmissionWorkspace={null}
+          hideDialogPauseAction={true}
           onSetDialogCompactSurface={onSetCompactSurface}
           onOpenDialogContext={onOpenContextReference}
           onCloseDialogContext={onCloseContextReader}
@@ -694,4 +738,4 @@
       <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={onPauseTask}>Zurück zu den Inhalten</button>
     </section>
   {/if}
-{/if}
+</div>

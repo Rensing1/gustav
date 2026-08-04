@@ -24,6 +24,10 @@ export type LearnerVisualSmokeCourse = {
   unitTitle: string;
 };
 
+export type LearnerNavigationCourse = LearnerVisualSmokeCourse & {
+  graphModuleId: string;
+};
+
 async function createCourse(page: Page, title: string): Promise<string> {
   const response = await page.request.post(`${webBase}/api/teaching/courses`, {
     headers: apiHeaders("/teaching/courses"),
@@ -193,6 +197,50 @@ export async function seedLearnerVisualSmokeCourse(
   await releaseSection(teacherPage, courseId, moduleId, sectionId);
   await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
   return { courseId, unitId, sectionId, taskId, courseTitle, unitTitle };
+}
+
+export async function seedLearnerNavigationCourse(
+  teacherPage: Page,
+  learnerPage: Page,
+  titlePrefix: string
+): Promise<LearnerNavigationCourse> {
+  const learnerSub = await currentUserSub(learnerPage);
+  const courseTitle = `${titlePrefix} Kurs`;
+  const unitTitle = `${titlePrefix} Einheit`;
+  const courseId = await createCourse(teacherPage, courseTitle);
+  const unitId = await createUnit(teacherPage, unitTitle, "modular");
+
+  const phasesResponse = await teacherPage.request.get(`${webBase}/api/teaching/units/${unitId}/phases`);
+  await expectApiOk(phasesResponse);
+  const phaseId = (await phasesResponse.json())[0]?.id as string;
+  const moduleResponse = await teacherPage.request.post(`${webBase}/api/teaching/units/${unitId}/modules`, {
+    headers: apiHeaders(`/teaching/units/${unitId}`),
+    data: { title: "Grundlagen", phase_id: phaseId }
+  });
+  await expectApiOk(moduleResponse, 201);
+  const graphModuleId = (await moduleResponse.json()).id as string;
+
+  const targetResponse = await teacherPage.request.get(
+    `${webBase}/api/teaching/units/${unitId}/modules/${graphModuleId}/content-target`
+  );
+  await expectApiOk(targetResponse);
+  const sectionId = (await targetResponse.json()).section_id as string;
+  await createMarkdownMaterial(
+    teacherPage,
+    unitId,
+    sectionId,
+    "Grundrechte und digitale Kommunikation",
+    "## Ausgangslage\n\nDieses Material ist beim ersten Lesen vollständig geöffnet."
+  );
+  const taskId = await createTask(teacherPage, unitId, sectionId, {
+    instruction_md: "Ordne das Material in zwei Sätzen ein.",
+    criteria: []
+  });
+
+  const courseModuleId = await attachUnitToCourse(teacherPage, courseId, unitId);
+  await releaseSection(teacherPage, courseId, courseModuleId, sectionId);
+  await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
+  return { courseId, unitId, sectionId, taskId, graphModuleId, courseTitle, unitTitle };
 }
 
 export async function seedLearnerDialogCourse(

@@ -17,9 +17,10 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "tablet" | "mobi
   const workspace = page.getByRole("region", { name: "KI-Dialog" });
   const partnerContext = workspace.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
   const composer = workspace.getByRole("region", { name: "Dialog fortsetzen" });
+  await expect(page.locator("#learner-task-back")).toBeVisible();
+  await expect(partnerContext.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
 
   if (mode === "desktop") {
-    await expect(partnerContext.getByRole("button", { name: "Pausieren" })).toBeVisible();
     await expect(partnerContext.getByRole("button", { name: "Dialog beenden" })).toBeVisible();
     await expect(composer.getByRole("button", { name: "Antwort senden" })).toBeVisible();
   } else {
@@ -28,7 +29,6 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "tablet" | "mobi
     await workspace.getByRole("button", { name: "Materialien" }).click();
     await expect(partnerContext).toBeVisible();
     await expect(composer).toBeHidden();
-    await expect(partnerContext.getByRole("button", { name: "Pausieren" })).toBeVisible();
     await workspace.getByRole("button", { name: "Aufgabe" }).click();
     await expect(composer).toBeVisible();
   }
@@ -165,7 +165,7 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     await expect(closingField).toBeVisible();
     const closingPartnerContext = learner.page.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
     const closingRegion = learner.page.getByRole("region", { name: "Abschluss vorbereiten" });
-    await expect(closingPartnerContext.getByRole("button", { name: "Pausieren" })).toBeVisible();
+    await expect(closingPartnerContext.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
     await expect(closingPartnerContext.getByRole("button", { name: "Dialog beenden" })).toHaveCount(0);
     await expect(closingRegion.getByRole("button", { name: "Zurück zum Dialog" })).toBeVisible();
     await expect(closingRegion.getByRole("button", { name: "Endgültig abgeben" })).toBeVisible();
@@ -173,7 +173,7 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     await closingField.fill("Die Auswahl der Textstellen bestimmt die Perspektive.");
     await expect(learner.page.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
 
-    await closingPartnerContext.getByRole("button", { name: "Pausieren" }).click();
+    await learner.page.locator("#learner-task-back").click();
     await expect(learner.page.getByRole("region", { name: "Orientieren" })).toBeVisible();
     await learner.page.reload();
     await learner.page.getByRole("button", { name: /beginnen/i }).first().click();

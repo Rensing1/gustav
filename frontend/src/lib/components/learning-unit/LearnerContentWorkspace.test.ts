@@ -92,6 +92,7 @@ function baseProps() {
     activeEditorMode: null,
     compactSurface: "task" as const,
     navigationVisible: true,
+    collapsedItemKeys: [],
     historyByTask: {},
     historyStateByTask: {},
     onBeginTask: vi.fn(),
@@ -119,6 +120,7 @@ describe("LearnerContentWorkspace", () => {
     expect(screen.getAllByRole("button", { name: "Modul schließen" })).toHaveLength(2);
     expect(container.querySelectorAll(".learner-orientation__module")).toHaveLength(2);
     expect(container.querySelector(".learner-task-workbench")).toBeNull();
+    expect(screen.getByText("Ein längerer Materialtext.")).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "Aufgabe 1 beginnen" }));
     expect(props.onBeginTask).toHaveBeenCalledWith("task:task-1", "text");
@@ -135,7 +137,7 @@ describe("LearnerContentWorkspace", () => {
 
     expect(screen.queryByRole("region", { name: "Orientieren" })).not.toBeInTheDocument();
     expect(container.querySelectorAll(".learner-task-workbench")).toHaveLength(1);
-    expect(container.querySelector(".learner-orientation__module")).toBeNull();
+    expect(container.querySelector(".learner-orientation__module")?.closest(".learner-surface--inactive")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Aufgabe 1 beginnen" })).not.toBeInTheDocument();
 
     const context = screen.getByRole("complementary", { name: "Aufgabe und Kontext" });
@@ -143,7 +145,8 @@ describe("LearnerContentWorkspace", () => {
     expect(within(context).getByText("Begründe deine Position zur Chatkontrolle.")).toBeInTheDocument();
     expect(within(work).queryByText("Begründe deine Position zur Chatkontrolle.")).not.toBeInTheDocument();
     expect(within(context).getByText("Grundrechte und Privatsphäre")).toBeInTheDocument();
-    expect(within(context).getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Zurück zu Modul Grundlagen/ })).toBeInTheDocument();
+    expect(within(context).queryByRole("button", { name: "Pausieren" })).not.toBeInTheDocument();
   });
 
   it("renders dialog context once instead of nesting the generic task context", async () => {
@@ -346,7 +349,8 @@ describe("LearnerContentWorkspace", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(path.resolve(currentDir, "../../styles/learning-unit.css"), "utf8");
 
-    expect(css).toMatch(/\.learner-task-workbench-container\s*\{[^}]*container-type:\s*inline-size;/s);
+    expect(css).toMatch(/\.learning-unit-stage--content\s*\{[^}]*container-type:\s*inline-size;/s);
+    expect(css).toMatch(/\.learner-task-workbench-container\s*\{[^}]*grid-template-rows:\s*minmax\(3\.25rem,\s*auto\) auto;/s);
     expect(css).toMatch(/\.learner-task-workbench\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
     expect(css).toContain("@container (min-width: 72rem)");
     expect(css).toMatch(/grid-template-columns:\s*clamp\(20rem,\s*30cqw,\s*28rem\) minmax\(0,\s*1fr\)/);

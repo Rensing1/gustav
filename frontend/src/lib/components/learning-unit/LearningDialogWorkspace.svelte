@@ -73,6 +73,7 @@
     onToggleContextModule = null,
     onAddContextReference = null,
     onPause = null,
+    showPauseAction = true,
     onCompleted = null
   }: {
     learnerSub?: string | null;
@@ -100,6 +101,7 @@
       taskId: string | null;
     }) => void) | null;
     onPause?: (() => void | Promise<void>) | null;
+    showPauseAction?: boolean;
     onCompleted?: (() => void | Promise<void>) | null;
   } = $props();
   let session = $state<DialogSession | null>(null);
@@ -426,9 +428,9 @@
 
         {#if session.status === "active" && !readOnly}
           <nav class="dialog-session-actions" aria-label="Sitzungsaktionen">
-            {#if onPause}
+            {#if showPauseAction && onPause}
               <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={() => onPause?.()}>Pausieren</button>
-            {:else}
+            {:else if showPauseAction}
               <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
             {/if}
             {#if !closingPhase}

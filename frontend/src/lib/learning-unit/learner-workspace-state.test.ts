@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   defaultLearnerWorkspaceState,
+  LEARNER_WORKSPACE_STORAGE_VERSION,
   learnerWorkspaceStorageKeys,
   normalizeLearnerWorkspaceState,
   readLearnerWorkspaceState,
@@ -11,6 +12,15 @@ import {
 } from "./learner-workspace-state";
 
 describe("learner workspace state", () => {
+  it("uses version 3 for the book, work and deliberate reader positions", () => {
+    expect(LEARNER_WORKSPACE_STORAGE_VERSION).toBe(3);
+    expect(defaultLearnerWorkspaceState().context).toMatchObject({
+      bookScrollTop: 0,
+      workScrollTop: 0,
+      readerScrollTop: 0
+    });
+  });
+
   it("starts in the reading surface without a second work surface", () => {
     expect(defaultLearnerWorkspaceState()).toMatchObject({
       surface: "reading",
@@ -79,7 +89,9 @@ describe("learner workspace state", () => {
         pickerOpen: false,
         expandedModuleIds: [],
         readingReferenceKey: "material:material-a",
-        scrollTop: 420
+        bookScrollTop: 420,
+        workScrollTop: 180,
+        readerScrollTop: 75
       },
       returnPosition: { moduleId: "module-a", scrollY: 640, focusId: "task-row-task-a" }
     };
@@ -93,6 +105,9 @@ describe("learner workspace state", () => {
     expect(persistent).not.toHaveProperty("readingReferenceKey");
     expect(tab.activeTask.taskId).toBe("task-a");
     expect(tab.context.readingReferenceKey).toBe("material:material-a");
+    expect(tab.context.bookScrollTop).toBe(420);
+    expect(tab.context.workScrollTop).toBe(180);
+    expect(tab.context.readerScrollTop).toBe(75);
     expect(tab).not.toHaveProperty("manualReferences");
   });
 
@@ -119,7 +134,9 @@ describe("learner workspace state", () => {
           pickerOpen: false,
           expandedModuleIds: ["module-open", "module-locked"],
           readingReferenceKey: "material:locked",
-          scrollTop: 100
+          bookScrollTop: 100,
+          workScrollTop: 50,
+          readerScrollTop: 25
         }
       },
       {
@@ -173,7 +190,9 @@ describe("learner workspace state", () => {
           pickerOpen: true,
           expandedModuleIds: ["module-open"],
           readingReferenceKey: "material:allowed",
-          scrollTop: 80
+          bookScrollTop: 80,
+          workScrollTop: 40,
+          readerScrollTop: 20
         },
         returnPosition: { moduleId: "module-open", scrollY: 300, focusId: "task-row-task-open" }
       })
@@ -195,6 +214,40 @@ describe("learner workspace state", () => {
     expect(restored.openedModuleIds).toEqual(["module-open"]);
     expect(restored.preferences).toEqual({ navigationVisible: false, fontSize: "large" });
     expect(restored.context.readingReferenceKey).toBe("material:allowed");
+    expect(restored.context.bookScrollTop).toBe(80);
+    expect(restored.context.workScrollTop).toBe(40);
+    expect(restored.context.readerScrollTop).toBe(20);
+  });
+
+  it("migrates version 2 without reopening its automatically focused reader", () => {
+    const keys = learnerWorkspaceStorageKeys("student-1", "course-1", "unit-1");
+    if (!keys) throw new Error("expected storage keys");
+    const sessionStorage = new Map<string, string>();
+    sessionStorage.set(
+      keys.tab,
+      JSON.stringify({
+        version: 2,
+        context: {
+          expandedReferenceKeys: ["material:allowed"],
+          readingReferenceKey: "material:allowed",
+          scrollTop: 96
+        }
+      })
+    );
+
+    const restored = readLearnerWorkspaceState({
+      localStorage: new Map(),
+      sessionStorage,
+      learnerSub: "student-1",
+      courseId: "course-1",
+      unitId: "unit-1",
+      openableModuleIds: new Set(["module-open"]),
+      accessibleReferenceKeys: new Set(["material:allowed"])
+    });
+
+    expect(restored.context.expandedReferenceKeys).toEqual(["material:allowed"]);
+    expect(restored.context.readingReferenceKey).toBeNull();
+    expect(restored.context.bookScrollTop).toBe(96);
   });
 
   it("keeps references from accessible modules before their content is loaded", () => {

@@ -435,7 +435,11 @@
       ...learnerWorkspace,
       context: {
         ...learnerWorkspace.context,
-        manualReferences: [...learnerWorkspace.context.manualReferences, reference]
+        manualReferences: [...learnerWorkspace.context.manualReferences, reference],
+        expandedReferenceKeys: [
+          ...learnerWorkspace.context.expandedReferenceKeys.filter((key) => key !== reference.key),
+          reference.key
+        ]
       }
     });
   }
@@ -470,7 +474,7 @@
         ...learnerWorkspace.context,
         compactSurface: "materials",
         readingReferenceKey: referenceKey,
-        scrollTop: 0
+        readerScrollTop: 0
       }
     });
   }
@@ -480,21 +484,20 @@
       ...learnerWorkspace,
       context: {
         ...learnerWorkspace.context,
-        readingReferenceKey: null,
-        scrollTop: 0
+        readingReferenceKey: null
       }
     });
   }
 
   function rememberContextScroll(scrollTop: number) {
-    if (Math.abs(learnerWorkspace.context.scrollTop - scrollTop) < 1) {
+    if (Math.abs(learnerWorkspace.context.bookScrollTop - scrollTop) < 1) {
       return;
     }
     setLearnerWorkspaceState({
       ...learnerWorkspace,
       context: {
         ...learnerWorkspace.context,
-        scrollTop: Math.max(0, scrollTop)
+        bookScrollTop: Math.max(0, scrollTop)
       }
     });
   }
@@ -1534,7 +1537,7 @@
                 contextPickerOpen={learnerWorkspace.context.pickerOpen}
                 expandedContextModuleIds={learnerWorkspace.context.expandedModuleIds}
                 readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
-                contextScrollTop={learnerWorkspace.context.scrollTop}
+                contextScrollTop={learnerWorkspace.context.bookScrollTop}
                 historyByTask={submissionHistoryByTask}
                 historyStateByTask={submissionHistoryStateByTask}
                 submittedTaskId={data.submittedTaskId}
@@ -1589,7 +1592,7 @@
             contextPickerOpen={learnerWorkspace.context.pickerOpen}
             expandedContextModuleIds={learnerWorkspace.context.expandedModuleIds}
             readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
-            contextScrollTop={learnerWorkspace.context.scrollTop}
+            contextScrollTop={learnerWorkspace.context.bookScrollTop}
             historyByTask={submissionHistoryByTask}
             historyStateByTask={submissionHistoryStateByTask}
             submittedTaskId={data.submittedTaskId}

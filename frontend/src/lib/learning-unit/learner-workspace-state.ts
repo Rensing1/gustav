@@ -1,4 +1,4 @@
-export const LEARNER_WORKSPACE_STORAGE_VERSION = 2;
+export const LEARNER_WORKSPACE_STORAGE_VERSION = 3;
 
 export type LearnerWorkspaceSurface = "graph" | "reading" | "task";
 export type LearnerWorkStatus = "editing" | "result";
@@ -34,7 +34,9 @@ export type LearnerWorkspaceState = {
     pickerOpen: boolean;
     expandedModuleIds: string[];
     readingReferenceKey: string | null;
-    scrollTop: number;
+    bookScrollTop: number;
+    workScrollTop: number;
+    readerScrollTop: number;
   };
   returnPosition: {
     moduleId: string | null;
@@ -71,7 +73,9 @@ export function defaultLearnerWorkspaceState(): LearnerWorkspaceState {
       pickerOpen: false,
       expandedModuleIds: [],
       readingReferenceKey: null,
-      scrollTop: 0
+      bookScrollTop: 0,
+      workScrollTop: 0,
+      readerScrollTop: 0
     },
     returnPosition: null,
     preferences: {
@@ -103,6 +107,10 @@ function uniqueStrings(value: unknown): string[] {
     return [];
   }
   return [...new Set(value.map(safeString).filter((entry): entry is string => Boolean(entry)))];
+}
+
+function safeScrollTop(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 function normalizeReference(value: unknown): LearnerContextReference | null {
@@ -208,10 +216,11 @@ export function normalizeLearnerWorkspaceState(
         access.openableModuleIds.has(id)
       ),
       readingReferenceKey: readingCandidate && referenceKeys.has(readingCandidate) ? readingCandidate : null,
-      scrollTop:
-        typeof rawContext.scrollTop === "number" && Number.isFinite(rawContext.scrollTop)
-          ? Math.max(0, rawContext.scrollTop)
-          : 0
+      bookScrollTop: safeScrollTop(
+        rawContext.bookScrollTop ?? (rawContext as { scrollTop?: unknown }).scrollTop
+      ),
+      workScrollTop: safeScrollTop(rawContext.workScrollTop),
+      readerScrollTop: safeScrollTop(rawContext.readerScrollTop)
     },
     returnPosition: rawReturn
       ? {
@@ -254,6 +263,7 @@ function parseVersioned(storage: ReadableStorage | null, key: string): Record<st
       parsed &&
       typeof parsed === "object" &&
       ((parsed as { version?: unknown }).version === LEARNER_WORKSPACE_STORAGE_VERSION ||
+        (parsed as { version?: unknown }).version === 2 ||
         (parsed as { version?: unknown }).version === 1)
     ) {
       return parsed as Record<string, unknown>;
@@ -293,6 +303,7 @@ export function readLearnerWorkspaceState({
   const persistentContext =
     persistent.context && typeof persistent.context === "object" ? persistent.context : {};
   const tabContext = tab.context && typeof tab.context === "object" ? tab.context : {};
+  const tabVersion = (tab as { version?: unknown }).version;
 
   return normalizeLearnerWorkspaceState(
     {
@@ -306,7 +317,13 @@ export function readLearnerWorkspaceState({
       context: {
         ...persistentContext,
         ...tabContext,
-        manualReferences: (persistentContext as { manualReferences?: unknown }).manualReferences
+        manualReferences: (persistentContext as { manualReferences?: unknown }).manualReferences,
+        // Version 2 opened its narrow reader automatically. Do not revive that
+        // obsolete presentation as a deliberate full-width reading choice.
+        readingReferenceKey:
+          tabVersion === 2
+            ? null
+            : (tabContext as { readingReferenceKey?: unknown }).readingReferenceKey
       }
     },
     { openableModuleIds, accessibleTaskKeys, accessibleReferenceKeys }
@@ -336,7 +353,9 @@ export function serializeLearnerWorkspaceTabState(state: LearnerWorkspaceState):
       pickerOpen: state.context.pickerOpen,
       expandedModuleIds: state.context.expandedModuleIds,
       readingReferenceKey: state.context.readingReferenceKey,
-      scrollTop: state.context.scrollTop
+      bookScrollTop: state.context.bookScrollTop,
+      workScrollTop: state.context.workScrollTop,
+      readerScrollTop: state.context.readerScrollTop
     },
     returnPosition: state.returnPosition
   });

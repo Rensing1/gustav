@@ -282,6 +282,21 @@ Verbindliche Familien:
 - `LearningDialogWorkspace`
 - `LearningResponseGroup`
 
+### Lehrenden-Arbeitsstarter
+
+`/teaching` ist keine Navigations- oder Kennzahlenübersicht. Die Seite zeigt
+zwei gleichwertige Arbeitsflächen: `Unterrichten` mit einer bewusst leeren
+Kurs-/Lerneinheiten-Auswahl und `Vorbereiten` mit höchstens drei zuletzt
+bearbeiteten Lerneinheiten. `PageActionHead` stellt den einzigen Seitenkopf;
+`QuietList` und `QuietListEntry` bilden die flachen Authoring-Zeilen.
+
+Ab `64rem` stehen beide Flächen nebeneinander und werden ausschließlich durch
+eine vertikale Linie getrennt. Darunter werden sie in derselben Reihenfolge
+gestapelt und durch eine horizontale Linie getrennt. Außenkarten,
+verschachtelte Rahmen, Kennzahlen und wiederholte Hauptnavigation sind für
+diese Seite nicht vorgesehen. Alle Zustände verwenden die zentralen Theme-,
+Fokus- und Kontrastwerte.
+
 `ModeSwitch` verbindet Navigationsziele und markiert die aktuell geöffnete Ansicht. `ChoiceSwitch` bildet dagegen eine lokale, gegenseitig ausschließende Auswahl mit nativen Radiofeldern ab. Seine aktive Option bleibt transparent und wird nur durch kräftigeren Text sowie eine zurückhaltende Akzentlinie markiert. Gefüllte Signalfarben, Schatten und Pillenformen sind für diese Auswahl nicht vorgesehen.
 
 ## 11. Lernraum und Lerneinheit

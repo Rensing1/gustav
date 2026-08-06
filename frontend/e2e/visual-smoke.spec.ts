@@ -14,6 +14,7 @@ import {
 import {
   seedH5pVisualSmokeUnit,
   seedLearnerVisualSmokeCourse,
+  seedTeacherHomeWorkStarter,
   seedTeacherVisualSmokeUnit
 } from "./support/seed-data";
 
@@ -49,6 +50,50 @@ test.describe("@visual-smoke auth shell pages", () => {
 });
 
 test.describe("@visual-smoke teacher workspace", () => {
+  test("@design-system renders the teacher work starter across themes and widths", async ({ page }) => {
+    const unique = Date.now();
+    const email = `visual_teacher_home_${unique}@${emailDomain}`;
+    await ensureTeacherUser(email, password);
+    await login(page, email, password);
+    await seedTeacherHomeWorkStarter(page, "Visual Arbeitsstart");
+    await page.goto("/teaching");
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+    });
+
+    const accountControl = page.locator(".account-trigger");
+    const updatedAt = page.locator(".teacher-home-workstarter .quiet-list-entry__meta");
+
+    for (const viewport of [
+      { name: "desktop", width: 1440, height: 900, columns: 2 },
+      { name: "tablet", width: 1024, height: 768, columns: 1 },
+      { name: "mobile", width: 390, height: 844, columns: 1 },
+    ]) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await expectNoViewportOverflow(page);
+      const columnCount = await page.locator(".teacher-home-workstarter__grid").evaluate((element) =>
+        getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean).length
+      );
+      expect(columnCount).toBe(viewport.columns);
+
+      await expect(page).toHaveScreenshot(`teacher-home-light-${viewport.name}.png`, {
+        animations: "disabled",
+        caret: "hide",
+        mask: [accountControl, updatedAt],
+      });
+
+      await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+      await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
+      await expect(page).toHaveScreenshot(`teacher-home-dark-${viewport.name}.png`, {
+        animations: "disabled",
+        caret: "hide",
+        mask: [accountControl, updatedAt],
+      });
+      await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+      await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "light");
+    }
+  });
+
   test("renders the modular teacher graph without empty or overflowing chrome", async ({ page }) => {
     const unique = Date.now();
     const email = `visual_teacher_${unique}@${emailDomain}`;

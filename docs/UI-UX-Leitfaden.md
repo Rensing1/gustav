@@ -118,8 +118,9 @@ Die visuelle Gewichtung innerhalb dieser Struktur ist ebenfalls festgelegt:
 - Die aktive Position muss klar markiert sein.
 - Die Top-Bar darf keine zweite Startseite sein. Wenig Chrome, wenig Meta,
   keine dekorativen Status-Chips.
-- Die Lehrkraft-Home-Seite `Lehrenden-Welt` bleibt als Start- und
-  Übersichtsseite unter `/teaching` erhalten, ist aber kein eigener Primärtab.
+- Die Lehrkraft-Startseite bleibt unter `/teaching` erhalten, ist aber kein
+  eigener Primärtab. Sie ist ein Arbeitsstarter für `Unterrichten` und
+  `Vorbereiten`, keine zweite Navigation oder Bestandsübersicht.
 - Das Brand-Element `[LOGO] GUSTAV` darf für Lehrkräfte explizit auf diese
   Home-Seite zurückführen.
 - Links darf ein kleines Komplettlogo mit ruhiger Wortmarke stehen. Das Logo
@@ -187,9 +188,19 @@ Der Lernraum ist die fokussierteste Fläche des Produkts.
 - H5P, Material und native Aufgaben sollen sich wie Teile derselben Oberfläche
   anfühlen, nicht wie eingebettete Fremdprodukte.
 
-### Lehrenden-Welt
+### Lehrenden-Startseite und Lehrenden-Welt
 
 Die Lehrenden-Welt ist operativer, aber nicht dashboardhaft.
+
+- `/teaching` beantwortet ausschließlich die Frage „Wo arbeite ich jetzt
+  weiter?“: Kurs und Lerneinheit für Live wählen oder eine der drei zuletzt
+  bearbeiteten Lerneinheiten öffnen.
+- Kurse, Diagnostik und die globale Navigation werden im Inhalt dieser Seite
+  nicht wiederholt. Kennzahlen und erklärende Einführungstexte entfallen.
+- Beide Arbeitswege sind auf breiten Ansichten gleichwertig und nur durch eine
+  Linie getrennt. Auf Tablet und Smartphone stehen sie untereinander.
+- `PageActionHead` bildet den knappen Seitenkopf. Letzte Lerneinheiten nutzen
+  die ruhige Listenfamilie; die abhängige Live-Auswahl bleibt fachbezogen.
 
 - Kurse, Lerneinheiten, Mitglieder und Arbeitsstände müssen schnell scanbar
   sein.

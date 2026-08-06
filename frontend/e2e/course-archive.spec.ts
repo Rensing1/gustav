@@ -13,6 +13,7 @@ async function authenticatedPage(browser: Browser): Promise<{ context: BrowserCo
 }
 
 test("@feature-acceptance teacher archives a course and learner exports only personal work", async ({ browser }) => {
+  test.setTimeout(90_000);
   const unique = Date.now();
   const teacherEmail = `e2e_teacher_archive_${unique}@${emailDomain}`;
   const learnerEmail = `e2e_learner_archive_${unique}@${emailDomain}`;
@@ -34,7 +35,21 @@ test("@feature-acceptance teacher archives a course and learner exports only per
     await teacher.page.goto("/teaching/courses");
     const activeRow = teacher.page.locator(".workspace-course-catalog__row").filter({ hasText: seeded.courseTitle });
     await expect(activeRow).toContainText("Politik-Wirtschaft · 10");
-    await activeRow.getByRole("checkbox").check();
+    const courseCatalogBox = await teacher.page.locator(".teacher-catalog").evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right };
+    });
+    await teacher.page.goto("/teaching/units");
+    await expect(teacher.page.getByRole("link", { name: seeded.unitTitle, exact: true })).toBeVisible();
+    const unitCatalogBox = await teacher.page.locator(".teacher-catalog").evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right };
+    });
+    expect(Math.abs(courseCatalogBox.left - unitCatalogBox.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(courseCatalogBox.right - unitCatalogBox.right)).toBeLessThanOrEqual(1);
+    await teacher.page.goto("/teaching/courses");
+    const refreshedActiveRow = teacher.page.locator(".workspace-course-catalog__row").filter({ hasText: seeded.courseTitle });
+    await refreshedActiveRow.getByRole("checkbox").check();
     await teacher.page.getByRole("button", { name: "Archivieren" }).click();
     await teacher.page.goto("/teaching/courses?status=archived");
     await expect(teacher.page.getByRole("link", { name: seeded.courseTitle, exact: true })).toBeVisible();

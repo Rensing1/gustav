@@ -66,14 +66,14 @@
 
 <svelte:window onkeydown={handleDialogKeydown} />
 
-<div class="workspace-page workspace-units-catalog">
+<div class="workspace-page workspace-units-catalog teacher-catalog">
   <PageActionHead title={data.pageTitle}>
     {#snippet actions()}
       <button class="workspace-link-action" type="button" onclick={openCreateDialog}>Neue Lerneinheit</button>
     {/snippet}
   </PageActionHead>
 
-  <section class="workspace-units-catalog__workspace">
+  <section class="workspace-units-catalog__workspace teacher-catalog__workspace">
     <TeacherUnitsCatalogToolbar
       query={queryDraft}
       sort={data.catalog.sort}

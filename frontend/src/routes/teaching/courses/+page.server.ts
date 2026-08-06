@@ -39,6 +39,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     showCreateDialog: url.searchParams.get("create") == "1",
     pageTitle: "Kurse",
     status: courseList.status,
+    wideWorkspaceShell: true,
   };
 };
 

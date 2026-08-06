@@ -297,6 +297,13 @@ dieselbe Zeilenstruktur; mobile Ansichten stapeln nur deren innere Informationen
 Archivierte Kursseiten bleiben strukturell identisch, kennzeichnen aber den
 schreibgeschützten Zustand und blenden fachliche Mutationen aus.
 
+Kurs- und Lerneinheitenkatalog verwenden gemeinsam `.teacher-catalog`: Beide
+richten sich an der 80-rem-Inhaltsbreite der Kopfzeile aus und teilen
+Werkzeugleisten-, Spaltenkopf- und Zeilenrhythmus. Fachlich unterschiedliche
+Spalten werden nur über `--teacher-catalog-columns` beschrieben. Eigene
+Maximalbreiten oder unabhängige Tabellenabstände in einzelnen Katalogen sind
+nicht zulässig.
+
 Das persönliche Lernarchiv der Schüler ist eine lineare Belegliste. Es zeigt
 ausschließlich eigene Abgaben und Rückmeldungen; Kursmaterialien, Teilnehmerlisten
 und fremde Leistungen werden dort weder angedeutet noch nachgeladen.

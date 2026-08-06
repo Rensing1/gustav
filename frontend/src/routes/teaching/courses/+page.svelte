@@ -31,7 +31,7 @@
 
 <svelte:head><title>Kurse | GUSTAV</title></svelte:head>
 
-<div class="workspace-page workspace-course-catalog">
+<div class="workspace-page workspace-course-catalog teacher-catalog">
   <PageActionHead title="Kurse">
     {#snippet actions()}
       <button class="workspace-link-action" type="button" onclick={() => (createDialogOpen = true)}>Neuer Kurs</button>
@@ -43,7 +43,7 @@
     <a class:active={data.status === "archived"} aria-current={data.status === "archived" ? "page" : undefined} href={catalogHref("archived")}>Archiv</a>
   </nav>
 
-  <form method="GET" class="workspace-course-catalog__filters" aria-label="Kurse filtern">
+  <form method="GET" class="workspace-course-catalog__filters teacher-catalog__toolbar" aria-label="Kurse filtern">
     {#if data.status === "archived"}<input type="hidden" name="status" value="archived" />{/if}
     <label><span>Suche</span><input name="q" value={data.filters.query} placeholder="Titel oder Fach" /></label>
     <label><span>Fach</span><input name="subject" value={data.filters.subject} placeholder="Alle Fächer" /></label>
@@ -59,15 +59,23 @@
           <button class="workspace-link-action" type="submit">Archivieren</button>
         </div>
       {/if}
+      {#if data.courses.length}
+        <div class="workspace-course-catalog__columns teacher-catalog__columns" aria-hidden="true">
+          <span>Kurs</span>
+          <span>Stammdaten</span>
+          <span>Nutzung</span>
+          <span>Aktion</span>
+        </div>
+      {/if}
       {#each data.courses as course}
-        <article class="workspace-course-catalog__row" class:workspace-course-catalog__row--incomplete={!course.metadata_complete}>
-          <label class="workspace-course-catalog__select" aria-label={`${course.title} auswählen`}>
-            <input type="checkbox" name="course_ids" value={course.id} bind:group={selected} />
-          </label>
-          <div class="workspace-course-catalog__identity">
+        <article class="workspace-course-catalog__row teacher-catalog__row-grid" class:workspace-course-catalog__row--incomplete={!course.metadata_complete}>
+          <div class="workspace-course-catalog__main">
+            <label class="workspace-course-catalog__select" aria-label={`${course.title} auswählen`}>
+              <input type="checkbox" name="course_ids" value={course.id} bind:group={selected} />
+            </label>
             <a href={course.href}><strong>{course.title}</strong></a>
-            <span>{metadata(course)}</span>
           </div>
+          <span class="workspace-course-catalog__metadata">{metadata(course)}</span>
           <span class="workspace-course-catalog__counts">{course.members_count} Mitglieder · {course.units_count} Lerneinheiten</span>
           <a class="workspace-link-action" href={course.href}>{course.members_count === 0 ? "Mitglieder hinzufügen" : course.units_count === 0 ? "Erste Lerneinheit hinzufügen" : "Kurs verwalten"}</a>
         </article>
@@ -78,14 +86,21 @@
     </form>
   {:else}
     <div class="workspace-course-catalog__list">
+      {#if data.courses.length}
+        <div class="workspace-course-catalog__columns teacher-catalog__columns" aria-hidden="true">
+          <span>Kurs</span>
+          <span>Stammdaten</span>
+          <span>Nutzung</span>
+          <span>Aktion</span>
+        </div>
+      {/if}
       {#each data.courses as course, index}
         {#if index === 0 || data.courses[index - 1]?.school_year_start !== course.school_year_start}
           <h2 class="workspace-course-catalog__year">{schoolYearLabel(course.school_year_start)}</h2>
         {/if}
-        <article class="workspace-course-catalog__row">
-          <div class="workspace-course-catalog__identity">
-            <a href={course.href}><strong>{course.title}</strong></a><span>{metadata(course)}</span>
-          </div>
+        <article class="workspace-course-catalog__row teacher-catalog__row-grid">
+          <div class="workspace-course-catalog__main"><a href={course.href}><strong>{course.title}</strong></a></div>
+          <span class="workspace-course-catalog__metadata">{metadata(course)}</span>
           <span class="workspace-course-catalog__counts">{course.members_count} Mitglieder · {course.units_count} Lerneinheiten</span>
           <form method="POST" action="?/restoreCourse">
             <input type="hidden" name="course_id" value={course.id} />

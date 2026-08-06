@@ -25,8 +25,8 @@
   }
 </script>
 
-<section class="teacher-units-catalog-toolbar">
-  <div class="teacher-units-catalog-toolbar__controls">
+<section class="teacher-units-catalog-toolbar teacher-catalog__toolbar">
+  <div class="teacher-units-catalog-toolbar__controls teacher-catalog__toolbar-controls">
     <div class="teacher-units-catalog-toolbar__search">
       <label>
         <span>Suche</span>

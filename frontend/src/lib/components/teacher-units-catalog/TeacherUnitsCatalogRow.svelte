@@ -38,7 +38,7 @@
 </script>
 
 <li class="teacher-units-catalog-row">
-  <div class="teacher-units-catalog-row__grid">
+  <div class="teacher-units-catalog-row__grid teacher-catalog__row-grid">
     <div class="teacher-units-catalog-row__main">
       <a class="teacher-units-catalog-row__title" href={unit.href}>
         <strong>{unit.title}</strong>
@@ -55,7 +55,7 @@
 
     <div class="teacher-units-catalog-row__time">
       <span class="teacher-units-catalog-row__kicker">Aktualisiert</span>
-      <span>{formatUpdatedAt(unit.updated_at)}</span>
+      <time datetime={unit.updated_at}>{formatUpdatedAt(unit.updated_at)}</time>
     </div>
 
     <div class="teacher-units-catalog-row__actions">

@@ -152,8 +152,26 @@ test.describe("@visual-smoke teacher workspace", () => {
 
       await teacher.page.goto("/teaching/courses");
       await expect(teacher.page.getByRole("link", { name: seeded.courseTitle, exact: true })).toBeVisible();
+      await teacher.page.setViewportSize({ width: 1440, height: 900 });
+      const courseCatalogBox = await teacher.page.locator(".teacher-catalog").evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right, width: box.width };
+      });
       await capture(teacher.page, "teacher-courses-active");
 
+      await teacher.page.goto("/teaching/units");
+      await expect(teacher.page.getByRole("link", { name: seeded.unitTitle, exact: true })).toBeVisible();
+      await teacher.page.setViewportSize({ width: 1440, height: 900 });
+      const unitCatalogBox = await teacher.page.locator(".teacher-catalog").evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right, width: box.width };
+      });
+      expect(Math.abs(courseCatalogBox.left - unitCatalogBox.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(courseCatalogBox.right - unitCatalogBox.right)).toBeLessThanOrEqual(1);
+      expect(Math.abs(courseCatalogBox.width - unitCatalogBox.width)).toBeLessThanOrEqual(1);
+      await capture(teacher.page, "teacher-units-catalog");
+
+      await teacher.page.goto("/teaching/courses");
       const row = teacher.page.locator(".workspace-course-catalog__row").filter({ hasText: seeded.courseTitle });
       await row.getByRole("checkbox").check();
       await teacher.page.getByRole("button", { name: "Archivieren" }).click();

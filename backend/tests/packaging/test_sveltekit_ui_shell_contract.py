@@ -360,9 +360,11 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
         encoding="utf-8"
     )
     assert ".workspace-course-catalog__row" in style_src
-    assert "grid-template-columns: auto minmax(16rem, 1fr) auto auto;" in style_src
+    assert ".teacher-catalog {" in style_src
+    assert "grid-template-columns: var(--teacher-catalog-columns);" in style_src
+    assert ".workspace-course-catalog {" in style_src
     assert ".workspace-course-catalog__scopes" in style_src
-    assert "min-height: 4.5rem;" in style_src
+    assert "min-height: 4.75rem;" in style_src
     assert "gap: var(--space-4);" in style_src
 
     root_page_src = (REPO_ROOT / "frontend" / "src" / "routes" / "+page.svelte").read_text(

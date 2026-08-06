@@ -41,14 +41,14 @@
   }
 </script>
 
-<section class="teacher-units-catalog-list">
+<section class="teacher-units-catalog-list teacher-catalog__table">
   <div class="teacher-units-catalog-list__meta">
     <p>Zeige {resultCount} Einheiten</p>
     <p>{relativeUpdateLabel(items)}</p>
   </div>
 
   {#if items.length}
-    <div class="teacher-units-catalog-list__columns" aria-hidden="true">
+    <div class="teacher-units-catalog-list__columns teacher-catalog__columns" aria-hidden="true">
       <span>Titel & Beschreibung</span>
       <span>Kurse</span>
       <span>Update</span>

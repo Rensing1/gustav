@@ -53,6 +53,10 @@ describe("TeacherLiveLauncher", () => {
     expect(screen.getByRole("button", { name: "Live öffnen" })).not.toBeDisabled();
     expect(screen.getByRole("combobox", { name: "Kurs" })).toHaveAttribute("name", "course_id");
     expect(unitSelect).toHaveAttribute("name", "unit_id");
+    expect(fetch).toHaveBeenCalledWith(
+      "/teaching/live-options/courses/course-1/units",
+      expect.objectContaining({ credentials: "include" })
+    );
   });
 
   it("ignores a stale unit response after a rapid course change", async () => {

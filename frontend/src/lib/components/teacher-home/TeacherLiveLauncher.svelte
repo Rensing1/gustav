@@ -38,7 +38,7 @@
 
     unitsLoading = true;
     try {
-      const response = await fetch(`/api/live/views/courses/${encodeURIComponent(courseId)}/units`, {
+      const response = await fetch(`/teaching/live-options/courses/${encodeURIComponent(courseId)}/units`, {
         cache: "no-store",
         credentials: "include",
         signal: requestController?.signal,

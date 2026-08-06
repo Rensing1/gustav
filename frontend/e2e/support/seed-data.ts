@@ -16,6 +16,13 @@ export type TeacherDialogAuthoringUnit = {
   moduleId: string;
 };
 
+export type TeacherHomeWorkStarter = {
+  courseId: string;
+  courseTitle: string;
+  unitId: string;
+  unitTitle: string;
+};
+
 export type LearnerVisualSmokeCourse = {
   courseId: string;
   unitId: string;
@@ -196,6 +203,21 @@ export async function seedTeacherVisualSmokeUnit(page: Page, title: string): Pro
   }
 
   return { unitId, title, moduleIds };
+}
+
+export async function seedTeacherHomeWorkStarter(page: Page, titlePrefix: string): Promise<TeacherHomeWorkStarter> {
+  const courseTitle = `${titlePrefix} Kurs`;
+  const unitTitle = `${titlePrefix} Lerneinheit`;
+  const courseId = await createCourse(page, courseTitle);
+  const unitId = await createUnit(page, unitTitle);
+  const sectionId = await createSection(page, unitId, "Start");
+  await createTask(page, unitId, sectionId, {
+    instruction_md: "Begründe deine Position in zwei Sätzen.",
+    criteria: [],
+  });
+  await attachUnitToCourse(page, courseId, unitId);
+
+  return { courseId, courseTitle, unitId, unitTitle };
 }
 
 export async function seedTeacherDialogAuthoringUnit(

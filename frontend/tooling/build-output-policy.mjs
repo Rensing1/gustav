@@ -1,5 +1,5 @@
 const ALLOWED_D3_CYCLE = /node_modules\/d3-(selection|interpolate|transition)\//;
-const ALLOWED_XYFLOW_SSR_IMPORT = /"handleConnectionChange".*"@xyflow\/system".*node_modules\/@xyflow\/svelte\/dist\/lib\/hooks\/useNodeConnections\.svelte\.js.*node_modules\/@xyflow\/svelte\/dist\/lib\/components\/Handle\/Handle\.svelte/;
+const ALLOWED_XYFLOW_SSR_IMPORT = /^(?=.*"handleConnectionChange")(?=.*"@xyflow\/system")(?=.*node_modules\/@xyflow\/svelte\/dist\/lib\/hooks\/useNodeConnections\.svelte\.js)(?=.*node_modules\/@xyflow\/svelte\/dist\/lib\/components\/Handle\/Handle\.svelte).*$/;
 
 /** Classify warnings from both Vite and adapter-node's final Rollup pass. */
 export function classifyBuildOutput(output) {

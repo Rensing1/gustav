@@ -11,8 +11,10 @@ test("allows only documented D3 cycles", () => {
 
 test("allows only XYFlow's exact Svelte SSR unused-import false positive", () => {
   const known = classifyBuildOutput('"handleConnectionChange" is imported from external module "@xyflow/system" but never used in "node_modules/@xyflow/svelte/dist/lib/hooks/useNodeConnections.svelte.js" and "node_modules/@xyflow/svelte/dist/lib/components/Handle/Handle.svelte".');
+  const knownReversed = classifyBuildOutput('"handleConnectionChange" is imported from external module "@xyflow/system" but never used in "node_modules/@xyflow/svelte/dist/lib/components/Handle/Handle.svelte" and "node_modules/@xyflow/svelte/dist/lib/hooks/useNodeConnections.svelte.js".');
   const unknown = classifyBuildOutput('"handleConnectionChange" is imported from external module "@xyflow/system" but never used in "src/example.js".');
   assert.equal(known.allowedWarnings.length, 1);
+  assert.equal(knownReversed.allowedWarnings.length, 1);
   assert.equal(unknown.blockingWarnings.length, 1);
 });
 

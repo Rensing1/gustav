@@ -232,7 +232,7 @@
 
 <svelte:head>
   <title>GUSTAV</title>
-  <meta name="theme-color" content={currentTheme === "dark" ? "#272E33" : "#FAF4ED"} />
+  <meta name="theme-color" content={currentTheme === "dark" ? "#121212" : "#f9f9f9"} />
 </svelte:head>
 
 <svelte:window onclick={closeAccountMenuOnWindowClick} />

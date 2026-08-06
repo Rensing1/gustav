@@ -353,6 +353,8 @@ Verbindliche Familien:
   ausgegeben
 - Unterstützt werden mindestens: Überschriften, Fett, Kursiv, Listen,
   nummerierte Listen, Links, Tabellen, `<br>`
+- Die Lernraum-Kopfzeile verwendet in beiden Themes die neutralen zentralen Oberflächenfarben. Der Markdown-Editor bildet aus Werkzeugleiste und Schreibbereich eine einzige gerahmte Eingabefläche; feste helle Sonderfarben, Aktionsschatten und voneinander abgesetzte Editorboxen sind nicht zulässig.
+- Editorwerkzeuge brechen auf schmalen Komponentenbreiten geordnet um. Aktive Formatierungen werden durch eine dünne Akzentkante gekennzeichnet; Fokus, Platzhalter, Auswahl, Links und Tabellen müssen in Light und Dark lesbar bleiben.
 - Lernraum-spezifische Overrides unter `.learning-unit-content-shell` gehören in
   das aktive Lernraum-CSS-Bundle (`frontend/src/lib/styles/learning-unit.css`
   plus gemeinsame Primitives), nicht zurück in `frontend/src/lib/styles/design-system.css`,

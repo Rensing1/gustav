@@ -209,7 +209,7 @@
 }
 
 .app-topbar--learner-unit {
-  background: rgba(251, 249, 244, 0.92);
+  background: color-mix(in srgb, var(--color-bg-surface) 94%, var(--color-bg-base) 6%);
   backdrop-filter: blur(12px);
 }
 
@@ -1994,14 +1994,25 @@
 
 .learning-markdown-editor {
   display: grid;
-  gap: 0.5rem;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, var(--color-line) 28%);
+  border-radius: var(--radius-l);
+  background: var(--color-bg-surface);
+  box-shadow: none;
+  container-type: inline-size;
+  transition: border-color 140ms ease;
+}
+
+.learning-markdown-editor:focus-within {
+  border-color: color-mix(in srgb, var(--color-accent) 64%, var(--color-border) 36%);
 }
 
 .learning-markdown-editor__surface {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-border) 68%, white 32%);
-  border-radius: 0.24rem;
-  background: #fbf9f4;
+  border: 0;
+  background: var(--color-bg-surface);
   box-shadow: none;
 }
 
@@ -2028,8 +2039,8 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.48rem 0.55rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 66%, white 34%);
-  background: #f7f4ed;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-bg-muted);
 }
 
 .learning-markdown-editor__toolbar button,
@@ -2037,22 +2048,31 @@
 .learning-markdown-editor__link-panel button,
 .learning-markdown-editor__link-panel input {
   min-height: 2rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.2rem;
-  background: var(--color-bg-elevated);
+  border: 1px solid color-mix(in srgb, var(--color-border) 58%, var(--color-bg-surface) 42%);
+  border-radius: var(--radius-s);
+  background: var(--color-bg-surface);
   color: var(--color-text);
   font: inherit;
+  box-shadow: none;
 }
 
 .learning-markdown-editor__toolbar button,
 .learning-markdown-editor__link-panel button {
   padding: 0.28rem 0.5rem;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.learning-markdown-editor__toolbar button:hover,
+.learning-markdown-editor__link-panel button:hover {
+  background: var(--color-bg-elevated);
 }
 
 .learning-markdown-editor__toolbar button.active {
-  border-color: var(--color-accent-strong);
-  background: var(--color-accent-soft);
+  border-color: color-mix(in srgb, var(--color-border) 58%, var(--color-bg-surface) 42%);
+  border-bottom-color: var(--color-accent);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
 }
 
 .learning-markdown-editor__table-actions {
@@ -2066,7 +2086,7 @@
 
 .learning-markdown-editor__link-error {
   width: 100%;
-  color: var(--color-danger, #9d1c16);
+  color: var(--color-danger);
   font-size: 0.84rem;
 }
 
@@ -2081,6 +2101,12 @@
   font-size: 1.02rem;
   line-height: 1.72;
   color: var(--color-text);
+  caret-color: var(--color-accent);
+}
+
+.learning-markdown-editor__surface .tiptap::selection,
+.learning-markdown-editor__surface .tiptap *::selection {
+  background: var(--color-accent-soft);
 }
 
 .learning-markdown-editor__surface .tiptap p.is-editor-empty:first-child::before {
@@ -2102,6 +2128,16 @@
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--color-border);
   vertical-align: top;
+}
+
+@container (max-width: 32rem) {
+  .learning-markdown-editor__toolbar select {
+    flex: 1 1 100%;
+  }
+
+  .learning-markdown-editor__toolbar button {
+    flex: 1 1 auto;
+  }
 }
 
 .learning-submission-editor__actions {

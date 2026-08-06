@@ -65,4 +65,18 @@ describe("MarkdownWysiwygEditor", () => {
     expect(proseMirrorRules).toMatch(/-webkit-overflow-scrolling:\s*touch\s*;/);
     expect(proseMirrorRules).toMatch(/min-height:\s*22rem\s*;/);
   });
+
+  it("uses theme surfaces for one cohesive editor instead of fixed light colors", () => {
+    const css = readWorkspaceCssBundle(stylesDir);
+    const editorRules = Array.from(css.matchAll(/\.learning-markdown-editor[^{}]*\{(?<body>[^}]*)\}/gs))
+      .map((match) => match.groups?.body ?? "")
+      .join("\n");
+
+    expect(editorRules).not.toMatch(/#fbf9f4|#f7f4ed|,\s*white\b/i);
+    expect(editorRules).toContain("var(--color-bg-surface)");
+    expect(editorRules).toContain("var(--color-bg-muted)");
+    expect(editorRules).toContain("box-shadow: none");
+    expect(css).toMatch(/\.learning-markdown-editor:focus-within\s*\{/);
+    expect(css).toMatch(/\.learning-markdown-editor__toolbar button\.active\s*\{[^}]*border-bottom-color:\s*var\(--color-accent\)/s);
+  });
 });

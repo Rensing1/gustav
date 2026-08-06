@@ -338,7 +338,10 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
     teaching_page_src = (
         REPO_ROOT / "frontend" / "src" / "routes" / "teaching" / "+page.svelte"
     ).read_text(encoding="utf-8")
-    assert "workspace-list" in teaching_page_src
+    assert "PageActionHead" in teaching_page_src
+    assert "QuietList" in teaching_page_src
+    assert "TeacherLiveLauncher" in teaching_page_src
+    assert "workspace-list" not in teaching_page_src
     assert "workspace-section--hero" not in teaching_page_src
 
     teaching_courses_src = (

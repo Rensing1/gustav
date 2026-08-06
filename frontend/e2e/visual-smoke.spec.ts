@@ -1,6 +1,8 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 import { currentUserSub, login } from "./support/auth";
+import { apiHeaders, expectApiOk } from "./support/api";
+import { makeCourseMetadataIncomplete } from "./support/course-fixture";
 import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import {
@@ -110,7 +112,7 @@ test.describe("@visual-smoke teacher workspace", () => {
   });
 
   test("@design-system renders the active catalog, school-year archive and personal learning archive", async ({ browser }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     const unique = Date.now();
     const teacherEmail = `visual_teacher_archive_${unique}@${emailDomain}`;
     const learnerEmail = `visual_learner_archive_${unique}@${emailDomain}`;
@@ -121,6 +123,9 @@ test.describe("@visual-smoke teacher workspace", () => {
 
     const capture = async (page: Page, prefix: string) => {
       await page.evaluate(async () => { await document.fonts.ready; });
+      await page.locator("time").evaluateAll((items) => {
+        for (const item of items) item.textContent = "01.08.2026, 12:00";
+      });
       await page.locator(".learning-portfolio__feedback").evaluateAll((items) => {
         for (const item of items) {
           item.innerHTML = "<p>Die Rückmeldung ordnet die eigene Lernleistung nachvollziehbar ein und nennt einen konkreten nächsten Schritt.</p>";
@@ -159,6 +164,33 @@ test.describe("@visual-smoke teacher workspace", () => {
       });
       await capture(teacher.page, "teacher-courses-active");
 
+      await teacher.page.goto(`/teaching/courses/${seeded.courseId}`);
+      await teacher.page.setViewportSize({ width: 1440, height: 900 });
+      await expect(teacher.page.locator(".teacher-course-workspace")).toBeVisible();
+      const courseWorkspaceBox = await teacher.page.locator(".teacher-course-workspace").evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right, width: box.width };
+      });
+      expect(Math.abs(courseCatalogBox.left - courseWorkspaceBox.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(courseCatalogBox.right - courseWorkspaceBox.right)).toBeLessThanOrEqual(1);
+      expect(Math.abs(courseCatalogBox.width - courseWorkspaceBox.width)).toBeLessThanOrEqual(1);
+      await capture(teacher.page, "teacher-course-detail-active");
+
+      await makeCourseMetadataIncomplete(seeded.courseId);
+      await teacher.page.reload();
+      await expect(teacher.page.getByText("Kursdaten unvollständig:")).toBeVisible();
+      await capture(teacher.page, "teacher-course-detail-incomplete");
+
+      const restoreMetadataResponse = await teacher.page.request.patch(`${webBase}/api/teaching/courses/${seeded.courseId}`, {
+        headers: apiHeaders(`/teaching/courses/${seeded.courseId}`),
+        data: {
+          subject: "Testfach",
+          grade_level: "Jahrgangsübergreifend",
+          school_year_start: new Date().getFullYear()
+        }
+      });
+      await expectApiOk(restoreMetadataResponse, 200);
+
       await teacher.page.goto("/teaching/units");
       await expect(teacher.page.getByRole("link", { name: seeded.unitTitle, exact: true })).toBeVisible();
       await teacher.page.setViewportSize({ width: 1440, height: 900 });
@@ -178,6 +210,10 @@ test.describe("@visual-smoke teacher workspace", () => {
       await teacher.page.goto("/teaching/courses?status=archived");
       await expect(teacher.page.getByRole("link", { name: seeded.courseTitle, exact: true })).toBeVisible();
       await capture(teacher.page, "teacher-courses-archive");
+
+      await teacher.page.goto(`/teaching/courses/${seeded.courseId}`);
+      await expect(teacher.page.getByText("Archiviert · schreibgeschützt")).toBeVisible();
+      await capture(teacher.page, "teacher-course-detail-archived");
 
       await learner.page.goto(`/learning/courses/${seeded.courseId}/archive`);
       await expect(learner.page.getByText(seeded.previousSubmissionText)).toBeVisible();

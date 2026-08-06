@@ -225,11 +225,74 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
   expect(closingShadow).toContain("4px 4px 0px");
 }
 
+async function expectChoiceSwitchDesignContract(page: Page): Promise<void> {
+  const preview = page.getByTestId("preview-choice-switches");
+  const contract = await preview.evaluate((surface) => {
+    const switches = Array.from(surface.querySelectorAll(".choice-switch"));
+    const firstOptions = switches[0]?.querySelectorAll(".choice-switch__option");
+    const activeOption = surface.querySelector('.choice-switch__option[data-current="true"]');
+    const activeLabel = activeOption?.querySelector("span");
+    const inactiveOption = surface.querySelector('.choice-switch__option[data-current="false"]');
+    if (
+      switches.length !== 2 ||
+      !firstOptions ||
+      firstOptions.length !== 2 ||
+      !(activeOption instanceof HTMLElement) ||
+      !(activeLabel instanceof HTMLElement) ||
+      !(inactiveOption instanceof HTMLElement)
+    ) {
+      throw new Error("UI lab is missing the answer format choice states");
+    }
+
+    const surfaceBox = surface.getBoundingClientRect();
+    const firstBox = firstOptions[0].getBoundingClientRect();
+    const secondBox = firstOptions[1].getBoundingClientRect();
+    const activeStyle = getComputedStyle(activeOption);
+    const activeLabelStyle = getComputedStyle(activeLabel);
+    const inactiveStyle = getComputedStyle(inactiveOption);
+
+    return {
+      surfaceWidth: surfaceBox.width,
+      firstWidth: firstBox.width,
+      secondWidth: secondBox.width,
+      activeBackground: activeStyle.backgroundColor,
+      activeColor: activeStyle.color,
+      activeShadow: activeStyle.boxShadow,
+      activeRadius: activeStyle.borderRadius,
+      activeUnderlineWidth: activeLabelStyle.borderBottomWidth,
+      activeUnderlineStyle: activeLabelStyle.borderBottomStyle,
+      inactiveColor: inactiveStyle.color
+    };
+  });
+
+  expect(contract.activeBackground).toBe("rgba(0, 0, 0, 0)");
+  expect(contract.activeShadow).toBe("none");
+  expect(contract.activeRadius).toBe("0px");
+  expect(contract.activeUnderlineWidth).toBe("3px");
+  expect(contract.activeUnderlineStyle).toBe("solid");
+  expect(contract.activeColor).not.toBe(contract.inactiveColor);
+  if (contract.surfaceWidth <= 480) {
+    expect(Math.abs(contract.firstWidth - contract.secondWidth)).toBeLessThanOrEqual(1);
+  }
+}
+
 async function expectDialogStatesScreenshot(page: Page, name: string): Promise<void> {
   // The sticky product top bar would otherwise cover the isolated component after Playwright scrolls it into view.
   const isolationStyle = await page.addStyleTag({ content: ".app-topbar { display: none !important; }" });
   try {
     await expect(page.getByTestId("preview-dialog-states")).toHaveScreenshot(name, {
+      animations: "disabled",
+      caret: "hide"
+    });
+  } finally {
+    await isolationStyle.evaluate((style) => style.remove());
+  }
+}
+
+async function expectChoiceSwitchScreenshot(page: Page, name: string): Promise<void> {
+  const isolationStyle = await page.addStyleTag({ content: ".app-topbar { display: none !important; }" });
+  try {
+    await expect(page.getByTestId("preview-choice-switches")).toHaveScreenshot(name, {
       animations: "disabled",
       caret: "hide"
     });
@@ -248,6 +311,7 @@ test.describe("@visual-smoke @design-system contrast design contract", () => {
       await openUiLab(page, viewport);
       await expectContrastDesignContract(page);
       await expectDialogDesignContract(page);
+      await expectChoiceSwitchDesignContract(page);
       await expect(page).toHaveScreenshot(`ui-lab-light-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide"
@@ -272,17 +336,20 @@ test.describe("@visual-smoke @design-system contrast design contract", () => {
       expect(darkContract.shadow).toContain("4px 4px 0 0");
       expect(darkContract.shadow).toContain("240, 241, 241");
       await expectDialogDesignContract(page);
+      await expectChoiceSwitchDesignContract(page);
       await expect(page).toHaveScreenshot(`ui-lab-dark-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide"
       });
       await expectDialogStatesScreenshot(page, `dialog-states-dark-${viewport.name}.png`);
+      await expectChoiceSwitchScreenshot(page, `choice-switch-dark-${viewport.name}.png`);
 
       await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
       await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "light");
       await page.getByRole("button", { name: "Light", exact: true }).click();
       await expect(page.locator(".preview-page")).toHaveAttribute("data-theme", "light");
       await expectDialogStatesScreenshot(page, `dialog-states-light-${viewport.name}.png`);
+      await expectChoiceSwitchScreenshot(page, `choice-switch-light-${viewport.name}.png`);
     });
   }
 });

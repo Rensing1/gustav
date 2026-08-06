@@ -41,6 +41,29 @@ test("@feature-acceptance follows graph, reading and task as one authenticated l
     await expect(learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" })).toBeVisible();
     await expectNoViewportOverflow(learner.page);
 
+    const answerFormat = learner.page.getByRole("group", { name: "Antwortform" });
+    const textEditor = learner.page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
+    await expect(answerFormat.getByRole("radio", { name: "Text schreiben" })).toBeChecked();
+    await textEditor.fill("Dieser Entwurf bleibt beim Wechsel erhalten.");
+
+    await answerFormat.getByRole("radio", { name: "Text schreiben" }).focus();
+    await learner.page.keyboard.press("ArrowRight");
+    await expect(answerFormat.getByRole("radio", { name: "Datei hochladen" })).toBeChecked();
+    await learner.page.getByLabel("Datei auswählen").setInputFiles({
+      name: "beleg.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n%%EOF\n")
+    });
+    await expect(learner.page.getByText("beleg.pdf")).toBeVisible();
+
+    await answerFormat.getByText("Text schreiben", { exact: true }).click();
+    await expect(answerFormat.getByRole("radio", { name: "Text schreiben" })).toBeChecked();
+    await expect(textEditor).toContainText("Dieser Entwurf bleibt beim Wechsel erhalten.");
+    await answerFormat.getByText("Datei hochladen", { exact: true }).click();
+    await expect(answerFormat.getByRole("radio", { name: "Datei hochladen" })).toBeChecked();
+    await expect(learner.page.getByText("beleg.pdf")).toBeVisible();
+    await expect(learner.page.getByRole("group", { name: "Antwortform" })).toHaveCount(1);
+
     const book = learner.page.getByRole("complementary", { name: "Aufgabe und Kontext" });
     await book.getByRole("button", { name: "Kontext hinzufügen" }).click();
     await book.getByRole("button", { name: /Weiteres Modul.*Quellen/ }).click();

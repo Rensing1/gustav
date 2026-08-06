@@ -7,6 +7,8 @@ Requires that migrations have been applied (e.g., `supabase migration up`).
 from __future__ import annotations
 
 import os
+from uuid import uuid4
+
 import pytest
 
 
@@ -39,19 +41,20 @@ async def test_db_repo_create_and_list_courses_when_db_available():
     from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
     repo = DBTeachingRepo(dsn=dsn)
+    teacher_id = f"teacher-db-{uuid4()}"
     # Create
-    c = repo.create_course(title="Chemie EF", subject="Chemie", grade_level="EF", term="2025-1", teacher_id="teacher-db-1")
+    c = repo.create_course(title="Chemie EF", subject="Chemie", grade_level="EF", term="2025-1", teacher_id=teacher_id)
     assert c["title"] == "Chemie EF"
-    assert c["teacher_id"] == "teacher-db-1"
+    assert c["teacher_id"] == teacher_id
 
     # List for teacher
-    arr = repo.list_courses_for_teacher(teacher_id="teacher-db-1", limit=10, offset=0)
+    arr = repo.list_courses_for_teacher(teacher_id=teacher_id, limit=10, offset=0)
     assert any(x["id"] == c["id"] for x in arr)
 
     # The unfiltered catalog is the normal browser entry point. PostgreSQL
     # still needs an explicit type for the nullable school-year parameter.
     catalog = repo.list_course_catalog_for_owner(
-        owner_sub="teacher-db-1",
+        owner_sub=teacher_id,
         status="active",
         query="",
         school_year_start=None,

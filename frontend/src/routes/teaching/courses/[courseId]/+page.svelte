@@ -1,4 +1,6 @@
 <script lang="ts">
+  import TeacherCourseUnitList from "$lib/components/teacher-course/TeacherCourseUnitList.svelte";
+  import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -9,9 +11,6 @@
   let membersDrawerOpen = $state(false);
   let memberFilter = $state("");
   let pendingMemberRemoval = $state<string | null>(null);
-  let pendingUnitRemoval = $state<string | null>(null);
-  let draggedModuleId = $state<string | null>(null);
-  let unitOrder = $state<PageData["assignedUnits"]>([]);
 
   function pageHref(extra: Record<string, string> = {}): string {
     const params = new URLSearchParams(extra);
@@ -55,7 +54,6 @@
     return data.members.filter((member) => member.name.toLocaleLowerCase("de-DE").includes(query));
   });
 
-  const memberPreview = $derived(data.members.slice(0, 4));
   const memberDialogQuery = $derived(form?.addMember?.values?.query ?? data.memberSearchQuery);
   const courseFormValues = $derived({
     title: form?.saveCourse?.values?.title ?? data.course.title,
@@ -65,57 +63,23 @@
     schoolYearStart: form?.saveCourse?.values?.schoolYearStart ?? (data.course.school_year_start ?? ""),
   });
   const readOnly = $derived(data.course.status === "archived");
-  const unitOrderChanged = $derived(
-    unitOrder.length == data.assignedUnits.length
-      && unitOrder.some((unit, index) => unit.module_id != data.assignedUnits[index]?.module_id)
-  );
-
-  function onDragStart(moduleId: string): void {
-    draggedModuleId = moduleId;
-  }
-
-  function moveUnit(moduleId: string, offset: number): void {
-    const current = [...unitOrder];
-    const sourceIndex = current.findIndex((unit) => unit.module_id == moduleId);
-    const targetIndex = sourceIndex + offset;
-
-    if (sourceIndex == -1 || targetIndex < 0 || targetIndex >= current.length) {
-      return;
-    }
-
-    const [moved] = current.splice(sourceIndex, 1);
-    current.splice(targetIndex, 0, moved);
-    unitOrder = current.map((unit, index) => ({ ...unit, position: index + 1 }));
-  }
-
-  function onDrop(targetModuleId: string): void {
-    if (!draggedModuleId || draggedModuleId == targetModuleId) {
-      draggedModuleId = null;
-      return;
-    }
-
-    const current = [...unitOrder];
-    const sourceIndex = current.findIndex((unit) => unit.module_id == draggedModuleId);
-    const targetIndex = current.findIndex((unit) => unit.module_id == targetModuleId);
-
-    if (sourceIndex == -1 || targetIndex == -1) {
-      draggedModuleId = null;
-      return;
-    }
-
-    const [moved] = current.splice(sourceIndex, 1);
-    current.splice(targetIndex, 0, moved);
-    unitOrder = current.map((unit, index) => ({ ...unit, position: index + 1 }));
-    draggedModuleId = null;
-  }
-
-  function resetUnitOrder(): void {
-    unitOrder = data.assignedUnits;
-  }
-
-  $effect(() => {
-    unitOrder = data.assignedUnits;
-  });
+  const canMutate = $derived(!readOnly && data.course.metadata_complete);
+  const missingMetadata = $derived([
+    ...(!data.course.subject ? ["Fach"] : []),
+    ...(!data.course.grade_level ? ["Jahrgang"] : []),
+    ...(data.course.school_year_start == null ? ["Schuljahr"] : [])
+  ]);
+  const courseMetadata = $derived([
+    data.course.subject,
+    data.course.grade_level === "Jahrgangsübergreifend"
+      ? data.course.grade_level
+      : data.course.grade_level ? `Jahrgang ${data.course.grade_level}` : null,
+    data.course.school_year_start == null
+      ? null
+      : `${data.course.school_year_start}/${String((data.course.school_year_start + 1) % 100).padStart(2, "0")}`,
+    `${data.assignedUnits.length} ${data.assignedUnits.length === 1 ? "Lerneinheit" : "Lerneinheiten"}`,
+    `${data.members.length} ${data.members.length === 1 ? "Lernender" : "Lernende"}`
+  ].filter((value): value is string => Boolean(value)).join(" · "));
 
   $effect(() => {
     addUnitDialogOpen = Boolean(data.showAddUnitDialog) || Boolean(form?.addUnit);
@@ -138,171 +102,66 @@
   <title>{data.course.title} | GUSTAV</title>
 </svelte:head>
 
-<div class="workspace-page workspace-page--course-context">
-  <section class="workspace-composer-header">
-    <div class="workspace-composer-copy">
-      <a class="workspace-back-link" href="/teaching/courses">Zurück zu Kurse</a>
-      <h1>{data.course.title}</h1>
-      <p class="workspace-copy">{data.assignedUnits.length} Lerneinheiten · {data.members.length} Mitglieder</p>
-      {#if readOnly}<p class="workspace-status-line">Archiviert · schreibgeschützt</p>{/if}
+<div class="workspace-page teacher-course-workspace">
+  <PageActionHead backHref="/teaching/courses" backLabel="← Kurse" title={data.course.title} copy={courseMetadata} />
+
+  {#if readOnly}
+    <div class="teacher-course-workspace__status" role="status">
+      <strong>Archiviert · schreibgeschützt</strong>
+    </div>
+  {/if}
+
+  {#if missingMetadata.length}
+    <div class="teacher-course-workspace__status teacher-course-workspace__status--warning" role="status">
+      <span><strong>Kursdaten unvollständig:</strong> {missingMetadata.join(", ")}</span>
+      <a class="workspace-text-button" href={pageHref({ course: "1" })}>Ergänzen</a>
+    </div>
+  {/if}
+
+  <section class="teacher-course-workspace__section" aria-labelledby="course-units-title">
+    <div class="teacher-course-workspace__section-head">
+      <div>
+        <h2 id="course-units-title">Lerneinheiten</h2>
+        <span>{data.assignedUnits.length}</span>
+      </div>
+      {#if canMutate}
+        <a class="workspace-link-action" href={pageHref({ "add-unit": "1" })}>Lerneinheit hinzufügen</a>
+      {/if}
     </div>
 
-    <div class="workspace-inline-actions">
-      <button class="workspace-link-action workspace-mobile-control" type="button" onclick={() => (membersDrawerOpen = true)}>
-        Mitglieder
-      </button>
-      <button class="workspace-link-action workspace-mobile-control" type="button" onclick={() => (courseDrawerOpen = true)}>
-        Kurs
-      </button>
+    <TeacherCourseUnitList
+      units={data.assignedUnits}
+      {canMutate}
+      draftModuleIds={form?.reorderModules?.moduleIds ?? []}
+      reorderError={form?.reorderModules?.error ?? null}
+    />
 
-      <details class="workspace-overflow-menu">
-        <summary aria-label="Weitere Aktionen">
-          <span aria-hidden="true">⋯</span>
-        </summary>
-        <div class="workspace-overflow-popover">
-          <a class="workspace-link-action" href={`/diagnostics/courses/${data.course.id}`}>Diagnostik</a>
-        </div>
-      </details>
+    {#if form?.removeUnit?.error}
+      <p class="workspace-form-error" role="alert">{form.removeUnit.error}</p>
+    {/if}
+  </section>
+
+  <section class="teacher-course-workspace__section" aria-labelledby="course-members-title">
+    <div class="teacher-course-workspace__management-row">
+      <div>
+        <h2 id="course-members-title">Mitglieder</h2>
+        <p>{data.members.length} {data.members.length === 1 ? "Lernender" : "Lernende"}</p>
+      </div>
+      <button class="workspace-link-action" type="button" onclick={() => (membersDrawerOpen = true)}>
+        {canMutate ? "Mitglieder verwalten" : "Mitglieder ansehen"}
+      </button>
     </div>
   </section>
 
-  <div class="workspace-composer-layout">
-    <section class="workspace-panel workspace-composer-main">
-      <div class="workspace-section-header">
-        <div class="workspace-section-heading">
-          <p class="workspace-label">Lerneinheiten</p>
-          <p class="workspace-note">Ordne und ergänze die Bausteine des Kurses direkt in dieser Liste.</p>
-        </div>
-        {#if !readOnly}<a class="workspace-link-action" href={pageHref({ "add-unit": "1" })}>Lerneinheit hinzufügen</a>{/if}
+  <section class="teacher-course-workspace__section" aria-labelledby="course-settings-title">
+    <div class="teacher-course-workspace__management-row">
+      <div>
+        <h2 id="course-settings-title">Kurseinstellungen</h2>
+        <p>Stammdaten und Kursstatus</p>
       </div>
-
-      {#if unitOrder.length}
-        <div class="workspace-list" role="list">
-          {#each unitOrder as unit, index}
-            <div
-              class="workspace-manage-row workspace-manage-row--draggable"
-              role="listitem"
-              draggable={!readOnly}
-              ondragstart={() => onDragStart(unit.module_id)}
-              ondragover={(event) => event.preventDefault()}
-              ondrop={() => onDrop(unit.module_id)}
-            >
-              <div class="workspace-unit-row">
-                <a class="workspace-manage-row-link" href={unit.href}>
-                  <strong>
-                    <span class="workspace-unit-order" aria-label={`Position ${unit.position}`}>{unit.position}</span>
-                    <span>{unit.title}</span>
-                  </strong>
-                </a>
-              </div>
-
-              <div class="workspace-unit-controls">
-                {#if !readOnly}<span class="workspace-unit-handle" aria-hidden="true">
-                  <span class="workspace-drag-handle">⋮⋮</span>
-                </span>{/if}
-
-                <details class="workspace-row-menu">
-                  <summary aria-label={`Aktionen für ${unit.title}`}>
-                    <span aria-hidden="true">⋯</span>
-                  </summary>
-                  <div class="workspace-row-menu-popover">
-                    <a class="workspace-link-action" href={unit.href}>Öffnen</a>
-                    <button class="workspace-text-button" type="button" onclick={() => moveUnit(unit.module_id, -1)} disabled={readOnly || index == 0}>
-                      Nach oben
-                    </button>
-                    <button
-                      class="workspace-text-button"
-                      type="button"
-                      onclick={() => moveUnit(unit.module_id, 1)}
-                      disabled={readOnly || index == unitOrder.length - 1}
-                    >
-                      Nach unten
-                    </button>
-                    {#if !readOnly && pendingUnitRemoval == unit.module_id}
-                      <form method="POST" action="?/removeUnit" class="workspace-row-menu-form">
-                        <input name="module_id" type="hidden" value={unit.module_id} />
-                        <button class="workspace-text-button workspace-text-button--danger" type="submit">Entfernen bestätigen</button>
-                        <button class="workspace-text-button" type="button" onclick={() => (pendingUnitRemoval = null)}>Abbrechen</button>
-                      </form>
-                    {:else if !readOnly}
-                      <button class="workspace-text-button workspace-text-button--danger" type="button" onclick={() => (pendingUnitRemoval = unit.module_id)}>
-                        Entfernen
-                      </button>
-                    {/if}
-                  </div>
-                </details>
-              </div>
-            </div>
-          {/each}
-        </div>
-
-        {#if !readOnly}<form id="reorder-modules-form" method="POST" action="?/reorderModules" class="workspace-form workspace-form--compact">
-          {#each unitOrder as unit}
-            <input name="module_ids" type="hidden" value={unit.module_id} />
-          {/each}
-
-          <div class="workspace-inline-actions">
-            <button class="workspace-link-action" type="submit" disabled={!unitOrderChanged}>Reihenfolge speichern</button>
-            <button class="workspace-text-button" type="button" onclick={resetUnitOrder} disabled={!unitOrderChanged}>Zurücksetzen</button>
-          </div>
-        </form>{/if}
-
-        {#if !readOnly}<div class="workspace-inline-actions">
-          <a class="workspace-link-action" href={pageHref({ "add-unit": "1" })}>Lerneinheit hinzufügen</a>
-        </div>{/if}
-      {:else}
-        <p class="workspace-empty">Noch keine Lerneinheiten zugeordnet.</p>
-        {#if !readOnly}<a class="workspace-link-action" href={pageHref({ "add-unit": "1" })}>Erste Lerneinheit hinzufügen</a>{/if}
-      {/if}
-
-      {#if form?.removeUnit?.error}
-        <p class="workspace-form-error">{form.removeUnit.error}</p>
-      {/if}
-
-      {#if form?.reorderModules?.error}
-        <p class="workspace-form-error">{form.reorderModules.error}</p>
-      {/if}
-    </section>
-
-    <aside class="workspace-composer-sidecar" aria-label="Sekundärer Kontext">
-      <section class="workspace-panel workspace-sidecar-block">
-        <div class="workspace-section-header">
-          <div class="workspace-section-heading">
-            <p class="workspace-label">Mitglieder</p>
-            <p class="workspace-note">{data.members.length} Lernende sind diesem Kurs zugeordnet.</p>
-          </div>
-          <button class="workspace-link-action" type="button" onclick={() => (membersDrawerOpen = true)}>{readOnly ? "Ansehen" : "Verwalten"}</button>
-        </div>
-
-        <div class="workspace-sidecar-list">
-          {#each memberPreview as member}
-            <a href={member.href}>
-              <strong>{member.name}</strong>
-              <span>{formatJoinedAt(member.joined_at)}</span>
-            </a>
-          {/each}
-        </div>
-      </section>
-
-      <section class="workspace-panel workspace-sidecar-block">
-        <div class="workspace-section-header">
-          <div class="workspace-section-heading">
-            <p class="workspace-label">Kurs</p>
-            <p class="workspace-note">Name und Metadaten bleiben hier bewusst klein.</p>
-          </div>
-          <button class="workspace-link-action" type="button" onclick={() => (courseDrawerOpen = true)}>Bearbeiten</button>
-        </div>
-
-        <div class="workspace-sidecar-meta">
-          <div><span>Titel</span><strong>{data.course.title}</strong></div>
-          <div><span>Fach</span><strong>{data.course.subject || "Nicht gesetzt"}</strong></div>
-          <div><span>Jahrgang</span><strong>{data.course.grade_level || "Nicht gesetzt"}</strong></div>
-          <div><span>Term</span><strong>{data.course.term || "Nicht gesetzt"}</strong></div>
-          <div><span>Schuljahr</span><strong>{data.course.school_year_start ? `${data.course.school_year_start}/${String((data.course.school_year_start + 1) % 100).padStart(2, "0")}` : "Nicht gesetzt"}</strong></div>
-        </div>
-      </section>
-    </aside>
-  </div>
+      <a class="workspace-link-action" href={pageHref({ course: "1" })}>Kurs bearbeiten</a>
+    </div>
+  </section>
 </div>
 
 {#if courseDrawerOpen}
@@ -332,19 +191,35 @@
         <div class="workspace-form-grid">
           <label class="workspace-field">
             <span>Fach</span>
-            <input name="subject" type="text" value={courseFormValues.subject} />
+            <input name="subject" type="text" list="course-detail-subjects" value={courseFormValues.subject} required />
           </label>
 
           <label class="workspace-field">
             <span>Jahrgang</span>
-            <input name="grade_level" type="text" value={courseFormValues.gradeLevel} />
+            <input name="grade_level" type="text" list="course-detail-grades" value={courseFormValues.gradeLevel} required />
           </label>
         </div>
 
-        <label class="workspace-field">
-          <span>Term</span>
-          <input name="term" type="text" value={courseFormValues.term} />
-        </label>
+        <datalist id="course-detail-subjects">
+          <option value="Informatik"></option>
+          <option value="Politik-Wirtschaft"></option>
+          <option value="Mathematik"></option>
+          <option value="Deutsch"></option>
+        </datalist>
+        <datalist id="course-detail-grades">
+          <option value="5"></option><option value="6"></option><option value="7"></option>
+          <option value="8"></option><option value="9"></option><option value="10"></option>
+          <option value="Jahrgangsübergreifend"></option>
+        </datalist>
+
+        {#if courseFormValues.term}
+          <label class="workspace-field">
+            <span>Frühere Abschnittsangabe</span>
+            <input name="term" type="text" value={courseFormValues.term} />
+          </label>
+        {:else}
+          <input name="term" type="hidden" value="" />
+        {/if}
 
         {#if form?.saveCourse?.error}
           <p class="workspace-form-error">{form.saveCourse.error}</p>
@@ -399,15 +274,16 @@
       <div class="workspace-modal-header">
         <div>
           <p class="workspace-modal-eyebrow">{data.course.title}</p>
-          <h2 id="members-drawer-title">Mitglieder verwalten</h2>
+          <h2 id="members-drawer-title">{canMutate ? "Mitglieder verwalten" : "Mitglieder ansehen"}</h2>
         </div>
         <button class="workspace-text-button" type="button" onclick={closeMembersDrawer}>Schließen</button>
       </div>
 
-      <div class="workspace-inline-actions">
-        <a class="workspace-link-action" href={`/teaching/courses/${data.course.id}/members`}>Mitgliederseite</a>
-        {#if !readOnly}<a class="workspace-link-action" href={pageHref({ members: "1", "add-member": "1" })}>Mitglied hinzufügen</a>{/if}
-      </div>
+      {#if canMutate}
+        <div class="workspace-inline-actions">
+          <a class="workspace-link-action" href={pageHref({ members: "1", "add-member": "1" })}>Mitglied hinzufügen</a>
+        </div>
+      {/if}
 
       <label class="workspace-member-search">
         <span>Mitglieder durchsuchen</span>
@@ -426,13 +302,13 @@
               <div class="workspace-inline-actions">
                 <a class="workspace-link-action" href={member.href}>Profil</a>
 
-                {#if !readOnly && pendingMemberRemoval == member.sub}
+                {#if canMutate && pendingMemberRemoval == member.sub}
                   <form method="POST" action="?/removeMember" class="workspace-inline-actions">
                     <input name="student_sub" type="hidden" value={member.sub} />
                     <button class="workspace-text-button workspace-text-button--danger" type="submit">Entfernen bestätigen</button>
                     <button class="workspace-text-button" type="button" onclick={() => (pendingMemberRemoval = null)}>Abbrechen</button>
                   </form>
-                {:else if !readOnly}
+                {:else if canMutate}
                   <button class="workspace-text-button workspace-text-button--danger" type="button" onclick={() => (pendingMemberRemoval = member.sub)}>
                     Entfernen
                   </button>
@@ -452,7 +328,7 @@
   </div>
 {/if}
 
-{#if addMemberDialogOpen && !readOnly}
+{#if addMemberDialogOpen && canMutate}
   <div class="workspace-modal">
     <a class="workspace-modal-backdrop" href={pageHref({ members: "1" })} aria-label="Dialog schließen"></a>
 
@@ -507,7 +383,7 @@
   </div>
 {/if}
 
-{#if addUnitDialogOpen && !readOnly}
+{#if addUnitDialogOpen && canMutate}
   <div class="workspace-modal">
     <a class="workspace-modal-backdrop" href={pageHref()} aria-label="Dialog schließen"></a>
 

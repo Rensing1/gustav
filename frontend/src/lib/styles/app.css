@@ -669,10 +669,6 @@ select {
   gap: 0.9rem;
 }
 
-.workspace-page--course-context {
-  gap: 0.72rem;
-}
-
 .workspace-filter-group {
   display: grid;
   gap: 0.5rem;
@@ -705,25 +701,6 @@ select {
   color: var(--color-text);
 }
 
-.workspace-composer-header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding-bottom: 0.1rem;
-}
-
-.workspace-composer-copy {
-  display: grid;
-  gap: 0.28rem;
-}
-
-.workspace-composer-copy h1 {
-  margin: 0;
-  font-size: clamp(1.34rem, 2vw, 1.68rem);
-  line-height: 1.04;
-}
-
 .workspace-back-link {
   color: var(--color-link);
   font-size: 0.82rem;
@@ -737,54 +714,6 @@ select {
   text-decoration: underline;
 }
 
-.workspace-composer-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 18rem;
-  gap: 0.72rem;
-  align-items: start;
-}
-
-.workspace-composer-main,
-.workspace-composer-sidecar,
-.workspace-sidecar-block {
-  display: grid;
-  gap: 0.72rem;
-}
-
-.workspace-composer-main {
-  gap: 0.54rem;
-}
-
-.workspace-sidecar-list,
-.workspace-sidecar-meta {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.workspace-sidecar-list a {
-  display: grid;
-  gap: 0.1rem;
-  text-decoration: none;
-}
-
-.workspace-sidecar-list span,
-.workspace-sidecar-meta span {
-  color: var(--color-text-muted);
-  font-size: 0.77rem;
-}
-
-.workspace-sidecar-meta div {
-  display: grid;
-  gap: 0.12rem;
-  padding-bottom: 0.42rem;
-  border-bottom: 1px solid var(--color-line);
-}
-
-.workspace-sidecar-meta div:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
 @media (max-width: 640px) {
   .workspace-section-header {
     flex-direction: column;
@@ -796,7 +725,6 @@ select {
   }
 
   .workspace-course-summary,
-  .workspace-composer-header,
   .workspace-search-result,
   .workspace-manage-row,
   .workspace-detail-list div {
@@ -856,10 +784,6 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .workspace-composer-layout {
-    grid-template-columns: 1fr;
-  }
-
   .workspace-unit-editor {
     grid-template-columns: 1fr;
   }
@@ -874,10 +798,6 @@ select {
   .workspace-unit-context-layout,
   .workspace-unit-content {
     grid-template-columns: 1fr;
-  }
-
-  .workspace-composer-sidecar {
-    display: none;
   }
 
   .workspace-mobile-control {

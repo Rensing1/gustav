@@ -304,6 +304,16 @@ Spalten werden nur über `--teacher-catalog-columns` beschrieben. Eigene
 Maximalbreiten oder unabhängige Tabellenabstände in einzelnen Katalogen sind
 nicht zulässig.
 
+Die Kurs-Detailseite setzt diese 80-rem-Achse als flache
+`.teacher-course-workspace` fort. `PageActionHead` enthält genau einen
+Rücksprung zu `Kurse` und keine konkurrierende Kopfaktion. Danach folgen Lerneinheiten,
+Mitglieder und Kurseinstellungen als drei durch Linien getrennte Bereiche ohne
+Außenkarten oder Sidecar. Die Lerneinheitenliste ist der einzige ausführliche
+Arbeitsbereich; Mitglieder und Einstellungen bleiben knappe Verwaltungszeilen
+und öffnen ihre vorhandenen Drawer. Unvollständige Stammdaten werden einmalig
+in einer schmalen Statuszeile benannt. Archivierte Kurse behalten dieselbe
+Struktur, bieten aber keine fachlichen Mutationen an.
+
 Das persönliche Lernarchiv der Schüler ist eine lineare Belegliste. Es zeigt
 ausschließlich eigene Abgaben und Rückmeldungen; Kursmaterialien, Teilnehmerlisten
 und fremde Leistungen werden dort weder angedeutet noch nachgeladen.

@@ -167,6 +167,12 @@ async function attachUnitToCourse(page: Page, courseId: string, unitId: string):
   return payload.id as string;
 }
 
+export async function addUnitToCourse(page: Page, courseId: string, title: string): Promise<{ unitId: string; unitTitle: string }> {
+  const unitId = await createUnit(page, title);
+  await attachUnitToCourse(page, courseId, unitId);
+  return { unitId, unitTitle: title };
+}
+
 async function releaseSection(page: Page, courseId: string, moduleId: string, sectionId: string): Promise<void> {
   const response = await page.request.patch(
     `${webBase}/api/teaching/courses/${courseId}/modules/${moduleId}/sections/${sectionId}/visibility`,

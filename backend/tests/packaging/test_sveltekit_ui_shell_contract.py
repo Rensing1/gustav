@@ -328,6 +328,9 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
         src = path.read_text(encoding="utf-8")
         if path.parts[-3:] == ("teaching", "courses", "+page.svelte"):
             assert "workspace-section" not in src, f"Course index should now avoid an outer workspace section in {path}"
+        elif path.parts[-4:] == ("teaching", "courses", "[courseId]", "+page.svelte"):
+            assert "teacher-course-workspace__section" in src, f"Expected flat course workspace sections in {path}"
+            assert 'class="workspace-section"' not in src, f"Course detail should avoid card-like workspace sections in {path}"
         elif path.parts[-2:] == ("learning", "+page.svelte"):
             assert "workspace-page learning-home" in src, f"Expected learner home list shell in {path}"
             assert "QuietList" in src, f"Expected learner home to render the shared quiet list in {path}"

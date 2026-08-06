@@ -132,14 +132,10 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     memberSearchResults = candidates.filter((candidate) => !attachedMemberSubs.has(candidate.sub));
   }
 
-  const breadcrumbs: BreadcrumbItem[] = [
-    { label: "Kurse", href: "/teaching/courses" }
-  ];
-
   return {
     assignedUnits: workspace.assignedUnits,
     availableUnits: workspace.availableUnits,
-    breadcrumbs,
+    breadcrumbs: [] as BreadcrumbItem[],
     course: workspace.course,
     deletionImpact,
     hidePageHeading: true,
@@ -155,6 +151,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     showAddUnitDialog: url.searchParams.get("add-unit") == "1",
     showCourseDrawer: url.searchParams.get("course") == "1",
     showMembersDrawer: url.searchParams.get("members") == "1",
+    wideWorkspaceShell: true,
   };
 };
 
@@ -171,7 +168,7 @@ export const actions: Actions = {
     if (!title || !subject || !gradeLevel || !Number.isInteger(schoolYearStart)) {
       return fail(400, {
         saveCourse: {
-          error: "Bitte gib einen Kurstitel ein.",
+          error: "Titel, Fach, Jahrgang und Schuljahr sind erforderlich.",
           values: { title, subject, gradeLevel, term, schoolYearStart: schoolYearRaw }
         }
       });
@@ -382,7 +379,8 @@ export const actions: Actions = {
     if (!moduleIds.length) {
       return fail(400, {
         reorderModules: {
-          error: "Die Reihenfolge enthält keine Lerneinheiten."
+          error: "Die Reihenfolge enthält keine Lerneinheiten.",
+          moduleIds
         }
       });
     }
@@ -398,7 +396,8 @@ export const actions: Actions = {
     if (!response.ok) {
       return fail(response.status, {
         reorderModules: {
-          error: "Die Reihenfolge konnte nicht gespeichert werden."
+          error: "Die Reihenfolge konnte nicht gespeichert werden.",
+          moduleIds
         }
       });
     }

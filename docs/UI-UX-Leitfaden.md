@@ -237,18 +237,18 @@ Die Lehrenden-Welt ist operativer, aber nicht dashboardhaft.
   organisiert sein, wenn Kursdetails, Mitglieder und Lerneinheiten direkt auf
   derselben Seite bearbeitbar bleiben sollen.
 - Für `Kurse` ist dabei das bevorzugte Modell:
-  - schmale Kopfzeile mit Rücksprung, Kurstitel, Metazeile und kleinem
-    Overflow-Menü
-  - dominante Hauptspalte `Lerneinheiten`
-  - ruhige Sidecar-Spalte für `Mitglieder` und `Kurs`
+  - `PageActionHead` mit genau einem Rücksprung, Kurstitel und Metazeile
+  - vollbreiter Hauptbereich `Lerneinheiten`
+  - knappe, durch Linien getrennte Verwaltungszeilen für `Mitglieder` und
+    `Kurseinstellungen`
 - `Lerneinheiten` ist der Standardfokus der Seite und bildet den
   `primary workspace`:
   - geordnete Liste
   - Reihenfolge ändern
   - Einheiten ergänzen oder entfernen
-- `Mitglieder` und `Kursdetails` leben im `secondary context`:
-  - als kompakte Sidecar-Blöcke auf breiten Ansichten
-  - als Drawer auf iPad hochkant und schmaleren Breiten
+- `Mitglieder` und `Kursdetails` werden auf der Arbeitsfläche nicht
+  vorweggenommen. Ihre ruhigen Verwaltungszeilen öffnen auf allen Breiten die
+  vorhandenen Drawer.
 - Zeilenaktionen bleiben textnah oder liegen in kleinen Zeilenmenüs statt in
   dauerpräsenten Buttonleisten.
 - `Kurs bearbeiten` liegt im Kurskontext als Drawer/Dialog. Archivierung und

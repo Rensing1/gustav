@@ -13,11 +13,16 @@ def test_frontend_contains_teacher_course_context_page() -> None:
         REPO_ROOT / "frontend" / "src" / "routes" / "teaching" / "courses" / "[courseId]" / "+page.server.ts"
     )
     page_path = REPO_ROOT / "frontend" / "src" / "routes" / "teaching" / "courses" / "[courseId]" / "+page.svelte"
+    unit_list_path = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "components" / "teacher-course" / "TeacherCourseUnitList.svelte"
+    )
 
     assert loader_path.is_file(), f"Missing course context loader: {loader_path}"
     assert page_path.is_file(), f"Missing course context page: {page_path}"
+    assert unit_list_path.is_file(), f"Missing course unit list: {unit_list_path}"
     loader_src = loader_path.read_text(encoding="utf-8")
     page_src = page_path.read_text(encoding="utf-8")
+    unit_list_src = unit_list_path.read_text(encoding="utf-8")
 
     assert "/api/teaching/courses/" in loader_src
     assert "/api/teaching/courses/" in loader_src
@@ -36,24 +41,25 @@ def test_frontend_contains_teacher_course_context_page() -> None:
     assert "showMembersDrawer" in loader_src
     assert "hidePageHeading" in loader_src
 
-    assert "workspace-composer-header" in page_src
-    assert "workspace-composer-layout" in page_src
-    assert "workspace-composer-sidecar" in page_src
+    assert "PageActionHead" in page_src
+    assert "TeacherCourseUnitList" in page_src
+    assert "teacher-course-workspace" in page_src
+    assert "teacher-course-workspace__section" in page_src
+    assert "teacher-course-workspace__management-row" in page_src
     assert "Lerneinheiten" in page_src
     assert "Mitglieder" in page_src
-    assert "Kurs" in page_src
+    assert "Kurseinstellungen" in page_src
     assert "Lerneinheit hinzufügen" in page_src
-    assert "workspace-row-menu" in page_src
-    assert "workspace-unit-order" in page_src
-    assert "workspace-unit-handle" in page_src
     assert "workspace-drawer-card" in page_src
-    assert "workspace-overflow-menu" in page_src
     assert "?/saveCourse" in page_src
     assert "?/deleteCourse" in page_src
     assert "?/removeMember" in page_src
-    assert "?/removeUnit" in page_src
-    assert "?/reorderModules" in page_src
+    assert "?/removeUnit" in unit_list_src
+    assert "?/reorderModules" in unit_list_src
+    assert "workspace-row-menu" in unit_list_src
     assert "workspace-modal-card" in page_src
     assert "workspace-tabs" not in page_src
     assert "workspace-disclosure" not in page_src
+    assert "workspace-composer-layout" not in page_src
+    assert "Diagnostik öffnen" not in page_src
     assert "Position {unit.position}" not in page_src

@@ -38,7 +38,7 @@ async def _client() -> httpx.AsyncClient:
 
 
 async def _create_course(client: httpx.AsyncClient, title: str = "Kurs") -> str:
-    r = await client.post("/api/teaching/courses", json={"title": title})
+    r = await client.post("/api/teaching/courses", json={"title": title, "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
     assert r.status_code == 201
     return r.json()["id"]
 
@@ -168,15 +168,15 @@ async def test_latest_detail_happy_path_and_no_content_cases():
 
 
 @pytest.mark.anyio
-async def test_latest_detail_hides_submission_after_membership_removal() -> None:
-    """A SECURITY DEFINER read must stop exposing submissions of former members.
+async def test_latest_detail_preserves_submission_after_membership_removal() -> None:
+    """A course owner keeps the historical submission of a former member.
 
     Given:
         - A learner submitted text while enrolled in the course.
     When:
         - The course owner removes that learner and requests the latest detail.
     Then:
-        - The required helper returns no submission and the private API responds 204.
+            - The private API still returns the learner's historical submission.
     """
     _require_db_or_skip()
     teaching = importlib.import_module("backend.web.routes.teaching")
@@ -227,7 +227,8 @@ async def test_latest_detail_hides_submission_after_membership_removal() -> None
             f"/api/teaching/courses/{course_id}/units/{unit['id']}/tasks/{task['id']}/students/{learner.sub}/submissions/latest"
         )
 
-    assert after_removal.status_code == 204
+    assert after_removal.status_code == 200
+    assert after_removal.json()["text_body"] == "Antwort vor Kursaustritt"
     assert after_removal.headers["Cache-Control"] == "private, no-store"
 
 

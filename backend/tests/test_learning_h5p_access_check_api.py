@@ -60,7 +60,7 @@ async def _prepare_released_h5p_task(monkeypatch: pytest.MonkeyPatch, *, content
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
 
-        course = await c.post("/api/teaching/courses", json={"title": "Kurs H5P Access"})
+        course = await c.post("/api/teaching/courses", json={"title": "Kurs H5P Access", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert course.status_code == 201
         course_id = course.json()["id"]
 
@@ -134,7 +134,7 @@ async def _prepare_locked_modular_h5p_task(monkeypatch: pytest.MonkeyPatch, *, c
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
 
-        course = await c.post("/api/teaching/courses", json={"title": "Kurs H5P Modular"})
+        course = await c.post("/api/teaching/courses", json={"title": "Kurs H5P Modular", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert course.status_code == 201
         course_id = course.json()["id"]
         UUID(course_id)

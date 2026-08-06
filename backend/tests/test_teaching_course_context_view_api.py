@@ -41,7 +41,12 @@ def _mock_bearer_auth(
 async def _seed_teacher_course_context(client: httpx.AsyncClient) -> tuple[str, str]:
     course_response = await client.post(
         "/api/teaching/courses",
-        json={"title": "Mathe 9b"},
+        json={
+            "title": "Mathe 9b",
+            "subject": "Mathematik",
+            "grade_level": "9",
+            "school_year_start": 2026,
+        },
         headers={"Origin": "http://test"},
     )
     course_id = course_response.json()["id"]

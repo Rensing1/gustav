@@ -61,7 +61,7 @@ async def _prepare_h5p_task_fixture(monkeypatch: pytest.MonkeyPatch, *, max_atte
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
 
-        r = await c.post("/api/teaching/courses", json={"title": "Kurs H5P"})
+        r = await c.post("/api/teaching/courses", json={"title": "Kurs H5P", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert r.status_code == 201
         course_id = r.json()["id"]
 

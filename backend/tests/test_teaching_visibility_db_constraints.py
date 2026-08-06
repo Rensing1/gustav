@@ -54,7 +54,14 @@ async def test_module_section_releases_check_constraint_and_not_null():
 
     repo = DBTeachingRepo()
     owner = "teacher-visibility-db-constraints"
-    course = repo.create_course(title="C", subject=None, grade_level=None, term=None, teacher_id=owner)
+    course = repo.create_course(
+        title="C",
+        subject="Testfach",
+        grade_level="10",
+        term=None,
+        school_year_start=2026,
+        teacher_id=owner,
+    )
     unit = repo.create_unit(title="U", summary=None, author_id=owner)
     section = repo.create_section(unit_id=unit["id"], title="S", author_id=owner)
     module = repo.create_course_module_owned(course["id"], owner, unit_id=unit["id"], context_notes=None)

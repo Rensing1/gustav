@@ -42,7 +42,10 @@ async def test_mark_extracted_updates_status_and_analysis_json():
     with psycopg.connect(dsn) as conn:  # type: ignore
         with conn.cursor() as cur:
             cur.execute("select set_config('app.current_sub', %s, false)", (teacher,))
-            cur.execute("insert into public.courses (title, teacher_id) values (%s, %s) returning id", ("RepoTest Course", teacher))
+            cur.execute(
+                "insert into public.courses (title, subject, grade_level, school_year_start, teacher_id) values (%s, %s, %s, %s, %s) returning id",
+                ("RepoTest Course", "Testfach", "10", 2026, teacher),
+            )
             course_id = cur.fetchone()[0]
             cur.execute("insert into public.units (title, author_id) values (%s, %s) returning id", ("RepoTest Unit", teacher))
             unit_id = cur.fetchone()[0]

@@ -9,12 +9,11 @@ Why:
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
 
 from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
-from backend.web.routes.teaching import _get_repo, _mark_recently_deleted
-from backend.web.routes.teaching_payloads import CourseCreate, CourseUpdate
+from backend.web.routes.teaching import _get_repo
+from backend.web.routes.teaching_payloads import CourseArchiveBatchPayload, CourseCreate, CourseDeletionPayload, CourseUpdate
 from backend.web.routes.teaching_serialization import _serialize_course
 from backend.web.routes.teaching_shared import (
     _current_sub,
@@ -60,6 +59,13 @@ async def create_course(request: Request, payload: CourseCreate):
     csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
+    if not payload.title.strip():
+        return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
+    if payload.subject is None or payload.grade_level is None or payload.school_year_start is None:
+        return _private_error(
+            {"error": "bad_request", "detail": "course_metadata_incomplete"},
+            status_code=400,
+        )
     sub = _current_sub(user)
     try:
         course = _get_repo().create_course(
@@ -67,6 +73,7 @@ async def create_course(request: Request, payload: CourseCreate):
             subject=payload.subject,
             grade_level=payload.grade_level,
             term=payload.term,
+            school_year_start=payload.school_year_start,
             teacher_id=sub,
         )
     except ValueError:
@@ -101,6 +108,8 @@ async def get_course(request: Request, course_id: str):
         course = repo.get_course(course_id)
     if not course:
         return _private_error({"error": "not_found"}, status_code=404)
+    if str(_serialize_course(course).get("status") or "active") == "deleting":
+        return _private_error({"error": "not_found"}, status_code=404)
     return _json_private(_serialize_course(course), status_code=200)
 
 
@@ -117,6 +126,11 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     if csrf:
         return csrf
     updates = payload.model_dump(mode="python", exclude_unset=True)
+    if any(updates.get(field) is None for field in ("subject", "grade_level", "school_year_start") if field in updates):
+        return _private_error(
+            {"error": "bad_request", "detail": "course_metadata_incomplete"},
+            status_code=400,
+        )
     try:
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
 
@@ -142,40 +156,97 @@ async def update_course(request: Request, course_id: str, payload: CourseUpdate)
     return _json_private(_serialize_course(updated), status_code=200, vary_origin=True)
 
 
-@teaching_courses_router.delete("/api/teaching/courses/{course_id}")
-async def delete_course(request: Request, course_id: str):
-    """Delete a course and its memberships for the owning teacher."""
+def _course_lifecycle_error(exc: Exception):
+    detail = str(exc).lower()
+    if "metadata_incomplete" in detail:
+        return _private_error({"error": "bad_request", "detail": "course_metadata_incomplete"}, status_code=400)
+    if "confirmation_mismatch" in detail:
+        return _private_error({"error": "bad_request", "detail": "deletion_confirmation_mismatch"}, status_code=400)
+    if "not_active" in detail or "not_archived" in detail:
+        return _private_error({"error": "conflict", "detail": "course_state_invalid"}, status_code=409)
+    if "not_found" in detail or "no data found" in detail:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _private_error({"error": "forbidden"}, status_code=403)
 
-    repo = _get_repo()
+
+async def _course_command(request: Request, course_id: str, method_name: str):
     user = getattr(request.state, "user", None)
-    sub = _current_sub(user)
     if not _role_in(user, "teacher"):
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return _private_error({"error": "forbidden"}, status_code=403)
     csrf = teaching_guards._csrf_guard(request)
     if csrf:
         return csrf
     try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        if isinstance(repo, DBTeachingRepo):
-            if not repo.course_exists_for_owner(course_id, sub):
-                exists = repo.course_exists(course_id)
-                if exists is False:
-                    return JSONResponse({"error": "not_found"}, status_code=404)
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-            repo.delete_course_owned(course_id, sub)
-            _mark_recently_deleted(sub, course_id)
-            return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
-        course = repo.get_course(course_id)
-        if not course:
-            return JSONResponse({"error": "not_found"}, status_code=404)
-        owner_id = course["teacher_id"] if isinstance(course, dict) else getattr(course, "teacher_id", None)
-        if sub != owner_id:
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        repo.delete_course(course_id)
-        _mark_recently_deleted(sub, course_id)
-        return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
+        result = getattr(_get_repo(), method_name)(course_id, _current_sub(user))
     except TeachingRepositoryUnavailable:
         raise
-    except Exception:
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    except Exception as exc:
+        return _course_lifecycle_error(exc)
+    return _json_private(_serialize_course(result), status_code=200, vary_origin=True)
+
+
+@teaching_courses_router.post("/api/teaching/courses/{course_id}/archive")
+async def archive_course(request: Request, course_id: str):
+    """Freeze an owned course and abandon unfinished dialog sessions atomically."""
+    return await _course_command(request, course_id, "archive_course_owned")
+
+
+@teaching_courses_router.post("/api/teaching/courses/{course_id}/restore")
+async def restore_course(request: Request, course_id: str):
+    """Restore a course that was archived accidentally."""
+    return await _course_command(request, course_id, "restore_course_owned")
+
+
+@teaching_courses_router.post("/api/teaching/courses/archive-batch")
+async def archive_courses_batch(request: Request, payload: CourseArchiveBatchPayload):
+    user = getattr(request.state, "user", None)
+    if not _role_in(user, "teacher"):
+        return _private_error({"error": "forbidden"}, status_code=403)
+    csrf = teaching_guards._csrf_guard(request)
+    if csrf:
+        return csrf
+    repo = _get_repo()
+    try:
+        course_ids = list(dict.fromkeys(payload.course_ids))
+        for course_id in course_ids:
+            if not _is_uuid_like(course_id):
+                return _private_error({"error": "bad_request", "detail": "invalid_course_id"}, status_code=400)
+        results = repo.archive_courses_owned(course_ids, _current_sub(user))
+    except TeachingRepositoryUnavailable:
+        raise
+    except Exception as exc:
+        return _course_lifecycle_error(exc)
+    return _json_private([_serialize_course(item) for item in results], status_code=200, vary_origin=True)
+
+
+@teaching_courses_router.get("/api/teaching/courses/{course_id}/deletion-impact")
+async def get_course_deletion_impact(request: Request, course_id: str):
+    user = getattr(request.state, "user", None)
+    if not _role_in(user, "teacher"):
+        return _private_error({"error": "forbidden"}, status_code=403)
+    impact = _get_repo().get_course_deletion_impact(course_id=course_id, owner_sub=_current_sub(user))
+    if not impact:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _json_private(impact, status_code=200)
+
+
+@teaching_courses_router.post("/api/teaching/courses/{course_id}/deletion-jobs")
+async def create_course_deletion_job(request: Request, course_id: str, payload: CourseDeletionPayload):
+    user = getattr(request.state, "user", None)
+    if not _role_in(user, "teacher"):
+        return _private_error({"error": "forbidden"}, status_code=403)
+    csrf = teaching_guards._csrf_guard(request)
+    if csrf:
+        return csrf
+    try:
+        job = _get_repo().queue_course_deletion(
+            course_id=course_id,
+            owner_sub=_current_sub(user),
+            confirmation_title=payload.confirmation_title,
+            confirm_student_data_loss=payload.confirm_student_data_loss,
+        )
+    except TeachingRepositoryUnavailable:
+        raise
+    except Exception as exc:
+        return _course_lifecycle_error(exc)
+    return _json_private(job, status_code=202, vary_origin=True)

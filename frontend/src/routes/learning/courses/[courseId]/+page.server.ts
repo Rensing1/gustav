@@ -27,7 +27,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     ]);
 
     const courseTitle =
-      home.courses.find((course) => course.id === params.courseId)?.title ?? "Kursraum";
+      [...home.current_courses, ...home.past_courses].find((course) => course.id === params.courseId)?.title ?? "Kursraum";
     const breadcrumbs: BreadcrumbItem[] = [
       { label: "Lernraum", href: "/learning" },
       { label: courseTitle }

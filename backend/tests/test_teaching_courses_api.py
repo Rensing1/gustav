@@ -45,7 +45,7 @@ async def test_teacher_can_create_and_list_own_courses(monkeypatch: pytest.Monke
         # Act: create course
         create = await client.post(
             "/api/teaching/courses",
-            json={"title": "Biologie Q1", "subject": "Biologie", "grade_level": "Q1", "term": "2025-1"},
+            json={"title": "Biologie Q1", "subject": "Biologie", "grade_level": "Q1", "term": "2025-1", "school_year_start": 2025},
         )
 
         # Assert: created
@@ -84,11 +84,27 @@ async def test_create_course_invalid_title_returns_400(monkeypatch: pytest.Monke
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
         # Empty title should trigger invalid_title -> 400 bad_request
-        resp = await client.post("/api/teaching/courses", json={"title": "   "})
+        resp = await client.post("/api/teaching/courses", json={"title": "   ", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert resp.status_code == 400
         body = resp.json()
         assert body.get("error") == "bad_request"
         assert body.get("detail") == "invalid_input"
+
+
+@pytest.mark.anyio
+async def test_create_course_requires_complete_new_metadata(monkeypatch: pytest.MonkeyPatch):
+    """New courses must not enter the catalog without lifecycle metadata."""
+    store = install_session_store(monkeypatch, main)
+    repo = teaching._Repo()  # type: ignore[attr-defined]
+    monkeypatch.setattr(teaching, "REPO", repo, raising=False)
+    teacher = store.create(sub="teacher-metadata-required", name="Owner", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        response = await client.post("/api/teaching/courses", json={"title": "Unvollständig"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "course_metadata_incomplete"
 
 
 @pytest.mark.anyio
@@ -155,7 +171,7 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
     # Teacher A creates a course
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t1.session_id)
-        c = await client.post("/api/teaching/courses", json={"title": "Mathe 10"})
+        c = await client.post("/api/teaching/courses", json={"title": "Mathe 10", "subject": "Mathematik", "grade_level": "10", "school_year_start": 2026})
         assert c.status_code == 201
         course_id = c.json()["id"]
 
@@ -249,7 +265,7 @@ async def test_student_listing_includes_member_courses(monkeypatch: pytest.Monke
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t.session_id)
-        c = await client.post("/api/teaching/courses", json={"title": "Physik 9"})
+        c = await client.post("/api/teaching/courses", json={"title": "Physik 9", "subject": "Physik", "grade_level": "9", "school_year_start": 2026})
         assert c.status_code == 201
         course_id = c.json()["id"]
         a = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": "student-X"})
@@ -276,7 +292,7 @@ async def test_list_courses_default_limit_matches_contract_10(monkeypatch: pytes
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
         for i in range(12):
-            r = await client.post("/api/teaching/courses", json={"title": f"Kurs {i + 1}"})
+            r = await client.post("/api/teaching/courses", json={"title": f"Kurs {i + 1}", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
             assert r.status_code == 201, r.text
 
         listed = await client.get("/api/teaching/courses")

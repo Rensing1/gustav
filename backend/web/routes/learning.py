@@ -90,6 +90,7 @@ from backend.web.routes.learning_submission_commands import (
     learning_submission_commands_router,
 )
 from backend.web.routes.learning_dialogs import learning_dialog_router
+from backend.web.routes.learning_portfolio import learning_portfolio_router
 from backend.web.routes.learning_submission_processing import (
     dev_try_process_pdf as _dev_try_process_pdf,  # noqa: F401
     validate_submission_payload as _validate_submission_payload,  # noqa: F401
@@ -116,6 +117,7 @@ learning_router.include_router(learning_internal_upload_router)
 learning_router.include_router(learning_submission_files_router)
 learning_router.include_router(learning_submission_commands_router)
 learning_router.include_router(learning_dialog_router)
+learning_router.include_router(learning_portfolio_router)
 logger = logging.getLogger("gustav.web.learning")
 
 # Compatibility note for source-level contract tests after upload-intent route
@@ -821,7 +823,7 @@ async def check_h5p_content_access(request: Request, course_id: str, content_id:
 
 
 @learning_router.get("/api/learning/courses")
-async def list_my_courses(request: Request, limit: int = 50, offset: int = 0):
+async def list_my_courses(request: Request, scope: str = "current", limit: int = 50, offset: int = 0):
     """List courses for the current student (alphabetical, minimal fields).
 
     Why:
@@ -849,7 +851,12 @@ async def list_my_courses(request: Request, limit: int = 50, offset: int = 0):
     if error:
         return error
     items = ListCoursesUseCase(_get_repo()).execute(
-        ListCoursesInput(student_sub=str(user.get("sub", "")), limit=int(limit or 50), offset=int(offset or 0))
+        ListCoursesInput(
+            student_sub=str(user.get("sub", "")),
+            limit=int(limit or 50),
+            offset=int(offset or 0),
+            scope="past" if scope == "past" else "current",
+        )
     )
     return JSONResponse(items, headers=_cache_headers_success())
 

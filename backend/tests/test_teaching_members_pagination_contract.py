@@ -57,7 +57,7 @@ async def test_members_limit_zero_uses_documented_default_10(monkeypatch: pytest
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        created = await c.post("/api/teaching/courses", json={"title": "Paginated Kurs"})
+        created = await c.post("/api/teaching/courses", json={"title": "Paginated Kurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert created.status_code == 201, created.text
         course_id = str(created.json()["id"])
 

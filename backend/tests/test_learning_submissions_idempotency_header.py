@@ -52,7 +52,7 @@ async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     async with (await _client()) as c:
         c.cookies.set("gustav_session", teacher.session_id)
         # Create course/unit/section/task
-        r = await c.post("/api/teaching/courses", json={"title": "Kurs Idem"})
+        r = await c.post("/api/teaching/courses", json={"title": "Kurs Idem", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert r.status_code == 201
         course_id = r.json()["id"]
         u = (await c.post("/api/teaching/units", json={"title": "Unit"})).json()

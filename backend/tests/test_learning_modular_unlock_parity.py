@@ -63,7 +63,7 @@ async def test_modular_unlock_status_matches_db_helper_for_each_module(monkeypat
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
 
         # Course + modular unit with 2 phases and dependency A -> B.
-        course_id = (await c.post("/api/teaching/courses", json={"title": "Parity Kurs"})).json()["id"]
+        course_id = (await c.post("/api/teaching/courses", json={"title": "Parity Kurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})).json()["id"]
         unit_id = (await c.post("/api/teaching/units", json={"title": "Parity Unit", "unit_type": "modular"})).json()["id"]
         p1 = (await c.get(f"/api/teaching/units/{unit_id}/phases")).json()[0]["id"]
         p2 = (await c.post(f"/api/teaching/units/{unit_id}/phases", json={"title": "Phase 2"})).json()["id"]
@@ -157,7 +157,7 @@ async def test_modular_unlock_done_transition_matches_db_helper_minimal(monkeypa
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
 
-        course_id = (await c.post("/api/teaching/courses", json={"title": "Parity Kurs 2"})).json()["id"]
+        course_id = (await c.post("/api/teaching/courses", json={"title": "Parity Kurs 2", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})).json()["id"]
         unit_id = (await c.post("/api/teaching/units", json={"title": "Parity Unit 2", "unit_type": "modular"})).json()["id"]
         p1 = (await c.get(f"/api/teaching/units/{unit_id}/phases")).json()[0]["id"]
         p2 = (await c.post(f"/api/teaching/units/{unit_id}/phases", json={"title": "Phase 2"})).json()["id"]

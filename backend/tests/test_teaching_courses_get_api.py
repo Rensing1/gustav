@@ -42,7 +42,11 @@ pytestmark = pytest.mark.anyio("asyncio")
 
 async def _create_course(client: httpx.AsyncClient, *, title: str, teacher_cookie: str) -> str:
     client.cookies.set(main.SESSION_COOKIE_NAME, teacher_cookie)
-    r = await client.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
+    r = await client.post(
+        "/api/teaching/courses",
+        json={"title": title, "subject": "Testfach", "grade_level": "10", "school_year_start": 2026},
+        headers={"Origin": "http://test"},
+    )
     assert r.status_code == 201
     body = r.json()
     assert isinstance(body, dict) and body.get("id")

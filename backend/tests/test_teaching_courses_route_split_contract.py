@@ -55,7 +55,9 @@ def test_course_router_owns_handlers_without_teaching_delegation() -> None:
         "create_course",
         "get_course",
         "update_course",
-        "delete_course",
+        "archive_course",
+        "restore_course",
+        "create_course_deletion_job",
     )
 
     assert "from backend.web.routes import teaching as teaching_routes" not in course_source

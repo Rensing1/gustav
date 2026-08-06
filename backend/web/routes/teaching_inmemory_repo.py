@@ -44,6 +44,10 @@ class Course:
     subject: str | None
     grade_level: str | None
     term: str | None
+    school_year_start: int | None
+    status: str
+    archived_at: str | None
+    archived_by: str | None
     teacher_id: str
     created_at: str
     updated_at: str
@@ -154,7 +158,7 @@ class InMemoryTeachingRepo:
         self.module_section_releases: Dict[tuple[str, str], Dict[str, Any]] = {}
         self.concern_box_entries: Dict[str, ConcernBoxEntryData] = {}
 
-    def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> Course:
+    def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, school_year_start: int | None = None, teacher_id: str) -> Course:
         normalized = (title or "").strip()
         if not normalized or len(normalized) > 200:
             raise ValueError("invalid_title")
@@ -166,6 +170,10 @@ class InMemoryTeachingRepo:
             subject=subject,
             grade_level=grade_level,
             term=term,
+            school_year_start=school_year_start,
+            status="active",
+            archived_at=None,
+            archived_by=None,
             teacher_id=teacher_id,
             created_at=now,
             updated_at=now,
@@ -175,8 +183,70 @@ class InMemoryTeachingRepo:
         return course
 
     def list_courses_for_teacher(self, *, teacher_id: str, limit: int, offset: int) -> List[Course]:
-        items = [c for c in self.courses.values() if c.teacher_id == teacher_id]
+        items = [c for c in self.courses.values() if c.teacher_id == teacher_id and c.status == "active"]
         return items[offset: offset + limit]
+
+    def list_course_catalog_for_owner(self, *, owner_sub: str, status: str, query: str, school_year_start: int | None, subject: str, limit: int, offset: int) -> List[dict]:
+        items = [
+            c for c in self.courses.values()
+            if c.teacher_id == owner_sub and c.status == status
+            and (not query or query.casefold() in c.title.casefold() or query.casefold() in str(c.subject or "").casefold())
+            and (school_year_start is None or c.school_year_start == school_year_start)
+            and (not subject or c.subject == subject)
+        ]
+        items.sort(key=lambda c: (-(c.school_year_start or 0) if status == "archived" else 0, c.title.casefold(), c.id))
+        return [
+            {
+                **asdict(c),
+                "metadata_complete": bool(c.subject and c.grade_level and c.school_year_start is not None),
+                "members_count": len(self.members.get(c.id, {})),
+                "units_count": len(self.modules_by_course.get(c.id, [])),
+            }
+            for c in items[offset: offset + limit]
+        ]
+
+    def archive_course_owned(self, course_id: str, owner_sub: str) -> Course:
+        course = self.courses.get(course_id)
+        if not course or course.teacher_id != owner_sub:
+            raise LookupError("course_not_found")
+        if not course.subject or not course.grade_level or course.school_year_start is None:
+            raise ValueError("course_metadata_incomplete")
+        if course.status != "active":
+            raise RuntimeError("course_not_active")
+        course.status = "archived"
+        course.archived_at = datetime.now(timezone.utc).isoformat()
+        course.archived_by = owner_sub
+        return course
+
+    def restore_course_owned(self, course_id: str, owner_sub: str) -> Course:
+        course = self.courses.get(course_id)
+        if not course or course.teacher_id != owner_sub:
+            raise LookupError("course_not_found")
+        if course.status != "archived":
+            raise RuntimeError("course_not_archived")
+        course.status = "active"
+        course.archived_at = None
+        course.archived_by = None
+        return course
+
+    def archive_courses_owned(self, course_ids: list[str], owner_sub: str) -> list[Course]:
+        return [self.archive_course_owned(course_id, owner_sub) for course_id in course_ids]
+
+    def get_course_deletion_impact(self, *, course_id: str, owner_sub: str) -> dict | None:
+        course = self.courses.get(course_id)
+        if not course or course.teacher_id != owner_sub:
+            return None
+        return {"course_id": course_id, "title": course.title, "members_count": len(self.members.get(course_id, {})), "submissions_count": 0, "dialogs_count": 0, "files_count": 0}
+
+    def queue_course_deletion(self, *, course_id: str, owner_sub: str, confirmation_title: str, confirm_student_data_loss: bool) -> dict:
+        course = self.courses.get(course_id)
+        if not course or course.teacher_id != owner_sub:
+            raise LookupError("course_not_found")
+        if confirmation_title != course.title or not confirm_student_data_loss:
+            raise ValueError("deletion_confirmation_mismatch")
+        course.status = "deleting"
+        now = datetime.now(timezone.utc).isoformat()
+        return {"id": str(uuid4()), "course_id": course_id, "status": "pending", "created_at": now}
 
     def list_courses_for_student(self, *, student_id: str, limit: int, offset: int) -> List[Course]:
         # Simple scan; replace with indexed DB query later
@@ -282,7 +352,7 @@ class InMemoryTeachingRepo:
         self.concern_box_entries[entry_id] = entry
         return True
 
-    def update_course(self, course_id: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Course | None:
+    def update_course(self, course_id: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET, school_year_start=_UNSET) -> Course | None:
         c = self.courses.get(course_id)
         if not c:
             return None
@@ -299,6 +369,8 @@ class InMemoryTeachingRepo:
             c.grade_level = grade_level
         if term is not _UNSET:
             c.term = term
+        if school_year_start is not _UNSET:
+            c.school_year_start = school_year_start
         c.updated_at = datetime.now(timezone.utc).isoformat()
         self.courses[course_id] = c
         return c

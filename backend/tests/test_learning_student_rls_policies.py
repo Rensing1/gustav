@@ -30,8 +30,8 @@ def _prep_rows(cur, teacher_sub: str, *, course_suffix: str) -> dict[str, str]:
     """Seed one released section with material+task and return identifiers."""
     cur.execute("select set_config('app.current_sub', %s, false)", (teacher_sub,))
     cur.execute(
-        "insert into public.courses (title, teacher_id) values (%s, %s) returning id",
-        (f"RLS Learning {course_suffix}", teacher_sub),
+        "insert into public.courses (title, subject, grade_level, school_year_start, teacher_id) values (%s, %s, %s, %s, %s) returning id",
+        (f"RLS Learning {course_suffix}", "Testfach", "10", 2026, teacher_sub),
     )
     course_id = cur.fetchone()[0]
     cur.execute(

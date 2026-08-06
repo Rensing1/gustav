@@ -74,7 +74,8 @@ function mockModularLoad() {
     }
     if (path === "/api/learning/views/learner-home") {
       return {
-        courses: [{ id: "course-1", title: "10RL Politik-Wirtschaft" }]
+        current_courses: [{ id: "course-1", title: "10RL Politik-Wirtschaft" }],
+        past_courses: []
       };
     }
     if (path === "/api/learning/courses/course-1/units/unit-1/modules/graph") {

@@ -45,10 +45,10 @@ async def test_learner_home_returns_student_courses(
     monkeypatch.setattr(
         app_routes,
         "_list_learner_courses",
-        lambda student_sub, limit, offset: [
+        lambda student_sub, limit, offset, scope="current": [
             {"id": "course-1", "title": "Mathe 9b"},
             {"id": "course-2", "title": "Informatik"},
-        ],
+        ] if scope == "current" else [],
     )
     headers = _mock_bearer_auth(monkeypatch, sub="student-home", roles=["student"], name="Lena")
 
@@ -58,10 +58,11 @@ async def test_learner_home_returns_student_courses(
     assert response.status_code == 200
     assert response.headers.get("Cache-Control") == "private, no-store"
     assert response.json()["user"]["sub"] == "student-home"
-    assert response.json()["courses"] == [
-        {"id": "course-1", "title": "Mathe 9b", "href": "/learning/courses/course-1"},
-        {"id": "course-2", "title": "Informatik", "href": "/learning/courses/course-2"},
+    assert response.json()["current_courses"] == [
+        {"id": "course-1", "title": "Mathe 9b", "href": "/learning/courses/course-1", "school_year_start": None},
+        {"id": "course-2", "title": "Informatik", "href": "/learning/courses/course-2", "school_year_start": None},
     ]
+    assert response.json()["past_courses"] == []
 
 
 @pytest.mark.anyio
@@ -135,7 +136,7 @@ def test_teacher_home_workstarter_sorts_courses_and_limits_recent_units(
     monkeypatch.setattr(
         app_routes,
         "_list_teacher_courses",
-        lambda owner_sub, limit, offset: [
+        lambda owner_sub, limit, offset, **filters: [
             {"id": "course-z", "title": "Zukunft"},
             {"id": "course-a", "title": "Anfang"},
         ],
@@ -171,7 +172,7 @@ async def test_teacher_courses_view_returns_teacher_course_cards(monkeypatch: py
     monkeypatch.setattr(
         app_routes,
         "_list_teacher_course_cards",
-        lambda owner_sub, limit, offset: [
+        lambda owner_sub, limit, offset, **filters: [
             {
                 "id": "course-1",
                 "title": "Mathe 9b",
@@ -181,6 +182,10 @@ async def test_teacher_courses_view_returns_teacher_course_cards(monkeypatch: py
                 "subject": "Mathematik",
                 "grade_level": "9b",
                 "term": "Q1",
+                "school_year_start": 2026,
+                "status": "active",
+                "metadata_complete": True,
+                "archived_at": None,
             },
             {
                 "id": "course-2",
@@ -191,6 +196,10 @@ async def test_teacher_courses_view_returns_teacher_course_cards(monkeypatch: py
                 "subject": None,
                 "grade_level": None,
                 "term": None,
+                "school_year_start": None,
+                "status": "active",
+                "metadata_complete": False,
+                "archived_at": None,
             },
         ],
     )
@@ -208,6 +217,10 @@ async def test_teacher_courses_view_returns_teacher_course_cards(monkeypatch: py
             "role": "teacher",
             "roles": ["teacher"],
         },
+        "status": "active",
+        "query": "",
+        "school_year_start": None,
+        "subject": "",
         "courses": [
             {
                 "id": "course-1",
@@ -218,6 +231,10 @@ async def test_teacher_courses_view_returns_teacher_course_cards(monkeypatch: py
                 "subject": "Mathematik",
                 "grade_level": "9b",
                 "term": "Q1",
+                "school_year_start": 2026,
+                "status": "active",
+                "metadata_complete": True,
+                "archived_at": None,
             },
             {
                 "id": "course-2",
@@ -228,6 +245,10 @@ async def test_teacher_courses_view_returns_teacher_course_cards(monkeypatch: py
                 "subject": None,
                 "grade_level": None,
                 "term": None,
+                "school_year_start": None,
+                "status": "active",
+                "metadata_complete": False,
+                "archived_at": None,
             },
         ],
     }

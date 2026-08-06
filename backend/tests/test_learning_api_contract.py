@@ -76,7 +76,16 @@ def _provide_submission_validation_bytes(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 async def _create_course(client: httpx.AsyncClient, title: str) -> str:
-    resp = await client.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
+    resp = await client.post(
+        "/api/teaching/courses",
+        json={
+            "title": title,
+            "subject": "Testfach",
+            "grade_level": "10",
+            "school_year_start": 2026,
+        },
+        headers={"Origin": "http://test"},
+    )
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
 

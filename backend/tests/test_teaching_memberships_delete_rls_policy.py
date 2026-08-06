@@ -46,7 +46,14 @@ def test_owner_can_delete_membership_under_rls(monkeypatch: pytest.MonkeyPatch) 
     student = "student-rls-delete-me"
 
     # Arrange: create course and add membership as owner (limited role path)
-    course = repo.create_course(title="RLS Delete", subject=None, grade_level=None, term=None, teacher_id=owner)
+    course = repo.create_course(
+        title="RLS Delete",
+        subject="Testfach",
+        grade_level="10",
+        term=None,
+        school_year_start=2026,
+        teacher_id=owner,
+    )
     created = repo.add_member_owned(course["id"], owner, student)
     assert created is True or created is False  # idempotent semantics allowed
 

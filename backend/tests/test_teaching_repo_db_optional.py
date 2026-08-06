@@ -48,6 +48,19 @@ async def test_db_repo_create_and_list_courses_when_db_available():
     arr = repo.list_courses_for_teacher(teacher_id="teacher-db-1", limit=10, offset=0)
     assert any(x["id"] == c["id"] for x in arr)
 
+    # The unfiltered catalog is the normal browser entry point. PostgreSQL
+    # still needs an explicit type for the nullable school-year parameter.
+    catalog = repo.list_course_catalog_for_owner(
+        owner_sub="teacher-db-1",
+        status="active",
+        query="",
+        school_year_start=None,
+        subject="",
+        limit=100,
+        offset=0,
+    )
+    assert any(x["id"] == c["id"] for x in catalog)
+
 
 def test_db_repo_memberships_enforce_owner_rls():
     dsn = os.getenv("DATABASE_URL") or _fallback_login_dsn()
@@ -62,6 +75,7 @@ def test_db_repo_memberships_enforce_owner_rls():
         subject="Geschichte",
         grade_level="EF",
         term="2025-2",
+        school_year_start=2026,
         teacher_id="teacher-owner",
     )
     # Owner adds a member via owner-scoped helper
@@ -94,9 +108,10 @@ def test_course_memberships_insert_blocked_for_non_owner():
     repo = DBTeachingRepo(dsn=dsn)
     course = repo.create_course(
         title="Politik EF",
-        subject=None,
-        grade_level=None,
+        subject="Politik",
+        grade_level="EF",
         term=None,
+        school_year_start=2026,
         teacher_id=owner,
     )
 

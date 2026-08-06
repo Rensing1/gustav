@@ -23,7 +23,7 @@ def list_courses_for_student(*, dsn: str, psycopg_module, student_sub: str, limi
                 select c.id::text, c.title, c.subject, c.grade_level, c.term
                   from public.courses c
                   join public.course_memberships m on m.course_id = c.id
-                 where m.student_id = %s
+                 where m.student_id = %s and m.ended_at is null and c.status = 'active'
                  order by c.title asc, c.id asc
                  offset %s
                  limit %s

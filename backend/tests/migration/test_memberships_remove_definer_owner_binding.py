@@ -46,7 +46,14 @@ async def test_remove_course_membership_binds_to_session_owner() -> None:
     attacker = "teacher-attacker-binding"
     student = "student-binding-target"
 
-    course = repo.create_course(title="BindOwner", subject=None, grade_level=None, term=None, teacher_id=real_owner)
+    course = repo.create_course(
+        title="BindOwner",
+        subject="Testfach",
+        grade_level="10",
+        term=None,
+        school_year_start=2026,
+        teacher_id=real_owner,
+    )
     repo.add_member_owned(course["id"], real_owner, student)
 
     dsn = _dsn()

@@ -178,7 +178,7 @@ async def _prepare_modular_learning_fixture(monkeypatch: pytest.MonkeyPatch) -> 
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", teacher.session_id)
-        course_resp = await client.post("/api/teaching/courses", json={"title": "Kurs Modular Worker"})
+        course_resp = await client.post("/api/teaching/courses", json={"title": "Kurs Modular Worker", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert course_resp.status_code == 201, course_resp.text
         course_id = course_resp.json()["id"]
 

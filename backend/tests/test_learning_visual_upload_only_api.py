@@ -82,7 +82,7 @@ async def _prepare_visual_task_fixture(monkeypatch: pytest.MonkeyPatch | None = 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
 
-        course = (await c.post("/api/teaching/courses", json={"title": "Kurs Visual"})).json()
+        course = (await c.post("/api/teaching/courses", json={"title": "Kurs Visual", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})).json()
         unit = (await c.post("/api/teaching/units", json={"title": "Unit"})).json()
         section = (
             await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "Abschnitt"})

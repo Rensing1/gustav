@@ -1,9 +1,8 @@
 """
-Teaching API — Members semantics after delete: 404 vs 403
+Teaching API — Members semantics after a confirmed deletion request
 
-Focus: After an owner deletes a course, roster operations (add/remove/list) must
-return 404 (Not Found), not 403 (Forbidden). This aligns clients and the
-OpenAPI contract.
+Focus: As soon as asynchronous deletion is accepted, roster operations must
+return 404 even while the worker is still removing database and storage data.
 """
 from __future__ import annotations
 
@@ -41,14 +40,17 @@ def _session_store(monkeypatch: pytest.MonkeyPatch):
 
 
 async def _create_course(client: httpx.AsyncClient) -> str:
-    resp = await client.post("/api/teaching/courses", json={"title": "Physics", "subject": "phy"})
+    resp = await client.post("/api/teaching/courses", json={"title": "Physics", "subject": "phy", "grade_level": "10", "school_year_start": 2026})
     assert resp.status_code == 201
     return resp.json()["id"]
 
 
 async def _delete_course(client: httpx.AsyncClient, cid: str) -> None:
-    resp = await client.delete(f"/api/teaching/courses/{cid}")
-    assert resp.status_code == 204
+    resp = await client.post(
+        f"/api/teaching/courses/{cid}/deletion-jobs",
+        json={"confirmation_title": "Physics", "confirm_student_data_loss": True},
+    )
+    assert resp.status_code == 202
 
 
 @pytest.mark.anyio

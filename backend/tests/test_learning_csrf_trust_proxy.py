@@ -36,7 +36,7 @@ async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     async with _client(main.app) as client:
         # Create course and learning items
         _set_session_cookie(client, teacher.session_id)
-        course = (await client.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://internal"})).json()
+        course = (await client.post("/api/teaching/courses", json={"title": "Kurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://internal"})).json()
         unit = (await client.post("/api/teaching/units", json={"title": "Unit"}, headers={"Origin": "http://internal"})).json()
         section = (await client.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "S"}, headers={"Origin": "http://internal"})).json()
         task = (

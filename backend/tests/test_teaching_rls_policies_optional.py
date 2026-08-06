@@ -9,6 +9,7 @@ Uses only one DSN (limited) and seeds rows by acting as the owning teacher via
 from __future__ import annotations
 
 import os
+import uuid
 import pytest
 
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
@@ -31,16 +32,8 @@ async def test_rls_limited_role_sees_only_own_rows():
     import psycopg  # type: ignore
 
     dsn = _limited_dsn()
-    t1, t2 = "teacher-rls-1", "teacher-rls-2"
-
-    # Cleanup any leftovers from previous runs for deterministic assertions
-    with psycopg.connect(dsn) as conn:
-        with conn.cursor() as cur:
-            cur.execute("select set_config('app.current_sub', %s, false)", (t1,))
-            cur.execute("delete from public.courses where teacher_id = current_setting('app.current_sub', true)")
-            cur.execute("select set_config('app.current_sub', %s, false)", (t2,))
-            cur.execute("delete from public.courses where teacher_id = current_setting('app.current_sub', true)")
-            conn.commit()
+    suffix = uuid.uuid4().hex
+    t1, t2 = f"teacher-rls-1-{suffix}", f"teacher-rls-2-{suffix}"
 
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:

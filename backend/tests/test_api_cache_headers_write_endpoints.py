@@ -70,7 +70,10 @@ async def test_create_course_201_has_private_no_store(monkeypatch: pytest.Monkey
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r = await c.post("/api/teaching/courses", json={"title": "Kurs A"})
+        r = await c.post(
+            "/api/teaching/courses",
+            json={"title": "Kurs A", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026},
+        )
 
     assert r.status_code == 201
     cc = r.headers.get("Cache-Control", "")

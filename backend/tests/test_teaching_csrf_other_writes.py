@@ -32,7 +32,7 @@ async def _client() -> httpx.AsyncClient:
 
 
 async def _create_course_same_origin(c: httpx.AsyncClient, *, title: str = "Kurs") -> str:
-    r = await c.post("/api/teaching/courses", json={"title": title}, headers={"Origin": "http://test"})
+    r = await c.post("/api/teaching/courses", json={"title": title, "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://test"})
     assert r.status_code == 201, r.text
     return str(r.json()["id"])
 
@@ -77,7 +77,11 @@ async def test_create_course_blocks_cross_origin_and_allows_same_origin(monkeypa
 
         # Same-origin → 201 + private cache headers
         csrf_calls["count"] = 0
-        r2 = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
+        r2 = await c.post(
+            "/api/teaching/courses",
+            json={"title": "Kurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026},
+            headers={"Origin": "http://test"},
+        )
         assert r2.status_code == 201
         assert r2.headers.get("Cache-Control") == "private, no-store"
         assert csrf_calls["count"] == 1, "CSRF guard should be evaluated exactly once per request"

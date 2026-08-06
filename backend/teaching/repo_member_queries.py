@@ -22,7 +22,7 @@ def list_courses_for_student(*, dsn: str, psycopg_module, student_id: str, limit
                        to_char(c.updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                 from public.courses c
                 join public.course_memberships m on m.course_id = c.id
-                where m.student_id = %s
+                where m.student_id = %s and m.ended_at is null and c.status = 'active'
                 order by c.created_at desc, c.id
                 limit %s offset %s
                 """,
@@ -94,10 +94,13 @@ def add_member_owned(*, dsn: str, psycopg_module, course_id: str, owner_sub: str
             cur.execute(
                 """
                 insert into public.course_memberships (course_id, student_id)
-                values (%s, %s)
-                on conflict do nothing
+                select %s, %s
+                 where public.course_exists_for_owner(%s, %s)
+                on conflict (course_id, student_id) do update
+                  set ended_at = null, ended_by = null, created_at = now()
+                where course_memberships.ended_at is not null
                 """,
-                (course_id, student_id),
+                (course_id, student_id, owner_sub, course_id),
             )
             inserted = cur.rowcount == 1
             conn.commit()
@@ -114,7 +117,7 @@ def remove_member_owned(
     owner_sub: str,
     student_id: str,
 ) -> None:
-    """Remove a membership for a course owned by `owner_sub`.
+    """End a membership without deleting the learner's history.
 
     Why:
         Teachers must be able to unenroll students from their own courses.
@@ -141,47 +144,19 @@ def remove_member_owned(
           execute the delete when RLS prevents it, but the route has
           already verified ownership via a SECURITY DEFINER helper.
     """
-    affected = 0
     with psycopg_module.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
             cur.execute(
-                "delete from public.course_memberships where course_id = %s and student_id = %s",
-                (course_id, student_id),
+                """
+                update public.course_memberships
+                   set ended_at = now(), ended_by = %s
+                 where course_id = %s and student_id = %s and ended_at is null
+                   and public.course_exists_for_owner(%s, course_id)
+                """,
+                (owner_sub, course_id, student_id, owner_sub),
             )
-            affected = cur.rowcount or 0
-            if affected == 0:
-                # Attempt SECURITY DEFINER helper (ownership already verified by route)
-                try:
-                    cur.execute(
-                        "select public.remove_course_membership(%s, %s, %s)",
-                        (owner_sub, course_id, student_id),
-                    )
-                    affected = 1  # treat as success when helper executes without error
-                except Exception:
-                    affected = 0
             conn.commit()
-    # Final fallback (dev/test only): allow service-role DSN when explicitly enabled.
-    if affected == 0 and service_dsn:
-        if not service_fallback_allowed():
-            # Deny fallback in prod/stage even if the flag is set; log once per call-site.
-            logger.warning(
-                "Service-DSN fallback blocked (env not allowed). Set GUSTAV_ENV in {dev,test,local} to enable for testing."
-            )
-            return
-        # Explicitly allowed in test/dev; log to make audits easier.
-        logger.warning("Using service-DSN fallback for membership delete (test/dev only)")
-        try:
-            with psycopg_module.connect(service_dsn) as conn2:  # type: ignore[arg-type]
-                with conn2.cursor() as cur2:
-                    cur2.execute(
-                        "delete from public.course_memberships where course_id = %s and student_id = %s",
-                        (course_id, student_id),
-                    )
-                    conn2.commit()
-        except Exception:
-            # Intentionally swallow errors in the test-only branch
-            pass
 
 def student_has_course(*, dsn: str, psycopg_module, course_id: str, student_sub: str) -> bool:
     with psycopg_module.connect(dsn) as conn:
@@ -208,7 +183,8 @@ def add_member(*, dsn: str, psycopg_module, course_id: str, student_id: str) -> 
                 """
                 insert into public.course_memberships (course_id, student_id)
                 values (%s, %s)
-                on conflict do nothing
+                on conflict (course_id, student_id) do update
+                  set ended_at = null, ended_by = null, created_at = now()
                 """,
                 (course_id, student_id),
             )
@@ -237,7 +213,7 @@ def remove_member(*, dsn: str, psycopg_module, course_id: str, student_id: str) 
     with psycopg_module.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "delete from public.course_memberships where course_id = %s and student_id = %s",
+                "update public.course_memberships set ended_at = now() where course_id = %s and student_id = %s and ended_at is null",
                 (course_id, student_id),
             )
             conn.commit()

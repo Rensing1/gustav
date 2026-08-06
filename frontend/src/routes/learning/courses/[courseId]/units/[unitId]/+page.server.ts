@@ -81,7 +81,7 @@ async function loadPageData(
     throw error(404, "Lerneinheit nicht gefunden.");
   }
   const courseTitle =
-    home.courses.find((course) => course.id === courseId)?.title ?? "Kursraum";
+    [...home.current_courses, ...home.past_courses].find((course) => course.id === courseId)?.title ?? "Kursraum";
 
   const legacyHistoryTaskId = url.searchParams.get("history");
   const rawRequestedTaskId = url.searchParams.get("task") ?? legacyHistoryTaskId;

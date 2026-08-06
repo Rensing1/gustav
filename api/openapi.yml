@@ -283,13 +283,20 @@ components:
           type: string
         href:
           type: string
+        school_year_start:
+          type: integer
+          nullable: true
     LearnerHome:
       type: object
-      required: [user, courses]
+      required: [user, current_courses, past_courses]
       properties:
         user:
           $ref: '#/components/schemas/SessionBootstrapUser'
-        courses:
+        current_courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearnerHomeCourse'
+        past_courses:
           type: array
           items:
             $ref: '#/components/schemas/LearnerHomeCourse'
@@ -377,7 +384,7 @@ components:
           type: string
     TeacherCourseListItem:
       type: object
-      required: [id, title, href, members_count, units_count]
+      required: [id, title, href, members_count, units_count, status, metadata_complete]
       properties:
         id:
           type: string
@@ -400,12 +407,30 @@ components:
         term:
           type: string
           nullable: true
+        school_year_start:
+          type: integer
+          minimum: 2000
+          maximum: 2200
+          nullable: true
+        status:
+          type: string
+          enum: [active, archived]
+        metadata_complete:
+          type: boolean
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
     TeacherCourseListView:
       type: object
-      required: [user, courses]
+      required: [user, status, query, school_year_start, subject, courses]
       properties:
         user:
           $ref: '#/components/schemas/SessionBootstrapUser'
+        status: { type: string, enum: [active, archived] }
+        query: { type: string }
+        school_year_start: { type: integer, nullable: true }
+        subject: { type: string }
         courses:
           type: array
           items:
@@ -1678,7 +1703,7 @@ components:
           description: Optional diagnostic tag (e.g. missing_OPENAI_BASE_URL, connect_failed, http_401).
     Course:
       type: object
-      required: [id, title, teacher_id, created_at, updated_at]
+      required: [id, title, teacher_id, status, metadata_complete, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1690,14 +1715,26 @@ components:
         subject:
           type: string
           maxLength: 100
-          nullable: true
         grade_level:
           type: string
           maxLength: 32
-          nullable: true
         term:
           type: string
           maxLength: 32
+          nullable: true
+        school_year_start:
+          type: integer
+          minimum: 2000
+          maximum: 2200
+          nullable: true
+        status:
+          type: string
+          enum: [active, archived, deleting]
+        metadata_complete:
+          type: boolean
+        archived_at:
+          type: string
+          format: date-time
           nullable: true
         teacher_id:
           type: string
@@ -1710,7 +1747,7 @@ components:
           format: date-time
     CourseCreate:
       type: object
-      required: [title]
+      required: [title, subject, grade_level, school_year_start]
       properties:
         title:
           type: string
@@ -1719,15 +1756,17 @@ components:
         subject:
           type: string
           maxLength: 100
-          nullable: true
         grade_level:
           type: string
           maxLength: 32
-          nullable: true
         term:
           type: string
           maxLength: 32
           nullable: true
+        school_year_start:
+          type: integer
+          minimum: 2000
+          maximum: 2200
     CourseUpdate:
       type: object
       properties:
@@ -1747,6 +1786,90 @@ components:
           type: string
           maxLength: 32
           nullable: true
+        school_year_start:
+          type: integer
+          minimum: 2000
+          maximum: 2200
+    CourseArchiveBatchRequest:
+      type: object
+      required: [course_ids]
+      additionalProperties: false
+      properties:
+        course_ids:
+          type: array
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    CourseDeletionImpact:
+      type: object
+      required: [course_id, title, members_count, submissions_count, dialogs_count, files_count]
+      additionalProperties: false
+      properties:
+        course_id: { type: string, format: uuid }
+        title: { type: string }
+        members_count: { type: integer, minimum: 0 }
+        submissions_count: { type: integer, minimum: 0 }
+        dialogs_count: { type: integer, minimum: 0 }
+        files_count: { type: integer, minimum: 0 }
+    CourseDeletionRequest:
+      type: object
+      required: [confirmation_title, confirm_student_data_loss]
+      additionalProperties: false
+      properties:
+        confirmation_title: { type: string, minLength: 1, maxLength: 200 }
+        confirm_student_data_loss: { type: boolean, enum: [true] }
+    CourseDeletionJob:
+      type: object
+      required: [id, course_id, status, created_at]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        course_id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, processing, completed, failed] }
+        created_at: { type: string, format: date-time }
+    LearningPortfolioSubmission:
+      type: object
+      required: [id, kind, intent, created_at, task_snapshot]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string }
+        intent: { type: string }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+        text_body: { type: string, nullable: true }
+        feedback_md: { type: string, nullable: true }
+        analysis_json: { type: object, nullable: true, additionalProperties: true }
+        file_name: { type: string, nullable: true }
+        file_href: { type: string, nullable: true }
+        dialog_session_id: { type: string, format: uuid, nullable: true }
+        task_snapshot: { type: object, additionalProperties: true }
+    LearningCoursePortfolio:
+      type: object
+      required: [course, submissions, export_href]
+      additionalProperties: false
+      properties:
+        course: { $ref: '#/components/schemas/LearningCourse' }
+        submissions:
+          type: array
+          items: { $ref: '#/components/schemas/LearningPortfolioSubmission' }
+        export_href: { type: string }
+        latest_export:
+          allOf: [{ $ref: '#/components/schemas/LearningExportJob' }]
+          nullable: true
+    LearningExportJob:
+      type: object
+      required: [id, course_id, status, requested_at, expires_at]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        course_id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, generating, ready, failed, expired] }
+        requested_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        download_href: { type: string, nullable: true }
+        error_code: { type: string, nullable: true }
     CourseMember:
       type: object
       required: [sub, name, joined_at]
@@ -3157,7 +3280,7 @@ components:
 
     LearningCourse:
       type: object
-      required: [id, title]
+      required: [id, title, status, membership_status]
       additionalProperties: false
       properties:
         id:
@@ -3175,6 +3298,17 @@ components:
         term:
           type: string
           nullable: true
+        school_year_start:
+          type: integer
+          minimum: 2000
+          maximum: 2200
+          nullable: true
+        status:
+          type: string
+          enum: [active, archived]
+        membership_status:
+          type: string
+          enum: [active, former]
     UnitPublic:
       type: object
       required: [id, title, unit_type]
@@ -4896,6 +5030,9 @@ paths:
         requiredRole: student
       parameters:
         - in: query
+          name: scope
+          schema: { type: string, enum: [current, past], default: current }
+        - in: query
           name: limit
           schema:
             type: integer
@@ -4947,6 +5084,98 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/learning/courses/{course_id}/portfolio:
+    get:
+      tags: [Learning]
+      summary: Return only the current learner's performance in a current or past course
+      operationId: getLearningCoursePortfolio
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Personal course portfolio, content: { application/json: { schema: { $ref: '#/components/schemas/LearningCoursePortfolio' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { description: Course or personal membership not found }
+  /api/learning/courses/{course_id}/exports:
+    post:
+      tags: [Learning]
+      summary: Queue a private personal course export
+      operationId: createLearningCourseExport
+      security: [{ cookieAuth: [] }]
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required for the cookie-authenticated export request."
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '202': { description: Export accepted, content: { application/json: { schema: { $ref: '#/components/schemas/LearningExportJob' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { description: Course or personal membership not found }
+  /api/learning/exports/{export_id}:
+    get:
+      tags: [Learning]
+      summary: Read the current learner's export status
+      operationId: getLearningExport
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - in: path
+          name: export_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Export status, content: { application/json: { schema: { $ref: '#/components/schemas/LearningExportJob' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { description: Export not found }
+  /api/learning/exports/{export_id}/download:
+    get:
+      tags: [Learning]
+      summary: Download the current learner's ready private export
+      operationId: downloadLearningExport
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - in: path
+          name: export_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: ZIP archive
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { description: Export not found }
+        '409': { description: export_not_ready or export_expired, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/portfolio/submissions/{submission_id}/file:
+    get:
+      tags: [Learning]
+      summary: Download the current learner's own historical submission file
+      operationId: downloadLearningPortfolioSubmissionFile
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - in: path
+          name: submission_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Original private submission file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { description: Submission not found in the caller's personal archive }
+
   /api/learning/courses/{course_id}/sections:
     get:
       tags: [Learning]
@@ -7712,6 +7941,18 @@ paths:
         - bearerAuth: []
       parameters:
         - in: query
+          name: status
+          schema: { type: string, enum: [active, archived], default: active }
+        - in: query
+          name: query
+          schema: { type: string, maxLength: 100 }
+        - in: query
+          name: school_year_start
+          schema: { type: integer, minimum: 2000, maximum: 2200 }
+        - in: query
+          name: subject
+          schema: { type: string, maxLength: 100 }
+        - in: query
           name: limit
           schema:
             type: integer
@@ -8816,42 +9057,120 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-    delete:
+  /api/teaching/courses/{course_id}/archive:
+    post:
       tags: [Teaching]
-      summary: Delete a course (owner only)
-      description: |-
-        Deletes a course when owned by the caller. Returns 404 when the course
-        does not exist and 403 when the caller is not the owner. Response 204
-        contains no content.
-      operationId: deleteCourse
-      security:
-        - cookieAuth: []
+      summary: Archive an owned active course
+      operationId: archiveCourse
+      security: [{ cookieAuth: [] }]
       x-security-notes:
-        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
-        - "RLS: author-only policies limit task visibility to the owning teacher."
-      x-permissions:
-        requiredRole: teacher
-        ownerOnly: true
+        - "CSRF: strict same-origin validation is required."
+        - "RLS and the owner-bound database function restrict archival to the course owner."
       parameters:
         - in: path
           name: course_id
           required: true
-          schema:
-            type: string
-            format: uuid
+          schema: { type: string, format: uuid }
       responses:
-        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
-        '204':
-          description: Deleted (no content)
-          headers:
-            Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
-              schema:
-                type: string
-                example: private, no-store
+        '200': { description: Archived course, content: { application/json: { schema: { $ref: '#/components/schemas/Course' } } } }
+        '400': { description: Invalid input or course_metadata_incomplete, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { $ref: '#/components/responses/Forbidden403' }
-        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Course not found }
+        '409': { description: Course is not active, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
+  /api/teaching/courses/{course_id}/restore:
+    post:
+      tags: [Teaching]
+      summary: Restore an owned archived course after accidental archival
+      operationId: restoreCourse
+      security: [{ cookieAuth: [] }]
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required."
+        - "RLS and the owner-bound database function restrict restoration to the course owner."
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Restored course, content: { application/json: { schema: { $ref: '#/components/schemas/Course' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { description: Course not found }
+        '409': { description: Course is not archived, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
+  /api/teaching/courses/archive-batch:
+    post:
+      tags: [Teaching]
+      summary: Archive multiple owned courses atomically
+      operationId: archiveCoursesBatch
+      security: [{ cookieAuth: [] }]
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required."
+        - "The owner-bound database function validates every course before changing any course."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseArchiveBatchRequest' }
+      responses:
+        '200':
+          description: Archived courses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Course' }
+        '400': { description: Invalid input or course_metadata_incomplete, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '409': { description: At least one course is not active }
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
+  /api/teaching/courses/{course_id}/deletion-impact:
+    get:
+      tags: [Teaching]
+      summary: Preview the current consequences of permanently deleting a course
+      operationId: getCourseDeletionImpact
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Current deletion impact, content: { application/json: { schema: { $ref: '#/components/schemas/CourseDeletionImpact' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { description: Course not found }
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
+  /api/teaching/courses/{course_id}/deletion-jobs:
+    post:
+      tags: [Teaching]
+      summary: Queue strongly confirmed permanent course deletion
+      operationId: createCourseDeletionJob
+      security: [{ cookieAuth: [] }]
+      x-security-notes:
+        - "CSRF: strict same-origin validation is required."
+        - "The server rechecks ownership, the exact title and explicit student-data-loss confirmation."
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseDeletionRequest' }
+      responses:
+        '202': { description: Deletion accepted, content: { application/json: { schema: { $ref: '#/components/schemas/CourseDeletionJob' } } } }
+        '400': { description: deletion_confirmation_mismatch, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { description: Course not found }
+        '409': { description: Course is already deleting }
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
 
   /api/teaching/courses/{course_id}/members:
     get:

@@ -53,7 +53,14 @@ async def test_rls_delete_policy_owner_can_delete_non_owner_cannot() -> None:
     attacker = "teacher-rls-attacker"
     student = "student-rls-target"
 
-    course = repo.create_course(title="RLSDelete", subject=None, grade_level=None, term=None, teacher_id=owner)
+    course = repo.create_course(
+        title="RLSDelete",
+        subject="Testfach",
+        grade_level="10",
+        term=None,
+        school_year_start=2026,
+        teacher_id=owner,
+    )
     repo.add_member_owned(course["id"], owner, student)
 
     dsn = _dsn_from_repo(repo)

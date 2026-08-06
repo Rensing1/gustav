@@ -18,7 +18,7 @@ def test_openapi_documents_home_view_models() -> None:
     assert "/api/teaching/views/courses" in spec["paths"]
 
     learner_schema = spec["components"]["schemas"]["LearnerHome"]
-    assert learner_schema["required"] == ["user", "courses"]
+    assert learner_schema["required"] == ["user", "current_courses", "past_courses"]
 
     learner_concern_schema = spec["components"]["schemas"]["LearnerConcernBoxView"]
     assert learner_concern_schema["required"] == ["user", "courses"]
@@ -37,7 +37,22 @@ def test_openapi_documents_home_view_models() -> None:
     assert teacher_concern_schema["required"] == ["user", "scopes", "active_scope", "entries"]
 
     teacher_courses_schema = spec["components"]["schemas"]["TeacherCourseListView"]
-    assert teacher_courses_schema["required"] == ["user", "courses"]
+    assert teacher_courses_schema["required"] == [
+        "user",
+        "status",
+        "query",
+        "school_year_start",
+        "subject",
+        "courses",
+    ]
 
     teacher_course_item = spec["components"]["schemas"]["TeacherCourseListItem"]
-    assert teacher_course_item["required"] == ["id", "title", "href", "members_count", "units_count"]
+    assert teacher_course_item["required"] == [
+        "id",
+        "title",
+        "href",
+        "members_count",
+        "units_count",
+        "status",
+        "metadata_complete",
+    ]

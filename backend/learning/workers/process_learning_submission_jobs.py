@@ -25,6 +25,12 @@ from importlib import import_module
 from concurrent.futures import ThreadPoolExecutor
 
 from . import runtime_config, telemetry
+from .course_lifecycle_jobs import (
+    build_storage_adapter_from_env,
+    process_deletion_once,
+    process_expired_export_once,
+    process_export_once,
+)
 from backend.learning.adapters.ports import (
     FeedbackAdapterProtocol,
     FeedbackInvalidAnalysisError,
@@ -1264,6 +1270,7 @@ def run_forever(
     vision_adapter: VisionAdapterProtocol,
     feedback_adapter: FeedbackAdapterProtocol,
     poll_interval: float = 0.5,
+    lifecycle_storage_adapter=None,
 ) -> None:
     """Continuously process jobs until interrupted."""
     import time
@@ -1274,6 +1281,12 @@ def run_forever(
             vision_adapter=vision_adapter,
             feedback_adapter=feedback_adapter,
         )
+        if lifecycle_storage_adapter is not None:
+            # Lifecycle jobs use the same least-privilege worker process but a
+            # separate queue, so AI failures cannot expose archive contents.
+            processed = process_export_once(dsn=dsn, storage_adapter=lifecycle_storage_adapter) or processed
+            processed = process_expired_export_once(dsn=dsn, storage_adapter=lifecycle_storage_adapter) or processed
+            processed = process_deletion_once(dsn=dsn, storage_adapter=lifecycle_storage_adapter) or processed
         if not processed:
             time.sleep(poll_interval)
 
@@ -1325,11 +1338,15 @@ def main() -> None:
     feedback_adapter = feedback_module.build()  # type: ignore[attr-defined]
 
     poll_interval = float(os.getenv("WORKER_POLL_INTERVAL", "0.5"))
+    lifecycle_storage_adapter = build_storage_adapter_from_env()
+    if lifecycle_storage_adapter is None:
+        LOG.warning("Course export and deletion jobs are disabled because private storage is not configured")
     run_forever(
         dsn=dsn,
         vision_adapter=vision_adapter,
         feedback_adapter=feedback_adapter,
         poll_interval=poll_interval,
+        lifecycle_storage_adapter=lifecycle_storage_adapter,
     )
 
 

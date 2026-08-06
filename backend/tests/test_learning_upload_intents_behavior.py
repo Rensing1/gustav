@@ -95,7 +95,7 @@ async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     async with (await _client()) as c:
         # Teacher creates course/unit/section/task and releases section
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://test"})
         assert r_course.status_code == 201
         course_id = r_course.json()["id"]
         r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"}, headers={"Origin": "http://test"})
@@ -233,7 +233,7 @@ async def test_upload_intent_requires_membership(monkeypatch: pytest.MonkeyPatch
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://test"})
         course_id = r_course.json()["id"]
         r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"}, headers={"Origin": "http://test"})
         unit_id = r_unit.json()["id"]
@@ -278,7 +278,7 @@ async def test_upload_intent_task_not_visible_returns_404(monkeypatch: pytest.Mo
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs"}, headers={"Origin": "http://test"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "Kurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://test"})
         course_id = r_course.json()["id"]
         r_unit = await c.post("/api/teaching/units", json={"title": "Einheit"}, headers={"Origin": "http://test"})
         unit_id = r_unit.json()["id"]

@@ -4,11 +4,13 @@ export type LearnerHomeCourse = {
   id: string;
   title: string;
   href: string;
+  school_year_start: number | null;
 };
 
 export type LearnerHome = {
   user: SessionBootstrapUser;
-  courses: LearnerHomeCourse[];
+  current_courses: LearnerHomeCourse[];
+  past_courses: LearnerHomeCourse[];
 };
 
 export type ConcernBoxCourseOption = {
@@ -74,10 +76,18 @@ export type TeacherCourseListItem = {
   subject: string | null;
   grade_level: string | null;
   term: string | null;
+  school_year_start: number | null;
+  status: "active" | "archived";
+  metadata_complete: boolean;
+  archived_at: string | null;
 };
 
 export type TeacherCourseListView = {
   user: SessionBootstrapUser;
+  status: "active" | "archived";
+  query: string;
+  school_year_start: number | null;
+  subject: string;
   courses: TeacherCourseListItem[];
 };
 

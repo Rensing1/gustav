@@ -17,6 +17,7 @@ class CourseCreate(BaseModel):
     subject: str | None = Field(default=None, max_length=100)
     grade_level: str | None = Field(default=None, max_length=32)
     term: str | None = Field(default=None, max_length=32)
+    school_year_start: int | None = Field(default=None, ge=2000, le=2200)
 
     @field_validator("subject", "grade_level", "term")
     @classmethod
@@ -33,6 +34,7 @@ class CourseUpdate(BaseModel):
     subject: str | None = None
     grade_level: str | None = None
     term: str | None = None
+    school_year_start: int | None = Field(default=None, ge=2000, le=2200)
 
     @field_validator("subject", "grade_level", "term")
     @classmethod
@@ -42,6 +44,14 @@ class CourseUpdate(BaseModel):
             return v if v else None
         return v
 
+
+class CourseArchiveBatchPayload(BaseModel):
+    course_ids: list[str] = Field(min_length=1, max_length=50)
+
+
+class CourseDeletionPayload(BaseModel):
+    confirmation_title: str = Field(min_length=1, max_length=200)
+    confirm_student_data_loss: bool
 
 class UnitCreatePayload(BaseModel):
     unit_type: str | None = Field(default=None)

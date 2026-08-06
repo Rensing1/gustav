@@ -44,7 +44,7 @@ async def _client() -> httpx.AsyncClient:
 
 
 async def _create_course(client: httpx.AsyncClient, title: str = "Kurs") -> str:
-    r = await client.post("/api/teaching/courses", json={"title": title})
+    r = await client.post("/api/teaching/courses", json={"title": title, "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
     assert r.status_code == 201
     return r.json()["id"]
 

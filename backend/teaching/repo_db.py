@@ -27,6 +27,7 @@ from backend.teaching import repo_member_queries as _repo_member_queries
 from backend.teaching import repo_section_queries as _repo_section_queries
 from backend.teaching import repo_unit_queries as _repo_unit_queries
 from backend.teaching import repo_course_module_queries as _repo_course_module_queries
+from backend.teaching import repo_course_lifecycle_queries as _repo_course_lifecycle_queries
 from backend.teaching import repo_concern_box_queries as _repo_concern_box_queries
 from backend.teaching import repo_ai_usage_queries as _repo_ai_usage_queries
 from backend.teaching import repo_task_queries as _repo_task_queries
@@ -105,6 +106,31 @@ def _safe_int(value: object) -> int | None:
         return None
 
 _UNSET = object()
+
+
+def _course_row_to_dict(row) -> dict:
+    """Map the stable course projection used by all course repository methods."""
+
+    subject, grade_level, school_year_start = row[2], row[3], row[5]
+    return {
+        "id": row[0],
+        "title": row[1],
+        "subject": subject,
+        "grade_level": grade_level,
+        "term": row[4],
+        "school_year_start": school_year_start,
+        "status": row[6],
+        "archived_at": row[7],
+        "archived_by": row[8],
+        "metadata_complete": bool(
+            str(subject or "").strip()
+            and str(grade_level or "").strip()
+            and school_year_start is not None
+        ),
+        "teacher_id": row[9],
+        "created_at": row[10],
+        "updated_at": row[11],
+    }
 
 
 def _is_unset(value: object) -> bool:
@@ -243,7 +269,7 @@ class DBTeachingRepo:
         return m.group("u") if m else ""
 
     # --- Courses ----------------------------------------------------------------
-    def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, teacher_id: str) -> dict:
+    def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, school_year_start: int | None = None, teacher_id: str) -> dict:
         title = title.strip()
         if not title or len(title) > 200:
             raise ValueError("invalid_title")
@@ -253,31 +279,26 @@ class DBTeachingRepo:
                 cur.execute("select set_config('app.current_sub', %s, true)", (teacher_id,))
                 cur.execute(
                     """
-                    insert into public.courses (title, subject, grade_level, term, teacher_id)
-                    values (%s, %s, %s, %s, %s)
+                    insert into public.courses (title, subject, grade_level, term, school_year_start, teacher_id)
+                    values (%s, %s, %s, %s, %s, %s)
                     returning id::text,
                               title,
                               subject,
                               grade_level,
                               term,
+                              school_year_start,
+                              status,
+                              to_char(archived_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"') as archived_at,
+                              archived_by,
                               teacher_id,
                               to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"') as created_at,
                               to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"') as updated_at
                     """,
-                    (title, subject, grade_level, term, teacher_id),
+                    (title, subject, grade_level, term, school_year_start, teacher_id),
                 )
                 row = cur.fetchone()
                 conn.commit()
-        return {
-            "id": row[0],
-            "title": row[1],
-            "subject": row[2],
-            "grade_level": row[3],
-            "term": row[4],
-            "teacher_id": row[5],
-            "created_at": row[6],
-            "updated_at": row[7],
-        }
+        return _course_row_to_dict(row)
 
     def list_courses_for_teacher(self, *, teacher_id: str, limit: int, offset: int) -> List[dict]:
         with psycopg.connect(self._dsn) as conn:
@@ -285,30 +306,19 @@ class DBTeachingRepo:
                 cur.execute("select set_config('app.current_sub', %s, true)", (teacher_id,))
                 cur.execute(
                     """
-                    select id::text, title, subject, grade_level, term, teacher_id,
+                    select id::text, title, subject, grade_level, term, school_year_start, status,
+                           to_char(archived_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'), archived_by, teacher_id,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                            to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                     from public.courses
-                    where teacher_id = %s
+                    where teacher_id = %s and status = 'active'
                     order by created_at desc, id
                     limit %s offset %s
                     """,
                     (teacher_id, int(limit), int(offset)),
                 )
                 rows = cur.fetchall() or []
-        return [
-            {
-                "id": r[0],
-                "title": r[1],
-                "subject": r[2],
-                "grade_level": r[3],
-                "term": r[4],
-                "teacher_id": r[5],
-                "created_at": r[6],
-                "updated_at": r[7],
-            }
-            for r in rows
-        ]
+        return [_course_row_to_dict(r) for r in rows]
 
     def list_courses_for_student(self, *, student_id: str, limit: int, offset: int) -> List[dict]:
         return _repo_member_queries.list_courses_for_student(
@@ -319,13 +329,52 @@ class DBTeachingRepo:
             offset=offset,
         )
 
+    def list_course_catalog_for_owner(self, *, owner_sub: str, status: str, query: str, school_year_start: int | None, subject: str, limit: int, offset: int) -> List[dict]:
+        return _repo_course_lifecycle_queries.list_teacher_courses(
+            dsn=self._dsn, psycopg_module=psycopg, owner_sub=owner_sub, status=status,
+            query=query, school_year_start=school_year_start, subject=subject, limit=limit, offset=offset,
+        )
+
+    def archive_course_owned(self, course_id: str, owner_sub: str) -> dict:
+        return _repo_course_lifecycle_queries.archive_course(dsn=self._dsn, psycopg_module=psycopg, course_id=course_id, owner_sub=owner_sub)
+
+    def archive_courses_owned(self, course_ids: list[str], owner_sub: str) -> list[dict]:
+        return _repo_course_lifecycle_queries.archive_courses(
+            dsn=self._dsn, psycopg_module=psycopg, course_ids=course_ids, owner_sub=owner_sub,
+        )
+
+    def restore_course_owned(self, course_id: str, owner_sub: str) -> dict:
+        return _repo_course_lifecycle_queries.restore_course(dsn=self._dsn, psycopg_module=psycopg, course_id=course_id, owner_sub=owner_sub)
+
+    def list_personal_courses(self, *, student_sub: str, scope: str, limit: int, offset: int) -> List[dict]:
+        return _repo_course_lifecycle_queries.list_personal_courses(dsn=self._dsn, psycopg_module=psycopg, student_sub=student_sub, scope=scope, limit=limit, offset=offset)
+
+    def personal_course_portfolio(self, *, course_id: str, student_sub: str) -> List[dict]:
+        return _repo_course_lifecycle_queries.personal_portfolio(dsn=self._dsn, psycopg_module=psycopg, course_id=course_id, student_sub=student_sub)
+
+    def create_learning_export_job(self, *, course_id: str, student_sub: str) -> dict:
+        return _repo_course_lifecycle_queries.create_export_job(dsn=self._dsn, psycopg_module=psycopg, course_id=course_id, student_sub=student_sub)
+
+    def get_learning_export_job(self, *, export_id: str, student_sub: str) -> dict | None:
+        return _repo_course_lifecycle_queries.get_export_job(dsn=self._dsn, psycopg_module=psycopg, export_id=export_id, student_sub=student_sub)
+
+    def get_course_deletion_impact(self, *, course_id: str, owner_sub: str) -> dict | None:
+        return _repo_course_lifecycle_queries.deletion_impact(dsn=self._dsn, psycopg_module=psycopg, course_id=course_id, owner_sub=owner_sub)
+
+    def queue_course_deletion(self, *, course_id: str, owner_sub: str, confirmation_title: str, confirm_student_data_loss: bool) -> dict:
+        return _repo_course_lifecycle_queries.queue_deletion(
+            dsn=self._dsn, psycopg_module=psycopg, course_id=course_id, owner_sub=owner_sub,
+            confirmation_title=confirmation_title, confirm_student_data_loss=confirm_student_data_loss,
+        )
+
     def get_course(self, course_id: str) -> Optional[dict]:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 # best-effort: owner id is required by policy; derive via sub param on callers
                 cur.execute(
                     """
-                    select id::text, title, subject, grade_level, term, teacher_id,
+                    select id::text, title, subject, grade_level, term, school_year_start, status,
+                           to_char(archived_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'), archived_by, teacher_id,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                            to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                     from public.courses where id = %s
@@ -335,16 +384,7 @@ class DBTeachingRepo:
                 r = cur.fetchone()
                 if not r:
                     return None
-        return {
-            "id": r[0],
-            "title": r[1],
-            "subject": r[2],
-            "grade_level": r[3],
-            "term": r[4],
-            "teacher_id": r[5],
-            "created_at": r[6],
-            "updated_at": r[7],
-        }
+        return _course_row_to_dict(r)
 
     # --- Units -----------------------------------------------------------------
     def list_units_for_author(self, *, author_id: str, limit: int, offset: int) -> List[dict]:
@@ -1220,7 +1260,8 @@ class DBTeachingRepo:
                 cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
                 cur.execute(
                     """
-                    select id::text, title, subject, grade_level, term, teacher_id,
+                    select id::text, title, subject, grade_level, term, school_year_start, status,
+                           to_char(archived_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'), archived_by, teacher_id,
                            to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                            to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                     from public.courses where id = %s
@@ -1230,18 +1271,9 @@ class DBTeachingRepo:
                 r = cur.fetchone()
                 if not r:
                     return None
-        return {
-            "id": r[0],
-            "title": r[1],
-            "subject": r[2],
-            "grade_level": r[3],
-            "term": r[4],
-            "teacher_id": r[5],
-            "created_at": r[6],
-            "updated_at": r[7],
-        }
+        return _course_row_to_dict(r)
 
-    def update_course_owned(self, course_id: str, owner_sub: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET) -> Optional[dict]:
+    def update_course_owned(self, course_id: str, owner_sub: str, *, title=_UNSET, subject=_UNSET, grade_level=_UNSET, term=_UNSET, school_year_start=_UNSET) -> Optional[dict]:
         """Update fields for a course owned by `owner_sub`.
 
         Why:
@@ -1276,6 +1308,10 @@ class DBTeachingRepo:
             sets.append(("grade_level", grade_level))
         if term is not _UNSET:
             sets.append(("term", term))
+        if school_year_start is not _UNSET:
+            if school_year_start is not None and not 2000 <= int(school_year_start) <= 2200:
+                raise ValueError("invalid_school_year")
+            sets.append(("school_year_start", school_year_start))
         if not sets:
             return self.get_course_for_owner(course_id, owner_sub)
         with psycopg.connect(self._dsn) as conn:
@@ -1293,7 +1329,8 @@ class DBTeachingRepo:
                         """
                         update public.courses set {assign}
                         where id = %s and teacher_id = %s
-                        returning id::text, title, subject, grade_level, term, teacher_id,
+                        returning id::text, title, subject, grade_level, term, school_year_start, status,
+                            to_char(archived_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'), archived_by, teacher_id,
                             to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                             to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                         """
@@ -1307,7 +1344,8 @@ class DBTeachingRepo:
                         f"""
                         update public.courses set {cols}
                         where id = %s and teacher_id = %s
-                        returning id::text, title, subject, grade_level, term, teacher_id,
+                        returning id::text, title, subject, grade_level, term, school_year_start, status,
+                            to_char(archived_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'), archived_by, teacher_id,
                             to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
                             to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
                         """,
@@ -1317,16 +1355,7 @@ class DBTeachingRepo:
                 if not r:
                     return None
                 conn.commit()
-        return {
-            "id": r[0],
-            "title": r[1],
-            "subject": r[2],
-            "grade_level": r[3],
-            "term": r[4],
-            "teacher_id": r[5],
-            "created_at": r[6],
-            "updated_at": r[7],
-        }
+        return _course_row_to_dict(r)
 
     def delete_course_owned(self, course_id: str, owner_sub: str) -> bool:
         """Delete a course if and only if `owner_sub` owns it.
@@ -1347,23 +1376,17 @@ class DBTeachingRepo:
 
     # --- Existence checks (prefer SECURITY DEFINER helpers) ---------------------
     def course_exists_for_owner(self, course_id: str, owner_sub: str) -> bool:
-        """Check existence+ownership in one step.
+        """Check whether an owned course is still available to normal routes.
 
         Behavior:
-            - Uses SECURITY DEFINER helper `public.course_exists_for_owner` when
-              present, which verifies ownership without relying on RLS.
-            - Falls back to `get_course_for_owner` under RLS constraints.
+            - Archived courses remain available to their owner as read-only data.
+            - Courses already queued for deletion disappear immediately.
         """
         try:
-            with psycopg.connect(self._dsn) as conn:
-                with conn.cursor() as cur:
-                    cur.execute("select public.course_exists_for_owner(%s, %s)", (owner_sub, course_id))
-                    r = cur.fetchone()
-                    if r is not None:
-                        return bool(r[0])
+            course = self.get_course_for_owner(course_id, owner_sub)
+            return bool(course and str(course.get("status") or "active") != "deleting")
         except Exception:
-            pass
-        return self.get_course_for_owner(course_id, owner_sub) is not None
+            return False
 
     def course_exists(self, course_id: str) -> Optional[bool]:
         """Return True/False when determinable, else None to avoid RLS-misclassification.

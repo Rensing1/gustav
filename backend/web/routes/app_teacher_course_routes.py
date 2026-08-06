@@ -55,9 +55,36 @@ def _count_teacher_course_members(course_id: str, owner_sub: str) -> int:
         offset += page_size
 
 
-def _list_teacher_course_cards(owner_sub: str, limit: int, offset: int) -> list[dict[str, object]]:
+def _list_teacher_course_cards(
+    owner_sub: str,
+    limit: int,
+    offset: int,
+    *,
+    status: str = "active",
+    query: str = "",
+    school_year_start: int | None = None,
+    subject: str = "",
+) -> list[dict[str, object]]:
     app_routes = _app_module()
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    catalog_method = getattr(repo, "list_course_catalog_for_owner", None)
+    if callable(catalog_method):
+        courses = catalog_method(
+            owner_sub=owner_sub,
+            status=status,
+            query=query,
+            school_year_start=school_year_start,
+            subject=subject,
+            limit=limit,
+            offset=offset,
+        )
+        return [
+            {
+                **dict(course),
+                "href": f"/teaching/courses/{course.get('id')}",
+            }
+            for course in courses
+        ]
     courses = repo.list_courses_for_teacher(teacher_id=owner_sub, limit=limit, offset=offset)
 
     items: list[dict[str, object]] = []
@@ -77,6 +104,14 @@ def _list_teacher_course_cards(owner_sub: str, limit: int, offset: int) -> list[
                 "subject": app_routes._field_value(course, "subject"),
                 "grade_level": app_routes._field_value(course, "grade_level"),
                 "term": app_routes._field_value(course, "term"),
+                "school_year_start": app_routes._field_value(course, "school_year_start"),
+                "status": str(app_routes._field_value(course, "status") or "active"),
+                "metadata_complete": bool(
+                    app_routes._field_value(course, "subject")
+                    and app_routes._field_value(course, "grade_level")
+                    and app_routes._field_value(course, "school_year_start") is not None
+                ),
+                "archived_at": app_routes._field_value(course, "archived_at"),
             }
         )
     return items
@@ -249,7 +284,15 @@ def _get_teacher_course(course_id: str, owner_sub: str):
 
 
 @app_teacher_course_router.get("/api/teaching/views/courses")
-async def get_teacher_course_list(request: Request, limit: int = 25, offset: int = 0):
+async def get_teacher_course_list(
+    request: Request,
+    status: str = "active",
+    query: str = "",
+    school_year_start: int | None = None,
+    subject: str = "",
+    limit: int = 25,
+    offset: int = 0,
+):
     """Return the owner-scoped course overview for the teacher workspace."""
 
     user = _current_user(request)
@@ -258,12 +301,21 @@ async def get_teacher_course_list(request: Request, limit: int = 25, offset: int
     if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
+    normalized_status = "archived" if status == "archived" else "active"
     body = {
         "user": _user_payload(user),
+        "status": normalized_status,
+        "query": str(query or "").strip(),
+        "school_year_start": school_year_start,
+        "subject": str(subject or "").strip(),
         "courses": _app_module()._list_teacher_course_cards(
             str(user.get("sub") or ""),
             limit=int(limit or 25),
             offset=int(offset or 0),
+            status=normalized_status,
+            query=str(query or "").strip(),
+            school_year_start=school_year_start,
+            subject=str(subject or "").strip(),
         ),
     }
     return JSONResponse(body, headers=_private_headers())

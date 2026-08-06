@@ -737,6 +737,14 @@ def _resp_non_owner_or_unknown(course_id: str, owner_sub: str):
         - Otherwise: 403 to avoid leaking information.
     """
     repo = _get_repo()
+    try:
+        owned = repo.get_course_for_owner(course_id, owner_sub)
+    except TeachingRepositoryUnavailable:
+        raise
+    except Exception:
+        owned = None
+    if owned and str(owned.get("status") or "active") == "deleting":
+        return _private_error({"error": "not_found"}, status_code=404)
     # Owner just deleted? Prefer 404 for immediate follow-ups
     if _was_recently_deleted(owner_sub, course_id):
         return _private_error({"error": "not_found"}, status_code=404)

@@ -48,6 +48,7 @@ entities:
       - student_subject_id
       - teacher_subject_id
       - joined_at
+      - optional_ended_at
     purpose:
       - course_access
       - teacher_dashboard
@@ -58,7 +59,7 @@ entities:
       admin: administrative_support
     retention: course_lifecycle_plus_configured_school_policy
     export: course_roster_and_membership_history
-    deletion: remove_membership_or_anonymize_history_after_policy
+    deletion: end_membership_without_deleting_personal_learning_history
     llm_usage:
       sent_to_llm: false
 
@@ -139,6 +140,27 @@ entities:
       sent_to_llm: possible_as_context_for_followup_feedback
       technical_packaging_allowed: true
       content_rewriting_allowed: false
+
+  learning_export_job:
+    description: Inhaltsfreier Auftrag für einen privaten Snapshot der eigenen Lernleistung eines Schülers.
+    personal_data:
+      - student_subject_id
+      - course_id
+      - cutoff_at
+      - private_storage_key
+      - status_and_expiry
+    purpose:
+      - student_data_portability
+      - offline_personal_archive
+    access:
+      student: own_export_jobs_only
+      teacher: none
+      admin: technical_support_without_archive_content
+    retention: generated_zip_expires_after_24_hours
+    export: not_applicable_job_metadata_only
+    deletion: delete_private_zip_on_expiry_or_course_deletion
+    llm_usage:
+      sent_to_llm: false
 
   learning_dialog_transcript:
     description: Pausierbare KI-Dialoge mit unveränderlichen Schüler- und KI-Nachrichten, Hilfestellungsmarkern und optionaler Abschlussantwort.

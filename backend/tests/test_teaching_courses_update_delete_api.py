@@ -37,7 +37,7 @@ async def test_owner_can_patch_title_and_non_owner_forbidden(monkeypatch: pytest
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
-        c = await client.post("/api/teaching/courses", json={"title": "Alt"})
+        c = await client.post("/api/teaching/courses", json={"title": "Alt", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert c.status_code == 201
         course_id = c.json()["id"]
 
@@ -53,7 +53,7 @@ async def test_owner_can_patch_title_and_non_owner_forbidden(monkeypatch: pytest
 
 
 @pytest.mark.anyio
-async def test_owner_can_delete_course_and_memberships(monkeypatch: pytest.MonkeyPatch):
+async def test_direct_course_delete_is_disabled(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     try:
         assert isinstance(teaching.REPO, DBTeachingRepo)
@@ -65,20 +65,13 @@ async def test_owner_can_delete_course_and_memberships(monkeypatch: pytest.Monke
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
-        c = await client.post("/api/teaching/courses", json={"title": "Loeschkurs"})
+        c = await client.post("/api/teaching/courses", json={"title": "Löschkurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert c.status_code == 201
         course_id = c.json()["id"]
-        # Add a member
-        a = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": "student-del"})
-        assert a.status_code in (201, 204)
-
-        # Delete
         d = await client.delete(f"/api/teaching/courses/{course_id}")
-        assert d.status_code == 204
-        assert (d.text or "") == ""
-        # List members should now 404 (course not found)
+        assert d.status_code == 405
         r = await client.get(f"/api/teaching/courses/{course_id}/members")
-        assert r.status_code == 404
+        assert r.status_code == 200
 
 
 @pytest.mark.anyio
@@ -94,7 +87,7 @@ async def test_patch_validation_errors(monkeypatch: pytest.MonkeyPatch):
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
-        c = await client.post("/api/teaching/courses", json={"title": "Valid"})
+        c = await client.post("/api/teaching/courses", json={"title": "Valid", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert c.status_code == 201
         course_id = c.json()["id"]
 
@@ -121,7 +114,7 @@ async def test_patch_with_no_fields_returns_current_row(monkeypatch: pytest.Monk
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
-        c = await client.post("/api/teaching/courses", json={"title": "StatusQuo"})
+        c = await client.post("/api/teaching/courses", json={"title": "StatusQuo", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026})
         assert c.status_code == 201
         course_id = c.json()["id"]
 
@@ -145,20 +138,24 @@ async def test_patch_can_clear_optional_fields(monkeypatch: pytest.MonkeyPatch):
         client.cookies.set("gustav_session", t_owner.session_id)
         c = await client.post(
             "/api/teaching/courses",
-            json={"title": "Chemie", "subject": "Chemie", "grade_level": "EF", "term": "2025-1"},
+            json={"title": "Chemie", "subject": "Chemie", "grade_level": "EF", "term": "2025-1", "school_year_start": 2025},
         )
         assert c.status_code == 201
         course_id = c.json()["id"]
 
-        p = await client.patch(f"/api/teaching/courses/{course_id}", json={"subject": None, "grade_level": None, "term": None})
+        rejected = await client.patch(f"/api/teaching/courses/{course_id}", json={"subject": None, "grade_level": None})
+        assert rejected.status_code == 400
+        assert rejected.json()["detail"] == "course_metadata_incomplete"
+
+        p = await client.patch(f"/api/teaching/courses/{course_id}", json={"term": None})
         assert p.status_code == 200
         body = p.json()
-        assert body["subject"] is None
-        assert body["grade_level"] is None
+        assert body["subject"] == "Chemie"
+        assert body["grade_level"] == "EF"
         assert body["term"] is None
 @pytest.mark.anyio
-async def test_owner_delete_unknown_course_returns_404(monkeypatch: pytest.MonkeyPatch):
-    """Owner deleting a non-existent course should get 404 Not Found."""
+async def test_direct_delete_unknown_course_is_also_disabled(monkeypatch: pytest.MonkeyPatch):
+    """No course may bypass the confirmed asynchronous deletion path."""
     store = install_session_store(monkeypatch, main)
     try:
         assert isinstance(teaching.REPO, DBTeachingRepo)
@@ -173,12 +170,11 @@ async def test_owner_delete_unknown_course_returns_404(monkeypatch: pytest.Monke
         # Use a random/invalid UUID; DB layer will not find it
         bad_id = "00000000-0000-0000-0000-000000000000"
         d = await client.delete(f"/api/teaching/courses/{bad_id}")
-        assert d.status_code in (403, 404)  # Implementation should return 404 for owner
-        # When the repo can disambiguate, it must be 404
+        assert d.status_code == 405
 
 
 @pytest.mark.anyio
-async def test_recently_deleted_marker_expires(monkeypatch: pytest.MonkeyPatch):
+async def test_disabled_direct_delete_does_not_hide_course(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     try:
         assert isinstance(teaching.REPO, DBTeachingRepo)
@@ -186,34 +182,15 @@ async def test_recently_deleted_marker_expires(monkeypatch: pytest.MonkeyPatch):
         pytest.skip("DB-backed TeachingRepo required for this test")
     _require_db_or_skip()
 
-    class FakeTime:
-        def __init__(self, start: float):
-            self.current = start
-
-        def time(self) -> float:
-            return self.current
-
-    fake_time = FakeTime(1_000_000.0)
-    monkeypatch.setattr(teaching, "time", fake_time, raising=False)
-
     t_owner = store.create(sub="teacher-time", name="Owner", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t_owner.session_id)
-        created = await client.post("/api/teaching/courses", json={"title": "Physik", "subject": "Physik"})
+        created = await client.post("/api/teaching/courses", json={"title": "Physik", "subject": "Physik", "grade_level": "10", "school_year_start": 2026})
         assert created.status_code == 201
         course_id = created.json()["id"]
 
         deleted = await client.delete(f"/api/teaching/courses/{course_id}")
-        assert deleted.status_code == 204
-
-        # Immediately after deletion: should respond 404
+        assert deleted.status_code == 405
         lst = await client.get(f"/api/teaching/courses/{course_id}/members")
-        assert lst.status_code == 404
-
-        # Advance the fake clock beyond TTL and ensure the marker expires
-        fake_time.current += teaching._RECENTLY_DELETED_TTL_SECONDS + 5
-
-        lst2 = await client.get(f"/api/teaching/courses/{course_id}/members")
-        # After TTL expiry, course remains non-existent -> 404 (contract)
-        assert lst2.status_code == 404
+        assert lst.status_code == 200

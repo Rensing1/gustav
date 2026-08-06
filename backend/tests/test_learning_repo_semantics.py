@@ -27,7 +27,10 @@ def _dsn() -> str:
 
 def _seed_course_with_section(cur, *, teacher: str) -> dict[str, str]:
     cur.execute("select set_config('app.current_sub', %s, false)", (teacher,))
-    cur.execute("insert into public.courses (title, teacher_id) values (%s, %s) returning id", (f"Repo course {uuid.uuid4()}", teacher))
+    cur.execute(
+        "insert into public.courses (title, subject, grade_level, school_year_start, teacher_id) values (%s, %s, %s, %s, %s) returning id",
+        (f"Repo course {uuid.uuid4()}", "Testfach", "10", 2026, teacher),
+    )
     course_id = cur.fetchone()[0]
     cur.execute("insert into public.units (title, author_id) values (%s, %s) returning id", (f"Repo unit {uuid.uuid4()}", teacher))
     unit_id = cur.fetchone()[0]

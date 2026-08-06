@@ -56,7 +56,7 @@ async def _create_unit(
 async def _create_course(client: httpx.AsyncClient, title: str) -> str:
     response = await client.post(
         "/api/teaching/courses",
-        json={"title": title},
+        json={"title": title, "subject": "Mathematik", "grade_level": "8", "school_year_start": 2026},
         headers={"Origin": "http://test"},
     )
     assert response.status_code == 201

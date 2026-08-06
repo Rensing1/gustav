@@ -46,7 +46,12 @@ def _unique_sub(prefix: str) -> str:
 async def _seed_course_for_teacher(client: httpx.AsyncClient, title: str = "Mathe 9b") -> str:
     response = await client.post(
         "/api/teaching/courses",
-        json={"title": title},
+        json={
+            "title": title,
+            "subject": "Mathematik",
+            "grade_level": "9",
+            "school_year_start": 2026,
+        },
         headers={"Origin": "http://test"},
     )
     assert response.status_code == 201

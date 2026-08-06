@@ -112,19 +112,32 @@ def _serialize_task(t) -> dict:
 
 def _serialize_course(c) -> dict:
     if is_dataclass(c):
-        return asdict(c)
-    if isinstance(c, dict):
-        return c
-    return {
-        "id": getattr(c, "id", None),
-        "title": getattr(c, "title", None),
-        "subject": getattr(c, "subject", None),
-        "grade_level": getattr(c, "grade_level", None),
-        "term": getattr(c, "term", None),
-        "teacher_id": getattr(c, "teacher_id", None),
-        "created_at": getattr(c, "created_at", None),
-        "updated_at": getattr(c, "updated_at", None),
-    }
+        data = asdict(c)
+    elif isinstance(c, dict):
+        data = dict(c)
+    else:
+        data = {
+            "id": getattr(c, "id", None),
+            "title": getattr(c, "title", None),
+            "subject": getattr(c, "subject", None),
+            "grade_level": getattr(c, "grade_level", None),
+            "term": getattr(c, "term", None),
+            "school_year_start": getattr(c, "school_year_start", None),
+            "status": getattr(c, "status", "active"),
+            "archived_at": getattr(c, "archived_at", None),
+            "teacher_id": getattr(c, "teacher_id", None),
+            "created_at": getattr(c, "created_at", None),
+            "updated_at": getattr(c, "updated_at", None),
+        }
+    data.setdefault("school_year_start", None)
+    data.setdefault("status", "active")
+    data.setdefault("archived_at", None)
+    data["metadata_complete"] = bool(
+        str(data.get("subject") or "").strip()
+        and str(data.get("grade_level") or "").strip()
+        and data.get("school_year_start") is not None
+    )
+    return data
 
 
 def _serialize_unit(u) -> dict:

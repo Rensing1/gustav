@@ -11,12 +11,16 @@ class CoursesRepoProtocol(Protocol):
     def list_units_for_student_course(self, *, student_sub: str, course_id: str) -> list[dict]:
         ...
 
+    def list_personal_courses(self, *, student_sub: str, scope: str, limit: int, offset: int) -> list[dict]:
+        ...
+
 
 @dataclass
 class ListCoursesInput:
     student_sub: str
     limit: int
     offset: int
+    scope: str = "current"
 
 
 class ListCoursesUseCase:
@@ -35,6 +39,9 @@ class ListCoursesUseCase:
         """
         limit = max(1, min(100, int(req.limit)))
         offset = max(0, int(req.offset))
+        personal = getattr(self._repo, "list_personal_courses", None)
+        if callable(personal):
+            return personal(student_sub=req.student_sub, scope=req.scope, limit=limit, offset=offset)
         return self._repo.list_courses_for_student(student_sub=req.student_sub, limit=limit, offset=offset)
 
 

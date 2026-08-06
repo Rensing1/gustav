@@ -48,9 +48,9 @@ def _field_value(item: object, key: str) -> object:
     return _app_module()._field_value(item, key)
 
 
-def _list_learner_courses(student_sub: str, limit: int, offset: int) -> list[dict]:
+def _list_learner_courses(student_sub: str, limit: int, offset: int, scope: str = "current") -> list[dict]:
     return ListCoursesUseCase(learning_routes._get_repo()).execute(  # type: ignore[attr-defined]
-        ListCoursesInput(student_sub=student_sub, limit=limit, offset=offset)
+        ListCoursesInput(student_sub=student_sub, limit=limit, offset=offset, scope=scope)
     )
 
 
@@ -76,18 +76,28 @@ async def get_learner_home(request: Request, limit: int = 12, offset: int = 0):
     if not has_role(user, "student"):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
 
-    items = _app_module()._list_learner_courses(str(user.get("sub") or ""), limit=int(limit or 12), offset=int(offset or 0))
-    body = {
-        "user": _user_payload(user),
-        "courses": [
+    student_sub = str(user.get("sub") or "")
+    current_items = _app_module()._list_learner_courses(student_sub, limit=int(limit or 12), offset=int(offset or 0), scope="current")
+    past_items = _app_module()._list_learner_courses(student_sub, limit=int(limit or 12), offset=int(offset or 0), scope="past")
+
+    def project(items: list[dict], *, past: bool) -> list[dict]:
+        return [
             {
                 "id": str(item.get("id") or ""),
                 "title": str(item.get("title") or ""),
-                "href": f"/learning/courses/{item.get('id')}",
+                "href": (
+                    f"/learning/courses/{item.get('id')}/archive"
+                    if past else f"/learning/courses/{item.get('id')}"
+                ),
+                "school_year_start": item.get("school_year_start"),
             }
             for item in items
             if isinstance(item, dict)
-        ],
+        ]
+    body = {
+        "user": _user_payload(user),
+        "current_courses": project(current_items, past=False),
+        "past_courses": project(past_items, past=True),
     }
     return JSONResponse(body, headers=_private_headers())
 

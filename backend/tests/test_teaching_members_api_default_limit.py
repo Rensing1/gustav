@@ -41,7 +41,7 @@ async def test_members_api_default_limit_is_10(monkeypatch: pytest.MonkeyPatch):
     async with (await _client()) as client:
         client.cookies.set(main.SESSION_COOKIE_NAME, t.session_id)
         # Create course
-        r = await client.post("/api/teaching/courses", json={"title": "Bio 9"})
+        r = await client.post("/api/teaching/courses", json={"title": "Bio 9", "subject": "Biologie", "grade_level": "9", "school_year_start": 2026})
         assert r.status_code == 201
         cid = r.json()["id"]
         # Add 15 members

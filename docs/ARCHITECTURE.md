@@ -42,6 +42,13 @@ Diese Trennung wird inkrementell umgesetzt. Aktuell befindet sich noch UI‑nahe
 Geplant (siehe `docs/bounded_contexts.md:1`):
 - `identity_access`: Nutzer, Rollen, AuthN/AuthZ (IServ/Supabase)
 - `teaching`: Kurse, Lerneinheiten, Abschnitte, Freischaltung, Live-Unterrichts-Ansicht
+- Der Kurslebenszyklus trennt `active`, `archived` und den vorübergehenden
+  Löschzustand `deleting`. Ehemalige Mitgliedschaften und finale
+  Aufgabensnapshots erhalten das persönliche Lernarchiv, während gewöhnliche
+  Lern- und Unterrichtswege ausschließlich aktive Kurse verwenden.
+- Lernexporte und endgültige Kurslöschungen laufen über private, wiederholbare
+  Worker-Aufträge. Die Webanwendung veröffentlicht weder interne Speicherpfade
+  noch unvollständige Archive.
 - `learning`: Einreichungen, Aufgaben, Karteikarten (Spaced Repetition)
 - `diagnostics`: diagnostische Lehrkräfte-Sichten und Lernendenprofile
 - `core`: geteilte Basistypen (IDs, Zeit, Fehler, Policies)

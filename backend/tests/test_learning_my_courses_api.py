@@ -40,9 +40,12 @@ async def _client() -> httpx.AsyncClient:
 
 
 async def _create_course(client: httpx.AsyncClient, title: str, *, subject: str | None = None) -> str:
-    payload: dict[str, object] = {"title": title}
-    if subject is not None:
-        payload["subject"] = subject
+    payload: dict[str, object] = {
+        "title": title,
+        "subject": subject or "Testfach",
+        "grade_level": "10",
+        "school_year_start": 2026,
+    }
     r = await client.post("/api/teaching/courses", json=payload)
     assert r.status_code == 201
     return r.json()["id"]
@@ -111,7 +114,16 @@ async def test_list_student_courses_alphabetical_and_minimal_fields(monkeypatch:
         # Alphabetical by title asc
         assert [it["title"] for it in items] == ["Algebra", "Biologie"]
         # Minimal fields, no teacher_id
-        assert set(items[0].keys()) <= {"id", "title", "subject", "grade_level", "term"}
+        assert set(items[0].keys()) <= {
+            "id",
+            "title",
+            "subject",
+            "grade_level",
+            "term",
+            "school_year_start",
+            "status",
+            "membership_status",
+        }
         assert "teacher_id" not in items[0]
 
 

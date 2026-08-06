@@ -11,6 +11,7 @@ from backend.learning import repo_course_unit_queries as _repo_course_unit_queri
 from backend.learning import repo_dialog_queries as _repo_dialog_queries
 from backend.learning import repo_history_worker_queries as _repo_history_worker_queries
 from backend.learning import repo_modular_unit_queries as _repo_modular_unit_queries
+from backend.learning import repo_portfolio_queries as _repo_portfolio_queries
 from backend.learning import repo_submission_command_queries as _repo_submission_command_queries
 from backend.learning import repo_submission_summary_queries as _repo_submission_summary_queries
 from backend.learning.repo_submission_mapping import (
@@ -267,6 +268,32 @@ class DBLearningRepo:
             student_sub=student_sub,
             limit=limit,
             offset=offset,
+        )
+
+    def list_personal_courses(self, *, student_sub: str, scope: str, limit: int, offset: int) -> List[dict]:
+        return _repo_portfolio_queries.list_courses(
+            dsn=self._dsn, psycopg_module=psycopg, student_sub=student_sub,
+            scope=scope, limit=limit, offset=offset,
+        )
+
+    def personal_course_portfolio(self, *, course_id: str, student_sub: str) -> List[dict]:
+        return _repo_portfolio_queries.portfolio(
+            dsn=self._dsn, psycopg_module=psycopg, course_id=course_id, student_sub=student_sub,
+        )
+
+    def create_learning_export_job(self, *, course_id: str, student_sub: str) -> dict:
+        return _repo_portfolio_queries.create_export(
+            dsn=self._dsn, psycopg_module=psycopg, course_id=course_id, student_sub=student_sub,
+        )
+
+    def get_learning_export_job(self, *, export_id: str, student_sub: str) -> dict | None:
+        return _repo_portfolio_queries.get_export(
+            dsn=self._dsn, psycopg_module=psycopg, export_id=export_id, student_sub=student_sub,
+        )
+
+    def get_latest_learning_export_job(self, *, course_id: str, student_sub: str) -> dict | None:
+        return _repo_portfolio_queries.latest_export(
+            dsn=self._dsn, psycopg_module=psycopg, course_id=course_id, student_sub=student_sub,
         )
 
     def list_units_for_student_course(self, *, student_sub: str, course_id: str) -> List[dict]:

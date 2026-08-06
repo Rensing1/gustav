@@ -121,7 +121,7 @@ async def _prepare_task_fixture(
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
 
-        course = (await c.post("/api/teaching/courses", json={"title": course_title})).json()
+        course = (await c.post("/api/teaching/courses", json={"title": course_title, "subject": "Informatik", "grade_level": "7", "school_year_start": 2026})).json()
         unit = (await c.post("/api/teaching/units", json={"title": "Unit"})).json()
         section = (await c.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "Abschnitt"})).json()
         task = (await c.post(f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks", json=task_payload)).json()

@@ -347,23 +347,23 @@ def test_room_pages_use_shared_workspace_primitives() -> None:
     teaching_courses_src = (
         REPO_ROOT / "frontend" / "src" / "routes" / "teaching" / "courses" / "+page.svelte"
     ).read_text(encoding="utf-8")
-    assert "workspace-grid" in teaching_courses_src
-    assert "workspace-metrics" in teaching_courses_src
+    assert "workspace-course-catalog__row" in teaching_courses_src
+    assert "PageActionHead" in teaching_courses_src
     assert "workspace-list" not in teaching_courses_src
     assert "workspace-toolbar" not in teaching_courses_src
     assert "Kurskontext mit Einheiten" not in teaching_courses_src
     assert 'class="workspace-section"' not in teaching_courses_src
-    assert "courseMeta(course)" in teaching_courses_src
-    assert "workspace-link-card--course" in teaching_courses_src
+    assert "metadata(course)" in teaching_courses_src
+    assert "workspace-link-card--course" not in teaching_courses_src
 
-    style_src = (REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "app.css").read_text(
+    style_src = (REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "teaching-workspace.css").read_text(
         encoding="utf-8"
     )
-    assert ".workspace-grid--courses" in style_src
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in style_src
-    assert ".workspace-link-card--course" in style_src
-    assert "min-height: 5.8rem;" in style_src
-    assert "gap: 0.28rem;" in style_src
+    assert ".workspace-course-catalog__row" in style_src
+    assert "grid-template-columns: auto minmax(16rem, 1fr) auto auto;" in style_src
+    assert ".workspace-course-catalog__scopes" in style_src
+    assert "min-height: 4.5rem;" in style_src
+    assert "gap: var(--space-4);" in style_src
 
     root_page_src = (REPO_ROOT / "frontend" / "src" / "routes" / "+page.svelte").read_text(
         encoding="utf-8"
@@ -436,7 +436,8 @@ def test_teaching_course_routes_define_breadcrumb_data() -> None:
     ).read_text(encoding="utf-8")
     assert "pageTitle" in teaching_courses_loader
     assert "breadcrumbs" in teaching_courses_loader
-    assert "headerAction" in teaching_courses_loader
+    assert "headerAction" not in teaching_courses_loader
+    assert 'pageTitle: "Kurse"' in teaching_courses_loader
     assert "hidePageHeading" in teaching_courses_loader
 
 
@@ -447,7 +448,9 @@ def test_teaching_courses_page_supports_create_action() -> None:
     src = page_server_path.read_text(encoding="utf-8")
 
     assert "export const actions" in src
-    assert '"/api/teaching/views/courses?limit=25&offset=0"' in src
+    assert "/api/teaching/views/courses?" in src
     assert '"/api/teaching/courses"' in src
     assert 'method: "POST"' in src
     assert "includeSameOrigin: true" in src
+    assert "school_year_start: schoolYearStart" in src
+    assert '"/api/teaching/courses/archive-batch"' in src

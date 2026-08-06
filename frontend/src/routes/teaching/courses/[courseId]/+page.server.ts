@@ -12,6 +12,14 @@ type Course = {
   subject: string | null;
   grade_level: string | null;
   term: string | null;
+  school_year_start: number | null;
+  status: "active" | "archived" | "deleting";
+  metadata_complete: boolean;
+};
+
+type DeletionImpact = {
+  course_id: string; title: string; members_count: number; submissions_count: number;
+  dialogs_count: number; files_count: number;
 };
 
 type CourseMember = {
@@ -107,6 +115,9 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
   await requireParentSpaceBootstrap(parent, authRedirectPath, "teaching");
 
   const workspace = await loadCourseWorkspace(fetch, cookies, params.courseId, authRedirectPath);
+  const deletionImpact = url.searchParams.get("course") == "1"
+    ? await requireBackendJson<DeletionImpact>(fetch, cookies, `/api/teaching/courses/${params.courseId}/deletion-impact`, { authRedirectPath })
+    : null;
   const memberSearchQuery = (url.searchParams.get("member-q") ?? "").trim();
   let memberSearchResults: DirectoryStudent[] = [];
 
@@ -130,6 +141,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     availableUnits: workspace.availableUnits,
     breadcrumbs,
     course: workspace.course,
+    deletionImpact,
     hidePageHeading: true,
     memberSearchQuery,
     memberSearchResults,
@@ -153,12 +165,14 @@ export const actions: Actions = {
     const subject = String(formData.get("subject") ?? "").trim();
     const gradeLevel = String(formData.get("grade_level") ?? "").trim();
     const term = String(formData.get("term") ?? "").trim();
+    const schoolYearRaw = String(formData.get("school_year_start") ?? "").trim();
+    const schoolYearStart = Number.parseInt(schoolYearRaw, 10);
 
-    if (!title) {
+    if (!title || !subject || !gradeLevel || !Number.isInteger(schoolYearStart)) {
       return fail(400, {
         saveCourse: {
           error: "Bitte gib einen Kurstitel ein.",
-          values: { title, subject, gradeLevel, term }
+          values: { title, subject, gradeLevel, term, schoolYearStart: schoolYearRaw }
         }
       });
     }
@@ -169,7 +183,8 @@ export const actions: Actions = {
         title,
         subject: subject || null,
         grade_level: gradeLevel || null,
-        term: term || null
+        term: term || null,
+        school_year_start: schoolYearStart
       }),
       headers: { "content-type": "application/json" },
       includeSameOrigin: true,
@@ -180,12 +195,12 @@ export const actions: Actions = {
       return fail(response.status, {
         saveCourse: {
           error: "Der Kurs konnte nicht gespeichert werden.",
-          values: { title, subject, gradeLevel, term }
+          values: { title, subject, gradeLevel, term, schoolYearStart: schoolYearRaw }
         }
       });
     }
 
-    throw redirect(303, `/teaching/courses/${params.courseId}?members=1`);
+    throw redirect(303, `/teaching/courses/${params.courseId}`);
   },
   deleteCourse: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
@@ -200,8 +215,14 @@ export const actions: Actions = {
       });
     }
 
-    const response = await backendRequest(fetch, cookies, `/api/teaching/courses/${params.courseId}`, {
-      method: "DELETE",
+    const confirmed = formData.get("confirm_student_data_loss") === "yes";
+    if (!confirmed) {
+      return fail(400, { deleteCourse: { error: "Bestätige auch den unwiderruflichen Verlust der Schülerdaten." } });
+    }
+    const response = await backendRequest(fetch, cookies, `/api/teaching/courses/${params.courseId}/deletion-jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirmation_title: confirmation, confirm_student_data_loss: true }),
       includeSameOrigin: true,
       authRedirectPath: currentPath(url)
     });
@@ -215,6 +236,23 @@ export const actions: Actions = {
     }
 
     throw redirect(303, "/teaching/courses");
+  },
+  archiveCourse: async ({ fetch, cookies, params, url }) => {
+    const response = await backendRequest(fetch, cookies, `/api/teaching/courses/${params.courseId}/archive`, {
+      method: "POST", includeSameOrigin: true, authRedirectPath: currentPath(url)
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { detail?: string };
+      return fail(response.status, { archiveCourse: { error: payload.detail === "course_metadata_incomplete" ? "Vervollständige zuerst Fach, Jahrgang und Schuljahr." : "Der Kurs konnte nicht archiviert werden." } });
+    }
+    throw redirect(303, `/teaching/courses/${params.courseId}`);
+  },
+  restoreCourse: async ({ fetch, cookies, params, url }) => {
+    const response = await backendRequest(fetch, cookies, `/api/teaching/courses/${params.courseId}/restore`, {
+      method: "POST", includeSameOrigin: true, authRedirectPath: currentPath(url)
+    });
+    if (!response.ok) return fail(response.status, { restoreCourse: { error: "Der Kurs konnte nicht wiederhergestellt werden." } });
+    throw redirect(303, `/teaching/courses/${params.courseId}`);
   },
   addMember: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();

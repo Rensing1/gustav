@@ -62,7 +62,9 @@
     subject: form?.saveCourse?.values?.subject ?? (data.course.subject ?? ""),
     gradeLevel: form?.saveCourse?.values?.gradeLevel ?? (data.course.grade_level ?? ""),
     term: form?.saveCourse?.values?.term ?? (data.course.term ?? ""),
+    schoolYearStart: form?.saveCourse?.values?.schoolYearStart ?? (data.course.school_year_start ?? ""),
   });
+  const readOnly = $derived(data.course.status === "archived");
   const unitOrderChanged = $derived(
     unitOrder.length == data.assignedUnits.length
       && unitOrder.some((unit, index) => unit.module_id != data.assignedUnits[index]?.module_id)
@@ -142,6 +144,7 @@
       <a class="workspace-back-link" href="/teaching/courses">Zurück zu Kurse</a>
       <h1>{data.course.title}</h1>
       <p class="workspace-copy">{data.assignedUnits.length} Lerneinheiten · {data.members.length} Mitglieder</p>
+      {#if readOnly}<p class="workspace-status-line">Archiviert · schreibgeschützt</p>{/if}
     </div>
 
     <div class="workspace-inline-actions">
@@ -170,7 +173,7 @@
           <p class="workspace-label">Lerneinheiten</p>
           <p class="workspace-note">Ordne und ergänze die Bausteine des Kurses direkt in dieser Liste.</p>
         </div>
-        <a class="workspace-link-action" href={pageHref({ "add-unit": "1" })}>Lerneinheit hinzufügen</a>
+        {#if !readOnly}<a class="workspace-link-action" href={pageHref({ "add-unit": "1" })}>Lerneinheit hinzufügen</a>{/if}
       </div>
 
       {#if unitOrder.length}
@@ -179,7 +182,7 @@
             <div
               class="workspace-manage-row workspace-manage-row--draggable"
               role="listitem"
-              draggable="true"
+              draggable={!readOnly}
               ondragstart={() => onDragStart(unit.module_id)}
               ondragover={(event) => event.preventDefault()}
               ondrop={() => onDrop(unit.module_id)}
@@ -194,9 +197,9 @@
               </div>
 
               <div class="workspace-unit-controls">
-                <span class="workspace-unit-handle" aria-hidden="true">
+                {#if !readOnly}<span class="workspace-unit-handle" aria-hidden="true">
                   <span class="workspace-drag-handle">⋮⋮</span>
-                </span>
+                </span>{/if}
 
                 <details class="workspace-row-menu">
                   <summary aria-label={`Aktionen für ${unit.title}`}>
@@ -204,24 +207,24 @@
                   </summary>
                   <div class="workspace-row-menu-popover">
                     <a class="workspace-link-action" href={unit.href}>Öffnen</a>
-                    <button class="workspace-text-button" type="button" onclick={() => moveUnit(unit.module_id, -1)} disabled={index == 0}>
+                    <button class="workspace-text-button" type="button" onclick={() => moveUnit(unit.module_id, -1)} disabled={readOnly || index == 0}>
                       Nach oben
                     </button>
                     <button
                       class="workspace-text-button"
                       type="button"
                       onclick={() => moveUnit(unit.module_id, 1)}
-                      disabled={index == unitOrder.length - 1}
+                      disabled={readOnly || index == unitOrder.length - 1}
                     >
                       Nach unten
                     </button>
-                    {#if pendingUnitRemoval == unit.module_id}
+                    {#if !readOnly && pendingUnitRemoval == unit.module_id}
                       <form method="POST" action="?/removeUnit" class="workspace-row-menu-form">
                         <input name="module_id" type="hidden" value={unit.module_id} />
                         <button class="workspace-text-button workspace-text-button--danger" type="submit">Entfernen bestätigen</button>
                         <button class="workspace-text-button" type="button" onclick={() => (pendingUnitRemoval = null)}>Abbrechen</button>
                       </form>
-                    {:else}
+                    {:else if !readOnly}
                       <button class="workspace-text-button workspace-text-button--danger" type="button" onclick={() => (pendingUnitRemoval = unit.module_id)}>
                         Entfernen
                       </button>
@@ -233,7 +236,7 @@
           {/each}
         </div>
 
-        <form id="reorder-modules-form" method="POST" action="?/reorderModules" class="workspace-form workspace-form--compact">
+        {#if !readOnly}<form id="reorder-modules-form" method="POST" action="?/reorderModules" class="workspace-form workspace-form--compact">
           {#each unitOrder as unit}
             <input name="module_ids" type="hidden" value={unit.module_id} />
           {/each}
@@ -242,14 +245,14 @@
             <button class="workspace-link-action" type="submit" disabled={!unitOrderChanged}>Reihenfolge speichern</button>
             <button class="workspace-text-button" type="button" onclick={resetUnitOrder} disabled={!unitOrderChanged}>Zurücksetzen</button>
           </div>
-        </form>
+        </form>{/if}
 
-        <div class="workspace-inline-actions">
+        {#if !readOnly}<div class="workspace-inline-actions">
           <a class="workspace-link-action" href={pageHref({ "add-unit": "1" })}>Lerneinheit hinzufügen</a>
-        </div>
+        </div>{/if}
       {:else}
         <p class="workspace-empty">Noch keine Lerneinheiten zugeordnet.</p>
-        <a class="workspace-link-action" href={pageHref({ "add-unit": "1" })}>Erste Lerneinheit hinzufügen</a>
+        {#if !readOnly}<a class="workspace-link-action" href={pageHref({ "add-unit": "1" })}>Erste Lerneinheit hinzufügen</a>{/if}
       {/if}
 
       {#if form?.removeUnit?.error}
@@ -268,7 +271,7 @@
             <p class="workspace-label">Mitglieder</p>
             <p class="workspace-note">{data.members.length} Lernende sind diesem Kurs zugeordnet.</p>
           </div>
-          <button class="workspace-link-action" type="button" onclick={() => (membersDrawerOpen = true)}>Verwalten</button>
+          <button class="workspace-link-action" type="button" onclick={() => (membersDrawerOpen = true)}>{readOnly ? "Ansehen" : "Verwalten"}</button>
         </div>
 
         <div class="workspace-sidecar-list">
@@ -295,6 +298,7 @@
           <div><span>Fach</span><strong>{data.course.subject || "Nicht gesetzt"}</strong></div>
           <div><span>Jahrgang</span><strong>{data.course.grade_level || "Nicht gesetzt"}</strong></div>
           <div><span>Term</span><strong>{data.course.term || "Nicht gesetzt"}</strong></div>
+          <div><span>Schuljahr</span><strong>{data.course.school_year_start ? `${data.course.school_year_start}/${String((data.course.school_year_start + 1) % 100).padStart(2, "0")}` : "Nicht gesetzt"}</strong></div>
         </div>
       </section>
     </aside>
@@ -318,6 +322,11 @@
         <label class="workspace-field">
           <span>Titel</span>
           <input name="title" type="text" value={courseFormValues.title} required />
+        </label>
+
+        <label class="workspace-field">
+          <span>Schuljahr (Startjahr)</span>
+          <input name="school_year_start" type="number" min="2000" max="2200" value={courseFormValues.schoolYearStart} required />
         </label>
 
         <div class="workspace-form-grid">
@@ -347,14 +356,27 @@
         </div>
       </form>
 
+      <form method="POST" action={readOnly ? "?/restoreCourse" : "?/archiveCourse"} class="workspace-form">
+        <p class="workspace-label">{readOnly ? "Kurs wiederherstellen" : "Kurs archivieren"}</p>
+        <p class="workspace-note">{readOnly ? "Nur verwenden, um eine versehentliche Archivierung zu korrigieren." : "Beendet die aktive Unterrichtsnutzung und erhält Lernleistungen schreibgeschützt."}</p>
+        {#if form?.archiveCourse?.error}<p class="workspace-form-error">{form.archiveCourse.error}</p>{/if}
+        {#if form?.restoreCourse?.error}<p class="workspace-form-error">{form.restoreCourse.error}</p>{/if}
+        <button class="workspace-link-action" type="submit">{readOnly ? "Wiederherstellen" : "Archivieren"}</button>
+      </form>
+
       <form method="POST" action="?/deleteCourse" class="workspace-form workspace-danger-zone">
         <input name="expected_title" type="hidden" value={data.course.title} />
         <p class="workspace-label">Kurs löschen</p>
-        <p class="workspace-note">Gib den Kurstitel zur Bestätigung ein. Dieser Schritt entfernt auch die Kurszuordnungen.</p>
+        <p class="workspace-note">Unwiderruflich betroffen: {data.deletionImpact?.members_count ?? 0} Mitgliedschaften, {data.deletionImpact?.submissions_count ?? 0} Abgaben, {data.deletionImpact?.dialogs_count ?? 0} Dialoge und {data.deletionImpact?.files_count ?? 0} Dateien.</p>
 
         <label class="workspace-field">
           <span>Bestätigung</span>
           <input name="confirmation" type="text" placeholder={data.course.title} />
+        </label>
+
+        <label class="workspace-field workspace-checkbox-field">
+          <input name="confirm_student_data_loss" type="checkbox" value="yes" />
+          <span>Ich bestätige den unwiderruflichen Verlust sämtlicher Schülerdaten dieses Kurses.</span>
         </label>
 
         {#if form?.deleteCourse?.error}
@@ -384,7 +406,7 @@
 
       <div class="workspace-inline-actions">
         <a class="workspace-link-action" href={`/teaching/courses/${data.course.id}/members`}>Mitgliederseite</a>
-        <a class="workspace-link-action" href={pageHref({ members: "1", "add-member": "1" })}>Mitglied hinzufügen</a>
+        {#if !readOnly}<a class="workspace-link-action" href={pageHref({ members: "1", "add-member": "1" })}>Mitglied hinzufügen</a>{/if}
       </div>
 
       <label class="workspace-member-search">
@@ -404,13 +426,13 @@
               <div class="workspace-inline-actions">
                 <a class="workspace-link-action" href={member.href}>Profil</a>
 
-                {#if pendingMemberRemoval == member.sub}
+                {#if !readOnly && pendingMemberRemoval == member.sub}
                   <form method="POST" action="?/removeMember" class="workspace-inline-actions">
                     <input name="student_sub" type="hidden" value={member.sub} />
                     <button class="workspace-text-button workspace-text-button--danger" type="submit">Entfernen bestätigen</button>
                     <button class="workspace-text-button" type="button" onclick={() => (pendingMemberRemoval = null)}>Abbrechen</button>
                   </form>
-                {:else}
+                {:else if !readOnly}
                   <button class="workspace-text-button workspace-text-button--danger" type="button" onclick={() => (pendingMemberRemoval = member.sub)}>
                     Entfernen
                   </button>
@@ -430,7 +452,7 @@
   </div>
 {/if}
 
-{#if addMemberDialogOpen}
+{#if addMemberDialogOpen && !readOnly}
   <div class="workspace-modal">
     <a class="workspace-modal-backdrop" href={pageHref({ members: "1" })} aria-label="Dialog schließen"></a>
 
@@ -485,7 +507,7 @@
   </div>
 {/if}
 
-{#if addUnitDialogOpen}
+{#if addUnitDialogOpen && !readOnly}
   <div class="workspace-modal">
     <a class="workspace-modal-backdrop" href={pageHref()} aria-label="Dialog schließen"></a>
 

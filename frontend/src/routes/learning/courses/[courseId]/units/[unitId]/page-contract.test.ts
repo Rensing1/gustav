@@ -192,16 +192,33 @@ describe("learning unit route contract", () => {
     expect(routeSource).not.toContain("`/api/learning/courses/${encodeURIComponent(data.courseId)}/tasks/${encodeURIComponent(taskId)}/submissions?limit=10&offset=0`");
   });
 
-  it("reloads source modules for restored material references", () => {
+  it("derives task context from opened modules without a parallel pin store", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const workspaceSource = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearnerContentWorkspace.svelte"),
+      "utf8"
+    );
+
+    expect(routeSource).toContain("orderedOpenModulesForContent()");
+    expect(routeSource).toContain("closable: module.id !== activeModuleId");
+    expect(routeSource).not.toContain("manualReferences");
+    expect(routeSource).not.toContain("ensureContextReferenceSourceLoaded");
+    expect(routeSource).not.toContain("addContextReference");
+    expect(workspaceSource).toContain("<LearnerMaterialContext");
+    expect(workspaceSource).not.toContain("Material suchen");
+    expect(workspaceSource).not.toContain("Angeheftet");
+  });
+
+  it("keeps the active task mounted while selecting another module in the graph", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
-    expect(routeSource).toContain("async function ensureContextReferenceSourceLoaded");
-    expect(routeSource).toContain('reference.kind === "material" && reference.moduleId');
-    expect(routeSource).toContain("await ensureModuleLoaded(reference.moduleId)");
-    expect(routeSource).toContain("!moduleCache[reference.moduleId]");
-    expect(routeSource).toContain("!moduleLoading[reference.moduleId]");
-    expect(routeSource).toContain('(submissionHistoryStateByTask[reference.taskId] ?? "not_loaded") === "not_loaded"');
+    expect(routeSource).toContain('const selectingContext = learnerWorkspace.surface === "graph" && Boolean(learnerWorkspace.activeTask);');
+    expect(routeSource).toContain("activeTask: learnerWorkspace.activeTask");
+    expect(routeSource).toContain('compactSurface: "materials"');
+    expect(routeSource).toContain("focusedModuleId: moduleId");
+    expect(routeSource).toContain('hidden={learnerWorkspace.surface === "graph"}');
   });
 
   it("handles direct browser fetch 401 responses through shared auth recovery before domain errors", () => {

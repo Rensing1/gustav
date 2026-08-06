@@ -27,10 +27,24 @@ const groups: ContentGroup[] = [
         }
       },
       {
+        key: "material:material-2",
+        kind: "material",
+        title: "Grenzen digitaler Überwachung",
+        position: 2,
+        contextLabel: "Grundlagen",
+        moduleId: "module-1",
+        material: {
+          id: "material-2",
+          title: "Grenzen digitaler Überwachung",
+          kind: "markdown",
+          body_md: "Ein zweiter vollständiger Materialtext."
+        }
+      },
+      {
         key: "task:task-1",
         kind: "task",
         title: "Aufgabe 1",
-        position: 2,
+        position: 3,
         contextLabel: "Grundlagen",
         moduleId: "module-1",
         task: {
@@ -93,6 +107,31 @@ function baseProps() {
     compactSurface: "task" as const,
     navigationVisible: true,
     collapsedItemKeys: [],
+    contextModules: [
+      {
+        id: "module-1",
+        title: "Grundlagen",
+        current: true,
+        closable: false,
+        loaded: true,
+        loading: false,
+        error: null,
+        items: groups[0].items
+      },
+      {
+        id: "module-2",
+        title: "Argumente",
+        current: false,
+        closable: true,
+        loaded: true,
+        loading: false,
+        error: null,
+        items: groups[1].items
+      }
+    ],
+    expandedContextModuleIds: [],
+    expandedSubmissionModuleIds: [],
+    expandedSubmissionKeys: [],
     historyByTask: {},
     historyStateByTask: {},
     onBeginTask: vi.fn(),
@@ -144,7 +183,15 @@ describe("LearnerContentWorkspace", () => {
     const work = screen.getByRole("main", { name: "Bearbeitung" });
     expect(within(context).getByText("Begründe deine Position zur Chatkontrolle.")).toBeInTheDocument();
     expect(within(work).queryByText("Begründe deine Position zur Chatkontrolle.")).not.toBeInTheDocument();
+    expect(within(context).getByRole("heading", { name: /Grundlagen/, level: 4 })).toBeInTheDocument();
+    expect(within(context).getByText("Aktuell")).toBeInTheDocument();
     expect(within(context).getByText("Grundrechte und Privatsphäre")).toBeInTheDocument();
+    expect(within(context).getByText("Ein längerer Materialtext.")).toBeInTheDocument();
+    expect(within(context).queryByText("Ein zweiter vollständiger Materialtext.")).not.toBeInTheDocument();
+    expect(within(context).queryByText("Material · Aktuelles Modul")).not.toBeInTheDocument();
+    expect(within(context).queryByRole("button", { name: /anheften|lösen/i })).not.toBeInTheDocument();
+    expect(within(context).queryByText("Material suchen")).not.toBeInTheDocument();
+    expect(within(context).getByRole("button", { name: "Modul Argumente schließen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Zurück zu Modul Grundlagen/ })).toBeInTheDocument();
     expect(within(context).queryByRole("button", { name: "Pausieren" })).not.toBeInTheDocument();
   });
@@ -207,41 +254,28 @@ describe("LearnerContentWorkspace", () => {
     expect(props.onSetCompactSurface).toHaveBeenCalledWith("task");
   });
 
-  it("renders current and pinned references as one deduplicated document stack", async () => {
+  it("renders opened modules without a second source-management workflow", async () => {
     const onContextScroll = vi.fn();
-    const onToggleContextReference = vi.fn();
-    const previousAnswer = "Meine ausführliche frühere Begründung mit mehreren Argumenten und Belegen.";
+    const onCloseModule = vi.fn();
+    const onUndoCloseModule = vi.fn();
     const props = {
       ...baseProps(),
       mode: "working" as const,
       activeTaskKey: "task:task-1",
       activeEditorMode: "text" as const,
       compactSurface: "materials" as const,
-      expandedReferenceKeys: ["submission:task-2"],
-      manualContextReferences: [
-        {
-          key: "material:material-1",
-          kind: "material" as const,
-          id: "material-1",
-          moduleId: "module-1",
-          taskId: null
-        },
-        {
-          key: "submission:task-2",
-          kind: "submission" as const,
-          id: "task-2",
-          moduleId: "module-2",
-          taskId: "task-2"
-        }
-      ],
+      expandedContextModuleIds: ["module-2"],
       contextScrollTop: 240,
+      closedContextModuleTitle: "Vertiefung",
       onContextScroll,
-      onToggleContextReference,
+      onCloseModule,
+      onUndoCloseModule,
       contextModules: [
         {
           id: "module-1",
           title: "Grundlagen",
           current: true,
+          closable: false,
           loaded: true,
           loading: false,
           error: null,
@@ -249,113 +283,42 @@ describe("LearnerContentWorkspace", () => {
         },
         {
           id: "module-2",
-          title: "Argumente",
+          title: "Vertiefung",
           current: false,
+          closable: true,
           loaded: true,
           loading: false,
           error: null,
-          items: [
-            {
-              key: "task:task-2",
-              kind: "task" as const,
-              title: "Frühere Analyse",
-              position: 1,
-              contextLabel: "Argumente",
-              moduleId: "module-2",
-              task: { id: "task-2", instruction_md: "Analysiere.", criteria: [], kind: "native" as const }
-            }
-          ]
+          items: [{
+            key: "material:material-3",
+            kind: "material" as const,
+            title: "Positionen im Parlament",
+            position: 1,
+            contextLabel: "Vertiefung",
+            moduleId: "module-2",
+            material: { id: "material-3", title: "Positionen im Parlament", kind: "markdown" as const, body_md: "Text aus dem geöffneten Modul." }
+          }]
         }
-      ],
-      historyByTask: {
-        "task-2": [
-          {
-            id: "submission-1",
-            intent: "submit" as const,
-            attempt_nr: 1,
-            kind: "text" as const,
-            created_at: "2026-08-03T10:00:00+00:00",
-            analysis_status: "completed" as const,
-            text_body: previousAnswer
-          }
-        ]
-      }
+      ]
     };
     const { container } = render(LearnerContentWorkspace, { props });
 
-    expect(screen.queryByRole("article", { name: "Kontext lesen" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("article", { name: "Grundrechte und Privatsphäre" })).toHaveLength(1);
-    expect(screen.getByRole("article", { name: "Frühere Analyse" })).toBeInTheDocument();
-    expect(screen.getByText(previousAnswer)).toBeInTheDocument();
-    expect(container.querySelector('[data-work-surface="task"]')).not.toBeNull();
-    const scrollSurface = container.querySelector<HTMLElement>(".learner-task-context__scroll");
-    expect(scrollSurface).not.toBeNull();
-    expect(scrollSurface?.scrollTop).toBe(240);
+    expect(screen.getByText("Text aus dem geöffneten Modul.")).toBeInTheDocument();
+    expect(screen.queryByText("Angeheftet")).not.toBeInTheDocument();
+    expect(screen.queryByText("Material suchen")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /anheften|lösen/i })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Modul Vertiefung schließen" }));
+    expect(onCloseModule).toHaveBeenCalledWith("module-2");
+    await fireEvent.click(screen.getByRole("button", { name: "Rückgängig" }));
+    expect(onUndoCloseModule).toHaveBeenCalledOnce();
 
+    const scrollSurface = container.querySelector<HTMLElement>(".learner-task-context__scroll");
+    expect(scrollSurface?.scrollTop).toBe(240);
     if (scrollSurface) {
       scrollSurface.scrollTop = 410;
       fireEvent.scroll(scrollSurface);
     }
     expect(onContextScroll).toHaveBeenCalledWith(410);
-
-    await fireEvent.click(screen.getByRole("button", { name: "Frühere Analyse ein- oder ausklappen" }));
-    expect(onToggleContextReference).toHaveBeenCalledWith("submission:task-2");
-  });
-
-  it("loads module groups lazily and offers materials and own submissions individually", async () => {
-    const onToggleContextModule = vi.fn();
-    const onAddContextReference = vi.fn();
-    const props = {
-      ...baseProps(),
-      mode: "working" as const,
-      activeTaskKey: "task:task-1",
-      activeEditorMode: "text" as const,
-      compactSurface: "materials" as const,
-      contextPickerOpen: true,
-      expandedContextModuleIds: ["module-2"],
-      onToggleContextModule,
-      onAddContextReference,
-      contextModules: [
-        {
-          id: "module-2",
-          title: "Argumente",
-          current: false,
-          loaded: true,
-          loading: false,
-          error: null,
-          items: [
-            {
-              key: "material:material-2",
-              kind: "material" as const,
-              title: "Positionen im Parlament",
-              position: 1,
-              contextLabel: "Argumente",
-              moduleId: "module-2",
-              material: { id: "material-2", title: "Positionen im Parlament", kind: "markdown" as const, body_md: "Text" }
-            },
-            {
-              key: "task:task-2",
-              kind: "task" as const,
-              title: "Aufgabe 2",
-              position: 2,
-              contextLabel: "Argumente",
-              moduleId: "module-2",
-              task: { id: "task-2", instruction_md: "Aufgabe", criteria: [], kind: "native" as const, has_submission: true }
-            }
-          ]
-        }
-      ]
-    };
-    render(LearnerContentWorkspace, { props });
-
-    await fireEvent.click(screen.getByRole("button", { name: /Positionen im Parlament/ }));
-    expect(onAddContextReference).toHaveBeenCalledWith(
-      expect.objectContaining({ key: "material:material-2", kind: "material", moduleId: "module-2" })
-    );
-    await fireEvent.click(screen.getByRole("button", { name: /Eigene frühere Abgabe Aufgabe 2/ }));
-    expect(onAddContextReference).toHaveBeenCalledWith(
-      expect.objectContaining({ key: "submission:task-2", kind: "submission", taskId: "task-2" })
-    );
   });
 
   it("opens a deliberately selected document across the workbench while keeping the desk mounted", async () => {
@@ -376,6 +339,7 @@ describe("LearnerContentWorkspace", () => {
           id: "module-1",
           title: "Grundlagen",
           current: true,
+          closable: false,
           loaded: true,
           loading: false,
           error: null,
@@ -416,5 +380,26 @@ describe("LearnerContentWorkspace", () => {
     expect(css).not.toContain("@container learning-dialog (min-width: 64rem)");
     expect(css).toMatch(/\.learner-task-context__scroll\s*\{[^}]*overflow-y:\s*auto;/s);
     expect(css).toMatch(/\.learner-reference-document__prose\s*\{[^}]*max-width:\s*68ch;/s);
+  });
+
+  it("keeps opened-module context styles local, responsive and free of pinning controls", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(path.resolve(currentDir, "../../styles/learning-unit.css"), "utf8");
+    const component = readFileSync(path.resolve(currentDir, "LearnerContentWorkspace.svelte"), "utf8");
+    const materialContext = readFileSync(path.resolve(currentDir, "LearnerMaterialContext.svelte"), "utf8");
+
+    expect(component).toContain("<LearnerMaterialContext");
+    expect(materialContext).not.toContain("Angeheftet");
+    expect(materialContext).not.toContain("Material suchen");
+    expect(materialContext).not.toContain("aria-pressed");
+    expect(css).not.toContain(".learner-context-picker");
+    expect(css).not.toContain(".learner-task-context__pinned");
+    expect(css).toContain(".learner-material-context__module");
+    expect(css).toMatch(/\.learner-material-context__tree-children\s*\{[^}]*border-inline-start:/s);
+    expect(css).toMatch(/\.learner-material-context__tree-item::before\s*\{[^}]*border-block-start:/s);
+    expect(css).toMatch(/\.learner-material-context__tree-item--submission\s*\{[^}]*margin-inline-start:/s);
+    expect(css).toMatch(/\.learner-tree-chevron--expanded\s*\{[^}]*transform:\s*rotate\(90deg\)/s);
+    expect(css).toMatch(/@container\s*\(max-width:\s*32rem\)[\s\S]*\.learner-material-context__tree-children\s*\{[^}]*padding-inline-start:/s);
+    expect(css).toMatch(/\.learner-material-context__module-toggle\s*\{[^}]*min-height:\s*2\.75rem;/s);
   });
 });

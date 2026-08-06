@@ -6,9 +6,10 @@
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
   import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
+  import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
-  import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
+  import type { LearningSubmission, LearningTask } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
 
   let {
@@ -35,12 +36,15 @@
     compactLayout = false,
     workspaceOnly = false,
     dialogCompactSurface = "task",
-    dialogContextMaterials = [],
-    dialogContextEntries = [],
-    dialogExpandedReferenceKeys = [],
-    dialogContextPickerOpen = false,
+    dialogExpandedModuleMaterialKeys = {},
     dialogExpandedContextModuleIds = [],
+    dialogExpandedSubmissionModuleIds = [],
+    dialogExpandedSubmissionKeys = [],
     dialogContextModules = [],
+    dialogHistoryByTask = {},
+    dialogHistoryStateByTask = {},
+    dialogFocusedContextModuleId = null,
+    dialogClosedContextModuleTitle = null,
     hideDialogPauseAction = false,
     enhanceSubmit = undefined,
     onToggle = null,
@@ -51,11 +55,11 @@
     onSetDialogCompactSurface = null,
     onOpenDialogContext = null,
     onToggleDialogMaterial = null,
-    onToggleDialogContextReference = null,
-    onRemoveDialogContextReference = null,
-    onToggleDialogContextPicker = null,
     onToggleDialogContextModule = null,
-    onAddDialogContextReference = null,
+    onToggleDialogSubmissionGroup = null,
+    onToggleDialogSubmission = null,
+    onCloseDialogContextModule = null,
+    onUndoCloseDialogContextModule = null,
     onSubmitUploadFeedback = null,
     onProgressPersisted = null
   }: {
@@ -82,39 +86,15 @@
     compactLayout?: boolean;
     workspaceOnly?: boolean;
     dialogCompactSurface?: "task" | "materials";
-    dialogContextMaterials?: LearningMaterial[];
-    dialogContextEntries?: Array<{
-      key: string;
-      kind: "material" | "submission";
-      label: string;
-      title: string;
-      material: LearningMaterial | null;
-      submissions: LearningSubmission[];
-      taskId?: string | null;
-      current?: boolean;
-      expanded?: boolean;
-      removable?: boolean;
-    }>;
-    dialogExpandedReferenceKeys?: string[];
-    dialogContextPickerOpen?: boolean;
+    dialogExpandedModuleMaterialKeys?: Record<string, string[]>;
     dialogExpandedContextModuleIds?: string[];
-    dialogContextModules?: Array<{
-      id: string;
-      title: string;
-      current: boolean;
-      loaded: boolean;
-      loading: boolean;
-      error: string | null;
-      options: Array<{
-        key: string;
-        kind: "material" | "submission";
-        id: string;
-        moduleId: string | null;
-        taskId: string | null;
-        title: string;
-        added: boolean;
-      }>;
-    }>;
+    dialogExpandedSubmissionModuleIds?: string[];
+    dialogExpandedSubmissionKeys?: string[];
+    dialogContextModules?: LearnerMaterialContextModule[];
+    dialogHistoryByTask?: Record<string, LearningSubmission[]>;
+    dialogHistoryStateByTask?: Record<string, SubmissionHistoryLoadState>;
+    dialogFocusedContextModuleId?: string | null;
+    dialogClosedContextModuleTitle?: string | null;
     hideDialogPauseAction?: boolean;
     enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
@@ -124,18 +104,12 @@
     onExitSubmissionWorkspace?: (() => void) | null;
     onSetDialogCompactSurface?: ((surface: "task" | "materials") => void) | null;
     onOpenDialogContext?: ((key: string) => void | Promise<void>) | null;
-    onToggleDialogMaterial?: ((key: string) => void) | null;
-    onToggleDialogContextReference?: ((key: string) => void | Promise<void>) | null;
-    onRemoveDialogContextReference?: ((key: string) => void) | null;
-    onToggleDialogContextPicker?: (() => void) | null;
+    onToggleDialogMaterial?: ((moduleId: string, key: string) => void) | null;
     onToggleDialogContextModule?: ((moduleId: string) => void | Promise<void>) | null;
-    onAddDialogContextReference?: ((reference: {
-      key: string;
-      kind: "material" | "submission";
-      id: string;
-      moduleId: string | null;
-      taskId: string | null;
-    }) => void) | null;
+    onToggleDialogSubmissionGroup?: ((moduleId: string) => void | Promise<void>) | null;
+    onToggleDialogSubmission?: ((key: string) => void) | null;
+    onCloseDialogContextModule?: ((moduleId: string) => void) | null;
+    onUndoCloseDialogContextModule?: (() => void) | null;
     onSubmitUploadFeedback?: ((payload: {
       taskId: string;
       taskKind: UploadTaskKind;
@@ -692,20 +666,23 @@
                 {courseId}
                 {task}
                 compactSurface={dialogCompactSurface}
-                contextMaterials={dialogContextMaterials}
-                contextEntries={dialogContextEntries}
-                expandedReferenceKeys={dialogExpandedReferenceKeys}
-                contextPickerOpen={dialogContextPickerOpen}
+                expandedModuleMaterialKeys={dialogExpandedModuleMaterialKeys}
                 expandedContextModuleIds={dialogExpandedContextModuleIds}
+                expandedSubmissionModuleIds={dialogExpandedSubmissionModuleIds}
+                expandedSubmissionKeys={dialogExpandedSubmissionKeys}
                 contextModules={dialogContextModules}
+                historyByTask={dialogHistoryByTask}
+                historyStateByTask={dialogHistoryStateByTask}
+                focusedContextModuleId={dialogFocusedContextModuleId}
+                closedContextModuleTitle={dialogClosedContextModuleTitle}
                 onSetCompactSurface={onSetDialogCompactSurface}
                 onOpenContext={onOpenDialogContext}
-                onToggleCurrentMaterial={onToggleDialogMaterial}
-                onToggleContextReference={onToggleDialogContextReference}
-                onRemoveContextReference={onRemoveDialogContextReference}
-                onToggleContextPicker={onToggleDialogContextPicker}
+                onToggleContextMaterial={onToggleDialogMaterial}
                 onToggleContextModule={onToggleDialogContextModule}
-                onAddContextReference={onAddDialogContextReference}
+                onToggleSubmissionGroup={onToggleDialogSubmissionGroup}
+                onToggleSubmission={onToggleDialogSubmission}
+                onCloseContextModule={onCloseDialogContextModule}
+                onUndoCloseContextModule={onUndoCloseDialogContextModule}
                 onPause={onExitSubmissionWorkspace}
                 showPauseAction={!hideDialogPauseAction}
                 onCompleted={onProgressPersisted}

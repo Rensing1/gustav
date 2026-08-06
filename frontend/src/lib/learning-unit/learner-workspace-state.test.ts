@@ -12,31 +12,19 @@ import {
 } from "./learner-workspace-state";
 
 describe("learner workspace state", () => {
-  it("uses version 3 for the book, work and deliberate reader positions", () => {
-    expect(LEARNER_WORKSPACE_STORAGE_VERSION).toBe(3);
-    expect(defaultLearnerWorkspaceState().context).toMatchObject({
+  it("uses version 5 for opened-module context disclosures", () => {
+    expect(LEARNER_WORKSPACE_STORAGE_VERSION).toBe(5);
+    expect(defaultLearnerWorkspaceState().context).toEqual({
+      compactSurface: "task",
+      expandedContextModuleIds: [],
+      expandedModuleMaterialKeys: {},
+      expandedSubmissionModuleIds: [],
+      expandedSubmissionKeys: [],
+      readingReferenceKey: null,
+      focusedModuleId: null,
       bookScrollTop: 0,
       workScrollTop: 0,
       readerScrollTop: 0
-    });
-  });
-
-  it("starts in the reading surface without a second work surface", () => {
-    expect(defaultLearnerWorkspaceState()).toMatchObject({
-      surface: "reading",
-      activeTask: null,
-      openedModuleIds: [],
-      collapsedItemKeys: [],
-      context: {
-        compactSurface: "task",
-        manualReferences: [],
-        pickerOpen: false,
-        readingReferenceKey: null
-      },
-      preferences: {
-        navigationVisible: true,
-        fontSize: "standard"
-      }
     });
   });
 
@@ -48,31 +36,11 @@ describe("learner workspace state", () => {
     expect(learnerWorkspaceStorageKeys(null, "course-1", "unit-1")).toBeNull();
   });
 
-  it("does not read the old unscoped workspace key", () => {
-    const localStorage = new Map<string, string>();
-    localStorage.set(
-      "gustav.learning.unit-workspace:course-1:unit-1",
-      JSON.stringify({ view: "content", splitView: true, openTabs: ["module-open"] })
-    );
-
-    const restored = readLearnerWorkspaceState({
-      localStorage,
-      sessionStorage: new Map(),
-      learnerSub: "student-1",
-      courseId: "course-1",
-      unitId: "unit-1",
-      openableModuleIds: new Set(["module-open"]),
-      accessibleReferenceKeys: new Set()
-    });
-
-    expect(restored).toEqual(defaultLearnerWorkspaceState());
-  });
-
-  it("keeps persistent pins and tab-local reading state separate", () => {
+  it("stores opened modules persistently and reading state only in the current tab", () => {
     const state: LearnerWorkspaceState = {
       ...defaultLearnerWorkspaceState(),
       surface: "task",
-      openedModuleIds: ["module-a"],
+      openedModuleIds: ["module-a", "module-b"],
       activeTask: {
         itemKey: "task:task-a",
         taskId: "task-a",
@@ -82,13 +50,12 @@ describe("learner workspace state", () => {
       },
       context: {
         compactSurface: "materials",
-        manualReferences: [
-          { key: "material:material-a", kind: "material", id: "material-a", moduleId: "module-a", taskId: null }
-        ],
-        expandedReferenceKeys: ["material:material-a"],
-        pickerOpen: false,
-        expandedModuleIds: [],
-        readingReferenceKey: "material:material-a",
+        expandedContextModuleIds: ["module-a", "module-b"],
+        expandedModuleMaterialKeys: { "module-b": ["material:material-b"] },
+        expandedSubmissionModuleIds: ["module-b"],
+        expandedSubmissionKeys: ["submission:task-b"],
+        readingReferenceKey: "material:material-b",
+        focusedModuleId: "module-b",
         bookScrollTop: 420,
         workScrollTop: 180,
         readerScrollTop: 75
@@ -99,24 +66,108 @@ describe("learner workspace state", () => {
     const persistent = JSON.parse(serializeLearnerWorkspacePersistentState(state));
     const tab = JSON.parse(serializeLearnerWorkspaceTabState(state));
 
-    expect(persistent.context.manualReferences).toHaveLength(1);
-    expect(persistent.preferences.fontSize).toBe("standard");
-    expect(persistent).not.toHaveProperty("activeTask");
-    expect(persistent).not.toHaveProperty("readingReferenceKey");
+    expect(persistent).toEqual({
+      version: 5,
+      openedModuleIds: ["module-a", "module-b"],
+      preferences: { navigationVisible: true, fontSize: "standard" }
+    });
     expect(tab.activeTask.taskId).toBe("task-a");
-    expect(tab.context.readingReferenceKey).toBe("material:material-a");
-    expect(tab.context.bookScrollTop).toBe(420);
-    expect(tab.context.workScrollTop).toBe(180);
-    expect(tab.context.readerScrollTop).toBe(75);
-    expect(tab).not.toHaveProperty("manualReferences");
+    expect(tab.context).toMatchObject({
+      compactSurface: "materials",
+      expandedContextModuleIds: ["module-a", "module-b"],
+      expandedModuleMaterialKeys: { "module-b": ["material:material-b"] },
+      expandedSubmissionModuleIds: ["module-b"],
+      expandedSubmissionKeys: ["submission:task-b"],
+      readingReferenceKey: "material:material-b",
+      focusedModuleId: "module-b"
+    });
   });
 
-  it("drops locked modules, inaccessible references and an invalid active task", () => {
+  it("keeps only accessible opened modules and their disclosure state", () => {
     const normalized = normalizeLearnerWorkspaceState(
       {
-        ...defaultLearnerWorkspaceState(),
+        openedModuleIds: ["module-open", "module-locked"],
+        context: {
+          expandedContextModuleIds: ["module-open", "module-locked"],
+          expandedModuleMaterialKeys: {
+            "module-open": ["material:allowed", "material:missing"],
+            "module-locked": ["material:locked"]
+          },
+          expandedSubmissionModuleIds: ["module-open", "module-locked"],
+          expandedSubmissionKeys: ["submission:allowed", "submission:locked"],
+          focusedModuleId: "module-locked"
+        }
+      },
+      {
+        openableModuleIds: new Set(["module-open"]),
+        accessibleReferenceKeys: new Set(["material:allowed", "submission:allowed"])
+      }
+    );
+
+    expect(normalized.openedModuleIds).toEqual(["module-open"]);
+    expect(normalized.context.expandedContextModuleIds).toEqual(["module-open"]);
+    expect(normalized.context.expandedModuleMaterialKeys).toEqual({
+      "module-open": ["material:allowed"]
+    });
+    expect(normalized.context.expandedSubmissionModuleIds).toEqual(["module-open"]);
+    expect(normalized.context.expandedSubmissionKeys).toEqual(["submission:allowed"]);
+    expect(normalized.context.focusedModuleId).toBeNull();
+  });
+
+  it("preserves an active task while the graph is used as material selection", () => {
+    const normalized = normalizeLearnerWorkspaceState(
+      {
+        surface: "graph",
+        openedModuleIds: ["module-open"],
+        activeTask: {
+          itemKey: "task:task-open",
+          taskId: "task-open",
+          moduleId: "module-open",
+          status: "editing",
+          editorMode: "upload"
+        }
+      },
+      {
+        openableModuleIds: new Set(["module-open"]),
+        accessibleTaskKeys: new Set(["task:task-open"])
+      }
+    );
+
+    expect(normalized.surface).toBe("graph");
+    expect(normalized.activeTask?.taskId).toBe("task-open");
+  });
+
+  it("keeps disclosure state for released sections in a linear unit", () => {
+    const normalized = normalizeLearnerWorkspaceState(
+      {
+        context: {
+          expandedContextModuleIds: ["section-current", "section-open", "section-locked"],
+          expandedModuleMaterialKeys: {
+            "section-open": ["material:open"],
+            "section-locked": ["material:locked"]
+          },
+          expandedSubmissionModuleIds: ["section-open"],
+          expandedSubmissionKeys: ["submission:task-open"]
+        }
+      },
+      {
+        openableModuleIds: new Set(),
+        accessibleContextModuleIds: new Set(["section-current", "section-open"]),
+        accessibleReferenceKeys: new Set(["material:open", "submission:task-open"])
+      }
+    );
+
+    expect(normalized.context.expandedContextModuleIds).toEqual(["section-current", "section-open"]);
+    expect(normalized.context.expandedModuleMaterialKeys).toEqual({ "section-open": ["material:open"] });
+    expect(normalized.context.expandedSubmissionModuleIds).toEqual(["section-open"]);
+    expect(normalized.context.expandedSubmissionKeys).toEqual(["submission:task-open"]);
+  });
+
+  it("drops an inaccessible active task and its reader", () => {
+    const normalized = normalizeLearnerWorkspaceState(
+      {
         surface: "task",
-        openedModuleIds: ["module-locked", "module-open"],
+        openedModuleIds: ["module-open"],
         activeTask: {
           itemKey: "task:locked-task",
           taskId: "locked-task",
@@ -125,18 +176,7 @@ describe("learner workspace state", () => {
           editorMode: "upload"
         },
         context: {
-          compactSurface: "materials",
-          manualReferences: [
-            { key: "material:allowed", kind: "material", id: "allowed", moduleId: "module-open", taskId: null },
-            { key: "material:locked", kind: "material", id: "locked", moduleId: "module-locked", taskId: null }
-          ],
-          expandedReferenceKeys: ["material:allowed", "material:locked"],
-          pickerOpen: false,
-          expandedModuleIds: ["module-open", "module-locked"],
-          readingReferenceKey: "material:locked",
-          bookScrollTop: 100,
-          workScrollTop: 50,
-          readerScrollTop: 25
+          readingReferenceKey: "material:locked"
         }
       },
       {
@@ -147,14 +187,11 @@ describe("learner workspace state", () => {
     );
 
     expect(normalized.surface).toBe("reading");
-    expect(normalized.openedModuleIds).toEqual(["module-open"]);
     expect(normalized.activeTask).toBeNull();
-    expect(normalized.context.manualReferences.map((entry) => entry.key)).toEqual(["material:allowed"]);
-    expect(normalized.context.expandedReferenceKeys).toEqual(["material:allowed"]);
     expect(normalized.context.readingReferenceKey).toBeNull();
   });
 
-  it("restores persistent state only from local storage and reading state only from the current tab", () => {
+  it("migrates version 4 without retaining pins or picker state", () => {
     const keys = learnerWorkspaceStorageKeys("student-1", "course-1", "unit-1");
     if (!keys) throw new Error("expected storage keys");
     const localStorage = new Map<string, string>();
@@ -162,12 +199,12 @@ describe("learner workspace state", () => {
     localStorage.set(
       keys.persistent,
       JSON.stringify({
-        version: 1,
+        version: 4,
         openedModuleIds: ["module-open"],
         preferences: { navigationVisible: false, fontSize: "large" },
         context: {
           manualReferences: [
-            { key: "material:allowed", kind: "material", id: "allowed", moduleId: "module-open", taskId: null }
+            { key: "material:pinned", kind: "material", id: "pinned", moduleId: "module-open" }
           ]
         }
       })
@@ -175,26 +212,15 @@ describe("learner workspace state", () => {
     sessionStorage.set(
       keys.tab,
       JSON.stringify({
-        version: 1,
-        surface: "task",
-        activeTask: {
-          itemKey: "task:task-open",
-          taskId: "task-open",
-          moduleId: "module-open",
-          status: "result",
-          editorMode: null
-        },
+        version: 4,
         context: {
-          compactSurface: "materials",
-          expandedReferenceKeys: ["material:allowed"],
           pickerOpen: true,
           expandedModuleIds: ["module-open"],
+          expandedReferenceKeys: ["material:pinned"],
+          expandedModuleMaterialKeys: { "module-open": ["material:allowed"] },
           readingReferenceKey: "material:allowed",
-          bookScrollTop: 80,
-          workScrollTop: 40,
-          readerScrollTop: 20
-        },
-        returnPosition: { moduleId: "module-open", scrollY: 300, focusId: "task-row-task-open" }
+          bookScrollTop: 80
+        }
       })
     );
 
@@ -205,78 +231,35 @@ describe("learner workspace state", () => {
       courseId: "course-1",
       unitId: "unit-1",
       openableModuleIds: new Set(["module-open"]),
-      accessibleTaskKeys: new Set(["task:task-open"]),
       accessibleReferenceKeys: new Set(["material:allowed"])
     });
 
-    expect(restored.surface).toBe("task");
-    expect(restored.activeTask?.status).toBe("result");
     expect(restored.openedModuleIds).toEqual(["module-open"]);
     expect(restored.preferences).toEqual({ navigationVisible: false, fontSize: "large" });
+    expect(restored.context.expandedModuleMaterialKeys).toEqual({ "module-open": ["material:allowed"] });
+    expect(restored.context.expandedContextModuleIds).toEqual([]);
+    expect(restored.context.expandedSubmissionKeys).toEqual([]);
     expect(restored.context.readingReferenceKey).toBe("material:allowed");
-    expect(restored.context.bookScrollTop).toBe(80);
-    expect(restored.context.workScrollTop).toBe(40);
-    expect(restored.context.readerScrollTop).toBe(20);
+    expect(restored.context).not.toHaveProperty("manualReferences");
+    expect(restored.context).not.toHaveProperty("pickerOpen");
   });
 
-  it("migrates version 2 without reopening its automatically focused reader", () => {
-    const keys = learnerWorkspaceStorageKeys("student-1", "course-1", "unit-1");
-    if (!keys) throw new Error("expected storage keys");
-    const sessionStorage = new Map<string, string>();
-    sessionStorage.set(
-      keys.tab,
-      JSON.stringify({
-        version: 2,
-        context: {
-          expandedReferenceKeys: ["material:allowed"],
-          readingReferenceKey: "material:allowed",
-          scrollTop: 96
-        }
-      })
+  it("does not read another learner's or the old unscoped workspace key", () => {
+    const localStorage = new Map<string, string>();
+    localStorage.set(
+      "gustav.learning.unit-workspace:course-1:unit-1",
+      JSON.stringify({ version: 5, openedModuleIds: ["module-open"] })
     );
 
     const restored = readLearnerWorkspaceState({
-      localStorage: new Map(),
-      sessionStorage,
+      localStorage,
+      sessionStorage: new Map(),
       learnerSub: "student-1",
       courseId: "course-1",
       unitId: "unit-1",
-      openableModuleIds: new Set(["module-open"]),
-      accessibleReferenceKeys: new Set(["material:allowed"])
+      openableModuleIds: new Set(["module-open"])
     });
 
-    expect(restored.context.expandedReferenceKeys).toEqual(["material:allowed"]);
-    expect(restored.context.readingReferenceKey).toBeNull();
-    expect(restored.context.bookScrollTop).toBe(96);
-  });
-
-  it("keeps references from accessible modules before their content is loaded", () => {
-    const normalized = normalizeLearnerWorkspaceState(
-      {
-        context: {
-          manualReferences: [
-            {
-              key: "material:later",
-              kind: "material",
-              id: "later",
-              moduleId: "module-open",
-              taskId: null
-            },
-            {
-              key: "material:locked",
-              kind: "material",
-              id: "locked",
-              moduleId: "module-locked",
-              taskId: null
-            }
-          ]
-        }
-      },
-      {
-        openableModuleIds: new Set(["module-open"])
-      }
-    );
-
-    expect(normalized.context.manualReferences.map((entry) => entry.key)).toEqual(["material:later"]);
+    expect(restored).toEqual(defaultLearnerWorkspaceState());
   });
 });

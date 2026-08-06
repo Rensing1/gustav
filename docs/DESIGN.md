@@ -369,22 +369,47 @@ Verbindliche Familien:
 - Der Aufgabenraum bleibt flach: keine Modulkarte, keine wiederholte
   Aufgabenzeile und keine vollständigen Rahmen um Kontext oder Bearbeitung.
 
-- Die linke Fläche funktioniert als fortlaufende Buchseite: Auf die
-  Aufgabenstellung folgen Materialien des aktuellen Abschnitts in didaktischer
-  Reihenfolge und danach bewusst angeheftete Materialien oder eigene frühere
-  Abgaben in der Reihenfolge des Hinzufügens. Doppelte Referenzschlüssel werden
-  nicht erneut dargestellt.
-- Aktuelle und neu angeheftete Dokumente sind zunächst offen. Jedes Dokument
-  besitzt eine vollständig bedienbare Titelzeile mit `aria-expanded` und
-  `aria-controls`. Rückmeldung, Kriterienauswertung und ältere Versuche bleiben
-  innerhalb einer Abgabe zunächst eingeklappt.
-- Materialien weiterer bereits geöffneter Module erscheinen als kompakte
-  Auswahlgruppen. Noch nicht geöffnete Materialien und eigene frühere Abgaben
-  werden einzeln angeheftet, nicht als vollständiges Modul.
-- Weitere Module werden erst beim Öffnen ihrer Gruppe geladen. Entzogene oder
-  gesperrte Inhalte werden beim Wiederherstellen verworfen beziehungsweise mit
-  einem sicheren Ladefehler angezeigt.
-- Ein normales Öffnen oder Hinzufügen ersetzt niemals den Dokumentstapel. Erst
+- Die linke Fläche funktioniert als fortlaufende Buchseite. Sie zeigt bei
+  modularen Lerneinheiten ausschließlich Module, die der Schüler zuvor im
+  Lernpfad geöffnet hat. Das Modul der aktiven Aufgabe steht zuerst und bleibt
+  geöffnet; weitere Module folgen in Lernpfad-Reihenfolge und beginnen
+  eingeklappt.
+- Der Materialbereich besitzt keine eigene Quellenverwaltung. Weitere Inhalte
+  werden ausschließlich über `Zum Lernpfad` geöffnet. Währenddessen bleibt die
+  Aufgabenarbeitsfläche montiert und wird nur für Tastatur und Screenreader
+  verborgen. Die Auswahl eines Moduls führt direkt zur Aufgabe zurück.
+- Beim ersten Öffnen eines Moduls ist dessen erstes Material geöffnet. Danach
+  dürfen mehrere Dokumente gleichzeitig vollständig im gemeinsamen
+  Materialscrollbereich geöffnet bleiben. Wiederholte Typ- und Herkunftsmarker
+  in jeder Dokumentzeile sind zu vermeiden.
+- Der Materialbereich visualisiert seine Hierarchie als flachen Baum statt als
+  Sammlung verschachtelter Karten: Module bilden die oberste Ebene,
+  Materialien und die Untergruppe `Eigene Abgaben` die zweite und einzelne
+  Abgaben die dritte. Dünne Verbindungslinien und eine maßvolle Einrückung
+  tragen die Hierarchie; zusätzliche Flächen, Rahmen und Herkunftslabels sind
+  dafür nicht zulässig.
+- Offenlegungschevrons stehen links vor dem Titel und drehen sich im geöffneten
+  Zustand. Rechts stehen ausschließlich Aktionen, die zur jeweiligen Ebene
+  gehören: `Groß lesen` an Dokumenten und `Modul schließen` an zusätzlichen
+  Modulen. `Eigene Abgaben` besitzt keine konkurrierende Nebenaktion.
+- Unter `32rem` Komponentenbreite wird die Einrückung verdichtet. Titel dürfen
+  mehrzeilig werden, während Offenlegungen und Symbolaktionen mindestens 44
+  Pixel hohe Berührungsflächen behalten und keinen horizontalen Überlauf
+  erzeugen.
+- Zusätzliche Module können im Materialbereich geschlossen werden. Das Modul der
+  aktiven Aufgabe ist geschützt; nach dem Schließen bietet eine lokale
+  Statuszeile einmalig `Rückgängig` an. Schließen entfernt nur den
+  Lernraumzustand und niemals Inhalte oder Abgaben.
+- Lineare Lerneinheiten zeigen alle freigeschalteten Abschnitte. Der Abschnitt
+  der aktiven Aufgabe steht zuerst und ist geöffnet; weitere Abschnitte beginnen
+  eingeklappt und besitzen keine Schließen-Aktion.
+- Jedes Modul besitzt eine standardmäßig geschlossene Untergruppe `Eigene
+  Abgaben`. Ihre Historie wird erst beim Öffnen geladen; die neueste finale
+  Abgabe steht zuerst. Rückmeldung, Kriterienauswertung und ältere Versuche
+  bleiben darin zunächst eingeklappt.
+- Entzogene oder gesperrte Inhalte werden beim Wiederherstellen verworfen
+  beziehungsweise mit einem sicheren Ladefehler angezeigt.
+- Ein normales Öffnen ersetzt niemals den Dokumentstapel. Erst
   die bewusste Aktion `Groß lesen` öffnet unter dem Aufgabenkopf eine
   Vollbreiten-Leseansicht. Die Buchseite und das Arbeitsheft bleiben montiert,
   sind dabei aber für Tastatur und Screenreader inaktiv. `Zurück zur Aufgabe`
@@ -396,9 +421,8 @@ Verbindliche Familien:
   andere Dateien zeigen Dateityp, Größe und eine Öffnen-Aktion. Sichere
   Dialogtranskripte werden als flacher Sprecherverlauf wiedergegeben.
 - Buchseite und Arbeitsheft besitzen auf breiten Flächen unabhängige vertikale
-  Scrollbereiche. Leseposition, ausgewählter Eintrag und Disclosure-Zustände
-  bleiben im aktuellen Tab erhalten; angeheftete IDs bleiben schüler-, kurs-
-  und lernspezifisch über Neuladen und Aufgabenwechsel hinweg erhalten.
+  Scrollbereiche. Leseposition, ausgewählter Eintrag sowie Modul- und
+  Dokumentoffenlegungen bleiben schülerbezogen im aktuellen Tab erhalten.
 - Gespeichert werden ausschließlich IDs und Ansichtsstatus, niemals Material-
   oder Abgabetexte.
 

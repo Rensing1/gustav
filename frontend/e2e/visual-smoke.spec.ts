@@ -5,6 +5,8 @@ import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import {
   expectInteractiveSurface,
+  expectLearnerMaterialContrast,
+  expectLearnerTaskTheme,
   expectNoViewportOverflow,
   expectVisiblePageShell,
   type SmokePage
@@ -146,6 +148,39 @@ test.describe("@visual-smoke learner workspace", () => {
         caret: "hide",
         mask: [accountControl]
       });
+      await expectLearnerTaskTheme(learner.page, "light");
+
+      await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+      await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
+      await expectLearnerTaskTheme(learner.page, "dark");
+      await expect(learner.page).toHaveScreenshot("learner-work-dark-desktop.png", {
+        animations: "disabled",
+        caret: "hide",
+        mask: [accountControl]
+      });
+      const sourceSection = contextSurface.getByRole("button", { name: "Modul Vertiefung ein- oder ausklappen" });
+      await expect(sourceSection).toBeVisible();
+      await sourceSection.click();
+      await contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => {
+        surface.scrollTop = surface.scrollHeight;
+      });
+      await expectLearnerMaterialContrast(learner.page);
+      await expect(learner.page).toHaveScreenshot("learner-material-list-dark-desktop.png", {
+        animations: "disabled",
+        caret: "hide",
+        mask: [accountControl]
+      });
+      await learner.page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+      await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "light");
+      await expectLearnerMaterialContrast(learner.page);
+      await expect(learner.page).toHaveScreenshot("learner-material-list-light-desktop.png", {
+        animations: "disabled",
+        caret: "hide",
+        mask: [accountControl]
+      });
+      await contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => {
+        surface.scrollTop = 0;
+      });
 
       const currentMaterial = contextSurface
         .locator(".learner-reference-document")
@@ -191,10 +226,42 @@ test.describe("@visual-smoke learner workspace", () => {
           caret: "hide",
           mask: [accountControl]
         });
+        await contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => {
+          surface.scrollTop = surface.scrollHeight;
+        });
+        await expectLearnerMaterialContrast(learner.page);
+        await expect(learner.page).toHaveScreenshot(`learner-material-list-light-${viewport.name}.png`, {
+          animations: "disabled",
+          caret: "hide",
+          mask: [accountControl]
+        });
+        await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+        await expectLearnerMaterialContrast(learner.page);
+        await expect(learner.page).toHaveScreenshot(`learner-material-list-dark-${viewport.name}.png`, {
+          animations: "disabled",
+          caret: "hide",
+          mask: [accountControl]
+        });
+        await learner.page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+        await contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => {
+          surface.scrollTop = 0;
+        });
       }
 
+      await workbench.getByRole("button", { name: "Aufgabe" }).click();
+      await expect(taskSurface).toBeVisible();
+      await expect(contextSurface).toBeHidden();
       await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
       await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
+      await expectLearnerTaskTheme(learner.page, "dark");
+      await expect(learner.page).toHaveScreenshot("learner-work-dark-mobile.png", {
+        animations: "disabled",
+        caret: "hide",
+        mask: [accountControl]
+      });
+      await workbench.getByRole("button", { name: "Materialien" }).click();
+      await expect(contextSurface).toBeVisible();
+      await expect(taskSurface).toBeHidden();
       await expect(learner.page).toHaveScreenshot("learner-context-dark-mobile.png", {
         animations: "disabled",
         caret: "hide",

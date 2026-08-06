@@ -27,6 +27,8 @@ describe("LearningReferenceDocument", () => {
     const toggle = screen.getByRole("button", { name: "Quellentext ein- oder ausklappen" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(toggle).toHaveAttribute("aria-controls", "reference-body-material-source");
+    expect(toggle.querySelector(".learner-tree-chevron")).not.toBeNull();
+    expect(toggle).not.toHaveTextContent(/[+−]/);
     expect(screen.getByText("Vollständiger Materialtext.")).toBeInTheDocument();
 
     await fireEvent.click(toggle);

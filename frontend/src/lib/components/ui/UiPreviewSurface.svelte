@@ -326,6 +326,7 @@
           id: group.id,
           title: group.title ?? "Modul",
           current: group.id === "module-1",
+          closable: group.id !== "module-1",
           loaded: true,
           loading: false,
           error: null,

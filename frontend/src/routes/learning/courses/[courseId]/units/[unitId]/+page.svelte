@@ -25,10 +25,12 @@
     contentGroupsForSections,
     flattenContentGroups,
     moduleContentItems,
+    sectionContentItems,
     type ModularWorkspaceSnapshot,
     orderedOpenModules,
     reconcileModularWorkspaceState,
     type ContentGroup,
+    type LearnerMaterialContextModule,
     type LearningContentItem
   } from "$lib/learning-unit/workspace";
   import {
@@ -50,7 +52,6 @@
     readLearnerWorkspaceState,
     serializeLearnerWorkspacePersistentState,
     serializeLearnerWorkspaceTabState,
-    type LearnerContextReference,
     type LearnerWorkspaceState
   } from "$lib/learning-unit/learner-workspace-state";
   import { learnerNavigationHref } from "$lib/learning-unit/learner-navigation";
@@ -74,6 +75,17 @@
     headers?: Record<string, string>;
   };
   type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
+  type ClosedModuleSnapshot = {
+    moduleId: string;
+    title: string;
+    index: number;
+    previousActiveTab: string | null;
+    expanded: boolean;
+    expandedMaterialKeys: string[] | null;
+    submissionsExpanded: boolean;
+    expandedSubmissionKeys: string[];
+    readingReferenceKey: string | null;
+  };
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -104,7 +116,9 @@
   let pendingSubmissionIntent = $state<"feedback" | "submit" | null>(null);
   let modularRestoreState = $state<ModularRestoreState>("idle");
   let modularRestoreMessage = $state<string | null>(null);
+  let closedModuleSnapshot = $state<ClosedModuleSnapshot | null>(null);
   let feedbackPollToken = 0;
+  let closedModuleUndoTimer: number | null = null;
 
   let rebuildToken = 0;
 
@@ -179,36 +193,39 @@
     return flattenContentGroups(contentGroups());
   }
 
-  function contextModuleOptions(): Array<{
-    id: string;
-    title: string;
-    current: boolean;
-    opened: boolean;
-    loaded: boolean;
-    loading: boolean;
-    error: string | null;
-    items: LearningContentItem[];
-  }> {
+  function contextModuleOptions(): LearnerMaterialContextModule[] {
+    const activeModuleId = learnerWorkspace.activeTask?.moduleId ?? null;
     if (!isModularUnit()) {
-      return contentGroups().map((group) => ({
-        id: group.id,
-        title: group.title ?? "Abschnitt",
-        current: group.items.some((item) => item.key === learnerWorkspace.activeTask?.itemKey),
-        opened: true,
-        loaded: true,
-        loading: false,
-        error: null,
-        items: group.items
-      }));
+      const sections = data.sections.map((section) => {
+        const items = sectionContentItems(section);
+        return {
+          id: section.section.id,
+          title: section.section.title || `Abschnitt ${section.section.position}`,
+          current: items.some((item) => item.key === learnerWorkspace.activeTask?.itemKey),
+          closable: false,
+          loaded: true,
+          loading: false,
+          error: null,
+          items
+        } satisfies LearnerMaterialContextModule;
+      });
+      return [
+        ...sections.filter((section) => section.current),
+        ...sections.filter((section) => !section.current)
+      ];
     }
 
-    return (graphState?.modules ?? [])
-      .filter((module) => module.status === "open" || module.status === "done")
+    const openedModules = orderedOpenModulesForContent();
+    const activeFirst = [
+      ...openedModules.filter((module) => module.id === activeModuleId),
+      ...openedModules.filter((module) => module.id !== activeModuleId)
+    ];
+    return activeFirst
       .map((module) => ({
         id: module.id,
         title: module.title,
-        current: module.id === learnerWorkspace.activeTask?.moduleId,
-        opened: modularWorkspace.openTabs.includes(module.id),
+        current: module.id === activeModuleId,
+        closable: module.id !== activeModuleId,
         loaded: Boolean(moduleCache[module.id]),
         loading: Boolean(moduleLoading[module.id]),
         error: moduleErrors[module.id] ?? null,
@@ -250,7 +267,10 @@
       },
       context: {
         ...learnerWorkspace.context,
-        compactSurface: "task"
+        compactSurface: "task",
+        expandedContextModuleIds: item.moduleId
+          ? [...new Set([...learnerWorkspace.context.expandedContextModuleIds, item.moduleId])]
+          : learnerWorkspace.context.expandedContextModuleIds
       },
       returnPosition: {
         moduleId: item.moduleId ?? null,
@@ -314,12 +334,36 @@
   }
 
   function showLearningPath() {
+    if (learnerWorkspace.surface === "task" && learnerWorkspace.activeTask) {
+      setLearnerWorkspaceState({
+        ...learnerWorkspace,
+        surface: "graph",
+        activeTask: learnerWorkspace.activeTask
+      });
+      syncLearnerNavigation({ surface: "graph", moduleId: null, taskId: null, panel: null }, "push");
+      return;
+    }
     if (browser && window.history.state?.gustavLearnerSurface === "reading") {
       window.history.back();
       return;
     }
     setLearnerWorkspaceState({ ...learnerWorkspace, surface: "graph", activeTask: null });
     syncLearnerNavigation({ surface: "graph", moduleId: null, taskId: null, panel: null }, "replace");
+  }
+
+  function returnToActiveTask() {
+    const task = learnerWorkspace.activeTask;
+    if (!task) return;
+    setLearnerWorkspaceState({ ...learnerWorkspace, surface: "task" });
+    syncLearnerNavigation(
+      {
+        surface: "task",
+        moduleId: task.moduleId,
+        taskId: task.taskId,
+        panel: task.status === "result" ? "result" : null
+      },
+      "replace"
+    );
   }
 
   async function restoreSurfaceFromUrl() {
@@ -331,7 +375,11 @@
 
     if (isModularUnit()) {
       if (!requestedModuleId || !openableModuleIds().has(requestedModuleId)) {
-        setLearnerWorkspaceState({ ...learnerWorkspace, surface: "graph", activeTask: null });
+        setLearnerWorkspaceState({
+          ...learnerWorkspace,
+          surface: "graph",
+          activeTask: learnerWorkspace.activeTask
+        });
         syncLearnerNavigation({ surface: "graph", moduleId: null, taskId: null, panel: null }, "replace");
         return;
       }
@@ -401,26 +449,40 @@
     setLearnerWorkspaceState({ ...learnerWorkspace, collapsedItemKeys });
   }
 
-  function toggleContextPicker() {
+  function toggleContextModuleMaterial(moduleId: string, itemKey: string) {
+    const moduleMaterialKeys = contextModuleOptions()
+      .find((module) => module.id === moduleId)
+      ?.items.filter((item) => item.kind === "material")
+      .map((item) => item.key) ?? [];
+    const storedKeys = learnerWorkspace.context.expandedModuleMaterialKeys[moduleId];
+    const expandedKeys = storedKeys ?? moduleMaterialKeys.slice(0, 1);
+    const nextKeys = expandedKeys.includes(itemKey)
+      ? expandedKeys.filter((key) => key !== itemKey)
+      : [...expandedKeys, itemKey];
+
     setLearnerWorkspaceState({
       ...learnerWorkspace,
       context: {
         ...learnerWorkspace.context,
-        pickerOpen: !learnerWorkspace.context.pickerOpen
+        expandedModuleMaterialKeys: {
+          ...learnerWorkspace.context.expandedModuleMaterialKeys,
+          [moduleId]: nextKeys
+        }
       }
     });
   }
 
   async function toggleContextModule(moduleId: string) {
-    const expanded = learnerWorkspace.context.expandedModuleIds.includes(moduleId);
-    const expandedModuleIds = expanded
-      ? learnerWorkspace.context.expandedModuleIds.filter((id) => id !== moduleId)
-      : [...learnerWorkspace.context.expandedModuleIds, moduleId];
+    if (moduleId === learnerWorkspace.activeTask?.moduleId) return;
+    const expanded = learnerWorkspace.context.expandedContextModuleIds.includes(moduleId);
+    const expandedContextModuleIds = expanded
+      ? learnerWorkspace.context.expandedContextModuleIds.filter((id) => id !== moduleId)
+      : [...learnerWorkspace.context.expandedContextModuleIds, moduleId];
     setLearnerWorkspaceState({
       ...learnerWorkspace,
       context: {
         ...learnerWorkspace.context,
-        expandedModuleIds
+        expandedContextModuleIds
       }
     });
     if (!expanded && isModularUnit()) {
@@ -428,64 +490,44 @@
     }
   }
 
-  async function addContextReference(reference: LearnerContextReference) {
-    if (learnerWorkspace.context.manualReferences.some((entry) => entry.key === reference.key)) {
-      return;
-    }
+  async function toggleContextSubmissions(moduleId: string) {
+    const expanded = learnerWorkspace.context.expandedSubmissionModuleIds.includes(moduleId);
+    const expandedSubmissionModuleIds = expanded
+      ? learnerWorkspace.context.expandedSubmissionModuleIds.filter((id) => id !== moduleId)
+      : [...learnerWorkspace.context.expandedSubmissionModuleIds, moduleId];
     setLearnerWorkspaceState({
       ...learnerWorkspace,
       context: {
         ...learnerWorkspace.context,
-        manualReferences: [...learnerWorkspace.context.manualReferences, reference],
-        expandedReferenceKeys: [
-          ...learnerWorkspace.context.expandedReferenceKeys.filter((key) => key !== reference.key),
-          reference.key
-        ]
+        expandedSubmissionModuleIds
       }
     });
-    await ensureContextReferenceSourceLoaded(reference);
-  }
-
-  async function toggleContextReference(referenceKey: string) {
-    const expanded = learnerWorkspace.context.expandedReferenceKeys.includes(referenceKey);
-    const reference = learnerWorkspace.context.manualReferences.find((entry) => entry.key === referenceKey);
-    setLearnerWorkspaceState({
-      ...learnerWorkspace,
-      context: {
-        ...learnerWorkspace.context,
-        expandedReferenceKeys: expanded
-          ? learnerWorkspace.context.expandedReferenceKeys.filter((key) => key !== referenceKey)
-          : [...learnerWorkspace.context.expandedReferenceKeys, referenceKey]
-      }
-    });
-    if (!expanded && reference) {
-      await ensureContextReferenceSourceLoaded(reference);
+    if (!expanded) {
+      const taskIds = contextModuleOptions()
+        .find((module) => module.id === moduleId)
+        ?.items.filter((item) => item.task?.has_submission)
+        .map((item) => item.task?.id)
+        .filter((taskId): taskId is string => Boolean(taskId)) ?? [];
+      await Promise.all(taskIds.map((taskId) => ensureSubmissionHistoryLoaded(taskId)));
     }
   }
 
-  function removeContextReference(referenceKey: string) {
+  function toggleContextSubmission(referenceKey: string) {
+    const expanded = learnerWorkspace.context.expandedSubmissionKeys.includes(referenceKey);
     setLearnerWorkspaceState({
       ...learnerWorkspace,
       context: {
         ...learnerWorkspace.context,
-        manualReferences: learnerWorkspace.context.manualReferences.filter(
-          (reference) => reference.key !== referenceKey
-        ),
-        expandedReferenceKeys: learnerWorkspace.context.expandedReferenceKeys.filter(
-          (key) => key !== referenceKey
-        ),
-        readingReferenceKey:
-          learnerWorkspace.context.readingReferenceKey === referenceKey
-            ? null
-            : learnerWorkspace.context.readingReferenceKey
+        expandedSubmissionKeys: expanded
+          ? learnerWorkspace.context.expandedSubmissionKeys.filter((key) => key !== referenceKey)
+          : [...learnerWorkspace.context.expandedSubmissionKeys, referenceKey]
       }
     });
   }
 
   async function openContextReference(referenceKey: string) {
-    const reference = learnerWorkspace.context.manualReferences.find((entry) => entry.key === referenceKey);
-    if (reference) {
-      await ensureContextReferenceSourceLoaded(reference);
+    if (referenceKey.startsWith("submission:")) {
+      await ensureSubmissionHistoryLoaded(referenceKey.slice("submission:".length));
     }
     setLearnerWorkspaceState({
       ...learnerWorkspace,
@@ -721,15 +763,6 @@
         ...moduleLoading,
         [moduleId]: false
       };
-    }
-  }
-
-  async function ensureContextReferenceSourceLoaded(reference: LearnerContextReference) {
-    if (reference.kind === "material" && reference.moduleId && isModularUnit()) {
-      await ensureModuleLoaded(reference.moduleId);
-    }
-    if (reference.kind === "submission" && reference.taskId) {
-      await ensureSubmissionHistoryLoaded(reference.taskId);
     }
   }
 
@@ -1172,12 +1205,13 @@
     }
   }
 
-  function openModule(moduleId: string) {
+  async function openModule(moduleId: string) {
     const module = graphModuleById(moduleId);
     if (!module || (module.status !== "open" && module.status !== "done")) {
       return;
     }
 
+    const selectingContext = learnerWorkspace.surface === "graph" && Boolean(learnerWorkspace.activeTask);
     const moduleAlreadyLoaded = Boolean(moduleCache[moduleId]);
     const openTabs = modularWorkspace.openTabs.includes(moduleId)
       ? modularWorkspace.openTabs
@@ -1187,30 +1221,104 @@
       ...modularWorkspace,
       view: "content",
       openTabs,
-      activeTab: moduleId
-    });
-    setLearnerWorkspaceState({
-      ...learnerWorkspace,
-      surface: "reading",
-      openedModuleIds: openTabs
+      activeTab: selectingContext
+        ? learnerWorkspace.activeTask?.moduleId ?? modularWorkspace.activeTab
+        : moduleId
     });
     modularRestoreState = "ready";
     modularRestoreMessage = null;
-    syncLearnerNavigation({ surface: "reading", moduleId, taskId: null, panel: null }, "push");
 
-    if (moduleAlreadyLoaded) {
+    const loaded = moduleAlreadyLoaded || await ensureModuleLoaded(moduleId);
+    if (!loaded) {
       return;
     }
 
-    void ensureModuleLoaded(moduleId).then((loaded) => {
-      if (!loaded) return;
+    if (selectingContext && learnerWorkspace.activeTask) {
+      const firstMaterialKey = moduleContentItems(moduleCache[moduleId] ?? null)
+        .find((item) => item.kind === "material")?.key;
+      const task = learnerWorkspace.activeTask;
+      setLearnerWorkspaceState({
+        ...learnerWorkspace,
+        surface: "task",
+        openedModuleIds: openTabs,
+        activeTask: learnerWorkspace.activeTask,
+        context: {
+          ...learnerWorkspace.context,
+          compactSurface: "materials",
+          expandedContextModuleIds: [
+            ...learnerWorkspace.context.expandedContextModuleIds.filter((id) => id !== moduleId),
+            moduleId
+          ],
+          expandedModuleMaterialKeys: {
+            ...learnerWorkspace.context.expandedModuleMaterialKeys,
+            [moduleId]: firstMaterialKey ? [firstMaterialKey] : []
+          },
+          focusedModuleId: moduleId
+        }
+      });
+      syncLearnerNavigation(
+        {
+          surface: "task",
+          moduleId: task.moduleId,
+          taskId: task.taskId,
+          panel: task.status === "result" ? "result" : null
+        },
+        "replace"
+      );
+      return;
+    }
+
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      surface: "reading",
+      openedModuleIds: openTabs,
+      activeTask: null
     });
+    syncLearnerNavigation({ surface: "reading", moduleId, taskId: null, panel: null }, "push");
+  }
+
+  function clearClosedModuleUndo() {
+    if (closedModuleUndoTimer !== null && browser) {
+      window.clearTimeout(closedModuleUndoTimer);
+    }
+    closedModuleUndoTimer = null;
+    closedModuleSnapshot = null;
   }
 
   function removeOpenModule(moduleId: string) {
+    if (learnerWorkspace.activeTask?.moduleId === moduleId) {
+      return;
+    }
     const currentIndex = modularWorkspace.openTabs.indexOf(moduleId);
     if (currentIndex < 0) {
       return;
+    }
+
+    const module = graphModuleById(moduleId);
+    const moduleItems = moduleContentItems(moduleCache[moduleId] ?? null);
+    const moduleReferenceKeys = new Set([
+      ...moduleItems.filter((item) => item.kind === "material").map((item) => item.key),
+      ...moduleItems.filter((item) => item.task).map((item) => `submission:${item.task?.id}`)
+    ]);
+    clearClosedModuleUndo();
+    closedModuleSnapshot = {
+      moduleId,
+      title: module?.title ?? "Modul",
+      index: currentIndex,
+      previousActiveTab: modularWorkspace.activeTab,
+      expanded: learnerWorkspace.context.expandedContextModuleIds.includes(moduleId),
+      expandedMaterialKeys: learnerWorkspace.context.expandedModuleMaterialKeys[moduleId] ?? null,
+      submissionsExpanded: learnerWorkspace.context.expandedSubmissionModuleIds.includes(moduleId),
+      expandedSubmissionKeys: learnerWorkspace.context.expandedSubmissionKeys.filter((key) =>
+        moduleReferenceKeys.has(key)
+      ),
+      readingReferenceKey:
+        learnerWorkspace.context.readingReferenceKey && moduleReferenceKeys.has(learnerWorkspace.context.readingReferenceKey)
+          ? learnerWorkspace.context.readingReferenceKey
+          : null
+    };
+    if (browser) {
+      closedModuleUndoTimer = window.setTimeout(() => clearClosedModuleUndo(), 8000);
     }
 
     const remaining = modularWorkspace.openTabs.filter((tabId) => tabId !== moduleId);
@@ -1224,20 +1332,73 @@
       openTabs: remaining,
       activeTab: nextActive
     });
+    const expandedModuleMaterialKeys = { ...learnerWorkspace.context.expandedModuleMaterialKeys };
+    delete expandedModuleMaterialKeys[moduleId];
     setLearnerWorkspaceState({
       ...learnerWorkspace,
       openedModuleIds: remaining,
-      surface:
-        learnerWorkspace.activeTask?.moduleId === moduleId ? (nextActive ? "reading" : "graph") : learnerWorkspace.surface,
-      activeTask:
-        learnerWorkspace.activeTask?.moduleId === moduleId ? null : learnerWorkspace.activeTask
+      context: {
+        ...learnerWorkspace.context,
+        expandedContextModuleIds: learnerWorkspace.context.expandedContextModuleIds.filter((id) => id !== moduleId),
+        expandedModuleMaterialKeys,
+        expandedSubmissionModuleIds: learnerWorkspace.context.expandedSubmissionModuleIds.filter((id) => id !== moduleId),
+        expandedSubmissionKeys: learnerWorkspace.context.expandedSubmissionKeys.filter((key) => !moduleReferenceKeys.has(key)),
+        readingReferenceKey:
+          learnerWorkspace.context.readingReferenceKey && moduleReferenceKeys.has(learnerWorkspace.context.readingReferenceKey)
+            ? null
+            : learnerWorkspace.context.readingReferenceKey,
+        focusedModuleId: learnerWorkspace.context.focusedModuleId === moduleId ? null : learnerWorkspace.context.focusedModuleId
+      }
     });
-    syncLearnerNavigation(
-      nextActive
-        ? { surface: "reading", moduleId: nextActive, taskId: null, panel: null }
-        : { surface: "graph", moduleId: null, taskId: null, panel: null },
-      "replace"
-    );
+    if (learnerWorkspace.surface !== "task") {
+      syncLearnerNavigation(
+        nextActive
+          ? { surface: "reading", moduleId: nextActive, taskId: null, panel: null }
+          : { surface: "graph", moduleId: null, taskId: null, panel: null },
+        "replace"
+      );
+    }
+  }
+
+  function undoCloseModule() {
+    const snapshot = closedModuleSnapshot;
+    if (!snapshot || !openableModuleIds().has(snapshot.moduleId)) return;
+    const openTabs = [...modularWorkspace.openTabs];
+    openTabs.splice(Math.min(snapshot.index, openTabs.length), 0, snapshot.moduleId);
+    setModularWorkspaceState({
+      ...modularWorkspace,
+      openTabs,
+      activeTab:
+        snapshot.previousActiveTab && openTabs.includes(snapshot.previousActiveTab)
+          ? snapshot.previousActiveTab
+          : modularWorkspace.activeTab ?? snapshot.moduleId
+    });
+    setLearnerWorkspaceState({
+      ...learnerWorkspace,
+      openedModuleIds: openTabs,
+      context: {
+        ...learnerWorkspace.context,
+        expandedContextModuleIds: snapshot.expanded
+          ? [...new Set([...learnerWorkspace.context.expandedContextModuleIds, snapshot.moduleId])]
+          : learnerWorkspace.context.expandedContextModuleIds,
+        expandedModuleMaterialKeys: snapshot.expandedMaterialKeys
+          ? {
+              ...learnerWorkspace.context.expandedModuleMaterialKeys,
+              [snapshot.moduleId]: snapshot.expandedMaterialKeys
+            }
+          : learnerWorkspace.context.expandedModuleMaterialKeys,
+        expandedSubmissionModuleIds: snapshot.submissionsExpanded
+          ? [...new Set([...learnerWorkspace.context.expandedSubmissionModuleIds, snapshot.moduleId])]
+          : learnerWorkspace.context.expandedSubmissionModuleIds,
+        expandedSubmissionKeys: [
+          ...new Set([...learnerWorkspace.context.expandedSubmissionKeys, ...snapshot.expandedSubmissionKeys])
+        ],
+        readingReferenceKey: snapshot.readingReferenceKey,
+        focusedModuleId: snapshot.moduleId
+      }
+    });
+    void ensureModuleLoaded(snapshot.moduleId);
+    clearClosedModuleUndo();
   }
 
   function updateLayoutPreferences(next: Partial<LayoutPreferences>) {
@@ -1359,12 +1520,21 @@
       courseId: data.courseId,
       unitId: data.unitId,
       openableModuleIds: openableModuleIds(),
+      accessibleContextModuleIds: isModularUnit()
+        ? undefined
+        : new Set(data.sections.map((section) => section.section.id)),
       accessibleTaskKeys: isModularUnit()
         ? undefined
         : new Set(currentContentItems().filter((item) => item.kind === "task").map((item) => item.key)),
       accessibleReferenceKeys: isModularUnit()
         ? undefined
-        : new Set(currentContentItems().filter((item) => item.kind === "material").map((item) => item.key))
+        : new Set(
+            currentContentItems().flatMap((item) => {
+              if (item.kind === "material") return [item.key];
+              if (item.task?.has_submission) return [`submission:${item.task.id}`];
+              return [];
+            })
+          )
     });
     setLearnerWorkspaceState(stored);
     const layoutDefaults = defaultLayoutPreferences(viewportWidth);
@@ -1428,29 +1598,6 @@
     }
     window.localStorage.setItem(keys.persistent, serializeLearnerWorkspacePersistentState(learnerWorkspace));
     window.sessionStorage.setItem(keys.tab, serializeLearnerWorkspaceTabState(learnerWorkspace));
-  });
-
-  $effect(() => {
-    if (!workspaceReady) return;
-
-    for (const reference of learnerWorkspace.context.manualReferences) {
-      if (
-        reference.kind === "material" &&
-        reference.moduleId &&
-        isModularUnit() &&
-        !moduleCache[reference.moduleId] &&
-        !moduleLoading[reference.moduleId]
-      ) {
-        void ensureModuleLoaded(reference.moduleId);
-      }
-      if (
-        reference.kind === "submission" &&
-        reference.taskId &&
-        (submissionHistoryStateByTask[reference.taskId] ?? "not_loaded") === "not_loaded"
-      ) {
-        void ensureSubmissionHistoryLoaded(reference.taskId);
-      }
-    }
   });
 
   $effect(() => {
@@ -1581,8 +1728,20 @@
     </section>
 
     {#if learnerWorkspace.surface === "graph"}
+      {#if learnerWorkspace.activeTask}
+        <section class="learning-path-task-return" aria-label="Laufende Aufgabe">
+          <div class="learning-unit-layout-frame learning-path-task-return__inner">
+            <p><strong>Aufgabe wird weiterbearbeitet.</strong> Öffne ein Modul, um dessen Materialien hinzuzunehmen.</p>
+            <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={returnToActiveTask}>
+              Zurück zur Aufgabe
+            </button>
+          </div>
+        </section>
+      {/if}
       <LearningUnitOverview graph={graphState} nodes={flowNodes} edges={flowEdges} />
-    {:else}
+    {/if}
+
+    <div hidden={learnerWorkspace.surface === "graph"} class="learning-unit-mounted-workspace">
       <div class="learning-unit-layout-rail">
         <div class="learning-unit-layout-frame">
           <section class="learning-unit-stage learning-unit-stage--content">
@@ -1616,7 +1775,7 @@
                 unitTitle={data.selectedUnit?.unit.title ?? "Lerneinheit"}
                 unitType="modular"
                 contentGroups={contentGroups()}
-                mode={learnerWorkspace.surface === "task" ? "working" : "orienting"}
+                mode={learnerWorkspace.surface === "task" || (learnerWorkspace.surface === "graph" && learnerWorkspace.activeTask) ? "working" : "orienting"}
                 activeTaskKey={learnerWorkspace.activeTask?.itemKey ?? null}
                 activeEditorMode={learnerWorkspace.activeTask?.editorMode ?? null}
                 workStatus={learnerWorkspace.activeTask?.status ?? "editing"}
@@ -1624,10 +1783,12 @@
                 navigationVisible={learnerWorkspace.preferences.navigationVisible}
                 collapsedItemKeys={learnerWorkspace.collapsedItemKeys}
                 contextModules={contextModuleOptions()}
-                manualContextReferences={learnerWorkspace.context.manualReferences}
-                contextPickerOpen={learnerWorkspace.context.pickerOpen}
-                expandedContextModuleIds={learnerWorkspace.context.expandedModuleIds}
-                expandedReferenceKeys={learnerWorkspace.context.expandedReferenceKeys}
+                expandedModuleMaterialKeys={learnerWorkspace.context.expandedModuleMaterialKeys}
+                expandedContextModuleIds={learnerWorkspace.context.expandedContextModuleIds}
+                expandedSubmissionModuleIds={learnerWorkspace.context.expandedSubmissionModuleIds}
+                expandedSubmissionKeys={learnerWorkspace.context.expandedSubmissionKeys}
+                focusedContextModuleId={learnerWorkspace.context.focusedModuleId}
+                closedContextModuleTitle={closedModuleSnapshot?.title ?? null}
                 readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
                 contextScrollTop={learnerWorkspace.context.bookScrollTop}
                 workScrollTop={learnerWorkspace.context.workScrollTop}
@@ -1649,13 +1810,13 @@
                 onCloseModule={removeOpenModule}
                 onSetCompactSurface={setCompactSurface}
                 onToggleMaterial={toggleReadingMaterial}
-                onToggleContextPicker={toggleContextPicker}
+                onToggleContextModuleMaterial={toggleContextModuleMaterial}
                 onToggleContextModule={toggleContextModule}
-                onAddContextReference={addContextReference}
-                onRemoveContextReference={removeContextReference}
-                onToggleContextReference={toggleContextReference}
+                onToggleContextSubmissions={toggleContextSubmissions}
+                onToggleContextSubmission={toggleContextSubmission}
                 onOpenContextReference={openContextReference}
                 onCloseContextReader={closeContextReader}
+                onUndoCloseModule={undoCloseModule}
                 onContextScroll={rememberContextScroll}
                 onWorkScroll={rememberWorkScroll}
                 onReaderScroll={rememberReaderScroll}
@@ -1666,7 +1827,7 @@
           </section>
         </div>
       </div>
-    {/if}
+    </div>
   {:else}
     <div class="learning-unit-layout-rail">
       <div class="learning-unit-layout-frame">
@@ -1685,10 +1846,11 @@
             navigationVisible={learnerWorkspace.preferences.navigationVisible}
             collapsedItemKeys={learnerWorkspace.collapsedItemKeys}
             contextModules={contextModuleOptions()}
-            manualContextReferences={learnerWorkspace.context.manualReferences}
-            contextPickerOpen={learnerWorkspace.context.pickerOpen}
-            expandedContextModuleIds={learnerWorkspace.context.expandedModuleIds}
-            expandedReferenceKeys={learnerWorkspace.context.expandedReferenceKeys}
+            expandedModuleMaterialKeys={learnerWorkspace.context.expandedModuleMaterialKeys}
+            expandedContextModuleIds={learnerWorkspace.context.expandedContextModuleIds}
+            expandedSubmissionModuleIds={learnerWorkspace.context.expandedSubmissionModuleIds}
+            expandedSubmissionKeys={learnerWorkspace.context.expandedSubmissionKeys}
+            focusedContextModuleId={learnerWorkspace.context.focusedModuleId}
             readingReferenceKey={learnerWorkspace.context.readingReferenceKey}
             contextScrollTop={learnerWorkspace.context.bookScrollTop}
             workScrollTop={learnerWorkspace.context.workScrollTop}
@@ -1710,11 +1872,10 @@
             onCloseModule={() => {}}
             onSetCompactSurface={setCompactSurface}
             onToggleMaterial={toggleReadingMaterial}
-            onToggleContextPicker={toggleContextPicker}
+            onToggleContextModuleMaterial={toggleContextModuleMaterial}
             onToggleContextModule={toggleContextModule}
-            onAddContextReference={addContextReference}
-            onRemoveContextReference={removeContextReference}
-            onToggleContextReference={toggleContextReference}
+            onToggleContextSubmissions={toggleContextSubmissions}
+            onToggleContextSubmission={toggleContextSubmission}
             onOpenContextReference={openContextReference}
             onCloseContextReader={closeContextReader}
             onContextScroll={rememberContextScroll}

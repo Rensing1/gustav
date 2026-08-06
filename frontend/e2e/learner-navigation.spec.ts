@@ -3,7 +3,11 @@ import { expect, test, type Browser, type BrowserContext, type Page } from "@pla
 import { login } from "./support/auth";
 import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
-import { expectNoViewportOverflow } from "./support/layout-sanity";
+import {
+  expectLearnerMaterialContrast,
+  expectLearnerTaskTheme,
+  expectNoViewportOverflow
+} from "./support/layout-sanity";
 import { seedLearnerNavigationCourse } from "./support/seed-data";
 
 const password = "Passw0rd!e2e";
@@ -34,12 +38,34 @@ test("@feature-acceptance follows graph, reading and task as one authenticated l
     await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.graphModuleId}$`));
     await expect(learner.page.getByText("Dieses Material ist beim ersten Lesen vollständig geöffnet.")).toBeVisible();
 
-    await learner.page.getByRole("button", { name: /beginnen/i }).click();
+    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
     await expect(learner.page).toHaveURL(
       new RegExp(`\\?module=${seeded.graphModuleId}&task=${seeded.taskId}$`)
     );
     await expect(learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" })).toBeVisible();
     await expectNoViewportOverflow(learner.page);
+    await expectLearnerTaskTheme(learner.page, "light");
+    const workbench = learner.page.getByRole("region", { name: "Aufgabe bearbeiten" });
+    const book = learner.page.getByRole("complementary", { name: "Aufgabe und Kontext" });
+    await expect(book.getByRole("heading", { name: "Materialien" })).toBeVisible();
+    await expect(book.getByText("Dieses Material ist beim ersten Lesen vollständig geöffnet.")).toBeVisible();
+    const secondMaterial = book.getByRole("button", {
+      name: `${seeded.secondMaterialTitle} ein- oder ausklappen`
+    });
+    await expect(secondMaterial).toHaveAttribute("aria-expanded", "false");
+    await secondMaterial.click();
+    await expect(secondMaterial).toHaveAttribute("aria-expanded", "true");
+    await expect(book.getByText("Dieses zweite Modulmaterial beginnt in der Arbeitsfläche eingeklappt.")).toBeVisible();
+
+    await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+    await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
+    await expectLearnerTaskTheme(learner.page, "dark");
+    await learner.page.setViewportSize({ width: 390, height: 844 });
+    await expectNoViewportOverflow(learner.page);
+    await expectLearnerTaskTheme(learner.page, "dark");
+    await learner.page.setViewportSize({ width: 1280, height: 900 });
+    await learner.page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+    await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "light");
 
     const answerFormat = learner.page.getByRole("group", { name: "Antwortform" });
     const textEditor = learner.page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
@@ -64,28 +90,42 @@ test("@feature-acceptance follows graph, reading and task as one authenticated l
     await expect(learner.page.getByText("beleg.pdf")).toBeVisible();
     await expect(learner.page.getByRole("group", { name: "Antwortform" })).toHaveCount(1);
 
-    const book = learner.page.getByRole("complementary", { name: "Aufgabe und Kontext" });
-    await book.getByRole("button", { name: "Kontext hinzufügen" }).click();
-    await book.getByRole("button", { name: /Weiteres Modul.*Quellen/ }).click();
-    const addContextImage = book.getByRole("button", {
-      name: new RegExp(`Material.*${seeded.contextImageTitle}`)
-    });
-    await expect(addContextImage).toBeVisible();
-    await addContextImage.click();
+    await learner.page.setViewportSize({ width: 1024, height: 768 });
+    await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
+    await expect(learner.page.getByText("Aufgabe wird weiterbearbeitet.")).toBeVisible();
+    await expect(learner.page.getByRole("button", { name: "Zurück zur Aufgabe" })).toBeVisible();
+    await learner.page.getByRole("button", { name: /Quellen/ }).click();
+    await expect(learner.page).toHaveURL(
+      new RegExp(`\\?module=${seeded.graphModuleId}&task=${seeded.taskId}$`)
+    );
+    await expect(workbench.getByRole("button", { name: "Materialien", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
     const contextImage = book.getByRole("img", { name: seeded.contextImageAltText });
     await expect(contextImage).toBeVisible();
     await expect.poll(() => contextImage.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
+    await expect(book.getByRole("button", { name: "Modul Quellen schließen" })).toBeVisible();
+    await expect(book.getByRole("button", { name: "Modul Grundlagen schließen" })).toHaveCount(0);
+    await expectLearnerMaterialContrast(learner.page);
 
-    await learner.page.reload();
+    await book.getByRole("button", { name: "Modul Quellen schließen" }).click();
+    await expect(book.getByRole("heading", { name: "Quellen" })).toHaveCount(0);
+    const undo = book.getByRole("status");
+    await expect(undo).toContainText("Modul „Quellen“ geschlossen.");
+    await undo.getByRole("button", { name: "Rückgängig" }).click();
     await expect(contextImage).toBeVisible();
-    await expect(book.getByRole("article", { name: seeded.contextImageTitle })).toBeVisible();
 
-    await learner.page.goBack();
-    await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.graphModuleId}$`));
-    await expect(learner.page.getByRole("heading", { name: "Grundlagen" })).toBeVisible();
-    await learner.page.goBack();
-    await expect(learner.page).toHaveURL(new RegExp(`/units/${seeded.unitId}$`));
-    await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
+    await workbench.getByRole("button", { name: "Aufgabe", exact: true }).click();
+    await expect(textEditor).toContainText("Dieser Entwurf bleibt beim Wechsel erhalten.");
+    await answerFormat.getByText("Datei hochladen", { exact: true }).click();
+    await expect(learner.page.getByText("beleg.pdf")).toBeVisible();
+
+    await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
+    await learner.page.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
+    await expect(learner.page).toHaveURL(
+      new RegExp(`\\?module=${seeded.graphModuleId}&task=${seeded.taskId}$`)
+    );
   } finally {
     await learner.context.close();
     await teacher.context.close();

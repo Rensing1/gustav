@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
+  import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
+  import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { renderMarkdown } from "$lib/utils/markdown";
-  import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
+  import type { LearningSubmission, LearningTask } from "$lib/types/learning";
 
   type DialogTurn = {
     id: string;
@@ -26,36 +27,7 @@
     initial_generation_attempts: number;
     turns: DialogTurn[];
   };
-  type DialogContextEntry = {
-    key: string;
-    kind: "material" | "submission";
-    label: string;
-    title: string;
-    material: LearningMaterial | null;
-    submissions: LearningSubmission[];
-    taskId?: string | null;
-    current?: boolean;
-    expanded?: boolean;
-    removable?: boolean;
-  };
-  type DialogContextOption = {
-    key: string;
-    kind: "material" | "submission";
-    id: string;
-    moduleId: string | null;
-    taskId: string | null;
-    title: string;
-    added: boolean;
-  };
-  type DialogContextModule = {
-    id: string;
-    title: string;
-    current: boolean;
-    loaded: boolean;
-    loading: boolean;
-    error: string | null;
-    options: DialogContextOption[];
-  };
+  type HistoryState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
 
   let {
     learnerSub = null,
@@ -64,20 +36,23 @@
     existingSessionId = null,
     readOnly = false,
     compactSurface = "task",
-    contextMaterials = [],
-    contextEntries = [],
-    expandedReferenceKeys = [],
-    contextPickerOpen = false,
+    expandedModuleMaterialKeys = {},
     expandedContextModuleIds = [],
+    expandedSubmissionModuleIds = [],
+    expandedSubmissionKeys = [],
     contextModules = [],
+    historyByTask = {},
+    historyStateByTask = {},
+    focusedContextModuleId = null,
+    closedContextModuleTitle = null,
     onSetCompactSurface = null,
     onOpenContext = null,
-    onToggleCurrentMaterial = null,
-    onToggleContextReference = null,
-    onRemoveContextReference = null,
-    onToggleContextPicker = null,
+    onToggleContextMaterial = null,
     onToggleContextModule = null,
-    onAddContextReference = null,
+    onToggleSubmissionGroup = null,
+    onToggleSubmission = null,
+    onCloseContextModule = null,
+    onUndoCloseContextModule = null,
     onPause = null,
     showPauseAction = true,
     onCompleted = null
@@ -88,26 +63,23 @@
     existingSessionId?: string | null;
     readOnly?: boolean;
     compactSurface?: "task" | "materials";
-    contextMaterials?: LearningMaterial[];
-    contextEntries?: DialogContextEntry[];
-    expandedReferenceKeys?: string[];
-    contextPickerOpen?: boolean;
+    expandedModuleMaterialKeys?: Record<string, string[]>;
     expandedContextModuleIds?: string[];
-    contextModules?: DialogContextModule[];
+    expandedSubmissionModuleIds?: string[];
+    expandedSubmissionKeys?: string[];
+    contextModules?: LearnerMaterialContextModule[];
+    historyByTask?: Record<string, LearningSubmission[]>;
+    historyStateByTask?: Record<string, HistoryState>;
+    focusedContextModuleId?: string | null;
+    closedContextModuleTitle?: string | null;
     onSetCompactSurface?: ((surface: "task" | "materials") => void) | null;
     onOpenContext?: ((key: string) => void | Promise<void>) | null;
-    onToggleCurrentMaterial?: ((key: string) => void) | null;
-    onToggleContextReference?: ((key: string) => void | Promise<void>) | null;
-    onRemoveContextReference?: ((key: string) => void) | null;
-    onToggleContextPicker?: (() => void) | null;
+    onToggleContextMaterial?: ((moduleId: string, key: string) => void) | null;
     onToggleContextModule?: ((moduleId: string) => void | Promise<void>) | null;
-    onAddContextReference?: ((reference: {
-      key: string;
-      kind: "material" | "submission";
-      id: string;
-      moduleId: string | null;
-      taskId: string | null;
-    }) => void) | null;
+    onToggleSubmissionGroup?: ((moduleId: string) => void | Promise<void>) | null;
+    onToggleSubmission?: ((key: string) => void) | null;
+    onCloseContextModule?: ((moduleId: string) => void) | null;
+    onUndoCloseContextModule?: (() => void) | null;
     onPause?: (() => void | Promise<void>) | null;
     showPauseAction?: boolean;
     onCompleted?: (() => void | Promise<void>) | null;
@@ -337,102 +309,25 @@
             <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
           </div>
 
-        {#if contextEntries.length}
-          <section class="dialog-context-materials" aria-labelledby="dialog-context-entries-title">
-            <h6 id="dialog-context-entries-title">Aufgabe & Kontext</h6>
-            {#each contextEntries as entry (entry.key)}
-              <div class="learner-task-context__document-row">
-                <LearningReferenceDocument
-                  referenceKey={entry.key}
-                  label={entry.label}
-                  title={entry.title}
-                  material={entry.material}
-                  submissions={entry.submissions}
-                  {courseId}
-                  taskId={entry.taskId}
-                  expanded={entry.expanded ?? expandedReferenceKeys.includes(entry.key)}
-                  onToggle={entry.current ? onToggleCurrentMaterial : onToggleContextReference}
-                  onOpenReader={onOpenContext}
-                />
-                {#if entry.removable}
-                  <button
-                    class="learner-task-context__remove"
-                    type="button"
-                    aria-label={`${entry.title} aus dem Kontext entfernen`}
-                    onclick={() => onRemoveContextReference?.(entry.key)}
-                  >Entfernen</button>
-                {/if}
-              </div>
-            {/each}
-          </section>
-        {:else if contextMaterials.length}
-          <section class="dialog-context-materials" aria-labelledby="dialog-context-materials-title">
-            <h6 id="dialog-context-materials-title">Materialien</h6>
-            {#each contextMaterials as material}
-              <LearningReferenceDocument
-                referenceKey={`material:${material.id}`}
-                label="Material · Aktuelles Modul"
-                title={material.title}
-                {material}
-                expanded={true}
-                onToggle={onToggleContextReference}
-                onOpenReader={onOpenContext}
-              />
-            {/each}
-          </section>
-        {/if}
-
-        <button
-          class="learner-task-context__add"
-          type="button"
-          aria-expanded={contextPickerOpen}
-          onclick={() => onToggleContextPicker?.()}
-        >+ Kontext hinzufügen</button>
-
-        {#if contextPickerOpen}
-          <section class="learner-context-picker" aria-label="Dialogkontext auswählen">
-            {#each contextModules as contextModule}
-              <div class="learner-context-picker__module">
-                <button
-                  class="learner-context-picker__module-toggle"
-                  type="button"
-                  aria-expanded={expandedContextModuleIds.includes(contextModule.id)}
-                  onclick={() => onToggleContextModule?.(contextModule.id)}
-                >
-                  <span>{contextModule.current ? "Aktuelles Modul" : "Weiteres Modul"}</span>
-                  <strong>{contextModule.title}</strong>
-                </button>
-                {#if expandedContextModuleIds.includes(contextModule.id)}
-                  <div class="learner-context-picker__module-body">
-                    {#if contextModule.loading}
-                      <p class="workspace-note">Inhalte werden geladen …</p>
-                    {:else if contextModule.error}
-                      <p class="workspace-note workspace-note--error">{contextModule.error}</p>
-                    {:else if contextModule.loaded}
-                      {#each contextModule.options as option}
-                        <button
-                          class="learner-context-picker__add-item"
-                          type="button"
-                          disabled={option.added}
-                          onclick={() => onAddContextReference?.({
-                            key: option.key,
-                            kind: option.kind,
-                            id: option.id,
-                            moduleId: option.moduleId,
-                            taskId: option.taskId
-                          })}
-                        >
-                          <span>{option.kind === "material" ? "Material" : "Eigene frühere Abgabe"}</span>
-                          <strong>{option.title}</strong>
-                        </button>
-                      {/each}
-                    {/if}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          </section>
-        {/if}
+        <LearnerMaterialContext
+          {courseId}
+          modules={contextModules}
+          expandedModuleIds={expandedContextModuleIds}
+          {expandedModuleMaterialKeys}
+          {expandedSubmissionModuleIds}
+          {expandedSubmissionKeys}
+          {historyByTask}
+          {historyStateByTask}
+          focusedModuleId={focusedContextModuleId}
+          closedModuleTitle={closedContextModuleTitle}
+          onToggleModule={onToggleContextModule}
+          onToggleMaterial={onToggleContextMaterial}
+          onToggleSubmissionGroup={onToggleSubmissionGroup}
+          onToggleSubmission={onToggleSubmission}
+          onOpenReference={onOpenContext}
+          onCloseModule={onCloseContextModule}
+          onUndoCloseModule={onUndoCloseContextModule}
+        />
 
         {#if session.status === "active" && !readOnly}
           <nav class="dialog-session-actions" aria-label="Sitzungsaktionen">

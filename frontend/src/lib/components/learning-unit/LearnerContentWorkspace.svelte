@@ -1,17 +1,24 @@
 <script lang="ts">
   import { tick } from "svelte";
   import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
+  import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
   import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
   import WorkspaceOutline from "$lib/components/ui/WorkspaceOutline.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
-  import type { LearnerContextReference } from "$lib/learning-unit/learner-workspace-state";
-  import type { ContentGroup, LearningContentItem } from "$lib/learning-unit/workspace";
+  import type { ContentGroup, LearnerMaterialContextModule, LearningContentItem } from "$lib/learning-unit/workspace";
   import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
 
   type HistoryState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
   type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
+  type ReaderReference = {
+    key: string;
+    kind: "material" | "submission";
+    id: string;
+    moduleId: string | null;
+    taskId: string | null;
+  };
 
   let {
     learnerSub = null,
@@ -27,10 +34,12 @@
     navigationVisible = true,
     collapsedItemKeys = [],
     contextModules = [],
-    manualContextReferences = [],
-    contextPickerOpen = false,
+    expandedModuleMaterialKeys = {},
     expandedContextModuleIds = [],
-    expandedReferenceKeys = [],
+    expandedSubmissionModuleIds = [],
+    expandedSubmissionKeys = [],
+    focusedContextModuleId = null,
+    closedContextModuleTitle = null,
     readingReferenceKey = null,
     contextScrollTop = 0,
     workScrollTop = 0,
@@ -52,13 +61,13 @@
     onCloseModule,
     onSetCompactSurface,
     onToggleMaterial,
-    onToggleContextPicker = null,
+    onToggleContextModuleMaterial = null,
     onToggleContextModule = null,
-    onAddContextReference = null,
-    onRemoveContextReference = null,
-    onToggleContextReference = null,
+    onToggleContextSubmissions = null,
+    onToggleContextSubmission = null,
     onOpenContextReference = null,
     onCloseContextReader = null,
+    onUndoCloseModule = null,
     onContextScroll = null,
     onWorkScroll = null,
     onReaderScroll = null,
@@ -77,20 +86,13 @@
     compactSurface?: "task" | "materials";
     navigationVisible?: boolean;
     collapsedItemKeys?: string[];
-    contextModules?: Array<{
-      id: string;
-      title: string;
-      current: boolean;
-      opened?: boolean;
-      loaded: boolean;
-      loading: boolean;
-      error: string | null;
-      items: LearningContentItem[];
-    }>;
-    manualContextReferences?: LearnerContextReference[];
-    contextPickerOpen?: boolean;
+    contextModules?: LearnerMaterialContextModule[];
+    expandedModuleMaterialKeys?: Record<string, string[]>;
     expandedContextModuleIds?: string[];
-    expandedReferenceKeys?: string[];
+    expandedSubmissionModuleIds?: string[];
+    expandedSubmissionKeys?: string[];
+    focusedContextModuleId?: string | null;
+    closedContextModuleTitle?: string | null;
     readingReferenceKey?: string | null;
     contextScrollTop?: number;
     workScrollTop?: number;
@@ -117,13 +119,13 @@
     onCloseModule: (moduleId: string) => void;
     onSetCompactSurface: (surface: "task" | "materials") => void;
     onToggleMaterial: (itemKey: string) => void;
-    onToggleContextPicker?: (() => void) | null;
+    onToggleContextModuleMaterial?: ((moduleId: string, itemKey: string) => void) | null;
     onToggleContextModule?: ((moduleId: string) => void | Promise<void>) | null;
-    onAddContextReference?: ((reference: LearnerContextReference) => void) | null;
-    onRemoveContextReference?: ((referenceKey: string) => void) | null;
-    onToggleContextReference?: ((referenceKey: string) => void | Promise<void>) | null;
+    onToggleContextSubmissions?: ((moduleId: string) => void | Promise<void>) | null;
+    onToggleContextSubmission?: ((referenceKey: string) => void) | null;
     onOpenContextReference?: ((referenceKey: string) => void | Promise<void>) | null;
     onCloseContextReader?: (() => void) | null;
+    onUndoCloseModule?: (() => void) | null;
     onContextScroll?: ((scrollTop: number) => void) | null;
     onWorkScroll?: ((scrollTop: number) => void) | null;
     onReaderScroll?: ((scrollTop: number) => void) | null;
@@ -186,16 +188,6 @@
     return contentGroups.find((group) => group.items.some((candidate) => candidate.key === item.key)) ?? null;
   }
 
-  function currentMaterials(item: LearningContentItem | null): LearningContentItem[] {
-    return groupForItem(item)?.items.filter((candidate) => candidate.kind === "material") ?? [];
-  }
-
-  function currentMaterialRecords(item: LearningContentItem | null): LearningMaterial[] {
-    return currentMaterials(item)
-      .map((entry) => entry.material)
-      .filter((material): material is LearningMaterial => Boolean(material));
-  }
-
   function uploadOnly(task: LearningTask): boolean {
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius";
   }
@@ -221,156 +213,43 @@
     return historyByTask[taskId] ?? [];
   }
 
-  function referenceByKey(referenceKey: string | null): LearnerContextReference | null {
+  function referenceByKey(referenceKey: string | null): ReaderReference | null {
     if (!referenceKey) return null;
-    const manual = manualContextReferences.find((reference) => reference.key === referenceKey);
-    if (manual) return manual;
-    const material = contextModules
-      .flatMap((module) => module.items)
-      .find((item) => item.key === referenceKey && item.material);
-    if (material?.material) {
-      return {
-        key: material.key,
-        kind: "material",
-        id: material.material.id,
-        moduleId: material.moduleId ?? null,
-        taskId: null
-      };
+    for (const item of contextModules.flatMap((module) => module.items)) {
+      if (item.material && item.key === referenceKey) {
+        return {
+          key: item.key,
+          kind: "material",
+          id: item.material.id,
+          moduleId: item.moduleId ?? null,
+          taskId: null
+        };
+      }
+      if (item.task && `submission:${item.task.id}` === referenceKey) {
+        return {
+          key: referenceKey,
+          kind: "submission",
+          id: item.task.id,
+          moduleId: item.moduleId ?? null,
+          taskId: item.task.id
+        };
+      }
     }
     return null;
   }
 
-  function materialForReference(reference: LearnerContextReference | null): LearningMaterial | null {
+  function materialForReference(reference: ReaderReference | null): LearningMaterial | null {
     if (!reference || reference.kind !== "material") return null;
-    return (
-      contextModules
-        .flatMap((module) => module.items)
-        .find((item) => item.material?.id === reference.id)?.material ?? null
-    );
+    return contextModules
+      .flatMap((module) => module.items)
+      .find((item) => item.material?.id === reference.id)?.material ?? null;
   }
 
-  function taskForReference(reference: LearnerContextReference | null): LearningContentItem | null {
+  function taskForReference(reference: ReaderReference | null): LearningContentItem | null {
     if (!reference?.taskId) return null;
-    return (
-      contextModules
-        .flatMap((module) => module.items)
-        .find((item) => item.task?.id === reference.taskId) ?? null
-    );
-  }
-
-  function referenceAlreadyAdded(key: string): boolean {
-    return currentMaterials(activeItem).some((item) => item.key === key)
-      || manualContextReferences.some((reference) => reference.key === key);
-  }
-
-  function contextReferenceDocuments(item: LearningContentItem | null) {
-    const documents: Array<{
-      key: string;
-      label: string;
-      title: string;
-      material: LearningMaterial | null;
-      submissions: LearningSubmission[];
-      taskId: string | null;
-      current: boolean;
-    }> = [];
-    const seen = new Set<string>();
-
-    for (const materialItem of currentMaterials(item)) {
-      if (!materialItem.material || seen.has(materialItem.key)) continue;
-      seen.add(materialItem.key);
-      documents.push({
-        key: materialItem.key,
-        label: "Material · Aktuelles Modul",
-        title: materialItem.title,
-        material: materialItem.material,
-        submissions: [],
-        taskId: null,
-        current: true
-      });
-    }
-
-    for (const reference of manualContextReferences) {
-      if (seen.has(reference.key)) continue;
-      seen.add(reference.key);
-      const material = materialForReference(reference);
-      const taskItem = taskForReference(reference);
-      documents.push({
-        key: reference.key,
-        label: reference.kind === "material" ? "Angeheftetes Material" : "Eigene frühere Abgabe",
-        title: material?.title ?? taskItem?.title ?? reference.id,
-        material,
-        submissions: reference.taskId ? taskHistory(reference.taskId) : [],
-        taskId: reference.taskId,
-        current: false
-      });
-    }
-
-    return documents;
-  }
-
-  function dialogContextEntries(item: LearningContentItem | null) {
-    return contextReferenceDocuments(item).map((document) => ({
-      key: document.key,
-      kind: document.material ? "material" as const : "submission" as const,
-      label: document.label,
-      title: document.title,
-      material: document.material,
-      submissions: document.submissions,
-      taskId: document.taskId,
-      current: document.current,
-      expanded: document.current
-        ? !collapsedItemKeys.includes(document.key)
-        : expandedReferenceKeys.includes(document.key),
-      removable: !document.current
-    }));
-  }
-
-  function dialogContextModuleOptions() {
-    return contextModules.map((contextModule) => {
-      const options: Array<{
-        key: string;
-        kind: "material" | "submission";
-        id: string;
-        moduleId: string | null;
-        taskId: string | null;
-        title: string;
-        added: boolean;
-      }> = [];
-      for (const option of contextModule.items) {
-        if (option.material) {
-          options.push({
-            key: option.key,
-            kind: "material",
-            id: option.material.id,
-            moduleId: option.moduleId ?? contextModule.id,
-            taskId: null,
-            title: option.title,
-            added: referenceAlreadyAdded(option.key)
-          });
-        }
-        if (!option.material && option.task?.has_submission) {
-          const key = `submission:${option.task.id}`;
-          options.push({
-            key,
-            kind: "submission",
-            id: option.task.id,
-            moduleId: option.moduleId ?? contextModule.id,
-            taskId: option.task.id,
-            title: option.title,
-            added: referenceAlreadyAdded(key)
-          });
-        }
-      }
-      return {
-        id: contextModule.id,
-        title: contextModule.title,
-        current: contextModule.current,
-        loaded: contextModule.loaded,
-        loading: contextModule.loading,
-        error: contextModule.error,
-        options
-      };
-    });
+    return contextModules
+      .flatMap((module) => module.items)
+      .find((item) => item.task?.id === reference.taskId) ?? null;
   }
 
   const readerReference = $derived.by(() => referenceByKey(readingReferenceKey));
@@ -576,139 +455,25 @@
               </div>
             </header>
 
-            <section class="learner-task-context__materials" aria-labelledby="learner-context-materials-title">
-              <h3 id="learner-context-materials-title">Materialien</h3>
-              {#if contextReferenceDocuments(activeItem).length}
-                <div class="learner-task-context__list" aria-label="Quellenstapel">
-                  {#each contextReferenceDocuments(activeItem) as document (document.key)}
-                    <div class="learner-task-context__document-row">
-                      <LearningReferenceDocument
-                        referenceKey={document.key}
-                        label={document.label}
-                        title={document.title}
-                        material={document.material}
-                        submissions={document.submissions}
-                        {courseId}
-                        taskId={document.taskId}
-                        expanded={document.current
-                          ? !collapsedItemKeys.includes(document.key)
-                          : expandedReferenceKeys.includes(document.key)}
-                        onToggle={(referenceKey) => document.current
-                          ? onToggleMaterial(referenceKey)
-                          : onToggleContextReference?.(referenceKey)}
-                        onOpenReader={onOpenContextReference}
-                      />
-                      {#if !document.current}
-                        <button
-                          class="learner-task-context__remove"
-                          type="button"
-                          aria-label={`${document.title} aus dem Kontext entfernen`}
-                          onclick={() => onRemoveContextReference?.(document.key)}
-                        >Entfernen</button>
-                      {/if}
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <p class="workspace-note">Für diesen Abschnitt sind keine Materialien hinterlegt.</p>
-              {/if}
-
-              {#if contextModules.some((module) => module.opened && !module.current)}
-                <div class="learner-task-context__opened" aria-label="Materialien aus geöffneten Modulen">
-                  <p class="workspace-label">Weitere geöffnete Module</p>
-                  {#each contextModules.filter((module) => module.opened && !module.current) as contextModule}
-                    <section class="learner-task-context__opened-module">
-                      <button
-                        class="learner-context-picker__module-toggle"
-                        type="button"
-                        aria-expanded={expandedContextModuleIds.includes(contextModule.id)}
-                        onclick={() => onToggleContextModule?.(contextModule.id)}
-                      >
-                        <span>Geöffnetes Modul</span>
-                        <strong>{contextModule.title}</strong>
-                      </button>
-                      {#if expandedContextModuleIds.includes(contextModule.id)}
-                        <div class="learner-context-picker__module-body">
-                          {#each contextModule.items.filter((item) => item.material) as materialItem}
-                            <button class="learner-task-context__item" type="button" onclick={() => onOpenContextReference?.(materialItem.key)}>
-                              <span class="learner-task-context__item-type">Material</span>
-                              <strong>{materialItem.title}</strong>
-                            </button>
-                          {/each}
-                        </div>
-                      {/if}
-                    </section>
-                  {/each}
-                </div>
-              {/if}
-
-              <button class="learner-task-context__add" type="button" aria-expanded={contextPickerOpen} onclick={() => onToggleContextPicker?.()}>
-                + Kontext hinzufügen
-              </button>
-
-              {#if contextPickerOpen}
-                <section class="learner-context-picker" aria-label="Kontext auswählen">
-                  {#each contextModules as contextModule}
-                    <div class="learner-context-picker__module">
-                      <button
-                        class="learner-context-picker__module-toggle"
-                        type="button"
-                        aria-expanded={expandedContextModuleIds.includes(contextModule.id)}
-                        onclick={() => onToggleContextModule?.(contextModule.id)}
-                      >
-                        <span>{contextModule.current ? "Aktuelles Modul" : "Weiteres Modul"}</span>
-                        <strong>{contextModule.title}</strong>
-                      </button>
-                      {#if expandedContextModuleIds.includes(contextModule.id)}
-                        <div class="learner-context-picker__module-body">
-                          {#if contextModule.loading}
-                            <p class="workspace-note">Inhalte werden geladen …</p>
-                          {:else if contextModule.error}
-                            <p class="workspace-note workspace-note--error">{contextModule.error}</p>
-                          {:else if contextModule.loaded}
-                            {#each contextModule.items as option}
-                              {#if option.material}
-                                {@const key = option.key}
-                                <button
-                                  class="learner-context-picker__add-item"
-                                  type="button"
-                                  disabled={referenceAlreadyAdded(key)}
-                                  onclick={() => onAddContextReference?.({
-                                    key,
-                                    kind: "material",
-                                    id: option.material?.id ?? "",
-                                    moduleId: option.moduleId ?? contextModule.id,
-                                    taskId: null
-                                  })}
-                                >
-                                  <span>Material</span><strong>{option.title}</strong>
-                                </button>
-                              {:else if option.task?.has_submission}
-                                {@const submissionKey = `submission:${option.task.id}`}
-                                <button
-                                  class="learner-context-picker__add-item"
-                                  type="button"
-                                  disabled={referenceAlreadyAdded(submissionKey)}
-                                  onclick={() => onAddContextReference?.({
-                                    key: submissionKey,
-                                    kind: "submission",
-                                    id: option.task?.id ?? "",
-                                    moduleId: option.moduleId ?? contextModule.id,
-                                    taskId: option.task?.id ?? null
-                                  })}
-                                >
-                                  <span>Eigene frühere Abgabe</span><strong>{option.title}</strong>
-                                </button>
-                              {/if}
-                            {/each}
-                          {/if}
-                        </div>
-                      {/if}
-                    </div>
-                  {/each}
-                </section>
-              {/if}
-            </section>
+            <LearnerMaterialContext
+              {courseId}
+              modules={contextModules}
+              expandedModuleIds={expandedContextModuleIds}
+              {expandedModuleMaterialKeys}
+              {expandedSubmissionModuleIds}
+              {expandedSubmissionKeys}
+              {historyByTask}
+              {historyStateByTask}
+              focusedModuleId={focusedContextModuleId}
+              closedModuleTitle={closedContextModuleTitle}
+              onToggleModule={onToggleContextModule}
+              onToggleMaterial={onToggleContextModuleMaterial}
+              onToggleSubmissionGroup={onToggleContextSubmissions}
+              onToggleSubmission={onToggleContextSubmission}
+              onOpenReference={onOpenContextReference}
+              onCloseModule={onCloseModule}
+              {onUndoCloseModule}
+            />
         </div>
 
       </aside>
@@ -736,12 +501,15 @@
           compactLayout={true}
           workspaceOnly={true}
           dialogCompactSurface={compactSurface}
-          dialogContextMaterials={currentMaterialRecords(activeItem)}
-          dialogContextEntries={dialogContextEntries(activeItem)}
-          dialogExpandedReferenceKeys={expandedReferenceKeys}
-          dialogContextPickerOpen={contextPickerOpen}
+          dialogExpandedModuleMaterialKeys={expandedModuleMaterialKeys}
           dialogExpandedContextModuleIds={expandedContextModuleIds}
-          dialogContextModules={dialogContextModuleOptions()}
+          dialogExpandedSubmissionModuleIds={expandedSubmissionModuleIds}
+          dialogExpandedSubmissionKeys={expandedSubmissionKeys}
+          dialogContextModules={contextModules}
+          dialogHistoryByTask={historyByTask}
+          dialogHistoryStateByTask={historyStateByTask}
+          dialogFocusedContextModuleId={focusedContextModuleId}
+          dialogClosedContextModuleTitle={closedContextModuleTitle}
           submitted={submittedTaskId === task.id}
           message={submissionMessage}
           errorMessage={submissionErrorTaskId === task.id ? submissionErrorMessage : null}
@@ -756,12 +524,12 @@
           hideDialogPauseAction={true}
           onSetDialogCompactSurface={onSetCompactSurface}
           onOpenDialogContext={onOpenContextReference}
-          onToggleDialogMaterial={onToggleMaterial}
-          onToggleDialogContextReference={onToggleContextReference}
-          onRemoveDialogContextReference={onRemoveContextReference}
-          onToggleDialogContextPicker={onToggleContextPicker}
+          onToggleDialogMaterial={onToggleContextModuleMaterial}
           onToggleDialogContextModule={onToggleContextModule}
-          onAddDialogContextReference={onAddContextReference}
+          onToggleDialogSubmissionGroup={onToggleContextSubmissions}
+          onToggleDialogSubmission={onToggleContextSubmission}
+          onCloseDialogContextModule={onCloseModule}
+          onUndoCloseDialogContextModule={onUndoCloseModule}
           onToggleReviewPanel={() => onToggleReviewPanel?.(task.id)}
           onSubmitUploadFeedback={onSubmitUploadFeedback}
           {onProgressPersisted}

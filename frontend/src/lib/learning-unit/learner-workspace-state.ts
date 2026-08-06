@@ -1,4 +1,4 @@
-export const LEARNER_WORKSPACE_STORAGE_VERSION = 3;
+export const LEARNER_WORKSPACE_STORAGE_VERSION = 5;
 
 export type LearnerWorkspaceSurface = "graph" | "reading" | "task";
 export type LearnerWorkStatus = "editing" | "result";
@@ -14,14 +14,6 @@ export type LearnerActiveTask = {
   editorMode: LearnerEditorMode;
 };
 
-export type LearnerContextReference = {
-  key: string;
-  kind: "material" | "submission";
-  id: string;
-  moduleId: string | null;
-  taskId: string | null;
-};
-
 export type LearnerWorkspaceState = {
   surface: LearnerWorkspaceSurface;
   openedModuleIds: string[];
@@ -29,11 +21,12 @@ export type LearnerWorkspaceState = {
   activeTask: LearnerActiveTask | null;
   context: {
     compactSurface: LearnerCompactSurface;
-    manualReferences: LearnerContextReference[];
-    expandedReferenceKeys: string[];
-    pickerOpen: boolean;
-    expandedModuleIds: string[];
+    expandedContextModuleIds: string[];
+    expandedModuleMaterialKeys: Record<string, string[]>;
+    expandedSubmissionModuleIds: string[];
+    expandedSubmissionKeys: string[];
     readingReferenceKey: string | null;
+    focusedModuleId: string | null;
     bookScrollTop: number;
     workScrollTop: number;
     readerScrollTop: number;
@@ -56,6 +49,7 @@ type ReadableStorage = {
 
 type WorkspaceAccess = {
   openableModuleIds: Set<string>;
+  accessibleContextModuleIds?: Set<string>;
   accessibleTaskKeys?: Set<string>;
   accessibleReferenceKeys?: Set<string>;
 };
@@ -68,11 +62,12 @@ export function defaultLearnerWorkspaceState(): LearnerWorkspaceState {
     activeTask: null,
     context: {
       compactSurface: "task",
-      manualReferences: [],
-      expandedReferenceKeys: [],
-      pickerOpen: false,
-      expandedModuleIds: [],
+      expandedContextModuleIds: [],
+      expandedModuleMaterialKeys: {},
+      expandedSubmissionModuleIds: [],
+      expandedSubmissionKeys: [],
       readingReferenceKey: null,
+      focusedModuleId: null,
       bookScrollTop: 0,
       workScrollTop: 0,
       readerScrollTop: 0
@@ -109,27 +104,29 @@ function uniqueStrings(value: unknown): string[] {
   return [...new Set(value.map(safeString).filter((entry): entry is string => Boolean(entry)))];
 }
 
-function safeScrollTop(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
+function normalizeExpandedModuleMaterialKeys(
+  value: unknown,
+  openedModuleIds: Set<string>,
+  access: WorkspaceAccess
+): Record<string, string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalized: Record<string, string[]> = {};
+  for (const [moduleId, rawKeys] of Object.entries(value)) {
+    if (!openedModuleIds.has(moduleId) || !Array.isArray(rawKeys)) {
+      continue;
+    }
+    normalized[moduleId] = uniqueStrings(rawKeys).filter(
+      (key) => !access.accessibleReferenceKeys || access.accessibleReferenceKeys.has(key)
+    );
+  }
+  return normalized;
 }
 
-function normalizeReference(value: unknown): LearnerContextReference | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const candidate = value as Partial<LearnerContextReference>;
-  const key = safeString(candidate.key);
-  const id = safeString(candidate.id);
-  if (!key || !id || (candidate.kind !== "material" && candidate.kind !== "submission")) {
-    return null;
-  }
-  return {
-    key,
-    kind: candidate.kind,
-    id,
-    moduleId: safeString(candidate.moduleId),
-    taskId: safeString(candidate.taskId)
-  };
+function safeScrollTop(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 function normalizeActiveTask(value: unknown): LearnerActiveTask | null {
@@ -167,17 +164,16 @@ export function normalizeLearnerWorkspaceState(
     : null;
 
   const openedModuleIds = uniqueStrings(candidate.openedModuleIds).filter((id) => access.openableModuleIds.has(id));
-  const manualReferences = (Array.isArray(rawContext.manualReferences) ? rawContext.manualReferences : [])
-    .map(normalizeReference)
-    .filter((entry): entry is LearnerContextReference => Boolean(entry))
-    .filter((entry) => !entry.moduleId || access.openableModuleIds.has(entry.moduleId))
-    .filter((entry) => !access.accessibleReferenceKeys || access.accessibleReferenceKeys.has(entry.key));
-  const referenceKeys = new Set([
-    ...manualReferences.map((entry) => entry.key),
-    ...(access.accessibleReferenceKeys ?? [])
-  ]);
-  const expandedReferenceKeys = uniqueStrings(rawContext.expandedReferenceKeys).filter((key) =>
-    referenceKeys.has(key)
+  const openedModuleIdSet = new Set(openedModuleIds);
+  const contextModuleIdSet = access.accessibleContextModuleIds ?? openedModuleIdSet;
+  const expandedContextModuleIds = uniqueStrings(rawContext.expandedContextModuleIds).filter((id) =>
+    contextModuleIdSet.has(id)
+  );
+  const expandedSubmissionModuleIds = uniqueStrings(rawContext.expandedSubmissionModuleIds).filter((id) =>
+    contextModuleIdSet.has(id)
+  );
+  const expandedSubmissionKeys = uniqueStrings(rawContext.expandedSubmissionKeys).filter((key) =>
+    !access.accessibleReferenceKeys || access.accessibleReferenceKeys.has(key)
   );
 
   let activeTask = normalizeActiveTask(candidate.activeTask);
@@ -209,13 +205,22 @@ export function normalizeLearnerWorkspaceState(
     activeTask,
     context: {
       compactSurface: rawContext.compactSurface === "materials" ? "materials" : "task",
-      manualReferences,
-      expandedReferenceKeys,
-      pickerOpen: rawContext.pickerOpen === true,
-      expandedModuleIds: uniqueStrings(rawContext.expandedModuleIds).filter((id) =>
-        access.openableModuleIds.has(id)
+      expandedContextModuleIds,
+      expandedModuleMaterialKeys: normalizeExpandedModuleMaterialKeys(
+        rawContext.expandedModuleMaterialKeys,
+        contextModuleIdSet,
+        access
       ),
-      readingReferenceKey: readingCandidate && referenceKeys.has(readingCandidate) ? readingCandidate : null,
+      expandedSubmissionModuleIds,
+      expandedSubmissionKeys,
+      readingReferenceKey:
+        readingCandidate && (!access.accessibleReferenceKeys || access.accessibleReferenceKeys.has(readingCandidate))
+          ? readingCandidate
+          : null,
+      focusedModuleId:
+        safeString(rawContext.focusedModuleId) && contextModuleIdSet.has(safeString(rawContext.focusedModuleId) as string)
+          ? safeString(rawContext.focusedModuleId)
+          : null,
       bookScrollTop: safeScrollTop(
         rawContext.bookScrollTop ?? (rawContext as { scrollTop?: unknown }).scrollTop
       ),
@@ -263,6 +268,8 @@ function parseVersioned(storage: ReadableStorage | null, key: string): Record<st
       parsed &&
       typeof parsed === "object" &&
       ((parsed as { version?: unknown }).version === LEARNER_WORKSPACE_STORAGE_VERSION ||
+        (parsed as { version?: unknown }).version === 4 ||
+        (parsed as { version?: unknown }).version === 3 ||
         (parsed as { version?: unknown }).version === 2 ||
         (parsed as { version?: unknown }).version === 1)
     ) {
@@ -281,6 +288,7 @@ export function readLearnerWorkspaceState({
   courseId,
   unitId,
   openableModuleIds,
+  accessibleContextModuleIds,
   accessibleTaskKeys,
   accessibleReferenceKeys
 }: {
@@ -290,6 +298,7 @@ export function readLearnerWorkspaceState({
   courseId: string;
   unitId: string;
   openableModuleIds: Set<string>;
+  accessibleContextModuleIds?: Set<string>;
   accessibleTaskKeys?: Set<string>;
   accessibleReferenceKeys?: Set<string>;
 }): LearnerWorkspaceState {
@@ -300,8 +309,6 @@ export function readLearnerWorkspaceState({
 
   const persistent = parseVersioned(localStorage, keys.persistent);
   const tab = parseVersioned(sessionStorage, keys.tab);
-  const persistentContext =
-    persistent.context && typeof persistent.context === "object" ? persistent.context : {};
   const tabContext = tab.context && typeof tab.context === "object" ? tab.context : {};
   const tabVersion = (tab as { version?: unknown }).version;
 
@@ -315,9 +322,21 @@ export function readLearnerWorkspaceState({
       returnPosition: tab.returnPosition,
       preferences: persistent.preferences,
       context: {
-        ...persistentContext,
         ...tabContext,
-        manualReferences: (persistentContext as { manualReferences?: unknown }).manualReferences,
+        // Version 4 used this array for the source picker. Opened modules are
+        // now the only context source, so the old picker expansion is ignored.
+        expandedContextModuleIds:
+          tabVersion === LEARNER_WORKSPACE_STORAGE_VERSION
+            ? (tabContext as { expandedContextModuleIds?: unknown }).expandedContextModuleIds
+            : [],
+        expandedSubmissionModuleIds:
+          tabVersion === LEARNER_WORKSPACE_STORAGE_VERSION
+            ? (tabContext as { expandedSubmissionModuleIds?: unknown }).expandedSubmissionModuleIds
+            : [],
+        expandedSubmissionKeys:
+          tabVersion === LEARNER_WORKSPACE_STORAGE_VERSION
+            ? (tabContext as { expandedSubmissionKeys?: unknown }).expandedSubmissionKeys
+            : [],
         // Version 2 opened its narrow reader automatically. Do not revive that
         // obsolete presentation as a deliberate full-width reading choice.
         readingReferenceKey:
@@ -326,7 +345,7 @@ export function readLearnerWorkspaceState({
             : (tabContext as { readingReferenceKey?: unknown }).readingReferenceKey
       }
     },
-    { openableModuleIds, accessibleTaskKeys, accessibleReferenceKeys }
+    { openableModuleIds, accessibleContextModuleIds, accessibleTaskKeys, accessibleReferenceKeys }
   );
 }
 
@@ -334,10 +353,7 @@ export function serializeLearnerWorkspacePersistentState(state: LearnerWorkspace
   return JSON.stringify({
     version: LEARNER_WORKSPACE_STORAGE_VERSION,
     openedModuleIds: state.openedModuleIds,
-    preferences: state.preferences,
-    context: {
-      manualReferences: state.context.manualReferences
-    }
+    preferences: state.preferences
   });
 }
 
@@ -349,10 +365,12 @@ export function serializeLearnerWorkspaceTabState(state: LearnerWorkspaceState):
     activeTask: state.activeTask,
     context: {
       compactSurface: state.context.compactSurface,
-      expandedReferenceKeys: state.context.expandedReferenceKeys,
-      pickerOpen: state.context.pickerOpen,
-      expandedModuleIds: state.context.expandedModuleIds,
+      expandedContextModuleIds: state.context.expandedContextModuleIds,
+      expandedModuleMaterialKeys: state.context.expandedModuleMaterialKeys,
+      expandedSubmissionModuleIds: state.context.expandedSubmissionModuleIds,
+      expandedSubmissionKeys: state.context.expandedSubmissionKeys,
       readingReferenceKey: state.context.readingReferenceKey,
+      focusedModuleId: state.context.focusedModuleId,
       bookScrollTop: state.context.bookScrollTop,
       workScrollTop: state.context.workScrollTop,
       readerScrollTop: state.context.readerScrollTop

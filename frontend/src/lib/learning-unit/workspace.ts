@@ -44,6 +44,17 @@ export type ContentGroup = {
   items: LearningContentItem[];
 };
 
+export type LearnerMaterialContextModule = {
+  id: string;
+  title: string;
+  current: boolean;
+  closable: boolean;
+  loaded: boolean;
+  loading: boolean;
+  error: string | null;
+  items: LearningContentItem[];
+};
+
 export type LearningUnitViewState = "overview" | "content";
 
 export type ModularWorkspaceSnapshot = {

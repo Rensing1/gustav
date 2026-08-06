@@ -254,106 +254,80 @@ describe("LearningDialogWorkspace", () => {
     expect(pause).toHaveAttribute("href", "/learning/courses/course-1");
   });
 
-  it("keeps pinned materials and prior submissions readable in the partner context", async () => {
+  it("shows materials from opened modules in the partner context without pinning", async () => {
     const onOpenContext = vi.fn();
+    const onCloseContextModule = vi.fn();
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ session: answeredSession() })));
     render(LearningDialogWorkspace, {
       props: {
         learnerSub: "student-1",
         courseId: "course-1",
         task: dialogTask,
-        contextEntries: [
+        contextModules: [
           {
-            key: "material:source",
-            kind: "material",
-            label: "Material",
-            title: "Lange Quelle",
-            material: {
-              id: "source",
+            id: "module-current",
+            title: "Grundlagen",
+            current: true,
+            closable: false,
+            loaded: true,
+            loading: false,
+            error: null,
+            items: [{
+              key: "material:source",
+              kind: "material",
               title: "Lange Quelle",
-              kind: "markdown",
-              body_md: "Ein langer Quellentext."
-            },
-            submissions: []
+              position: 1,
+              contextLabel: "Grundlagen",
+              moduleId: "module-current",
+              material: {
+                id: "source",
+                title: "Lange Quelle",
+                kind: "markdown",
+                body_md: "Ein langer Quellentext."
+              }
+            }]
           },
           {
-            key: "submission:task-old",
-            kind: "submission",
-            label: "Eigene frühere Abgabe",
-            title: "Frühere Analyse",
-            material: null,
-            submissions: [{
-              id: "submission-old",
-              intent: "submit",
-              attempt_nr: 1,
-              kind: "text",
-              created_at: "2026-08-03T10:00:00+00:00",
-              analysis_status: "completed",
-              text_body: "Meine frühere Begründung."
-            }]
+            id: "module-extra",
+            title: "Vertiefung",
+            current: false,
+            closable: true,
+            loaded: true,
+            loading: false,
+            error: null,
+            items: []
           }
         ],
-        expandedReferenceKeys: ["material:source", "submission:task-old"],
-        onOpenContext
+        expandedContextModuleIds: ["module-extra"],
+        onOpenContext,
+        onCloseContextModule
       }
     });
 
     const context = await screen.findByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    expect(within(context).getByRole("heading", { name: /Grundlagen/, level: 4 })).toBeInTheDocument();
     expect(within(context).getByText("Lange Quelle")).toBeInTheDocument();
     expect(within(context).getByText("Ein langer Quellentext.")).toBeInTheDocument();
-    expect(within(context).getByText("Frühere Analyse")).toBeInTheDocument();
-    expect(within(context).getByText("Meine frühere Begründung.")).toBeInTheDocument();
-    expect(within(context).queryByRole("button", { name: "Zur Kontextliste" })).not.toBeInTheDocument();
-    await fireEvent.click(within(context).getByRole("button", { name: "Frühere Analyse groß lesen" }));
-    expect(onOpenContext).toHaveBeenCalledWith("submission:task-old");
+    expect(within(context).queryByText("Angeheftet")).not.toBeInTheDocument();
+    expect(within(context).queryByText("Material suchen")).not.toBeInTheDocument();
+    await fireEvent.click(within(context).getByRole("button", { name: "Modul Vertiefung schließen" }));
+    expect(onCloseContextModule).toHaveBeenCalledWith("module-extra");
   });
 
-  it("adds individual accessible context from the dialog sidebar", async () => {
-    const onToggleContextPicker = vi.fn();
-    const onToggleContextModule = vi.fn();
-    const onAddContextReference = vi.fn();
+  it("does not render the removed source picker in the dialog sidebar", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ session: answeredSession() })));
     render(LearningDialogWorkspace, {
       props: {
         learnerSub: "student-1",
         courseId: "course-1",
         task: dialogTask,
-        contextPickerOpen: true,
-        expandedContextModuleIds: ["module-2"],
-        contextModules: [
-          {
-            id: "module-2",
-            title: "Vertiefung",
-            current: false,
-            loaded: true,
-            loading: false,
-            error: null,
-            options: [
-              {
-                key: "material:source-2",
-                kind: "material",
-                id: "source-2",
-                moduleId: "module-2",
-                taskId: null,
-                title: "Gegenposition",
-                added: false
-              }
-            ]
-          }
-        ],
-        onToggleContextPicker,
-        onToggleContextModule,
-        onAddContextReference
+        contextModules: []
       }
     });
 
     await screen.findByText("Archivarin");
-    await fireEvent.click(screen.getByRole("button", { name: /Gegenposition/ }));
-    expect(onAddContextReference).toHaveBeenCalledWith(expect.objectContaining({
-      key: "material:source-2",
-      kind: "material",
-      moduleId: "module-2"
-    }));
+    expect(screen.queryByText("Material suchen")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /anheften|lösen/i })).not.toBeInTheDocument();
   });
 
   it("hides all session actions in the completed read-only view", async () => {

@@ -17,7 +17,7 @@
     onOpenReader = null
   }: {
     referenceKey: string;
-    label: string;
+    label: string | null;
     title: string;
     material?: LearningMaterial | null;
     submissions?: LearningSubmission[];
@@ -34,13 +34,21 @@
   const safeKey = $derived(referenceKey.replace(/[^a-zA-Z0-9_-]+/g, "-"));
   const bodyId = $derived(`reference-body-${safeKey}`);
 
+  function orderedSubmissions(): LearningSubmission[] {
+    return [...submissions].sort((left, right) => {
+      const timeDifference = Date.parse(right.created_at) - Date.parse(left.created_at);
+      return timeDifference || right.attempt_nr - left.attempt_nr;
+    });
+  }
+
   function primarySubmission(): LearningSubmission | null {
-    return submissions.find((submission) => submission.intent === "submit") ?? submissions[0] ?? null;
+    const ordered = orderedSubmissions();
+    return ordered.find((submission) => submission.intent === "submit") ?? ordered[0] ?? null;
   }
 
   function olderSubmissions(): LearningSubmission[] {
     const primaryId = primarySubmission()?.id;
-    return submissions.filter((submission) => submission.id !== primaryId);
+    return orderedSubmissions().filter((submission) => submission.id !== primaryId);
   }
 
   function firstFile(submission: LearningSubmission | null): NonNullable<LearningSubmission["files"]>[number] | null {
@@ -79,24 +87,49 @@
 <article class:learner-reference-document--reader={readerMode} class="learner-reference-document" aria-label={title}>
   {#if readerMode}
     <header class="learner-reference-document__reader-header">
-      <p class="workspace-label">{label}</p>
+      {#if label}<p class="workspace-label">{label}</p>{/if}
       <h2 id="learner-reference-reader-heading" tabindex="-1">{title}</h2>
     </header>
   {:else}
-    <button
-      class="learner-reference-document__toggle"
-      type="button"
-      aria-label={`${title} ein- oder ausklappen`}
-      aria-expanded={expanded}
-      aria-controls={bodyId}
-      onclick={() => onToggle?.(referenceKey)}
-    >
-      <span>
-        <small>{label}</small>
-        <strong>{title}</strong>
-      </span>
-      <span aria-hidden="true">{expanded ? "−" : "+"}</span>
-    </button>
+    <header class="learner-reference-document__header">
+      <button
+        class="learner-reference-document__toggle"
+        type="button"
+        aria-label={`${title} ein- oder ausklappen`}
+        aria-expanded={expanded}
+        aria-controls={bodyId}
+        onclick={() => onToggle?.(referenceKey)}
+      >
+        <svg
+          class:learner-tree-chevron--expanded={expanded}
+          class="learner-tree-chevron"
+          aria-hidden="true"
+          viewBox="0 0 16 16"
+        >
+          <path d="m6 3.5 4.5 4.5L6 12.5" />
+        </svg>
+        <span>
+          {#if label}<small>{label}</small>{/if}
+          <strong>{title}</strong>
+        </span>
+      </button>
+      <div class="learner-reference-document__actions">
+        {#if onOpenReader}
+          <button
+            id={`reference-reader-trigger-${safeKey}`}
+            class="learner-reference-document__icon-action"
+            type="button"
+            title="Großansicht"
+            aria-label={`${title} groß lesen`}
+            onclick={() => onOpenReader?.(referenceKey)}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M7 17 17 7M9 7h8v8" />
+            </svg>
+          </button>
+        {/if}
+      </div>
+    </header>
   {/if}
 
   {#if expanded || readerMode}
@@ -227,16 +260,6 @@
         </section>
       {:else}
         <p class="workspace-note">Der Inhalt wird geladen …</p>
-      {/if}
-
-      {#if !readerMode}
-        <button
-          id={`reference-reader-trigger-${safeKey}`}
-          class="learner-reference-document__reader-action"
-          type="button"
-          aria-label={`${title} groß lesen`}
-          onclick={() => onOpenReader?.(referenceKey)}
-        >Groß lesen</button>
       {/if}
     </div>
   {/if}

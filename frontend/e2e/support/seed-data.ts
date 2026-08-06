@@ -28,6 +28,8 @@ export type LearnerVisualSmokeCourse = {
 export type LearnerNavigationCourse = LearnerVisualSmokeCourse & {
   graphModuleId: string;
   contextGraphModuleId: string;
+  secondMaterialTitle: string;
+  secondTaskId: string;
   contextImageAltText: string;
   contextImageTitle: string;
 };
@@ -274,8 +276,17 @@ export async function seedLearnerVisualSmokeCourse(
     instruction_md: previousTaskTitle,
     criteria: []
   });
+  const sourceSectionId = await createSection(teacherPage, unitId, "Vertiefung");
+  await createMarkdownMaterial(
+    teacherPage,
+    unitId,
+    sourceSectionId,
+    "Ergänzende Perspektive",
+    "## Ergänzung\n\nDiese Quelle stammt aus einem weiteren freigeschalteten Abschnitt."
+  );
   const moduleId = await attachUnitToCourse(teacherPage, courseId, unitId);
   await releaseSection(teacherPage, courseId, moduleId, sectionId);
+  await releaseSection(teacherPage, courseId, moduleId, sourceSectionId);
   await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
   const previousSubmissionText = "Meine frühere Einordnung bleibt als eigene Abgabe verfügbar.";
   const submissionResponse = await learnerPage.request.post(
@@ -347,8 +358,20 @@ export async function seedLearnerNavigationCourse(
     "Grundrechte und digitale Kommunikation",
     "## Ausgangslage\n\nDieses Material ist beim ersten Lesen vollständig geöffnet."
   );
+  const secondMaterialTitle = "Grenzen digitaler Überwachung";
+  await createMarkdownMaterial(
+    teacherPage,
+    unitId,
+    sectionId,
+    secondMaterialTitle,
+    "## Vertiefung\n\nDieses zweite Modulmaterial beginnt in der Arbeitsfläche eingeklappt."
+  );
   const taskId = await createTask(teacherPage, unitId, sectionId, {
     instruction_md: "Ordne das Material in zwei Sätzen ein.",
+    criteria: []
+  });
+  const secondTaskId = await createTask(teacherPage, unitId, sectionId, {
+    instruction_md: "Vergleiche die beiden Materialien miteinander.",
     criteria: []
   });
 
@@ -379,8 +402,10 @@ export async function seedLearnerNavigationCourse(
     unitId,
     sectionId,
     taskId,
+    secondTaskId,
     graphModuleId,
     contextGraphModuleId,
+    secondMaterialTitle,
     contextImageAltText,
     contextImageTitle,
     courseTitle,

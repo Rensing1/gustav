@@ -88,7 +88,7 @@ from backend.web.routes.app_teacher_concern_routes import (
     get_teacher_home as get_teacher_home,  # noqa: F401
     restore_teacher_concern_box_entry as restore_teacher_concern_box_entry,  # noqa: F401
     _teacher_concern_box_scopes as _teacher_concern_box_scopes,  # noqa: F401
-    _teacher_home_entries as _teacher_home_entries,  # noqa: F401
+    _teacher_home_workstarter as _teacher_home_workstarter,  # noqa: F401
 )
 from backend.web.routes.app_teacher_node_editor_routes import (
     app_teacher_node_editor_router,
@@ -112,6 +112,7 @@ from backend.web.routes.app_teacher_unit_routes import (
     _list_teacher_units as _list_teacher_units,  # noqa: F401
     _list_submission_pairs_for_students as _list_submission_pairs_for_students,  # noqa: F401
     _list_unit_task_ids as _list_unit_task_ids,  # noqa: F401
+    _teacher_units_catalog as _teacher_units_catalog,  # noqa: F401
 )
 from backend.web.routes.app_teacher_course_routes import (
     app_teacher_course_router,

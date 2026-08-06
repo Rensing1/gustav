@@ -335,28 +335,46 @@ components:
         created_at:
           type: string
           format: date-time
-    TeacherHomeEntry:
+    TeacherHomeCourseOption:
       type: object
-      required: [id, title, href, description]
+      required: [id, title]
       properties:
         id:
           type: string
         title:
           type: string
-        href:
+    TeacherHomeRecentUnit:
+      type: object
+      required: [id, title, updated_at, href]
+      properties:
+        id:
           type: string
-        description:
+        title:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        href:
           type: string
     TeacherHome:
       type: object
-      required: [user, entries]
+      required: [user, courses, recent_units, units_href, create_unit_href]
       properties:
         user:
           $ref: '#/components/schemas/SessionBootstrapUser'
-        entries:
+        courses:
           type: array
           items:
-            $ref: '#/components/schemas/TeacherHomeEntry'
+            $ref: '#/components/schemas/TeacherHomeCourseOption'
+        recent_units:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/TeacherHomeRecentUnit'
+        units_href:
+          type: string
+        create_unit_href:
+          type: string
     TeacherCourseListItem:
       type: object
       required: [id, title, href, members_count, units_count]
@@ -7446,8 +7464,9 @@ paths:
       tags: [App]
       summary: Return the teacher home read-model
       description: >-
-        Returns the current teaching identity together with the first
-        top-level navigation cards for the SvelteKit teacher home page.
+        Returns the current teaching identity together with owner-scoped
+        course choices and the three most recently edited learning units for
+        the SvelteKit teacher work starter.
       operationId: getTeacherHome
       security:
         - bearerAuth: []

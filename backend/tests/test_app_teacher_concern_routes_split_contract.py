@@ -22,7 +22,7 @@ def test_teacher_concern_routes_live_in_focused_router_module() -> None:
 def test_app_hotspot_no_longer_defines_teacher_concern_handlers_or_helpers() -> None:
     source = (REPO_ROOT / "backend" / "web" / "routes" / "app.py").read_text(encoding="utf-8")
 
-    assert "def _teacher_home_entries(" not in source
+    assert "def _teacher_home_workstarter(" not in source
     assert "def _teacher_concern_box_scopes(" not in source
     assert "async def get_teacher_home(" not in source
     assert "async def get_teacher_concern_box(" not in source

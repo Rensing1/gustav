@@ -43,6 +43,7 @@ def test_teacher_unit_read_model_helpers_live_with_teacher_unit_routes() -> None
         "_list_submission_pairs_for_students",
         "_list_unit_task_ids",
         "_find_course_unit",
+        "_teacher_units_catalog",
     )
     for helper_name in helper_names:
         assert getattr(app, helper_name) is getattr(unit_routes, helper_name)

@@ -24,7 +24,14 @@ def test_openapi_documents_home_view_models() -> None:
     assert learner_concern_schema["required"] == ["user", "courses"]
 
     teacher_schema = spec["components"]["schemas"]["TeacherHome"]
-    assert teacher_schema["required"] == ["user", "entries"]
+    assert teacher_schema["required"] == [
+        "user",
+        "courses",
+        "recent_units",
+        "units_href",
+        "create_unit_href",
+    ]
+    assert teacher_schema["properties"]["recent_units"]["maxItems"] == 3
 
     teacher_concern_schema = spec["components"]["schemas"]["TeacherConcernBoxView"]
     assert teacher_concern_schema["required"] == ["user", "scopes", "active_scope", "entries"]

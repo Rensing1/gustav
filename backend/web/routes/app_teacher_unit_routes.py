@@ -191,25 +191,14 @@ def _find_course_unit(course_id: str, owner_sub: str, unit_id: str) -> dict[str,
     return None
 
 
-@app_teacher_unit_router.get("/api/teaching/views/units/catalog")
-async def get_teacher_units_catalog(
-    request: Request,
-    query: str = "",
-    sort: str | None = None,
-):
-    """Return the teacher units catalog as a structured bestandsliste.
+def _teacher_units_catalog(owner_sub: str, query: str = "", sort: str | None = None) -> dict[str, object]:
+    """Build the owner-scoped unit catalog projection shared by teacher views.
 
-    The payload stays intentionally small and UI-ready. It avoids mixed meta
-    strings so the frontend can render a flat table-like inventory with a
-    separate course cell and a dedicated title link.
+    The teacher home page deliberately reuses this projection so its recent
+    units follow the exact same activity and sorting rules as the full catalog.
+    Callers must pass the authenticated teacher subject; repository reads keep
+    enforcing author ownership.
     """
-    user = _current_user(request)
-    if user is None:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not has_any_role(user, {"teacher", "admin"}):
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-
-    owner_sub = str(user.get("sub") or "")
     course_refs_by_unit, _ = _build_teacher_unit_course_refs(owner_sub)
     units = _list_teacher_units(owner_sub, limit=200, offset=0)
 
@@ -244,27 +233,28 @@ async def get_teacher_units_catalog(
             status_label = "In Bearbeitung"
             status_tone = "accent"
 
-        item = {
-            "id": unit_id,
-            "title": str(unit.get("title") or ""),
-            "topic": str(unit.get("summary") or "").strip() or None,
-            "updated_at": last_activity,
-            "href": f"/teaching/units/{unit_id}",
-            "courses_count": courses_count,
-            "courses": [
-                {
-                    "id": str(ref.get("id") or ""),
-                    "title": str(ref.get("title") or ""),
-                    "href": str(ref.get("href") or ""),
-                }
-                for ref in refs
-                if str(ref.get("id") or "")
-            ],
-            "status_label": status_label,
-            "status_tone": status_tone,
-            "searchable": haystack,
-        }
-        items.append(item)
+        items.append(
+            {
+                "id": unit_id,
+                "title": str(unit.get("title") or ""),
+                "topic": str(unit.get("summary") or "").strip() or None,
+                "updated_at": last_activity,
+                "href": f"/teaching/units/{unit_id}",
+                "courses_count": courses_count,
+                "courses": [
+                    {
+                        "id": str(ref.get("id") or ""),
+                        "title": str(ref.get("title") or ""),
+                        "href": str(ref.get("href") or ""),
+                    }
+                    for ref in refs
+                    if str(ref.get("id") or "")
+                ],
+                "status_label": status_label,
+                "status_tone": status_tone,
+                "searchable": haystack,
+            }
+        )
 
     query_value = query.strip()
     if query_value:
@@ -292,14 +282,34 @@ async def get_teacher_units_catalog(
         for item in items
     ]
 
-    body = {
-        "user": _user_payload(user),
+    return {
         "query": query_value,
         "sort": active_sort,
         "result_count": len(list_items),
         "items": list_items,
         "create_href": "/teaching/units?create=1",
     }
+
+
+@app_teacher_unit_router.get("/api/teaching/views/units/catalog")
+async def get_teacher_units_catalog(
+    request: Request,
+    query: str = "",
+    sort: str | None = None,
+):
+    """Return the teacher units catalog as a structured bestandsliste.
+
+    The payload stays intentionally small and UI-ready. It avoids mixed meta
+    strings so the frontend can render a flat table-like inventory with a
+    separate course cell and a dedicated title link.
+    """
+    user = _current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    if not has_any_role(user, {"teacher", "admin"}):
+        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+
+    body = {"user": _user_payload(user), **_teacher_units_catalog(str(user.get("sub") or ""), query, sort)}
     return JSONResponse(body, headers=_private_headers())
 
 

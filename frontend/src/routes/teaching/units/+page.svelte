@@ -47,7 +47,7 @@
   }
 
   $effect(() => {
-    createDialogOpen = Boolean(form?.createUnit);
+    createDialogOpen = Boolean(data.showCreateDialog) || Boolean(form?.createUnit);
   });
 
   $effect(() => {

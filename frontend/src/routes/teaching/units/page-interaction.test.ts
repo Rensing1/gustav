@@ -19,6 +19,7 @@ const sampleData: PageData = {
   breadcrumbs: [],
   hidePageHeading: true,
   wideWorkspaceShell: true,
+  showCreateDialog: false,
   pageTitle: "Lerneinheiten",
   pageCopy: "",
   catalog: {

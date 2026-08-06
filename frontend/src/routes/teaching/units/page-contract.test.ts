@@ -28,13 +28,13 @@ describe("teacher units catalog route contract", () => {
     expect(pageSource).not.toContain("data.catalog.views");
     expect(pageSource).not.toContain("data.catalog.filters");
     expect(pageSource).not.toContain('href={data.catalog.create_href}');
-    expect(pageSource).not.toContain("data.showCreateDialog");
+    expect(pageSource).toContain("data.showCreateDialog");
     expect(pageSource).not.toContain("workspace-section workspace-units-catalog__workspace");
     expect(pageSource).not.toContain("Status</span>");
     expect(serverSource).toContain("hidePageHeading: true");
     expect(serverSource).toContain("wideWorkspaceShell: true");
     expect(serverSource).not.toContain("headerAction:");
-    expect(serverSource).not.toContain("showCreateDialog:");
+    expect(serverSource).toContain("showCreateDialog:");
   });
 
   it("keeps delete entry points in the catalog while routing deletion to the unit workspace", () => {

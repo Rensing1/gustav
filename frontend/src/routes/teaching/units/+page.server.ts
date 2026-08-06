@@ -29,6 +29,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     catalog,
     hidePageHeading: true,
     wideWorkspaceShell: true,
+    showCreateDialog: url.searchParams.get("create") === "1",
     pageTitle: "Lerneinheiten",
     pageCopy: ""
   };

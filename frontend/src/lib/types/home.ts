@@ -21,16 +21,24 @@ export type LearnerConcernBoxView = {
   courses: ConcernBoxCourseOption[];
 };
 
-export type TeacherHomeEntry = {
+export type TeacherHomeCourseOption = {
   id: string;
   title: string;
+};
+
+export type TeacherHomeRecentUnit = {
+  id: string;
+  title: string;
+  updated_at: string;
   href: string;
-  description: string;
 };
 
 export type TeacherHome = {
   user: SessionBootstrapUser;
-  entries: TeacherHomeEntry[];
+  courses: TeacherHomeCourseOption[];
+  recent_units: TeacherHomeRecentUnit[];
+  units_href: string;
+  create_unit_href: string;
 };
 
 export type TeacherConcernBoxFilterOption = {

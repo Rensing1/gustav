@@ -272,6 +272,7 @@ Verbindliche Familien:
 - `BreadcrumbBar`
 - `PageActionHead`
 - `ModeSwitch`
+- `ChoiceSwitch`
 - `QuietList`
 - `QuietListEntry`
 - `AuthFrame`
@@ -280,6 +281,8 @@ Verbindliche Familien:
 - `GraphModuleNode`
 - `LearningDialogWorkspace`
 - `LearningResponseGroup`
+
+`ModeSwitch` verbindet Navigationsziele und markiert die aktuell geöffnete Ansicht. `ChoiceSwitch` bildet dagegen eine lokale, gegenseitig ausschließende Auswahl mit nativen Radiofeldern ab. Seine aktive Option bleibt transparent und wird nur durch kräftigeren Text sowie eine zurückhaltende Akzentlinie markiert. Gefüllte Signalfarben, Schatten und Pillenformen sind für diese Auswahl nicht vorgesehen.
 
 ## 11. Lernraum und Lerneinheit
 

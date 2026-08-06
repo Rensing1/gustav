@@ -352,6 +352,101 @@
   border-bottom-color: var(--color-accent);
 }
 
+.choice-switch {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  container-type: inline-size;
+}
+
+.choice-switch__legend {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  color: color-mix(in srgb, var(--color-link) 72%, var(--color-text) 28%);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.choice-switch__options {
+  display: inline-flex;
+  max-width: 100%;
+  gap: var(--space-4);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 45%, transparent 55%);
+}
+
+.choice-switch__option {
+  position: relative;
+  min-width: 0;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.choice-switch__option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice-switch__option span {
+  display: inline-flex;
+  min-height: 2.35rem;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: -1px;
+  padding: 0.35rem 0.15rem 0.45rem;
+  border-bottom: 3px solid transparent;
+  color: inherit;
+  font-family: var(--font-learner-label);
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.choice-switch__option:hover {
+  color: var(--color-text);
+}
+
+.choice-switch__option[data-current="true"] {
+  color: var(--color-text);
+}
+
+.choice-switch__option[data-current="true"] span {
+  border-bottom-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-border) 58%);
+}
+
+.choice-switch__option input:focus-visible + span {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.choice-switch__option:has(input:disabled) {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@container (max-width: 30rem) {
+  .choice-switch__options {
+    width: 100%;
+  }
+
+  .choice-switch__option {
+    flex: 1 1 50%;
+  }
+
+  .choice-switch__option span {
+    width: 100%;
+  }
+}
+
 .page-action-head {
   display: grid;
   gap: var(--space-3);

@@ -6,6 +6,7 @@
 
   import AuthFrame from "./AuthFrame.svelte";
   import BreadcrumbBar from "./BreadcrumbBar.svelte";
+  import ChoiceSwitch from "./ChoiceSwitch.svelte";
   import GraphInspectorPanel from "./GraphInspectorPanel.svelte";
   import GraphStageFrame from "./GraphStageFrame.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
@@ -654,6 +655,33 @@
         actionHref="/auth/login"
         actionLabel="Erneut anmelden"
       />
+    </article>
+
+    <article class="preview-card" data-testid="preview-choice-switches">
+      <p class="preview-card__eyebrow">Lokale Auswahl</p>
+      <h2>Antwortform</h2>
+      <div class="preview-workspace-stack">
+        <ChoiceSwitch
+          legend="Textmodus aktiv"
+          name="preview-answer-text"
+          value="text"
+          options={[
+            { value: "text", label: "Text schreiben" },
+            { value: "upload", label: "Datei hochladen" }
+          ]}
+          onValueChange={() => {}}
+        />
+        <ChoiceSwitch
+          legend="Uploadmodus aktiv"
+          name="preview-answer-upload"
+          value="upload"
+          options={[
+            { value: "text", label: "Text schreiben" },
+            { value: "upload", label: "Datei hochladen" }
+          ]}
+          onValueChange={() => {}}
+        />
+      </div>
     </article>
   </section>
 </div>

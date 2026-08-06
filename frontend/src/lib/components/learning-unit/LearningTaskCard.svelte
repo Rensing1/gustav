@@ -5,6 +5,7 @@
   import LearningDialogWorkspace from "$lib/components/learning-unit/LearningDialogWorkspace.svelte";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
+  import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
@@ -312,10 +313,6 @@
     if (next === "text") {
       restoreDraft(next);
     }
-  }
-
-  function editorModeIs(next: SubmissionMode): boolean {
-    return editorMode === next;
   }
 
   function uploadTitle(): string {
@@ -719,137 +716,118 @@
               {:else}
                 <p class="workspace-note">Diese H5P-Aufgabe ist noch nicht bereit.</p>
               {/if}
-            {:else if editorMode === "upload" || uploadOnly()}
-              <form class="learning-submission-upload" method="POST" enctype="multipart/form-data" use:enhance={enhanceSubmit}>
-                <input type="hidden" name="task_id" value={task.id} />
-                <input type="hidden" name="task_kind" value={task.kind} />
-                <input type="hidden" name="unit_type" value={unitType} />
-                {#if moduleId}
-                  <input type="hidden" name="module_id" value={moduleId} />
-                {/if}
-                {#if !uploadOnly()}
-                  <div class="learning-submission-workspace__mode-switch learning-task-inline-editor__mode-switch" role="tablist" aria-label="Bearbeitungsmodus">
+            {:else}
+              {#if !uploadOnly()}
+                <ChoiceSwitch
+                  legend="Antwortform"
+                  name={`answer-mode-${task.id}`}
+                  value={editorMode}
+                  options={[
+                    { value: "text", label: "Text schreiben" },
+                    { value: "upload", label: "Datei hochladen" }
+                  ]}
+                  onValueChange={(value) => setEditorMode(value as SubmissionMode)}
+                />
+              {/if}
+
+              {#if !uploadOnly()}
+                <div class="learning-submission-mode-panel" hidden={editorMode !== "text"}>
+                  <form class="learning-submission-editor learning-submission-editor--immersive" method="POST" enctype="multipart/form-data" use:enhance={enhanceSubmit}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <input type="hidden" name="task_kind" value={task.kind} />
+                    <input type="hidden" name="unit_type" value={unitType} />
+                    {#if moduleId}
+                      <input type="hidden" name="module_id" value={moduleId} />
+                    {/if}
+                    <section class="learning-submission-editor__field">
+                      <span>Deine Lösung</span>
+                      <MarkdownWysiwygEditor
+                        name="text_body"
+                        value={draftText}
+                        placeholder="Schreibe hier deine Lösung."
+                        onInput={updateDraft}
+                      />
+                    </section>
+                    <div class="learning-submission-editor__actions">
+                      <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
+                        Rückmeldung einholen
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              {/if}
+
+              <div class="learning-submission-mode-panel" hidden={!uploadOnly() && editorMode !== "upload"}>
+                <form class="learning-submission-upload" method="POST" enctype="multipart/form-data" use:enhance={enhanceSubmit}>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <input type="hidden" name="task_kind" value={task.kind} />
+                  <input type="hidden" name="unit_type" value={unitType} />
+                  {#if moduleId}
+                    <input type="hidden" name="module_id" value={moduleId} />
+                  {/if}
+                  <label class="learning-submission-upload__dropzone">
+                    <span class="learning-submission-upload__title">{uploadTitle()}</span>
+                    <span class="learning-submission-upload__copy">{uploadCopy()}</span>
+                    <input
+                      bind:this={uploadInput}
+                      aria-label="Datei auswählen"
+                      name="upload_file"
+                      type="file"
+                      accept={uploadAccept()}
+                      onchange={handleUploadSelection}
+                    />
+                  </label>
+                  {#if selectedUploadFile}
+                    <section class="learning-submission-upload__selected" aria-label="Ausgewählte Datei">
+                      <div>
+                        <p class="learning-submission-upload__selected-name">{selectedUploadFile.name}</p>
+                        <p class="learning-submission-upload__selected-meta">{selectedUploadLabel(selectedUploadFile)}</p>
+                      </div>
+                      <div class="learning-submission-upload__selected-actions">
+                        <button
+                          class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
+                          type="button"
+                          onclick={clearUploadSelection}
+                        >
+                          Entfernen
+                        </button>
+                      </div>
+                    </section>
+                  {:else if currentUploadSubmission()}
+                    <section class="learning-submission-upload__selected" aria-label="Bisherige Datei">
+                      <div>
+                        <p class="learning-submission-upload__selected-name">Bisherige Datei</p>
+                        <p class="learning-submission-upload__selected-meta">{fileSummary(currentUploadSubmission()!)}</p>
+                      </div>
+                      <div class="learning-submission-upload__selected-actions">
+                        <button
+                          class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
+                          type="button"
+                          onclick={clearUploadSelection}
+                        >
+                          Entfernen
+                        </button>
+                      </div>
+                    </section>
+                  {/if}
+                  <div class="learning-submission-editor__actions">
                     <button
-                      class:workspace-tab--active={editorModeIs("text")}
-                      class="workspace-tab"
-                      type="button"
-                      onclick={() => setEditorMode("text")}
+                      class="workspace-top-action workspace-top-action--quiet"
+                      name="submission_intent"
+                      type={onSubmitUploadFeedback ? "button" : "submit"}
+                      value="feedback"
+                      disabled={feedbackPending || !hasUploadReadyForSubmit()}
+                      onclick={() => {
+                        if (onSubmitUploadFeedback) {
+                          submitUploadFeedback();
+                        }
+                      }}
                     >
-                      Text
-                    </button>
-                    <button
-                      class:workspace-tab--active={editorModeIs("upload")}
-                      class="workspace-tab"
-                      type="button"
-                      onclick={() => setEditorMode("upload")}
-                    >
-                      Upload
+                      Rückmeldung einholen
                     </button>
                   </div>
-                {/if}
-                <label class="learning-submission-upload__dropzone">
-                  <span class="learning-submission-upload__title">{uploadTitle()}</span>
-                  <span class="learning-submission-upload__copy">{uploadCopy()}</span>
-                  <input
-                    bind:this={uploadInput}
-                    aria-label="Datei auswählen"
-                    name="upload_file"
-                    type="file"
-                    accept={uploadAccept()}
-                    onchange={handleUploadSelection}
-                  />
-                </label>
-                {#if selectedUploadFile}
-                  <section class="learning-submission-upload__selected" aria-label="Ausgewählte Datei">
-                    <div>
-                      <p class="learning-submission-upload__selected-name">{selectedUploadFile.name}</p>
-                      <p class="learning-submission-upload__selected-meta">{selectedUploadLabel(selectedUploadFile)}</p>
-                    </div>
-                    <div class="learning-submission-upload__selected-actions">
-                      <button
-                        class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
-                        type="button"
-                        onclick={clearUploadSelection}
-                      >
-                        Entfernen
-                      </button>
-                    </div>
-                  </section>
-                {:else if currentUploadSubmission()}
-                  <section class="learning-submission-upload__selected" aria-label="Bisherige Datei">
-                    <div>
-                      <p class="learning-submission-upload__selected-name">Bisherige Datei</p>
-                      <p class="learning-submission-upload__selected-meta">{fileSummary(currentUploadSubmission()!)}</p>
-                    </div>
-                    <div class="learning-submission-upload__selected-actions">
-                      <button
-                        class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
-                        type="button"
-                        onclick={clearUploadSelection}
-                      >
-                        Entfernen
-                      </button>
-                    </div>
-                  </section>
-                {/if}
-                <div class="learning-submission-editor__actions">
-                  <button
-                    class="workspace-top-action workspace-top-action--quiet"
-                    name="submission_intent"
-                    type={onSubmitUploadFeedback ? "button" : "submit"}
-                    value="feedback"
-                    disabled={feedbackPending || !hasUploadReadyForSubmit()}
-                    onclick={() => {
-                      if (onSubmitUploadFeedback) {
-                        submitUploadFeedback();
-                      }
-                    }}
-                  >
-                    Rückmeldung einholen
-                  </button>
-                </div>
-              </form>
-            {:else}
-              <form class="learning-submission-editor learning-submission-editor--immersive" method="POST" enctype="multipart/form-data" use:enhance={enhanceSubmit}>
-                <input type="hidden" name="task_id" value={task.id} />
-                <input type="hidden" name="task_kind" value={task.kind} />
-                <input type="hidden" name="unit_type" value={unitType} />
-                {#if moduleId}
-                  <input type="hidden" name="module_id" value={moduleId} />
-                {/if}
-                <div class="learning-submission-workspace__mode-switch learning-task-inline-editor__mode-switch" role="tablist" aria-label="Bearbeitungsmodus">
-                  <button
-                    class:workspace-tab--active={editorModeIs("text")}
-                    class="workspace-tab"
-                    type="button"
-                    onclick={() => setEditorMode("text")}
-                  >
-                    Text
-                  </button>
-                  <button
-                    class:workspace-tab--active={editorModeIs("upload")}
-                    class="workspace-tab"
-                    type="button"
-                    onclick={() => setEditorMode("upload")}
-                  >
-                    Upload
-                  </button>
-                </div>
-                <section class="learning-submission-editor__field">
-                  <span>Deine Lösung</span>
-                  <MarkdownWysiwygEditor
-                    name="text_body"
-                    value={draftText}
-                    placeholder="Schreibe hier deine Lösung."
-                    onInput={updateDraft}
-                  />
-                </section>
-                <div class="learning-submission-editor__actions">
-                  <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
-                    Rückmeldung einholen
-                  </button>
-                </div>
-              </form>
+                </form>
+              </div>
             {/if}
 
             {#if errorMessage}

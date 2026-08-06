@@ -4,6 +4,7 @@
 
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
+  import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { learningSubmissionFailureMessage } from "$lib/utils/learning-failures";
   import {
@@ -246,69 +247,50 @@
       {/if}
 
       {#if !uploadOnly()}
-        <div class="learning-submission-workspace__mode-switch">
-          <button
-            class:workspace-tab--active={mode === "text"}
-            class="workspace-tab"
-            type="button"
-            onclick={() => setMode("text")}
-          >
-            Text
-          </button>
-          <button
-            class:workspace-tab--active={mode === "upload"}
-            class="workspace-tab"
-            type="button"
-            onclick={() => setMode("upload")}
-          >
-            Upload
-          </button>
+        <ChoiceSwitch
+          legend="Antwortform"
+          name={`answer-mode-${task.id}`}
+          value={mode}
+          options={[
+            { value: "text", label: "Text schreiben" },
+            { value: "upload", label: "Datei hochladen" }
+          ]}
+          onValueChange={(value) => setMode(value as SubmissionMode)}
+        />
+      {/if}
+
+      {#if !uploadOnly()}
+        <div class="learning-submission-mode-panel" hidden={mode !== "text"}>
+          <form method="POST" class="learning-submission-editor learning-submission-editor--immersive" enctype="multipart/form-data">
+            <input type="hidden" name="task_id" value={task.id} />
+            <input type="hidden" name="task_kind" value={task.kind} />
+            <input type="hidden" name="unit_type" value={unitType} />
+            {#if moduleId}
+              <input type="hidden" name="module_id" value={moduleId} />
+            {/if}
+            <section class="learning-submission-editor__field">
+              <span>Deine Lösung</span>
+              <MarkdownWysiwygEditor
+                name="text_body"
+                value={draftText}
+                placeholder="Schreibe hier deine Lösung."
+                onInput={updateDraft}
+              />
+            </section>
+
+            <div class="learning-submission-editor__actions">
+              <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback">
+                Rückmeldung einholen
+              </button>
+              <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit">
+                Endgültig abgeben
+              </button>
+            </div>
+          </form>
         </div>
       {/if}
 
-      {#if mode === "text"}
-        <form method="POST" class="learning-submission-editor learning-submission-editor--immersive" enctype="multipart/form-data">
-          <input type="hidden" name="task_id" value={task.id} />
-          <input type="hidden" name="task_kind" value={task.kind} />
-          <input type="hidden" name="unit_type" value={unitType} />
-          {#if moduleId}
-            <input type="hidden" name="module_id" value={moduleId} />
-          {/if}
-          <section class="learning-submission-editor__field">
-            <span>Deine Lösung</span>
-            <MarkdownWysiwygEditor
-              name="text_body"
-              value={draftText}
-              placeholder="Schreibe hier deine Lösung."
-              onInput={updateDraft}
-            />
-          </section>
-
-          <div class="learning-submission-editor__actions">
-            <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback">
-              Rückmeldung einholen
-            </button>
-            <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="submit">
-              Endgültig abgeben
-            </button>
-          </div>
-        </form>
-
-        {#if message === "feedback" && latestFeedbackSubmission()}
-          <section class="learning-submission-history__section learning-submission-workspace__inline-feedback">
-            <div class="learning-submission-workspace__feedback-header">
-              <span class="learning-submission-history__intent learning-submission-history__intent--feedback">
-                Rückmeldung
-              </span>
-              <span>{latestFeedbackSubmission()?.created_at}</span>
-            </div>
-            <p class="workspace-label">Neueste Rückmeldung</p>
-            <div class="markdown-prose">
-              {@html renderMarkdown(latestFeedbackSubmission()?.feedback_md ?? "")}
-            </div>
-          </section>
-        {/if}
-      {:else}
+      <div class="learning-submission-mode-panel" hidden={!uploadOnly() && mode !== "upload"}>
         <form method="POST" class="learning-submission-upload" enctype="multipart/form-data">
           <input type="hidden" name="task_id" value={task.id} />
           <input type="hidden" name="task_kind" value={task.kind} />
@@ -330,7 +312,7 @@
                 Bild oder PDF hochladen
               {/if}
             </span>
-            <input name="upload_file" type="file" />
+            <input aria-label="Datei auswählen" name="upload_file" type="file" />
           </label>
 
           <div class="learning-submission-editor__actions">
@@ -342,21 +324,21 @@
             </button>
           </div>
         </form>
+      </div>
 
-        {#if message === "feedback" && latestFeedbackSubmission()}
-          <section class="learning-submission-history__section learning-submission-workspace__inline-feedback">
-            <div class="learning-submission-workspace__feedback-header">
-              <span class="learning-submission-history__intent learning-submission-history__intent--feedback">
-                Rückmeldung
-              </span>
-              <span>{latestFeedbackSubmission()?.created_at}</span>
-            </div>
-            <p class="workspace-label">Neueste Rückmeldung</p>
-            <div class="markdown-prose">
-              {@html renderMarkdown(latestFeedbackSubmission()?.feedback_md ?? "")}
-            </div>
-          </section>
-        {/if}
+      {#if message === "feedback" && latestFeedbackSubmission()}
+        <section class="learning-submission-history__section learning-submission-workspace__inline-feedback">
+          <div class="learning-submission-workspace__feedback-header">
+            <span class="learning-submission-history__intent learning-submission-history__intent--feedback">
+              Rückmeldung
+            </span>
+            <span>{latestFeedbackSubmission()?.created_at}</span>
+          </div>
+          <p class="workspace-label">Neueste Rückmeldung</p>
+          <div class="markdown-prose">
+            {@html renderMarkdown(latestFeedbackSubmission()?.feedback_md ?? "")}
+          </div>
+        </section>
       {/if}
     </div>
   {:else}

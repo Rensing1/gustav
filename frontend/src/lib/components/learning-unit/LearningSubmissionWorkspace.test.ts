@@ -49,6 +49,55 @@ describe("LearningSubmissionWorkspace", () => {
     expect(screen.getByText("Datei auswählen")).toBeInTheDocument();
   });
 
+  it("restores the server-selected upload mode together with its validation error", async () => {
+    render(LearningSubmissionWorkspace, {
+      props: {
+        courseId: "course-1",
+        task: nativeTask,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialMode: "upload",
+        errorMessage: "Bitte wähle eine Datei aus."
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("radio", { name: "Datei hochladen" })).toBeChecked();
+    });
+    expect(screen.getByText("Bitte wähle eine Datei aus.")).toBeVisible();
+    expect(screen.getByLabelText("Datei auswählen")).toBeVisible();
+  });
+
+  it("uses the shared answer format choice and keeps both editors mounted", async () => {
+    render(LearningSubmissionWorkspace, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task: nativeTask,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        initialMode: "text"
+      }
+    });
+
+    const group = screen.getByRole("group", { name: "Antwortform" });
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    await fireEvent.input(editor, { target: { value: "Entwurf bleibt erhalten" } });
+
+    await fireEvent.click(screen.getByRole("radio", { name: "Datei hochladen" }));
+    const upload = screen.getByLabelText("Datei auswählen") as HTMLInputElement;
+    await fireEvent.change(upload, {
+      target: { files: [new File(["dummy"], "quelle.pdf", { type: "application/pdf" })] }
+    });
+
+    await fireEvent.click(screen.getByRole("radio", { name: "Text schreiben" }));
+
+    expect(group).toBeInTheDocument();
+    expect(editor).toBeVisible();
+    expect(editor.value).toBe("Entwurf bleibt erhalten");
+    expect(upload).not.toBeVisible();
+  });
+
   it("restores and persists text drafts scoped to the learner", async () => {
     const legacyKey = "gustav.learning.submission-draft:course-1:task-1:text";
     const scopedKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";

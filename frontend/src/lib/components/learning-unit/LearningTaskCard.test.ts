@@ -37,6 +37,15 @@ describe("LearningTaskCard", () => {
     expect(source).not.toContain("onInput={() => {}}");
   });
 
+  it("uses the shared choice switch once and removes the former tablist markup", () => {
+    const source = readFileSync(path.resolve(currentDir, "LearningTaskCard.svelte"), "utf8");
+
+    expect(source).toContain('import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";');
+    expect(source.match(/<ChoiceSwitch/g)).toHaveLength(1);
+    expect(source).not.toContain('role="tablist" aria-label="Bearbeitungsmodus"');
+    expect(source).not.toContain('class="learning-task-inline-editor__mode-switch"');
+  });
+
   it("restores and persists inline text drafts scoped to the learner", async () => {
     const legacyKey = "gustav.learning.submission-draft:course-1:task-1:text";
     const scopedKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";
@@ -490,7 +499,7 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
   });
 
-  it("opens native tasks in text mode with a text/upload switch", () => {
+  it("opens native tasks with one accessible answer format choice", () => {
     render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -502,9 +511,41 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByRole("button", { name: "Text" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Upload" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Antwortform" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Text schreiben" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Datei hochladen" })).not.toBeChecked();
     expect(screen.getByText("Deine Lösung")).toBeInTheDocument();
+  });
+
+  it("keeps the text draft and selected file while switching answer formats", async () => {
+    render(LearningTaskCard, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 8",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    await fireEvent.input(editor, { target: { value: "Mein erhaltener Entwurf" } });
+
+    await fireEvent.click(screen.getByRole("radio", { name: "Datei hochladen" }));
+    const input = screen.getByLabelText("Datei auswählen") as HTMLInputElement;
+    const file = new File(["dummy"], "beleg.pdf", { type: "application/pdf" });
+    await fireEvent.change(input, { target: { files: [file] } });
+
+    await fireEvent.click(screen.getByRole("radio", { name: "Text schreiben" }));
+    expect(editor).toBeVisible();
+    expect(editor.value).toBe("Mein erhaltener Entwurf");
+
+    await fireEvent.click(screen.getByRole("radio", { name: "Datei hochladen" }));
+    expect(screen.getByText("beleg.pdf")).toBeVisible();
+    expect(screen.getAllByRole("group", { name: "Antwortform" })).toHaveLength(1);
+    expect(screen.queryByRole("tablist", { name: "Bearbeitungsmodus" })).toBeNull();
   });
 
   it("renders upload-only tasks directly in the task-specific upload editor", () => {
@@ -523,8 +564,8 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.queryByRole("button", { name: "Text" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Upload" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Text schreiben" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Datei hochladen" })).toBeNull();
     expect(screen.getByText(".sb3-Datei auswählen")).toBeInTheDocument();
   });
 
@@ -544,8 +585,8 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.queryByRole("button", { name: "Text" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Upload" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Text schreiben" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Datei hochladen" })).toBeNull();
     expect(screen.getByText(".fls-Datei auswählen")).toBeInTheDocument();
   });
 

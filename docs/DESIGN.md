@@ -290,6 +290,17 @@ Kurs-/Lerneinheiten-Auswahl und `Vorbereiten` mit höchstens drei zuletzt
 bearbeiteten Lerneinheiten. `PageActionHead` stellt den einzigen Seitenkopf;
 `QuietList` und `QuietListEntry` bilden die flachen Authoring-Zeilen.
 
+Der Kurskatalog verwendet dieselbe knappe Kopf- und Aktionshierarchie. Unter
+`PageActionHead` folgen Statusumschalter und Filter, anschließend flache
+Kurszeilen. Aktive Kurse und das nach Schuljahren gruppierte Archiv verwenden
+dieselbe Zeilenstruktur; mobile Ansichten stapeln nur deren innere Informationen.
+Archivierte Kursseiten bleiben strukturell identisch, kennzeichnen aber den
+schreibgeschützten Zustand und blenden fachliche Mutationen aus.
+
+Das persönliche Lernarchiv der Schüler ist eine lineare Belegliste. Es zeigt
+ausschließlich eigene Abgaben und Rückmeldungen; Kursmaterialien, Teilnehmerlisten
+und fremde Leistungen werden dort weder angedeutet noch nachgeladen.
+
 Ab `64rem` stehen beide Flächen nebeneinander und werden ausschließlich durch
 eine vertikale Linie getrennt. Darunter werden sie in derselben Reihenfolge
 gestapelt und durch eine horizontale Linie getrennt. Außenkarten,

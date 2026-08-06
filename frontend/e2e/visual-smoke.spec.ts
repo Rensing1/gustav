@@ -108,6 +108,67 @@ test.describe("@visual-smoke teacher workspace", () => {
     await expectInteractiveSurface(page.locator(".teacher-flow-workspace"));
     await expectNoViewportOverflow(page);
   });
+
+  test("@design-system renders the active catalog, school-year archive and personal learning archive", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const unique = Date.now();
+    const teacherEmail = `visual_teacher_archive_${unique}@${emailDomain}`;
+    const learnerEmail = `visual_learner_archive_${unique}@${emailDomain}`;
+    await ensureTeacherUser(teacherEmail, password);
+    await ensureLearnerUser(learnerEmail, password);
+    const teacher = await newSmokePage(browser);
+    const learner = await newSmokePage(browser);
+
+    const capture = async (page: Page, prefix: string) => {
+      await page.evaluate(async () => { await document.fonts.ready; });
+      await page.locator(".learning-portfolio__feedback").evaluateAll((items) => {
+        for (const item of items) {
+          item.innerHTML = "<p>Die Rückmeldung ordnet die eigene Lernleistung nachvollziehbar ein und nennt einen konkreten nächsten Schritt.</p>";
+        }
+      });
+      for (const viewport of [
+        { name: "desktop", width: 1440, height: 900 },
+        { name: "tablet", width: 1024, height: 768 },
+        { name: "mobile", width: 390, height: 844 },
+      ]) {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await expectNoViewportOverflow(page);
+        const masks = [page.locator(".account-trigger"), page.locator("time")];
+        await expect(page).toHaveScreenshot(`${prefix}-light-${viewport.name}.png`, {
+          animations: "disabled", caret: "hide", fullPage: true, mask: masks,
+        });
+        await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+        await expect(page).toHaveScreenshot(`${prefix}-dark-${viewport.name}.png`, {
+          animations: "disabled", caret: "hide", fullPage: true, mask: masks,
+        });
+        await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+      }
+    };
+
+    try {
+      await login(teacher.page, teacherEmail, password);
+      await login(learner.page, learnerEmail, password);
+      const seeded = await seedLearnerVisualSmokeCourse(teacher.page, learner.page, "Visual Kursarchiv");
+
+      await teacher.page.goto("/teaching/courses");
+      await expect(teacher.page.getByRole("link", { name: seeded.courseTitle, exact: true })).toBeVisible();
+      await capture(teacher.page, "teacher-courses-active");
+
+      const row = teacher.page.locator(".workspace-course-catalog__row").filter({ hasText: seeded.courseTitle });
+      await row.getByRole("checkbox").check();
+      await teacher.page.getByRole("button", { name: "Archivieren" }).click();
+      await teacher.page.goto("/teaching/courses?status=archived");
+      await expect(teacher.page.getByRole("link", { name: seeded.courseTitle, exact: true })).toBeVisible();
+      await capture(teacher.page, "teacher-courses-archive");
+
+      await learner.page.goto(`/learning/courses/${seeded.courseId}/archive`);
+      await expect(learner.page.getByText(seeded.previousSubmissionText)).toBeVisible();
+      await capture(learner.page, "learner-course-archive");
+    } finally {
+      await teacher.context.close();
+      await learner.context.close();
+    }
+  });
 });
 
 test.describe("@visual-smoke learner workspace", () => {

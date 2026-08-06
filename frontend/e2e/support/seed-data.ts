@@ -53,7 +53,12 @@ export type LearnerBookWorkspaceCourse = LearnerVisualSmokeCourse & {
 async function createCourse(page: Page, title: string): Promise<string> {
   const response = await page.request.post(`${webBase}/api/teaching/courses`, {
     headers: apiHeaders("/teaching/courses"),
-    data: { title }
+    data: {
+      title,
+      subject: "Testfach",
+      grade_level: "Jahrgangsübergreifend",
+      school_year_start: new Date().getFullYear()
+    }
   });
   await expectApiOk(response, 201);
   const payload = await response.json();

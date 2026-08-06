@@ -220,17 +220,17 @@ Die Lehrenden-Welt ist operativer, aber nicht dashboardhaft.
 - Objektübersichten der Lehrenden-Welt liegen nicht noch einmal in einer
   äußeren Rahmen- oder Kartenfläche. Die Objektkarten selbst sind die einzige
   sichtbare Objektebene.
-- Für `Kurse` gilt standardmäßig ein ruhiges Raster statt einer technischen
-  Linkliste. Sichtbar sind nur nutzbare Kursinformationen, keine rohen IDs.
-- Für `Kurse` gilt auf iPad und Desktop standardmäßig ein kompaktes
-  Zweispaltenraster.
-- Kurskarten sind kompakte Arbeitsobjekte, keine großzügigen Dashboard-Kacheln.
-- Die Reihenfolge innerhalb einer Kurskarte ist:
-  - Titel
-  - Kennzahlen
-  - optionale Metazeile
-- Fehlende Metadaten werden weggelassen. Platzhaltertexte oder generische
-  Ersatzbeschreibungen sind zu vermeiden.
+- Für `Kurse` gilt ein flacher Katalog mit den getrennten Zuständen `Aktiv` und
+  `Archiv`. Karten oder Dashboard-Kacheln werden hier nicht verwendet.
+- Jede Zeile zeigt Titel, `Fach · Jahrgang · Schuljahr`, Mitglieds- und
+  Lerneinheitenanzahl sowie genau eine zustandsabhängige Hauptaktion.
+- Aktive Kurse sind alphabetisch sortiert. Das Archiv wird nach Schuljahren
+  absteigend gruppiert. Suche, Schuljahr und Fach verfeinern dieselbe Liste.
+- Die Mehrfachauswahl gehört ausschließlich zur Sammelarchivierung. Auf kleinen
+  Breiten stapeln sich Metadaten und Aktion innerhalb derselben Kurszeile.
+- Unvollständige Bestandskurse bleiben lesbar, werden aber ruhig markiert. Vor
+  Mitglieder-, Lerneinheiten- oder Archivänderungen führt die Kursseite zur
+  Ergänzung von Fach, Jahrgang und Schuljahr.
 - Kurs-Detailseiten bleiben derselben Sprache treu: kein lokaler Intro-Block,
   sondern direkte Arbeitsbereiche unterhalb des globalen Headers.
 - Kurs-Detailseiten für Lehrkräfte dürfen als ruhiges Listen-Werkzeug
@@ -251,8 +251,11 @@ Die Lehrenden-Welt ist operativer, aber nicht dashboardhaft.
   - als Drawer auf iPad hochkant und schmaleren Breiten
 - Zeilenaktionen bleiben textnah oder liegen in kleinen Zeilenmenüs statt in
   dauerpräsenten Buttonleisten.
-- `Kurs bearbeiten` liegt im Kurskontext als Drawer/Dialog; `Kurs löschen`
-  bleibt dort in der Danger Zone und ist nie Teil der Hauptfläche.
+- `Kurs bearbeiten` liegt im Kurskontext als Drawer/Dialog. Archivierung und
+  Wiederherstellung sind dort eigenständige Lebenszyklusaktionen.
+- `Kurs endgültig löschen` zeigt zuerst die aktuelle Löschfolge. Die Lehrkraft
+  muss Kurstitel und Verlust aller Schülerdaten bestätigen; ein unmittelbarer
+  Löschknopf ohne diesen Ablauf ist unzulässig.
 - Diagnostik ist aus dem Kurskontext direkt erreichbar, jedoch als Kopf- oder
   Sekundäraktion statt als eigener Hauptblock.
 - Das Hinzufügen von Lerneinheiten darf direkt auf der Kursseite stattfinden,

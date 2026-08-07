@@ -21,8 +21,8 @@
 
 <div class="workspace-unit-commandbar-stack">
   <div class="workspace-unit-commandbar-heading">
-    <p class="workspace-label">Canvas</p>
-    <strong>Teacher flow</strong>
+    <p class="workspace-label">Struktur</p>
+    <strong>Lernweg bearbeiten</strong>
   </div>
 
   <div class="workspace-unit-commandbar" role="toolbar" aria-label="Graphwerkzeuge">

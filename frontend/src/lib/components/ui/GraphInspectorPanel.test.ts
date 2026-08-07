@@ -7,12 +7,12 @@ describe("GraphInspectorPanel", () => {
   it("renders an inline inspector shell for graph entities", () => {
     render(GraphInspectorPanel, {
       props: {
-        eyebrow: "Property inspector",
+        eyebrow: "Struktur",
         title: "Phase bearbeiten"
       }
     });
 
-    expect(screen.getByText("Property inspector")).toBeInTheDocument();
+    expect(screen.getByText("Struktur")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Phase bearbeiten" })).toBeInTheDocument();
   });
 });

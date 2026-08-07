@@ -4,6 +4,7 @@
 
   import { prepareBrowserStorageUpload } from "$lib/utils/browser-storage-upload";
   import { renderMarkdown } from "$lib/utils/markdown";
+  import GraphDeleteDialog from "$lib/components/teacher-unit-graph/GraphDeleteDialog.svelte";
   import TeacherH5PTaskEditor from "$lib/components/TeacherH5PTaskEditor.svelte";
   import TeacherNodeEditorProperties from "$lib/components/teacher-node-editor/TeacherNodeEditorProperties.svelte";
   import TeacherNodeEditorSection from "$lib/components/teacher-node-editor/TeacherNodeEditorSection.svelte";
@@ -118,6 +119,7 @@
   let editorMessage = $state<{ tone: "success"; text: string } | null>(null);
   let dialogPreviewInputs = $state<Record<string, string>>({});
   let dialogPreviews = $state<Record<string, { pending: boolean; error: string | null; reply: string | null; starters: string[] }>>({});
+  let deleteModuleOpen = $state(false);
 
   async function previewDialog(task: TeacherUnitNodeEditorTask) {
     const studentMessage = (dialogPreviewInputs[task.id] ?? "").trim();
@@ -550,18 +552,43 @@
       editorMessage = null;
       showCreateTask = true;
     }
+    if (actionError(form.deleteModule)) {
+      deleteModuleOpen = true;
+    }
   });
+
+  function openDeleteModuleDialog() {
+    deleteModuleOpen = true;
+  }
+
+  function closeDeleteModuleDialog() {
+    deleteModuleOpen = false;
+  }
 </script>
 
 <svelte:head>
   <title>{editorState.node.editor_title} | GUSTAV</title>
 </svelte:head>
 
+{#snippet nodeHeaderActions()}
+  {#if editorState.node.kind === "module"}
+    <details class="workspace-row-menu">
+      <summary aria-label="Modulaktionen">⋯</summary>
+      <div class="workspace-row-menu-popover">
+        <button class="workspace-link-action workspace-link-action--danger" type="button" onclick={openDeleteModuleDialog}>
+          Modul löschen
+        </button>
+      </div>
+    </details>
+  {/if}
+{/snippet}
+
 <div class="workspace-page teacher-node-editor-page">
   <PageActionHead
-    backHref={`/teaching/units/${editorState.unit.id}`}
+    backHref={`/teaching/units/${editorState.unit.id}?module=${encodeURIComponent(editorState.node.id)}&quick=1`}
     backLabel="Zurück zum Graph"
     title={editorState.node.editor_title}
+    actions={nodeHeaderActions}
   />
 
   <section class="workspace-node-editor workspace-node-editor--content-only">
@@ -976,3 +1003,13 @@
     </TeacherNodeEditorSection>
   </section>
 </div>
+
+{#if deleteModuleOpen && data.moduleDeletionImpact}
+  <GraphDeleteDialog
+    impact={data.moduleDeletionImpact}
+    action="?/deleteModule"
+    error={actionError(form?.deleteModule)}
+    onCancel={closeDeleteModuleDialog}
+    enhanceForm={enhanceEditorForm}
+  />
+{/if}

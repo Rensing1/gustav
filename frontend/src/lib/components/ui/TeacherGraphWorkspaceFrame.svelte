@@ -16,6 +16,7 @@
     commandBarActions,
     commandBarPopovers,
     inspectorOpen = false,
+    embedded = false,
     canvas,
     inspector
   }: {
@@ -27,6 +28,7 @@
     commandBarActions: TeacherGraphCommandBarAction[];
     commandBarPopovers?: Snippet;
     inspectorOpen?: boolean;
+    embedded?: boolean;
     canvas?: Snippet;
     inspector?: Snippet;
   } = $props();
@@ -44,8 +46,12 @@
   {/snippet}
 </PageActionHead>
 
-<section class:teacher-flow-workspace--with-inspector={inspectorOpen} class="teacher-flow-workspace teacher-flow-shell">
-  <div class="teacher-flow-workspace__canvas">
+<section
+  class:teacher-flow-workspace--with-inspector={inspectorOpen}
+  class:teacher-flow-workspace--embedded={embedded}
+  class="teacher-flow-workspace teacher-flow-shell"
+>
+  <div class="teacher-flow-workspace__canvas" tabindex="-1" aria-label="Lernweg-Graph">
     {@render canvas?.()}
   </div>
 

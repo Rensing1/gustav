@@ -198,7 +198,7 @@
         <div class="workspace-unit-commandbar-popover" role="dialog" aria-label="Phase hinzufügen">
           <div class="workspace-unit-commandbar-popover__header">
             <div>
-              <p class="workspace-label">Canvas</p>
+              <p class="workspace-label">Struktur</p>
               <h2>Phase hinzufügen</h2>
             </div>
             <a class="workspace-link-action workspace-link-action--subtle" href="/ui-lab">Schließen</a>
@@ -225,6 +225,7 @@
         ]}
         commandBarPopovers={previewCommandPopovers}
         inspectorOpen={true}
+        embedded={true}
       >
         {#snippet canvas()}
           <div class="preview-graph-reference">
@@ -247,7 +248,7 @@
                       <span aria-hidden="true" class="teacher-flow-unit-node__drag-handle"></span>
                       <span>Modul 1</span>
                     </div>
-                    <span class="teacher-flow-unit-node__state">Module node</span>
+                    <span class="teacher-flow-unit-node__state">Modul</span>
                     <a class="teacher-flow-unit-node__editor" href="/ui-lab">Öffnen</a>
                   </div>
                   <strong>Fachbegriffe</strong>
@@ -269,7 +270,7 @@
         {/snippet}
 
         {#snippet inspector()}
-          <GraphInspectorPanel eyebrow="Property inspector" title="Abschnitt bearbeiten" closeHref="/ui-lab">
+          <GraphInspectorPanel eyebrow="Struktur" title="Abschnitt bearbeiten" closeHref="/ui-lab">
             {#snippet children()}
               <form class="workspace-form workspace-form--compact">
                 <label class="workspace-field">
@@ -582,7 +583,7 @@
 
     <article class="preview-card">
       <p class="preview-card__eyebrow">Lehrkraft-Knoten</p>
-      <GraphStageFrame chromeless eyebrow="Graph-Stage" title="Teacher flow" copy="Gleiche Objektfamilie, andere Werkzeuge.">
+      <GraphStageFrame chromeless eyebrow="Lernweg" title="Struktur bearbeiten" copy="Gleiche Objektfamilie, andere Werkzeuge.">
         {#snippet children()}
           <div class="preview-graph-sample teacher-flow-shell">
             <div class="preview-graph-sample__phase">
@@ -601,7 +602,7 @@
                     <span aria-hidden="true" class="teacher-flow-unit-node__drag-handle"></span>
                     <span>Modul 1</span>
                   </div>
-                  <span class="teacher-flow-unit-node__state">Module node</span>
+                  <span class="teacher-flow-unit-node__state">Modul</span>
                   <a class="teacher-flow-unit-node__editor" href="/ui-lab">Öffnen</a>
                 </div>
                 <strong>Fachbegriffe</strong>
@@ -625,7 +626,7 @@
 
     <article class="preview-card">
       <p class="preview-card__eyebrow">Inspector</p>
-      <GraphInspectorPanel eyebrow="Property inspector" title="Phase bearbeiten" closeHref="/ui-lab">
+      <GraphInspectorPanel eyebrow="Struktur" title="Phase bearbeiten" closeHref="/ui-lab">
         {#snippet children()}
           <form class="workspace-form workspace-form--compact">
             <label class="workspace-field">

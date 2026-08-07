@@ -11,6 +11,7 @@ describe("TeacherGraphWorkspaceFrame", () => {
         backLabel: "Zurück zu Lerneinheiten",
         title: "Programmieren mit Scratch",
         copy: "8 Phasen · 21 Module · dieselbe Graphansicht wie für Lernende",
+        embedded: true,
         commandBarActions: [
           { label: "Phase hinzufügen", href: "/ui-lab", active: true },
           { label: "Modul hinzufügen", href: "/ui-lab", active: false }
@@ -20,6 +21,7 @@ describe("TeacherGraphWorkspaceFrame", () => {
 
     expect(screen.getByRole("link", { name: "Zurück zu Lerneinheiten" })).toHaveAttribute("href", "/teaching/units");
     expect(screen.getByRole("toolbar", { name: "Graphwerkzeuge" })).toBeInTheDocument();
-    expect(screen.getByText("Teacher flow")).toBeInTheDocument();
+    expect(screen.getByText("Lernweg bearbeiten")).toBeInTheDocument();
+    expect(screen.getByLabelText("Lernweg-Graph").parentElement).toHaveClass("teacher-flow-workspace--embedded");
   });
 });

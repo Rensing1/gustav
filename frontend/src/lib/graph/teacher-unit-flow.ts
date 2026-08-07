@@ -64,16 +64,6 @@ export type TeacherFlowNodeData = {
   position?: number | null;
   connectable?: boolean;
   compact?: boolean;
-  enhanceGraphForm?: SubmitFunction;
-  onOpenProperties?: (() => void) | null;
-  onCloseProperties?: (() => void) | null;
-  quickEdit?: {
-    title: string;
-    requiredPrereqCount: string;
-    phaseId: string;
-    phaseOptions: Array<{ id: string; title: string }>;
-    error?: string | null;
-  } | null;
 };
 
 export type TeacherFlowNode = Node<TeacherFlowNodeData, "unitNode" | "phaseBand">;

@@ -8,12 +8,12 @@ vi.mock("$lib/server/api", () => ({
 
 vi.mock("$lib/server/guards", () => ({
   currentPath: vi.fn(() => "/teaching/units/unit-1/nodes/node-1"),
-  requireSpaceBootstrap: vi.fn(async () => ({
+  requireParentSpaceBootstrap: vi.fn(async () => ({
     user: { sub: "teacher-1", name: "Felix", roles: ["teacher"] }
   }))
 }));
 
-import { actions, __testables } from "./+page.server";
+import { actions, __testables, load } from "./+page.server";
 import { backendRequest, requireBackendJson } from "$lib/server/api";
 
 const backendRequestMock = vi.mocked(backendRequest);
@@ -28,7 +28,7 @@ function requestWithFormData(formData: FormData): Parameters<typeof actions.crea
 describe("teacher node editor server helpers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireBackendJsonMock.mockResolvedValue({
+    const editor = {
       user: {
         sub: "teacher-1",
         name: "Felix",
@@ -54,7 +54,62 @@ describe("teacher node editor server helpers", () => {
       },
       materials: [],
       tasks: []
+    };
+    requireBackendJsonMock.mockImplementation(async (_fetch, _cookies, href) => {
+      if (String(href).includes("/workspace")) {
+        return {
+          graph: {
+            kind: "modular",
+            phases: [
+              {
+                id: "phase-1",
+                title: "Phase",
+                position: 1,
+                modules: [
+                  {
+                    id: "node-1",
+                    title: "Orientierung",
+                    phase_id: "phase-1",
+                    materials_count: 0,
+                    tasks_count: 0
+                  }
+                ]
+              }
+            ],
+            edges: []
+          }
+        } as never;
+      }
+      return editor as never;
+    });
+  });
+
+  it("does not load modular deletion context for a linear section", async () => {
+    requireBackendJsonMock.mockResolvedValueOnce({
+      user: { sub: "teacher-1", name: "Felix", role: "teacher", roles: ["teacher"] },
+      unit: { id: "unit-1", title: "Einheit", unit_type: "linear", edit_href: "/teaching/units/unit-1" },
+      node: {
+        id: "section-1",
+        kind: "section",
+        title: "Einstieg",
+        editor_title: "Einstieg",
+        backing_section_id: "section-1"
+      },
+      settings: { kind: "section" },
+      materials: [],
+      tasks: []
     } as never);
+
+    const result = await load({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {},
+      params: { unitId: "unit-1", nodeId: "section-1" },
+      parent: vi.fn(async () => ({})),
+      url: new URL("https://app.localhost/teaching/units/unit-1/nodes/section-1")
+    } as never);
+
+    expect(requireBackendJsonMock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ moduleDeletionImpact: null });
   });
 
   it("parses repeated criteria fields into a bounded list", () => {
@@ -235,6 +290,49 @@ describe("teacher node editor server helpers", () => {
         }
       }
     });
+  });
+
+  it("requires explicit confirmation before deleting a module", async () => {
+    const form = new FormData();
+
+    const result = await actions.deleteModule({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof actions.deleteModule>[0]["cookies"],
+      params: { unitId: "unit-1", nodeId: "node-1" },
+      request: requestWithFormData(form)
+    } as Parameters<typeof actions.deleteModule>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        deleteModule: {
+          error: "Bitte bestätige die endgültige Löschung."
+        }
+      }
+    });
+    expect(backendRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes a confirmed module and returns to its graph", async () => {
+    backendRequestMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const form = new FormData();
+    form.set("confirmed", "1");
+
+    await expect(
+      actions.deleteModule({
+        fetch: vi.fn() as unknown as typeof fetch,
+        cookies: {} as Parameters<typeof actions.deleteModule>[0]["cookies"],
+        params: { unitId: "unit-1", nodeId: "node-1" },
+        request: requestWithFormData(form)
+      } as Parameters<typeof actions.deleteModule>[0])
+    ).rejects.toMatchObject({ status: 303, location: "/teaching/units/unit-1?phase=phase-1&quick=1" });
+
+    expect(backendRequestMock).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      "/api/teaching/units/unit-1/modules/node-1",
+      expect.objectContaining({ method: "DELETE", includeSameOrigin: true })
+    );
   });
 
   it("creates Filius tasks with the Filius marker payload", () => {

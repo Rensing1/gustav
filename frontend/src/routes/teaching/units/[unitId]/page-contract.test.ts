@@ -9,7 +9,7 @@ describe("teacher unit graph route contract", () => {
     return readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
   }
 
-  it("uses shared workspace controls and no longer depends on legacy app.css popover styles", () => {
+  it("uses one shared structure inspector and no embedded module quick editor", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const source = routeSource();
     const graphNodeSource = readFileSync(
@@ -21,19 +21,25 @@ describe("teacher unit graph route contract", () => {
     expect(source).toContain("<GraphInspectorPanel");
     expect(source).toContain('class="workspace-unit-commandbar-popover"');
     expect(source).toContain('class="workspace-field"');
-    expect(graphNodeSource).toContain('class="teacher-flow-unit-node__quickedit-field workspace-field"');
+    expect(source).toContain("<GraphDeleteDialog");
+    expect(source).toContain('type StructurePanelMode = "create-phase" | "create-module" | "edit-phase" | "edit-module" | null');
+    expect(graphNodeSource).not.toContain("teacher-flow-unit-node__quickedit");
     expect(appCss).not.toContain(".workspace-unit-commandbar-popover {");
     expect(appCss).not.toContain(".teacher-flow-unit-node__quickedit {");
   });
 
-  it("keeps create dialogs in local state instead of using non-reactive browser URL state", () => {
+  it("keeps exactly one modular inspector mode in reactive local state", () => {
     const source = routeSource();
 
-    expect(source).toContain("let createPhaseOpen = $state");
-    expect(source).toContain("let createModuleOpen = $state");
+    expect(source).toContain("let structurePanelMode = $state<StructurePanelMode>(null)");
     expect(source).toContain("let createSectionOpen = $state");
+    expect(source).toContain("function setStructurePanelMode");
     expect(source).toContain("function openCreateModuleDialog");
-    expect(source).toContain("function closeCreateModuleDialog");
+    expect(source).toContain('lastQuickSelectionKey = ""');
+    expect(source).toContain('nodesFocusable={true}');
+    expect(source).toContain('.svelte-flow__node[data-id=');
+    expect(source).not.toContain("let createPhaseOpen");
+    expect(source).not.toContain("let createModuleOpen");
     expect(source).not.toContain("window.location.href");
     expect(source).not.toContain("window.history.replaceState");
   });
@@ -83,6 +89,10 @@ describe("teacher unit graph route contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const source = routeSource();
     const serverSource = readFileSync(path.resolve(currentDir, "+page.server.ts"), "utf8");
+    const deleteDialogSource = readFileSync(
+      path.resolve(currentDir, "../../../../lib/components/teacher-unit-graph/GraphDeleteDialog.svelte"),
+      "utf8"
+    );
     const graphNodeSource = readFileSync(
       path.resolve(currentDir, "../../../../lib/components/teacher-unit-graph/GraphUnitNode.svelte"),
       "utf8"
@@ -92,12 +102,14 @@ describe("teacher unit graph route contract", () => {
       "utf8"
     );
 
-    expect(source).toContain("import { applyAction, enhance } from \"$app/forms\";");
-    expect(source).toContain("import { invalidateAll, replaceState } from \"$app/navigation\";");
+    expect(source).toContain("import { enhance } from \"$app/forms\";");
+    expect(source).toContain("import { goto, invalidateAll, replaceState } from \"$app/navigation\";");
     expect(source).toContain("await update({ reset: false });");
     expect(source).toContain("await invalidateAll();");
+    expect(source).toContain("await update({ reset: true, invalidateAll: false });");
+    expect(source).toContain("await goto(targetHref");
+    expect(source).toContain("invalidateAll: true");
     expect(source).toContain("async function reloadWorkspace");
-    expect(source).not.toContain("invalidateAll: false");
     expect(source).not.toContain("refreshWorkspaceView");
     expect(source).not.toContain("workspace: TeacherUnitWorkspaceView;");
     expect(source).not.toContain("success.workspace");
@@ -105,11 +117,28 @@ describe("teacher unit graph route contract", () => {
     expect(serverSource).not.toContain("async function loadWorkspace");
     expect(serverSource).not.toContain("workspace: await loadWorkspace");
 
-    expect(graphNodeSource).not.toContain("const enhanceGraphForm");
-    expect(graphNodeSource).toContain("use:enhance={data.enhanceGraphForm}");
+    expect(graphNodeSource).not.toContain("enhanceGraphForm");
+    expect(graphNodeSource).not.toContain("use:enhance");
 
     expect(graphEdgeSource).not.toContain("const enhanceGraphForm");
     expect(graphEdgeSource).toContain("use:enhance={data.enhanceGraphForm}");
+  });
+
+  it("positions new phases contextually and requires explicit destructive confirmation", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = routeSource();
+    const serverSource = readFileSync(path.resolve(currentDir, "+page.server.ts"), "utf8");
+    const deleteDialogSource = readFileSync(
+      path.resolve(currentDir, "../../../../lib/components/teacher-unit-graph/GraphDeleteDialog.svelte"),
+      "utf8"
+    );
+
+    expect(source).toContain('name="after_phase_id"');
+    expect(serverSource).toContain("after_phase_id: afterPhaseId || null");
+    expect(serverSource).toContain('formData.get("confirmed")');
+    expect(serverSource).toContain('confirmed !== "1"');
+    expect(deleteDialogSource).toContain('`${entityLabel} und Inhalte löschen`');
+    expect(source).toContain("Modul löschen");
   });
 
   it("keeps browser graph 401 responses recoverable instead of mapping them to graph errors", () => {
@@ -124,16 +153,16 @@ describe("teacher unit graph route contract", () => {
 
   it("handles action success URL patches exactly once through the enhance pipeline", () => {
     const source = routeSource();
-    const syncUrlPatchCalls = source.match(/syncUrlPatch\(success\.next\)/g) ?? [];
+    const targetHrefCalls = source.match(/success\.next \? pageHref\(success\.next\) : null/g) ?? [];
 
-    expect(syncUrlPatchCalls).toHaveLength(1);
+    expect(targetHrefCalls).toHaveLength(1);
     expect(source).toContain("const success = graphActionSuccessFromResult(result);");
     expect(source).toContain("closeCreateDialogsFromNext(success.next);");
-    expect(source).toContain("await applyAction(result);");
-    expect(source).toContain("await invalidateAll();");
+    expect(source).toContain("await update({ reset: true, invalidateAll: false });");
+    expect(source).toContain("await goto(targetHref");
     expect(source).toContain("return;");
     expect(source).not.toContain("if (success) {\n        if (success.message)");
-    expect(source).not.toContain("if (success.next) {\n        syncUrlPatch(success.next);");
+    expect(source).not.toContain("syncUrlPatch(success.next)");
   });
 
   it("does not keep a second browser URL cache next to SvelteKit page state", () => {

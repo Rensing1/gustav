@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from "./$types";
 
 import { backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
+import { graphDeletionFallback } from "$lib/teacher-unit-workspace/graph-deletion-impact";
 import type { TeacherUnitWorkspaceView } from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
@@ -16,6 +17,18 @@ const WORKSPACE_PARAM_MAP: Record<string, string> = {
 
 function workspaceHref(unitId: string): string {
   return `/api/teaching/views/units/${encodeURIComponent(unitId)}/workspace`;
+}
+
+function graphSelectionPatch(
+  fallback: ReturnType<typeof graphDeletionFallback>
+): Record<string, string | null> {
+  if (fallback?.kind === "module") {
+    return { module: fallback.id, phase: null, quick: "1" };
+  }
+  if (fallback?.kind === "phase") {
+    return { module: null, phase: fallback.id, quick: "1" };
+  }
+  return { module: null, phase: null, quick: null };
 }
 
 async function readErrorDetail(response: Response): Promise<string> {
@@ -249,7 +262,7 @@ export const actions: Actions = {
       savePhase: {
         ok: true,
         message: "Phase gespeichert.",
-        next: { phase: phaseId, quick: null }
+        next: { phase: phaseId, quick: "1" }
       }
     };
   },
@@ -257,14 +270,17 @@ export const actions: Actions = {
   createPhase: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
+    const afterPhaseId = String(formData.get("after_phase_id") ?? "").trim();
 
     if (!title) {
-      return fail(400, { createPhase: { error: "Bitte gib einen Phasentitel ein.", values: { title } } });
+      return fail(400, {
+        createPhase: { error: "Bitte gib einen Phasentitel ein.", values: { title, after_phase_id: afterPhaseId } }
+      });
     }
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/units/${params.unitId}/phases`, {
       method: "POST",
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title, after_phase_id: afterPhaseId || null }),
       headers: { "content-type": "application/json" },
       includeSameOrigin: true,
       authRedirectPath: currentPath(url)
@@ -272,7 +288,10 @@ export const actions: Actions = {
 
     if (!response.ok) {
       return fail(response.status, {
-        createPhase: { error: "Die Phase konnte nicht angelegt werden.", values: { title } }
+        createPhase: {
+          error: "Die Phase konnte nicht angelegt werden.",
+          values: { title, after_phase_id: afterPhaseId }
+        }
       });
     }
 
@@ -281,7 +300,7 @@ export const actions: Actions = {
       createPhase: {
         ok: true,
         message: "Phase angelegt.",
-        next: { phase: created.id, "create-phase": null }
+        next: { phase: created.id, quick: "1", "create-phase": null }
       }
     };
   },
@@ -289,10 +308,24 @@ export const actions: Actions = {
   deletePhase: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const phaseId = String(formData.get("phase_id") ?? "").trim();
+    const confirmed = String(formData.get("confirmed") ?? "").trim();
 
     if (!phaseId) {
-      return fail(400, { deletePhase: { error: "Es wurde keine Phase ausgewählt." } });
+      return fail(400, { deletePhase: { error: "Es wurde keine Phase ausgewählt.", values: { phase_id: phaseId } } });
     }
+    if (confirmed !== "1") {
+      return fail(400, {
+        deletePhase: { error: "Bitte bestätige die endgültige Löschung.", values: { phase_id: phaseId } }
+      });
+    }
+
+    const workspace = await requireBackendJson<TeacherUnitWorkspaceView>(
+      fetch,
+      cookies,
+      workspaceHref(params.unitId),
+      { authRedirectPath: currentPath(url) }
+    );
+    const next = graphSelectionPatch(graphDeletionFallback(workspace, { kind: "phase", id: phaseId }));
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/units/${params.unitId}/phases/${phaseId}`, {
       method: "DELETE",
@@ -301,14 +334,16 @@ export const actions: Actions = {
     });
 
     if (!response.ok) {
-      return fail(response.status, { deletePhase: { error: "Die Phase konnte nicht entfernt werden." } });
+      return fail(response.status, {
+        deletePhase: { error: "Die Phase konnte nicht entfernt werden.", values: { phase_id: phaseId } }
+      });
     }
 
     return {
       deletePhase: {
         ok: true,
         message: "Phase gelöscht.",
-        next: { phase: null, quick: null }
+        next
       }
     };
   },
@@ -406,7 +441,7 @@ export const actions: Actions = {
       saveModule: {
         ok: true,
         message: "Modul gespeichert.",
-        next: { module: moduleId, phase: phaseId, quick: null }
+        next: { module: moduleId, phase: phaseId, quick: "1" }
       }
     };
   },
@@ -447,7 +482,7 @@ export const actions: Actions = {
       createModule: {
         ok: true,
         message: "Modul angelegt.",
-        next: { module: created.id, phase: phaseId, "create-module": null }
+        next: { module: created.id, phase: phaseId, quick: "1", "create-module": null }
       }
     };
   },
@@ -455,10 +490,24 @@ export const actions: Actions = {
   deleteModule: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const moduleId = String(formData.get("module_id") ?? "").trim();
+    const confirmed = String(formData.get("confirmed") ?? "").trim();
 
     if (!moduleId) {
-      return fail(400, { deleteModule: { error: "Es wurde kein Modul ausgewählt." } });
+      return fail(400, { deleteModule: { error: "Es wurde kein Modul ausgewählt.", values: { module_id: moduleId } } });
     }
+    if (confirmed !== "1") {
+      return fail(400, {
+        deleteModule: { error: "Bitte bestätige die endgültige Löschung.", values: { module_id: moduleId } }
+      });
+    }
+
+    const workspace = await requireBackendJson<TeacherUnitWorkspaceView>(
+      fetch,
+      cookies,
+      workspaceHref(params.unitId),
+      { authRedirectPath: currentPath(url) }
+    );
+    const next = graphSelectionPatch(graphDeletionFallback(workspace, { kind: "module", id: moduleId }));
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/units/${params.unitId}/modules/${moduleId}`, {
       method: "DELETE",
@@ -467,14 +516,16 @@ export const actions: Actions = {
     });
 
     if (!response.ok) {
-      return fail(response.status, { deleteModule: { error: "Das Modul konnte nicht entfernt werden." } });
+      return fail(response.status, {
+        deleteModule: { error: "Das Modul konnte nicht entfernt werden.", values: { module_id: moduleId } }
+      });
     }
 
     return {
       deleteModule: {
         ok: true,
         message: "Modul gelöscht.",
-        next: { module: null, edgeFrom: null, edgeTo: null, quick: null }
+        next: { ...next, edgeFrom: null, edgeTo: null }
       }
     };
   },

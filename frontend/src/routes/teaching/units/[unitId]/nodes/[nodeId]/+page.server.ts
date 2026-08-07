@@ -1,13 +1,25 @@
-import { fail } from "@sveltejs/kit";
+import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 import { backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
-import type { TeacherUnitNodeEditorMaterial, TeacherUnitNodeEditorView } from "$lib/types/home";
+import {
+  graphDeletionFallback,
+  graphDeletionImpact
+} from "$lib/teacher-unit-workspace/graph-deletion-impact";
+import type {
+  TeacherUnitNodeEditorMaterial,
+  TeacherUnitNodeEditorView,
+  TeacherUnitWorkspaceView
+} from "$lib/types/home";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
 function editorHref(unitId: string, nodeId: string): string {
   return `/api/teaching/views/units/${encodeURIComponent(unitId)}/nodes/${encodeURIComponent(nodeId)}/editor`;
+}
+
+function workspaceHref(unitId: string, nodeId: string): string {
+  return `/api/teaching/views/units/${encodeURIComponent(unitId)}/workspace?module_id=${encodeURIComponent(nodeId)}`;
 }
 
 function actionAuthRedirectPath(url: URL | undefined): string {
@@ -31,7 +43,8 @@ type EditorActionName =
   | "saveTask"
   | "createTask"
   | "deleteTask"
-  | "reorderTask";
+  | "reorderTask"
+  | "deleteModule";
 
 const INVALID_NUMBER = Symbol("invalid_number");
 const INVALID_DATETIME = Symbol("invalid_datetime");
@@ -301,6 +314,15 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
   await requireParentSpaceBootstrap(parent, authRedirectPath, "teaching");
 
   const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId, authRedirectPath);
+  const workspace =
+    editor.node.kind === "module"
+      ? await requireBackendJson<TeacherUnitWorkspaceView>(
+          fetch,
+          cookies,
+          workspaceHref(params.unitId, params.nodeId),
+          { authRedirectPath }
+        )
+      : null;
 
   const breadcrumbs: BreadcrumbItem[] = [
     { label: "Lerneinheiten", href: "/teaching/units" },
@@ -311,11 +333,58 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     breadcrumbs,
     hidePageHeading: true,
     pageTitle: editor.node.editor_title,
-    editor
+    editor,
+    moduleDeletionImpact:
+      editor.node.kind === "module" && workspace
+        ? graphDeletionImpact(workspace, { kind: "module", id: editor.node.id })
+        : null
   };
 };
 
 export const actions: Actions = {
+  deleteModule: async ({ fetch, cookies, params, request, url }) => {
+    const authRedirectPath = actionAuthRedirectPath(url);
+    const formData = await request.formData();
+    const confirmed = asText(formData.get("confirmed"));
+
+    if (confirmed !== "1") {
+      return fail(400, { deleteModule: { error: "Bitte bestätige die endgültige Löschung." } });
+    }
+
+    const workspace = await requireBackendJson<TeacherUnitWorkspaceView>(
+      fetch,
+      cookies,
+      workspaceHref(params.unitId, params.nodeId),
+      { authRedirectPath }
+    );
+    const fallback = graphDeletionFallback(workspace, { kind: "module", id: params.nodeId });
+
+    const response = await backendRequest(
+      fetch,
+      cookies,
+      `/api/teaching/units/${params.unitId}/modules/${params.nodeId}`,
+      {
+        method: "DELETE",
+        includeSameOrigin: true,
+        authRedirectPath
+      }
+    );
+
+    if (!response.ok) {
+      return fail(response.status, { deleteModule: { error: "Das Modul konnte nicht entfernt werden." } });
+    }
+
+    const graphUrl = new URL(`/teaching/units/${params.unitId}`, "https://app.localhost");
+    if (fallback?.kind === "module") {
+      graphUrl.searchParams.set("module", fallback.id);
+      graphUrl.searchParams.set("quick", "1");
+    } else if (fallback?.kind === "phase") {
+      graphUrl.searchParams.set("phase", fallback.id);
+      graphUrl.searchParams.set("quick", "1");
+    }
+    throw redirect(303, `${graphUrl.pathname}${graphUrl.search}`);
+  },
+
   saveNode: async ({ fetch, cookies, params, request, url }) => {
     const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();

@@ -11,6 +11,15 @@ const sampleData: PageData = {
   breadcrumbs: [],
   hidePageHeading: true,
   pageTitle: "Orientierung",
+  moduleDeletionImpact: {
+    kind: "module",
+    id: "node-1",
+    title: "Orientierung",
+    modulesCount: 1,
+    materialsCount: 0,
+    tasksCount: 0,
+    connectionsCount: 0
+  },
   editor: {
     user: {
       sub: "teacher-1",

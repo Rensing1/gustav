@@ -26,7 +26,7 @@ describe("UiPreviewSurface", () => {
     expect(screen.getAllByText("Phase hinzufügen").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Eigenschaften" }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Taskfläche zuerst/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Property inspector").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Struktur").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Abschnitt bearbeiten" })).toBeInTheDocument();
     expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "KI-Dialog · Gespräch" })).toBeInTheDocument();

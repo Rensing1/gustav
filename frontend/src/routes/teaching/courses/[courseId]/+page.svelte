@@ -1,6 +1,10 @@
 <script lang="ts">
+  import { replaceState } from "$app/navigation";
+  import { page } from "$app/state";
   import TeacherCourseUnitList from "$lib/components/teacher-course/TeacherCourseUnitList.svelte";
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
+  import WorkspaceDrawer from "$lib/components/ui/WorkspaceDrawer.svelte";
+  import { withoutQueryParameters } from "$lib/components/ui/workspace-drawer-url";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -26,12 +30,30 @@
     addMemberDialogOpen = false;
   }
 
+  function openCourseDrawer(): void {
+    courseDrawerOpen = true;
+  }
+
   function closeCourseDrawer(): void {
     courseDrawerOpen = false;
+    removeDrawerQuery("course");
   }
 
   function closeMembersDrawer(): void {
     membersDrawerOpen = false;
+    removeDrawerQuery("members", "add-member", "member-q");
+  }
+
+  function removeDrawerQuery(...names: string[]): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const nextHref = withoutQueryParameters(window.location.href, names);
+    if (nextHref !== currentHref) {
+      replaceState(nextHref, page.state);
+    }
   }
 
   function formatJoinedAt(value: string): string {
@@ -114,7 +136,7 @@
   {#if missingMetadata.length}
     <div class="teacher-course-workspace__status teacher-course-workspace__status--warning" role="status">
       <span><strong>Kursdaten unvollständig:</strong> {missingMetadata.join(", ")}</span>
-      <a class="workspace-text-button" href={pageHref({ course: "1" })}>Ergänzen</a>
+      <a class="workspace-text-button" href={pageHref({ course: "1" })} onclick={openCourseDrawer}>Ergänzen</a>
     </div>
   {/if}
 
@@ -159,16 +181,13 @@
         <h2 id="course-settings-title">Kurseinstellungen</h2>
         <p>Stammdaten und Kursstatus</p>
       </div>
-      <a class="workspace-link-action" href={pageHref({ course: "1" })}>Kurs bearbeiten</a>
+      <a class="workspace-link-action" href={pageHref({ course: "1" })} onclick={openCourseDrawer}>Kurs bearbeiten</a>
     </div>
   </section>
 </div>
 
 {#if courseDrawerOpen}
-  <div class="workspace-modal workspace-modal--drawer">
-    <a class="workspace-modal-backdrop" href={pageHref()} aria-label="Drawer schließen"></a>
-
-    <div class="workspace-modal-card workspace-drawer-card" role="dialog" aria-modal="true" aria-labelledby="edit-course-title">
+  <WorkspaceDrawer labelledBy="edit-course-title" onClose={closeCourseDrawer}>
       <div class="workspace-modal-header">
         <div>
           <p class="workspace-modal-eyebrow">{data.course.title}</p>
@@ -262,15 +281,11 @@
           <button class="workspace-text-button workspace-text-button--danger" type="submit">Kurs endgültig löschen</button>
         </div>
       </form>
-    </div>
-  </div>
+  </WorkspaceDrawer>
 {/if}
 
 {#if membersDrawerOpen}
-  <div class="workspace-modal workspace-modal--drawer">
-    <a class="workspace-modal-backdrop" href={pageHref()} aria-label="Drawer schließen"></a>
-
-    <div class="workspace-modal-card workspace-drawer-card" role="dialog" aria-modal="true" aria-labelledby="members-drawer-title">
+  <WorkspaceDrawer labelledBy="members-drawer-title" onClose={closeMembersDrawer}>
       <div class="workspace-modal-header">
         <div>
           <p class="workspace-modal-eyebrow">{data.course.title}</p>
@@ -324,8 +339,7 @@
       {#if form?.removeMember?.error}
         <p class="workspace-form-error">{form.removeMember.error}</p>
       {/if}
-    </div>
-  </div>
+  </WorkspaceDrawer>
 {/if}
 
 {#if addMemberDialogOpen && canMutate}

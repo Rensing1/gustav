@@ -57,6 +57,37 @@ describe("teacher course detail page", () => {
     expect(within(drawer).queryByRole("link", { name: "Mitgliederseite" })).not.toBeInTheDocument();
   });
 
+  it("closes the members drawer with Escape or the outside surface", async () => {
+    render(Page, { props: { data: courseData(), form: {} as never } });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Mitglieder verwalten" }));
+    const drawer = screen.getByRole("dialog", { name: "Mitglieder verwalten" });
+    await fireEvent.click(within(drawer).getByPlaceholderText("Name eingeben"));
+    expect(drawer).toBeInTheDocument();
+
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Mitglieder verwalten" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Mitglieder verwalten" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Seitenleiste schließen" }));
+    expect(screen.queryByRole("dialog", { name: "Mitglieder verwalten" })).not.toBeInTheDocument();
+  });
+
+  it("reopens the course drawer immediately after closing it", async () => {
+    const data = courseData();
+    data.showCourseDrawer = true;
+    render(Page, { props: { data, form: {} as never } });
+
+    expect(screen.getByRole("dialog", { name: "Kurs bearbeiten" })).toBeInTheDocument();
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Kurs bearbeiten" })).not.toBeInTheDocument();
+
+    const editLink = screen.getByRole("link", { name: "Kurs bearbeiten" });
+    editLink.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    await fireEvent.click(editLink);
+    expect(screen.getByRole("dialog", { name: "Kurs bearbeiten" })).toBeInTheDocument();
+  });
+
   it("names all missing metadata and blocks course mutations", async () => {
     render(Page, {
       props: {

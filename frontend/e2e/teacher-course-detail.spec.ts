@@ -55,12 +55,33 @@ test("@feature-acceptance teacher manages a course in the flat detail workspace"
     await teacher.page.getByRole("button", { name: "Mitglieder verwalten" }).click();
     const membersDrawer = teacher.page.getByRole("dialog", { name: "Mitglieder verwalten" });
     await expect(membersDrawer).toBeVisible();
-    await membersDrawer.getByRole("button", { name: "Schließen" }).click();
+    await teacher.page.keyboard.press("Escape");
+    await expect(membersDrawer).toBeHidden();
+
+    await teacher.page.getByRole("button", { name: "Mitglieder verwalten" }).click();
+    const outsideSurface = teacher.page.getByRole("button", { name: "Seitenleiste schließen" });
+    await outsideSurface.click({ position: { x: 100, y: 100 } });
+    await expect(membersDrawer).toBeHidden();
 
     await teacher.page.getByRole("link", { name: "Kurs bearbeiten" }).click();
     await expect(teacher.page).toHaveURL(new RegExp(`/teaching/courses/${seeded.courseId}\\?course=1$`));
-    const courseDrawer = teacher.page.getByRole("dialog", { name: "Kurs bearbeiten" });
+    let courseDrawer = teacher.page.getByRole("dialog", { name: "Kurs bearbeiten" });
     await expect(courseDrawer).toContainText("Mitgliedschaften");
+    await teacher.page.keyboard.press("Escape");
+    await expect(courseDrawer).toBeHidden();
+    await expect(teacher.page).toHaveURL(new RegExp(`/teaching/courses/${seeded.courseId}$`));
+
+    await teacher.page.getByRole("link", { name: "Kurs bearbeiten" }).click();
+    await expect(courseDrawer).toBeVisible();
+    await teacher.page.keyboard.press("Escape");
+    await expect(courseDrawer).toBeHidden();
+    await expect(teacher.page).toHaveURL(new RegExp(`/teaching/courses/${seeded.courseId}$`));
+
+    await teacher.page.reload();
+    await expect(teacher.page.getByRole("dialog", { name: "Kurs bearbeiten" })).toHaveCount(0);
+
+    await teacher.page.getByRole("link", { name: "Kurs bearbeiten" }).click();
+    courseDrawer = teacher.page.getByRole("dialog", { name: "Kurs bearbeiten" });
     await courseDrawer.getByRole("button", { name: "Archivieren" }).click();
     await expect(teacher.page.getByText("Archiviert · schreibgeschützt")).toBeVisible();
     await expect(teacher.page.getByRole("button", { name: "Mitglieder ansehen" })).toBeVisible();

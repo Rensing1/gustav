@@ -98,6 +98,8 @@ def test_root_layout_uses_alpha3_shell_primitives() -> None:
     assert "teacherNavItems" in src, "Teacher navigation should be derived separately from learner navigation"
     assert 'label: "Kurse"' in src, "Teacher navigation should expose courses directly"
     assert 'label: "Lerneinheiten"' in src, "Teacher navigation should expose units directly"
+    assert 'label: "Live"' in src, "Teacher navigation should expose the live room directly"
+    assert 'label: "Diagnostik"' not in src, "Unreleased diagnostics must not appear in primary navigation"
     assert 'label: "Lehrenden-Welt"' not in src, "Teacher home should no longer be a primary teacher tab"
 
 

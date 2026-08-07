@@ -457,11 +457,11 @@ def _load_unit_live_helper_rows(
 # --- User directory adapter (mockable) ------------------------------------------
 
 def resolve_student_names(subs: list[str]) -> dict[str, str]:
-    """Resolve user IDs to display names via Keycloak directory (humanized).
+    """Resolve canonical teacher-visible learner labels via the directory.
 
-    - Always attempt the directory call; on failure, fall back to "Unbekannt".
-    - Humanize returned identifiers (emails/usernames) to "Vorname Nachname".
-    - Never expose SUBs in the names returned by this function.
+    The directory already applies the shared `TeacherStudentLabel` contract.
+    This web adapter preserves its exact result and only derives a localpart
+    from legacy email-like subjects when no directory record exists.
     """
     out: dict[str, str] = {}
     try:
@@ -470,22 +470,15 @@ def resolve_student_names(subs: list[str]) -> dict[str, str]:
         for sid in subs:
             val = str((raw or {}).get(sid, "")).strip()
             if not val or val == sid:
-                # Directory could not resolve the SUB. As a pragmatic fallback
-                # for legacy imports, derive a display name from the identifier
-                # itself when it clearly encodes an email (or legacy-email:...).
-                # This prevents leaking raw emails: the humanizer strips the
-                # domain and known prefixes.
                 fallback = ""
                 try:
                     if sid.startswith("legacy-email:") or ("@" in sid):
-                        fallback = directory.humanize_identifier(sid)  # type: ignore[attr-defined]
+                        fallback = directory.localpart_identifier(sid)  # type: ignore[attr-defined]
                 except Exception:
                     fallback = ""
                 out[sid] = fallback or "Unbekannt"
             else:
-                # Humanize emails/legacy/username patterns
-                nice = directory.humanize_identifier(val)  # type: ignore[attr-defined]
-                out[sid] = nice or "Unbekannt"
+                out[sid] = val
         return out
     except Exception:
         return {s: "Unbekannt" for s in subs}

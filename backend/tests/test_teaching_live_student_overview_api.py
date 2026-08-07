@@ -216,7 +216,7 @@ async def test_student_live_overview_deduplicates_unit_ids_case_insensitively(mo
     monkeypatch.setattr(teaching, "_get_student_live_overview_service", lambda: fake_service, raising=False)
     monkeypatch.setattr(
         teaching,
-        "resolve_student_login_labels_by_sub",
+        "resolve_live_student_names_by_sub",
         lambda subs: {str(subs[0]): "anna.login"},
         raising=False,
     )
@@ -261,7 +261,7 @@ async def test_student_live_overview_accepts_path_encoded_student_sub_with_slash
     monkeypatch.setattr(teaching, "_get_student_live_overview_service", lambda: fake_service, raising=False)
     monkeypatch.setattr(
         teaching,
-        "resolve_student_login_labels_by_sub",
+        "resolve_live_student_names_by_sub",
         lambda subs: {str(subs[0]): "anna.login"},
         raising=False,
     )

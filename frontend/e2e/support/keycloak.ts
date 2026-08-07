@@ -11,6 +11,12 @@ type KeycloakRole = {
   name: string;
 };
 
+type LearnerProfile = {
+  firstName: string;
+  lastName: string;
+  displayName?: string;
+};
+
 async function keycloakAdminContext(): Promise<APIRequestContext> {
   return request.newContext({
     baseURL: kcBase,
@@ -63,7 +69,12 @@ async function findUserId(kc: APIRequestContext, token: string, email: string): 
   return users[0]?.id ?? null;
 }
 
-async function ensureUserWithRole(email: string, password: string, roleName: "teacher" | "student"): Promise<void> {
+async function ensureUserWithRole(
+  email: string,
+  password: string,
+  roleName: "teacher" | "student",
+  profile?: LearnerProfile
+): Promise<string> {
   const kc = await keycloakAdminContext();
   try {
     const token = await adminToken(kc);
@@ -74,8 +85,9 @@ async function ensureUserWithRole(email: string, password: string, roleName: "te
         data: {
           username: email,
           email,
-          firstName: "E2E",
-          lastName: roleName === "teacher" ? "Teacher" : "Learner",
+          firstName: profile?.firstName ?? "E2E",
+          lastName: profile?.lastName ?? (roleName === "teacher" ? "Teacher" : "Learner"),
+          attributes: profile?.displayName ? { display_name: [profile.displayName] } : undefined,
           enabled: true,
           emailVerified: true,
           requiredActions: []
@@ -85,6 +97,22 @@ async function ensureUserWithRole(email: string, password: string, roleName: "te
       userId = await findUserId(kc, token, email);
     }
     expect(userId).toBeTruthy();
+
+    if (profile) {
+      const update = await kc.put(`/admin/realms/${realm}/users/${userId}`, {
+        headers: adminHeaders(token),
+        data: {
+          username: email,
+          email,
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          attributes: profile.displayName ? { display_name: [profile.displayName] } : {},
+          enabled: true,
+          emailVerified: true
+        }
+      });
+      expect([200, 204]).toContain(update.status());
+    }
 
     const passwordResponse = await kc.put(`/admin/realms/${realm}/users/${userId}/reset-password`, {
       headers: adminHeaders(token),
@@ -102,6 +130,7 @@ async function ensureUserWithRole(email: string, password: string, roleName: "te
       data: [role]
     });
     expect([200, 204]).toContain(assignRole.status());
+    return userId as string;
   } finally {
     await kc.dispose();
   }
@@ -113,4 +142,12 @@ export async function ensureTeacherUser(email: string, password: string): Promis
 
 export async function ensureLearnerUser(email: string, password: string): Promise<void> {
   await ensureUserWithRole(email, password, "student");
+}
+
+export async function ensureLearnerUserProfile(
+  email: string,
+  password: string,
+  profile: LearnerProfile
+): Promise<string> {
+  return ensureUserWithRole(email, password, "student", profile);
 }

@@ -105,6 +105,14 @@ components:
     Role:
       type: string
       enum: [student, teacher, admin]
+    TeacherStudentLabel:
+      type: string
+      description: >-
+        Canonical learner label for teacher-visible surfaces. Uses trimmed
+        `firstName lastName` only when both values exist; otherwise uses the
+        unchanged localpart of the learner email or email-like username. Returns
+        `Unbekannt` when neither source is available. Never exposes a mutable
+        display name or a raw OIDC subject.
     Me:
       type: object
       required: [sub, roles, name, expires_at]
@@ -472,7 +480,7 @@ components:
         sub:
           type: string
         name:
-          type: string
+          $ref: '#/components/schemas/TeacherStudentLabel'
         href:
           type: string
         joined_at:
@@ -675,7 +683,8 @@ components:
         anonymous:
           type: boolean
         student_name:
-          type: string
+          allOf:
+            - $ref: '#/components/schemas/TeacherStudentLabel'
           nullable: true
         created_at:
           type: string
@@ -1148,7 +1157,7 @@ components:
         sub:
           type: string
         name:
-          type: string
+          $ref: '#/components/schemas/TeacherStudentLabel'
         href:
           type: string
     DiagnosticsCourseMatrixCell:
@@ -1196,7 +1205,7 @@ components:
         sub:
           type: string
         name:
-          type: string
+          $ref: '#/components/schemas/TeacherStudentLabel'
         href:
           type: string
     DiagnosticsLearnerProfileSummary:
@@ -1298,7 +1307,7 @@ components:
         sub:
           type: string
         name:
-          type: string
+          $ref: '#/components/schemas/TeacherStudentLabel'
         href:
           type: string
     LiveMatrixCell:
@@ -1457,7 +1466,7 @@ components:
         sub:
           type: string
         name:
-          type: string
+          $ref: '#/components/schemas/TeacherStudentLabel'
         href:
           type: string
     LiveDetailTask:
@@ -1878,7 +1887,7 @@ components:
           type: string
           description: Student subject identifier (OIDC sub)
         name:
-          type: string
+          $ref: '#/components/schemas/TeacherStudentLabel'
         joined_at:
           type: string
           format: date-time
@@ -12891,7 +12900,7 @@ paths:
     get:
       tags: [Users]
       summary: Search users by name
-      description: Teachers/Admins search for students by display name; returns sub and name.
+      description: Teachers/Admins search for students; returned names use TeacherStudentLabel.
       operationId: searchUsers
       security:
         - cookieAuth: []
@@ -12935,7 +12944,7 @@ paths:
                   required: [sub, name]
                   properties:
                     sub: { type: string }
-                    name: { type: string }
+                    name: { $ref: '#/components/schemas/TeacherStudentLabel' }
         '400':
           description: |
             Invalid query. detail codes:
@@ -12963,7 +12972,7 @@ paths:
     get:
       tags: [Users]
       summary: List users by role
-      description: Teachers/Admins list users by role; returns sub and name for pagination and UI population.
+      description: Teachers/Admins list users by role; returned names use TeacherStudentLabel.
       operationId: listUsers
       security:
         - cookieAuth: []
@@ -13007,7 +13016,7 @@ paths:
                   required: [sub, name]
                   properties:
                     sub: { type: string }
-                    name: { type: string }
+                    name: { $ref: '#/components/schemas/TeacherStudentLabel' }
         '400':
           description: |
             Invalid query. detail codes:

@@ -37,14 +37,16 @@ class _Resp:
 
 
 def _mk_user(idx: int, name: str | None = None, username: str | None = None):
+    first, last = (name.split(" ", 1) if name and " " in name else ("", ""))
+    login = username or f"user{idx:04d}"
+    email = login if "@" in login else f"{login}@example.test"
     return {
         "id": f"sub-{idx:04d}",
-        "firstName": None,
-        "lastName": None,
-        "email": None,
-        "username": username or f"user{idx:04d}",
+        "firstName": first,
+        "lastName": last,
+        "email": email,
+        "username": email,
         "attributes": {},
-        "display_name": name or None,
     }
 
 
@@ -158,7 +160,7 @@ def test_directory_search_retries_with_admin_fallback_token(monkeypatch: pytest.
     monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
 
     out = dir.search_users_by_name(role="student", q="seb", limit=5)
-    assert out == [{"sub": "sub-1111", "name": "Sebastian Keyser"}]
+    assert out == [{"sub": "sub-1111", "name": "sebastian.keyser"}]
 
 
 def test_directory_search_by_surname_works_after_admin_fallback(monkeypatch: pytest.MonkeyPatch):
@@ -192,7 +194,7 @@ def test_directory_search_by_surname_works_after_admin_fallback(monkeypatch: pyt
     monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
 
     out = dir.search_users_by_name(role="student", q="mustermann", limit=10)
-    assert out == [{"sub": "sub-otto", "name": "Otto Mustermann"}]
+    assert out == [{"sub": "sub-otto", "name": "otto.mustermann"}]
 
 
 def test_directory_list_retries_with_admin_fallback_token(monkeypatch: pytest.MonkeyPatch):

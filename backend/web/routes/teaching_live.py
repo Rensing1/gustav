@@ -31,12 +31,10 @@ from backend.web.routes.teaching import (
     _load_average_scores_by_submission_id,
     _load_latest_submission_state_by_task,
     _load_unit_live_helper_rows,
-    _resolve_student_login_labels_runtime,
     _safe_download_filename,
     _safe_int,
     _summary_snapshot_cursor_runtime,
     _teaching_submission_file_href,
-    resolve_live_student_names_by_sub,
 )
 from backend.web.routes.teaching_serialization import (
     _build_latest_submission_payload,
@@ -221,7 +219,10 @@ async def get_unit_live_summary(
         except Exception:
             roster = []
         member_subs = [sid for sid, _ in roster]
-        names = await asyncio.to_thread(resolve_live_student_names_by_sub, member_subs)
+        names = await asyncio.to_thread(
+            _teaching_module().resolve_live_student_names_by_sub,
+            member_subs,
+        )
 
         has_map: set[tuple[str, str]] = set()
         avg_map: dict[tuple[str, str], float | None] = {}
@@ -663,7 +664,7 @@ async def get_student_live_overview(request: Request, course_id: str, student_su
     except LookupError:
         return _private_error({"error": "not_found"}, status_code=404, vary_origin=True)
 
-    names = _resolve_student_login_labels_runtime([str(student_sub)])
+    names = _teaching_module().resolve_live_student_names_by_sub([str(student_sub)])
     display_name = names.get(str(student_sub), "Unbekannt")
     return _json_private(overview.to_dict(student_name=display_name), status_code=200, vary_origin=True)
 

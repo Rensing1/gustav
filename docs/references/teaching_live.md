@@ -71,8 +71,9 @@ Hinweis fuer das kanonische `/live`-Dashboard:
   `task_id`-Auswahl nach.
 - Klicks auf Schüler und Aufgaben bleiben innerhalb desselben Workspace und
   synchronisieren nur die URL, nicht die ganze Seite.
-- Die Tabellenanzeige priorisiert `Vorname Nachname`; nur ohne Personenname
-  fällt `/live` auf den Mail-Localpart zurück.
+- Die Tabellenanzeige verwendet `Vorname Nachname` nur bei zwei gepflegten
+  Namensteilen. Fehlt einer davon, fällt `/live` auf den unveränderten
+  Mail-Localpart zurück. Derselbe Vertrag gilt in allen Lehrkraftansichten.
 
 Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen separat über dedizierte Endpunkte geladen werden.
 

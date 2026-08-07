@@ -193,6 +193,31 @@ def test_resolve_live_student_names_by_sub_falls_back_to_localpart_when_names_mi
     assert out == {"sub-a": "anna.adler"}
 
 
+def test_resolve_live_student_names_by_sub_requires_both_person_name_parts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import backend.identity_access.directory as dir  # type: ignore
+
+    monkeypatch.setattr(dir._KC, "token", _kc_token_stub)
+
+    def fake_get(url, headers=None, params=None, timeout=None, verify=None, allow_redirects=None):
+        return _Resp(
+            200,
+            {
+                "id": "sub-a",
+                "firstName": "Anna",
+                "lastName": "",
+                "email": "anna.adler@example.test",
+                "attributes": {"display_name": ["Anderer Name"]},
+            },
+        )
+
+    monkeypatch.setattr(dir, "requests", types.SimpleNamespace(get=fake_get))
+    monkeypatch.setattr(dir, "_LIVE_STUDENT_NAME_CACHE", {}, raising=False)
+
+    assert dir.resolve_live_student_names_by_sub(["sub-a"]) == {"sub-a": "anna.adler"}
+
+
 def test_resolve_live_student_names_by_sub_uses_warm_cache_without_fetching_new_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -284,9 +309,9 @@ def test_resolve_live_student_names_by_sub_prunes_expired_entries_and_caps_cache
     out = dir.resolve_live_student_names_by_sub(["sub-a", "sub-b", "sub-c"])
 
     assert out == {
-        "sub-a": "SUB-A",
-        "sub-b": "SUB-B",
-        "sub-c": "SUB-C",
+        "sub-a": "sub-a",
+        "sub-b": "sub-b",
+        "sub-c": "sub-c",
     }
     assert token_calls == 1
     kc = dir._KC()
@@ -412,9 +437,9 @@ def test_resolve_live_student_names_by_sub_resolves_uncached_subs_in_parallel(
     out = dir.resolve_live_student_names_by_sub(["sub-a", "sub-b", "sub-c"])
 
     assert out == {
-        "sub-a": "SUB-A",
-        "sub-b": "SUB-B",
-        "sub-c": "SUB-C",
+        "sub-a": "sub-a",
+        "sub-b": "sub-b",
+        "sub-c": "sub-c",
     }
     assert token_calls == 1
     assert max_active_calls >= 2

@@ -246,6 +246,35 @@ def localpart_identifier(s: str) -> str:
     return ""
 
 
+def teacher_student_label(user: dict) -> str:
+    """Return the canonical learner label used on teacher-visible surfaces.
+
+    Why:
+        Teachers need the same stable label in course, live, concern, and
+        diagnostics views. A complete person name is easiest to read; an exact
+        login localpart remains recognizable when profile names are incomplete.
+
+    Behavior:
+        Both `firstName` and `lastName` must be present. Otherwise the function
+        uses the unchanged localpart of `email` or an email-like `username`.
+        Mutable display-name attributes and opaque user ids are never exposed.
+
+    Permissions:
+        This pure helper performs no lookup. Callers must already be authorized
+        to process the supplied server-side directory record.
+    """
+    first = str(user.get("firstName") or "").strip()
+    last = str(user.get("lastName") or "").strip()
+    if first and last:
+        return f"{first} {last}"
+
+    for field in ("email", "username"):
+        localpart = localpart_identifier(str(user.get(field) or ""))
+        if localpart:
+            return localpart
+    return "Unbekannt"
+
+
 def _localpart_identifier(s: str) -> str:
     """Backward-compatible wrapper around localpart extraction helper."""
     return localpart_identifier(s)
@@ -430,9 +459,10 @@ def search_users_by_name(*, role: str, q: str, limit: int) -> List[dict]:
                     if not sub or sub in seen_subs:
                         continue
                     seen_subs.add(sub)
-                    name = _display_name(u)
+                    name = teacher_student_label(u) if role == "student" else _display_name(u)
                     uname = str(u.get("username", ""))
-                    if ql in name.lower() or (ql and ql in uname.lower()):
+                    email = str(u.get("email", ""))
+                    if ql in name.lower() or (ql and (ql in uname.lower() or ql in email.lower())):
                         results.append({"sub": sub, "name": name})
                         if len(results) >= limit:
                             break
@@ -464,7 +494,7 @@ def resolve_student_names(subs: List[str]) -> Dict[str, str]:
                 continue
             r.raise_for_status()
             u = r.json() or {}
-            out[sid] = _display_name(u) or sid
+            out[sid] = teacher_student_label(u)
         except Exception:
             out[sid] = sid
     return out
@@ -555,12 +585,7 @@ def resolve_live_student_names_by_sub(subs: List[str]) -> Dict[str, str]:
             if r.status_code != 404:
                 r.raise_for_status()
                 u = r.json() or {}
-                first = str(u.get("firstName") or "").strip()
-                last = str(u.get("lastName") or "").strip()
-                if first or last:
-                    label = " ".join(part for part in (first, last) if part).strip()
-                if not label:
-                    label = _login_label(u)
+                label = teacher_student_label(u)
         except Exception:
             label = ""
         if label and label != "Unbekannt":
@@ -648,7 +673,7 @@ def list_users_by_role(*, role: str, limit: int, offset: int) -> List[dict]:
 
         results: List[dict] = []
         for u in merged[want_offset : want_offset + want_limit]:
-            name = _display_name(u)
+            name = teacher_student_label(u)
             sub = u.get("id")
             if sub and name:
                 results.append({"sub": str(sub), "name": name})

@@ -32,6 +32,11 @@ export type LearnerVisualSmokeCourse = {
   unitTitle: string;
 };
 
+export type TeacherStudentLabelCourse = {
+  courseId: string;
+  unitId: string;
+};
+
 export type LearnerNavigationCourse = LearnerVisualSmokeCourse & {
   graphModuleId: string;
   contextGraphModuleId: string;
@@ -192,6 +197,20 @@ async function addCurrentLearnerToCourse(page: Page, courseId: string, learnerSu
   if (![201, 204].includes(response.status())) {
     await expectApiOk(response);
   }
+}
+
+export async function seedTeacherStudentLabelCourse(
+  page: Page,
+  learnerSubs: string[],
+  title: string
+): Promise<TeacherStudentLabelCourse> {
+  const courseId = await createCourse(page, title);
+  const unitId = await createUnit(page, `${title} Lerneinheit`);
+  await attachUnitToCourse(page, courseId, unitId);
+  for (const learnerSub of learnerSubs) {
+    await addCurrentLearnerToCourse(page, courseId, learnerSub);
+  }
+  return { courseId, unitId };
 }
 
 export async function seedTeacherVisualSmokeUnit(page: Page, title: string): Promise<TeacherVisualSmokeUnit> {

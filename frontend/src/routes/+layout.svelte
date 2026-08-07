@@ -48,11 +48,6 @@
       requiredSpace: "teaching"
     },
     {
-      href: "/diagnostics",
-      label: "Diagnostik",
-      requiredSpace: "diagnostics"
-    },
-    {
       href: "/live",
       label: "Live",
       requiredSpace: "live"

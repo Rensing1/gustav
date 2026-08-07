@@ -31,6 +31,22 @@ Minimaler, kontextübergreifender Nutzerdatensatz:
 
 E-Mail wird bewusst nicht im DTO ausgegeben (Privacy by Design, geringere Koppelung).
 
+### Lehrkraftsichtbare Schülerbezeichnungen
+
+Der allgemeine Anzeigename des eigenen Profils ist nicht die Bezeichnung, die
+Lehrkräfte in Kurs-, Live-, Sorgenfach- und Diagnostikansichten sehen. Dort gilt
+ein eigener, serverseitiger Vertrag:
+
+1. Nur ein vollständig gepflegtes Paar aus `firstName` und `lastName` wird als
+   `Vorname Nachname` ausgegeben.
+2. Fehlt ein Namensteil, wird exakt der lokale Teil der E-Mail beziehungsweise
+   eines E-Mail-artigen Benutzernamens verwendet.
+3. Ohne sicheren Identifier erscheint `Unbekannt`.
+
+Das frei gesetzte `display_name` und das opake OIDC-Subject werden in diesen
+Lehrkraftansichten nie als Schülerbezeichnung ausgegeben. Die fertige
+Bezeichnung entsteht im Identity-Adapter; Frontends formatieren sie nicht neu.
+
 ## Token-Claims (Keycloak)
 - Pflicht: `sub`, `aud`, `iss`, `exp` (OIDC Standard)
 - Rollen: `realm_access.roles`

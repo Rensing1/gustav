@@ -41,8 +41,9 @@ Verbindliche Regeln:
 - Schüler- und Lehrkraftflächen wirken wie ein Produkt.
 - Unterschiede entstehen über Dichte, Werkzeuge und Kontext, nicht über
   verschiedene Designwelten.
-- `Diagnostik` und `Live` bleiben außerhalb der ersten visuellen Welle, müssen
-  später aber dieselbe Sprache übernehmen.
+- Die noch nicht freigegebene `Diagnostik` bleibt aus der Hauptnavigation
+  verborgen. Direkte Entwicklungsansichten folgen dennoch derselben
+  Formensprache wie die produktiven Lehrkraftflächen.
 
 ## 3. Shell
 
@@ -313,6 +314,12 @@ Arbeitsbereich; Mitglieder und Einstellungen bleiben knappe Verwaltungszeilen
 und öffnen ihre vorhandenen Drawer. Unvollständige Stammdaten werden einmalig
 in einer schmalen Statuszeile benannt. Archivierte Kurse behalten dieselbe
 Struktur, bieten aber keine fachlichen Mutationen an.
+
+Lehrkraft-Drawer verwenden den gemeinsamen `WorkspaceDrawer`. Sie lassen sich
+über die sichtbare Schließen-Aktion, mit `Escape` oder durch einen Klick auf die
+abgedunkelte Außenfläche schließen. Interaktionen innerhalb des Drawers dürfen
+ihn nicht schließen. Liegt ein weiterer modaler Dialog darüber, reagiert der
+darunterliegende Drawer nicht auf `Escape`.
 
 Das persönliche Lernarchiv der Schüler ist eine lineare Belegliste. Es zeigt
 ausschließlich eigene Abgaben und Rückmeldungen; Kursmaterialien, Teilnehmerlisten

@@ -113,8 +113,10 @@ Die visuelle Gewichtung innerhalb dieser Struktur ist ebenfalls festgelegt:
 - Für Lehrkräfte ist die Top-Bar arbeitsorientiert:
   - `Kurse`
   - `Lerneinheiten`
-  - `Diagnostik`
   - `Live`
+- Noch nicht freigegebene Räume wie `Diagnostik` dürfen nicht in der
+  Hauptnavigation erscheinen. Direkte Entwicklungsrouten können bestehen
+  bleiben, bis der Raum produktreif ist.
 - Die aktive Position muss klar markiert sein.
 - Die Top-Bar darf keine zweite Startseite sein. Wenig Chrome, wenig Meta,
   keine dekorativen Status-Chips.
@@ -256,8 +258,9 @@ Die Lehrenden-Welt ist operativer, aber nicht dashboardhaft.
 - `Kurs endgültig löschen` zeigt zuerst die aktuelle Löschfolge. Die Lehrkraft
   muss Kurstitel und Verlust aller Schülerdaten bestätigen; ein unmittelbarer
   Löschknopf ohne diesen Ablauf ist unzulässig.
-- Diagnostik ist aus dem Kurskontext direkt erreichbar, jedoch als Kopf- oder
-  Sekundäraktion statt als eigener Hauptblock.
+- Diagnostik wird bis zur Produktfreigabe weder im Kurskontext noch in der
+  Hauptnavigation angeboten; direkte Entwicklungsrouten bleiben davon
+  unberührt.
 - Das Hinzufügen von Lerneinheiten darf direkt auf der Kursseite stattfinden,
   wenn es einen ruhigen, klar begrenzten Dialog oder ein Sheet nutzt.
 
@@ -440,6 +443,11 @@ Geeignete Fälle:
 
 Sheets sind keine Ablage für beliebige Restinformationen. Wenn der Inhalt eine
 eigene Lese- oder Arbeitslogik hat, bekommt er eine eigene Seite.
+
+Drawer besitzen immer drei gleichwertige Schließwege: die sichtbare
+Schließen-Aktion, `Escape` und einen Klick auf die abgedunkelte Außenfläche.
+Klicks innerhalb des Drawers verändern dessen Offenheitszustand nicht. Bei
+gestapelten Dialogen reagiert ausschließlich die oberste modale Fläche.
 
 ### Buttons und Aktionen
 

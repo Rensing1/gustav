@@ -87,3 +87,53 @@ async def test_update_unit_phase_maps_permission_error_to_403(monkeypatch: pytes
     assert resp.status_code == 403, resp.text
     assert resp.json().get("error") == "forbidden"
     assert resp.headers.get("Cache-Control") == "private, no-store"
+
+
+@pytest.mark.anyio
+async def test_create_unit_phase_passes_contextual_anchor_to_repository(monkeypatch: pytest.MonkeyPatch):
+    teacher = _teacher_session(monkeypatch, "t-phases-context")
+    unit_id = "00000000-0000-0000-0000-000000000001"
+    anchor_id = "00000000-0000-0000-0000-000000000002"
+
+    class _StubRepo:
+        def __init__(self) -> None:
+            self.received_anchor: str | None = None
+
+        def unit_exists_for_author(self, _unit_id: str, _author_sub: str) -> bool:
+            return True
+
+        def unit_exists(self, _unit_id: str) -> bool:
+            return True
+
+        def create_unit_phase(
+            self,
+            _unit_id: str,
+            _title: str,
+            _author_sub: str,
+            *,
+            after_phase_id: str | None = None,
+        ) -> dict:
+            self.received_anchor = after_phase_id
+            return {
+                "id": "00000000-0000-0000-0000-000000000003",
+                "unit_id": unit_id,
+                "title": "Vertiefung",
+                "position": 2,
+            }
+
+    repo = _StubRepo()
+    monkeypatch.setattr(teaching, "_get_repo", lambda: repo, raising=True)
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        base_url="http://test",
+        headers={"Origin": "http://test"},
+    ) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        response = await client.post(
+            f"/api/teaching/units/{unit_id}/phases",
+            json={"title": "Vertiefung", "after_phase_id": anchor_id},
+        )
+
+    assert response.status_code == 201, response.text
+    assert repo.received_anchor == anchor_id

@@ -140,6 +140,8 @@ class ModuleSectionVisibilityPayload(BaseModel):
 class UnitPhaseCreatePayload(BaseModel):
     # Accept any length; enforce 1..200 in handler to return 400 (not 422).
     title: str | None = Field(default=None)
+    # Keep the wire input loose so invalid anchors map to the documented 400.
+    after_phase_id: object | None = Field(default=None)
 
     @field_validator("title")
     @classmethod

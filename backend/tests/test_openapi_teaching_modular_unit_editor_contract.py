@@ -87,6 +87,19 @@ def test_openapi_phase_module_reorder_description_mentions_stable_append_semanti
     assert "stable" in desc
 
 
+def test_openapi_phase_create_supports_contextual_insertion() -> None:
+    spec = _load_spec()
+    schema = spec["components"]["schemas"]["TeachingUnitPhaseCreate"]
+    anchor = schema["properties"]["after_phase_id"]
+
+    assert anchor["type"] == "string"
+    assert anchor["format"] == "uuid"
+    assert anchor["nullable"] is True
+
+    description = spec["paths"]["/api/teaching/units/{unit_id}/phases"]["post"]["responses"]["400"]["description"]
+    assert "invalid_after_phase_id" in description
+
+
 def test_openapi_legacy_edge_delete_documents_sunset_date() -> None:
     spec = _load_spec()
     op = spec["paths"]["/api/teaching/units/{unit_id}/modules/edges"]["delete"]

@@ -455,13 +455,21 @@ class DBTeachingRepo:
             author_id=author_id,
         )
 
-    def create_unit_phase(self, unit_id: str, title: str, author_id: str) -> dict:
+    def create_unit_phase(
+        self,
+        unit_id: str,
+        title: str,
+        author_id: str,
+        *,
+        after_phase_id: str | None = None,
+    ) -> dict:
         return _repo_unit_module_queries.create_unit_phase(
             dsn=self._dsn,
             psycopg_module=psycopg,
             unit_id=unit_id,
             title=title,
             author_id=author_id,
+            after_phase_id=after_phase_id,
         )
 
     def update_unit_phase_title(self, unit_id: str, phase_id: str, title: str, author_id: str) -> Optional[dict]:

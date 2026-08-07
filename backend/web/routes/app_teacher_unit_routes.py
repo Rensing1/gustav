@@ -437,7 +437,9 @@ async def get_teacher_unit_workspace(
             "courses_count": courses_count,
         }
 
-        if not selected_module_id and module_items:
+        # An explicit phase selection must not be replaced by the default module.
+        # This keeps the graph's phase inspector stable after URL navigation.
+        if not selected_module_id and not selected_phase_id and not (edge_source_id or edge_target_id) and module_items:
             selected_module_id = str(module_items[0].get("id") or "")
         selected_module = modules_by_id.get(selected_module_id or "")
         selected_phase = next(

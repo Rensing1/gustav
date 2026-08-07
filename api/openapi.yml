@@ -2029,6 +2029,11 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+        after_phase_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Insert the new phase directly after this phase. Omit to append it.
     TeachingUnitPhaseUpdate:
       type: object
       additionalProperties: false
@@ -9701,7 +9706,7 @@ paths:
     post:
       tags: [Teaching]
       summary: Create a phase in a modular learning unit (author only)
-      description: Creates a new phase at the next available position.
+      description: Creates a new phase after the optional anchor phase or appends it when no anchor is supplied.
       operationId: createUnitPhase
       security:
         - cookieAuth: []
@@ -9750,6 +9755,7 @@ paths:
               - invalid_unit_id
               - invalid_unit_type
               - invalid_title
+              - invalid_after_phase_id
           content:
             application/json:
               schema:

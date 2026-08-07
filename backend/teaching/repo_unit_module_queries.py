@@ -111,8 +111,16 @@ def list_unit_phases_for_author(*, dsn: str, psycopg_module, unit_id: str, autho
         for r in rows
     ]
 
-def create_unit_phase(*, dsn: str, psycopg_module, unit_id: str, title: str, author_id: str) -> dict:
-    """Create a new phase at the next position within a modular unit."""
+def create_unit_phase(
+    *,
+    dsn: str,
+    psycopg_module,
+    unit_id: str,
+    title: str,
+    author_id: str,
+    after_phase_id: str | None = None,
+) -> dict:
+    """Create a phase after an optional anchor while holding the unit lock."""
     title = (title or "").strip()
     if not title or len(title) > 200:
         raise ValueError("invalid_title")
@@ -129,8 +137,33 @@ def create_unit_phase(*, dsn: str, psycopg_module, unit_id: str, title: str, aut
             unit_type = str(unit_row[0] or "linear").strip().lower()
             if unit_type != "modular":
                 raise ValueError("invalid_unit_type")
-            cur.execute("select coalesce(max(position), 0) + 1 from public.unit_phases where unit_id = %s", (unit_id,))
-            next_pos = int(cur.fetchone()[0])
+            if after_phase_id:
+                cur.execute(
+                    "select position from public.unit_phases where id = %s::uuid and unit_id = %s::uuid",
+                    (after_phase_id, unit_id),
+                )
+                anchor_row = cur.fetchone()
+                if not anchor_row:
+                    raise ValueError("invalid_after_phase_id")
+                next_pos = int(anchor_row[0]) + 1
+                # Positions are unique per unit. Deferring the constraint lets the
+                # transaction shift all following phases before inserting the gap.
+                cur.execute("set constraints unit_phases_unit_id_position_key deferred")
+                cur.execute(
+                    """
+                    update public.unit_phases
+                       set position = position + 1
+                     where unit_id = %s::uuid
+                       and position >= %s
+                    """,
+                    (unit_id, next_pos),
+                )
+            else:
+                cur.execute(
+                    "select coalesce(max(position), 0) + 1 from public.unit_phases where unit_id = %s::uuid",
+                    (unit_id,),
+                )
+                next_pos = int(cur.fetchone()[0])
             cur.execute(
                 """
                 insert into public.unit_phases (unit_id, title, position)

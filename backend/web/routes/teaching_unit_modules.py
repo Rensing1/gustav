@@ -94,7 +94,7 @@ async def list_unit_phases(request: Request, unit_id: str):
 
 @teaching_unit_modules_router.post("/api/teaching/units/{unit_id}/phases")
 async def create_unit_phase(request: Request, unit_id: str, payload: UnitPhaseCreatePayload):
-    """Create a phase in a modular unit (author only); appends at the next position."""
+    """Create a phase at its contextual position for the unit author."""
 
     repo = _get_repo()
     user, error = _require_teacher(request)
@@ -111,11 +111,24 @@ async def create_unit_phase(request: Request, unit_id: str, payload: UnitPhaseCr
     if repo_error:
         return repo_error
     title = payload.title or ""
+    after_phase_id = payload.after_phase_id
+    if after_phase_id is not None:
+        if not isinstance(after_phase_id, str) or not _is_uuid_like(after_phase_id.strip()):
+            return _private_error(
+                {"error": "bad_request", "detail": "invalid_after_phase_id"},
+                status_code=400,
+            )
+        after_phase_id = _canonical_uuid(after_phase_id.strip())
     try:
-        phase = repo.create_unit_phase(unit_id, title, sub)
+        phase = repo.create_unit_phase(
+            unit_id,
+            title,
+            sub,
+            after_phase_id=after_phase_id,
+        )
     except ValueError as exc:
         detail = str(exc) or "invalid_input"
-        if detail in {"invalid_unit_type", "invalid_title"}:
+        if detail in {"invalid_unit_type", "invalid_title", "invalid_after_phase_id"}:
             return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
         return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     except PermissionError:

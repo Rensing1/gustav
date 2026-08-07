@@ -105,6 +105,69 @@ async def test_unit_phases_list_create_rename_reorder_happy_path(monkeypatch: py
 
 
 @pytest.mark.anyio
+async def test_unit_phase_create_inserts_after_anchor_atomically(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
+    _require_db_or_skip()
+
+    try:
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = store.create(sub="teacher-phases-contextual", name="Phases", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client, title="Contextual phases", unit_type="modular")
+        initial = (await client.get(f"/api/teaching/units/{unit['id']}/phases")).json()[0]
+        final = (
+            await client.post(f"/api/teaching/units/{unit['id']}/phases", json={"title": "Final"})
+        ).json()
+
+        created = await client.post(
+            f"/api/teaching/units/{unit['id']}/phases",
+            json={"title": "Inserted", "after_phase_id": initial["id"]},
+        )
+
+        assert created.status_code == 201
+        assert created.json()["position"] == 2
+        listed = (await client.get(f"/api/teaching/units/{unit['id']}/phases")).json()
+        assert [phase["id"] for phase in listed] == [initial["id"], created.json()["id"], final["id"]]
+        assert [phase["position"] for phase in listed] == [1, 2, 3]
+
+
+@pytest.mark.anyio
+async def test_unit_phase_create_rejects_anchor_from_another_unit(monkeypatch: pytest.MonkeyPatch):
+    store = install_session_store(monkeypatch, main)
+    _require_db_or_skip()
+
+    try:
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+
+        assert isinstance(teaching.REPO, DBTeachingRepo)
+    except Exception:
+        pytest.skip("DB-backed TeachingRepo required for this test")
+
+    teacher = store.create(sub="teacher-phases-anchor", name="Phases", roles=["teacher"])
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        target = await _create_unit(client, title="Target phases", unit_type="modular")
+        other = await _create_unit(client, title="Other phases", unit_type="modular")
+        other_phase = (await client.get(f"/api/teaching/units/{other['id']}/phases")).json()[0]
+
+        response = await client.post(
+            f"/api/teaching/units/{target['id']}/phases",
+            json={"title": "Invalid anchor", "after_phase_id": other_phase["id"]},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "invalid_after_phase_id"
+
+
+@pytest.mark.anyio
 async def test_unit_phases_requires_authentication_returns_401(monkeypatch: pytest.MonkeyPatch):
     """Phase endpoints must return 401 without an authenticated session."""
     install_session_store(monkeypatch, main)

@@ -157,6 +157,17 @@ async def test_teacher_unit_workspace_returns_modular_graph_and_edge_selection(
         assert project.status_code == 201
         project_module = project.json()["id"]
 
+        phase_selection = await client.get(
+            f"/api/teaching/views/units/{unit_id}/workspace",
+            params={"phase_id": phase_two},
+            headers=headers,
+        )
+        assert phase_selection.status_code == 200
+        assert phase_selection.json()["selection"] == {
+            "kind": "phase",
+            "phase": {"id": phase_two, "title": "Vertiefung", "position": 2},
+        }
+
         edge = await client.post(
             f"/api/teaching/units/{unit_id}/modules/edges",
             json={"from_module_id": intro_module, "to_module_id": project_module},

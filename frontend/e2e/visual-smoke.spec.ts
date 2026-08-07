@@ -36,6 +36,31 @@ async function newSmokePage(browser: Browser): Promise<{ context: BrowserContext
   return { context, page: await context.newPage() };
 }
 
+async function fitVisibleGraph(page: Page): Promise<void> {
+  const fitButton = page.getByRole("button", { name: "Fit View" });
+  // The first pass reacts to a preceding viewport/grid resize; the second uses
+  // the settled canvas dimensions and therefore produces a stable reference.
+  for (let pass = 0; pass < 2; pass += 1) {
+    await fitButton.evaluate((button) => (button as HTMLButtonElement).click());
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+  }
+}
+
+async function expectCenteredGraphContext(page: Page): Promise<void> {
+  const geometryIsCentered = await page.evaluate(() => {
+    const canvas = document.querySelector<HTMLElement>(".teacher-flow-workspace__canvas")?.getBoundingClientRect();
+    const modules = Array.from(document.querySelectorAll<HTMLElement>(".teacher-flow-node--module"));
+    if (!canvas || canvas.height < 400 || modules.length === 0) return false;
+    return modules.every((module) => {
+      const rect = module.getBoundingClientRect();
+      return rect.top >= canvas.top + 48 && rect.bottom <= canvas.bottom - 48;
+    });
+  });
+  expect(geometryIsCentered).toBe(true);
+}
+
 test.describe("@visual-smoke auth shell pages", () => {
   for (const viewport of [
     { name: "desktop", width: 1280, height: 900 },
@@ -96,19 +121,91 @@ test.describe("@visual-smoke teacher workspace", () => {
     }
   });
 
-  test("renders the modular teacher graph without empty or overflowing chrome", async ({ page }) => {
+  test("@design-system renders the modular graph inspector and deletion dialog across themes and widths", async ({ page }) => {
+    test.setTimeout(120_000);
     const unique = Date.now();
     const email = `visual_teacher_${unique}@${emailDomain}`;
     await ensureTeacherUser(email, password);
     await login(page, email, password);
 
-    const seeded = await seedTeacherVisualSmokeUnit(page, `Visual Smoke Graph ${unique}`);
+    const seeded = await seedTeacherVisualSmokeUnit(page, "Visual Smoke Graph");
 
     await page.goto(`/teaching/units/${seeded.unitId}`);
     await expect(page.getByRole("toolbar", { name: "Graphwerkzeuge" })).toBeVisible();
     await expect(page.locator(".teacher-flow-node--module")).toHaveCount(2);
     await expectInteractiveSurface(page.locator(".teacher-flow-workspace"));
-    await expectNoViewportOverflow(page);
+    const phaseLink = page.locator(".teacher-flow-phase-band__label").first();
+    const phaseHref = await phaseLink.getAttribute("href");
+    expect(phaseHref).toBeTruthy();
+    const phaseUrl = `/teaching/units/${seeded.unitId}${phaseHref}`;
+    await phaseLink.click();
+    const inspector = page.getByRole("complementary", { name: "Phase bearbeiten" });
+    const accountControl = page.locator(".account-trigger");
+    await expect(inspector).toBeVisible();
+    await page.evaluate(async () => { await document.fonts.ready; });
+
+    for (const viewport of [
+      { name: "desktop", width: 1440, height: 900 },
+      { name: "tablet", width: 1024, height: 768 },
+      { name: "mobile", width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expectNoViewportOverflow(page);
+      if (viewport.width > 720) {
+        await fitVisibleGraph(page);
+        await expect(phaseLink).toBeInViewport({ ratio: 0.2 });
+        if (viewport.width >= 1200) await expectCenteredGraphContext(page);
+      }
+      await expect(page).toHaveScreenshot(`teacher-graph-inspector-light-${viewport.name}.png`, {
+        animations: "disabled",
+        caret: "hide",
+        mask: viewport.width > 720 ? [accountControl] : [],
+        maxDiffPixelRatio: 0.005,
+      });
+
+      await inspector.getByRole("button", { name: "Phase löschen" }).click();
+      const dialog = page.getByRole("dialog", { name: "Phase löschen" });
+      await expect(dialog).toBeVisible();
+      await expect(page).toHaveScreenshot(`teacher-graph-delete-light-${viewport.name}.png`, {
+        animations: "disabled",
+        caret: "hide",
+        mask: viewport.width > 720 ? [accountControl] : [],
+        maxDiffPixelRatio: 0.005,
+      });
+      await dialog.getByRole("button", { name: "Abbrechen" }).click();
+
+      await inspector.getByRole("button", { name: "Schließen" }).click();
+      await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+      await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
+      await page.goto(phaseUrl);
+      await expect(inspector).toBeVisible();
+      await page.evaluate(() => window.scrollTo(0, 0));
+      if (viewport.width > 720) {
+        await fitVisibleGraph(page);
+        await expect(phaseLink).toBeInViewport({ ratio: 0.2 });
+        if (viewport.width >= 1200) await expectCenteredGraphContext(page);
+      }
+      await expect(page).toHaveScreenshot(`teacher-graph-inspector-dark-${viewport.name}.png`, {
+        animations: "disabled",
+        caret: "hide",
+        mask: viewport.width > 720 ? [accountControl] : [],
+        maxDiffPixelRatio: 0.005,
+      });
+      await inspector.getByRole("button", { name: "Phase löschen" }).click();
+      await expect(page.getByRole("dialog", { name: "Phase löschen" })).toBeVisible();
+      await expect(page).toHaveScreenshot(`teacher-graph-delete-dark-${viewport.name}.png`, {
+        animations: "disabled",
+        caret: "hide",
+        mask: viewport.width > 720 ? [accountControl] : [],
+        maxDiffPixelRatio: 0.005,
+      });
+      await page.getByRole("dialog", { name: "Phase löschen" }).getByRole("button", { name: "Abbrechen" }).click();
+      await inspector.getByRole("button", { name: "Schließen" }).click();
+      await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+      await page.goto(phaseUrl);
+      await expect(inspector).toBeVisible();
+    }
   });
 
   test("@design-system renders the active catalog, school-year archive and personal learning archive", async ({ browser }) => {

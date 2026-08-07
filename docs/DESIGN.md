@@ -334,6 +334,28 @@ Fokus- und Kontrastwerte.
 
 `ModeSwitch` verbindet Navigationsziele und markiert die aktuell geöffnete Ansicht. `ChoiceSwitch` bildet dagegen eine lokale, gegenseitig ausschließende Auswahl mit nativen Radiofeldern ab. Seine aktive Option bleibt transparent und wird nur durch kräftigeren Text sowie eine zurückhaltende Akzentlinie markiert. Gefüllte Signalfarben, Schatten und Pillenformen sind für diese Auswahl nicht vorgesehen.
 
+### Lerneinheiten-Editor
+
+Bei modularen Lerneinheiten bleibt der Graph der dauerhafte Arbeitskontext.
+Phasen und Module werden über genau eine kontextuelle Seitenleiste angelegt und
+bearbeitet; Werkzeugleisten-Popover und Editoren direkt am Knoten sind nicht
+zulässig. Nach dem Anlegen bleibt das neue Element ausgewählt und fokussiert.
+Der Modulinhaltseditor führt mit `Zurück zum Graph` wieder zum bearbeiteten
+Modul und seiner geöffneten Seitenleiste.
+
+Auf schmalen Ansichten belegt die Seitenleiste die verfügbare Breite, ohne den
+Graphen zu demontieren. `Escape`, die Schließen-Aktion und ein Klick auf die
+freie Graphfläche schließen sie und geben den Fokus an den Auslöser zurück.
+Interne Implementierungsbegriffe werden nicht als sichtbare Beschriftungen
+verwendet.
+
+Das Löschen einer Phase oder eines Moduls verlangt immer einen modalen
+Bestätigungsdialog. Er nennt Titel sowie die Zahl betroffener Module,
+Materialien, Aufgaben und Verbindungen. `Abbrechen` ist die sichere
+Standardaktion; die destruktive Aktion benennt ausdrücklich, dass auch Inhalte
+gelöscht werden. Derselbe Dialog wird im Graphen und im Modulinhaltseditor
+verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
+
 ## 11. Lernraum und Lerneinheit
 
 ### 11.1 Lernweg und URL

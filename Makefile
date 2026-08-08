@@ -14,6 +14,8 @@ DB_SUPERPASSWORD ?= postgres
 help:
 	@echo "Targets:"
 	@echo "  up                 - Build and start docker services (web, keycloak, caddy)"
+	@echo "  local-ca-status    - Show trust status for Caddy CA in system and browsers"
+	@echo "  trust-local-ca     - Explicitly trust Caddy CA in system, Chromium/Codex and Firefox"
 	@echo "  ps                 - Show docker compose services"
 	@echo "  reset-local        - Reset local Supabase DB + recreate app services"
 	@echo "  db-login-user      - Create/alter app DB login (IN ROLE gustav_limited, local only)"
@@ -60,10 +62,20 @@ up:
 	mkdir -p .tmp
 	touch .tmp/caddy-root.crt
 	docker compose up -d --build
-	# Best-effort: copy Caddy internal root CA for HTTPS clients (e.g. E2E tests).
+	# Export the public CA atomically; never change host/browser trust during startup.
 	@if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
-	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
+	  python3 -m backend.tools.local_ca_trust export && \
+	  python3 -m backend.tools.local_ca_trust status --warn-only || \
+	  echo "Hinweis: Caddy-CA konnte noch nicht geprüft werden; nutze 'make local-ca-status'."; \
 	fi
+
+.PHONY: local-ca-status
+local-ca-status:
+	@python3 -m backend.tools.local_ca_trust status
+
+.PHONY: trust-local-ca
+trust-local-ca:
+	@python3 -m backend.tools.local_ca_trust trust
 
 .PHONY: ps
 ps:
@@ -83,9 +95,11 @@ reset-local:
 	mkdir -p .tmp
 	touch .tmp/caddy-root.crt
 	docker compose up -d --build --force-recreate web learning-worker h5p
-	# Best-effort: copy Caddy internal root CA for HTTPS clients (e.g. E2E tests).
+	# Refresh the public helper CA without silently modifying trust stores.
 	@if docker ps --format '{{.Names}}' | grep -q '^gustav-caddy$$'; then \
-	  docker cp gustav-caddy:/data/caddy/pki/authorities/local/root.crt .tmp/caddy-root.crt >/dev/null 2>&1 || true; \
+	  python3 -m backend.tools.local_ca_trust export && \
+	  python3 -m backend.tools.local_ca_trust status --warn-only || \
+	  echo "Hinweis: Caddy-CA konnte noch nicht geprüft werden; nutze 'make local-ca-status'."; \
 	fi
 
 .PHONY: db-login-user

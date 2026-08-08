@@ -105,6 +105,28 @@ Notes:
 - If `app.localhost` / `id.localhost` do not resolve to `127.0.0.1`, add them to `/etc/hosts` (see `docs/references/network_topology.md`).
 - The local setup is the best starting point if you want to understand or evaluate the platform.
 
+### Trust local HTTPS in Firefox and Chromium/Codex
+
+`make up` exports only Caddy's public root CA to `.tmp/caddy-root.crt`; it never changes host or browser trust stores automatically. Inspect the current state first:
+
+```bash
+make local-ca-status
+```
+
+On Debian/Ubuntu, install the NSS command-line tool once if the status output requests it:
+
+```bash
+sudo apt install libnss3-tools
+```
+
+Then close Firefox and Codex completely and run the explicit, idempotent trust step:
+
+```bash
+make trust-local-ca
+```
+
+The command validates the current CA before installing it in the Linux system store, Chromium's shared NSS database, and active classic, Snap, or Flatpak Firefox profiles. Restart Firefox and Codex afterwards. If the Caddy data volume is deleted and recreated, the local CA changes; `make local-ca-status` will report the stale fingerprint and `make trust-local-ca` will replace only GUSTAV's managed certificate entry.
+
 ## Self-hosting notes
 
 GUSTAV is self-hostable, but at this stage it should be approached as an experimental system that is best explored locally first.

@@ -4,6 +4,8 @@ Status: Stable
 
 ## Ziele
 - `make up` – Dienste bauen/starten (frontend, web, keycloak, caddy, h5p, learning-worker) inkl. lokaler `.tmp`-Vorbereitung und Caddy-CA-Helferdatei
+- `make local-ca-status` – prüft rein lesend, ob Caddys aktuelle Root-CA im System sowie in Chromium/Codex und aktiven Firefox-Profilen hinterlegt ist
+- `make trust-local-ca` – validiert und installiert Caddys öffentliche Root-CA ausdrücklich und idempotent; benötigt `certutil` (`libnss3-tools`) und für den System-Trust-Store `sudo`
 - `make ps` – Statusübersicht (docker compose ps)
 - `make reset-local` – Supabase DB reset + Services recreate (Hinweis: Keys rotieren; `.env` ggf. via `supabase status` aktualisieren)
 - `make db-login-user` – Login‑User erstellen/aktualisieren (IN ROLE gustav_limited)
@@ -35,5 +37,6 @@ Status: Stable
 - `KC_ADMIN_CLIENT_ID`/`KC_ADMIN_CLIENT_SECRET`/`KC_ADMIN_REALM` – Confidential Client für Admin-API-Sync
 
 ## Hinweis (KISS)
+- `make up` installiert keine Zertifikate. Vor `make trust-local-ca` Firefox und Codex vollständig schließen und danach neu starten. Nach einer Neuerstellung des Caddy-Daten-Volumes den Status erneut prüfen.
 - RUN_* Flags (`RUN_E2E`, `RUN_SUPABASE_E2E`, `RUN_OPENAI_E2E`) immer zusammen mit den passenden Markern laufen lassen (`-m e2e` / `-m supabase_integration` / `-m openai_integration`). Sonst mischt man bewusst „ohne externe Services“ mit „mit echten Services“ und bekommt vermeidbare Rotläufe.
 - Wenn `verify-preflight-db` fehlschlägt: zuerst `supabase migration up && make db-login-user` ausführen (alternativ `make reset-local`), dann `make verify` erneut starten.

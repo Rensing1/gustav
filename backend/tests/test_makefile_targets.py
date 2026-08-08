@@ -1,7 +1,6 @@
 import re
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = PROJECT_ROOT / "Makefile"
 FRONTEND_VITEST_CONFIG = PROJECT_ROOT / "frontend" / "vitest.config.ts"
@@ -33,6 +32,24 @@ def test_reset_local_provisions_worker_login_before_recreating_worker() -> None:
     assert body.index("$(MAKE) learning-worker-db-login-user") < body.index(
         "docker compose up -d --build --force-recreate web learning-worker h5p"
     )
+
+
+def test_local_ca_targets_are_explicit_and_up_only_warns() -> None:
+    """Starting services must never silently modify host or browser trust stores."""
+
+    makefile = MAKEFILE.read_text(encoding="utf-8")
+    status_body = _target_body("local-ca-status")
+    trust_body = _target_body("trust-local-ca")
+    up_body = _target_body("up")
+
+    assert "local-ca-status" in makefile
+    assert "trust-local-ca" in makefile
+    assert "backend.tools.local_ca_trust status" in status_body
+    assert "backend.tools.local_ca_trust trust" in trust_body
+    assert "backend.tools.local_ca_trust export" in up_body
+    assert "backend.tools.local_ca_trust status --warn-only" in up_body
+    assert "backend.tools.local_ca_trust trust" not in up_body
+    assert "sudo" not in up_body
 
 
 def test_test_db_security_runs_csrf_and_session_baseline_regressions() -> None:

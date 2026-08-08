@@ -32,6 +32,7 @@ test("@feature-acceptance saves and reloads every dialog authoring field", async
   await createForm.getByLabel("Aufgabentyp").selectOption("dialog");
   await createForm.getByLabel("Anweisung & Beschreibung").fill(values.instruction);
   await createForm.getByLabel("Kriterium 1", { exact: true }).fill(values.criterion);
+  await createForm.getByText("Weitere Einstellungen", { exact: true }).click();
   await createForm.getByLabel("Lehrkraft-Kontext").fill(values.teacherContext);
   await createForm.getByLabel("Name des KI-Partners").fill(values.partnerName);
   await createForm.getByLabel("Sichtbare Kurzbeschreibung").fill(values.description);
@@ -49,8 +50,9 @@ test("@feature-acceptance saves and reloads every dialog authoring field", async
 
   await page.reload();
   await page.getByRole("button", { name: new RegExp(values.instruction) }).click();
+  await page.getByText("Weitere Einstellungen", { exact: true }).click();
 
-  await expect(page.getByLabel("Anweisung & Beschreibung")).toHaveValue(values.instruction);
+  await expect(page.getByLabel("Anweisung & Beschreibung")).toHaveText(values.instruction);
   await expect(page.getByLabel("Kriterium 1", { exact: true })).toHaveValue(values.criterion);
   await expect(page.getByLabel("Lehrkraft-Kontext")).toHaveValue(values.teacherContext);
   await expect(page.getByLabel("Name des KI-Partners")).toHaveValue(values.partnerName);

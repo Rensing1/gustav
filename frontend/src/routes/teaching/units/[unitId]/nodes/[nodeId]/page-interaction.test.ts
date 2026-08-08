@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("$app/navigation", () => ({ replaceState: vi.fn() }));
 
 import Page from "./+page.svelte";
 import type { PageData } from "./$types";
@@ -10,7 +12,10 @@ const sampleData: PageData = {
   appSessionActive: false,
   breadcrumbs: [],
   hidePageHeading: true,
+  wideWorkspaceShell: true,
   pageTitle: "Orientierung",
+  contentSelection: { kind: "overview" },
+  incomingPrerequisiteCount: 0,
   moduleDeletionImpact: {
     kind: "module",
     id: "node-1",
@@ -50,27 +55,11 @@ const sampleData: PageData = {
 };
 
 describe("teacher node editor page", () => {
-  it("closes the create material area when the section button is clicked again", async () => {
-    render(Page, {
-      props: {
-        data: sampleData,
-        form: {} as never
-      }
-    });
-
-    const materialsHeading = screen.getByRole("heading", { name: "Materialien" }).closest("section");
-    expect(materialsHeading).not.toBeNull();
-    const materialsSection = materialsHeading as HTMLElement;
-    const toggleButton = within(materialsSection).getAllByRole("button", { name: /^Material hinzufügen$/i })[0];
-
-    expect(within(materialsSection).getByText("Materialtyp")).toBeInTheDocument();
-
-    await fireEvent.click(toggleButton);
-
-    expect(within(materialsSection).queryByText("Materialtyp")).not.toBeInTheDocument();
+  beforeEach(() => {
+    sessionStorage.clear();
   });
 
-  it("renders ten visible criteria fields for task creation", () => {
+  it("opens a modular node in a quiet overview without implicit create forms", () => {
     render(Page, {
       props: {
         data: sampleData,
@@ -78,12 +67,46 @@ describe("teacher node editor page", () => {
       }
     });
 
-    const tasksHeading = screen.getByRole("heading", { name: "Aufgaben" }).closest("section");
-    expect(tasksHeading).not.toBeNull();
-    const tasksSection = tasksHeading as HTMLElement;
+    expect(screen.getByRole("heading", { name: "Inhalt auswählen" })).toBeInTheDocument();
+    expect(screen.getByText("Wähle links ein Material oder eine Aufgabe aus.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Material hinzufügen$/i })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Aufgabe hinzufügen$/i })).toHaveLength(1);
+    expect(screen.queryByLabelText("Materialtyp")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Aufgabentyp")).not.toBeInTheDocument();
+  });
 
-    const fields = within(tasksSection).getAllByLabelText(/Kriterium \d+/i);
-    expect(fields).toHaveLength(10);
+  it("returns from a new material draft to the mounted content outline", async () => {
+    render(Page, {
+      props: {
+        data: sampleData,
+        form: {} as never
+      }
+    });
+
+    await fireEvent.click(screen.getAllByRole("button", { name: /^Material hinzufügen$/i })[0]);
+    expect(screen.getByLabelText("Materialtyp")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "← Inhalte" }));
+
+    expect(screen.queryByLabelText("Materialtyp")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Inhalt auswählen" })).toBeInTheDocument();
+  });
+
+  it("starts with one criterion and allows up to ten criteria", async () => {
+    render(Page, {
+      props: {
+        data: sampleData,
+        form: {} as never
+      }
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: /^Aufgabe hinzufügen$/i }));
+    expect(screen.getAllByLabelText(/^Kriterium \d+$/i)).toHaveLength(1);
+    for (let index = 1; index < 10; index += 1) {
+      await fireEvent.click(screen.getByRole("button", { name: "Kriterium hinzufügen" }));
+    }
+    expect(screen.getAllByLabelText(/^Kriterium \d+$/i)).toHaveLength(10);
+    expect(screen.queryByRole("button", { name: "Kriterium hinzufügen" })).not.toBeInTheDocument();
   });
 
   it("offers Filius task creation and labels existing Filius tasks", async () => {
@@ -112,25 +135,21 @@ describe("teacher node editor page", () => {
       }
     });
 
-    const tasksHeading = screen.getByRole("heading", { name: "Aufgaben" }).closest("section");
-    expect(tasksHeading).not.toBeNull();
-    const tasksSection = tasksHeading as HTMLElement;
+    await fireEvent.click(screen.getByRole("button", { name: /^Aufgabe hinzufügen$/i }));
 
-    await fireEvent.click(within(tasksSection).getByRole("button", { name: /^Aufgabe hinzufügen$/i }));
-
-    const typeSelect = within(tasksSection).getByLabelText("Aufgabentyp");
+    const typeSelect = screen.getByLabelText("Aufgabentyp");
     expect(within(typeSelect).getByRole("option", { name: "Filius" })).toHaveValue("filius");
 
     await fireEvent.change(typeSelect, { target: { value: "filius" } });
 
-    expect(within(tasksSection).getByLabelText("Anweisung & Beschreibung")).toBeInTheDocument();
-    expect(within(tasksSection).getAllByLabelText(/Kriterium \d+/i)).toHaveLength(10);
-    expect(within(tasksSection).getByLabelText("Lehrkraft-Kontext")).toBeInTheDocument();
+    expect(screen.getByLabelText("Anweisung & Beschreibung")).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/^Kriterium \d+$/i)).toHaveLength(1);
+    expect(screen.getByLabelText("Lehrkraft-Kontext")).toBeInTheDocument();
 
-    await fireEvent.click(within(tasksSection).getByRole("button", { name: /Untersuche das Filius-Netzwerk/i }));
+    await fireEvent.click(screen.getByRole("button", { name: /Untersuche das Filius-Netzwerk/i }));
 
-    expect(within(tasksSection).getAllByText("Filius").length).toBeGreaterThan(0);
-    expect(within(tasksSection).getByText("Lernende reichen hier ein Filius-Projekt als `.fls` ein.")).toBeInTheDocument();
+    expect(screen.getAllByText("Filius").length).toBeGreaterThan(0);
+    expect(screen.getByText("Lernende reichen hier ein Filius-Projekt als `.fls` ein.")).toBeInTheDocument();
   });
 
   it("shows every saved dialog field while keeping the preview closed", async () => {
@@ -252,9 +271,22 @@ describe("teacher node editor page", () => {
     });
 
     expect(screen.getByText("Material angelegt.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Arbeitsblatt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Arbeitsblatt/ })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Arbeitsblatt")).toBeInTheDocument();
     expect(screen.queryByText(/Datei vorbereitet:/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a local accessible error when reordering fails", () => {
+    render(Page, {
+      props: {
+        data: sampleData,
+        form: {
+          reorderMaterial: { error: "Die Materialien konnten nicht neu geordnet werden." }
+        } as never
+      }
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Die Materialien konnten nicht neu geordnet werden.");
   });
 
   it("resynchronizes the local editor state when new page data arrives for the same route", async () => {
@@ -304,9 +336,41 @@ describe("teacher node editor page", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Orientierung aktualisiert" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Merkblatt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Merkblatt/ })).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: /Neue Aufgabe/i }));
-    expect(screen.getByDisplayValue("Neue Aufgabe")).toBeInTheDocument();
+    expect(screen.getByLabelText("Anweisung & Beschreibung")).toHaveValue("Neue Aufgabe");
     expect(screen.queryByRole("heading", { name: "Orientierung" })).not.toBeInTheDocument();
+  });
+
+  it("restores a scoped new-material draft after remounting in the same tab", async () => {
+    const first = render(Page, { props: { data: sampleData, form: {} as never } });
+    await fireEvent.click(screen.getAllByRole("button", { name: /^Material hinzufügen$/i })[0]);
+    await fireEvent.input(screen.getByLabelText("Titel"), { target: { value: "Ungespeicherter Entwurf" } });
+    expect(screen.getByRole("button", { name: "Verwerfen" })).toBeInTheDocument();
+    await screen.findByRole("toolbar", { name: "Text formatieren" });
+    first.unmount();
+
+    render(Page, { props: { data: sampleData, form: {} as never } });
+
+    expect(await screen.findByDisplayValue("Ungespeicherter Entwurf")).toBeInTheDocument();
+  });
+
+  it("asks for confirmation before deleting modular content", async () => {
+    const data = {
+      ...sampleData,
+      editor: {
+        ...sampleData.editor,
+        materials: [{ id: "material-1", title: "Merkblatt", kind: "markdown" as const, body_md: "Inhalt", position: 1 }]
+      }
+    } satisfies PageData;
+    render(Page, { props: { data, form: {} as never } });
+    await fireEvent.click(screen.getByRole("button", { name: /Merkblatt/ }));
+    await fireEvent.click(screen.getByText("Aktionen"));
+    await fireEvent.click(screen.getByRole("button", { name: "Entfernen" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Material löschen" });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText("Merkblatt")).toBeInTheDocument();
+    expect(document.querySelector('input[name="confirmed"]')).toHaveValue("1");
   });
 });

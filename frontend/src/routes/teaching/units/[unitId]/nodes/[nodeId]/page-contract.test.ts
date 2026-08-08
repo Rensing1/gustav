@@ -34,11 +34,27 @@ describe("teacher node editor contract", () => {
     expect(routeSource).toContain('<input name="sha256" type="hidden" value=');
   });
 
-  it("renders an inline success status for editor actions", () => {
+  it("renders accessible inline status messages for editor actions", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
     expect(routeSource).toContain("editorMessage");
-    expect(routeSource).toContain("workspace-note workspace-note--success");
+    expect(routeSource).toContain("workspace-note--${editorMessage.tone}");
+    expect(routeSource).toContain('role={editorMessage.tone === "error" ? "alert" : "status"}');
+  });
+
+  it("keeps create actions available in the compact content stage without duplicating them on desktop", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const teachingCss = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/styles/teaching-workspace.css"),
+      "utf8"
+    );
+
+    expect(routeSource).toContain("teacher-module-outline__compact-add");
+    expect(teachingCss).toMatch(/\.teacher-module-outline__compact-add\s*\{[^}]*display:\s*none/s);
+    expect(teachingCss).toMatch(
+      /@container \(max-width: 63\.99rem\)[\s\S]*\.teacher-module-outline__compact-add\s*\{[^}]*display:\s*inline-grid/s
+    );
   });
 });

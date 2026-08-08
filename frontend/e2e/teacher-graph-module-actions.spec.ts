@@ -109,6 +109,48 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
 
   await modulePanel.getByRole("link", { name: "Inhalt bearbeiten" }).click();
   await expect(page).toHaveURL(/\/nodes\//);
+  const editorPane = page.locator(".teacher-module-editor-pane");
+  await expect(editorPane.getByRole("heading", { name: "Inhalt auswählen" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Material hinzufügen" }).first().click();
+  await editorPane.getByLabel("Titel").fill("E2E Merkblatt");
+  await expect(editorPane.getByRole("toolbar", { name: "Text formatieren" })).toBeVisible();
+  await editorPane.getByRole("textbox", { name: "Inhalt" }).fill("Ein kurzer Materialtext.");
+  await editorPane.getByRole("button", { name: "Material hinzufügen" }).click();
+  await expect(page.getByText("Material angelegt.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Aufgabe hinzufügen" }).first().click();
+  await editorPane.getByRole("textbox", { name: "Anweisung & Beschreibung" }).fill("Begründe deine Antwort.");
+  await editorPane.getByRole("textbox", { name: "Kriterium 1", exact: true }).fill("Die Antwort ist nachvollziehbar begründet.");
+  await editorPane.getByRole("button", { name: "Aufgabe hinzufügen" }).click();
+  await expect(page.getByText("Aufgabe angelegt.")).toBeVisible();
+
+  await page.getByRole("button", { name: /E2E Merkblatt/ }).click();
+  await editorPane.getByLabel("Titel").fill("E2E Merkblatt Entwurf");
+  await expect(editorPane.getByRole("toolbar", { name: "Text formatieren" })).toBeVisible();
+  await editorPane.getByRole("textbox", { name: "Inhalt", exact: true }).fill("Geänderter Entwurfsinhalt.");
+  await page.getByRole("button", { name: /Begründe deine Antwort/ }).click();
+  await page.getByRole("button", { name: /E2E Merkblatt/ }).click();
+  await expect(editorPane.getByLabel("Titel")).toHaveValue("E2E Merkblatt Entwurf");
+  await expect(editorPane.getByRole("textbox", { name: "Inhalt", exact: true })).toContainText("Geänderter Entwurfsinhalt.");
+  await page.reload();
+  await expect(editorPane.getByLabel("Titel")).toHaveValue("E2E Merkblatt Entwurf");
+  await expect(editorPane.getByRole("toolbar", { name: "Text formatieren" })).toBeVisible();
+  await expect(editorPane.getByRole("textbox", { name: "Inhalt", exact: true })).toContainText("Geänderter Entwurfsinhalt.");
+  await editorPane.getByRole("button", { name: "Verwerfen" }).click();
+  await expect(editorPane.getByLabel("Titel")).toHaveValue("E2E Merkblatt");
+  await expect(editorPane.getByRole("toolbar", { name: "Text formatieren" })).toBeVisible();
+  await expect(editorPane.getByRole("textbox", { name: "Inhalt", exact: true })).toContainText("Ein kurzer Materialtext.");
+
+  await editorPane.getByText("Aktionen").click();
+  await editorPane.getByRole("button", { name: "Entfernen" }).click();
+  const contentDeleteDialog = page.getByRole("dialog", { name: "Material löschen" });
+  await expect(contentDeleteDialog).toContainText("E2E Merkblatt");
+  await contentDeleteDialog.getByRole("button", { name: "Abbrechen" }).click();
+  await editorPane.getByRole("button", { name: "Entfernen" }).click();
+  await page.getByRole("dialog", { name: "Material löschen" }).getByRole("button", { name: "Material löschen" }).click();
+  await expect(page.getByText("Material gelöscht.")).toBeVisible();
+
   await page.getByRole("link", { name: "Zurück zum Graph" }).click();
   await expect(page).toHaveURL(new RegExp(`/teaching/units/${unitId}\\?module=.*quick=1`));
   await expect(page.getByRole("complementary", { name: "Modul bearbeiten" })).toBeVisible();

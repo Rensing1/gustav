@@ -7,6 +7,7 @@ import {
   graphDeletionFallback,
   graphDeletionImpact
 } from "$lib/teacher-unit-workspace/graph-deletion-impact";
+import { parseContentSelection } from "$lib/teacher-node-editor/module-content-state";
 import type {
   TeacherUnitNodeEditorMaterial,
   TeacherUnitNodeEditorView,
@@ -180,6 +181,15 @@ function reorderIds(
   return reordered;
 }
 
+function moveIdBefore(ids: string[], movedId: string, beforeId: string): string[] {
+  if (movedId === beforeId || !ids.includes(movedId) || !ids.includes(beforeId)) {
+    return ids;
+  }
+  const reordered = ids.filter((id) => id !== movedId);
+  reordered.splice(reordered.indexOf(beforeId), 0, movedId);
+  return reordered;
+}
+
 async function finalizePreparedFileMaterial(
   fetchFn: typeof fetch,
   cookies: Parameters<PageServerLoad>[0]["cookies"],
@@ -304,6 +314,7 @@ function taskPayloadFromForm(
 }
 
 export const __testables = {
+  moveIdBefore,
   normalizeCriteriaItems,
   readCriteriaItems,
   taskPayloadFromForm
@@ -332,8 +343,14 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
   return {
     breadcrumbs,
     hidePageHeading: true,
+    wideWorkspaceShell: editor.node.kind === "module",
     pageTitle: editor.node.editor_title,
     editor,
+    contentSelection: parseContentSelection(url.searchParams.get("content"), editor),
+    incomingPrerequisiteCount:
+      editor.node.kind === "module" && workspace?.graph.kind === "modular"
+        ? (workspace.graph.edges ?? []).filter((edge) => edge.to === editor.node.id).length
+        : 0,
     moduleDeletionImpact:
       editor.node.kind === "module" && workspace
         ? graphDeletionImpact(workspace, { kind: "module", id: editor.node.id })
@@ -645,9 +662,15 @@ export const actions: Actions = {
     const formData = await request.formData();
     const sectionId = asText(formData.get("section_id"));
     const materialId = asText(formData.get("material_id"));
+    const confirmed = asText(formData.get("confirmed"));
 
     if (!sectionId || !materialId) {
       return fail(400, { deleteMaterial: { error: "Es wurde kein Material ausgewählt." } });
+    }
+    if (confirmed !== "1") {
+      return fail(400, {
+        deleteMaterial: { error: "Bitte bestätige, dass du das Material löschen möchtest." }
+      });
     }
 
     const response = await backendRequest(
@@ -674,11 +697,12 @@ export const actions: Actions = {
     const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const materialId = asText(formData.get("material_id"));
+    const beforeId = asText(formData.get("before_id"));
     const direction = asText(formData.get("direction")) === "down" ? "down" : "up";
     const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId, authRedirectPath);
     const sectionId = sectionIdForEditor(editor);
     const orderedIds = editor.materials.map((item) => item.id);
-    const nextIds = reorderIds(orderedIds, materialId, direction);
+    const nextIds = beforeId ? moveIdBefore(orderedIds, materialId, beforeId) : reorderIds(orderedIds, materialId, direction);
 
     if (nextIds.join(",") === orderedIds.join(",")) {
       return {
@@ -833,9 +857,15 @@ export const actions: Actions = {
     const formData = await request.formData();
     const sectionId = asText(formData.get("section_id"));
     const taskId = asText(formData.get("task_id"));
+    const confirmed = asText(formData.get("confirmed"));
 
     if (!sectionId || !taskId) {
       return fail(400, { deleteTask: { error: "Es wurde keine Aufgabe ausgewählt." } });
+    }
+    if (confirmed !== "1") {
+      return fail(400, {
+        deleteTask: { error: "Bitte bestätige, dass du die Aufgabe löschen möchtest." }
+      });
     }
 
     const response = await backendRequest(
@@ -862,11 +892,12 @@ export const actions: Actions = {
     const authRedirectPath = actionAuthRedirectPath(url);
     const formData = await request.formData();
     const taskId = asText(formData.get("task_id"));
+    const beforeId = asText(formData.get("before_id"));
     const direction = asText(formData.get("direction")) === "down" ? "down" : "up";
     const editor = await readEditor(fetch, cookies, params.unitId, params.nodeId, authRedirectPath);
     const sectionId = sectionIdForEditor(editor);
     const orderedIds = editor.tasks.map((item) => item.id);
-    const nextIds = reorderIds(orderedIds, taskId, direction);
+    const nextIds = beforeId ? moveIdBefore(orderedIds, taskId, beforeId) : reorderIds(orderedIds, taskId, direction);
 
     if (nextIds.join(",") === orderedIds.join(",")) {
       return {

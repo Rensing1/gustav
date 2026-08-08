@@ -145,6 +145,11 @@ describe("teacher node editor server helpers", () => {
     expect(parsed.values.criteria_items).toHaveLength(10);
   });
 
+  it("moves a dragged item before the chosen target without crossing groups", () => {
+    expect(__testables.moveIdBefore(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
+    expect(__testables.moveIdBefore(["a", "b"], "foreign", "b")).toEqual(["a", "b"]);
+  });
+
   it("finalizes prepared file uploads instead of uploading server-side", async () => {
     backendRequestMock.mockResolvedValueOnce(
       new Response(
@@ -307,6 +312,33 @@ describe("teacher node editor server helpers", () => {
       data: {
         deleteModule: {
           error: "Bitte bestätige die endgültige Löschung."
+        }
+      }
+    });
+    expect(backendRequestMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["deleteMaterial", "Material"],
+    ["deleteTask", "Aufgabe"]
+  ] as const)("requires explicit confirmation before %s", async (actionName, label) => {
+    const form = new FormData();
+    form.set("section_id", "section-1");
+    form.set(actionName === "deleteMaterial" ? "material_id" : "task_id", "content-1");
+
+    const action = actions[actionName];
+    const result = await action({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {},
+      params: { unitId: "unit-1", nodeId: "node-1" },
+      request: requestWithFormData(form)
+    } as never);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        [actionName]: {
+          error: `Bitte bestätige, dass du ${label === "Material" ? "das Material" : "die Aufgabe"} löschen möchtest.`
         }
       }
     });

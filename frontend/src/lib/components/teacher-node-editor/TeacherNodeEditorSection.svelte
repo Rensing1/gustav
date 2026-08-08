@@ -7,6 +7,7 @@
     createLabel,
     showCreate = false,
     hasItems = false,
+    workbench = false,
     emptyMessage = null,
     onCreate,
     list,
@@ -17,6 +18,7 @@
     createLabel: string;
     showCreate?: boolean;
     hasItems?: boolean;
+    workbench?: boolean;
     emptyMessage?: string | null;
     onCreate?: (() => void) | null;
     list?: Snippet;
@@ -24,23 +26,27 @@
   } = $props();
 </script>
 
-<section class="workspace-panel teacher-node-editor-section">
+<section class:teacher-node-editor-section--workbench={workbench} class="workspace-panel teacher-node-editor-section">
   <div class="teacher-node-editor-section__header">
     <div class="teacher-node-editor-section__heading">
       <p class="workspace-label">{eyebrow}</p>
       <h2>{title}</h2>
     </div>
-    <button class="teacher-node-editor-section__action" type="button" onclick={onCreate}>
-      <span aria-hidden="true">+</span>
-      {createLabel}
-    </button>
+    {#if !workbench}
+      <button class="teacher-node-editor-section__action" type="button" onclick={onCreate}>
+        <span aria-hidden="true">+</span>
+        {createLabel}
+      </button>
+    {/if}
   </div>
 
   {#if showCreate}
     <div class="teacher-node-editor-section__create">
-      <div class="teacher-node-editor-section__create-head">
-        <p class="workspace-kicker">Neu</p>
-      </div>
+      {#if !workbench}
+        <div class="teacher-node-editor-section__create-head">
+          <p class="workspace-kicker">Neu</p>
+        </div>
+      {/if}
       <div data-testid="teacher-node-editor-create-slot">
         {#if create}
           {@render create()}

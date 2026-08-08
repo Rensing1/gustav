@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/svelte";
+import { createRawSnippet } from "svelte";
 import { describe, expect, it } from "vitest";
 
 import TeacherNodeEditorSection from "./TeacherNodeEditorSection.svelte";
@@ -33,5 +34,26 @@ describe("TeacherNodeEditorSection", () => {
 
     expect(screen.getByText("Noch keine Aufgaben hinterlegt.")).toBeInTheDocument();
     expect(screen.queryByTestId("teacher-node-editor-create-slot")).not.toBeInTheDocument();
+  });
+
+  it("renders optional actions next to the section heading", () => {
+    const actions = createRawSnippet(() => ({
+      render: () => '<button type="button">Aktionen</button>'
+    }));
+
+    render(TeacherNodeEditorSection, {
+      props: {
+        eyebrow: "Material",
+        title: "Material bearbeiten",
+        createLabel: "Material hinzufügen",
+        hasItems: true,
+        workbench: true,
+        actions
+      }
+    });
+
+    const action = screen.getByRole("button", { name: "Aktionen" });
+    expect(action.closest(".teacher-node-editor-section__header")).toBeInTheDocument();
+    expect(action.closest(".teacher-node-editor-section__actions")).toBeInTheDocument();
   });
 });

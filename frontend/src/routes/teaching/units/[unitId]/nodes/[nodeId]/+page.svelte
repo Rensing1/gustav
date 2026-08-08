@@ -148,6 +148,19 @@
       data.incomingPrerequisiteCount ?? 0
     )
   );
+  const selectedMaterial = $derived(
+    expandedMaterialId
+      ? editorState.materials.find((material) => material.id === expandedMaterialId) ?? null
+      : null
+  );
+  const selectedTask = $derived(
+    expandedTaskId
+      ? editorState.tasks.find((task) => task.id === expandedTaskId) ?? null
+      : null
+  );
+  const selectedTaskIndex = $derived(
+    selectedTask ? editorState.tasks.findIndex((task) => task.id === selectedTask.id) : -1
+  );
 
   function replaceContentUrl(selection: ModuleContentSelection) {
     if (!browser) return;
@@ -888,6 +901,56 @@
   {/if}
 {/snippet}
 
+{#snippet materialActions()}
+  {#if selectedMaterial}
+    <details class="workspace-node-editor-card-menu">
+      <summary class="workspace-node-editor-card-menu__toggle">Aktionen</summary>
+      <div class="workspace-node-editor-card-menu__panel">
+        <form method="POST" action="?/reorderMaterial" use:enhance={enhanceEditorForm}>
+          <input type="hidden" name="material_id" value={selectedMaterial.id} />
+          <input type="hidden" name="direction" value="up" />
+          <button type="submit">Nach oben</button>
+        </form>
+        <form method="POST" action="?/reorderMaterial" use:enhance={enhanceEditorForm}>
+          <input type="hidden" name="material_id" value={selectedMaterial.id} />
+          <input type="hidden" name="direction" value="down" />
+          <button type="submit">Nach unten</button>
+        </form>
+        <button
+          class="workspace-node-editor-card-menu__danger"
+          type="button"
+          onclick={() => openContentDeleteDialog("material", selectedMaterial.id, selectedMaterial.title)}
+        >Entfernen</button>
+      </div>
+    </details>
+  {/if}
+{/snippet}
+
+{#snippet taskActions()}
+  {#if selectedTask}
+    <details class="workspace-node-editor-card-menu">
+      <summary class="workspace-node-editor-card-menu__toggle">Aktionen</summary>
+      <div class="workspace-node-editor-card-menu__panel">
+        <form method="POST" action="?/reorderTask" use:enhance={enhanceEditorForm}>
+          <input type="hidden" name="task_id" value={selectedTask.id} />
+          <input type="hidden" name="direction" value="up" />
+          <button type="submit">Nach oben</button>
+        </form>
+        <form method="POST" action="?/reorderTask" use:enhance={enhanceEditorForm}>
+          <input type="hidden" name="task_id" value={selectedTask.id} />
+          <input type="hidden" name="direction" value="down" />
+          <button type="submit">Nach unten</button>
+        </form>
+        <button
+          class="workspace-node-editor-card-menu__danger"
+          type="button"
+          onclick={() => openContentDeleteDialog("task", selectedTask.id, taskTitle(selectedTask, selectedTaskIndex))}
+        >Entfernen</button>
+      </div>
+    </details>
+  {/if}
+{/snippet}
+
 <div class="workspace-page teacher-node-editor-page">
   <PageActionHead
     backHref={`/teaching/units/${editorState.unit.id}?module=${encodeURIComponent(editorState.node.id)}`}
@@ -1030,6 +1093,7 @@
     {/if}
 
     <div class:teacher-module-editor-pane={isModuleEditor}>
+      <div class:teacher-module-editor-pane__content={isModuleEditor}>
       {#if isModuleEditor && moduleSelection.kind !== "overview"}
         <button class="teacher-module-editor-pane__back" type="button" onclick={() => selectModuleContent({ kind: "overview" })}>
           ← Inhalte
@@ -1064,6 +1128,7 @@
       emptyMessage="Noch keine Materialien hinterlegt."
       onCreate={openCreateMaterial}
       workbench={isModuleEditor}
+      actions={selectedMaterial ? materialActions : undefined}
     >
       {#snippet create()}
         <form
@@ -1160,9 +1225,10 @@
 
             {#if expandedMaterialId === material.id}
               <div class="workspace-node-editor-entry-body">
-                <div class="workspace-node-editor-entry-toolbar">
-                  <span class="workspace-node-editor-entry-toolbar-spacer"></span>
-                  <details class="workspace-node-editor-card-menu">
+                {#if !isModuleEditor}
+                  <div class="workspace-node-editor-entry-toolbar">
+                    <span class="workspace-node-editor-entry-toolbar-spacer"></span>
+                    <details class="workspace-node-editor-card-menu">
                     <summary class="workspace-node-editor-card-menu__toggle">Aktionen</summary>
                     <div class="workspace-node-editor-card-menu__panel">
                       <form method="POST" action="?/reorderMaterial" use:enhance={enhanceEditorForm}>
@@ -1186,8 +1252,9 @@
                         {/if}
                       </form>
                     </div>
-                  </details>
-                </div>
+                    </details>
+                  </div>
+                {/if}
 
                 {#if material.kind === "file" && isPreviewableFile(material)}
                   <div class="workspace-node-editor-file-preview">
@@ -1262,6 +1329,7 @@
       emptyMessage="Noch keine Aufgaben hinterlegt."
       onCreate={openCreateTask}
       workbench={isModuleEditor}
+      actions={selectedTask ? taskActions : undefined}
     >
       {#snippet create()}
         <form method="POST" action="?/createTask" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm} data-draft-target="new-task" oninput={captureModuleDraft} onchange={captureModuleDraft}>
@@ -1379,9 +1447,10 @@
 
             {#if expandedTaskId === task.id}
               <div class="workspace-node-editor-entry-body">
-                <div class="workspace-node-editor-entry-toolbar">
-                  <span class="workspace-node-editor-entry-toolbar-spacer"></span>
-                  <details class="workspace-node-editor-card-menu">
+                {#if !isModuleEditor}
+                  <div class="workspace-node-editor-entry-toolbar">
+                    <span class="workspace-node-editor-entry-toolbar-spacer"></span>
+                    <details class="workspace-node-editor-card-menu">
                     <summary class="workspace-node-editor-card-menu__toggle">Aktionen</summary>
                     <div class="workspace-node-editor-card-menu__panel">
                       <form method="POST" action="?/reorderTask" use:enhance={enhanceEditorForm}>
@@ -1405,8 +1474,9 @@
                         {/if}
                       </form>
                     </div>
-                  </details>
-                </div>
+                    </details>
+                  </div>
+                {/if}
 
                 <form method="POST" action="?/saveTask" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm} data-draft-target={`task:${task.id}`} oninput={captureModuleDraft} onchange={captureModuleDraft}>
                   <input type="hidden" name="section_id" value={sectionId()} />
@@ -1527,6 +1597,7 @@
       {/snippet}
     </TeacherNodeEditorSection>
     {/if}
+      </div>
     </div>
   </section>
 </div>

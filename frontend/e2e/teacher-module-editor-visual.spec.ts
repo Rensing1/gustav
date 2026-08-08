@@ -51,6 +51,32 @@ test.describe("@visual-smoke @design-system module editor workspace", () => {
       await outline.getByRole("button", { name: /Argumentationshilfe/ }).click();
       await expect(editor.getByRole("heading", { name: "Material bearbeiten" })).toBeVisible();
       await expect(editor.getByRole("textbox", { name: "Inhalt" })).toBeVisible();
+      if (viewport.width === 1920) {
+        const toolbar = editor.getByRole("toolbar", { name: "Text formatieren" });
+        const format = toolbar.getByRole("combobox", { name: "Absatzformat" });
+        await expect(toolbar).toBeVisible();
+        await expect(format).toBeVisible();
+        const [workspaceBox, workbenchBox, outlineBox, contentBox, toolbarBox, formatBox] = await Promise.all([
+          page.locator(".workspace-body").boundingBox(),
+          workbench.boundingBox(),
+          outline.boundingBox(),
+          editor.locator(".teacher-module-editor-pane__content").boundingBox(),
+          toolbar.boundingBox(),
+          format.boundingBox()
+        ]);
+        expect(workspaceBox).not.toBeNull();
+        expect(workbenchBox).not.toBeNull();
+        expect(outlineBox).not.toBeNull();
+        expect(contentBox).not.toBeNull();
+        expect(toolbarBox).not.toBeNull();
+        expect(formatBox).not.toBeNull();
+        expect(workbenchBox!.width / workspaceBox!.width).toBeGreaterThanOrEqual(0.9);
+        expect(outlineBox!.width).toBeGreaterThanOrEqual(22 * 16);
+        expect(outlineBox!.width).toBeLessThanOrEqual(25 * 16);
+        expect(contentBox!.width).toBeLessThanOrEqual(72 * 16 + 1);
+        expect(contentBox!.width).toBeGreaterThan(60 * 16);
+        expect(formatBox!.width / toolbarBox!.width).toBeLessThan(0.3);
+      }
       await waitForStablePage(page);
       await expect(page).toHaveScreenshot(`teacher-module-editor-light-${viewport.name}-material.png`, {
         animations: "disabled",

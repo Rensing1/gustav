@@ -164,6 +164,7 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
 
   await modulePanel.getByRole("link", { name: "Inhalt bearbeiten" }).click();
   await expect(page).toHaveURL(/\/nodes\//);
+  await page.setViewportSize({ width: 1920, height: 1080 });
   const editorPane = page.locator(".teacher-module-editor-pane");
   await expect(editorPane.getByRole("heading", { name: "Inhalt auswählen" })).toBeVisible();
 
@@ -173,6 +174,26 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
   await editorPane.locator('[contenteditable="true"][aria-label="Inhalt"]').fill("Ein kurzer Materialtext.");
   await editorPane.getByRole("button", { name: "Material hinzufügen" }).click();
   await expect(page.getByText("Material angelegt.")).toBeVisible();
+
+  const editorGeometry = await page.evaluate(() => {
+    const workspace = document.querySelector<HTMLElement>(".workspace-body");
+    const workbench = document.querySelector<HTMLElement>(".teacher-module-workbench");
+    const outline = document.querySelector<HTMLElement>(".teacher-module-outline");
+    const content = document.querySelector<HTMLElement>(".teacher-module-editor-pane__content");
+    if (!workspace || !workbench || !outline || !content) return null;
+    return {
+      workspaceWidth: workspace.getBoundingClientRect().width,
+      workbenchWidth: workbench.getBoundingClientRect().width,
+      outlineWidth: outline.getBoundingClientRect().width,
+      contentWidth: content.getBoundingClientRect().width
+    };
+  });
+  expect(editorGeometry).not.toBeNull();
+  expect(editorGeometry!.workbenchWidth / editorGeometry!.workspaceWidth).toBeGreaterThanOrEqual(0.9);
+  expect(editorGeometry!.outlineWidth).toBeGreaterThanOrEqual(22 * 16);
+  expect(editorGeometry!.outlineWidth).toBeLessThanOrEqual(25 * 16);
+  expect(editorGeometry!.contentWidth).toBeLessThanOrEqual(72 * 16 + 1);
+  await expect(editorPane.locator(".teacher-node-editor-section__header").getByText("Aktionen")).toBeVisible();
 
   await page.getByRole("button", { name: "Aufgabe hinzufügen" }).first().click();
   await editorPane.locator('[contenteditable="true"][aria-label="Anweisung & Beschreibung"]').fill("Begründe deine Antwort.");

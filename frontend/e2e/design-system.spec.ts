@@ -148,6 +148,7 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
       sidebarAreas: sidebarStyle.gridTemplateAreas,
       sidebarDisplay: sidebarStyle.display,
       sidebarPosition: sidebarStyle.position,
+      sidebarPaddingBottom: Number.parseFloat(sidebarStyle.paddingBottom),
       mainDisplay: mainStyle.display,
       switchDisplay: switcherStyle.display,
       layoutBox: { x: layoutBox.x, y: layoutBox.y, width: layoutBox.width, height: layoutBox.height },
@@ -193,7 +194,9 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
     expect(contract.switchDisplay).toBe("none");
     expect(contract.layoutColumns.split(" ")).toHaveLength(2);
     expect(contract.sidebarBox.y).toBe(contract.mainBox.y);
-    expect(contract.sidebarBox.y + contract.sidebarBox.height - contract.sessionActionsBox.y - contract.sessionActionsBox.height).toBeLessThanOrEqual(17);
+    expect(
+      contract.sidebarBox.y + contract.sidebarBox.height - contract.sessionActionsBox.y - contract.sessionActionsBox.height
+    ).toBeLessThanOrEqual(contract.sidebarPaddingBottom + 1);
     expect(contract.aiWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.studentWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.sendButtonWidth).toBeLessThan(contract.composerContentWidth);

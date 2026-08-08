@@ -610,9 +610,14 @@
 
 .teacher-module-workbench {
   max-width: none;
-  grid-template-columns: 22rem minmax(0, 1fr);
+  grid-template-columns: clamp(22rem, 23cqw, 25rem) minmax(0, 1fr);
   gap: 0;
   border-top: 1px solid var(--color-line);
+}
+
+.teacher-module-workbench.workspace-node-editor--content-only {
+  max-width: none;
+  width: 100%;
 }
 
 .teacher-module-workbench > .teacher-flow-status {
@@ -620,7 +625,10 @@
 }
 
 .teacher-module-outline {
+  position: sticky;
+  top: 5.35rem;
   min-width: 0;
+  align-self: start;
   padding: 1.4rem 1.5rem 2rem 0;
   border-right: 1px solid var(--color-line);
 }
@@ -777,7 +785,12 @@
 
 .teacher-module-editor-pane {
   min-width: 0;
-  padding: 1.4rem 0 2rem 2.5rem;
+  padding: 1.4rem clamp(2rem, 4cqw, 5rem) 3rem;
+}
+
+.teacher-module-editor-pane__content {
+  width: min(100%, 72rem);
+  margin-inline: auto;
 }
 
 .teacher-module-editor-pane__back {
@@ -807,7 +820,26 @@
 }
 
 .teacher-node-editor-section--workbench .teacher-node-editor-section__header {
+  align-items: end;
   padding-bottom: 0.8rem;
+}
+
+.teacher-node-editor-section__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.teacher-module-editor-pane .learning-markdown-editor__toolbar select {
+  width: auto;
+  flex: 0 0 11rem;
+}
+
+@container (min-width: 64rem) {
+  .teacher-module-editor-pane .learning-markdown-editor__surface .tiptap {
+    min-height: clamp(24rem, 52dvh, 36rem);
+    max-height: 64dvh;
+  }
 }
 
 .teacher-node-editor-criteria-list--dynamic {
@@ -869,7 +901,7 @@
   margin-block-start: var(--space-3);
 }
 
-.workspace-node-editor-card--workbench {
+.workspace-node-editor-card.workspace-node-editor-card--workbench {
   padding: 0;
   border: 0;
   background: transparent;
@@ -878,6 +910,11 @@
 
 .workspace-node-editor-card--workbench .workspace-node-editor-entry-body {
   border-top: 0;
+}
+
+.teacher-node-editor-section--workbench .teacher-node-editor-section__create {
+  padding: 0;
+  border: 0;
 }
 
 @container (max-width: 63.99rem) {
@@ -891,6 +928,7 @@
   }
 
   .teacher-module-outline {
+    position: static;
     padding-right: 0;
     border-right: 0;
   }
@@ -900,7 +938,7 @@
   }
 
   .teacher-module-editor-pane {
-    padding-left: 0;
+    padding-inline: 0;
   }
 
   .teacher-module-editor-pane__back {
@@ -2957,6 +2995,8 @@
 
 /* Teacher home is a work starter, not another dashboard card wall. */
 .teacher-home-workstarter {
+  width: min(100%, var(--layout-content-max));
+  margin-inline: auto;
   gap: var(--space-5);
 }
 

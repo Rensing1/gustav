@@ -17,4 +17,13 @@ describe("wide workspace contract", () => {
     expect(primitives.slice(wideRule)).toMatch(/\.workspace-inner--wide\s*\{[^}]*112rem/s);
     expect(base).not.toContain(".workspace-inner--wide {");
   });
+
+  it("keeps the teacher work starter aligned with the catalog measure", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const teaching = readFileSync(path.resolve(currentDir, "teaching-workspace.css"), "utf8");
+
+    expect(teaching).toMatch(
+      /\.teacher-home-workstarter\s*\{[^}]*width:\s*min\(100%,\s*var\(--layout-content-max\)\);[^}]*margin-inline:\s*auto;/s
+    );
+  });
 });

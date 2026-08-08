@@ -10,6 +10,7 @@
     workbench = false,
     emptyMessage = null,
     onCreate,
+    actions,
     list,
     create
   }: {
@@ -21,6 +22,7 @@
     workbench?: boolean;
     emptyMessage?: string | null;
     onCreate?: (() => void) | null;
+    actions?: Snippet;
     list?: Snippet;
     create?: Snippet;
   } = $props();
@@ -37,6 +39,10 @@
         <span aria-hidden="true">+</span>
         {createLabel}
       </button>
+    {:else if actions}
+      <div class="teacher-node-editor-section__actions">
+        {@render actions()}
+      </div>
     {/if}
   </div>
 

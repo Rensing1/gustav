@@ -85,7 +85,8 @@ def get_modular_unit_graph(repo, *, psycopg_module, student_sub: str, course_id:
                        um.position_in_phase,
                        um.required_prereq_count,
                        us.tasks_total,
-                       us.materials_count
+                       us.materials_count,
+                       um.module_kind
                   from public.unit_modules um
                   join public.unit_sections us on us.id = um.section_id
                   join public.unit_phases p on p.id = um.phase_id
@@ -107,6 +108,7 @@ def get_modular_unit_graph(repo, *, psycopg_module, student_sub: str, course_id:
                         "required_prereq_count": int(r[6] or 0),
                         "tasks_total": int(r[7] or 0),
                         "materials_count": int(r[8] or 0),
+                        "module_kind": str(r[9] or "learning"),
                     }
                 )
 
@@ -159,6 +161,8 @@ def get_modular_unit_graph(repo, *, psycopg_module, student_sub: str, course_id:
                         "title": m["title"],
                         "phase_id": m["phase_id"],
                         "position_in_phase": int(m["position_in_phase"]),
+                        "module_kind": str(s.get("module_kind", m["module_kind"]) or "learning"),
+                        "due_tasks_count": int(s.get("due_tasks_count") or 0),
                         "required_prereq_count": int(s.get("required_prereq_count", m["required_prereq_count"]) or 0),
                         "prereq_done": int(s.get("prereq_done") or 0),
                         "prereq_required": int(s.get("prereq_required") or 0),
@@ -193,8 +197,10 @@ def fetch_modular_unit_module_states(
                prereq_done,
                tasks_total,
                tasks_done,
-               status
-          from public.get_modular_unit_module_states_for_student(%s, %s::uuid, %s::uuid)
+               status,
+               module_kind,
+               due_tasks_count
+          from public.get_modular_unit_module_states_for_student(%s, %s::uuid, %s::uuid, true)
         """,
         (student_sub, course_uuid, unit_uuid),
     )
@@ -214,6 +220,8 @@ def fetch_modular_unit_module_states(
             # non-H5P task -> any submission; H5P task -> full score only.
             "tasks_done": int(r[6] or 0),
             "status": str(r[7] or "locked"),
+            "module_kind": str(r[8] or "learning"),
+            "due_tasks_count": int(r[9] or 0),
         }
     return state
 

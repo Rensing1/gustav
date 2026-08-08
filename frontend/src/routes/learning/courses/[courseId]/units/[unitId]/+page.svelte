@@ -1209,6 +1209,14 @@
     if (!module || (module.status !== "open" && module.status !== "done")) {
       return;
     }
+    if (module.module_kind === "practice") {
+      const query = new URLSearchParams({
+        course_id: data.courseId,
+        practice_module_id: module.id
+      });
+      window.location.assign(`/learning/practice?${query.toString()}`);
+      return;
+    }
 
     const selectingContext = learnerWorkspace.surface === "graph" && Boolean(learnerWorkspace.activeTask);
     const moduleAlreadyLoaded = Boolean(moduleCache[moduleId]);

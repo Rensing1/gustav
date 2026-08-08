@@ -21,6 +21,6 @@ def test_openapi_documents_session_bootstrap() -> None:
     ]
 
     schema = spec["components"]["schemas"]["SessionBootstrap"]
-    assert schema["required"] == ["user", "start_target", "spaces"]
+    assert schema["required"] == ["user", "start_target", "spaces", "practice_enabled"]
     assert schema["properties"]["start_target"]["enum"] == ["/learning", "/teaching"]
     assert schema["properties"]["spaces"]["items"]["type"] == "string"

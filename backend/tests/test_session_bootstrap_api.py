@@ -53,9 +53,10 @@ async def test_session_bootstrap_returns_student_start_target(monkeypatch: pytes
             "role": "student",
             "roles": ["student"],
         },
-        "start_target": "/learning",
-        "spaces": ["learning"],
-    }
+            "start_target": "/learning",
+            "spaces": ["learning"],
+            "practice_enabled": False,
+        }
 
 
 @pytest.mark.anyio

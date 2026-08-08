@@ -153,7 +153,7 @@ components:
             $ref: '#/components/schemas/Role'
     SessionBootstrap:
       type: object
-      required: [user, start_target, spaces]
+      required: [user, start_target, spaces, practice_enabled]
       properties:
         user:
           $ref: '#/components/schemas/SessionBootstrapUser'
@@ -166,6 +166,9 @@ components:
           description: Top-level product spaces the shell should expose for the current role.
           items:
             type: string
+        practice_enabled:
+          type: boolean
+          description: Whether students may start new practice sessions.
       example:
         user:
           sub: "teacher-123"
@@ -3439,6 +3442,8 @@ components:
         - title
         - phase_id
         - position_in_phase
+        - module_kind
+        - due_tasks_count
         - required_prereq_count
         - prereq_done
         - prereq_required
@@ -3461,6 +3466,12 @@ components:
         position_in_phase:
           type: integer
           minimum: 1
+        module_kind:
+          type: string
+          enum: [learning, practice]
+        due_tasks_count:
+          type: integer
+          minimum: 0
         required_prereq_count:
           type: integer
           minimum: 0
@@ -3520,6 +3531,110 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LearningUnitGraphEdge'
+
+    LearningPracticeStack:
+      type: object
+      additionalProperties: false
+      required: [course_id, course_title, unit_id, unit_title, practice_module_id, module_title, task_count, due_tasks_count]
+      properties:
+        course_id: { type: string, format: uuid }
+        course_title: { type: string }
+        unit_id: { type: string, format: uuid }
+        unit_title: { type: string }
+        practice_module_id: { type: string, format: uuid }
+        module_title: { type: string }
+        task_count: { type: integer, minimum: 1 }
+        due_tasks_count: { type: integer, minimum: 0 }
+    LearningPracticeStacksResponse:
+      type: object
+      additionalProperties: false
+      required: [stacks]
+      properties:
+        stacks:
+          type: array
+          items: { $ref: '#/components/schemas/LearningPracticeStack' }
+    LearningPracticeStackSelection:
+      type: object
+      additionalProperties: false
+      required: [course_id, practice_module_id]
+      properties:
+        course_id: { type: string, format: uuid }
+        practice_module_id: { type: string, format: uuid }
+    LearningPracticeSessionCreate:
+      type: object
+      additionalProperties: false
+      required: [mode, stacks]
+      properties:
+        mode: { type: string, enum: [due, exam] }
+        stacks:
+          type: array
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/LearningPracticeStackSelection' }
+    LearningPracticeSessionItem:
+      type: object
+      additionalProperties: false
+      required: [id, course_id, practice_module_id, task_id, position, status, presentation_number, kind, instruction_md, criteria]
+      properties:
+        id: { type: string, format: uuid }
+        course_id: { type: string, format: uuid }
+        practice_module_id: { type: string, format: uuid }
+        task_id: { type: string, format: uuid }
+        position: { type: integer, minimum: 1 }
+        status: { type: string, enum: [active, awaiting_analysis, feedback, retry_queued] }
+        presentation_number: { type: integer, minimum: 1, maximum: 2 }
+        kind: { type: string, enum: [native, h5p] }
+        instruction_md: { type: string }
+        criteria:
+          type: array
+          items: { type: string }
+        h5p_content_id: { type: string, nullable: true }
+    LearningPracticeSession:
+      type: object
+      additionalProperties: false
+      required: [id, mode, status, started_at, total_items, completed_items, current_item]
+      properties:
+        id: { type: string, format: uuid }
+        mode: { type: string, enum: [due, exam] }
+        status: { type: string, enum: [active, ended] }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+        total_items: { type: integer, minimum: 0, maximum: 1000 }
+        completed_items: { type: integer, minimum: 0, maximum: 1000 }
+        current_item:
+          allOf: [{ $ref: '#/components/schemas/LearningPracticeSessionItem' }]
+          nullable: true
+    LearningPracticeAttemptCreate:
+      type: object
+      additionalProperties: false
+      required: [answer_text]
+      properties:
+        answer_text: { type: string, minLength: 1 }
+    LearningPracticeAttemptAccepted:
+      type: object
+      additionalProperties: false
+      required: [attempt_id, status]
+      properties:
+        attempt_id: { type: string, format: uuid }
+        status: { type: string, enum: [pending] }
+    LearningPracticeAttempt:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, completed, failed] }
+        classification: { type: string, enum: [secure, partial, insufficient], nullable: true }
+        fulfillment: { type: number, minimum: 0, maximum: 1, nullable: true }
+        feedback_md: { type: string, nullable: true }
+        due_at: { type: string, format: date-time, nullable: true }
+    LearningPracticeSolution:
+      type: object
+      additionalProperties: false
+      required: [model_solution_md]
+      properties:
+        model_solution_md: { type: string }
 
     LearningModuleCore:
       type: object
@@ -5088,6 +5203,176 @@ paths:
                     modelsLoaded: false
                     modelsCount: 0
                     detail: connect_failed
+  /api/learning/practice/stacks:
+    get:
+      tags: [Learning]
+      summary: List open non-empty practice stacks for the current learner
+      operationId: listLearningPracticeStacks
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["RLS and modular unlock status scope every stack to the authenticated learner."]
+      responses:
+        '200':
+          description: Available practice stacks
+          headers: { Cache-Control: { schema: { type: string, example: "private, no-store" } } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeStacksResponse' } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/sessions/active:
+    get:
+      tags: [Learning]
+      summary: Return the current learner's active practice session
+      operationId: getActiveLearningPracticeSession
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["RLS scopes the session to the authenticated learner."]
+      responses:
+        '200':
+          description: Active session
+          headers: { Cache-Control: { schema: { type: string, example: "private, no-store" } } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeSession' } } }
+        '204': { description: No active session }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/sessions:
+    post:
+      tags: [Learning]
+      summary: Create an immutable shuffled practice-session snapshot
+      operationId: createLearningPracticeSession
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["CSRF same-origin checks and RLS membership checks apply."]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeSessionCreate' } } }
+      responses:
+        '201':
+          description: Session snapshot created
+          headers: { Cache-Control: { schema: { type: string, example: "private, no-store" } } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeSession' } } }
+        '400': { description: Invalid or oversized selection, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: A selected stack is unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: An active session already exists, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Practice session creation is disabled, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/sessions/{session_id}:
+    get:
+      tags: [Learning]
+      summary: Return one learner-owned practice session
+      operationId: getLearningPracticeSession
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["RLS returns foreign sessions as not found."]
+      parameters:
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Session, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeSession' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Session not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/sessions/{session_id}/continue:
+    post:
+      tags: [Learning]
+      summary: Advance a feedback item to the next snapshotted item
+      operationId: continueLearningPracticeSession
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["CSRF, ownership and current stack access are rechecked."]
+      parameters:
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Updated session, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeSession' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Session not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Current item has no feedback yet, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/sessions/{session_id}/items/{item_id}/attempts:
+    post:
+      tags: [Learning]
+      summary: Submit one native practice answer for asynchronous evaluation
+      operationId: createLearningPracticeAttempt
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["CSRF, ownership, stack access and Idempotency-Key binding are enforced."]
+      parameters:
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: item_id, required: true, schema: { type: string, format: uuid } }
+        - { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeAttemptCreate' } } }
+      responses:
+        '202': { description: Attempt accepted, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeAttemptAccepted' } } } }
+        '400': { description: Invalid text answer, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Session or item not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Item state conflict, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/attempts/{attempt_id}:
+    get:
+      tags: [Learning]
+      summary: Poll one learner-owned practice attempt
+      operationId: getLearningPracticeAttempt
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["RLS returns foreign attempts as not found."]
+      parameters:
+        - { in: path, name: attempt_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Attempt status, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeAttempt' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Attempt not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/sessions/{session_id}/items/{item_id}/solution:
+    post:
+      tags: [Learning]
+      summary: Reveal and audit the model solution after a completed attempt
+      operationId: revealLearningPracticeSolution
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["CSRF same-origin checks apply; the reveal is persisted before teacher-only content is returned."]
+      parameters:
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: item_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Authorized model solution, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeSolution' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: No completed attempt exists, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Session or item not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Item state conflict, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/sessions/{session_id}/items/{item_id}/skip:
+    post:
+      tags: [Learning]
+      summary: Skip the current item without changing scheduler state
+      operationId: skipLearningPracticeItem
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["CSRF, ownership and current stack access are rechecked."]
+      parameters:
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: item_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Updated session, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeSession' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Session or item not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Item state conflict, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/sessions/{session_id}/end:
+    post:
+      tags: [Learning]
+      summary: End the learner's practice session idempotently
+      operationId: endLearningPracticeSession
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["CSRF same-origin checks apply; ending remains available after selected-stack access is lost."]
+      parameters:
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Ended session, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeSession' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Session not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/learning/courses:
     get:
       tags: [Learning]

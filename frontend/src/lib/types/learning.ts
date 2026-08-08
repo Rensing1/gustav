@@ -107,7 +107,8 @@ export type LearningUnitGraphModule = {
   title: string;
   phase_id: string;
   position_in_phase: number;
-  module_kind?: "learning" | "practice";
+  module_kind: "learning" | "practice";
+  due_tasks_count: number;
   required_prereq_count: number;
   prereq_done: number;
   prereq_required: number;

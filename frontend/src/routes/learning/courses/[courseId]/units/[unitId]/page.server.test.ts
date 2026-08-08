@@ -431,7 +431,8 @@ describe("learning unit route load", () => {
           bootstrap: {
             user: { sub: "student-1", name: "Test", role: "student", roles: ["student"] },
             start_target: "/learning",
-            spaces: ["learning"]
+            spaces: ["learning"],
+            practice_enabled: false
           },
           appSessionActive: true,
           theme: "light"

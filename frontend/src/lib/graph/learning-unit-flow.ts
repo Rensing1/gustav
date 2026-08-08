@@ -51,7 +51,7 @@ function toTeacherPhases(graph: LearningUnitGraph): TeacherUnitWorkspaceGraphPha
       title: module.title,
       phase_id: module.phase_id,
       position_in_phase: module.position_in_phase,
-      module_kind: module.module_kind ?? "learning",
+      module_kind: module.module_kind,
       required_prereq_count: module.required_prereq_count,
       materials_count: module.materials_count,
       tasks_count: module.tasks_total,
@@ -142,8 +142,12 @@ export async function buildLearningUnitFlow(
         createLabel: null,
         connectable: false,
         status: module?.status ?? "locked",
-        progressLabel: `${module?.tasks_done ?? 0}/${module?.tasks_total ?? 0} Aufgaben`,
-        materialsLabel: `${module?.materials_count ?? 0} Materialien`,
+        progressLabel: module?.module_kind === "practice"
+          ? `${module.due_tasks_count} fällig`
+          : `${module?.tasks_done ?? 0}/${module?.tasks_total ?? 0} Aufgaben`,
+        materialsLabel: module?.module_kind === "practice"
+          ? "Übungsstapel"
+          : `${module?.materials_count ?? 0} Materialien`,
         openable,
         onSelect: openable && module ? () => onOpenModule(module.id) : null
       },

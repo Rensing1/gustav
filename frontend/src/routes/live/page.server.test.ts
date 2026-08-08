@@ -42,7 +42,8 @@ describe("live page load", () => {
     requireParentSpaceBootstrapMock.mockResolvedValue({
       user: { sub: "teacher-1", name: "Ada", role: "teacher", roles: ["teacher"] },
       start_target: "/teaching",
-      spaces: ["teaching"]
+      spaces: ["teaching"],
+      practice_enabled: false
     });
   });
 

@@ -47,6 +47,7 @@ def include_main_routers(
     from backend.web.routes.teaching_unit_tasks import teaching_unit_tasks_router
     from backend.web.routes.teaching_units import teaching_units_router
     from backend.web.routes.learning import learning_router
+    from backend.web.routes.practice import practice_router
     from backend.web.routes.operations import operations_router
     from backend.web.routes.teaching_live import teaching_live_router
     from backend.web.routes.teaching_h5p import teaching_h5p_router
@@ -59,6 +60,7 @@ def include_main_routers(
             auth_router,
             app_router,
             learning_router,
+            practice_router,
             teaching_live_router,
             teaching_courses_router,
             teaching_course_modules_router,

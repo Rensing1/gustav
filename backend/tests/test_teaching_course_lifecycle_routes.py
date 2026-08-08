@@ -48,6 +48,16 @@ async def test_archive_requires_metadata_and_delete_requires_double_confirmation
         archived = await client.post(f"/api/teaching/courses/{course_id}/archive")
         assert archived.status_code == 200
         assert archived.json()["status"] == "archived"
+
+        active_courses = await client.get("/api/teaching/courses")
+        archived_courses = await client.get(
+            "/api/teaching/courses", params={"status": "archived"}
+        )
+        assert active_courses.status_code == 200
+        assert archived_courses.status_code == 200
+        assert course_id not in {course["id"] for course in active_courses.json()}
+        assert course_id in {course["id"] for course in archived_courses.json()}
+
         restored = await client.post(f"/api/teaching/courses/{course_id}/restore")
         assert restored.status_code == 200
         assert restored.json()["status"] == "active"
@@ -64,3 +74,49 @@ async def test_archive_requires_metadata_and_delete_requires_double_confirmation
         )
         assert queued.status_code == 202
         assert queued.json()["status"] == "pending"
+        assert queued.json()["course_title"] == "Kursarchiv"
+
+        repeated = await client.post(
+            f"/api/teaching/courses/{course_id}/deletion-jobs",
+            json={"confirmation_title": "Kursarchiv", "confirm_student_data_loss": True},
+        )
+        assert repeated.status_code == 202
+        assert repeated.json()["id"] == queued.json()["id"]
+
+        jobs = await client.get("/api/teaching/course-deletion-jobs")
+        assert jobs.status_code == 200
+        assert [job["id"] for job in jobs.json()] == [queued.json()["id"]]
+
+        current = await client.get(
+            f"/api/teaching/course-deletion-jobs/{queued.json()['id']}"
+        )
+        assert current.status_code == 200
+        assert current.json() == queued.json()
+
+        repo.course_deletion_jobs[queued.json()["id"]].update(
+            status="completed",
+            completed_at="2026-08-08T12:00:00+00:00",
+        )
+        repo.courses.pop(course_id)
+        completed_repeat = await client.post(
+            f"/api/teaching/courses/{course_id}/deletion-jobs",
+            json={"confirmation_title": "Kursarchiv", "confirm_student_data_loss": True},
+        )
+        assert completed_repeat.status_code == 202
+        assert completed_repeat.json()["id"] == queued.json()["id"]
+        assert completed_repeat.json()["status"] == "completed"
+
+        malformed = await client.get(
+            "/api/teaching/course-deletion-jobs/not-a-valid-job-id"
+        )
+        assert malformed.status_code == 404
+
+        foreign_store = install_session_store(monkeypatch, main)
+        foreign_session = foreign_store.create(
+            sub="teacher-foreign", name="Andere Lehrkraft", roles=["teacher"]
+        )
+        client.cookies.set("gustav_session", foreign_session.session_id)
+        foreign = await client.get(
+            f"/api/teaching/course-deletion-jobs/{queued.json()['id']}"
+        )
+        assert foreign.status_code == 404

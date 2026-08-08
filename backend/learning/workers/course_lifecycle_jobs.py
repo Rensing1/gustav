@@ -182,64 +182,85 @@ def process_export_once(*, dsn: str, storage_adapter, max_bytes: int | None = No
 
 
 def process_deletion_once(*, dsn: str, storage_adapter) -> bool:
-    """Delete one queued object, then finalize an empty deletion outbox."""
+    """Process one leased deletion action through least-privilege commands."""
 
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """update public.course_deletion_jobs set status='processing', started_at=coalesce(started_at, now())
-                   where id=(select id from public.course_deletion_jobs where status in ('pending','processing') order by created_at for update skip locked limit 1)
-                   returning id::text"""
+                """
+                select action, job_id::text, outbox_id::text, bucket,
+                       storage_key, lease_token::text
+                  from public.learning_worker_claim_course_deletion()
+                """
             )
-            job = cur.fetchone()
+            claim = cur.fetchone()
             conn.commit()
-        if not job:
+        if not claim:
             return False
-        job_id = str(job[0])
-        with conn.cursor() as cur:
-            cur.execute(
-                "select id::text, bucket, storage_key from public.storage_deletion_outbox where deletion_job_id=%s::uuid and status<>'deleted' order by created_at limit 1",
-                (job_id,),
+        action = str(claim[0])
+        if action != "delete_object":
+            return True
+
+        outbox_id, bucket, storage_key, lease_token = claim[2:6]
+        try:
+            storage_adapter.delete_object(bucket=bucket, key=storage_key)
+        except Exception as exc:
+            LOG.warning(
+                "learning.course_deletion.storage_failed error_type=%s",
+                type(exc).__name__,
             )
-            item = cur.fetchone()
-        if item:
-            try:
-                storage_adapter.delete_object(bucket=item[1], key=item[2])
-                with conn.cursor() as cur:
-                    cur.execute("update public.storage_deletion_outbox set status='deleted', updated_at=now(), last_error_code=null where id=%s::uuid", (item[0],))
-            except Exception:
-                with conn.cursor() as cur:
-                    cur.execute("update public.storage_deletion_outbox set status='failed', retry_count=least(retry_count+1,20), updated_at=now(), last_error_code='storage_delete_failed' where id=%s::uuid", (item[0],))
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select public.learning_worker_fail_storage_deletion(%s::uuid, %s::uuid, %s)",
+                    (outbox_id, lease_token, "storage_delete_failed"),
+                )
             conn.commit()
             return True
+
         with conn.cursor() as cur:
-            cur.execute("select public.finalize_course_deletion(%s::uuid)", (job_id,))
+            cur.execute(
+                "select public.learning_worker_complete_storage_deletion(%s::uuid, %s::uuid)",
+                (outbox_id, lease_token),
+            )
         conn.commit()
         return True
 
 
 def process_expired_export_once(*, dsn: str, storage_adapter) -> bool:
-    """Remove one expired private ZIP and retain only inhaltsfreie job metadata."""
+    """Remove one leased expired ZIP and retain only inhaltsfreie metadata."""
 
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """select id::text, storage_key from public.learning_export_jobs
-                    where expires_at <= now() and status <> 'expired'
-                    order by expires_at for update skip locked limit 1"""
+                """
+                select export_id::text, storage_key, lease_token::text
+                  from public.learning_worker_claim_expired_export()
+                """
             )
-            row = cur.fetchone()
-            if not row:
-                return False
-            if row[1]:
-                try:
-                    storage_adapter.delete_object(bucket=EXPORT_STORAGE_BUCKET, key=row[1])
-                except Exception:
-                    conn.rollback()
-                    return True
-            cur.execute(
-                "update public.learning_export_jobs set status='expired', storage_key=null, size_bytes=null where id=%s::uuid",
-                (row[0],),
-            )
+            claim = cur.fetchone()
             conn.commit()
+        if not claim:
+            return False
+        export_id, storage_key, lease_token = claim
+        if storage_key:
+            try:
+                storage_adapter.delete_object(bucket=EXPORT_STORAGE_BUCKET, key=storage_key)
+            except Exception as exc:
+                LOG.warning(
+                    "learning.export.cleanup_failed error_type=%s",
+                    type(exc).__name__,
+                )
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "select public.learning_worker_fail_expired_export(%s::uuid, %s::uuid, %s)",
+                        (export_id, lease_token, "storage_delete_failed"),
+                    )
+                conn.commit()
+                return True
+        with conn.cursor() as cur:
+            cur.execute(
+                "select public.learning_worker_complete_expired_export(%s::uuid, %s::uuid)",
+                (export_id, lease_token),
+            )
+        conn.commit()
     return True

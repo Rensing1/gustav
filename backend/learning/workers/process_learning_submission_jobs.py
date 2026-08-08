@@ -1282,13 +1282,26 @@ def run_forever(
             feedback_adapter=feedback_adapter,
         )
         if lifecycle_storage_adapter is not None:
-            # Lifecycle jobs use the same least-privilege worker process but a
-            # separate queue, so AI failures cannot expose archive contents.
-            processed = process_export_once(dsn=dsn, storage_adapter=lifecycle_storage_adapter) or processed
-            processed = process_expired_export_once(dsn=dsn, storage_adapter=lifecycle_storage_adapter) or processed
-            processed = process_deletion_once(dsn=dsn, storage_adapter=lifecycle_storage_adapter) or processed
+            processed = run_lifecycle_once(
+                dsn=dsn,
+                storage_adapter=lifecycle_storage_adapter,
+            ) or processed
         if not processed:
             time.sleep(poll_interval)
+
+
+def run_lifecycle_once(*, dsn: str, storage_adapter) -> bool:
+    """Process each lifecycle queue once without letting cleanup starve deletion.
+
+    Expired exports can require repeated storage cleanup attempts. Course
+    deletion therefore runs before that best-effort cleanup, while new exports
+    retain first priority.
+    """
+
+    processed = process_export_once(dsn=dsn, storage_adapter=storage_adapter)
+    processed = process_deletion_once(dsn=dsn, storage_adapter=storage_adapter) or processed
+    processed = process_expired_export_once(dsn=dsn, storage_adapter=storage_adapter) or processed
+    return processed
 
 
 def _dsn_username(dsn: str) -> str:

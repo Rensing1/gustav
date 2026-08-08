@@ -88,17 +88,22 @@ test("@feature-acceptance teacher archives a course and learner exports only per
 });
 
 test("@feature-acceptance teacher permanently deletes only an isolated test course after strong confirmation", async ({ browser }) => {
+  test.setTimeout(90_000);
   const unique = Date.now();
   const teacherEmail = `e2e_teacher_delete_${unique}@${emailDomain}`;
   const learnerEmail = `e2e_learner_delete_${unique}@${emailDomain}`;
+  const foreignTeacherEmail = `e2e_teacher_delete_foreign_${unique}@${emailDomain}`;
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
+  await ensureTeacherUser(foreignTeacherEmail, password);
 
   const teacher = await authenticatedPage(browser);
   const learner = await authenticatedPage(browser);
+  const foreignTeacher = await authenticatedPage(browser);
   try {
     await login(teacher.page, teacherEmail, password);
     await login(learner.page, learnerEmail, password);
+    await login(foreignTeacher.page, foreignTeacherEmail, password);
     const seeded = await seedLearnerVisualSmokeCourse(teacher.page, learner.page, `E2E Löschen ${unique}`);
 
     await teacher.page.goto(`/teaching/courses/${seeded.courseId}?course=1`);
@@ -114,15 +119,50 @@ test("@feature-acceptance teacher permanently deletes only an isolated test cour
     await expect(teacher.page).toHaveURL(/\/teaching\/courses$/);
     await expect(teacher.page.getByText(seeded.courseTitle, { exact: true })).toHaveCount(0);
 
+    const deletionJobsResponse = await teacher.page.request.get(
+      `${webBase}/api/teaching/course-deletion-jobs?include_completed=true`,
+    );
+    expect(deletionJobsResponse.ok()).toBeTruthy();
+    const deletionJob = (await deletionJobsResponse.json() as Array<{
+      id: string;
+      course_id: string;
+      status: string;
+    }>).find((job) => job.course_id === seeded.courseId);
+    expect(deletionJob?.id).toBeTruthy();
+
     await expect.poll(async () => {
-      const response = await teacher.page.request.get(`${webBase}/api/teaching/courses/${seeded.courseId}`);
-      return [403, 404].includes(response.status()) ? "inaccessible" : response.status();
-    }, { timeout: 15_000 }).toBe("inaccessible");
+      const response = await teacher.page.request.get(
+        `${webBase}/api/teaching/course-deletion-jobs/${deletionJob!.id}`,
+      );
+      if (!response.ok()) return `http-${response.status()}`;
+      return (await response.json()).status;
+    }, { timeout: 45_000 }).toBe("completed");
+
+    const repeatedJob = await teacher.page.evaluate(async ({ courseId, courseTitle }) => {
+      const response = await fetch(`/api/teaching/courses/${courseId}/deletion-jobs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmation_title: courseTitle,
+          confirm_student_data_loss: true,
+        }),
+      });
+      return { status: response.status, body: await response.json() };
+    }, { courseId: seeded.courseId, courseTitle: seeded.courseTitle });
+    expect(repeatedJob.status).toBe(202);
+    expect(repeatedJob.body.id).toBe(deletionJob!.id);
+    expect(repeatedJob.body.status).toBe("completed");
+
+    const foreignRead = await foreignTeacher.page.request.get(
+      `${webBase}/api/teaching/course-deletion-jobs/${deletionJob!.id}`,
+    );
+    expect(foreignRead.status()).toBe(404);
 
     await learner.page.goto("/learning");
     await expect(learner.page.getByRole("link", { name: seeded.courseTitle })).toHaveCount(0);
   } finally {
     await teacher.context.close();
     await learner.context.close();
+    await foreignTeacher.context.close();
   }
 });

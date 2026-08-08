@@ -18,6 +18,9 @@ help:
 	@echo "  trust-local-ca     - Explicitly trust Caddy CA in system, Chromium/Codex and Firefox"
 	@echo "  ps                 - Show docker compose services"
 	@echo "  reset-local        - Reset local Supabase DB + recreate app services"
+	@echo "  dev-accounts       - Provision local teacher/student browser personas and modular fixture"
+	@echo "  reset-dev-accounts - Reset all data owned by the local dev teacher and rebuild the fixture"
+	@echo "  test-dev-accounts  - Smoke-test both dev personas and the modular fixture in Chromium"
 	@echo "  db-login-user      - Create/alter app DB login (IN ROLE gustav_limited, local only)"
 	@echo "  learning-worker-db-login-user - Create/alter worker DB login (IN ROLE gustav_worker, local only)"
 	@echo "  test               - Run test suite (unit/integration)"
@@ -101,6 +104,14 @@ reset-local:
 	  python3 -m backend.tools.local_ca_trust status --warn-only || \
 	  echo "Hinweis: Caddy-CA konnte noch nicht geprüft werden; nutze 'make local-ca-status'."; \
 	fi
+
+.PHONY: dev-accounts
+dev-accounts:
+	@.venv/bin/python -m backend.tools.dev_accounts ensure
+
+.PHONY: reset-dev-accounts
+reset-dev-accounts:
+	@.venv/bin/python -m backend.tools.dev_accounts reset
 
 .PHONY: db-login-user
 db-login-user:
@@ -264,6 +275,11 @@ test-visual-smoke:
 test-feature-acceptance:
 	@cd frontend && node tooling/check-playwright-browser.mjs
 	@cd frontend && npm run test:e2e -- --grep @feature-acceptance
+
+.PHONY: test-dev-accounts
+test-dev-accounts:
+	@cd frontend && node tooling/check-playwright-browser.mjs
+	@cd frontend && RUN_DEV_ACCOUNTS=1 npm run test:e2e -- --grep @dev-accounts --output ../.tmp/playwright-dev-accounts
 
 .PHONY: verify-feature
 verify-feature:

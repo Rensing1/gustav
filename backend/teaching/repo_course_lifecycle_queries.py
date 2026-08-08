@@ -252,6 +252,72 @@ def _export_job(row) -> dict:
     }
 
 
+def _deletion_job(row) -> dict:
+    """Map the stable owner-visible deletion-job projection."""
+
+    return {
+        "id": row[0],
+        "course_id": row[1],
+        "course_title": row[2],
+        "status": row[3],
+        "created_at": row[4].isoformat() if hasattr(row[4], "isoformat") else str(row[4]),
+        "started_at": row[5].isoformat() if row[5] and hasattr(row[5], "isoformat") else row[5],
+        "completed_at": row[6].isoformat() if row[6] and hasattr(row[6], "isoformat") else row[6],
+        "error_code": row[7],
+    }
+
+
+def list_deletion_jobs(
+    *,
+    dsn: str,
+    psycopg_module,
+    owner_sub: str,
+    include_completed: bool,
+    limit: int,
+    offset: int,
+) -> list[dict[str, Any]]:
+    """List deletion jobs through RLS and an explicit owner predicate."""
+
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+            cur.execute(
+                """
+                select id::text, course_id::text, course_title, status, created_at,
+                       started_at, completed_at, error_code
+                  from public.course_deletion_jobs
+                 where owner_sub = %s
+                   and (%s or status <> 'completed')
+                 order by created_at desc, id desc
+                 offset %s limit %s
+                """,
+                (owner_sub, include_completed, max(0, offset), max(1, min(100, limit))),
+            )
+            rows = cur.fetchall() or []
+    return [_deletion_job(row) for row in rows]
+
+
+def get_deletion_job(
+    *, dsn: str, psycopg_module, job_id: str, owner_sub: str
+) -> dict[str, Any] | None:
+    """Read one deletion job without revealing jobs owned by another teacher."""
+
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+            cur.execute(
+                """
+                select id::text, course_id::text, course_title, status, created_at,
+                       started_at, completed_at, error_code
+                  from public.course_deletion_jobs
+                 where id = %s and owner_sub = %s
+                """,
+                (job_id, owner_sub),
+            )
+            row = cur.fetchone()
+    return _deletion_job(row) if row else None
+
+
 def deletion_impact(*, dsn: str, psycopg_module, course_id: str, owner_sub: str) -> dict | None:
     with psycopg_module.connect(dsn) as conn:
         with conn.cursor() as cur:
@@ -267,11 +333,13 @@ def queue_deletion(*, dsn: str, psycopg_module, course_id: str, owner_sub: str, 
             cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
             cur.execute(
                 """
-                select (j).id::text, (j).course_id::text, (j).status, (j).created_at
+                select (j).id::text, (j).course_id::text, (j).course_title,
+                       (j).status, (j).created_at, (j).started_at,
+                       (j).completed_at, (j).error_code
                   from (select public.queue_course_deletion_owned(%s, %s, %s, %s) j) q
                 """,
                 (course_id, owner_sub, confirmation_title, confirm_student_data_loss),
             )
             row = cur.fetchone()
             conn.commit()
-    return {"id": row[0], "course_id": row[1], "status": row[2], "created_at": row[3].isoformat()}
+    return _deletion_job(row)

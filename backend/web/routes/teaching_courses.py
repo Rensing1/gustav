@@ -8,6 +8,8 @@ Why:
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Request
 
 from backend.teaching.errors import TeachingRepositoryUnavailable
@@ -29,13 +31,22 @@ teaching_courses_router = APIRouter(tags=["Teaching"])
 
 
 @teaching_courses_router.get("/api/teaching/courses")
-async def list_courses(request: Request, limit: int = 10, offset: int = 0):
+async def list_courses(
+    request: Request,
+    limit: int = 10,
+    offset: int = 0,
+    status: Literal["active", "archived"] = "active",
+):
     """
     List courses for the current user with simple pagination.
 
     Behavior:
-        - Teachers: return owned courses.
-        - Students: return courses the student is a member of.
+        - Teachers: return owned active or archived courses.
+        - Students: return active courses the student is a member of.
+
+    Permissions:
+        Requesting archived courses requires the teacher role. Ownership is
+        enforced by the repository under the caller's database identity.
     """
 
     user = getattr(request.state, "user", None)
@@ -43,8 +54,18 @@ async def list_courses(request: Request, limit: int = 10, offset: int = 0):
     limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=10, max_limit=50)
     repo = _get_repo()
     if _role_in(user, "teacher"):
-        items = repo.list_courses_for_teacher(teacher_id=sub, limit=limit, offset=offset)
+        items = repo.list_course_catalog_for_owner(
+            owner_sub=sub,
+            status=status,
+            query="",
+            school_year_start=None,
+            subject="",
+            limit=limit,
+            offset=offset,
+        )
     else:
+        if status != "active":
+            return _private_error({"error": "forbidden"}, status_code=403)
         items = repo.list_courses_for_student(student_id=sub, limit=limit, offset=offset)
     return _json_private([_serialize_course(c) for c in items], status_code=200)
 
@@ -250,3 +271,49 @@ async def create_course_deletion_job(request: Request, course_id: str, payload: 
     except Exception as exc:
         return _course_lifecycle_error(exc)
     return _json_private(job, status_code=202, vary_origin=True)
+
+
+@teaching_courses_router.get("/api/teaching/course-deletion-jobs")
+async def list_course_deletion_jobs(
+    request: Request,
+    include_completed: bool = False,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List deletion jobs owned by the authenticated teacher."""
+
+    user = getattr(request.state, "user", None)
+    if not _role_in(user, "teacher"):
+        return _private_error({"error": "forbidden"}, status_code=403)
+    limit, offset = _clamp_limit_offset(limit=limit, offset=offset, default_limit=50, max_limit=100)
+    try:
+        jobs = _get_repo().list_course_deletion_jobs(
+            owner_sub=_current_sub(user),
+            include_completed=include_completed,
+            limit=limit,
+            offset=offset,
+        )
+    except TeachingRepositoryUnavailable:
+        raise
+    return _json_private(jobs, status_code=200)
+
+
+@teaching_courses_router.get("/api/teaching/course-deletion-jobs/{job_id}")
+async def get_course_deletion_job(request: Request, job_id: str):
+    """Read one owner-scoped deletion job without leaking foreign IDs."""
+
+    user = getattr(request.state, "user", None)
+    if not _role_in(user, "teacher"):
+        return _private_error({"error": "forbidden"}, status_code=403)
+    if not _is_uuid_like(job_id):
+        return _private_error({"error": "not_found"}, status_code=404)
+    try:
+        job = _get_repo().get_course_deletion_job(
+            job_id=job_id,
+            owner_sub=_current_sub(user),
+        )
+    except TeachingRepositoryUnavailable:
+        raise
+    if not job:
+        return _private_error({"error": "not_found"}, status_code=404)
+    return _json_private(job, status_code=200)

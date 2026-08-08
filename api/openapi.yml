@@ -1830,13 +1830,20 @@ components:
         confirm_student_data_loss: { type: boolean, enum: [true] }
     CourseDeletionJob:
       type: object
-      required: [id, course_id, status, created_at]
+      required: [id, course_id, course_title, status, created_at, started_at, completed_at, error_code]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
         course_id: { type: string, format: uuid }
+        course_title: { type: string }
         status: { type: string, enum: [pending, processing, completed, failed] }
         created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        error_code:
+          type: string
+          enum: [storage_delete_failed]
+          nullable: true
     LearningPortfolioSubmission:
       type: object
       required: [id, kind, intent, created_at, task_snapshot]
@@ -8883,7 +8890,8 @@ paths:
       summary: List courses for the current user
       description: >-
         Teachers see courses where they are the owner (teacher_id == sub).
-        Students see courses where they are a member.
+        Teachers may select their active or archived catalog. Students see
+        active courses where they are a member and cannot request archives.
       operationId: listCourses
       security:
         - cookieAuth: []
@@ -8901,6 +8909,13 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - in: query
+          name: status
+          description: Owner-scoped lifecycle status; archived is teacher-only.
+          schema:
+            type: string
+            enum: [active, archived]
+            default: active
       responses:
         '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
@@ -9184,6 +9199,56 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden403' }
         '404': { description: Course not found }
         '409': { description: Course is already deleting }
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
+
+  /api/teaching/course-deletion-jobs:
+    get:
+      tags: [Teaching]
+      summary: List permanent course deletion jobs owned by the current teacher
+      operationId: listCourseDeletionJobs
+      security: [{ cookieAuth: [] }]
+      x-security-notes:
+        - "RLS and an explicit owner predicate restrict results to the authenticated teacher."
+      parameters:
+        - in: query
+          name: include_completed
+          schema: { type: boolean, default: false }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Owner-scoped deletion jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CourseDeletionJob' }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
+
+  /api/teaching/course-deletion-jobs/{job_id}:
+    get:
+      tags: [Teaching]
+      summary: Read one permanent course deletion job owned by the current teacher
+      operationId: getCourseDeletionJob
+      security: [{ cookieAuth: [] }]
+      x-security-notes:
+        - "Unknown and foreign job identifiers both return 404 to prevent existence disclosure."
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Current deletion job state, content: { application/json: { schema: { $ref: '#/components/schemas/CourseDeletionJob' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { $ref: '#/components/responses/Forbidden403' }
+        '404': { description: Job not found }
         '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
 
   /api/teaching/courses/{course_id}/members:

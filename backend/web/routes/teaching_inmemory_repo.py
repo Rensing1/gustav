@@ -157,6 +157,7 @@ class InMemoryTeachingRepo:
         self.upload_intents: Dict[str, Dict[str, Any]] = {}
         self.module_section_releases: Dict[tuple[str, str], Dict[str, Any]] = {}
         self.concern_box_entries: Dict[str, ConcernBoxEntryData] = {}
+        self.course_deletion_jobs: Dict[str, Dict[str, Any]] = {}
 
     def create_course(self, *, title: str, subject: str | None, grade_level: str | None, term: str | None, school_year_start: int | None = None, teacher_id: str) -> Course:
         normalized = (title or "").strip()
@@ -240,13 +241,73 @@ class InMemoryTeachingRepo:
 
     def queue_course_deletion(self, *, course_id: str, owner_sub: str, confirmation_title: str, confirm_student_data_loss: bool) -> dict:
         course = self.courses.get(course_id)
-        if not course or course.teacher_id != owner_sub:
+        existing = next(
+            (
+                job
+                for job in self.course_deletion_jobs.values()
+                if job["course_id"] == course_id and job["owner_sub"] == owner_sub
+            ),
+            None,
+        )
+        expected_title = course.title if course and course.teacher_id == owner_sub else None
+        if expected_title is None and existing is not None:
+            expected_title = existing["course_title"]
+        if expected_title is None:
             raise LookupError("course_not_found")
-        if confirmation_title != course.title or not confirm_student_data_loss:
+        if confirmation_title != expected_title or not confirm_student_data_loss:
             raise ValueError("deletion_confirmation_mismatch")
+        if existing is not None:
+            if existing["status"] == "failed":
+                existing.update(
+                    status="pending",
+                    started_at=None,
+                    completed_at=None,
+                    error_code=None,
+                )
+            return {key: value for key, value in existing.items() if key != "owner_sub"}
+        if course is None or course.teacher_id != owner_sub:
+            raise LookupError("course_not_found")
         course.status = "deleting"
         now = datetime.now(timezone.utc).isoformat()
-        return {"id": str(uuid4()), "course_id": course_id, "status": "pending", "created_at": now}
+        job = {
+            "id": str(uuid4()),
+            "course_id": course_id,
+            "course_title": course.title,
+            "status": "pending",
+            "created_at": now,
+            "started_at": None,
+            "completed_at": None,
+            "error_code": None,
+            "owner_sub": owner_sub,
+        }
+        self.course_deletion_jobs[job["id"]] = job
+        return {key: value for key, value in job.items() if key != "owner_sub"}
+
+    def list_course_deletion_jobs(
+        self,
+        *,
+        owner_sub: str,
+        include_completed: bool,
+        limit: int,
+        offset: int,
+    ) -> list[dict]:
+        jobs = [
+            job
+            for job in self.course_deletion_jobs.values()
+            if job["owner_sub"] == owner_sub
+            and (include_completed or job["status"] != "completed")
+        ]
+        jobs.sort(key=lambda job: (job["created_at"], job["id"]), reverse=True)
+        return [
+            {key: value for key, value in job.items() if key != "owner_sub"}
+            for job in jobs[offset : offset + limit]
+        ]
+
+    def get_course_deletion_job(self, *, job_id: str, owner_sub: str) -> dict | None:
+        job = self.course_deletion_jobs.get(job_id)
+        if not job or job["owner_sub"] != owner_sub:
+            return None
+        return {key: value for key, value in job.items() if key != "owner_sub"}
 
     def list_courses_for_student(self, *, student_id: str, limit: int, offset: int) -> List[Course]:
         # Simple scan; replace with indexed DB query later

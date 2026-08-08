@@ -8,6 +8,9 @@ Status: Stable
 - `make trust-local-ca` – validiert und installiert Caddys öffentliche Root-CA ausdrücklich und idempotent; benötigt `certutil` (`libnss3-tools`) und für den System-Trust-Store `sudo`
 - `make ps` – Statusübersicht (docker compose ps)
 - `make reset-local` – Supabase DB reset + Services recreate (Hinweis: Keys rotieren; `.env` ggf. via `supabase status` aktualisieren)
+- `make dev-accounts` – lokale Lehrer-/Schüler-Personas und die vollständige modulare Browser-Testlandschaft idempotent provisionieren
+- `make reset-dev-accounts` – nach vollständigem Preflight ausschließlich die Daten der Dev-Lehrkraft über idempotente Kurslöschaufträge löschen, deren Abschluss überwachen und die modulare Testlandschaft neu aufbauen; ein privates Recovery-Manifest ermöglicht die sichere Wiederaufnahme
+- `make test-dev-accounts` – beide Personas, Graphzustände, H5P, Dialog und Diagnostik im opt-in Chromium-Smoke mit isoliertem Artefaktordner prüfen
 - `make db-login-user` – Login‑User erstellen/aktualisieren (IN ROLE gustav_limited)
 - `make learning-worker-db-login-user` – Worker-Login‑User erstellen/aktualisieren (dedizierte Worker-Rechte)
 - `make test` – Unit/Integration
@@ -35,6 +38,8 @@ Status: Stable
 - `KC_BASE_URL`/`KC_HOST_HEADER`/`KC_REALM`/`KC_ADMIN_USER`/`KC_ADMIN_PASS` – Keycloak Admin Lookup für `import-legacy*`
 - `KEYCLOAK_ADMIN`/`KEYCLOAK_ADMIN_PASSWORD` – lokaler Master-Admin für E2E/Reset
 - `KC_ADMIN_CLIENT_ID`/`KC_ADMIN_CLIENT_SECRET`/`KC_ADMIN_REALM` – Confidential Client für Admin-API-Sync
+- `DEV_TEACHER_EMAIL`/`DEV_TEACHER_PASSWORD` und `DEV_STUDENT_EMAIL`/`DEV_STUDENT_PASSWORD` – ignorierte lokale Zugangsdaten für wiederholbare Browserprüfungen; fehlende Werte erzeugt `make dev-accounts`
+- `OPENAI_BASE_URL`/`AI_TEXT_MODEL` – für Dev-Accounts ist ein erreichbarer Loopback-Endpunkt oder ein entfernter HTTPS-KI-Provider wie Mistral mit öffentlichem CA-Bundle zulässig; die Produktdienste selbst bleiben strikt lokal
 
 ## Hinweis (KISS)
 - `make up` installiert keine Zertifikate. Vor `make trust-local-ca` Firefox und Codex vollständig schließen und danach neu starten. Nach einer Neuerstellung des Caddy-Daten-Volumes den Status erneut prüfen.

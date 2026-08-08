@@ -32,6 +32,31 @@ make trust-local-ca
 
 Für die visuellen Playwright-Smokes wird einmalig `make playwright-bootstrap` ausgeführt. `make test-visual-smoke` prüft den Chromium-Browser vor dem Start und meldet den Bootstrap-Befehl frühzeitig, statt erst am Ende des produktnahen Profils zu scheitern.
 
+## Lokale Browser-Personas
+
+Für wiederholbare manuelle Prüfungen stehen eine feste Dev-Lehrkraft und ein fester Dev-Schüler zur Verfügung. Die Zugangsdaten liegen ausschließlich in der ignorierten lokalen `.env`:
+
+```bash
+make dev-accounts
+```
+
+Der erste Lauf ergänzt fehlende `DEV_TEACHER_*`- und `DEV_STUDENT_*`-Werte, provisioniert beide Konten in Keycloak und erstellt den Kurs „GUSTAV Browser-Test“ mit der modularen Lerneinheit „Digitale Systeme untersuchen“. Ein erneuter Lauf lässt eine vollständige Landschaft unverändert.
+
+Die Fixture enthält drei Phasen, sechs verzweigte Module, Markdown-, Bild- und PDF-Materialien sowie native, visuelle, Scratch-, Calliope-, Filius-, H5P- und Dialogaufgaben. Der Schüler besitzt eine ausgewertete Einstiegsabgabe und einen fortsetzbaren KI-Dialog; dadurch sind erledigte, offene und gesperrte Module sowie Diagnostikdaten gleichzeitig prüfbar.
+
+Der Reset löscht alle Kurse und Lerneinheiten der dedizierten Dev-Lehrkraft und baut die definierte Landschaft neu auf. Andere Konten bleiben unberührt:
+
+```bash
+make reset-dev-accounts
+make test-dev-accounts
+```
+
+Vor der ersten Löschung schreibt der Reset ein privates Recovery-Manifest nach `.tmp/dev-accounts-state.json`. Er übernimmt darin offene oder fehlgeschlagene Kurslöschaufträge, wartet über die eigentümergeschützte Status-API auf `completed` und entfernt das aufgezeichnete H5P-Objekt erst danach. Bei Workerfehler oder Timeout wird kein Erfolg gemeldet; der nächste Lauf kann denselben Zustand sicher fortsetzen. Manifest und `.env` haben Dateimodus `0600`.
+
+Beide Befehle verweigern entfernte Web-, Keycloak- und Storage-Adressen. Der KI-Dienst darf entweder über Loopback oder als entfernter HTTPS-Provider wie Mistral konfiguriert sein; entfernte Klartext-HTTP-Adressen und Zugangsdaten in der URL bleiben verboten. Für entfernte HTTPS-Anbieter wird das öffentliche CA-Bundle verwendet, nicht die lokale Caddy-CA. Der Reset beginnt erst, wenn Web, Keycloak, H5P, Storage, Learning-Worker samt Lifecycle-Kommandos und das konfigurierte KI-Modell erreichbar sind. Das Browser-Smoke-Profil ist opt-in und gehört bewusst nicht zu `make verify`.
+
+Nach einem erfolgreichen Reset gilt derselbe erwartete Lernstand: „Start und Überblick“ ist erledigt und enthält Abgabe plus formative Rückmeldung; die drei Erarbeitungsmodule sind offen; der KI-Dialog ist fortsetzbar; H5P ist noch nicht abgeschlossen; „Transferaufgabe“ und „Abschluss“ sind gesperrt. Die Diagnostik zeigt bereits die Einstiegsabgabe.
+
 ## Typische Fehler
 - Health 502/Timeout → Web nicht erreichbar (Logs prüfen: `docker compose logs -n 200 web`).
 - `ERR_CERT_AUTHORITY_INVALID` in Firefox/Codex → `make local-ca-status`, danach Browser schließen und `make trust-local-ca` ausführen.

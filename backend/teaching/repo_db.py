@@ -367,6 +367,17 @@ class DBTeachingRepo:
             confirmation_title=confirmation_title, confirm_student_data_loss=confirm_student_data_loss,
         )
 
+    def list_course_deletion_jobs(self, *, owner_sub: str, include_completed: bool, limit: int, offset: int) -> list[dict]:
+        return _repo_course_lifecycle_queries.list_deletion_jobs(
+            dsn=self._dsn, psycopg_module=psycopg, owner_sub=owner_sub,
+            include_completed=include_completed, limit=limit, offset=offset,
+        )
+
+    def get_course_deletion_job(self, *, job_id: str, owner_sub: str) -> dict | None:
+        return _repo_course_lifecycle_queries.get_deletion_job(
+            dsn=self._dsn, psycopg_module=psycopg, job_id=job_id, owner_sub=owner_sub,
+        )
+
     def get_course(self, course_id: str) -> Optional[dict]:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:

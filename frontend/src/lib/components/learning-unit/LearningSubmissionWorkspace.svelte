@@ -3,7 +3,7 @@
   import { onMount } from "svelte";
 
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
-  import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
+  import MarkdownWysiwygEditor from "$lib/components/ui/MarkdownEditor.svelte";
   import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { learningSubmissionFailureMessage } from "$lib/utils/learning-failures";

@@ -7,11 +7,13 @@
     name = "text_body",
     value = "",
     placeholder = "Schreibe hier deine Lösung.",
+    ariaLabel = name,
     onInput = null
   }: {
     name?: string;
     value?: string;
     placeholder?: string;
+    ariaLabel?: string;
     onInput?: ((nextValue: string) => void) | null;
   } = $props();
 
@@ -101,6 +103,7 @@
         element: host,
         content: fallbackValue,
         placeholder,
+        ariaLabel,
         onUpdate: (nextValue) => {
           if (nextValue !== currentValue) {
             setCurrentValue(nextValue);
@@ -183,7 +186,7 @@
   {/if}
   <div bind:this={host} class="learning-markdown-editor__surface"></div>
   <textarea
-    aria-label={name}
+    aria-label={editorReady ? undefined : ariaLabel}
     hidden={editorReady}
     name={editorReady ? undefined : name}
     rows="12"

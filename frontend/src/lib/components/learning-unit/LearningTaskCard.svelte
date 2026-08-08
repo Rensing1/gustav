@@ -4,7 +4,7 @@
   import H5PTaskPlayer from "$lib/components/H5PTaskPlayer.svelte";
   import LearningDialogWorkspace from "$lib/components/learning-unit/LearningDialogWorkspace.svelte";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
-  import MarkdownWysiwygEditor from "$lib/components/learning-unit/MarkdownWysiwygEditor.svelte";
+  import MarkdownWysiwygEditor from "$lib/components/ui/MarkdownEditor.svelte";
   import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";

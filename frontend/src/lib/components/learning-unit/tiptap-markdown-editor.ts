@@ -30,6 +30,7 @@ type CreateEditorOptions = {
   element: HTMLElement;
   content: string;
   placeholder: string;
+  ariaLabel?: string;
   onUpdate: (markdown: string) => void;
   onStateChange?: () => void;
 };
@@ -64,7 +65,7 @@ export function createTiptapMarkdownEditor(options: CreateEditorOptions): Tiptap
     ],
     editorProps: {
       attributes: {
-        "aria-label": options.placeholder,
+        "aria-label": options.ariaLabel ?? options.placeholder,
         class: "tiptap"
       }
     },

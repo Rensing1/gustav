@@ -35,6 +35,12 @@ describe("MarkdownWysiwygEditor", () => {
     expect(source).toContain("editorReady");
   });
 
+  it("gives the accessible field name only to the currently interactive editor", () => {
+    const source = readFileSync(editorSourcePath, "utf8");
+
+    expect(source).toContain("aria-label={editorReady ? undefined : ariaLabel}");
+  });
+
   it("initializes the no-JS fallback value before client effects run", () => {
     const source = readFileSync(editorSourcePath, "utf8");
 

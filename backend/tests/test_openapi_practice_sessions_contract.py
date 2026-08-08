@@ -21,6 +21,7 @@ def test_practice_stack_and_session_paths_are_contracted() -> None:
         "/api/learning/practice/sessions/{session_id}": {"get"},
         "/api/learning/practice/sessions/{session_id}/continue": {"post"},
         "/api/learning/practice/sessions/{session_id}/items/{item_id}/attempts": {"post"},
+        "/api/learning/practice/sessions/{session_id}/items/{item_id}/h5p-context": {"post"},
         "/api/learning/practice/attempts/{attempt_id}": {"get"},
         "/api/learning/practice/sessions/{session_id}/items/{item_id}/solution": {"post"},
         "/api/learning/practice/sessions/{session_id}/items/{item_id}/skip": {"post"},
@@ -56,3 +57,8 @@ def test_practice_session_create_contract_has_mode_selection_and_limits() -> Non
     assert create["properties"]["stacks"]["maxItems"] == 50
     assert schemas["SessionBootstrap"]["properties"]["practice_enabled"]["type"] == "boolean"
 
+
+def test_practice_attempt_contract_separates_native_and_token_bound_h5p_inputs() -> None:
+    variants = _spec()["components"]["schemas"]["LearningPracticeAttemptCreate"]["oneOf"]
+    assert {"answer_text"} == set(variants[0]["required"])
+    assert {"score_raw", "score_max", "practice_completion_token"} == set(variants[1]["required"])

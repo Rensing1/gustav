@@ -61,6 +61,7 @@ def worker_module(monkeypatch):
         "_update_submission_completed",
         lambda **kw: calls["update_completed"].append(kw),
     )
+    monkeypatch.setattr(mod, "complete_worker_practice_attempt", lambda **kw: None)
     # Avoid touching DB GUCs in tests
     monkeypatch.setattr(mod, "_set_current_sub", lambda *a, **k: None)
     monkeypatch.setattr(

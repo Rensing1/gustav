@@ -11,6 +11,7 @@ Owner: Platform/App
 | Web | SESSION_DATABASE_URL | postgresql://postgres@supabase_db_gustav-alpha2:5432/postgres | Secret | env/.env | Sessions (Service Role) |
 | Web | SERVICE_ROLE_DSN | postgresql://postgres@supabase_db_gustav-alpha2:5432/postgres | Secret | env/.env | Server-seitige Metadaten-Cleanups (z. B. Teaching-Storage) |
 | Web | CLI_TOKENS_BACKEND | =SESSIONS_BACKEND | db | env/.env | Persistenz für opake CLI-Tokens |
+| Web | ENABLE_PRACTICE_SESSIONS | false | false bis zur Pilotfreigabe | env/.env | Blendet den Übungsraum ein und erlaubt neue Sitzungen; aktive Sitzungen bleiben bei Deaktivierung fortsetzbar |
 | Web | WEB_BASE | https://app.localhost | FQDN | env/.env | Browser Base |
 | Web | REDIRECT_URI | https://app.localhost/auth/callback | FQDN/callback | env/.env | OIDC Callback |
 | KC | KC_BASE_URL | https://id.localhost | HTTPS FQDN | env/.env | IdP Base |

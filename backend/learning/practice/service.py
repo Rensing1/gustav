@@ -48,6 +48,26 @@ class PracticeRepoProtocol(Protocol):
 
     def end_session(self, *, student_sub: str, session_id: str) -> dict | None: ...
 
+    def create_native_attempt(
+        self, *, student_sub: str, session_id: str, item_id: str,
+        answer_text: str, idempotency_key: str
+    ) -> dict: ...
+
+    def get_attempt(self, *, student_sub: str, attempt_id: str) -> dict | None: ...
+
+    def reveal_solution(
+        self, *, student_sub: str, session_id: str, item_id: str
+    ) -> dict | None: ...
+
+    def issue_h5p_context(
+        self, *, student_sub: str, session_id: str, item_id: str
+    ) -> dict | None: ...
+
+    def complete_h5p_attempt(
+        self, *, student_sub: str, session_id: str, item_id: str,
+        score_raw: int, score_max: int, completion_token: str
+    ) -> dict: ...
+
 
 def _selection(stacks: object) -> list[dict[str, str]]:
     if isinstance(stacks, (str, bytes)) or not isinstance(stacks, Sequence):
@@ -122,3 +142,80 @@ class PracticeService:
         if session is None:
             raise LookupError("practice_session_not_found")
         return session
+
+    def create_native_attempt(
+        self,
+        student_sub: str,
+        session_id: str,
+        item_id: str,
+        *,
+        answer_text: object,
+        idempotency_key: object,
+    ) -> dict:
+        answer = str(answer_text or "").strip()
+        key = str(idempotency_key or "").strip()
+        if not key:
+            raise ValueError("missing_idempotency_key")
+        if len(key) > 128:
+            raise ValueError("invalid_idempotency_key")
+        if not answer:
+            raise ValueError("invalid_practice_answer")
+        return self.repo.create_native_attempt(
+            student_sub=student_sub,
+            session_id=session_id,
+            item_id=item_id,
+            answer_text=answer,
+            idempotency_key=key,
+        )
+
+    def get_attempt(self, student_sub: str, attempt_id: str) -> dict:
+        attempt = self.repo.get_attempt(student_sub=student_sub, attempt_id=attempt_id)
+        if attempt is None:
+            raise LookupError("practice_attempt_not_found")
+        return attempt
+
+    def reveal_solution(self, student_sub: str, session_id: str, item_id: str) -> dict:
+        solution = self.repo.reveal_solution(
+            student_sub=student_sub, session_id=session_id, item_id=item_id
+        )
+        if solution is None:
+            raise LookupError("practice_session_not_found")
+        return solution
+
+    def issue_h5p_context(self, student_sub: str, session_id: str, item_id: str) -> dict:
+        context = self.repo.issue_h5p_context(
+            student_sub=student_sub, session_id=session_id, item_id=item_id
+        )
+        if context is None:
+            raise LookupError("practice_session_not_found")
+        return context
+
+    def complete_h5p_attempt(
+        self,
+        student_sub: str,
+        session_id: str,
+        item_id: str,
+        *,
+        score_raw: object,
+        score_max: object,
+        completion_token: object,
+    ) -> dict:
+        token = str(completion_token or "").strip()
+        if not token:
+            raise ValueError("missing_practice_completion_token")
+        if isinstance(score_raw, bool) or isinstance(score_max, bool):
+            raise ValueError("invalid_h5p_score")
+        try:
+            raw, maximum = int(score_raw), int(score_max)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid_h5p_score") from exc
+        if raw < 0 or maximum <= 0 or raw > maximum:
+            raise ValueError("invalid_h5p_score")
+        return self.repo.complete_h5p_attempt(
+            student_sub=student_sub,
+            session_id=session_id,
+            item_id=item_id,
+            score_raw=raw,
+            score_max=maximum,
+            completion_token=token,
+        )

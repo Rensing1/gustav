@@ -595,6 +595,14 @@ async function main() {
       typeof req.query.course_id === "string" ? req.query.course_id : undefined;
     const contextId =
       typeof req.query.context_id === "string" ? req.query.context_id : undefined;
+    const taskId =
+      typeof req.query.task_id === "string" ? req.query.task_id : contextId;
+    const practiceSessionId =
+      typeof req.query.practice_session_id === "string" ? req.query.practice_session_id : undefined;
+    const practiceItemId =
+      typeof req.query.practice_item_id === "string" ? req.query.practice_item_id : undefined;
+    const practiceCompletionToken =
+      typeof req.query.practice_completion_token === "string" ? req.query.practice_completion_token : undefined;
     const readOnlyStateRaw =
       typeof req.query.read_only_state === "string" ? req.query.read_only_state : undefined;
     const readOnlyState = readOnlyStateRaw === "true";
@@ -674,12 +682,17 @@ async function main() {
       // Attach course/task context to the `setFinished` endpoint so the H5P
       // service can persist a `learning_submissions(kind='h5p')` row server-side.
       // This avoids relying solely on browser xAPI events (which can be flaky).
-      if (courseId && contextId && out?.integration?.ajax?.setFinished) {
+      if (courseId && taskId && out?.integration?.ajax?.setFinished) {
         try {
           const base = "http://local.invalid";
           const u = new URL(String(out.integration.ajax.setFinished), base);
           u.searchParams.set("course_id", String(courseId));
-          u.searchParams.set("task_id", String(contextId));
+          u.searchParams.set("task_id", String(taskId));
+          if (practiceSessionId && practiceItemId && practiceCompletionToken) {
+            u.searchParams.set("practice_session_id", practiceSessionId);
+            u.searchParams.set("practice_item_id", practiceItemId);
+            u.searchParams.set("practice_completion_token", practiceCompletionToken);
+          }
           out.integration.ajax.setFinished = `${u.pathname}${u.search || ""}`;
         } catch {
           // Do not fail content loading when URL parsing fails.
@@ -1212,6 +1225,9 @@ async function main() {
     // 2) Persist a Learning submission so Teacher dashboards can read progress.
     const courseId = typeof req.query.course_id === "string" ? req.query.course_id : "";
     const taskId = typeof req.query.task_id === "string" ? req.query.task_id : "";
+    const practiceSessionId = typeof req.query.practice_session_id === "string" ? req.query.practice_session_id : "";
+    const practiceItemId = typeof req.query.practice_item_id === "string" ? req.query.practice_item_id : "";
+    const practiceCompletionToken = typeof req.query.practice_completion_token === "string" ? req.query.practice_completion_token : "";
     if (courseId && taskId) {
       try {
         const rawNum = Number(score);
@@ -1233,8 +1249,14 @@ async function main() {
               maxScore: scoreMax,
             });
 
+            const isPractice = Boolean(practiceSessionId && practiceItemId && practiceCompletionToken);
             const base = gustavWebInternalBase.replace(/\/+$/, "");
-            const url = `${base}/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(taskId)}/submissions`;
+            const url = isPractice
+              ? `${base}/api/learning/practice/sessions/${encodeURIComponent(practiceSessionId)}/items/${encodeURIComponent(practiceItemId)}/attempts`
+              : `${base}/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(taskId)}/submissions`;
+            const submissionBody = isPractice
+              ? { score_raw: scoreRaw, score_max: scoreMax, practice_completion_token: practiceCompletionToken }
+              : { kind: "h5p", score_raw: scoreRaw, score_max: scoreMax };
 
             const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
             const frontendCookieHeader = buildSessionCookieHeader(cookieHeader, frontendSessionCookieName);
@@ -1258,15 +1280,16 @@ async function main() {
               result = await forwardLearningSubmission({
                 url,
                 headers,
-                body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
+                body: JSON.stringify(submissionBody),
                 timeoutMs: upstreamFetchTimeoutMs,
                 maxAttempts: 2,
                 baseBackoffMs: 100,
                 metrics: finishedForwardingMetrics,
               });
             } else if (frontendCookieHeader) {
-              const frontendUrl =
-                `${gustavFrontendInternalBase.replace(/\/+$/, "")}/internal/h5p/submissions?course_id=${encodeURIComponent(courseId)}&task_id=${encodeURIComponent(taskId)}`;
+              const frontendUrl = isPractice
+                ? `${gustavFrontendInternalBase.replace(/\/+$/, "")}/internal/h5p/practice-attempts?session_id=${encodeURIComponent(practiceSessionId)}&item_id=${encodeURIComponent(practiceItemId)}`
+                : `${gustavFrontendInternalBase.replace(/\/+$/, "")}/internal/h5p/submissions?course_id=${encodeURIComponent(courseId)}&task_id=${encodeURIComponent(taskId)}`;
               result = await forwardLearningSubmission({
                 url: frontendUrl,
                 headers: {
@@ -1274,7 +1297,7 @@ async function main() {
                   "idempotency-key": idem,
                   cookie: frontendCookieHeader,
                 },
-                body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }),
+                body: JSON.stringify(submissionBody),
                 timeoutMs: upstreamFetchTimeoutMs,
                 maxAttempts: 2,
                 baseBackoffMs: 100,

@@ -43,6 +43,10 @@ from backend.learning.adapters.ports import (
     VisionResult,
     VisionTransientError,
 )
+from backend.learning.practice.completion import (
+    complete_worker_practice_attempt,
+    fail_worker_practice_attempt,
+)
 
 try:  # pragma: no cover - optional dependency in some environments
     import psycopg
@@ -431,9 +435,20 @@ def _process_job(
     task_context = _fetch_task_context(
         conn=conn,
         task_id=str(submission.get("task_id") or payload.get("task_id") or ""),
+        is_practice_attempt=bool(payload.get("practice_attempt_id")),
     )
     instruction_md = payload.get("instruction_md") or task_context.get("instruction_md")
     teacher_context_md = task_context.get("teacher_context_md")
+    if task_context.get("is_practice_attempt") and task_context.get("model_solution_md"):
+        teacher_context_md = "\n\n".join(
+            part
+            for part in (
+                str(teacher_context_md or "").strip(),
+                "Verbindliche Musterlösung:\n"
+                + str(task_context["model_solution_md"]).strip(),
+            )
+            if part
+        )
 
     # End the transaction before any external I/O (ticket: avoid "idle in transaction").
     conn.commit()
@@ -501,6 +516,13 @@ def _process_job(
             analysis_json=feedback_result.analysis_json,
             feedback_md=feedback_result.feedback_md,
         )
+        if payload.get("practice_attempt_id"):
+            complete_worker_practice_attempt(
+                conn=conn,
+                submission_id=job.submission_id,
+                analysis_json=feedback_result.analysis_json,
+                feedback_md=feedback_result.feedback_md,
+            )
         telemetry.increment_counter("ai_worker_processed_total", status="completed")
         _delete_job(conn, job_id=job.id)
         conn.commit()
@@ -608,6 +630,13 @@ def _process_job(
             analysis_json=feedback_result.analysis_json,
             feedback_md=feedback_result.feedback_md,
         )
+        if payload.get("practice_attempt_id"):
+            complete_worker_practice_attempt(
+                conn=conn,
+                submission_id=job.submission_id,
+                analysis_json=feedback_result.analysis_json,
+                feedback_md=feedback_result.feedback_md,
+            )
         telemetry.increment_counter("ai_worker_processed_total", status="completed")
         _delete_job(conn, job_id=job.id)
         conn.commit()
@@ -781,6 +810,13 @@ def _process_job(
         analysis_json=feedback_result.analysis_json,
         feedback_md=feedback_result.feedback_md,
     )
+    if payload.get("practice_attempt_id"):
+        complete_worker_practice_attempt(
+            conn=conn,
+            submission_id=job.submission_id,
+            analysis_json=feedback_result.analysis_json,
+            feedback_md=feedback_result.feedback_md,
+        )
     telemetry.increment_counter("ai_worker_processed_total", status="completed")
     _delete_job(conn, job_id=job.id)
     conn.commit()
@@ -838,7 +874,9 @@ def _fetch_submission(conn: Connection, *, submission_id: str) -> Optional[dict]
     return dict(row) if row else None
 
 
-def _fetch_task_context(conn: Connection, *, task_id: str) -> dict[str, str | None]:
+def _fetch_task_context(
+    conn: Connection, *, task_id: str, is_practice_attempt: bool = False
+) -> dict[str, str | bool | None]:
     """Fetch task context needed for feedback generation.
 
     Notes:
@@ -848,32 +886,56 @@ def _fetch_task_context(conn: Connection, *, task_id: str) -> dict[str, str | No
         the Learning API surface.
     """
     if not task_id:
-        return {"instruction_md": None, "teacher_context_md": None}
+        return {
+            "instruction_md": None,
+            "teacher_context_md": None,
+            "model_solution_md": None,
+            "is_practice_attempt": False,
+        }
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                select instruction_md, teacher_context_md
-                  from public.unit_tasks
-                 where id = %s::uuid
+                select task.instruction_md,
+                       task.teacher_context_md,
+                       task.model_solution_md
+                  from public.unit_tasks task
+                 where task.id = %s::uuid
                 """,
                 (task_id,),
             )
             row = cur.fetchone()
     except Exception as exc:
         LOG.warning("Task context lookup failed task_id=%s reason=%s", task_id, exc.__class__.__name__)
-        return {"instruction_md": None, "teacher_context_md": None}
+        return {
+            "instruction_md": None,
+            "teacher_context_md": None,
+            "model_solution_md": None,
+            "is_practice_attempt": False,
+        }
     if not row:
-        return {"instruction_md": None, "teacher_context_md": None}
+        return {
+            "instruction_md": None,
+            "teacher_context_md": None,
+            "model_solution_md": None,
+            "is_practice_attempt": False,
+        }
     # psycopg rows may be tuple-like or dict-like depending on row_factory.
     # The worker uses `row_factory=dict_row`, while some tests use defaults.
     try:
         instruction_md = row["instruction_md"]  # type: ignore[index]
         teacher_context_md = row["teacher_context_md"]  # type: ignore[index]
+        model_solution_md = row["model_solution_md"]  # type: ignore[index]
     except Exception:
         instruction_md = row[0] if len(row) > 0 else None  # type: ignore[index]
         teacher_context_md = row[1] if len(row) > 1 else None  # type: ignore[index]
-    return {"instruction_md": instruction_md, "teacher_context_md": teacher_context_md}
+        model_solution_md = row[2] if len(row) > 2 else None  # type: ignore[index]
+    return {
+        "instruction_md": instruction_md,
+        "teacher_context_md": teacher_context_md,
+        "model_solution_md": model_solution_md,
+        "is_practice_attempt": bool(is_practice_attempt),
+    }
 
 
 def _set_current_sub(conn: Connection, sub: str) -> None:
@@ -1060,6 +1122,10 @@ def _handle_vision_error(
         error_code="vision_failed",
         message=truncated,
     )
+    if isinstance(job.payload, dict) and job.payload.get("practice_attempt_id"):
+        fail_worker_practice_attempt(
+            conn=conn, submission_id=submission_id, error_code="vision_failed"
+        )
     # Record the terminal failure on the job row for observability/audit dashboards.
     _mark_job_failed(conn=conn, job_id=job.id, error_code="vision_failed")
     telemetry.increment_counter("ai_worker_failed_total", error_code="vision_failed")
@@ -1097,6 +1163,10 @@ def _handle_feedback_error(
         error_code=error_code,
         message=truncated,
     )
+    if isinstance(job.payload, dict) and job.payload.get("practice_attempt_id"):
+        fail_worker_practice_attempt(
+            conn=conn, submission_id=submission_id, error_code=error_code
+        )
     # Preserve the terminal failure on the queue row so operators can inspect past errors.
     _mark_job_failed(conn=conn, job_id=job.id, error_code=error_code)
     telemetry.increment_counter("ai_worker_failed_total", error_code=error_code)

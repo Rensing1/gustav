@@ -3606,18 +3606,33 @@ components:
           allOf: [{ $ref: '#/components/schemas/LearningPracticeSessionItem' }]
           nullable: true
     LearningPracticeAttemptCreate:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [answer_text]
+          properties:
+            answer_text: { type: string, minLength: 1 }
+        - type: object
+          additionalProperties: false
+          required: [score_raw, score_max, practice_completion_token]
+          properties:
+            score_raw: { type: integer, minimum: 0 }
+            score_max: { type: integer, minimum: 1 }
+            practice_completion_token: { type: string, minLength: 32, maxLength: 128 }
+    LearningPracticeH5PContext:
       type: object
       additionalProperties: false
-      required: [answer_text]
+      required: [practice_completion_token, context_id]
       properties:
-        answer_text: { type: string, minLength: 1 }
+        practice_completion_token: { type: string }
+        context_id: { type: string }
     LearningPracticeAttemptAccepted:
       type: object
       additionalProperties: false
       required: [attempt_id, status]
       properties:
         attempt_id: { type: string, format: uuid }
-        status: { type: string, enum: [pending] }
+        status: { type: string, enum: [pending, completed, failed] }
     LearningPracticeAttempt:
       type: object
       additionalProperties: false
@@ -5324,6 +5339,23 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Attempt not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/learning/practice/sessions/{session_id}/items/{item_id}/h5p-context:
+    post:
+      tags: [Learning]
+      summary: Issue a fresh token-bound H5P presentation context
+      operationId: createLearningPracticeH5PContext
+      security: [{ cookieAuth: [] }]
+      x-permissions: { requiredRole: student }
+      x-security-notes: ["CSRF and current-item ownership are enforced; only the token digest is persisted."]
+      parameters:
+        - { in: path, name: session_id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: item_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Fresh presentation context, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPracticeH5PContext' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Session or item not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Item state conflict, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/learning/practice/sessions/{session_id}/items/{item_id}/solution:
     post:
       tags: [Learning]

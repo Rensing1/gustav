@@ -1,7 +1,22 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
+  import { invalidateAll } from "$app/navigation";
+  import PracticeH5PTask from "$lib/components/PracticeH5PTask.svelte";
   import type { PageData } from "./$types";
 
-  let { data, form }: { data: PageData; form: { practice?: { error?: string } } | null } = $props();
+  let { data, form }: {
+    data: PageData;
+    form: { practice?: { error?: string; solution?: string } } | null;
+  } = $props();
+
+  $effect(() => {
+    if (!browser || data.attempt?.status !== "pending") return;
+    const timer = window.setTimeout(() => void invalidateAll(), 1500);
+    return () => window.clearTimeout(timer);
+  });
+
+  const classificationLabel = (value: string | null) =>
+    value === "secure" ? "Sicher beherrscht" : value === "partial" ? "Teilweise beherrscht" : "Noch nicht ausreichend";
 </script>
 
 <svelte:head><title>Üben | GUSTAV</title></svelte:head>
@@ -22,18 +37,60 @@
           <p>Kriterien: {data.activeSession.current_item.criteria.join(" · ")}</p>
         {/if}
         {#if data.activeSession.current_item.status === "active"}
+          {#if data.activeSession.current_item.kind === "native"}
+            <form method="POST" action="?/attempt">
+              <input type="hidden" name="session_id" value={data.activeSession.id} />
+              <input type="hidden" name="item_id" value={data.activeSession.current_item.id} />
+              <input type="hidden" name="idempotency_key" value={data.attemptKey} />
+              <label>
+                <span>Deine Antwort</span>
+                <textarea name="answer_text" rows="8" required></textarea>
+              </label>
+              <button type="submit">Antwort zur Auswertung senden</button>
+            </form>
+          {:else}
+            {#if data.activeSession.current_item.h5p_content_id}
+              <PracticeH5PTask
+                sessionId={data.activeSession.id}
+                itemId={data.activeSession.current_item.id}
+                courseId={data.activeSession.current_item.course_id}
+                taskId={data.activeSession.current_item.task_id}
+                contentId={data.activeSession.current_item.h5p_content_id}
+                onCompleted={invalidateAll}
+              />
+            {/if}
+          {/if}
           <form method="POST" action="?/skip">
             <input type="hidden" name="session_id" value={data.activeSession.id} />
             <input type="hidden" name="item_id" value={data.activeSession.current_item.id} />
             <button type="submit">Aufgabe überspringen</button>
           </form>
         {:else if data.activeSession.current_item.status === "feedback"}
+          {#if data.attempt?.status === "completed"}
+            <section aria-live="polite">
+              <h4>{classificationLabel(data.attempt.classification)}</h4>
+              {#if data.attempt.feedback_md}<p>{data.attempt.feedback_md}</p>{/if}
+              {#if data.attempt.due_at}<p>Nächste Fälligkeit: {new Date(data.attempt.due_at).toLocaleString("de-DE")}</p>{/if}
+            </section>
+          {/if}
+          {#if form?.practice?.solution}
+            <section aria-live="polite">
+              <h4>Musterlösung</h4>
+              <p>{form.practice.solution}</p>
+            </section>
+          {:else}
+            <form method="POST" action="?/solution">
+              <input type="hidden" name="session_id" value={data.activeSession.id} />
+              <input type="hidden" name="item_id" value={data.activeSession.current_item.id} />
+              <button type="submit">Musterlösung anzeigen</button>
+            </form>
+          {/if}
           <form method="POST" action="?/continue">
             <input type="hidden" name="session_id" value={data.activeSession.id} />
             <button type="submit">Weiter</button>
           </form>
         {:else}
-          <p>Die Rückmeldung wird vorbereitet.</p>
+          <p aria-live="polite">Die Rückmeldung wird vorbereitet.</p>
         {/if}
       {/if}
       <form method="POST" action="?/end">

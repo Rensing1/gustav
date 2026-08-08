@@ -33,3 +33,12 @@ export type LearningPracticeSession = {
   completed_items: number;
   current_item: LearningPracticeSessionItem | null;
 };
+
+export type LearningPracticeAttempt = {
+  id: string;
+  status: "pending" | "completed" | "failed";
+  classification: "secure" | "partial" | "insufficient" | null;
+  fulfillment: number | null;
+  feedback_md: string | null;
+  due_at: string | null;
+};

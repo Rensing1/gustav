@@ -211,6 +211,13 @@ def create_submission(repo, data: SubmissionInput, *, psycopg_module, sql_module
                 raise LookupError("task_not_visible")
             section_uuid = str(UUID(meta[1]))
             unit_uuid = str(UUID(meta[2]))
+            cur.execute(
+                "select module_kind from public.unit_modules where section_id=%s::uuid",
+                (section_uuid,),
+            )
+            module_row = cur.fetchone()
+            if module_row and str(module_row[0]) == "practice":
+                raise ValueError("practice_requires_session")
             if not repo._is_modular_section_open_or_done(
                 cur=cur,
                 course_uuid=course_uuid,

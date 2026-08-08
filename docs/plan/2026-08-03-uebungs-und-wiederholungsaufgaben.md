@@ -2,9 +2,11 @@
 
 **Stand:** 8. August 2026
 
-**Status:** fachlich freigegeben; Scheduler-Gate 0 am 8. August 2026 geschlossen
+**Status:** implementiert und für den Pilotbetrieb abgenommen; Scheduler-Gate 0 am 8. August 2026 geschlossen, technische Abnahme am 8. August 2026
 
 **Codebasis:** `/home/felix/gustav-alpha2`
+
+**Abnahmenachweis:** `make verify-feature` (2.296 Python- und 453 Frontend-Tests sowie 11 aktive Feature-Acceptance-Reisen grün; Practice-Reise bei sicherem Standardflag im Gesamtgate übersprungen und separat mit aktiviertem Flag grün) sowie `make docker-validate` erfolgreich. Native und H5P-Roundtrips einschließlich paralleler H5P-Doppelmeldung laufen gegen die lokal migrierte PostgreSQL-Datenbank.
 
 ## 1. Ziel und User Stories
 

@@ -34,6 +34,15 @@ class Service:
     def get_session(self, student_sub: str, session_id: str):
         raise LookupError("practice_session_not_found")
 
+    def create_native_attempt(self, student_sub: str, session_id: str, item_id: str, **kwargs):
+        return {"attempt_id": "22222222-2222-2222-2222-222222222222", "status": "pending"}
+
+    def get_attempt(self, student_sub: str, attempt_id: str):
+        raise LookupError("practice_attempt_not_found")
+
+    def reveal_solution(self, student_sub: str, session_id: str, item_id: str):
+        return {"model_solution_md": "Eine sichere Musterlösung"}
+
 
 @pytest.fixture
 def app() -> FastAPI:
@@ -97,3 +106,36 @@ async def test_foreign_session_is_fail_closed_404(app: FastAPI) -> None:
         )
     assert response.status_code == 404
     assert response.json()["detail"] == "practice_session_not_found"
+
+
+@pytest.mark.anyio
+async def test_native_attempt_requires_idempotency_key(app: FastAPI) -> None:
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/learning/practice/sessions/11111111-1111-1111-1111-111111111111/items/33333333-3333-3333-3333-333333333333/attempts",
+            headers={"Origin": "http://test"},
+            json={"answer_text": "Antwort"},
+        )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "missing_idempotency_key"
+
+
+@pytest.mark.anyio
+async def test_native_attempt_is_accepted_for_async_analysis(app: FastAPI) -> None:
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/learning/practice/sessions/11111111-1111-1111-1111-111111111111/items/33333333-3333-3333-3333-333333333333/attempts",
+            headers={"Origin": "http://test", "Idempotency-Key": "attempt-key"},
+            json={"answer_text": "Antwort"},
+        )
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+
+
+@pytest.mark.anyio
+async def test_foreign_attempt_is_fail_closed_404(app: FastAPI) -> None:
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/learning/practice/attempts/22222222-2222-2222-2222-222222222222"
+        )
+    assert response.status_code == 404

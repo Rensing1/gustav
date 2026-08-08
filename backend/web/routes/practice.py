@@ -174,32 +174,97 @@ async def end_practice_session(request: Request, session_id: str):
 
 
 @practice_router.post("/api/learning/practice/sessions/{session_id}/items/{item_id}/attempts")
-async def create_practice_attempt_placeholder(request: Request, session_id: str, item_id: str):
-    """Reserve the contract path until the native-evaluation slice wires it."""
-
+async def create_practice_attempt(request: Request, session_id: str, item_id: str):
     student_sub, error = _student(request)
     if error:
         return error
     csrf_error = _csrf(request)
     if csrf_error:
         return csrf_error
-    return _error(409, "practice_attempt_not_ready")
+    if not _valid_uuid(session_id) or not _valid_uuid(item_id):
+        return _error(400, "invalid_uuid")
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise ValueError("invalid_practice_payload")
+        if "practice_completion_token" in payload:
+            attempt = _service().complete_h5p_attempt(
+                student_sub or "",
+                session_id,
+                item_id,
+                score_raw=payload.get("score_raw"),
+                score_max=payload.get("score_max"),
+                completion_token=payload.get("practice_completion_token"),
+            )
+        else:
+            idempotency_key = request.headers.get("Idempotency-Key")
+            if not str(idempotency_key or "").strip():
+                raise ValueError("missing_idempotency_key")
+            attempt = _service().create_native_attempt(
+                student_sub or "",
+                session_id,
+                item_id,
+                answer_text=payload.get("answer_text"),
+                idempotency_key=idempotency_key,
+            )
+    except LookupError:
+        return _error(404, "practice_session_not_found")
+    except ValueError as exc:
+        detail = str(exc)
+        status = 409 if detail.startswith("practice_item_") else 400
+        return _error(status, detail)
+    return JSONResponse(attempt, status_code=202, headers=_NO_STORE)
+
+
+@practice_router.post("/api/learning/practice/sessions/{session_id}/items/{item_id}/h5p-context")
+async def issue_practice_h5p_context(request: Request, session_id: str, item_id: str):
+    student_sub, error = _student(request)
+    if error:
+        return error
+    csrf_error = _csrf(request)
+    if csrf_error:
+        return csrf_error
+    if not _valid_uuid(session_id) or not _valid_uuid(item_id):
+        return _error(400, "invalid_uuid")
+    try:
+        context = _service().issue_h5p_context(student_sub or "", session_id, item_id)
+    except LookupError:
+        return _error(404, "practice_session_not_found")
+    except ValueError as exc:
+        return _error(409, str(exc))
+    return JSONResponse(context, status_code=201, headers=_NO_STORE)
 
 
 @practice_router.get("/api/learning/practice/attempts/{attempt_id}")
-async def get_practice_attempt_placeholder(request: Request, attempt_id: str):
+async def get_practice_attempt(request: Request, attempt_id: str):
     student_sub, error = _student(request)
     if error:
         return error
-    return _error(404, "practice_attempt_not_found")
+    if not _valid_uuid(attempt_id):
+        return _error(400, "invalid_uuid")
+    try:
+        attempt = _service().get_attempt(student_sub or "", attempt_id)
+    except LookupError:
+        return _error(404, "practice_attempt_not_found")
+    return JSONResponse(attempt, headers=_NO_STORE)
 
 
 @practice_router.post("/api/learning/practice/sessions/{session_id}/items/{item_id}/solution")
-async def reveal_practice_solution_placeholder(request: Request, session_id: str, item_id: str):
+async def reveal_practice_solution(request: Request, session_id: str, item_id: str):
     student_sub, error = _student(request)
     if error:
         return error
     csrf_error = _csrf(request)
     if csrf_error:
         return csrf_error
-    return _error(409, "practice_solution_not_ready")
+    if not _valid_uuid(session_id) or not _valid_uuid(item_id):
+        return _error(400, "invalid_uuid")
+    try:
+        solution = _service().reveal_solution(student_sub or "", session_id, item_id)
+    except LookupError:
+        return _error(404, "practice_session_not_found")
+    except PermissionError:
+        return _error(403, "practice_solution_forbidden")
+    except ValueError as exc:
+        return _error(409, str(exc))
+    return JSONResponse(solution, headers=_NO_STORE)

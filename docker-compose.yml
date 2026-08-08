@@ -45,6 +45,7 @@ services:
       # Same-origin proxy for Storage uploads to avoid browser CORS issues
       - ENABLE_STORAGE_UPLOAD_PROXY=false
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
+      - ENABLE_PRACTICE_SESSIONS=${ENABLE_PRACTICE_SESSIONS:-false}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
       # Internal Keycloak base URL for server-to-server calls (token exchange, JWKS).
       # Do NOT set this to a *.localhost hostname inside containers: it resolves to loopback.

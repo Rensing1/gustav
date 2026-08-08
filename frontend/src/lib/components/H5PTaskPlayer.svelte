@@ -7,11 +7,18 @@
     courseId,
     taskId,
     contentId,
+    practiceContext = null,
     onProgressPersisted = null
   }: {
     courseId: string;
     taskId: string;
     contentId: string;
+    practiceContext?: {
+      sessionId: string;
+      itemId: string;
+      completionToken: string;
+      contextId: string;
+    } | null;
     onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
 
@@ -94,8 +101,11 @@
       }
       submittedStatementIds.add(safeKey);
 
+      const target = practiceContext
+        ? `/api/learning/practice/sessions/${encodeURIComponent(practiceContext.sessionId)}/items/${encodeURIComponent(practiceContext.itemId)}/attempts`
+        : `/bff/h5p/submissions?course_id=${encodeURIComponent(courseId)}&task_id=${encodeURIComponent(taskId)}`;
       const response = await fetch(
-        `/bff/h5p/submissions?course_id=${encodeURIComponent(courseId)}&task_id=${encodeURIComponent(taskId)}`,
+        target,
         {
           method: "POST",
           credentials: "include",
@@ -103,7 +113,15 @@
             "content-type": "application/json",
             "idempotency-key": safeKey
           },
-          body: JSON.stringify({ kind: "h5p", score_raw: scoreRaw, score_max: scoreMax })
+          body: JSON.stringify(
+            practiceContext
+              ? {
+                  score_raw: scoreRaw,
+                  score_max: scoreMax,
+                  practice_completion_token: practiceContext.completionToken
+                }
+              : { kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }
+          )
         }
       );
 
@@ -132,7 +150,7 @@
       };
       player.id = `h5p-player-${taskId}`;
       player.setAttribute("content-id", contentId);
-      player.setAttribute("context-id", taskId);
+      player.setAttribute("context-id", practiceContext?.contextId || taskId);
       root.innerHTML = "";
       root.appendChild(player);
 
@@ -145,7 +163,13 @@
         const url = new URL("/h5p/player/model", window.location.origin);
         url.searchParams.set("content_id", contentIdArg);
         url.searchParams.set("course_id", courseId);
-        url.searchParams.set("context_id", taskId || contextId || "");
+        url.searchParams.set("context_id", practiceContext?.contextId || taskId || contextId || "");
+        url.searchParams.set("task_id", taskId);
+        if (practiceContext) {
+          url.searchParams.set("practice_session_id", practiceContext.sessionId);
+          url.searchParams.set("practice_item_id", practiceContext.itemId);
+          url.searchParams.set("practice_completion_token", practiceContext.completionToken);
+        }
         if (readOnlyState) {
           url.searchParams.set("read_only_state", "true");
         }

@@ -59,6 +59,12 @@ export type LearnerNavigationCourse = LearnerVisualSmokeCourse & {
   contextImageTitle: string;
 };
 
+export type LearnerPracticeCourse = {
+  courseId: string;
+  unitId: string;
+  practiceModuleId: string;
+};
+
 export type LearnerBookWorkspaceCourse = LearnerVisualSmokeCourse & {
   imageAltText: string;
   pdfMaterialTitle: string;
@@ -288,6 +294,40 @@ export async function seedTeacherVisualSmokeUnit(page: Page, title: string): Pro
   }
 
   return { unitId, title, moduleIds };
+}
+
+export async function seedLearnerPracticeCourse(
+  teacherPage: Page,
+  learnerPage: Page,
+  title: string
+): Promise<LearnerPracticeCourse> {
+  const learnerSub = await currentUserSub(learnerPage);
+  const courseId = await createCourse(teacherPage, `${title} Kurs`);
+  const unitId = await createUnit(teacherPage, `${title} Einheit`, "modular");
+  const phasesResponse = await teacherPage.request.get(`${webBase}/api/teaching/units/${unitId}/phases`);
+  await expectApiOk(phasesResponse);
+  const phaseId = (await phasesResponse.json())[0]?.id as string;
+  const moduleResponse = await teacherPage.request.post(`${webBase}/api/teaching/units/${unitId}/modules`, {
+    headers: apiHeaders(`/teaching/units/${unitId}`),
+    data: { title: "Wiederholen", phase_id: phaseId, module_kind: "practice" }
+  });
+  await expectApiOk(moduleResponse, 201);
+  const practiceModuleId = (await moduleResponse.json()).id as string;
+  const targetResponse = await teacherPage.request.get(
+    `${webBase}/api/teaching/units/${unitId}/modules/${practiceModuleId}/content-target`
+  );
+  await expectApiOk(targetResponse);
+  const sectionId = (await targetResponse.json()).section_id as string;
+  await createTask(teacherPage, unitId, sectionId, {
+    instruction_md: "Erkläre, warum ein Test zuerst rot sein soll.",
+    criteria: ["Die Antwort erklärt den Zweck eines zunächst fehlschlagenden Tests."],
+    teacher_context_md: "Bewerte, ob die Rückmeldung den beobachtbaren TDD-Zyklus erklärt.",
+    model_solution_md: "Ein zunächst roter Test beweist, dass er die noch fehlende Funktion wirklich prüft."
+  });
+  const courseModuleId = await attachUnitToCourse(teacherPage, courseId, unitId);
+  await releaseSection(teacherPage, courseId, courseModuleId, sectionId);
+  await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
+  return { courseId, unitId, practiceModuleId };
 }
 
 export async function seedTeacherModuleEditorVisualUnit(

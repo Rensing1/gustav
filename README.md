@@ -127,6 +127,18 @@ make trust-local-ca
 
 The command validates the current CA before installing it in the Linux system store, Chromium's shared NSS database, and active classic, Snap, or Flatpak Firefox profiles. Restart Firefox and Codex afterwards. If the Caddy data volume is deleted and recreated, the local CA changes; `make local-ca-status` will report the stale fingerprint and `make trust-local-ca` will replace only GUSTAV's managed certificate entry.
 
+### Reusable teacher and student browser personas
+
+For repeatable local development and browser testing, provision the dedicated teacher and student personas together with the modular test landscape:
+
+```bash
+make dev-accounts
+```
+
+The command is idempotent. Credentials remain only in the ignored local `.env`; never print or commit them. Use `make reset-dev-accounts` only when all data owned by the dedicated development teacher may be replaced with the defined mixed learning state. `make test-dev-accounts` runs the opt-in browser smoke for both personas, including modular graph states, H5P, the resumable AI dialog, and diagnostics.
+
+The application, identity, and storage services must remain local. A remote AI provider such as Mistral is supported only through HTTPS. See [the E2E guide](docs/tests/e2e_howto.md#lokale-browser-personas) for setup, safety boundaries, expected fixture state, and troubleshooting.
+
 ## Self-hosting notes
 
 GUSTAV is self-hostable, but at this stage it should be approached as an experimental system that is best explored locally first.

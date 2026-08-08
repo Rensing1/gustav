@@ -343,6 +343,23 @@ zulässig. Nach dem Anlegen bleibt das neue Element ausgewählt und fokussiert.
 Der Modulinhaltseditor führt mit `Zurück zum Graph` wieder zum bearbeiteten
 Modul und seiner geöffneten Seitenleiste.
 
+Der Modulinhaltseditor selbst ist eine flache Inhaltsarbeitsfläche. Ab `64rem`
+Komponentenbreite stehen links eine etwa 22rem breite Inhaltsübersicht und
+rechts genau ein Bearbeitungskontext. Materialien und Aufgaben bilden getrennte
+Listen mit eigener Reihenfolge; eine schmale Akzentkante markiert die einzige
+Auswahl. Außenkarten, gleichzeitig geöffnete Formulare und ein zweiter
+Eigenschafteneditor sind nicht zulässig. Ohne Auswahl zeigt die rechte Fläche
+einen ruhigen Überblick.
+
+Unter `64rem` wird daraus der gestufte Ablauf `Inhalte → Bearbeiten`; die
+zurückliegende Stufe bleibt montiert und Entwürfe bleiben erhalten. Formwerte
+werden pro Lehrkraft, Lerneinheit, Modul und Ziel nur im aktuellen Browsertab
+gesichert. Dateiobjekte werden nie lokal gespeichert. Markdown-Materialien und
+Aufgabenstellungen verwenden denselben zentralen Editor wie Lernendenantworten.
+Kriterien beginnen mit einem Eintrag und können bis höchstens zehn ergänzt und
+sortiert werden. Material- und Aufgabenlöschungen benötigen einen modalen
+Bestätigungsdialog.
+
 Auf schmalen Ansichten belegt die Seitenleiste die verfügbare Breite, ohne den
 Graphen zu demontieren. `Escape`, die Schließen-Aktion und ein Klick auf die
 freie Graphfläche schließen sie und geben den Fokus an den Auslöser zurück.
@@ -581,4 +598,4 @@ Verbindliche Regeln:
 - Benachbarte Bedienelemente mit derselben Funktionsebene teilen gemeinsame Chrom-Regeln; Theme- und Account-Schalter der Top-Bar sind die Referenz dafür.
 - Die ehemalige warme Papier-/Petrolpalette darf nicht lokal über hart codierte Werte zurückkehren.
 
-Das UI-Labor besitzt freigegebene Light- und Dark-Referenzbilder für Desktop und Mobil. `make test-visual-smoke` vergleicht sie, während `make update-visual-baselines` ausschließlich für eine beabsichtigte und anschließend visuell geprüfte Designänderung verwendet wird.
+Das UI-Labor und ausgewählte vollständige Arbeitsansichten besitzen freigegebene Light- und Dark-Referenzbilder für Desktop und Mobil. Der Moduleditor wird als echte, authentifizierte Arbeitsansicht bei 1920 × 1080, 1024 × 768 und 390 × 844 Pixeln geprüft. `make test-visual-smoke` vergleicht diese Referenzen, während `make update-visual-baselines` ausschließlich für eine beabsichtigte und anschließend visuell geprüfte Designänderung verwendet wird.

@@ -11,6 +11,11 @@ export type TeacherVisualSmokeUnit = {
   moduleIds: string[];
 };
 
+export type TeacherModuleEditorVisualUnit = TeacherVisualSmokeUnit & {
+  materialId: string;
+  taskId: string;
+};
+
 export type TeacherDialogAuthoringUnit = {
   unitId: string;
   moduleId: string;
@@ -233,6 +238,37 @@ export async function seedTeacherVisualSmokeUnit(page: Page, title: string): Pro
   }
 
   return { unitId, title, moduleIds };
+}
+
+export async function seedTeacherModuleEditorVisualUnit(
+  page: Page,
+  title: string
+): Promise<TeacherModuleEditorVisualUnit> {
+  const seeded = await seedTeacherVisualSmokeUnit(page, title);
+  const moduleId = seeded.moduleIds[0];
+  expect(moduleId).toBeTruthy();
+
+  const sectionResponse = await page.request.get(
+    `${webBase}/api/teaching/units/${seeded.unitId}/modules/${moduleId}/content-target`
+  );
+  await expectApiOk(sectionResponse);
+  const sectionPayload = await sectionResponse.json();
+  const sectionId = sectionPayload.section_id as string;
+
+  const materialId = await createMarkdownMaterial(
+    page,
+    seeded.unitId,
+    sectionId,
+    "Argumentationshilfe",
+    "## Leitfragen\n\n- Welche Position wird vertreten?\n- Welche Belege stützen sie?"
+  );
+  const taskId = await createTask(page, seeded.unitId, sectionId, {
+    instruction_md: "Begründe deine Position mit einem Beleg aus dem Material.",
+    criteria: ["Die Position ist nachvollziehbar begründet.", "Ein Materialbeleg wird verwendet."],
+    max_attempts: 2
+  });
+
+  return { ...seeded, materialId, taskId };
 }
 
 export async function seedTeacherHomeWorkStarter(page: Page, titlePrefix: string): Promise<TeacherHomeWorkStarter> {

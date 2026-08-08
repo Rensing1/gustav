@@ -192,6 +192,16 @@ Der Lernraum ist die fokussierteste Fläche des Produkts.
 
 ### Lehrenden-Startseite und Lehrenden-Welt
 
+#### Modulinhalte bearbeiten
+
+Modulare Lerneinheiten trennen Orientierung und Bearbeitung: Der Graph verwaltet
+Moduleigenschaften, der Moduleditor ausschließlich Materialien und Aufgaben.
+Die Inhaltsübersicht bleibt flach und zeigt immer nur einen Bearbeitungskontext.
+Auf schmalen Flächen wird zwischen Übersicht und Editor gewechselt, ohne den
+aktuellen Entwurf zu verlieren. Sortierung ist per Ziehen sowie über die
+zugänglichen Aktionen `Nach oben` und `Nach unten` möglich. Löschen erfolgt nie
+direkt aus einem Zeilenmenü, sondern erst nach einer eindeutigen Bestätigung.
+
 Die Lehrenden-Welt ist operativer, aber nicht dashboardhaft.
 
 - `/teaching` beantwortet ausschließlich die Frage „Wo arbeite ich jetzt

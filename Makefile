@@ -38,7 +38,7 @@ help:
 	@echo "  test-feature-acceptance - Run authenticated Playwright feature journeys"
 	@echo "  verify-feature     - Run deterministic checks and mandatory feature acceptance"
 	@echo "  test-visual-smoke  - Run deterministic Playwright visual smoke checks"
-	@echo "  update-visual-baselines - Review and update UI-lab screenshot baselines"
+	@echo "  update-visual-baselines - Review and update approved screenshot baselines"
 	@echo "  playwright-bootstrap - Install the supported Playwright Chromium browser"
 	@echo "  test-full-prod-like - Run full prod-like verification profile"
 	@echo "  harness-minimum    - Run hard PR-1 harness safety gate"

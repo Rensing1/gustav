@@ -1,10 +1,8 @@
 # Implementierungsplan: Übungs- und Wiederholungsaufgaben
 
-**Stand:** 4. August 2026
+**Stand:** 8. August 2026
 
-**Status:** fachlich vorstrukturiert; Scheduler-Konzept dokumentiert, aber Gate 0 noch nicht fachlich freigegeben
-
-**Produktgrundlage:** „Featurebeschreibung: Übungs- und Wiederholungsaufgaben“, Stand 3. August 2026
+**Status:** fachlich freigegeben; Scheduler-Gate 0 am 8. August 2026 geschlossen
 
 **Codebasis:** `/home/felix/gustav-alpha2`
 
@@ -115,6 +113,13 @@ Rechtschreibung, sprachliche Eleganz oder Aussprache beeinflussen die Auswertung
 - Ein unterstützter Abruf darf sichtbar höchstens als teilweise beherrscht gelten. Er verändert weder Stabilität noch Intervall oder bestehende Fälligkeit; sein Zeitpunkt wird dennoch als letzte Exposition für die nächste Berechnung gespeichert.
 - Eine zweite H5P-Präsentation derselben Sitzung gilt immer als unterstützt, weil der H5P-Inhalt nach dem ersten Versuch richtige Lösungen oder Lösungshinweise gezeigt haben kann.
 
+### 2.7 Technische Betriebsgrenzen
+
+- Eine Sitzung darf höchstens 50 ausgewählte Übungsstapel und höchstens 1.000 Snapshot-Aufgaben enthalten. Diese Grenzen dienen ausschließlich dem Schutz von API und Datenbank und sind keine pädagogische Paketgröße.
+- `ENABLE_PRACTICE_SESSIONS=false` ist der sichere Standard. Bei Deaktivierung werden Einstieg und neue Sitzungen gesperrt; bereits aktive Sitzungen bleiben fortsetzbar und können beendet werden.
+- Verliert ein Lernender während einer Sitzung die Kursmitgliedschaft oder wird ein Stapel wieder gesperrt, werden noch nicht angenommene Items dieses Stapels zugriffsbedingt übersprungen. Andere gültige Stapel laufen weiter; eine leere Sitzung endet automatisch. Bereits angenommene Versuche werden technisch und fachlich abgeschlossen.
+- Gleichzeitige Änderungen einer bereits angezeigten Aufgabe erhalten in Version 1 keine eigene Versions- oder Konfliktlogik.
+
 ## 3. Befund in der aktuellen Architektur
 
 ### 3.1 Wiederverwendbare Bausteine
@@ -140,9 +145,9 @@ Der normale Submission-Endpunkt weist Aufgaben aus Übungsmodulen zurück. Der P
 
 ## 4. Gate 0: eigenes Scheduler-Konzept
 
-Der vorgeschlagene mathematisch-wissenschaftliche Vertrag ist in [`practice_scheduler_concept.md`](../research/practice_scheduler_concept.md) vollständig dokumentiert. Er trägt die Version `gustav-practice-v1`. Das Dokument ist die normative Quelle für Gleichungen, Konstanten, Zeitsemantik, Rundung, Golden-Vektoren und spätere Parameter-Governance. Gate 0 bleibt bis zur ausdrücklichen fachlichen Freigabe offen.
+Der mathematisch-wissenschaftliche Vertrag ist in [`practice_scheduler_concept.md`](../research/practice_scheduler_concept.md) vollständig dokumentiert. Er trägt die Version `gustav-practice-v1`. Das Dokument ist die normative Quelle für Gleichungen, Konstanten, Zeitsemantik, Rundung, Golden-Vektoren und spätere Parameter-Governance. Der Produktverantwortliche hat Gate 0 am 8. August 2026 ausdrücklich freigegeben.
 
-Die Featurebeschreibung legt bereits folgende Vergessenskurve fest:
+Der freigegebene Scheduler-Vertrag verwendet folgende Vergessenskurve:
 
 \[
 R(t,S)=\left(1+\frac{t}{9S}\right)^{-1}
@@ -177,7 +182,7 @@ Vor jeder Scheduler-Implementierung entsteht deshalb ein eigenes mathematisch-wi
 9. Mindestens zehn fachlich freigegebene Golden-Vektoren mit Eingaben und erwartetem `S_neu`, Intervall und `due_at`.
 10. Festlegung, welche Pilotdaten eine spätere Parameteränderung rechtfertigen.
 
-Bis Gate 0 freigegeben ist, darf kein provisorischer Scheduler implementiert oder produktiv aktiviert werden. Die übrige Architektur kann geplant, aber nicht als vollständiges Feature ausgeliefert werden.
+Ein abweichender oder provisorischer Scheduler darf nicht implementiert oder produktiv aktiviert werden.
 
 ## 5. Zielarchitektur
 
@@ -423,9 +428,8 @@ Mindestens ein mit `@feature-acceptance` markierter Playwright-Test prüft den v
 
 ### Slice 0: Produktgrundlage und Scheduler-Konzept
 
-**Ergebnis:** Alle fachlichen Quellen liegen im Repository und Gate 0 ist als testbarer Vertrag geschlossen.
+**Ergebnis:** Der fachliche Plan und der Scheduler-Vertrag liegen im Repository und Gate 0 ist als testbarer Vertrag geschlossen.
 
-- Die bereitgestellte Featurebeschreibung unter `docs/research/uebungs-und-wiederholungsaufgaben.md` ablegen und korrekt aus diesem Plan verlinken.
 - Begriffe für Übungsmodul, Übungsstapel, Übungssitzung, Practice-Zustand, Einstufung und unterstützten Abruf im Projektglossar festlegen.
 - Das englische Scheduler-Konzept [`practice_scheduler_concept.md`](../research/practice_scheduler_concept.md) gemäß Abschnitt 4 fachlich prüfen.
 - Gleichungen, Parameter und Golden-Vektoren fachlich freigeben.
@@ -542,7 +546,7 @@ Refactor:
 - Tokens sind zufällig, kurzlebig beziehungsweise einmal verwendbar und fachlich an Schüler, Sitzung, Item und Präsentation gebunden.
 - Logs und Telemetrie enthalten keine Antworttexte, Musterlösungen oder vollständigen KI-Ausgaben.
 - Bestehende Kurs-, Task- und Submission-Löschregeln werden in Migrationstests für alle neuen Fremdschlüssel nachvollzogen.
-- Ein globales, in allen Umgebungen identisch ausgewertetes Feature-Flag kann neue Practice-Sitzungen für den Pilot aktivieren oder deaktivieren. Ein Rollback löscht keine Zustände oder Versuche.
+- Das in allen Umgebungen identisch ausgewertete Feature-Flag `ENABLE_PRACTICE_SESSIONS` aktiviert oder deaktiviert neue Practice-Sitzungen für den Pilot. Es ist standardmäßig `false`; ein Rollback löscht keine Zustände oder Versuche und blockiert keine bereits aktive Sitzung.
 - Lokal und Produktion verwenden dieselben Migrationen, ENV-Namen, Containerpfade und RLS-Regeln.
 
 ## 11. Nicht Bestandteil des ersten Releases
@@ -582,9 +586,8 @@ Das erste Release gilt als abgeschlossen, wenn:
 
 Vor dem ersten Code-Slice müssen folgende Bedingungen erfüllt sein:
 
-1. Die Produktgrundlage ist im Repository abgelegt.
-2. Gate 0 ist fachlich freigegeben und durch Golden-Vektoren vollständig spezifiziert.
-3. `api/openapi.yml`, aktuelle Migrationen und ENV-Konfiguration wurden erneut auf Lokal-ist-Prod-Kompatibilität geprüft.
-4. Die gegenwärtigen unabhängigen Änderungen im Arbeitsbaum sind abgeschlossen oder sauber von der Feature-Arbeit getrennt.
-5. Die Implementierung beginnt auf einem dafür vorgesehenen Feature-Branch und folgt in jedem Slice Contract-first sowie Red-Green-Refactor.
-6. Kein Schedulerparameter, keine Musterlösung und keine sichtbare Einstufung wird dem Sprachmodell zur freien Entscheidung überlassen.
+1. Gate 0 ist fachlich freigegeben und durch Golden-Vektoren vollständig spezifiziert.
+2. `api/openapi.yml`, aktuelle Migrationen und ENV-Konfiguration wurden erneut auf Lokal-ist-Prod-Kompatibilität geprüft.
+3. Die gegenwärtigen unabhängigen Änderungen im Arbeitsbaum sind abgeschlossen oder sauber von der Feature-Arbeit getrennt.
+4. Die Implementierung beginnt auf einem dafür vorgesehenen Feature-Branch und folgt in jedem Slice Contract-first sowie Red-Green-Refactor.
+5. Kein Schedulerparameter, keine Musterlösung und keine sichtbare Einstufung wird dem Sprachmodell zur freien Entscheidung überlassen.

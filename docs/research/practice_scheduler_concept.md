@@ -1,10 +1,12 @@
 # Practice Scheduler Concept
 
-**Status:** Proposed mathematical and scientific contract; product approval is still required
+**Status:** Approved mathematical and scientific contract
 
 **Scheduler version:** `gustav-practice-v1`
 
 **Date:** 4 August 2026
+
+**Product approval:** 8 August 2026
 
 **Applies to:** GUSTAV practice and review tasks
 
@@ -503,4 +505,4 @@ Every accepted change receives a new version, updated Golden Vectors, a document
 
 ## 17. Approval gate
 
-This document closes the design work required for Scheduler Gate 0, but it does not approve itself. No production scheduler may be implemented or activated until the product owner explicitly approves this contract, including its equations, constants, Golden Vectors, and pilot-governance rules.
+The product owner approved this complete contract on 8 August 2026, including its equations, constants, Golden Vectors, and pilot-governance rules. Scheduler Gate 0 is therefore closed. Any semantic change still requires a new scheduler version and explicit product approval.

@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import os
 from typing import Any
-from uuid import uuid4
 
 from backend.learning.adapters.dspy import dialog_program
 from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.learning.adapters.dspy.usage import capture_dspy_usage
 from backend.learning.adapters.local_feedback import _require_secure_openai_base_url
-from backend.learning.adapters.ports import TokenUsageEvent
 
 
 def _model_name(raw: str) -> str:
@@ -30,27 +28,13 @@ class LocalDialogGenerator:
         self._lm = None
         self._usage_events: list[Any] = []
 
-    def _unknown_usage(self, *, stage: str, error_code: str | None = None) -> TokenUsageEvent:
-        """Create one content-free event when provider telemetry is unavailable."""
+    def _captured_events(self, events: list[Any]) -> list[Any]:
+        """Keep only events proven by DSPy's request-local usage tracker."""
 
-        return TokenUsageEvent(
-            event_key=str(uuid4()),
-            model=self._model or "unknown",
-            stage=stage,
-            modality="text",
-            call_kind="dialog_generation",
-            usage_known=False,
-            unknown_reason="missing_provider_usage",
-            error_code=error_code,
-        )
+        return events
 
-    def _captured_events(self, events: list[Any], *, stage: str) -> list[Any]:
-        return events or [self._unknown_usage(stage=stage)]
-
-    def _failed_events(self, exc: Exception, *, stage: str) -> list[Any]:
+    def _failed_events(self, exc: Exception) -> list[Any]:
         events = list(getattr(exc, "usage_events", []) or [])
-        if not events:
-            return [self._unknown_usage(stage=stage, error_code="dialog_ai_unavailable")]
         for event in events:
             event.error_code = "dialog_ai_unavailable"
         return events
@@ -89,9 +73,9 @@ class LocalDialogGenerator:
                 call_kind="dialog_generation",
             )
         except Exception as exc:
-            self._usage_events = self._failed_events(exc, stage="initial_starters")
+            self._usage_events = self._failed_events(exc)
             raise
-        self._usage_events = self._captured_events(events, stage="initial_starters")
+        self._usage_events = self._captured_events(events)
         return result
 
     def partner_reply(self, *, context: dict[str, Any], turn: dict[str, Any]) -> dict[str, Any]:
@@ -105,9 +89,9 @@ class LocalDialogGenerator:
                 call_kind="dialog_generation",
             )
         except Exception as exc:
-            self._usage_events = self._failed_events(exc, stage="reply")
+            self._usage_events = self._failed_events(exc)
             raise
-        self._usage_events = self._captured_events(events, stage="reply")
+        self._usage_events = self._captured_events(events)
         return result
 
     def pop_usage_events(self) -> list[Any]:

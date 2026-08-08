@@ -48,6 +48,10 @@ describe("teacher course detail page", () => {
     render(Page, { props: { data: courseData(), form: {} as never } });
 
     expect(screen.getAllByRole("link", { name: "Lerneinheit hinzufügen" })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "KI-Nutzung öffnen" })).toHaveAttribute(
+      "href",
+      "/teaching/courses/course-1/ai-usage"
+    );
     expect(screen.queryByText("Alex Beispiel")).not.toBeInTheDocument();
     expect(screen.getByText(/Informatik · Jahrgang 10 · 2026\/27/)).toBeInTheDocument();
 
@@ -122,6 +126,10 @@ describe("teacher course detail page", () => {
 
     expect(screen.getByText("Archiviert · schreibgeschützt")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Lerneinheit hinzufügen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "KI-Nutzung öffnen" })).toHaveAttribute(
+      "href",
+      "/teaching/courses/course-1/ai-usage"
+    );
     expect(screen.getByRole("link", { name: "Kurs bearbeiten" })).toHaveAttribute("href", "?course=1");
     expect(screen.getByText(/1 Mitgliedschaften, 7 Abgaben, 2 Dialoge und 3 Dateien/)).toBeInTheDocument();
   });

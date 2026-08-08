@@ -25,6 +25,7 @@ import os
 from typing import Sequence
 
 from backend.learning.adapters.dspy import helpers as dspy_helpers
+from backend.learning.adapters.dspy.usage import capture_dspy_usage
 from backend.learning.adapters.ports import (
     FeedbackInvalidAnalysisError,
     FeedbackPermanentError,
@@ -441,13 +442,21 @@ class _LocalFeedbackAdapter:
         try:
             from backend.learning.adapters.dspy.dialog_assessment_program import analyze_dialog
 
-            return analyze_dialog(
-                student_performance=student_performance,
-                conversation_context=conversation_context,
-                criteria=criteria,
-                instruction_md=instruction_md,
-                lm=self._get_text_analysis_lm(),
+            result, usage_events = capture_dspy_usage(
+                lambda: analyze_dialog(
+                    student_performance=student_performance,
+                    conversation_context=conversation_context,
+                    criteria=criteria,
+                    instruction_md=instruction_md,
+                    lm=self._get_text_analysis_lm(),
+                ),
+                model=self._text_model,
+                stage="analysis",
+                modality="text",
+                call_kind="primary",
             )
+            result.usage_events.extend(usage_events)
+            return result
         except (FeedbackPermanentError, FeedbackTransientError):
             raise
         except Exception as exc:

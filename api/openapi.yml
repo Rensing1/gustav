@@ -509,13 +509,13 @@ components:
           type: string
         stage:
           type: string
-          enum: [ocr, analysis, feedback]
+          enum: [ocr, analysis, feedback, initial_starters, reply]
         modality:
           type: string
           enum: [text, visual]
         call_kind:
           type: string
-          enum: [primary, repair, no_criteria]
+          enum: [primary, repair, no_criteria, dialog_generation]
         input_tokens:
           type: integer
           minimum: 0
@@ -8103,14 +8103,29 @@ paths:
             type: string
         - in: query
           name: from
+          description: >-
+            Inclusive lower boundary. Accepts either an ISO-8601 timestamp with
+            timezone or a calendar date interpreted as midnight in
+            Europe/Berlin.
           schema:
-            type: string
-            format: date-time
+            oneOf:
+              - type: string
+                format: date-time
+              - type: string
+                format: date
         - in: query
           name: to
+          description: >-
+            Exclusive upper boundary. Accepts either an ISO-8601 timestamp
+            with timezone or a calendar date interpreted as midnight in
+            Europe/Berlin. A UI that includes the selected final day sends the
+            following calendar date.
           schema:
-            type: string
-            format: date-time
+            oneOf:
+              - type: string
+                format: date-time
+              - type: string
+                format: date
         - in: query
           name: unit_id
           schema:

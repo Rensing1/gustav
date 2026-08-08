@@ -3600,6 +3600,152 @@
   color: var(--color-text-muted);
 }
 
+.teacher-course-ai-usage {
+  width: min(100%, var(--layout-content-max));
+  margin-inline: auto;
+  gap: var(--space-6);
+}
+
+.teacher-course-ai-usage__filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(10rem, 1fr)) auto;
+  align-items: end;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+  border-block: 1px solid var(--color-border);
+}
+
+.teacher-course-ai-usage__filters label {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.teacher-course-ai-usage__filters label > span {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.teacher-course-ai-usage__filters input,
+.teacher-course-ai-usage__filters select {
+  min-height: 2.75rem;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+}
+
+.teacher-course-ai-usage__filter-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.teacher-course-ai-usage__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid var(--color-border);
+}
+
+.teacher-course-ai-usage__summary > div {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+}
+
+.teacher-course-ai-usage__summary > div + div {
+  border-inline-start: 1px solid var(--color-border);
+}
+
+.teacher-course-ai-usage__summary span {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.teacher-course-ai-usage__summary strong {
+  font-family: var(--font-mono);
+  font-size: clamp(1.65rem, 4vw, 2.5rem);
+  line-height: 1;
+}
+
+.teacher-course-ai-usage__breakdown,
+.teacher-course-ai-usage__empty {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.teacher-course-ai-usage__section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.teacher-course-ai-usage__section-head h2,
+.teacher-course-ai-usage__empty h2 {
+  margin: 0;
+  font-size: clamp(1.05rem, 1.7vw, 1.28rem);
+}
+
+.teacher-course-ai-usage__section-head p,
+.teacher-course-ai-usage__empty p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.teacher-course-ai-usage__section-head .teacher-course-ai-usage__unknown {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.teacher-course-ai-usage__table-wrap {
+  overflow-x: auto;
+}
+
+.teacher-course-ai-usage table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.teacher-course-ai-usage th,
+.teacher-course-ai-usage td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+  text-align: right;
+}
+
+.teacher-course-ai-usage th:first-child,
+.teacher-course-ai-usage td:first-child,
+.teacher-course-ai-usage th:nth-child(2),
+.teacher-course-ai-usage td:nth-child(2) {
+  text-align: left;
+}
+
+.teacher-course-ai-usage thead th {
+  border-block: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.teacher-course-ai-usage tbody th {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.teacher-course-ai-usage__empty {
+  padding-block: var(--space-6);
+  border-block: 1px solid var(--color-border);
+}
+
 @media (max-width: 48rem) {
   .teacher-course-workspace {
     gap: var(--space-5);
@@ -3627,5 +3773,25 @@
 
   .teacher-course-unit-list__row {
     min-height: 4rem;
+  }
+
+  .teacher-course-ai-usage__filters,
+  .teacher-course-ai-usage__summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .teacher-course-ai-usage__filter-actions,
+  .teacher-course-ai-usage__filter-actions > * {
+    width: 100%;
+  }
+
+  .teacher-course-ai-usage__summary > div + div {
+    border-inline-start: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .teacher-course-ai-usage__section-head {
+    align-items: start;
+    flex-direction: column;
   }
 }

@@ -47,3 +47,25 @@ def test_openapi_documents_teacher_course_ai_usage_view() -> None:
 
     totals = spec["components"]["schemas"]["AiUsageTotals"]
     assert totals["required"] == ["input_tokens", "output_tokens", "total_tokens", "known_events", "unknown_events", "breakdown"]
+
+    breakdown = spec["components"]["schemas"]["AiUsageBreakdownItem"]
+    assert breakdown["properties"]["stage"]["enum"] == [
+        "ocr",
+        "analysis",
+        "feedback",
+        "initial_starters",
+        "reply",
+    ]
+    assert breakdown["properties"]["call_kind"]["enum"] == [
+        "primary",
+        "repair",
+        "no_criteria",
+        "dialog_generation",
+    ]
+
+    parameters = {item["name"]: item for item in operation["parameters"]}
+    for name in ("from", "to"):
+        assert parameters[name]["schema"]["oneOf"] == [
+            {"type": "string", "format": "date-time"},
+            {"type": "string", "format": "date"},
+        ]

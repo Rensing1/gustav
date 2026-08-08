@@ -175,6 +175,16 @@
     </div>
   </section>
 
+  <section class="teacher-course-workspace__section" aria-labelledby="course-ai-usage-title">
+    <div class="teacher-course-workspace__management-row">
+      <div>
+        <h2 id="course-ai-usage-title">KI-Nutzung</h2>
+        <p>Input-, Output- und Gesamttokens des Kurses</p>
+      </div>
+      <a class="workspace-link-action" href={`/teaching/courses/${data.course.id}/ai-usage`}>KI-Nutzung öffnen</a>
+    </div>
+  </section>
+
   <section class="teacher-course-workspace__section" aria-labelledby="course-settings-title">
     <div class="teacher-course-workspace__management-row">
       <div>

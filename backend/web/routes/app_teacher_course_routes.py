@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import sys as _sys
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
@@ -162,6 +163,12 @@ def _parse_usage_filter_timestamp(value: str | None) -> datetime | None:
     raw = str(value or "").strip()
     if not raw:
         return None
+    if len(raw) == 10:
+        try:
+            calendar_day = datetime.strptime(raw, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("invalid_time_filter")
+        return calendar_day.replace(tzinfo=ZoneInfo("Europe/Berlin")).astimezone(timezone.utc)
     try:
         parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
@@ -187,11 +194,15 @@ def _build_usage_totals(events: list[dict[str, object]]) -> dict[str, object]:
     breakdown: dict[tuple[str, str, str, str], dict[str, object]] = {}
 
     for event in events:
-        known = bool(event.get("usage_known"))
-        if known:
-            totals["known_events"] = int(totals["known_events"]) + 1
-        else:
-            totals["unknown_events"] = int(totals["unknown_events"]) + 1
+        known_events = event.get("known_events")
+        unknown_events = event.get("unknown_events")
+        if known_events is None and unknown_events is None:
+            known_events = 1 if bool(event.get("usage_known")) else 0
+            unknown_events = 0 if bool(event.get("usage_known")) else 1
+        known_count = int(known_events or 0)
+        unknown_count = int(unknown_events or 0)
+        totals["known_events"] = int(totals["known_events"]) + known_count
+        totals["unknown_events"] = int(totals["unknown_events"]) + unknown_count
 
         for source_key, target_key in (
             ("input_tokens", "input_tokens"),
@@ -222,10 +233,8 @@ def _build_usage_totals(events: list[dict[str, object]]) -> dict[str, object]:
                 "unknown_events": 0,
             },
         )
-        if known:
-            item["known_events"] = int(item["known_events"]) + 1
-        else:
-            item["unknown_events"] = int(item["unknown_events"]) + 1
+        item["known_events"] = int(item["known_events"]) + known_count
+        item["unknown_events"] = int(item["unknown_events"]) + unknown_count
         for token_key in ("input_tokens", "output_tokens", "total_tokens"):
             value = event.get(token_key)
             if value is not None:
@@ -383,8 +392,8 @@ async def get_teacher_course_ai_usage(
     unit_id: str | None = None,
     task_id: str | None = None,
     student_sub: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ):
     """Return owner-scoped technical AI token counters for one course.
 
@@ -427,9 +436,26 @@ async def get_teacher_course_ai_usage(
     if course is None:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
-    page_limit = max(1, min(int(limit or 50), 200))
-    page_offset = max(0, int(offset or 0))
-    members = app_routes._list_teacher_course_members_window(course_id, owner_sub, limit=page_limit, offset=page_offset)
+    page_limit = int(limit)
+    page_offset = int(offset)
+    members_count = app_routes._count_teacher_course_members(course_id, owner_sub)
+    normalized_student_sub = str(student_sub).strip() if student_sub else None
+    if normalized_student_sub:
+        all_members = app_routes._list_teacher_course_members_window(
+            course_id,
+            owner_sub,
+            limit=max(1, members_count),
+            offset=0,
+        )
+        filtered_members = [member for member in all_members if str(member.get("sub") or "") == normalized_student_sub]
+        members = filtered_members[page_offset : page_offset + page_limit]
+    else:
+        members = app_routes._list_teacher_course_members_window(
+            course_id,
+            owner_sub,
+            limit=page_limit,
+            offset=page_offset,
+        )
     events = app_routes._list_teacher_course_ai_usage_events(
         course_id=course_id,
         owner_sub=owner_sub,
@@ -437,7 +463,7 @@ async def get_teacher_course_ai_usage(
         to_at=to_at,
         unit_id=str(unit_id).strip() if unit_id else None,
         task_id=str(task_id).strip() if task_id else None,
-        student_sub=str(student_sub).strip() if student_sub else None,
+        student_sub=normalized_student_sub,
     )
 
     events_by_student: dict[str, list[dict[str, object]]] = {}
@@ -460,7 +486,7 @@ async def get_teacher_course_ai_usage(
             "href": f"/teaching/courses/{course_id}",
             "members_href": f"/teaching/courses/{course_id}/members",
             "diagnostics_href": f"/diagnostics/courses/{course_id}",
-            "members_count": len(members),
+            "members_count": members_count,
             "units_count": len(app_routes._list_teacher_course_units(course_id, owner_sub)),
         },
         "filters": {
@@ -468,7 +494,7 @@ async def get_teacher_course_ai_usage(
             "to": to_at.isoformat() if to_at else None,
             "unit_id": str(unit_id).strip() if unit_id else None,
             "task_id": str(task_id).strip() if task_id else None,
-            "student_sub": str(student_sub).strip() if student_sub else None,
+            "student_sub": normalized_student_sub,
         },
         "totals": app_routes._build_usage_totals(events),
         "learners": learners,

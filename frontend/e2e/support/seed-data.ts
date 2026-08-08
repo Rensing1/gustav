@@ -42,6 +42,14 @@ export type TeacherStudentLabelCourse = {
   unitId: string;
 };
 
+export type TeacherAiUsageCourse = {
+  courseId: string;
+  courseTitle: string;
+  unitId: string;
+  unitTitle: string;
+  taskId: string;
+};
+
 export type LearnerNavigationCourse = LearnerVisualSmokeCourse & {
   graphModuleId: string;
   contextGraphModuleId: string;
@@ -216,6 +224,26 @@ export async function seedTeacherStudentLabelCourse(
     await addCurrentLearnerToCourse(page, courseId, learnerSub);
   }
   return { courseId, unitId };
+}
+
+export async function seedTeacherAiUsageCourse(
+  teacherPage: Page,
+  learnerPage: Page,
+  title: string
+): Promise<TeacherAiUsageCourse> {
+  const learnerSub = await currentUserSub(learnerPage);
+  const courseId = await createCourse(teacherPage, title);
+  const unitTitle = `${title} Lerneinheit`;
+  const unitId = await createUnit(teacherPage, unitTitle);
+  const sectionId = await createSection(teacherPage, unitId, "Start");
+  const taskId = await createTask(teacherPage, unitId, sectionId, {
+    instruction_md: "Begründe deine technische Entscheidung.",
+    criteria: ["Die Begründung ist nachvollziehbar."]
+  });
+  const moduleId = await attachUnitToCourse(teacherPage, courseId, unitId);
+  await releaseSection(teacherPage, courseId, moduleId, sectionId);
+  await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
+  return { courseId, courseTitle: title, unitId, unitTitle, taskId };
 }
 
 export async function seedTeacherVisualSmokeUnit(page: Page, title: string): Promise<TeacherVisualSmokeUnit> {

@@ -196,6 +196,11 @@ Der Lernraum ist die fokussierteste Fläche des Produkts.
 
 Modulare Lerneinheiten trennen Orientierung und Bearbeitung: Der Graph verwaltet
 Moduleigenschaften, der Moduleditor ausschließlich Materialien und Aufgaben.
+Die Auswahl eines Graphknotens zeigt zunächst nur eine kompakte Kontextleiste;
+Eigenschaften öffnen sich erst nach einer ausdrücklichen Aktion in einer
+überlagernden Seitenleiste. Der Graph wird dabei niemals schmaler. Die Rückkehr
+aus dem Moduleditor markiert das Modul, ohne das Eigenschaftenformular
+automatisch zu öffnen.
 Die Inhaltsübersicht bleibt flach und zeigt immer nur einen Bearbeitungskontext.
 Auf schmalen Flächen wird zwischen Übersicht und Editor gewechselt, ohne den
 aktuellen Entwurf zu verlieren. Sortierung ist per Ziehen sowie über die

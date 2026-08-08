@@ -37,7 +37,7 @@ async function newSmokePage(browser: Browser): Promise<{ context: BrowserContext
 }
 
 async function fitVisibleGraph(page: Page): Promise<void> {
-  const fitButton = page.getByRole("button", { name: "Fit View" });
+  const fitButton = page.getByRole("button", { name: "Gesamtansicht" });
   // The first pass reacts to a preceding viewport/grid resize; the second uses
   // the settled canvas dimensions and therefore produces a stable reference.
   for (let pass = 0; pass < 2; pass += 1) {
@@ -138,7 +138,11 @@ test.describe("@visual-smoke teacher workspace", () => {
     const phaseHref = await phaseLink.getAttribute("href");
     expect(phaseHref).toBeTruthy();
     const phaseUrl = `/teaching/units/${seeded.unitId}${phaseHref}`;
+    const phasePropertiesUrl = `${phaseUrl}&panel=phase-properties`;
     await phaseLink.click();
+    const phaseContext = page.getByRole("region", { name: "Ausgewählte Phase" });
+    await expect(phaseContext).toBeVisible();
+    await phaseContext.getByRole("button", { name: "Eigenschaften" }).click();
     const inspector = page.getByRole("complementary", { name: "Phase bearbeiten" });
     const accountControl = page.locator(".account-trigger");
     await expect(inspector).toBeVisible();
@@ -178,7 +182,7 @@ test.describe("@visual-smoke teacher workspace", () => {
       await inspector.getByRole("button", { name: "Schließen" }).click();
       await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
       await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
-      await page.goto(phaseUrl);
+      await page.goto(phasePropertiesUrl);
       await expect(inspector).toBeVisible();
       await page.evaluate(() => window.scrollTo(0, 0));
       if (viewport.width > 720) {
@@ -203,7 +207,7 @@ test.describe("@visual-smoke teacher workspace", () => {
       await page.getByRole("dialog", { name: "Phase löschen" }).getByRole("button", { name: "Abbrechen" }).click();
       await inspector.getByRole("button", { name: "Schließen" }).click();
       await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
-      await page.goto(phaseUrl);
+      await page.goto(phasePropertiesUrl);
       await expect(inspector).toBeVisible();
     }
   });

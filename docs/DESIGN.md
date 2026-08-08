@@ -339,9 +339,22 @@ Fokus- und Kontrastwerte.
 Bei modularen Lerneinheiten bleibt der Graph der dauerhafte Arbeitskontext.
 Phasen und Module werden über genau eine kontextuelle Seitenleiste angelegt und
 bearbeitet; Werkzeugleisten-Popover und Editoren direkt am Knoten sind nicht
-zulässig. Nach dem Anlegen bleibt das neue Element ausgewählt und fokussiert.
-Der Modulinhaltseditor führt mit `Zurück zum Graph` wieder zum bearbeiteten
-Modul und seiner geöffneten Seitenleiste.
+zulässig. Die gesamte 112-rem-Arbeitsbreite steht dem Graphen zur Verfügung.
+Ein Klick auf eine Phase oder ein Modul wählt nur aus. Eine flache Kontextleiste
+nennt Titel, reale Bestandszahlen und die nächsten Aktionen; erst
+`Eigenschaften` öffnet das Formular. Nach dem Anlegen bleibt das neue Element
+ausgewählt, fokussiert und bewusst zur weiteren Bearbeitung geöffnet. Der
+Modulinhaltseditor führt mit `Zurück zum Graph` wieder zum markierten Modul,
+öffnet dessen Eigenschaften aber nicht ungefragt.
+
+Die Eigenschaftenseitenleiste liegt auf Desktop und Tablet über dem rechten
+Graphbereich und darf die gemessene Graphbreite nicht verändern. Auswahl,
+Öffnen, Schließen und Speichern erhalten den aktuellen Ausschnitt. Der erste
+Aufruf fokussiert die ausgewählte oder erste Phase mit lesbarer Vergrößerung;
+`Gesamtansicht` und `Auswahl fokussieren` bleiben getrennte, bewusste Aktionen.
+Auswahl und Seitenleistenmodus werden als getrennte URL-Zustände in einem
+gemeinsamen Navigationsschritt aktualisiert. Damit stellt die Browsernavigation
+beides eindeutig wieder her.
 
 Der Modulinhaltseditor selbst ist eine flache Inhaltsarbeitsfläche. Ab `64rem`
 Komponentenbreite stehen links eine etwa 22rem breite Inhaltsübersicht und

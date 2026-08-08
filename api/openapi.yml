@@ -830,7 +830,7 @@ components:
           minimum: 1
     TeacherUnitWorkspaceModuleItem:
       type: object
-      required: [id, title, phase_id, position_in_phase, required_prereq_count, materials_count, tasks_count, editor_href]
+      required: [id, title, phase_id, position_in_phase, module_kind, required_prereq_count, materials_count, tasks_count, editor_href]
       properties:
         id:
           type: string
@@ -841,6 +841,9 @@ components:
         position_in_phase:
           type: integer
           minimum: 1
+        module_kind:
+          type: string
+          enum: [learning, practice]
         required_prereq_count:
           type: integer
           minimum: 0
@@ -907,6 +910,10 @@ components:
         teacher_context_md:
           type: string
           nullable: true
+        model_solution_md:
+          type: string
+          nullable: true
+          description: Teacher-authored model solution. Never included in learner task schemas.
         due_at:
           type: string
           format: date-time
@@ -965,7 +972,7 @@ components:
           minimum: 0
     TeacherUnitWorkspaceSelectionModule:
       type: object
-      required: [id, title, phase_id, position_in_phase, required_prereq_count, materials_count, tasks_count, editor_href]
+      required: [id, title, phase_id, position_in_phase, module_kind, required_prereq_count, materials_count, tasks_count, editor_href]
       properties:
         id:
           type: string
@@ -976,6 +983,9 @@ components:
         position_in_phase:
           type: integer
           minimum: 1
+        module_kind:
+          type: string
+          enum: [learning, practice]
         required_prereq_count:
           type: integer
           minimum: 0
@@ -1097,6 +1107,10 @@ components:
         backing_section_id:
           type: string
           nullable: true
+        module_kind:
+          type: string
+          enum: [learning, practice]
+          nullable: true
     TeacherUnitNodeEditorSettings:
       type: object
       required: [kind]
@@ -1107,6 +1121,10 @@ components:
         required_prereq_count:
           type: integer
           minimum: 0
+          nullable: true
+        module_kind:
+          type: string
+          enum: [learning, practice]
           nullable: true
     TeacherUnitNodeEditorView:
       type: object
@@ -2062,7 +2080,7 @@ components:
           description: Desired order (1..n) of phase IDs for the given unit
     TeachingUnitModule:
       type: object
-      required: [id, unit_id, phase_id, title, position_in_phase, required_prereq_count]
+      required: [id, unit_id, phase_id, title, position_in_phase, required_prereq_count, module_kind]
       additionalProperties: false
       properties:
         id:
@@ -2087,6 +2105,9 @@ components:
           type: integer
           minimum: 0
           description: k-of-n prerequisites required to unlock the module (k >= 0)
+        module_kind:
+          type: string
+          enum: [learning, practice]
     TeachingUnitModuleCreate:
       type: object
       required: [title, phase_id]
@@ -2100,6 +2121,10 @@ components:
           type: string
           format: uuid
           description: Phase to create the module in
+        module_kind:
+          type: string
+          enum: [learning, practice]
+          default: learning
     TeachingUnitModuleUpdate:
       type: object
       additionalProperties: false
@@ -2616,6 +2641,10 @@ components:
           type: string
           nullable: true
           description: Optional teacher-only AI context (Markdown). Must never be shown to students.
+        model_solution_md:
+          type: string
+          nullable: true
+          description: Teacher-only model solution. Required for native tasks in practice modules.
         position:
           type: integer
           minimum: 1
@@ -2680,6 +2709,10 @@ components:
           type: string
           nullable: true
           description: Optional teacher-only AI context (Markdown). Must never be shown to students.
+        model_solution_md:
+          type: string
+          nullable: true
+          description: Teacher-only model solution. Required for native tasks in practice modules.
         due_at:
           type: string
           format: date-time
@@ -2729,6 +2762,10 @@ components:
           type: string
           nullable: true
           description: Optional teacher-only AI context (Markdown). Must never be shown to students.
+        model_solution_md:
+          type: string
+          nullable: true
+          description: Teacher-only model solution. Required for native tasks in practice modules.
         due_at:
           type: string
           format: date-time

@@ -77,6 +77,7 @@ async def get_teacher_unit_node_editor(request: Request, unit_id: str, node_id: 
         settings = {
             "kind": "module",
             "required_prereq_count": int(module.get("required_prereq_count") or 0),
+            "module_kind": str(module.get("module_kind") or "learning"),
         }
     else:
         section = next(
@@ -126,6 +127,7 @@ async def get_teacher_unit_node_editor(request: Request, unit_id: str, node_id: 
                 "instruction_md": str(item.get("instruction_md") or ""),
                 "criteria": list(item.get("criteria") or []),
                 "teacher_context_md": item.get("teacher_context_md"),
+                "model_solution_md": item.get("model_solution_md"),
                 "due_at": item.get("due_at"),
                 "max_attempts": item.get("max_attempts"),
                 "position": int(item.get("position") or 0),
@@ -144,4 +146,5 @@ async def get_teacher_unit_node_editor(request: Request, unit_id: str, node_id: 
     }
     if node_kind == "module":
         body["node"]["backing_section_id"] = backing_section_id
+        body["node"]["module_kind"] = str(settings.get("module_kind") or "learning")
     return JSONResponse(body, headers=_private_headers())

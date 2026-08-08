@@ -211,6 +211,7 @@ def _build_parser() -> argparse.ArgumentParser:
     modules_create.add_argument("--unit-id", required=True)
     modules_create.add_argument("--phase-id", required=True)
     modules_create.add_argument("--title", required=True)
+    modules_create.add_argument("--module-kind", choices=["learning", "practice"], default="learning")
     modules_edit = modules_sub.add_parser("edit")
     modules_edit.add_argument("module_id")
     modules_edit.add_argument("--unit-id", required=True)
@@ -294,6 +295,9 @@ def _build_parser() -> argparse.ArgumentParser:
                 teacher_context = task_cmd.add_mutually_exclusive_group()
                 teacher_context.add_argument("--teacher-context-md")
                 teacher_context.add_argument("--clear-teacher-context", action="store_true")
+                model_solution = task_cmd.add_mutually_exclusive_group()
+                model_solution.add_argument("--model-solution-md")
+                model_solution.add_argument("--clear-model-solution", action="store_true")
                 due_at = task_cmd.add_mutually_exclusive_group()
                 due_at.add_argument("--due-at")
                 due_at.add_argument("--clear-due-at", action="store_true")
@@ -303,6 +307,7 @@ def _build_parser() -> argparse.ArgumentParser:
             else:
                 task_cmd.add_argument("--criterion", action="append", dest="criteria")
                 task_cmd.add_argument("--teacher-context-md")
+                task_cmd.add_argument("--model-solution-md")
                 task_cmd.add_argument("--due-at")
                 task_cmd.add_argument("--max-attempts", type=int)
             task_cmd.add_argument(
@@ -600,7 +605,7 @@ def _modules(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int
         return _request_configured(
             method="POST",
             path=base,
-            json_body={"phase_id": args.phase_id, "title": args.title},
+            json_body={"phase_id": args.phase_id, "title": args.title, "module_kind": args.module_kind},
             success={201},
             stdout=stdout,
             stderr=stderr,
@@ -930,6 +935,8 @@ def _task_payload(
         payload["criteria"] = args.criteria
     if getattr(args, "teacher_context_md", None) is not None:
         payload["teacher_context_md"] = args.teacher_context_md
+    if getattr(args, "model_solution_md", None) is not None:
+        payload["model_solution_md"] = args.model_solution_md
     if getattr(args, "due_at", None) is not None:
         payload["due_at"] = args.due_at
     if getattr(args, "max_attempts", None) is not None:

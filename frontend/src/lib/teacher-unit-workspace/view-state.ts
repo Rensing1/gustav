@@ -153,6 +153,7 @@ export function deriveModuleSelection(
       title: module.title,
       phase_id: module.phase_id,
       position_in_phase: module.position_in_phase,
+      module_kind: module.module_kind,
       required_prereq_count: module.required_prereq_count,
       materials_count: module.materials_count,
       tasks_count: module.tasks_count,

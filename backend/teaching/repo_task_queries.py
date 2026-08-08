@@ -199,6 +199,7 @@ def create_task(
     instruction_md: str,
     criteria: List[str],
     teacher_context_md: str | None,
+    model_solution_md: str | None = None,
     due_at,
     max_attempts: int | None,
     kind: str,
@@ -239,6 +240,7 @@ def create_task(
                   instruction_md,
                   criteria,
                   teacher_context_md,
+                  model_solution_md,
                   due_at,
                   max_attempts,
                   position,
@@ -246,7 +248,7 @@ def create_task(
                   h5p_content_id,
                   h5p_display_options
                 )
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 returning {_TASK_COLUMNS_SQL}
                 """,
                 (
@@ -255,6 +257,7 @@ def create_task(
                     instruction,
                     criteria,
                     teacher_context_md,
+                    model_solution_md,
                     due_at,
                     max_attempts,
                     next_pos,
@@ -287,6 +290,7 @@ def update_task(
     instruction_md=_UNSET,
     criteria=_UNSET,
     teacher_context_md=_UNSET,
+    model_solution_md=_UNSET,
     due_at=_UNSET,
     max_attempts=_UNSET,
     kind=_UNSET,
@@ -323,6 +327,9 @@ def update_task(
             if not _is_unset(teacher_context_md):
                 updates.append("teacher_context_md")
                 params.append(teacher_context_md)
+            if not _is_unset(model_solution_md):
+                updates.append("model_solution_md")
+                params.append(model_solution_md)
             if not _is_unset(due_at):
                 updates.append("due_at")
                 params.append(due_at)

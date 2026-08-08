@@ -30,6 +30,7 @@ class TasksRepoProtocol(Protocol):
         instruction_md: str,
         criteria: List[str],
         teacher_context_md: Optional[str],
+        model_solution_md: Optional[str],
         due_at: Optional[datetime],
         max_attempts: Optional[int],
         kind: str,
@@ -49,6 +50,7 @@ class TasksRepoProtocol(Protocol):
         instruction_md: Any,
         criteria: Any,
         teacher_context_md: Any,
+        model_solution_md: Any,
         due_at: Any,
         max_attempts: Any,
         kind: Any,
@@ -108,6 +110,51 @@ def _normalize_teacher_context(value: object) -> Optional[str]:
         raise ValueError("invalid_teacher_context_md")
     trimmed = value.strip()
     return trimmed or None
+
+
+def _normalize_model_solution(value: object) -> Optional[str]:
+    """Normalize the teacher-only answer reference used by practice tasks."""
+
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("invalid_model_solution_md")
+    trimmed = value.strip()
+    return trimmed or None
+
+
+def _section_module_kind(repo: object, unit_id: str, section_id: str, author_id: str) -> str:
+    """Resolve whether a section backs a practice module.
+
+    Repositories predating modular units do not expose the resolver and are
+    treated as normal learning sections. The DB repository implements it and
+    the database trigger remains the final invariant boundary.
+    """
+
+    resolver = getattr(repo, "get_section_module_kind_for_author", None)
+    if not callable(resolver):
+        return "learning"
+    value = str(resolver(unit_id, section_id, author_id) or "learning").strip().lower()
+    return value if value in {"learning", "practice"} else "learning"
+
+
+def _validate_practice_task(
+    *,
+    kind: str,
+    criteria: Sequence[str],
+    teacher_context_md: Optional[str],
+    model_solution_md: Optional[str],
+    due_at: object,
+    max_attempts: object,
+) -> None:
+    """Enforce the complete authoring contract for practice tasks."""
+
+    if kind not in {"native", "h5p"}:
+        raise ValueError("practice_task_kind_not_supported")
+    if due_at is not None or max_attempts is not None:
+        raise ValueError("practice_schedule_fields_forbidden")
+    if kind == "native" and (not criteria or not teacher_context_md or not model_solution_md):
+        raise ValueError("practice_fields_required")
 
 
 def _parse_due_at(value: object) -> Optional[datetime]:
@@ -274,6 +321,7 @@ class TasksService:
         instruction_md: object,
         criteria: object = None,
         teacher_context_md: object = None,
+        model_solution_md: object = None,
         due_at: object = None,
         max_attempts: object = None,
         h5p: object | None = None,
@@ -288,6 +336,7 @@ class TasksService:
         instruction = _normalize_instruction(instruction_md)
         crit = _normalize_criteria(criteria)
         teacher_context = _normalize_teacher_context(teacher_context_md)
+        model_solution = _normalize_model_solution(model_solution_md)
         due_dt = _parse_due_at(due_at)
         attempts = _normalize_max_attempts(max_attempts)
         kind_configs = [h5p is not None, visual is not None, scratch is not None, calliope is not None, filius is not None, dialog is not None]
@@ -322,20 +371,36 @@ class TasksService:
         repo_kwargs: dict[str, Any] = {}
         if dialog is not None:
             repo_kwargs["dialog_config"] = dialog_config
-        return self.repo.create_task(
-            unit_id,
-            section_id,
-            author_id,
-            instruction_md=instruction,
-            criteria=crit,
-            teacher_context_md=teacher_context,
-            due_at=due_dt,
-            max_attempts=attempts,
-            kind=kind,
-            h5p_content_id=h5p_content_id,
-            h5p_display_options=h5p_display_options,
+        if _section_module_kind(self.repo, unit_id, section_id, author_id) == "practice":
+            _validate_practice_task(
+                kind=kind,
+                criteria=crit,
+                teacher_context_md=teacher_context,
+                model_solution_md=model_solution,
+                due_at=due_dt,
+                max_attempts=attempts,
+            )
+        create_kwargs = {
+            "instruction_md": instruction,
+            "criteria": crit,
+            "teacher_context_md": teacher_context,
+            "model_solution_md": model_solution,
+            "due_at": due_dt,
+            "max_attempts": attempts,
+            "kind": kind,
+            "h5p_content_id": h5p_content_id,
+            "h5p_display_options": h5p_display_options,
             **repo_kwargs,
-        )
+        }
+        try:
+            return self.repo.create_task(unit_id, section_id, author_id, **create_kwargs)
+        except TypeError as exc:
+            # Older test adapters do not know the new optional teacher field.
+            # Compatibility is safe only when no model solution was supplied.
+            if model_solution is not None or "model_solution_md" not in str(exc):
+                raise
+            create_kwargs.pop("model_solution_md")
+            return self.repo.create_task(unit_id, section_id, author_id, **create_kwargs)
 
     def update_task(
         self,
@@ -347,6 +412,7 @@ class TasksService:
         instruction_md: object = _UNSET,
         criteria: object = _UNSET,
         teacher_context_md: object = _UNSET,
+        model_solution_md: object = _UNSET,
         due_at: object = _UNSET,
         max_attempts: object = _UNSET,
         h5p: object = _UNSET,
@@ -365,6 +431,8 @@ class TasksService:
             repo_kwargs["criteria"] = _normalize_criteria(criteria)
         if teacher_context_md is not _UNSET:
             repo_kwargs["teacher_context_md"] = _normalize_teacher_context(teacher_context_md)
+        if model_solution_md is not _UNSET:
+            repo_kwargs["model_solution_md"] = _normalize_model_solution(model_solution_md)
         if due_at is not _UNSET:
             repo_kwargs["due_at"] = _parse_due_at(due_at)
         if max_attempts is not _UNSET:
@@ -431,6 +499,26 @@ class TasksService:
                 repo_kwargs["h5p_content_id"] = None
                 repo_kwargs["h5p_display_options"] = {}
                 repo_kwargs["dialog_config"] = normalize_dialog_config(dialog)
+        if _section_module_kind(self.repo, unit_id, section_id, author_id) == "practice":
+            existing = next(
+                (
+                    item
+                    for item in self.repo.list_tasks_for_section_owned(unit_id, section_id, author_id)
+                    if str(item.get("id") or "") == task_id
+                ),
+                None,
+            )
+            if existing is None:
+                raise LookupError("task_not_found")
+            merged = {**existing, **repo_kwargs}
+            _validate_practice_task(
+                kind=str(merged.get("kind") or "native"),
+                criteria=list(merged.get("criteria") or []),
+                teacher_context_md=merged.get("teacher_context_md"),
+                model_solution_md=merged.get("model_solution_md"),
+                due_at=merged.get("due_at"),
+                max_attempts=merged.get("max_attempts"),
+            )
         result = self.repo.update_task(
             unit_id,
             section_id,

@@ -156,7 +156,7 @@
   }
 
   function createModuleValues() {
-    return actionValues<{ title: string; phase_id: string }>(form?.createModule);
+    return actionValues<{ title: string; phase_id: string; module_kind: "learning" | "practice" }>(form?.createModule);
   }
 
   function createSectionValues() {
@@ -1222,6 +1222,13 @@
                   {#each modularPhases() as phase}
                     <option value={phase.id} selected={createModulePhaseId() === phase.id}>{phase.title}</option>
                   {/each}
+                </select>
+              </label>
+              <label class="workspace-field">
+                <span>Modultyp</span>
+                <select name="module_kind">
+                  <option value="learning" selected={(createModuleValues().module_kind ?? "learning") === "learning"}>Lernmodul</option>
+                  <option value="practice" selected={createModuleValues().module_kind === "practice"}>Übungsmodul</option>
                 </select>
               </label>
               {#if actionError(form?.createModule)}

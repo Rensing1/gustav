@@ -239,6 +239,8 @@ function taskPayloadFromForm(
   const instructionMd = instructionMdRaw.trim();
   const criteriaItems = readCriteriaItems(formData);
   const teacherContextMdRaw = asBody(formData.get("teacher_context_md"));
+  const modelSolutionMdRaw = asBody(formData.get("model_solution_md"));
+  const practiceModule = asText(formData.get("module_kind")) === "practice";
   const dueAtRaw = asText(formData.get("due_at"));
   const maxAttemptsRaw = asText(formData.get("max_attempts"));
   const h5pContentId = asText(formData.get("h5p_content_id"));
@@ -250,6 +252,7 @@ function taskPayloadFromForm(
     instruction_md: instructionMdRaw,
     criteria_items: criteriaItems,
     teacher_context_md: teacherContextMdRaw,
+    model_solution_md: modelSolutionMdRaw,
     due_at: dueAtRaw,
     max_attempts: maxAttemptsRaw,
     h5p_content_id: h5pContentId,
@@ -265,6 +268,20 @@ function taskPayloadFromForm(
 
   if (taskKind !== "h5p" && !instructionMd) {
     return { ok: false, error: "Bitte gib eine Aufgabenstellung ein.", values };
+  }
+  if (practiceModule && !["native", "h5p"].includes(taskKind)) {
+    return { ok: false, error: "Übungsmodule unterstützen nur normale Aufgaben und H5P.", values };
+  }
+  if (
+    practiceModule &&
+    taskKind === "native" &&
+    (!criteriaItems.length || !teacherContextMdRaw.trim() || !modelSolutionMdRaw.trim())
+  ) {
+    return {
+      ok: false,
+      error: "Normale Übungsaufgaben benötigen mindestens ein Kriterium, Lehrkraft-Kontext und Musterlösung.",
+      values
+    };
   }
 
   const dueAt = parseOptionalDateTime(dueAtRaw);
@@ -287,8 +304,9 @@ function taskPayloadFromForm(
         : instructionMd,
     criteria: taskKind === "h5p" ? [] : criteriaItems,
     teacher_context_md: taskKind === "h5p" ? null : teacherContextMdRaw.trim() || null,
-    due_at: dueAt,
-    max_attempts: maxAttempts
+    model_solution_md: taskKind === "h5p" ? null : modelSolutionMdRaw.trim() || null,
+    due_at: practiceModule ? null : dueAt,
+    max_attempts: practiceModule ? null : maxAttempts
   };
 
   if (taskKind === "h5p") {

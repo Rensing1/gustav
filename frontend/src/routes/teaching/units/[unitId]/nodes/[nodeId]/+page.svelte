@@ -54,6 +54,7 @@
     instruction_md: string;
     criteria_items: string[];
     teacher_context_md: string;
+    model_solution_md: string;
     due_at: string;
     max_attempts: string;
     h5p_content_id: string;
@@ -161,6 +162,9 @@
   let dropBeforeId = $state("");
 
   const isModuleEditor = $derived(editorState.node.kind === "module");
+  const isPracticeModule = $derived(
+    editorState.settings.kind === "module" && editorState.settings.module_kind === "practice"
+  );
   const prerequisiteSummary = $derived(
     formatPrerequisiteSummary(
       editorState.settings.kind === "module" ? editorState.settings.required_prereq_count : 0,
@@ -719,6 +723,10 @@
     return taskValues(task).teacher_context_md ?? task.teacher_context_md ?? "";
   }
 
+  function taskModelSolutionValue(task: TeacherUnitNodeEditorTask): string {
+    return taskValues(task).model_solution_md ?? task.model_solution_md ?? "";
+  }
+
   function taskDueAtValue(task: TeacherUnitNodeEditorTask): string {
     return taskValues(task).due_at ?? dateTimeLocalValue(task.due_at);
   }
@@ -1074,6 +1082,7 @@
           <h2>Inhalte</h2>
         </div>
 
+        {#if !isPracticeModule}
         <section class="teacher-module-outline__group" aria-labelledby="module-materials-heading">
           <div class="teacher-module-outline__group-head">
             <h3 id="module-materials-heading">Materialien</h3>
@@ -1127,6 +1136,7 @@
             <p class="teacher-module-outline__empty">Noch keine Materialien</p>
           {/if}
         </section>
+        {/if}
 
         <section class="teacher-module-outline__group" aria-labelledby="module-tasks-heading">
           <div class="teacher-module-outline__group-head">
@@ -1202,15 +1212,15 @@
         <section class="teacher-module-editor-overview">
           <p class="workspace-label">Modulinhalt</p>
           <h2>Inhalt auswählen</h2>
-          <p>Wähle links ein Material oder eine Aufgabe aus.</p>
+          <p>{isPracticeModule ? "Wähle links eine Übungsaufgabe aus." : "Wähle links ein Material oder eine Aufgabe aus."}</p>
           <div class="workspace-inline-actions">
-            <button class="workspace-link-action" type="button" onclick={openCreateMaterial}>Material hinzufügen</button>
+            {#if !isPracticeModule}<button class="workspace-link-action" type="button" onclick={openCreateMaterial}>Material hinzufügen</button>{/if}
             <button class="workspace-link-action" type="button" onclick={openCreateTask}>Aufgabe hinzufügen</button>
           </div>
         </section>
       {/if}
 
-    {#if !isModuleEditor || moduleSelection.kind === "material" || moduleSelection.kind === "new-material"}
+    {#if !isPracticeModule && (!isModuleEditor || moduleSelection.kind === "material" || moduleSelection.kind === "new-material")}
     <TeacherNodeEditorSection
       eyebrow={showCreateMaterial ? "Neues Material" : "Material"}
       title={showCreateMaterial ? "Material anlegen" : "Material bearbeiten"}
@@ -1528,17 +1538,20 @@
       {#snippet create()}
         <form method="POST" action="?/createTask" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm} data-draft-target="new-task" oninput={captureModuleDraft} onchange={captureModuleDraft}>
           <input type="hidden" name="section_id" value={sectionId()} />
+          <input type="hidden" name="module_kind" value={isPracticeModule ? "practice" : "learning"} />
 
           <label class="workspace-field">
             <span>Aufgabentyp</span>
             <select bind:value={createTaskKind} name="task_kind">
               <option value="native">Normale Aufgabe</option>
               <option value="h5p">H5P</option>
+              {#if !isPracticeModule}
               <option value="visual">Visuelle Aufgabe</option>
               <option value="scratch">Scratch</option>
               <option value="calliope">Calliope</option>
               <option value="filius">Filius</option>
               <option value="dialog">KI-Dialog</option>
+              {/if}
             </select>
           </label>
 
@@ -1604,11 +1617,16 @@
 
           <details class="teacher-module-advanced-settings" open={!isModuleEditor}>
             <summary>Weitere Einstellungen</summary>
-            <label class="workspace-field"><span>Lehrkraft-Kontext</span><textarea name="teacher_context_md" rows="4">{createTaskValues().teacher_context_md ?? ""}</textarea></label>
+            {#if createTaskKind !== "h5p"}
+              <label class="workspace-field"><span>Lehrkraft-Kontext</span><textarea name="teacher_context_md" rows="4">{createTaskValues().teacher_context_md ?? ""}</textarea></label>
+              <label class="workspace-field"><span>Musterlösung</span><textarea name="model_solution_md" rows="5">{createTaskValues().model_solution_md ?? ""}</textarea></label>
+            {/if}
+            {#if !isPracticeModule}
             <div class="workspace-node-editor-grid">
               <label class="workspace-field"><span>Fällig bis</span><input name="due_at" type="datetime-local" value={createTaskValues().due_at ?? ""} /></label>
               <label class="workspace-field"><span>Max. Versuche</span><input name="max_attempts" min="1" type="number" value={createTaskValues().max_attempts ?? ""} /></label>
             </div>
+            {/if}
           </details>
 
           <input name="h5p_content_id" type="hidden" value={createTaskValues().h5p_content_id ?? ""} />
@@ -1674,6 +1692,7 @@
 
                 <form method="POST" action="?/saveTask" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm} data-draft-target={`task:${task.id}`} oninput={captureModuleDraft} onchange={captureModuleDraft}>
                   <input type="hidden" name="section_id" value={sectionId()} />
+                  <input type="hidden" name="module_kind" value={isPracticeModule ? "practice" : "learning"} />
                   <input type="hidden" name="task_id" value={task.id} />
                   <input type="hidden" name="task_kind" value={task.kind} />
 
@@ -1768,11 +1787,16 @@
 
                   <details class="teacher-module-advanced-settings" open={!isModuleEditor}>
                     <summary>Weitere Einstellungen</summary>
-                    <label class="workspace-field"><span>Lehrkraft-Kontext</span><textarea name="teacher_context_md" rows="4">{taskTeacherContextValue(task)}</textarea></label>
+                    {#if task.kind !== "h5p"}
+                      <label class="workspace-field"><span>Lehrkraft-Kontext</span><textarea name="teacher_context_md" rows="4">{taskTeacherContextValue(task)}</textarea></label>
+                      <label class="workspace-field"><span>Musterlösung</span><textarea name="model_solution_md" rows="5">{taskModelSolutionValue(task)}</textarea></label>
+                    {/if}
+                    {#if !isPracticeModule}
                     <div class="workspace-node-editor-grid">
                       <label class="workspace-field"><span>Fällig bis</span><input name="due_at" type="datetime-local" value={taskDueAtValue(task)} /></label>
                       <label class="workspace-field"><span>Max. Versuche</span><input name="max_attempts" type="number" min="1" value={taskMaxAttemptsValue(task)} /></label>
                     </div>
+                    {/if}
                   </details>
 
                   {#if taskError(task)}

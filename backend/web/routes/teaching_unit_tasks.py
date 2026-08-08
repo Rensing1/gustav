@@ -38,6 +38,7 @@ _TASK_VALIDATION_DETAILS = {
     "invalid_due_at",
     "invalid_max_attempts",
     "invalid_teacher_context_md",
+    "invalid_model_solution_md",
     "invalid_h5p_config",
     "invalid_visual_config",
     "invalid_scratch_config",
@@ -45,6 +46,9 @@ _TASK_VALIDATION_DETAILS = {
     "invalid_filius_config",
     "invalid_dialog_config",
     "invalid_task_kind_config",
+    "practice_fields_required",
+    "practice_schedule_fields_forbidden",
+    "practice_task_kind_not_supported",
 }
 
 
@@ -145,6 +149,7 @@ async def create_section_task(
             instruction_md=payload.instruction_md,
             criteria=payload.criteria,
             teacher_context_md=payload.teacher_context_md,
+            model_solution_md=payload.model_solution_md,
             due_at=payload.due_at,
             max_attempts=payload.max_attempts,
             h5p=payload.h5p,
@@ -197,6 +202,7 @@ async def update_section_task(
         "instruction_md",
         "criteria",
         "teacher_context_md",
+        "model_solution_md",
         "due_at",
         "max_attempts",
         "h5p",

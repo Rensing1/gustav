@@ -55,6 +55,7 @@ def test_core_response_serializers_live_outside_teaching_router() -> None:
         "title": "Modul",
         "position_in_phase": 1,
         "required_prereq_count": 0,
+        "module_kind": "learning",
     }
     assert serializers._serialize_unit_graph_edge(  # type: ignore[attr-defined]
         {"from_module_id": "module-1", "to_module_id": "module-2"}

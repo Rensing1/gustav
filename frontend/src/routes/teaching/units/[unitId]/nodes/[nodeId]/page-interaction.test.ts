@@ -47,7 +47,8 @@ const sampleData: PageData = {
     },
     settings: {
       kind: "module",
-      required_prereq_count: 0
+      required_prereq_count: 0,
+      module_kind: "learning"
     },
     materials: [],
     tasks: []

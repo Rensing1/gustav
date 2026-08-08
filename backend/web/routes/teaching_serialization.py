@@ -32,6 +32,7 @@ def _serialize_task(t) -> dict:
             "instruction_md": getattr(t, "instruction_md", None),
             "criteria": getattr(t, "criteria", []),
             "teacher_context_md": getattr(t, "teacher_context_md", None),
+            "model_solution_md": getattr(t, "model_solution_md", None),
             "due_at": getattr(t, "due_at", None),
             "max_attempts": getattr(t, "max_attempts", None),
             "position": getattr(t, "position", None),
@@ -389,6 +390,9 @@ def _serialize_unit_module(m) -> dict:
         ),
         "required_prereq_count": (
             m.get("required_prereq_count", 0) if isinstance(m, dict) else getattr(m, "required_prereq_count", 0)
+        ),
+        "module_kind": (
+            m.get("module_kind", "learning") if isinstance(m, dict) else getattr(m, "module_kind", "learning")
         ),
     }
 

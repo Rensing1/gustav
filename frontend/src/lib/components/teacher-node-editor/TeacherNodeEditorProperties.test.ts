@@ -32,7 +32,7 @@ describe("TeacherNodeEditorProperties", () => {
           title: "Krisenjahre",
           editor_title: "Krisenjahre"
         },
-        settings: { kind: "module", required_prereq_count: 2 }
+        settings: { kind: "module", required_prereq_count: 2, module_kind: "learning" }
       }
     });
 

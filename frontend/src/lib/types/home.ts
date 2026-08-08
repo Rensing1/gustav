@@ -200,6 +200,7 @@ export type TeacherUnitWorkspaceModuleItem = {
   phase_id: string;
   position_in_phase: number;
   required_prereq_count: number;
+  module_kind: "learning" | "practice";
   materials_count: number;
   tasks_count: number;
   editor_href: string;
@@ -228,6 +229,7 @@ export type TeacherUnitNodeEditorTask = {
   instruction_md: string;
   criteria: string[];
   teacher_context_md?: string | null;
+  model_solution_md?: string | null;
   due_at?: string | null;
   max_attempts?: number | null;
   position: number;
@@ -286,6 +288,7 @@ export type TeacherUnitWorkspaceSelectionModule = {
   phase_id: string;
   position_in_phase: number;
   required_prereq_count: number;
+  module_kind: "learning" | "practice";
   materials_count: number;
   tasks_count: number;
   editor_href: string;
@@ -322,11 +325,12 @@ export type TeacherUnitNodeEditorNode = {
   title: string;
   editor_title: string;
   backing_section_id?: string | null;
+  module_kind?: "learning" | "practice" | null;
 };
 
 export type TeacherUnitNodeEditorSettings =
   | { kind: "section" }
-  | { kind: "module"; required_prereq_count: number };
+  | { kind: "module"; required_prereq_count: number; module_kind: "learning" | "practice" };
 
 export type TeacherUnitNodeEditorView = {
   user: SessionBootstrapUser;

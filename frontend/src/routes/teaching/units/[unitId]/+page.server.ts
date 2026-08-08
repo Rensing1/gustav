@@ -451,19 +451,20 @@ export const actions: Actions = {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();
     const phaseId = String(formData.get("phase_id") ?? "").trim();
+    const moduleKind = String(formData.get("module_kind") ?? "learning").trim();
 
     if (!title || !phaseId) {
       return fail(400, {
         createModule: {
           error: "Bitte gib Titel und Phase für das Modul an.",
-          values: { title, phase_id: phaseId }
+          values: { title, phase_id: phaseId, module_kind: moduleKind }
         }
       });
     }
 
     const response = await backendRequest(fetch, cookies, `/api/teaching/units/${params.unitId}/modules`, {
       method: "POST",
-      body: JSON.stringify({ title, phase_id: phaseId }),
+      body: JSON.stringify({ title, phase_id: phaseId, module_kind: moduleKind }),
       headers: { "content-type": "application/json" },
       includeSameOrigin: true,
       authRedirectPath: currentPath(url)
@@ -473,7 +474,7 @@ export const actions: Actions = {
       return fail(response.status, {
         createModule: {
           error: "Das Modul konnte nicht angelegt werden.",
-          values: { title, phase_id: phaseId }
+          values: { title, phase_id: phaseId, module_kind: moduleKind }
         }
       });
     }

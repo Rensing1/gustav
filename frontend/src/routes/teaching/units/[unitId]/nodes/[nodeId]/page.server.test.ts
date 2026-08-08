@@ -469,6 +469,7 @@ describe("teacher node editor server helpers", () => {
       instruction_md: "Führe einen prüfenden Dialog.",
       criteria: ["Antworten sind begründet"],
       teacher_context_md: "Interner Fachkontext.",
+      model_solution_md: null,
       due_at: null,
       max_attempts: null,
       dialog: {

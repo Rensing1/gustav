@@ -407,6 +407,7 @@ async def get_teacher_unit_workspace(
                 "phase_id": str(module.get("phase_id") or ""),
                 "position_in_phase": int(module.get("position_in_phase") or 0),
                 "required_prereq_count": int(module.get("required_prereq_count") or 0),
+                "module_kind": str(module.get("module_kind") or "learning"),
                 "materials_count": materials_count,
                 "tasks_count": tasks_count,
                 "editor_href": f"/teaching/units/{unit_id}/nodes/{str(module.get('id') or '')}",

@@ -112,6 +112,7 @@ class TaskData:
     instruction_md: str
     criteria: List[str]
     teacher_context_md: Optional[str] | None
+    model_solution_md: Optional[str] | None
     due_at: Optional[str] | None
     max_attempts: Optional[int] | None
     position: int
@@ -905,6 +906,7 @@ class InMemoryTeachingRepo:
         instruction_md: str,
         criteria: Sequence[str] | None = None,
         teacher_context_md: str | None = None,
+        model_solution_md: str | None = None,
         due_at=None,
         max_attempts: int | None = None,
         kind: str = "native",
@@ -936,6 +938,9 @@ class InMemoryTeachingRepo:
             teacher_context_md=teacher_context_md.strip()
             if isinstance(teacher_context_md, str) and teacher_context_md.strip()
             else None,
+            model_solution_md=model_solution_md.strip()
+            if isinstance(model_solution_md, str) and model_solution_md.strip()
+            else None,
             due_at=due_iso,
             max_attempts=max_attempts,
             position=pos,
@@ -961,6 +966,7 @@ class InMemoryTeachingRepo:
         instruction_md=_UNSET,
         criteria=_UNSET,
         teacher_context_md=_UNSET,
+        model_solution_md=_UNSET,
         due_at=_UNSET,
         max_attempts=_UNSET,
         kind=_UNSET,
@@ -989,6 +995,12 @@ class InMemoryTeachingRepo:
             elif isinstance(teacher_context_md, str):
                 stripped = teacher_context_md.strip()
                 task.teacher_context_md = stripped or None
+        if model_solution_md is not _UNSET:
+            if model_solution_md is None:
+                task.model_solution_md = None
+            elif isinstance(model_solution_md, str):
+                stripped = model_solution_md.strip()
+                task.model_solution_md = stripped or None
         if due_at is not _UNSET:
             if due_at is None:
                 task.due_at = None

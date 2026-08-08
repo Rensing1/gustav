@@ -339,7 +339,8 @@ def list_unit_modules_for_author(*, dsn: str, psycopg_module, unit_id: str, auth
                        um.phase_id::text,
                        um.position_in_phase,
                        um.required_prereq_count,
-                       s.title
+                       s.title,
+                       um.module_kind
                   from public.unit_modules um
                   join public.unit_sections s on s.id = um.section_id
                   join public.unit_phases p on p.id = um.phase_id
@@ -358,6 +359,7 @@ def list_unit_modules_for_author(*, dsn: str, psycopg_module, unit_id: str, auth
             "position_in_phase": int(r[4] or 1),
             "required_prereq_count": int(r[5] or 0),
             "title": r[6],
+            "module_kind": str(r[7] or "learning") if len(r) > 7 else "learning",
         }
         for r in rows
     ]
@@ -387,7 +389,8 @@ def get_unit_module_for_author(*, dsn: str, psycopg_module, unit_id: str, module
                        um.phase_id::text,
                        um.position_in_phase,
                        um.required_prereq_count,
-                       s.title
+                       s.title,
+                       um.module_kind
                   from public.unit_modules um
                   join public.unit_sections s on s.id = um.section_id
                  where um.unit_id = %s
@@ -406,7 +409,36 @@ def get_unit_module_for_author(*, dsn: str, psycopg_module, unit_id: str, module
         "position_in_phase": int(row[4] or 1),
         "required_prereq_count": int(row[5] or 0),
         "title": row[6],
+        "module_kind": str(row[7] or "learning") if len(row) > 7 else "learning",
     }
+
+
+def get_section_module_kind_for_author(
+    *, dsn: str, psycopg_module, unit_id: str, section_id: str, author_id: str
+) -> str:
+    """Return the immutable module kind for an authored section.
+
+    Linear sections do not have a `unit_modules` row and therefore retain the
+    normal learning-task contract.
+    """
+
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+            cur.execute(
+                """
+                select coalesce(module.module_kind, 'learning')
+                  from public.unit_sections section
+                  join public.units unit on unit.id = section.unit_id
+                  left join public.unit_modules module on module.section_id = section.id
+                 where section.id = %s::uuid
+                   and section.unit_id = %s::uuid
+                   and unit.author_id = %s
+                """,
+                (section_id, unit_id, author_id),
+            )
+            row = cur.fetchone()
+    return str((row or ["learning"])[0] or "learning")
 
 def list_unit_module_edges_for_author(*, dsn: str, psycopg_module, unit_id: str, author_id: str) -> List[dict]:
     """List dependency edges for a modular unit authored by the caller.
@@ -439,7 +471,10 @@ def list_unit_module_edges_for_author(*, dsn: str, psycopg_module, unit_id: str,
             rows = cur.fetchall() or []
     return [{"from": r[0], "to": r[1]} for r in rows]
 
-def create_unit_module_for_author(*, dsn: str, psycopg_module, unit_id: str, phase_id: str, title: str, author_id: str) -> dict:
+def create_unit_module_for_author(
+    *, dsn: str, psycopg_module, unit_id: str, phase_id: str, title: str,
+    module_kind: str, author_id: str
+) -> dict:
     """Create a module in the given phase (Option B).
 
     Option B:
@@ -460,6 +495,9 @@ def create_unit_module_for_author(*, dsn: str, psycopg_module, unit_id: str, pha
     t = (title or "").strip()
     if not t or len(t) > 200:
         raise ValueError("invalid_title")
+    normalized_kind = str(module_kind or "learning").strip().lower()
+    if normalized_kind not in {"learning", "practice"}:
+        raise ValueError("invalid_module_kind")
 
     with psycopg_module.connect(dsn) as conn:
         with conn.cursor() as cur:
@@ -509,16 +547,17 @@ def create_unit_module_for_author(*, dsn: str, psycopg_module, unit_id: str, pha
             next_pos_in_phase = int(cur.fetchone()[0])
             cur.execute(
                 """
-                insert into public.unit_modules (unit_id, section_id, phase_id, position_in_phase)
-                values (%s::uuid, %s::uuid, %s::uuid, %s)
-                returning id::text, required_prereq_count
+                insert into public.unit_modules (unit_id, section_id, phase_id, position_in_phase, module_kind)
+                values (%s::uuid, %s::uuid, %s::uuid, %s, %s)
+                returning id::text, required_prereq_count, module_kind
                 """,
-                (unit_id, section_id, phase_id, next_pos_in_phase),
+                (unit_id, section_id, phase_id, next_pos_in_phase, normalized_kind),
             )
             module_row = cur.fetchone()
             if not module_row:
                 raise RuntimeError("unit_modules insert returned no row")
             module_id, required_prereq_count = module_row[0], int(module_row[1] or 0)
+            stored_kind = str(module_row[2] or "learning") if len(module_row) > 2 else normalized_kind
             conn.commit()
     return {
         "id": module_id,
@@ -527,6 +566,7 @@ def create_unit_module_for_author(*, dsn: str, psycopg_module, unit_id: str, pha
         "phase_id": phase_id,
         "position_in_phase": next_pos_in_phase,
         "required_prereq_count": required_prereq_count,
+        "module_kind": stored_kind,
         "title": t,
     }
 

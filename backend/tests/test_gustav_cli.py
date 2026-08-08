@@ -336,7 +336,7 @@ def test_modules_edge_create_uses_unit_scoped_endpoint(tmp_path, monkeypatch) ->
     )
 
 
-def test_modules_create_sends_phase_and_title(tmp_path, monkeypatch) -> None:
+def test_modules_create_sends_phase_title_and_practice_kind(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("GUSTAV_CONFIG_HOME", str(tmp_path))
     config.save_config(config.GustavCLIConfig(base_url="https://gustav.example", token="gustav_cli_token_secret"))
     calls: list[tuple[str, str, dict[str, str] | None, object | None]] = []
@@ -347,7 +347,10 @@ def test_modules_create_sends_phase_and_title(tmp_path, monkeypatch) -> None:
     )
 
     code = cli.main(
-        ["modules", "create", "--unit-id", "unit-1", "--phase-id", "phase-1", "--title", "Modul A"],
+        [
+            "modules", "create", "--unit-id", "unit-1", "--phase-id", "phase-1",
+            "--title", "Modul A", "--module-kind", "practice",
+        ],
         stdout=io.StringIO(),
         stderr=io.StringIO(),
     )
@@ -357,7 +360,7 @@ def test_modules_create_sends_phase_and_title(tmp_path, monkeypatch) -> None:
         "POST",
         "https://gustav.example/api/teaching/units/unit-1/modules",
         {"Authorization": "Bearer gustav_cli_token_secret"},
-        {"phase_id": "phase-1", "title": "Modul A"},
+        {"phase_id": "phase-1", "title": "Modul A", "module_kind": "practice"},
     )
 
 
@@ -1188,7 +1191,7 @@ def test_tasks_list_edit_delete_and_reorder_use_section_endpoint(tmp_path, monke
 
     target = ["--unit-id", "unit-1", "--section-id", "section-1"]
     assert cli.main(["tasks", "list", *target], stdout=io.StringIO(), stderr=io.StringIO()) == 0
-    assert cli.main(["tasks", "edit", "task-1", *target, "--instruction-md", "Neu", "--criterion", "A", "--teacher-context-md", "privat", "--due-at", "2026-05-12T08:00:00Z", "--max-attempts", "2"], stdout=io.StringIO(), stderr=io.StringIO()) == 0
+    assert cli.main(["tasks", "edit", "task-1", *target, "--instruction-md", "Neu", "--criterion", "A", "--teacher-context-md", "privat", "--model-solution-md", "Lösung", "--due-at", "2026-05-12T08:00:00Z", "--max-attempts", "2"], stdout=io.StringIO(), stderr=io.StringIO()) == 0
     assert cli.main(["tasks", "delete", "task-1", *target, "--yes"], stdout=io.StringIO(), stderr=io.StringIO()) == 0
     assert cli.main(["tasks", "reorder", *target, "--ids", "t2", "t1"], stdout=io.StringIO(), stderr=io.StringIO()) == 0
 
@@ -1198,7 +1201,7 @@ def test_tasks_list_edit_delete_and_reorder_use_section_endpoint(tmp_path, monke
             "PATCH",
             "https://gustav.example/api/teaching/units/unit-1/sections/section-1/tasks/task-1",
             {"Authorization": "Bearer gustav_cli_token_secret"},
-            {"instruction_md": "Neu", "criteria": ["A"], "teacher_context_md": "privat", "due_at": "2026-05-12T08:00:00Z", "max_attempts": 2},
+            {"instruction_md": "Neu", "criteria": ["A"], "teacher_context_md": "privat", "model_solution_md": "Lösung", "due_at": "2026-05-12T08:00:00Z", "max_attempts": 2},
         ),
         ("DELETE", "https://gustav.example/api/teaching/units/unit-1/sections/section-1/tasks/task-1", {"Authorization": "Bearer gustav_cli_token_secret"}, None),
         ("POST", "https://gustav.example/api/teaching/units/unit-1/sections/section-1/tasks/reorder", {"Authorization": "Bearer gustav_cli_token_secret"}, {"task_ids": ["t2", "t1"]}),

@@ -527,13 +527,25 @@ class DBTeachingRepo:
             author_id=author_id,
         )
 
-    def create_unit_module_for_author(self, *, unit_id: str, phase_id: str, title: str, author_id: str) -> dict:
+    def create_unit_module_for_author(
+        self, *, unit_id: str, phase_id: str, title: str, module_kind: str, author_id: str
+    ) -> dict:
         return _repo_unit_module_queries.create_unit_module_for_author(
             dsn=self._dsn,
             psycopg_module=psycopg,
             unit_id=unit_id,
             phase_id=phase_id,
             title=title,
+            module_kind=module_kind,
+            author_id=author_id,
+        )
+
+    def get_section_module_kind_for_author(self, unit_id: str, section_id: str, author_id: str) -> str:
+        return _repo_unit_module_queries.get_section_module_kind_for_author(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            unit_id=unit_id,
+            section_id=section_id,
             author_id=author_id,
         )
 
@@ -857,6 +869,7 @@ class DBTeachingRepo:
         instruction_md: str,
         criteria: List[str],
         teacher_context_md: str | None,
+        model_solution_md: str | None = None,
         due_at,
         max_attempts: int | None,
         kind: str,
@@ -874,6 +887,7 @@ class DBTeachingRepo:
             instruction_md=instruction_md,
             criteria=criteria,
             teacher_context_md=teacher_context_md,
+            model_solution_md=model_solution_md,
             due_at=due_at,
             max_attempts=max_attempts,
             kind=kind,
@@ -892,6 +906,7 @@ class DBTeachingRepo:
         instruction_md=_UNSET,
         criteria=_UNSET,
         teacher_context_md=_UNSET,
+        model_solution_md=_UNSET,
         due_at=_UNSET,
         max_attempts=_UNSET,
         kind=_UNSET,
@@ -910,6 +925,7 @@ class DBTeachingRepo:
             instruction_md=instruction_md,
             criteria=criteria,
             teacher_context_md=teacher_context_md,
+            model_solution_md=model_solution_md,
             due_at=due_at,
             max_attempts=max_attempts,
             kind=kind,

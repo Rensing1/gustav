@@ -69,7 +69,8 @@ TASK_COLUMNS_SQL = """
     to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
     kind,
     h5p_content_id,
-    h5p_display_options
+    h5p_display_options,
+    model_solution_md
 """
 
 
@@ -101,6 +102,7 @@ def task_row_to_dict(row: tuple) -> dict[str, Any]:
         "instruction_md": row[3],
         "criteria": list(row[4] or []),
         "teacher_context_md": row[5],
+        "model_solution_md": row[14] if len(row) > 14 else None,
         "due_at": row[6],
         "max_attempts": int(row[7]) if row[7] is not None else None,
         "position": int(row[8]) if row[8] is not None else None,

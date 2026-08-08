@@ -160,6 +160,13 @@ class MaterialsService:
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
 
+    def _ensure_materials_allowed(self, unit_id: str, section_id: str, author_id: str) -> None:
+        """Reject materials in practice modules before reaching persistence."""
+
+        resolver = getattr(self.repo, "get_section_module_kind_for_author", None)
+        if callable(resolver) and resolver(unit_id, section_id, author_id) == "practice":
+            raise ValueError("practice_module_material_forbidden")
+
     def list_markdown_materials(self, unit_id: str, section_id: str, author_id: str) -> List[Any]:
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
@@ -176,6 +183,7 @@ class MaterialsService:
     ) -> Any:
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
+        self._ensure_materials_allowed(unit_id, section_id, author_id)
         return self.repo.create_markdown_material(
             unit_id,
             section_id,
@@ -280,6 +288,7 @@ class MaterialsService:
             raise RuntimeError("storage_adapter_not_configured")
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
+        self._ensure_materials_allowed(unit_id, section_id, author_id)
         sanitized = _sanitize_filename(filename)
         if not sanitized:
             raise ValueError("invalid_filename")
@@ -367,6 +376,7 @@ class MaterialsService:
             raise RuntimeError("storage_adapter_not_configured")
         if not self.repo.section_exists_for_author(unit_id, section_id, author_id):
             raise LookupError("section_not_found")
+        self._ensure_materials_allowed(unit_id, section_id, author_id)
         intent = self.repo.get_upload_intent_owned(intent_id, unit_id, section_id, author_id)
         if intent is None:
             raise LookupError("intent_not_found")

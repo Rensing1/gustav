@@ -180,6 +180,7 @@ class UnitModuleCreatePayload(BaseModel):
     # Accept raw strings (including empty) and validate in handler to return 400.
     title: str | None = Field(default=None)
     phase_id: str | None = Field(default=None)
+    module_kind: str | None = Field(default="learning")
 
     @field_validator("title")
     @classmethod
@@ -366,6 +367,7 @@ class TaskCreatePayload(BaseModel):
     instruction_md: object | None = None
     criteria: object | None = None
     teacher_context_md: object | None = None
+    model_solution_md: object | None = None
     due_at: object | None = None
     max_attempts: object | None = None
     h5p: object | None = None
@@ -380,6 +382,7 @@ class TaskUpdatePayload(BaseModel):
     instruction_md: object | None = None
     criteria: object | None = None
     teacher_context_md: object | None = None
+    model_solution_md: object | None = None
     due_at: object | None = None
     max_attempts: object | None = None
     h5p: object | None = None

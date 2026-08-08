@@ -361,15 +361,24 @@ async def create_unit_module(request: Request, unit_id: str, payload: UnitModule
         return repo_error
     title = payload.title or ""
     phase_id = payload.phase_id or ""
+    module_kind = str(payload.module_kind or "learning").strip().lower()
     if not _is_uuid_like(phase_id):
         return _private_error({"error": "bad_request", "detail": "invalid_phase_id"}, status_code=400)
     if not title or len(title) > 200:
         return _private_error({"error": "bad_request", "detail": "invalid_title"}, status_code=400)
+    if module_kind not in {"learning", "practice"}:
+        return _private_error({"error": "bad_request", "detail": "invalid_module_kind"}, status_code=400)
     try:
-        created = repo.create_unit_module_for_author(unit_id=unit_id, phase_id=phase_id, title=title, author_id=sub)
+        created = repo.create_unit_module_for_author(
+            unit_id=unit_id,
+            phase_id=phase_id,
+            title=title,
+            module_kind=module_kind,
+            author_id=sub,
+        )
     except ValueError as exc:
         detail = str(exc) or "invalid_input"
-        if detail in {"invalid_unit_type", "invalid_title"}:
+        if detail in {"invalid_unit_type", "invalid_title", "invalid_module_kind"}:
             return _private_error({"error": "bad_request", "detail": detail}, status_code=400)
         return _private_error({"error": "bad_request", "detail": "invalid_input"}, status_code=400)
     except LookupError:
@@ -422,12 +431,24 @@ async def create_unit_module_edge(request: Request, unit_id: str, payload: UnitM
     except LookupError:
         return _private_error({"error": "not_found"}, status_code=404)
     module_ids: set[str] = set()
+    module_kinds: dict[str, str] = {}
     for item in modules or []:
         raw_id = str((item or {}).get("id")) if isinstance(item, dict) else str(getattr(item, "id", ""))
         if _is_uuid_like(raw_id):
-            module_ids.add(_canonical_uuid(raw_id))
+            canonical_id = _canonical_uuid(raw_id)
+            module_ids.add(canonical_id)
+            module_kinds[canonical_id] = str(
+                (item or {}).get("module_kind", "learning")
+                if isinstance(item, dict)
+                else getattr(item, "module_kind", "learning")
+            )
     if from_id not in module_ids or to_id not in module_ids:
         return _private_error({"error": "not_found"}, status_code=404)
+    if module_kinds.get(from_id) == "practice":
+        return _private_error(
+            {"error": "bad_request", "detail": "practice_module_outgoing_edge"},
+            status_code=400,
+        )
     try:
         created = repo.create_unit_module_edge_for_author(
             unit_id=unit_id, from_module_id=from_id, to_module_id=to_id, author_id=sub

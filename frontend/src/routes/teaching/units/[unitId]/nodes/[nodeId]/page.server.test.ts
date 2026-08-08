@@ -357,7 +357,7 @@ describe("teacher node editor server helpers", () => {
         params: { unitId: "unit-1", nodeId: "node-1" },
         request: requestWithFormData(form)
       } as Parameters<typeof actions.deleteModule>[0])
-    ).rejects.toMatchObject({ status: 303, location: "/teaching/units/unit-1?phase=phase-1&quick=1" });
+    ).rejects.toMatchObject({ status: 303, location: "/teaching/units/unit-1?phase=phase-1" });
 
     expect(backendRequestMock).toHaveBeenCalledWith(
       expect.any(Function),

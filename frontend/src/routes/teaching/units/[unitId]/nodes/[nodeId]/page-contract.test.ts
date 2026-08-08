@@ -57,4 +57,12 @@ describe("teacher node editor contract", () => {
       /@container \(max-width: 63\.99rem\)[\s\S]*\.teacher-module-outline__compact-add\s*\{[^}]*display:\s*inline-grid/s
     );
   });
+
+  it("returns to a selected module without opening its properties automatically", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("?module=${encodeURIComponent(editorState.node.id)}");
+    expect(routeSource).not.toContain("&quick=1");
+  });
 });

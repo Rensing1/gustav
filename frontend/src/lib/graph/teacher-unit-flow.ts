@@ -82,6 +82,14 @@ export type TeacherFlowEdge = Edge<TeacherFlowEdgeData> & {
   pathOptions?: SmoothStepPathOptionsLike;
 };
 
+export function formatGraphCount(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+export function formatGraphCounts(materialsCount: number, tasksCount: number): string {
+  return `${formatGraphCount(materialsCount, "Material", "Materialien")} · ${formatGraphCount(tasksCount, "Aufgabe", "Aufgaben")}`;
+}
+
 type ElkNode = { id: string; x?: number; y?: number; width?: number; height?: number };
 type ModulePosition = {
   x: number;
@@ -437,11 +445,10 @@ function sectionNode(
     data: {
       kind: "section",
       title: item.title,
-      kicker: `Abschnitt ${item.position}`,
-      meta: `${item.materials_count} Materialien · ${item.tasks_count} Aufgaben`,
+      kicker: `Abschnitt ${String(item.position).padStart(2, "0")}`,
+      meta: formatGraphCounts(item.materials_count, item.tasks_count),
       selectHref: `?section=${encodeURIComponent(item.id)}`,
       editorHref: item.editor_href,
-      quickHref: `?section=${encodeURIComponent(item.id)}&quick=1`,
       position: item.position,
       connectable: false,
       compact: true
@@ -472,7 +479,6 @@ function phaseNode(
       kicker: `Phase ${phase.position}`,
       meta: `${phase.modules.length} Module`,
       selectHref: `?phase=${encodeURIComponent(phase.id)}`,
-      quickHref: `?phase=${encodeURIComponent(phase.id)}&quick=1`,
       createHref: `?phase=${encodeURIComponent(phase.id)}&create-module=1`,
       createLabel: "Modul hinzufügen",
       phaseId: phase.id,
@@ -510,11 +516,10 @@ function moduleNode(
     data: {
       kind: "module",
       title: module.title,
-      kicker: `Modul ${module.position_in_phase}`,
-      meta: `${module.materials_count} Materialien · ${module.tasks_count} Aufgaben`,
+      kicker: `Modul ${String(module.position_in_phase).padStart(2, "0")}`,
+      meta: formatGraphCounts(module.materials_count, module.tasks_count),
       selectHref: `?module=${encodeURIComponent(module.id)}`,
       editorHref: module.editor_href,
-      quickHref: `?module=${encodeURIComponent(module.id)}&quick=1`,
       phaseId: module.phase_id,
       position: module.position_in_phase,
       connectable: true,

@@ -1,20 +1,27 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
-  import { goto, invalidateAll, replaceState } from "$app/navigation";
+  import { goto, invalidateAll, pushState, replaceState } from "$app/navigation";
   import { page } from "$app/state";
   import {
-    Controls,
     Panel,
     SvelteFlow,
     type Connection
   } from "@xyflow/svelte";
   import "@xyflow/svelte/dist/style.css";
   import type { SubmitFunction } from "@sveltejs/kit";
+  import { onMount, setContext } from "svelte";
 
   import GraphDeleteDialog from "$lib/components/teacher-unit-graph/GraphDeleteDialog.svelte";
   import GraphPhaseBand from "$lib/components/teacher-unit-graph/GraphPhaseBand.svelte";
+  import GraphSelectionBar, {
+    type GraphSelectionBarSelection
+  } from "$lib/components/teacher-unit-graph/GraphSelectionBar.svelte";
   import type { TeacherGraphCommandBarAction } from "$lib/components/teacher-unit-graph/TeacherGraphCommandBar.svelte";
   import TeacherGraphEdge from "$lib/components/teacher-unit-graph/TeacherGraphEdge.svelte";
+  import TeacherGraphViewportControls, {
+    type TeacherGraphViewportController
+  } from "$lib/components/teacher-unit-graph/TeacherGraphViewportControls.svelte";
+  import { TEACHER_GRAPH_SELECTION_CONTEXT } from "$lib/components/teacher-unit-graph/selection-context";
   import GraphUnitNode from "$lib/components/teacher-unit-graph/GraphUnitNode.svelte";
   import GraphInspectorPanel from "$lib/components/ui/GraphInspectorPanel.svelte";
   import TeacherGraphWorkspaceFrame from "$lib/components/ui/TeacherGraphWorkspaceFrame.svelte";
@@ -36,8 +43,7 @@
     deriveModuleSelection as deriveWorkspaceModuleSelection,
     derivePhaseSelection as deriveWorkspacePhaseSelection,
     deriveSectionSelection as deriveWorkspaceSectionSelection,
-    modularPhases as workspaceModularPhases,
-    workspaceGraphSignature
+    modularPhases as workspaceModularPhases
   } from "$lib/teacher-unit-workspace/view-state";
   import {
     actionError,
@@ -62,19 +68,19 @@
   let flowBusy = $state(false);
   let graphMessage = $state<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   let workspaceState = $state<TeacherUnitWorkspaceView>(initialWorkspace());
-  let localSelection = $state<TeacherUnitWorkspaceSelection>({ kind: "none" });
+  let localSelection = $state<TeacherUnitWorkspaceSelection>(initialWorkspace().selection);
   let handledForm: ActionData | undefined = undefined;
-  let initialCreateDialogStateApplied = $state(false);
-  type StructurePanelMode = "create-phase" | "create-module" | "edit-phase" | "edit-module" | null;
+  let initialPanelStateApplied = $state(false);
+  type StructurePanelMode = "create-phase" | "create-module" | "phase-properties" | "module-properties" | null;
   let structurePanelMode = $state<StructurePanelMode>(null);
+  let unitEditOpen = $state(false);
   let deleteTarget = $state<GraphDeletionTarget | null>(null);
   let inspectorReturnFocus = $state<HTMLElement | null>(null);
+  let unitEditReturnFocus: HTMLElement | null = null;
   let createSectionOpen = $state(false);
   let flowViewport = $state<{ x: number; y: number; zoom: number } | undefined>(undefined);
-  let lastWorkspaceSignature = "";
-  let pendingViewportReset = false;
   let flowBuildSequence = 0;
-  let lastQuickSelectionKey = "";
+  let graphViewportController: TeacherGraphViewportController | null = null;
 
   const nodeTypes = {
     unitNode: GraphUnitNode,
@@ -84,6 +90,18 @@
   const edgeTypes = {
     teacherEdge: TeacherGraphEdge
   };
+
+  setContext(TEACHER_GRAPH_SELECTION_CONTEXT, (kind: "section" | "phase" | "module", id: string) => {
+    if (kind === "section") {
+      setSelectionAndPanel(deriveSectionSelection(id), null);
+    } else if (kind === "phase") {
+      setSelectionAndPanel(derivePhaseSelection(id), null);
+    } else {
+      setSelectionAndPanel(deriveModuleSelection(id), null);
+    }
+  });
+
+  onMount(() => applyRouteState(currentUrl()));
 
   const enhanceGraphForm: SubmitFunction = () => {
     return async ({ result, update }) => {
@@ -95,12 +113,12 @@
         if (deleted) {
           deleteTarget = null;
           structurePanelMode = success.next?.module
-            ? "edit-module"
+            ? "module-properties"
             : success.next?.phase
-              ? "edit-phase"
+              ? "phase-properties"
               : null;
         } else if (created) {
-          structurePanelMode = success.next?.module ? "edit-module" : success.next?.phase ? "edit-phase" : null;
+          structurePanelMode = success.next?.module ? "module-properties" : success.next?.phase ? "phase-properties" : null;
         }
         closeCreateDialogsFromNext(success.next);
         // Keep the action result (including its success message), but reload
@@ -121,6 +139,11 @@
         if (deleted || created) {
           focusGraphTarget(success.next);
         }
+        if (created) {
+          graphViewportController?.focusNode(
+            success.next?.phase ? `phase:${success.next.phase}` : success.next?.module ?? null
+          );
+        }
         return;
       }
       await update({ reset: false });
@@ -140,7 +163,10 @@
   }
 
   function currentUrl(): URL {
-    return new URL(page.url);
+    if (typeof document !== "undefined") {
+      return new URL(document.location.href);
+    }
+    return new URL(page.url.href);
   }
 
   function pageHref(next: Record<string, string | null>): string {
@@ -161,18 +187,81 @@
     return currentUrl().searchParams.get("quick") === "1";
   }
 
+  function panelParam(mode: StructurePanelMode): string | null {
+    if (mode === "phase-properties" || mode === "module-properties") {
+      return mode;
+    }
+    return mode;
+  }
+
+  function selectionFromUrl(
+    url: URL = currentUrl(),
+    workspace: TeacherUnitWorkspaceView = workspaceState
+  ): TeacherUnitWorkspaceSelection {
+    const moduleId = url.searchParams.get("module");
+    if (moduleId) {
+      return deriveWorkspaceModuleSelection(workspace, moduleId);
+    }
+
+    const phaseId = url.searchParams.get("phase");
+    if (phaseId) {
+      return deriveWorkspacePhaseSelection(workspace, phaseId);
+    }
+
+    const sectionId = url.searchParams.get("section");
+    if (sectionId) {
+      return deriveWorkspaceSectionSelection(workspace, sectionId);
+    }
+
+    const edgeFrom = url.searchParams.get("edgeFrom");
+    const edgeTo = url.searchParams.get("edgeTo");
+    if (edgeFrom && edgeTo) {
+      return deriveWorkspaceEdgeSelection(workspace, edgeFrom, edgeTo);
+    }
+
+    return { kind: "none" };
+  }
+
+  function panelModeFromUrl(
+    url: URL = currentUrl(),
+    selection: TeacherUnitWorkspaceSelection = localSelection
+  ): StructurePanelMode {
+    const panel = url.searchParams.get("panel");
+    if (panel === "create-phase" || panel === "create-module") {
+      return panel;
+    }
+    if (panel === "phase-properties" && selection.kind === "phase") {
+      return panel;
+    }
+    if (panel === "module-properties" && selection.kind === "module") {
+      return panel;
+    }
+
+    if (url.searchParams.get("create-phase") === "1" || form?.createPhase) {
+      return "create-phase";
+    }
+    if (url.searchParams.get("create-module") === "1" || form?.createModule) {
+      return "create-module";
+    }
+    if (url.searchParams.get("quick") === "1") {
+      if (selection.kind === "phase") return "phase-properties";
+      if (selection.kind === "module") return "module-properties";
+    }
+    return null;
+  }
+
   function showCreatePhaseDialog(): boolean {
     return structurePanelMode === "create-phase"
-      || (!initialCreateDialogStateApplied && Boolean(data.showCreatePhaseDialog || form?.createPhase));
+      || (!initialPanelStateApplied && Boolean(data.showCreatePhaseDialog || form?.createPhase));
   }
 
   function showCreateModuleDialog(): boolean {
     return structurePanelMode === "create-module"
-      || (!initialCreateDialogStateApplied && Boolean(data.showCreateModuleDialog || form?.createModule));
+      || (!initialPanelStateApplied && Boolean(data.showCreateModuleDialog || form?.createModule));
   }
 
   function showCreateSectionDialog(): boolean {
-    return createSectionOpen || (!initialCreateDialogStateApplied && Boolean(data.showCreateSectionDialog || form?.createSection));
+    return createSectionOpen || (!initialPanelStateApplied && Boolean(data.showCreateSectionDialog || form?.createSection));
   }
 
   function selectedPhaseId(): string | null {
@@ -224,28 +313,51 @@
     }
   }
 
-  function setStructurePanelMode(mode: StructurePanelMode) {
+  function selectionSearchPatch(selection: TeacherUnitWorkspaceSelection): Record<string, string | null> {
+    const patch: Record<string, string | null> = {
+      section: null,
+      phase: null,
+      module: null,
+      edgeFrom: null,
+      edgeTo: null
+    };
+    if (selection.kind === "section") patch.section = selection.section.id;
+    if (selection.kind === "phase") patch.phase = selection.phase.id;
+    if (selection.kind === "module") patch.module = selection.module.id;
+    if (selection.kind === "edge") {
+      patch.edgeFrom = selection.edge.from_id;
+      patch.edgeTo = selection.edge.to_id;
+    }
+    return patch;
+  }
+
+  function selectionIdentity(selection: TeacherUnitWorkspaceSelection): string {
+    if (selection.kind === "section") return `section:${selection.section.id}`;
+    if (selection.kind === "phase") return `phase:${selection.phase.id}`;
+    if (selection.kind === "module") return `module:${selection.module.id}`;
+    if (selection.kind === "edge") return `edge:${selection.edge.from_id}:${selection.edge.to_id}`;
+    return "none";
+  }
+
+  function setSelectionAndPanel(selection: TeacherUnitWorkspaceSelection, mode: StructurePanelMode) {
+    if (selectionIdentity(localSelection) === selectionIdentity(selection) && structurePanelMode === mode) {
+      return;
+    }
     if (mode !== null && structurePanelMode === null && document.activeElement instanceof HTMLElement) {
       inspectorReturnFocus = document.activeElement === document.body ? null : document.activeElement;
     }
     const returnFocus = mode === null ? inspectorReturnFocus : null;
+    localSelection = selection;
     structurePanelMode = mode;
     const next: Record<string, string | null> = {
+      ...selectionSearchPatch(selection),
       "create-phase": null,
       "create-module": null,
-      quick: mode === "edit-phase" || mode === "edit-module" ? "1" : null
+      quick: null,
+      panel: panelParam(mode)
     };
-    if (mode === "create-phase") {
-      next["create-phase"] = "1";
-    } else if (mode === "create-module") {
-      next["create-module"] = "1";
-    }
-    replaceCurrentUrl(pageHref(next));
+    pushCurrentUrl(pageHref(next));
     if (mode === null) {
-      // Allow the currently selected graph item to reopen its inspector after
-      // the user closed it. Otherwise the route-sync effect would mistake the
-      // next click for the already handled `quick=1` selection.
-      lastQuickSelectionKey = "";
       inspectorReturnFocus = null;
       requestAnimationFrame(() => {
         if (returnFocus?.isConnected) {
@@ -261,6 +373,10 @@
         );
       });
     }
+  }
+
+  function setStructurePanelMode(mode: StructurePanelMode) {
+    setSelectionAndPanel(localSelection, mode);
   }
 
   function openDeleteDialog(target: GraphDeletionTarget) {
@@ -311,6 +427,12 @@
     }
   }
 
+  function pushCurrentUrl(href: string) {
+    if (typeof window !== "undefined") {
+      pushState(href, page.state);
+    }
+  }
+
   function graphCommandActions(): TeacherGraphCommandBarAction[] {
     if (workspaceState.graph.kind === "linear") {
       return [{ label: "Abschnitt hinzufügen", active: showCreateSectionDialog(), onClick: openCreateSectionDialog }];
@@ -354,28 +476,6 @@
     return deriveWorkspaceEdgeSelection(workspaceState, fromId, toId);
   }
 
-  function syncSelectionUrl(selection: TeacherUnitWorkspaceSelection) {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const url = currentUrl();
-    ["section", "phase", "module", "edgeFrom", "edgeTo"].forEach((key) => url.searchParams.delete(key));
-
-    if (selection.kind === "section") {
-      url.searchParams.set("section", selection.section.id);
-    } else if (selection.kind === "phase") {
-      url.searchParams.set("phase", selection.phase.id);
-    } else if (selection.kind === "module") {
-      url.searchParams.set("module", selection.module.id);
-    } else if (selection.kind === "edge") {
-      url.searchParams.set("edgeFrom", selection.edge.from_id);
-      url.searchParams.set("edgeTo", selection.edge.to_id);
-    }
-
-    replaceCurrentUrl(`${url.pathname}${url.search}${url.hash}`);
-  }
-
   function syncUrlPatch(next: Record<string, string | null>) {
     if (typeof window === "undefined") {
       return;
@@ -385,8 +485,7 @@
   }
 
   async function applyLocalSelection(selection: TeacherUnitWorkspaceSelection) {
-    localSelection = selection;
-    syncSelectionUrl(selection);
+    setSelectionAndPanel(selection, null);
   }
 
   function setGraphMessage(text: string, tone: "info" | "success" | "error" = "info") {
@@ -444,10 +543,6 @@
           enhanceGraphForm
         }
       }));
-      if (pendingViewportReset) {
-        flowViewport = { x: 0, y: 0, zoom: 1 };
-        pendingViewportReset = false;
-      }
     } finally {
       if (buildSequence === flowBuildSequence) {
         flowBusy = false;
@@ -464,59 +559,27 @@
     });
   }
 
-  $effect(() => {
-    if (initialCreateDialogStateApplied) {
-      return;
+  function applyRouteState(url: URL) {
+    const selection = selectionFromUrl(url);
+    const mode = workspaceState.graph.kind === "modular" ? panelModeFromUrl(url, selection) : null;
+    localSelection = selection;
+    structurePanelMode = mode;
+    unitEditOpen = url.searchParams.get("edit") === "1" || Boolean(form?.saveUnit);
+    createSectionOpen = url.searchParams.get("create-section") === "1" || Boolean(form?.createSection);
+
+    if (!initialPanelStateApplied) {
+      initialPanelStateApplied = true;
     }
-    initialCreateDialogStateApplied = true;
-    if (data.showCreatePhaseDialog || form?.createPhase) {
-      structurePanelMode = "create-phase";
-    } else if (data.showCreateModuleDialog || form?.createModule) {
-      structurePanelMode = "create-module";
-    } else if (quickEditOpen() && data.workspace.selection.kind === "phase") {
-      structurePanelMode = "edit-phase";
-    } else if (quickEditOpen() && data.workspace.selection.kind === "module") {
-      structurePanelMode = "edit-module";
+
+    if (url.searchParams.get("quick") === "1" && mode) {
+      queueMicrotask(() => replaceCurrentUrl(pageHref({ quick: null, panel: panelParam(mode) })));
     }
-    createSectionOpen = Boolean(data.showCreateSectionDialog);
-  });
+  }
 
   $effect(() => {
-    const quick = page.url.searchParams.get("quick");
-    const selection = data.workspace.selection;
-    const selectionId =
-      selection.kind === "phase"
-        ? selection.phase.id
-        : selection.kind === "module"
-          ? selection.module.id
-          : "none";
-    const key = `${quick ?? ""}:${selection.kind}:${selectionId}`;
-    if (key === lastQuickSelectionKey) {
-      return;
-    }
-    lastQuickSelectionKey = key;
-    if (quick !== "1") {
-      return;
-    }
-    if (selection.kind === "phase") {
-      structurePanelMode = "edit-phase";
-      focusGraphTarget({ phase: selection.phase.id });
-    } else if (selection.kind === "module") {
-      structurePanelMode = "edit-module";
-      focusGraphTarget({ module: selection.module.id });
-    }
-  });
-
-  $effect(() => {
-    const nextWorkspaceSignature = workspaceGraphSignature(data.workspace);
-    const workspaceChanged = Boolean(lastWorkspaceSignature && nextWorkspaceSignature !== lastWorkspaceSignature);
-    if (workspaceChanged) {
-      pendingViewportReset = true;
-    }
-    lastWorkspaceSignature = nextWorkspaceSignature;
     const nextWorkspace = cloneWorkspace(data.workspace);
     workspaceState = nextWorkspace;
-    localSelection = data.workspace.selection;
+    localSelection = selectionFromUrl(currentUrl(), nextWorkspace);
   });
 
   $effect(() => {
@@ -573,10 +636,10 @@
         setGraphMessage(success.message, "success");
       }
       if (createPhaseSuccess) {
-        structurePanelMode = "edit-phase";
+        structurePanelMode = "phase-properties";
       }
       if (createModuleSuccess) {
-        structurePanelMode = "edit-module";
+        structurePanelMode = "module-properties";
       }
       if (createSectionSuccess) {
         closeCreateSectionDialog();
@@ -787,20 +850,22 @@
       return;
     }
 
+    selectGraphNode(node);
+  }
+
+  function selectGraphNode(node: TeacherFlowNode) {
     const nodeData = flowNodeData(node);
     if (nodeData.kind === "section") {
-      await applyLocalSelection(deriveSectionSelection(node.id));
+      void applyLocalSelection(deriveSectionSelection(node.id));
       return;
     }
     if (nodeData.kind === "phase") {
       const phaseId = nodeData.phaseId ?? node.id.replace(/^phase:/, "");
-      await applyLocalSelection(derivePhaseSelection(phaseId));
-      setStructurePanelMode("edit-phase");
+      setSelectionAndPanel(derivePhaseSelection(phaseId), null);
       return;
     }
     if (nodeData.kind === "module") {
-      await applyLocalSelection(deriveModuleSelection(node.id));
-      setStructurePanelMode("edit-module");
+      setSelectionAndPanel(deriveModuleSelection(node.id), null);
     }
   }
 
@@ -879,8 +944,8 @@
   function inspectorTitle(): string {
     if (structurePanelMode === "create-phase") return "Phase hinzufügen";
     if (structurePanelMode === "create-module") return "Modul hinzufügen";
-    if (structurePanelMode === "edit-module") return "Modul bearbeiten";
-    if (structurePanelMode === "edit-phase") return "Phase bearbeiten";
+    if (structurePanelMode === "module-properties") return "Modul bearbeiten";
+    if (structurePanelMode === "phase-properties") return "Phase bearbeiten";
     return "Abschnitt bearbeiten";
   }
 
@@ -904,15 +969,123 @@
     return deleteTarget ? graphDeletionImpact(workspaceState, deleteTarget) : null;
   }
 
+  function selectionBarSelection(): GraphSelectionBarSelection | null {
+    const selection = localSelection;
+    if (selection.kind === "phase") {
+      const phase = modularPhases().find((item) => item.id === selection.phase.id);
+      return {
+        kind: "phase",
+        title: selection.phase.title,
+        moduleCount: phase?.modules.length ?? 0
+      };
+    }
+    if (selection.kind === "module") {
+      const phase = modularPhases().find((item) => item.id === selection.module.phase_id);
+      return {
+        kind: "module",
+        title: selection.module.title,
+        phaseTitle: phase?.title ?? "",
+        materialsCount: selection.module.materials_count,
+        tasksCount: selection.module.tasks_count,
+        editorHref: selection.module.editor_href
+      };
+    }
+    return null;
+  }
+
+  function openSelectedProperties() {
+    if (localSelection.kind === "phase") {
+      setStructurePanelMode("phase-properties");
+    } else if (localSelection.kind === "module") {
+      setStructurePanelMode("module-properties");
+    }
+  }
+
+  function addModuleToSelectedPhase() {
+    if (localSelection.kind === "phase") {
+      setStructurePanelMode("create-module");
+    }
+  }
+
+  function requestSelectedDeletion() {
+    if (localSelection.kind === "phase") {
+      openSelectedPhaseDeleteDialog();
+    } else if (localSelection.kind === "module") {
+      openSelectedModuleDeleteDialog();
+    }
+  }
+
+  function focusSelectedGraphItem() {
+    if (localSelection.kind === "phase") {
+      focusGraphTarget({ phase: localSelection.phase.id });
+      graphViewportController?.focusNode(`phase:${localSelection.phase.id}`);
+    } else if (localSelection.kind === "module") {
+      focusGraphTarget({ module: localSelection.module.id });
+      graphViewportController?.focusNode(localSelection.module.id);
+    }
+  }
+
+  function initialGraphFocusNodeId(): string | null {
+    if (localSelection.kind === "phase") return `phase:${localSelection.phase.id}`;
+    if (localSelection.kind === "module") return localSelection.module.id;
+    return modularPhases()[0] ? `phase:${modularPhases()[0].id}` : flowNodes[0]?.id ?? null;
+  }
+
+  function registerGraphViewportController(controller: TeacherGraphViewportController) {
+    graphViewportController = controller;
+  }
+
+  function openUnitEditDialog() {
+    unitEditReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    structurePanelMode = null;
+    inspectorReturnFocus = null;
+    unitEditOpen = true;
+    pushCurrentUrl(pageHref({
+      edit: "1",
+      panel: null,
+      quick: null,
+      "create-phase": null,
+      "create-module": null
+    }));
+  }
+
+  function closeUnitEditDialog() {
+    const returnFocus = unitEditReturnFocus;
+    unitEditReturnFocus = null;
+    unitEditOpen = false;
+    pushCurrentUrl(pageHref({ edit: null }));
+    requestAnimationFrame(() => returnFocus?.isConnected && returnFocus.focus());
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" && unitEditOpen) {
+      event.preventDefault();
+      closeUnitEditDialog();
+    }
+  }
+
+  function handleWindowPopState() {
+    queueMicrotask(() => applyRouteState(currentUrl()));
+  }
+
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} onpopstate={handleWindowPopState} />
 
 <svelte:head>
   <title>{workspaceState.unit.title} | GUSTAV</title>
 </svelte:head>
 
 {#snippet unitHeaderActions()}
-  <a class="workspace-link-action workspace-link-action--subtle" href={workspaceState.unit.edit_href}>Bearbeiten</a>
-  <a class="workspace-link-action workspace-link-action--danger" href={pageHref({ delete: "1" })}>Löschen</a>
+  <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={openUnitEditDialog}>
+    Lerneinheit bearbeiten
+  </button>
+  <details class="workspace-row-menu">
+    <summary aria-label="Lerneinheitsaktionen">•••</summary>
+    <div class="workspace-row-menu__panel">
+      <a class="workspace-row-menu__danger" href={pageHref({ delete: "1" })}>Lerneinheit löschen</a>
+    </div>
+  </details>
 {/snippet}
 
 {#snippet unitCommandPopovers()}
@@ -943,16 +1116,29 @@
   {/if}
 {/snippet}
 
+{#snippet selectionContext()}
+  {#if workspaceState.graph.kind === "modular" && selectionBarSelection()}
+    <GraphSelectionBar
+      selection={selectionBarSelection()!}
+      onOpenProperties={openSelectedProperties}
+      onAddModule={localSelection.kind === "phase" ? addModuleToSelectedPhase : null}
+      onFocusSelection={focusSelectedGraphItem}
+      onRequestDelete={requestSelectedDeletion}
+    />
+  {/if}
+{/snippet}
+
 <TeacherGraphWorkspaceFrame
   backHref="/teaching/units"
   backLabel="Zurück zu Lerneinheiten"
   title={workspaceState.unit.title}
   copy={workspaceState.unit.unit_type === "linear"
-    ? `${workspaceState.counts.sections_count} Abschnitte · dieselbe Graphansicht wie für Lernende`
-    : `${workspaceState.counts.phases_count} Phasen · ${workspaceState.counts.modules_count} Module · dieselbe Graphansicht wie für Lernende`}
+    ? `${workspaceState.counts.sections_count} Abschnitte`
+    : `${workspaceState.counts.phases_count} Phasen · ${workspaceState.counts.modules_count} Module`}
   headerActions={unitHeaderActions}
   commandBarActions={graphCommandActions()}
   commandBarPopovers={unitCommandPopovers}
+  contextBar={selectionContext}
   inspectorOpen={inspectorOpen()}
 >
   {#snippet canvas()}
@@ -963,11 +1149,9 @@
       class="teacher-flow-canvas"
       {nodeTypes}
       {edgeTypes}
-      fitView
-      fitViewOptions={{ padding: 0.24, minZoom: 0.68, maxZoom: 1.02 }}
       minZoom={0.52}
       maxZoom={1.26}
-      elementsSelectable={false}
+      elementsSelectable={true}
       nodesFocusable={true}
       panOnDrag={true}
       selectNodesOnDrag={false}
@@ -978,7 +1162,10 @@
       onconnect={handleConnect}
       onnodedragstop={handleNodeDragStop}
     >
-      <Controls position="bottom-right" />
+      <TeacherGraphViewportControls
+        initialNodeId={initialGraphFocusNodeId()}
+        onControllerReady={registerGraphViewportController}
+      />
 
       {#if graphMessage}
         <Panel position="top-center">
@@ -1057,7 +1244,7 @@
               </a>
             </div>
           </form>
-        {:else if structurePanelMode === "edit-phase" && localSelection.kind === "phase"}
+        {:else if structurePanelMode === "phase-properties" && localSelection.kind === "phase"}
           <form method="POST" action="?/savePhase" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
             <input type="hidden" name="phase_id" value={localSelection.phase.id} />
             <label class="workspace-field">
@@ -1080,7 +1267,7 @@
               </button>
             </div>
           </form>
-        {:else if structurePanelMode === "edit-module" && localSelection.kind === "module"}
+        {:else if structurePanelMode === "module-properties" && localSelection.kind === "module"}
           <form method="POST" action="?/saveModule" class="workspace-form workspace-form--compact" use:enhance={enhanceGraphForm}>
             <input type="hidden" name="module_id" value={localSelection.module.id} />
             <input type="hidden" name="current_phase_id" value={localSelection.module.phase_id} />
@@ -1134,7 +1321,7 @@
             <input type="hidden" name="section_id" value={localSelection.section.id} />
             <button class="workspace-link-action workspace-link-action--danger" type="submit">Abschnitt löschen</button>
           </form>
-        {:else if structurePanelMode === "edit-phase" && localSelection.kind === "phase"}
+        {:else if structurePanelMode === "phase-properties" && localSelection.kind === "phase"}
           <button
             class="workspace-link-action workspace-link-action--danger"
             type="button"
@@ -1142,7 +1329,7 @@
           >
             Phase löschen
           </button>
-        {:else if structurePanelMode === "edit-module" && localSelection.kind === "module"}
+        {:else if structurePanelMode === "module-properties" && localSelection.kind === "module"}
           <button
             class="workspace-link-action workspace-link-action--danger"
             type="button"
@@ -1166,20 +1353,21 @@
   />
 {/if}
 
-{#if data.showEditDialog}
+{#if unitEditOpen}
   <div class="dialog-backdrop">
-    <div class="dialog-card">
+    <button class="dialog-backdrop__dismiss" type="button" aria-label="Bearbeiten schließen" onclick={closeUnitEditDialog}></button>
+    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="edit-unit-title">
       <div class="dialog-card__header">
         <div>
           <p class="workspace-label">Lerneinheit</p>
-          <h2>Bearbeiten</h2>
+          <h2 id="edit-unit-title">Lerneinheit bearbeiten</h2>
         </div>
-        <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ edit: null })}>Schließen</a>
+        <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={closeUnitEditDialog}>Schließen</button>
       </div>
       <form method="POST" action="?/saveUnit" class="workspace-form">
         <label class="workspace-field">
           <span>Titel</span>
-          <input name="title" type="text" value={form?.saveUnit?.values?.title ?? workspaceState.unit.title} />
+          <input name="title" type="text" value={form?.saveUnit?.values?.title ?? workspaceState.unit.title} use:focusWhenMounted />
         </label>
         <label class="workspace-field">
           <span>Zusammenfassung</span>
@@ -1190,7 +1378,7 @@
         {/if}
         <div class="dialog-card__actions">
           <button class="workspace-link-action" type="submit">Speichern</button>
-          <a class="workspace-link-action workspace-link-action--subtle" href={pageHref({ edit: null })}>Abbrechen</a>
+          <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={closeUnitEditDialog}>Abbrechen</button>
         </div>
       </form>
     </div>

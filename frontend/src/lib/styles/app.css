@@ -370,18 +370,6 @@ select {
   min-height: 100%;
 }
 
-.workspace-inner--wide {
-  width: min(100%, 112rem);
-}
-
-.workspace-inner--live-wide {
-  width: min(100%, 144rem);
-}
-
-.workspace-inner--learner-unit-wide {
-  width: min(100%, var(--layout-content-max));
-}
-
 .workspace-header {
   padding: 1rem 0 0.4rem;
 }

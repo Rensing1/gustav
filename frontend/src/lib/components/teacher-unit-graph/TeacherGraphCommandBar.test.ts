@@ -16,8 +16,9 @@ describe("TeacherGraphCommandBar", () => {
     });
 
     expect(screen.getByRole("toolbar", { name: "Graphwerkzeuge" })).toBeInTheDocument();
-    expect(screen.getByText("Struktur")).toBeInTheDocument();
-    expect(screen.getByText("Lernweg bearbeiten")).toBeInTheDocument();
+    expect(screen.getByText("Lernweg")).toBeInTheDocument();
+    expect(screen.queryByText("Struktur")).not.toBeInTheDocument();
+    expect(screen.queryByText("Lernweg bearbeiten")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Phase hinzufügen" })).toHaveClass("workspace-top-action--active");
     expect(screen.getByRole("link", { name: "Modul hinzufügen" })).toHaveAttribute(
       "href",

@@ -394,10 +394,8 @@ export const actions: Actions = {
     const graphUrl = new URL(`/teaching/units/${params.unitId}`, "https://app.localhost");
     if (fallback?.kind === "module") {
       graphUrl.searchParams.set("module", fallback.id);
-      graphUrl.searchParams.set("quick", "1");
     } else if (fallback?.kind === "phase") {
       graphUrl.searchParams.set("phase", fallback.id);
-      graphUrl.searchParams.set("quick", "1");
     }
     throw redirect(303, `${graphUrl.pathname}${graphUrl.search}`);
   },

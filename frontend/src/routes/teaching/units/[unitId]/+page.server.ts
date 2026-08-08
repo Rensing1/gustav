@@ -23,12 +23,12 @@ function graphSelectionPatch(
   fallback: ReturnType<typeof graphDeletionFallback>
 ): Record<string, string | null> {
   if (fallback?.kind === "module") {
-    return { module: fallback.id, phase: null, quick: "1" };
+    return { module: fallback.id, phase: null, panel: null, quick: null };
   }
   if (fallback?.kind === "phase") {
-    return { module: null, phase: fallback.id, quick: "1" };
+    return { module: null, phase: fallback.id, panel: null, quick: null };
   }
-  return { module: null, phase: null, quick: null };
+  return { module: null, phase: null, panel: null, quick: null };
 }
 
 async function readErrorDetail(response: Response): Promise<string> {
@@ -83,6 +83,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
   return {
     breadcrumbs,
     hidePageHeading: true,
+    wideWorkspaceShell: true,
     pageTitle: workspace.unit.title,
     showEditDialog: url.searchParams.get("edit") == "1",
     showDeleteDialog: url.searchParams.get("delete") == "1",
@@ -262,7 +263,7 @@ export const actions: Actions = {
       savePhase: {
         ok: true,
         message: "Phase gespeichert.",
-        next: { phase: phaseId, quick: "1" }
+        next: { phase: phaseId, module: null, panel: "phase-properties", quick: null }
       }
     };
   },
@@ -300,7 +301,7 @@ export const actions: Actions = {
       createPhase: {
         ok: true,
         message: "Phase angelegt.",
-        next: { phase: created.id, quick: "1", "create-phase": null }
+        next: { phase: created.id, module: null, panel: "phase-properties", quick: null, "create-phase": null }
       }
     };
   },
@@ -441,7 +442,7 @@ export const actions: Actions = {
       saveModule: {
         ok: true,
         message: "Modul gespeichert.",
-        next: { module: moduleId, phase: phaseId, quick: "1" }
+        next: { module: moduleId, phase: null, panel: "module-properties", quick: null }
       }
     };
   },
@@ -482,7 +483,7 @@ export const actions: Actions = {
       createModule: {
         ok: true,
         message: "Modul angelegt.",
-        next: { module: created.id, phase: phaseId, quick: "1", "create-module": null }
+        next: { module: created.id, phase: null, panel: "module-properties", quick: null, "create-module": null }
       }
     };
   },

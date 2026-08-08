@@ -17,15 +17,29 @@ describe("teacher unit graph route contract", () => {
       "utf8"
     );
     const appCss = readFileSync(path.resolve(currentDir, "../../../../lib/styles/app.css"), "utf8");
+    const teachingCss = readFileSync(
+      path.resolve(currentDir, "../../../../lib/styles/teaching-workspace.css"),
+      "utf8"
+    );
+    const viewportControlsSource = readFileSync(
+      path.resolve(currentDir, "../../../../lib/components/teacher-unit-graph/TeacherGraphViewportControls.svelte"),
+      "utf8"
+    );
 
     expect(source).toContain("<GraphInspectorPanel");
     expect(source).toContain('class="workspace-unit-commandbar-popover"');
     expect(source).toContain('class="workspace-field"');
     expect(source).toContain("<GraphDeleteDialog");
-    expect(source).toContain('type StructurePanelMode = "create-phase" | "create-module" | "edit-phase" | "edit-module" | null');
+    expect(source).toContain("GraphSelectionBar");
+    expect(source).toContain('type StructurePanelMode = "create-phase" | "create-module" | "phase-properties" | "module-properties" | null');
     expect(graphNodeSource).not.toContain("teacher-flow-unit-node__quickedit");
     expect(appCss).not.toContain(".workspace-unit-commandbar-popover {");
     expect(appCss).not.toContain(".teacher-flow-unit-node__quickedit {");
+    expect(teachingCss).toContain("pointer-events: none !important;");
+    expect(teachingCss).toContain("z-index: 1 !important;");
+    expect(teachingCss).toMatch(/\.teacher-flow-workspace__canvas\s*\{[^}]*overflow:\s*clip;/s);
+    expect(viewportControlsSource).toContain('const phaseBands = allNodes.filter((node) => node.type === "phaseBand")');
+    expect(viewportControlsSource).toContain("nodes: phaseBands.length > 0 ? phaseBands : allNodes");
   });
 
   it("keeps exactly one modular inspector mode in reactive local state", () => {
@@ -35,8 +49,10 @@ describe("teacher unit graph route contract", () => {
     expect(source).toContain("let createSectionOpen = $state");
     expect(source).toContain("function setStructurePanelMode");
     expect(source).toContain("function openCreateModuleDialog");
-    expect(source).toContain('lastQuickSelectionKey = ""');
+    expect(source).toContain("function setSelectionAndPanel");
+    expect(source).toContain('searchParams.get("panel")');
     expect(source).toContain('nodesFocusable={true}');
+    expect(source).toContain('elementsSelectable={true}');
     expect(source).toContain('.svelte-flow__node[data-id=');
     expect(source).not.toContain("let createPhaseOpen");
     expect(source).not.toContain("let createModuleOpen");
@@ -53,7 +69,7 @@ describe("teacher unit graph route contract", () => {
     expect(source).not.toContain('{#if showCreateSectionDialog()}\n  <div class="dialog-backdrop">');
   });
 
-  it("updates successful graph action workspaces through route data and resets the SvelteFlow viewport once", () => {
+  it("updates successful graph actions through route data without resetting the current viewport", () => {
     const source = routeSource();
 
     expect(source).toContain("workspaceForBuild: TeacherUnitWorkspaceView = workspaceState");
@@ -69,16 +85,14 @@ describe("teacher unit graph route contract", () => {
     expect(source).not.toContain("applyWorkspaceUpdate");
     expect(source).toContain("let flowBuildSequence = 0");
     expect(source).toContain("let flowViewport = $state");
-    expect(source).toContain("let pendingViewportReset = false");
+    expect(source).not.toContain("pendingViewportReset");
     expect(source).toContain("let handledForm: ActionData | undefined = undefined;");
     expect(source).not.toContain("let handledForm = $state");
     expect(source).toContain("const buildSequence = ++flowBuildSequence");
     expect(source).toContain("if (buildSequence !== flowBuildSequence)");
     expect(source).not.toContain("flowRenderKey");
     expect(source).not.toContain("scheduleFlowRebuild(data.workspace.selection, nextWorkspace);");
-    expect(source).toContain("pendingViewportReset = true");
-    expect(source).toContain("flowViewport = { x: 0, y: 0, zoom: 1 }");
-    expect(source).toContain("pendingViewportReset = false");
+    expect(source).not.toContain("flowViewport = { x: 0, y: 0, zoom: 1 }");
     expect(source).not.toContain("flowCanvasGeneration");
     expect(source).not.toContain("{#key");
     expect(source).toContain("bind:viewport={flowViewport}");
@@ -103,7 +117,7 @@ describe("teacher unit graph route contract", () => {
     );
 
     expect(source).toContain("import { enhance } from \"$app/forms\";");
-    expect(source).toContain("import { goto, invalidateAll, replaceState } from \"$app/navigation\";");
+    expect(source).toContain("import { goto, invalidateAll, pushState, replaceState } from \"$app/navigation\";");
     expect(source).toContain("await update({ reset: false });");
     expect(source).toContain("await invalidateAll();");
     expect(source).toContain("await update({ reset: true, invalidateAll: false });");
@@ -169,21 +183,26 @@ describe("teacher unit graph route contract", () => {
     const source = routeSource();
 
     expect(source).not.toContain("let currentHref");
+    expect(source).not.toContain("lastRouteStateKey");
     expect(source).not.toContain("currentHref =");
     expect(source).toContain("function currentUrl(");
-    expect(source).toContain("new URL(page.url)");
+    expect(source).toContain("new URL(document.location.href)");
+    expect(source).toContain("new URL(page.url.href)");
+    expect(source).toContain("function handleWindowPopState");
+    expect(source).toContain("onpopstate={handleWindowPopState}");
+    expect(source).toContain("onMount(() => applyRouteState(currentUrl()))");
   });
 
-  it("exposes edit and delete as direct design-system header actions", () => {
+  it("exposes explicit unit editing and keeps destructive deletion in the overflow menu", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const source = routeSource();
     const serverSource = readFileSync(path.resolve(currentDir, "+page.server.ts"), "utf8");
 
     expect(serverSource).toContain('showDeleteDialog: url.searchParams.get("delete") == "1"');
-    expect(source).toContain('href={workspaceState.unit.edit_href}>Bearbeiten</a>');
-    expect(source).toContain('href={pageHref({ delete: "1" })}>Löschen</a>');
-    expect(source).not.toContain('aria-label="Einheitsaktionen"');
-    expect(source).not.toContain('class="workspace-row-menu"');
+    expect(serverSource).toContain("wideWorkspaceShell: true");
+    expect(source).toContain("Lerneinheit bearbeiten");
+    expect(source).toContain('aria-label="Lerneinheitsaktionen"');
+    expect(source).toContain('href={pageHref({ delete: "1" })}>Lerneinheit löschen</a>');
   });
 
   it("renders the unit delete dialog with exact-title confirmation and course warning", () => {

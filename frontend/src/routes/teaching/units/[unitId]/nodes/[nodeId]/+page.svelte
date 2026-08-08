@@ -890,7 +890,7 @@
 
 <div class="workspace-page teacher-node-editor-page">
   <PageActionHead
-    backHref={`/teaching/units/${editorState.unit.id}?module=${encodeURIComponent(editorState.node.id)}&quick=1`}
+    backHref={`/teaching/units/${editorState.unit.id}?module=${encodeURIComponent(editorState.node.id)}`}
     backLabel="Zurück zum Graph"
     title={editorState.node.editor_title}
     copy={isModuleEditor

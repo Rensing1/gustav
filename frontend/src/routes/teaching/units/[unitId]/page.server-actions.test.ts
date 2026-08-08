@@ -76,7 +76,7 @@ describe("teacher unit graph server actions", () => {
     expect(result).toMatchObject({
       createPhase: {
         ok: true,
-        next: { phase: "phase-new", quick: "1", "create-phase": null }
+        next: { phase: "phase-new", quick: null, panel: "phase-properties", "create-phase": null }
       }
     });
   });
@@ -114,7 +114,14 @@ describe("teacher unit graph server actions", () => {
     expect(result).toMatchObject({
       deleteModule: {
         ok: true,
-        next: { module: "module-2", phase: null, quick: "1", edgeFrom: null, edgeTo: null }
+        next: {
+          module: "module-2",
+          phase: null,
+          quick: null,
+          panel: null,
+          edgeFrom: null,
+          edgeTo: null
+        }
       }
     });
     expect(backendRequestMock).toHaveBeenCalledWith(

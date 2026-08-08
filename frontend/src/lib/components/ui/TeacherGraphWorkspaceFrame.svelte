@@ -15,6 +15,7 @@
     headerActions,
     commandBarActions,
     commandBarPopovers,
+    contextBar,
     inspectorOpen = false,
     embedded = false,
     canvas,
@@ -27,6 +28,7 @@
     headerActions?: Snippet;
     commandBarActions: TeacherGraphCommandBarAction[];
     commandBarPopovers?: Snippet;
+    contextBar?: Snippet;
     inspectorOpen?: boolean;
     embedded?: boolean;
     canvas?: Snippet;
@@ -45,6 +47,10 @@
     <TeacherGraphCommandBar actions={commandBarActions} popovers={commandBarPopovers} />
   {/snippet}
 </PageActionHead>
+
+{#if contextBar}
+  {@render contextBar()}
+{/if}
 
 <section
   class:teacher-flow-workspace--with-inspector={inspectorOpen}

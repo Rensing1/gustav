@@ -1853,7 +1853,7 @@
 
 .teacher-flow-shell .svelte-flow__node.teacher-flow-phase {
   cursor: default;
-  pointer-events: none;
+  pointer-events: none !important;
 }
 
 .teacher-flow-shell .svelte-flow__node.teacher-flow-node--module.dragging,
@@ -1946,6 +1946,10 @@
   z-index: 34 !important;
 }
 
+.teacher-flow-shell .svelte-flow__node.teacher-flow-phase {
+  z-index: 1 !important;
+}
+
 .teacher-flow-unit-node {
   position: relative;
   display: grid;
@@ -2009,6 +2013,8 @@
   display: grid;
   gap: 0.18rem;
   min-width: 0;
+  color: inherit;
+  text-decoration: none;
 }
 
 .teacher-flow-unit-node__header {
@@ -2023,6 +2029,7 @@
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
+  padding-inline-start: 1.25rem;
 }
 
 .teacher-flow-unit-node__copy span {
@@ -2034,7 +2041,10 @@
 }
 
 .teacher-flow-unit-node__drag-handle {
-  flex: 0 0 auto;
+  position: absolute;
+  inset-block-start: 0.82rem;
+  inset-inline-start: 0.82rem;
+  z-index: 2;
   width: 0.92rem;
   height: 1.2rem;
   border-radius: 999px;
@@ -2408,6 +2418,7 @@
   gap: 0.6rem;
 }
 
+.dialog-backdrop,
 .graph-delete-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -2419,6 +2430,7 @@
   isolation: isolate;
 }
 
+.dialog-backdrop__dismiss,
 .graph-delete-dialog-backdrop__dismiss {
   position: absolute;
   inset: 0;
@@ -2429,6 +2441,38 @@
   border: 0;
   background: transparent;
   cursor: default;
+}
+
+.dialog-card {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-4);
+  width: min(34rem, 100%);
+  max-height: calc(100dvh - 2 * var(--space-5));
+  padding: var(--space-5);
+  overflow-y: auto;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+}
+
+.dialog-card__header,
+.dialog-card__actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.dialog-card__header h2,
+.dialog-card__header p {
+  margin: 0;
+}
+
+.dialog-card__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .graph-delete-dialog {
@@ -2736,19 +2780,82 @@
 }
 
 .teacher-flow-workspace--with-inspector {
-  grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .teacher-flow-workspace__canvas {
   height: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: clip;
 }
 
 .teacher-flow-workspace__canvas:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
+}
+
+.teacher-flow-workspace--with-inspector:not(.teacher-flow-workspace--embedded) .graph-inspector-panel {
+  position: absolute;
+  inset-block-start: var(--space-4);
+  inset-inline-end: var(--space-4);
+  z-index: 70;
+  width: clamp(22rem, 26vw, 26rem);
+  max-height: calc(100% - 2 * var(--space-4));
+  overflow-y: auto;
+}
+
+.teacher-graph-selection-bar {
+  position: sticky;
+  top: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-3) 0;
+  border-block: 1px solid var(--color-line);
+  background: var(--color-bg-base);
+}
+
+.teacher-graph-selection-bar__copy {
+  display: grid;
+  grid-template-columns: auto minmax(0, auto) auto;
+  align-items: baseline;
+  gap: 0.35rem 0.8rem;
+  min-width: 0;
+}
+
+.teacher-graph-selection-bar__copy span,
+.teacher-graph-selection-bar__copy small {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.teacher-graph-selection-bar__copy strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teacher-graph-selection-bar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.teacher-graph-selection-bar__menu {
+  align-self: center;
 }
 
 @media (max-width: 720px) {
@@ -2790,6 +2897,30 @@
     overflow-y: auto;
     border: 0;
     background: var(--color-bg-base);
+  }
+
+  .teacher-graph-selection-bar {
+    position: static;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .teacher-graph-selection-bar__copy {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-graph-selection-bar__copy strong {
+    white-space: normal;
+  }
+
+  .teacher-graph-selection-bar__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-graph-selection-bar__actions .workspace-link-action {
+    width: 100%;
+    justify-content: center;
   }
 
   .teacher-flow-workspace--with-inspector:not(.teacher-flow-workspace--embedded) .graph-inspector-panel__header {

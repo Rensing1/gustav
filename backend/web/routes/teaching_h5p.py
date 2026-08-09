@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from urllib.parse import urlsplit
 from typing import Any
 
 from fastapi import APIRouter, File, Request, UploadFile
@@ -121,6 +122,38 @@ def _h5p_internal_auth_headers(request: Request | None) -> dict[str, str]:
     }
 
 
+def _h5p_browser_proxy_headers(request: Request | None) -> dict[str, str]:
+    """Preserve the verified public browser origin across the internal H5P hop.
+
+    The H5P sidecar performs its own same-origin check. The internal request
+    reaches it under a Docker hostname, so forwarded host information must
+    describe the public GUSTAV origin that the browser actually used.
+    """
+
+    if request is None:
+        return {}
+    headers: dict[str, str] = {}
+    cookie_header = str(request.headers.get("cookie") or "").strip()
+    if cookie_header:
+        headers["cookie"] = cookie_header
+    origin = str(request.headers.get("origin") or "").strip()
+    if origin:
+        headers["origin"] = origin
+    referer = str(request.headers.get("referer") or "").strip()
+    if referer:
+        headers["referer"] = referer
+
+    public_url = origin or referer
+    try:
+        parsed = urlsplit(public_url)
+    except ValueError:
+        parsed = None
+    if parsed and parsed.scheme in {"http", "https"} and parsed.netloc:
+        headers["x-forwarded-proto"] = parsed.scheme
+        headers["x-forwarded-host"] = parsed.netloc
+    return headers
+
+
 async def _request_h5p_service(
     method: str,
     path: str,
@@ -139,17 +172,8 @@ async def _request_h5p_service(
         keeps the wrapper endpoints thin and testable.
     """
 
-    headers: dict[str, str] = {}
+    headers = _h5p_browser_proxy_headers(request)
     if request is not None:
-        cookie_header = str(request.headers.get("cookie") or "").strip()
-        if cookie_header:
-            headers["cookie"] = cookie_header
-        origin = str(request.headers.get("origin") or "").strip()
-        if origin:
-            headers["origin"] = origin
-        referer = str(request.headers.get("referer") or "").strip()
-        if referer:
-            headers["referer"] = referer
         headers.update(_h5p_internal_auth_headers(request))
 
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
@@ -357,7 +381,12 @@ async def save_task_h5p_content(
     except PermissionError:
         await _rollback_h5p_content(new_content_id, request)
         return _private_error({"error": "forbidden"}, status_code=403)
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "H5P task link persistence failed task_id=%s reason=%s",
+            task_id,
+            exc.__class__.__name__,
+        )
         await _rollback_h5p_content(new_content_id, request)
         return _private_error({"error": "internal_error"}, status_code=500)
     return _json_private({"content_id": new_content_id, "metadata": (upstream_payload or {}).get("metadata") or {}}, status_code=200)

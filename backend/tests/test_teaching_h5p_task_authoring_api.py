@@ -10,6 +10,7 @@ Why:
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -23,6 +24,26 @@ from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E4
 teaching_h5p = importlib.import_module("backend.web.routes.teaching_h5p")
 teaching_task_services = importlib.import_module("backend.web.routes.teaching_task_services")
 teaching = importlib.import_module("backend.web.routes.teaching")
+
+
+def test_h5p_browser_proxy_headers_preserve_public_same_origin() -> None:
+    request = SimpleNamespace(
+        headers={
+            "cookie": "gustav_session=session-id",
+            "origin": "https://app.localhost",
+            "referer": "https://app.localhost/teaching/units/unit-id",
+        }
+    )
+
+    headers = teaching_h5p._h5p_browser_proxy_headers(request)
+
+    assert headers == {
+        "cookie": "gustav_session=session-id",
+        "origin": "https://app.localhost",
+        "referer": "https://app.localhost/teaching/units/unit-id",
+        "x-forwarded-proto": "https",
+        "x-forwarded-host": "app.localhost",
+    }
 
 
 async def _client() -> httpx.AsyncClient:

@@ -2,9 +2,12 @@
 
 ## Unreleased
 ### Features
+- feat(cli): Die Teaching-CLI erstellt modulare Lerneinheiten und Dialogaufgaben, leert optionale Aufgabenfelder explizit, rendert Modulgraphen lesbar und verwaltet Kurse, Mitglieder, Kursmodule, Freischaltungen und Löschaufträge vollständig.
 - feat(materials): Lehrkräfte können vollständig eingebettete HTML-Simulationen bis 5 MiB als exploratives Material mit optionaler Orientierung veröffentlichen. Vorschau und Lernansicht starten bewusst, lassen sich zurücksetzen und laufen in einer Offline-CSP-/Iframe-Sandbox ohne Tracking oder Ergebnisübertragung.
 
 ### Security (dev = prod)
+- security(cli): Kursauthoring und gezielte Schülersuche verwenden explizite `read`/`write`/`delete`-Capabilities; H5P-Editor-JSON, Dialogvorschau und vollständige Benutzerlisten bleiben cookiegebunden.
+- security(h5p): Der taskgebundene Browser-Proxy erhält die bereits geprüfte öffentliche Origin über den internen Web→H5P-Hop, sodass der H5P-Sidecar seine eigene Same-Origin-Prüfung beibehält und Editor-JSON cookiegebunden speichern kann.
 - security(simulations): Simulations-HTML wird beim Finalisieren bytegenau validiert und ausschließlich über berechtigungsgeprüfte GUSTAV-Player-Endpunkte ausgeliefert; direkte Storage-Downloads, Same-Origin-Rechte und Netzwerkverbindungen bleiben gesperrt.
 - security(cli): Teaching-Datei-Uploads, Datei-Downloads und H5P-Paket-Import/-Export/-Reset sind jetzt explizite `cliTokenAuth`-Capabilities mit getrennten `read`/`write`-Scopes; Browser-CSRF bleibt für Cookie-Flows unverändert aktiv.
 - security(cli): `gustav h5p import/reset --module-id` nutzt direkte Modul-Endpunkte, damit write-only CLI-Tokens ohne read-scoped `content-target`-Lookup funktionieren.
@@ -44,6 +47,7 @@
 - ai(vision): `_call_model` kapselt nun alle Ollama-Aufrufe (Timeouts, Markdown-Unwrap, Images-Handling), sodass `extract()` nur noch orchestriert und Tests den Helper gezielt prüfen können.
 
 ### Docs (updates)
+- docs(cli): Die CLI-Referenz dokumentiert Dialog-JSON, Clear-Semantik, Kursverwaltung und die unveränderten Browsergrenzen.
 - docs(ui): Der Designvertrag dokumentiert gemeinsame Aktionsmeldungen, Feldfehler, Live-Regionen, Fokusführung und transiente Lebensdauer.
 - docs(cli): `docs/references/gustav_cli.md` dokumentiert Datei-Material-Upload/-Download, H5P-Paketbefehle und Task-Kinds für `native|h5p|visual|scratch|calliope|filius`.
 - docs(config): `.env.example` und `docs/references/config_matrix.md` dokumentieren `H5P_INTERNAL_SHARED_SECRET` für interne Web→H5P-CLI-Aufrufe.
@@ -58,6 +62,7 @@
 - docs(env): `.env.example` referenziert jetzt die passenden Doku-Seiten statt langer Inline-Kommentare (Config-Matrix, Identity, Storage, Learning-AI).
 
 ### Tests (updates)
+- tests(cli): Contract-, Scope- und CLI-Tests decken modulare Units, Dialogkonfiguration, Clear-Flags, Modulgraphen und die vollständige Kursauthoring-Oberfläche ab.
 - tests(cli): CLI-Regressionen sichern Task-Kind-Marker, Material-Upload-Flow und H5P-Paket-Import.
 - tests(learning-adapters): Neu `test_local_vision_images_param.py` stellt sicher, dass der Vision-Adapter `images=[<b64>]` übergibt.
 - tests(learning-adapters): Neu `test_local_vision_model_helper.py` beschreibt `_call_model` (Timeouts, Markdown-Unwrap, Images-Verhalten) und hält die Helper-Refactorierung grün.

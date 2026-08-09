@@ -2,7 +2,7 @@
 
 Die GUSTAV CLI ist ein Terminal-Werkzeug für Lehrkräfte, um wiederkehrende Authoring-Aufgaben ohne Browser auszuführen. Sie nutzt ausschließlich die bestehende Teaching-API und enthält keine eigene Geschäftslogik.
 
-Status: erste funktionsfähige Version. Die CLI ist noch nicht als globales `gustav`-Binary paketiert.
+Die CLI deckt das Teaching-Authoring für Lerneinheiten, Inhalte und Kurse ab. Sie ist noch nicht als globales `gustav`-Binary paketiert.
 
 ## Aufruf
 
@@ -82,12 +82,13 @@ gustav units list --json
 
 ```bash
 gustav units list [--json]
-gustav units create --title <titel> [--description <text>] [--json]
+gustav units create --title <titel> [--description <text>] [--unit-type linear|modular] [--json]
 gustav units edit <unit-id> [--title <titel>] [--description <text>] [--json]
 gustav units delete <unit-id> --yes
 ```
 
 `delete` erfordert ein Token mit `delete`-Scope und zusätzlich `--yes`.
+Ohne `--unit-type` verwendet die API aus Kompatibilitätsgründen weiterhin `linear`.
 
 ### Abschnitte
 
@@ -156,13 +157,32 @@ Mutierende Materialbefehle mit `--module-id` verwenden direkte Modul-Endpunkte. 
 
 ```bash
 gustav tasks list --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--json]
-gustav tasks create --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --instruction-md <markdown> [--criterion <text>]... [--kind native|h5p|visual|scratch|calliope|filius]
-gustav tasks edit <task-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--instruction-md <markdown>] [--criterion <text>]... [--teacher-context-md <markdown>] [--due-at <iso>] [--max-attempts <n>] [--kind native|h5p|visual|scratch|calliope|filius]
+gustav tasks create --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --instruction-md <markdown> [--criterion <text>]... [--kind native|h5p|visual|scratch|calliope|filius|dialog] [--dialog-config <json-pfad>]
+gustav tasks edit <task-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--instruction-md <markdown>] [--criterion <text> | --clear-criteria] [--teacher-context-md <markdown> | --clear-teacher-context] [--due-at <iso> | --clear-due-at] [--max-attempts <n> | --clear-max-attempts] [--kind native|h5p|visual|scratch|calliope|filius|dialog] [--dialog-config <json-pfad>]
 gustav tasks delete <task-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --yes
 gustav tasks reorder --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --ids <task-id>...
 ```
 
-Mehrere Kriterien werden durch wiederholtes `--criterion` übergeben. Die CLI sendet kein read-only `kind`-Feld, sondern die im API-Vertrag vorgesehenen Konfigurationsblöcke. Für `visual`, `scratch`, `calliope` und `filius` sind das aktuell leere Marker-Konfigurationen. Für `h5p` wird zunächst eine H5P-Aufgabe ohne verknüpften Inhalt erstellt; das Paket wird anschließend über `gustav h5p import` verknüpft.
+Mehrere Kriterien werden durch wiederholtes `--criterion` übergeben. Die vier `--clear-*`-Optionen senden explizit `[]` beziehungsweise `null`; nicht genannte Felder bleiben unverändert. Setter und zugehöriges Clear-Flag schließen sich gegenseitig aus.
+
+Die CLI sendet kein read-only `kind`-Feld, sondern die im API-Vertrag vorgesehenen Konfigurationsblöcke. Für `visual`, `scratch`, `calliope` und `filius` sind das aktuell leere Marker-Konfigurationen. Für `h5p` wird zunächst eine H5P-Aufgabe ohne verknüpften Inhalt erstellt; das Paket wird anschließend über `gustav h5p import` verknüpft.
+
+Für Dialogaufgaben müssen `--kind dialog` und `--dialog-config` gemeinsam angegeben werden. Die UTF-8-JSON-Datei wird vor dem API-Aufruf mit denselben Geschäftsregeln wie im Task-Use-Case geprüft:
+
+```json
+{
+  "partner_name": "Ada",
+  "partner_description_md": "Eine Lernpartnerin für Binärzahlen.",
+  "role_md": "Ask precise questions and do not reveal the solution.",
+  "learning_goal_md": "Explain binary place values.",
+  "opening_message_md": "Wie kann ich dir bei Binärzahlen helfen?",
+  "response_mode": "hybrid",
+  "max_rounds": 6,
+  "closing_prompt_md": null
+}
+```
+
+Unbekannte Felder, fehlende Pflichtwerte und Grenzwertverletzungen werden lokal abgelehnt. Interne Rollen- und Lernzieltexte erscheinen dabei nicht in Fehlermeldungen. Die kostenverursachende Dialogvorschau bleibt browsergebunden.
 
 Mutierende Aufgabenbefehle mit `--module-id` verwenden direkte Modul-Endpunkte. `create`, `edit` und `reorder` benötigen nur `write`; `delete` benötigt nur `delete`. `list --module-id` bleibt eine Leseoperation und nutzt weiterhin den Content-Target-Resolver.
 
@@ -180,10 +200,47 @@ Bei modularen H5P-Aufgaben rufen `import` und `reset` direkte Modul-Endpunkte au
 
 Technisch authentifiziert die Teaching-API zuerst das CLI-Token und ruft den H5P-Sidecar anschließend über einen internen, `H5P_INTERNAL_SHARED_SECRET`-gebundenen Lehrer-Kontext auf. Dadurch brauchen CLI-Workflows keine Browser-Cookies; Cookie-Flows behalten ihren Same-Origin-/CSRF-Schutz.
 
+### Kurse und Kursinhalte
+
+```bash
+gustav courses list [--status active|archived] [--limit <n>] [--offset <n>] [--json]
+gustav courses create --title <titel> --subject <fach> --grade-level <jahrgang> --school-year-start <jahr> [--term <zeitraum>] [--json]
+gustav courses show <course-id> [--json]
+gustav courses edit <course-id> [--title <titel>] [--subject <fach>] [--grade-level <jahrgang>] [--school-year-start <jahr>] [--term <zeitraum> | --clear-term] [--json]
+gustav courses archive <course-id> [--json]
+gustav courses restore <course-id> [--json]
+gustav courses archive-batch --ids <course-id>... [--json]
+gustav courses deletion-impact <course-id> [--json]
+gustav courses delete <course-id> --confirmation-title <exakter-titel> --confirm-student-data-loss --yes [--json]
+
+gustav course-deletion-jobs list [--include-completed] [--limit <n>] [--offset <n>] [--json]
+gustav course-deletion-jobs show <job-id> [--json]
+```
+
+Die permanente Löschung legt nur einen asynchronen Auftrag an. Der Befehl wartet nicht auf dessen Abschluss; die zurückgegebene Job-ID wird mit `course-deletion-jobs show` weiterverfolgt.
+
+```bash
+gustav students search --query <name> [--limit <n>] [--json]
+gustav course-members list --course-id <course-id> [--limit <n>] [--offset <n>] [--json]
+gustav course-members add --course-id <course-id> --student-sub <sub> [--json]
+gustav course-members remove --course-id <course-id> --student-sub <sub> --yes [--json]
+
+gustav course-modules list --course-id <course-id> [--json]
+gustav course-modules add --course-id <course-id> --unit-id <unit-id> [--context-notes <text>] [--json]
+gustav course-modules reorder --course-id <course-id> --ids <course-module-id>... [--json]
+gustav course-modules remove --course-id <course-id> --module-id <course-module-id> --yes [--json]
+
+gustav course-sections list --course-id <course-id> --module-id <course-module-id> [--json]
+gustav course-sections release --course-id <course-id> --module-id <course-module-id> --section-id <section-id> [--json]
+gustav course-sections hide --course-id <course-id> --module-id <course-module-id> --section-id <section-id> [--json]
+```
+
+`students search` sucht ausschließlich gezielt nach Schülern und gibt nur `sub` und Anzeigename zurück. Die vollständige Benutzerliste ist nicht für CLI-Tokens freigegeben. Lesen benötigt `read`, normale Änderungen `write`; Mitglieder/Kursmodule entfernen und permanente Löschaufträge benötigen `delete`.
+
 ## Beispiel-Workflow
 
 ```bash
-gustav units create --title "Sortieralgorithmen" --description "Einführung"
+gustav units create --title "Sortieralgorithmen" --description "Einführung" --unit-type modular
 gustav units list
 
 gustav phases create --unit-id <unit-id> --title "Einstieg"
@@ -208,6 +265,7 @@ gustav tasks create \
 - Es gibt keinen `units reorder`-Befehl, weil Lerneinheiten im Authoring-Modell keine globale Reihenfolge haben.
 - `move`-Wrapper wie `--before`, `--after` oder `--to-index` sind noch nicht umgesetzt. Nutze `reorder --ids`.
 - H5P-Authoring aus Editor-JSON ist nicht Teil der CLI; unterstützter Weg ist Import/Export bestehender `.h5p`-Pakete.
+- Die Dialog-KI-Vorschau bleibt wegen KI-Kosten und Nutzungsprotokollierung browsergebunden.
 - Spezialaufgaben `visual`, `scratch`, `calliope` und `filius` nutzen die bestehenden Marker-Konfigurationen, aber keine zusätzlichen Lehrer-Starterdateien.
 
 ## Technische Referenzen
@@ -215,6 +273,7 @@ gustav tasks create \
 - API-Vertrag: `api/openapi.yml`
 - Implementierungsplan: `docs/plan/2026-05-11-gustav-cli-authoring-api.md`
 - Ausbauplan Datei/H5P: `docs/plan/2026-05-26-gustav-cli-upload-h5p.md`
+- Ausbauplan vollständiges Authoring: `docs/plan/2026-08-09-gustav-cli-authoring-completeness.md`
 - CLI-Code: `backend/tools/gustav_cli/`
-- CLI-Tests: `backend/tests/test_gustav_cli.py`
+- CLI-Tests: `backend/tests/test_gustav_cli.py` und `backend/tests/test_gustav_cli_completion.py`
 - Token-Tests: `backend/tests/test_cli_tokens.py`

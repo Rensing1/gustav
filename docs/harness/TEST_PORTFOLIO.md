@@ -49,7 +49,7 @@ Dieses Dokument macht das Testportfolio steuerbar. Es ist bewusst ein Gruppeninv
 | `backend/tests/test_learning_worker_jobs.py` | 2009 | rewrite/split | Worker-Semantik ist kritisch; Queue, Transaction Boundaries, Error Mapping und Privacy Logs sollen getrennte Testflächen werden. |
 | `backend/tests/test_teaching_live_unit_summary_api.py` | 1219 | rewrite/split | Summary-/Delta-/Owner-Grenzen bleiben tabu, aber die Datei ist zu breit für gezielte Live-Refactors. |
 | `backend/tests/test_teaching_live_detail_api.py` | 1184 | rewrite/split | Detail-, Relation-Guard- und H5P-Review-Credential-Verhalten sollen klarer getrennt werden. |
-| `backend/tests/test_gustav_cli.py` | 1210 | rewrite/split | CLI-Sicherheitsregeln bleiben wichtig; Auth, Units/Sections, Materials/Tasks, H5P und Config-Schutz sollen getrennt werden. |
+| `backend/tests/test_gustav_cli.py` | 1255 | split in progress | Bestehende Auth-, Config-, Upload- und H5P-Regressionen bleiben hier; neue vollständige Authoring-Szenarien liegen fokussiert in `test_gustav_cli_completion.py`. |
 | `frontend/src/lib/components/learning-unit/LearningTaskCard.test.ts` | 1202 | rewrite/split | Drafts, Review/History, Upload-Artefakte, H5P und Style-Contracts sollen getrennte Komponenten-/Contract-Tests werden. |
 | `backend/tests/migration/test_import_snapshot_backup.py` | 1094 | retire-later | Alpha1-/Snapshot-Wissen bleibt erhalten, bis der Legacy-Import als aktiver Produktpfad bewusst beendet ist. |
 | `backend/tests/learning_adapters/test_local_feedback_visual_pipeline.py` | 924 | merge | Vision-/DSPy-Fakes sollen mit verwandten Adaptertests geteilt werden; keine Abdeckung für Schüler-Submission-Integrität verlieren. |

@@ -193,7 +193,7 @@ def _normalize_filius_config(value: object) -> None:
         raise ValueError("invalid_filius_config")
 
 
-def _normalize_dialog_config(value: object) -> Dict[str, Any]:
+def normalize_dialog_config(value: object) -> Dict[str, Any]:
     """Validate and normalize the teacher-authored dialog configuration.
 
     Why:
@@ -313,7 +313,7 @@ class TasksService:
             h5p_content_id, h5p_display_options = None, {}
             kind = "filius"
         elif dialog is not None:
-            dialog_config = _normalize_dialog_config(dialog)
+            dialog_config = normalize_dialog_config(dialog)
             h5p_content_id, h5p_display_options = None, {}
             kind = "dialog"
         else:
@@ -430,7 +430,7 @@ class TasksService:
                 repo_kwargs["kind"] = "dialog"
                 repo_kwargs["h5p_content_id"] = None
                 repo_kwargs["h5p_display_options"] = {}
-                repo_kwargs["dialog_config"] = _normalize_dialog_config(dialog)
+                repo_kwargs["dialog_config"] = normalize_dialog_config(dialog)
         result = self.repo.update_task(
             unit_id,
             section_id,

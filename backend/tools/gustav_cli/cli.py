@@ -13,7 +13,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from uuid import uuid4
 
+from backend.teaching.services.tasks import normalize_dialog_config
+
 from .config import GustavCLIConfig, load_config, save_config
+from .course_commands import register_course_parsers, run_course_command
 
 
 def _parse_json_response(raw: str, *, non_json_body: dict[str, object]) -> Any:
@@ -152,6 +155,7 @@ def _build_parser() -> argparse.ArgumentParser:
     units_create = units_sub.add_parser("create")
     units_create.add_argument("--title", required=True)
     units_create.add_argument("--description", default=None)
+    units_create.add_argument("--unit-type", choices=("linear", "modular"))
     units_create.add_argument("--json", action="store_true")
     units_edit = units_sub.add_parser("edit")
     units_edit.add_argument("unit_id")
@@ -283,15 +287,30 @@ def _build_parser() -> argparse.ArgumentParser:
         if name == "edit":
             task_cmd.add_argument("--instruction-md")
         if name in {"create", "edit"}:
-            task_cmd.add_argument("--criterion", action="append", dest="criteria")
-            task_cmd.add_argument("--teacher-context-md")
-            task_cmd.add_argument("--due-at")
-            task_cmd.add_argument("--max-attempts", type=int)
+            if name == "edit":
+                criteria = task_cmd.add_mutually_exclusive_group()
+                criteria.add_argument("--criterion", action="append", dest="criteria")
+                criteria.add_argument("--clear-criteria", action="store_true")
+                teacher_context = task_cmd.add_mutually_exclusive_group()
+                teacher_context.add_argument("--teacher-context-md")
+                teacher_context.add_argument("--clear-teacher-context", action="store_true")
+                due_at = task_cmd.add_mutually_exclusive_group()
+                due_at.add_argument("--due-at")
+                due_at.add_argument("--clear-due-at", action="store_true")
+                max_attempts = task_cmd.add_mutually_exclusive_group()
+                max_attempts.add_argument("--max-attempts", type=int)
+                max_attempts.add_argument("--clear-max-attempts", action="store_true")
+            else:
+                task_cmd.add_argument("--criterion", action="append", dest="criteria")
+                task_cmd.add_argument("--teacher-context-md")
+                task_cmd.add_argument("--due-at")
+                task_cmd.add_argument("--max-attempts", type=int)
             task_cmd.add_argument(
                 "--kind",
-                choices=["native", "h5p", "visual", "scratch", "calliope", "filius"],
+                choices=["native", "h5p", "visual", "scratch", "calliope", "filius", "dialog"],
                 default="native" if name == "create" else None,
             )
+            task_cmd.add_argument("--dialog-config")
         if name == "delete":
             task_cmd.add_argument("--yes", action="store_true")
         if name == "reorder":
@@ -316,6 +335,7 @@ def _build_parser() -> argparse.ArgumentParser:
             h5p_cmd.add_argument("--force", action="store_true")
         if name == "reset":
             h5p_cmd.add_argument("--yes", action="store_true")
+    register_course_parsers(sub)
     return parser
 
 
@@ -380,11 +400,21 @@ def _print_body(body: object, *, as_json: bool, stdout: TextIO) -> None:
     if isinstance(body, list):
         for item in body:
             if isinstance(item, dict):
-                label = item.get("title") or item.get("instruction_md") or item.get("label") or ""
-                stdout.write(f"{item.get('id', '')}\t{label}\n")
+                identity = item.get("id") or item.get("sub") or item.get("job_id") or ""
+                label = (
+                    item.get("title")
+                    or item.get("instruction_md")
+                    or item.get("name")
+                    or item.get("label")
+                    or item.get("status")
+                    or ""
+                )
+                stdout.write(f"{identity}\t{label}\n")
         return
     if isinstance(body, dict):
-        stdout.write(f"{body.get('id', '')}\t{body.get('title', '')}\n")
+        identity = body.get("id") or body.get("sub") or body.get("job_id") or ""
+        label = body.get("title") or body.get("name") or body.get("status") or ""
+        stdout.write(f"{identity}\t{label}\n")
 
 
 def _auth_headers(cfg: GustavCLIConfig) -> dict[str, str]:
@@ -414,7 +444,7 @@ def _request_configured(
         stderr.write(f"API-Fehler ({status}): {body}\n")
         return 1
     if status == 204:
-        stdout.write("Gelöscht.\n")
+        stdout.write("null\n" if as_json else "Gelöscht.\n")
         return 0
     _print_body(body, as_json=as_json, stdout=stdout)
     return 0
@@ -425,6 +455,8 @@ def _units_create(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -
     if cfg is None:
         return 1
     payload: dict[str, object] = {"title": args.title}
+    if args.unit_type is not None:
+        payload["unit_type"] = args.unit_type
     if args.description is not None:
         payload["summary"] = args.description
     status, body = _http_json(
@@ -548,15 +580,22 @@ def _module_edges(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -
 def _modules(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
     base = f"/api/teaching/units/{args.unit_id}/modules"
     if args.command == "list":
-        return _request_configured(
-            method="GET",
-            path=f"{base}/graph",
-            json_body=None,
-            success={200},
-            stdout=stdout,
-            stderr=stderr,
-            as_json=args.json,
+        cfg = _load_config_or_error(stderr)
+        if cfg is None:
+            return 1
+        status, body = _http_json(
+            "GET",
+            f"{cfg.base_url}{base}/graph",
+            headers=_auth_headers(cfg),
         )
+        if status != 200:
+            stderr.write(f"API-Fehler ({status}): {body}\n")
+            return 1
+        if args.json:
+            _print_body(body, as_json=True, stdout=stdout)
+        else:
+            _print_module_graph(body, stdout=stdout)
+        return 0
     if args.command == "create":
         return _request_configured(
             method="POST",
@@ -670,7 +709,7 @@ def _request_with_config(
         stderr.write(f"API-Fehler ({status}): {body}\n")
         return 1
     if status == 204:
-        stdout.write("Gelöscht.\n")
+        stdout.write("null\n" if as_json else "Gelöscht.\n")
         return 0
     _print_body(body, as_json=as_json, stdout=stdout)
     return 0
@@ -822,7 +861,46 @@ def _materials(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> i
     return 2
 
 
-def _apply_task_kind_payload(payload: dict[str, object], kind: str | None, *, partial: bool) -> None:
+def _print_module_graph(body: object, *, stdout: TextIO) -> None:
+    """Render the modular graph without losing phases or dependency edges."""
+
+    if not isinstance(body, dict):
+        stdout.write("Keine Phasen, Module oder Kanten.\n")
+        return
+    phases = [item for item in body.get("phases", []) if isinstance(item, dict)]
+    modules = [item for item in body.get("modules", []) if isinstance(item, dict)]
+    edges = [item for item in body.get("edges", []) if isinstance(item, dict)]
+    if not phases and not modules and not edges:
+        stdout.write("Keine Phasen, Module oder Kanten.\n")
+        return
+    for phase in sorted(phases, key=lambda item: (int(item.get("position") or 0), str(item.get("id") or ""))):
+        stdout.write(
+            f"PHASE\t{phase.get('position', '')}\t{phase.get('id', '')}\t{phase.get('title', '')}\n"
+        )
+    for module in sorted(
+        modules,
+        key=lambda item: (int(item.get("position") or 0), str(item.get("id") or "")),
+    ):
+        stdout.write(
+            "MODULE\t"
+            f"{module.get('position', '')}\t{module.get('id', '')}\t"
+            f"{module.get('phase_id', '')}\t{module.get('title', '')}\t"
+            f"{module.get('required_prereq_count', 0)}\n"
+        )
+    for edge in sorted(
+        edges,
+        key=lambda item: (str(item.get("from_module_id") or ""), str(item.get("to_module_id") or "")),
+    ):
+        stdout.write(f"EDGE\t{edge.get('from_module_id', '')}\t{edge.get('to_module_id', '')}\n")
+
+
+def _apply_task_kind_payload(
+    payload: dict[str, object],
+    kind: str | None,
+    *,
+    partial: bool,
+    dialog_config: dict[str, object] | None = None,
+) -> None:
     if kind is None:
         return
     if kind == "native":
@@ -832,10 +910,19 @@ def _apply_task_kind_payload(payload: dict[str, object], kind: str | None, *, pa
     if kind == "h5p":
         payload["h5p"] = {"content_id": None, "display_options": {}}
         return
+    if kind == "dialog":
+        if dialog_config is not None:
+            payload["dialog"] = dialog_config
+        return
     payload[kind] = {}
 
 
-def _task_payload(args: argparse.Namespace, *, partial: bool) -> dict[str, object]:
+def _task_payload(
+    args: argparse.Namespace,
+    *,
+    partial: bool,
+    dialog_config: dict[str, object] | None = None,
+) -> dict[str, object]:
     payload: dict[str, object] = {}
     if getattr(args, "instruction_md", None) is not None:
         payload["instruction_md"] = args.instruction_md
@@ -847,13 +934,43 @@ def _task_payload(args: argparse.Namespace, *, partial: bool) -> dict[str, objec
         payload["due_at"] = args.due_at
     if getattr(args, "max_attempts", None) is not None:
         payload["max_attempts"] = args.max_attempts
-    _apply_task_kind_payload(payload, getattr(args, "kind", None), partial=partial)
+    if partial and getattr(args, "clear_criteria", False):
+        payload["criteria"] = []
+    if partial and getattr(args, "clear_teacher_context", False):
+        payload["teacher_context_md"] = None
+    if partial and getattr(args, "clear_due_at", False):
+        payload["due_at"] = None
+    if partial and getattr(args, "clear_max_attempts", False):
+        payload["max_attempts"] = None
+    _apply_task_kind_payload(
+        payload,
+        getattr(args, "kind", None),
+        partial=partial,
+        dialog_config=dialog_config,
+    )
     if not partial and "instruction_md" not in payload:
         payload["instruction_md"] = args.instruction_md
     return payload
 
 
 def _tasks(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
+    dialog_path = getattr(args, "dialog_config", None)
+    kind = getattr(args, "kind", None)
+    if (kind == "dialog") != (dialog_path is not None):
+        stderr.write("--kind dialog und --dialog-config müssen gemeinsam verwendet werden.\n")
+        return 1
+    dialog_config: dict[str, object] | None = None
+    if dialog_path is not None:
+        source = Path(dialog_path)
+        if not source.is_file():
+            stderr.write("Die angegebene Dialog-Konfiguration existiert nicht.\n")
+            return 1
+        try:
+            raw_dialog = json.loads(source.read_text(encoding="utf-8"))
+            dialog_config = normalize_dialog_config(raw_dialog)
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+            stderr.write("Die Dialog-Konfiguration ist ungültig.\n")
+            return 1
     resolved = _authoring_resource_base(
         "tasks",
         args,
@@ -870,13 +987,13 @@ def _tasks(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
             cfg,
             method="POST",
             path=base,
-            json_body=_task_payload(args, partial=False),
+            json_body=_task_payload(args, partial=False, dialog_config=dialog_config),
             success={201},
             stdout=stdout,
             stderr=stderr,
         )
     if args.command == "edit":
-        payload = _task_payload(args, partial=True)
+        payload = _task_payload(args, partial=True, dialog_config=dialog_config)
         if not payload:
             stderr.write("Mindestens ein Aufgabenfeld ist erforderlich.\n")
             return 1
@@ -1016,6 +1133,20 @@ def main(
         return _tasks(args, stdout=stdout, stderr=stderr)
     if args.group == "h5p":
         return _h5p(args, stdout=stdout, stderr=stderr)
+    if args.group in {
+        "courses",
+        "course-deletion-jobs",
+        "course-members",
+        "course-modules",
+        "course-sections",
+        "students",
+    }:
+        return run_course_command(
+            args,
+            request=_request_configured,
+            stdout=stdout,
+            stderr=stderr,
+        )
     parser.error("unknown command")
     return 2
 

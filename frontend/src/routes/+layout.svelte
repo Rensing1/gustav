@@ -63,6 +63,12 @@
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 
+  function concernBoxHref(): string {
+    return data.bootstrap?.user.role === "student"
+      ? "/learning/kummerkasten"
+      : "/teaching/kummerkasten";
+  }
+
   function isPrimaryActive(href: string): boolean {
     if (href === "/teaching/courses") {
       return isActive("/teaching/courses");
@@ -261,6 +267,14 @@
       {/if}
 
       <div class="app-topbar-controls">
+        {#if data.bootstrap}
+          <a
+            class="app-topbar-concern-link"
+            href={concernBoxHref()}
+            aria-current={isActive(concernBoxHref()) ? "page" : undefined}
+          >Kummerkasten</a>
+        {/if}
+
         <div class="app-topbar-tools">
           <ThemeToggle currentTheme={currentTheme} onToggle={toggleTheme} />
 
@@ -275,11 +289,6 @@
 
               <div class="account-menu__panel">
                 <a class="account-menu__action" href="/profile">Profil</a>
-                {#if data.bootstrap.user.role === "student"}
-                  <a class="account-menu__action" href="/learning/kummerkasten">Kummerkasten</a>
-                {:else}
-                  <a class="account-menu__action" href="/teaching/kummerkasten">Kummerkasten</a>
-                {/if}
                 <a class="account-menu__action" href="/auth/logout">Abmelden</a>
               </div>
             </details>

@@ -1,4 +1,4 @@
-"""Contract tests for the SvelteKit concern box pages and account menu links."""
+"""Contract tests for the SvelteKit concern box pages and global navigation."""
 
 from __future__ import annotations
 
@@ -21,9 +21,15 @@ def test_frontend_contains_concern_box_pages() -> None:
     assert "/api/teaching/views/concern-box" in teacher_loader.read_text(encoding="utf-8")
 
 
-def test_root_layout_contains_concern_box_account_links() -> None:
+def test_root_layout_contains_role_aware_concern_box_topbar_link() -> None:
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
     src = layout_path.read_text(encoding="utf-8")
+    account_panel = src.split('<div class="account-menu__panel">', maxsplit=1)[1]
 
-    assert 'href="/learning/kummerkasten"' in src
-    assert 'href="/teaching/kummerkasten"' in src
+    assert 'function concernBoxHref(): string' in src
+    assert '"/learning/kummerkasten"' in src
+    assert '"/teaching/kummerkasten"' in src
+    assert 'class="app-topbar-concern-link"' in src
+    assert 'href={concernBoxHref()}' in src
+    assert 'href="/learning/kummerkasten"' not in account_panel
+    assert 'href="/teaching/kummerkasten"' not in account_panel

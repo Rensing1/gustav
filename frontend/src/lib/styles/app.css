@@ -170,10 +170,39 @@ select {
 }
 
 .app-topbar-controls {
+  --topbar-tool-height: 2.3rem;
   display: inline-flex;
   align-items: center;
   justify-self: end;
   gap: 0.55rem;
+}
+
+.app-topbar-concern-link {
+  height: var(--topbar-tool-height);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.78rem;
+  border: 1px solid transparent;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.app-topbar-concern-link:hover,
+.app-topbar-concern-link:focus-visible,
+.app-topbar-concern-link[aria-current="page"] {
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
+  color: var(--color-text);
 }
 
 .app-topbar-tools {
@@ -828,6 +857,16 @@ select {
   .app-topbar-controls {
     grid-column: 1 / -1;
     justify-self: end;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .account-trigger {
+    padding-left: 0;
+  }
+
+  .account-trigger__name {
+    display: none;
   }
 
   .brand-logo {

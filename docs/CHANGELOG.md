@@ -27,6 +27,7 @@
 - ai(defaults): Vision=`qwen2.5vl:3b`, Feedback=`gpt-oss:latest`.
 - config(csrf): Prod/stage startup now requires dedicated `APP_CSRF_TOKEN_SECRET` (placeholder/dummy values rejected).
 ### UI
+- ui(navigation): Der rollenabhängige Kummerkasten ist jetzt als dauerhaft sichtbare, mobil erreichbare Aktion in der Kopfleiste statt im Kontomenü verlinkt.
 - ui(learning): Task-Formular sendet per HTMX und tauscht nur das Verlaufs-Fragment (kein Full-Page-Reload). PRG-Fallback ohne HTMX bleibt erhalten; Erfolgsbanner via HX-Trigger.
 - ui(learning): Verlauf aktualisiert sich automatisch (hx-trigger="every 2s") solange der neueste Versuch pending ist; Polling stoppt bei completed.
 - ui(learning): HTML5 `required` am Textfeld entfernt, damit Upload-Modus den Submit nicht clientseitig blockiert; Servervalidierung greift weiter für leeren Text.

@@ -27,6 +27,30 @@ describe("account menu contract", () => {
     expect(layoutSource).toContain('class="account-menu__panel"');
   });
 
+  it("keeps the role-aware concern box visible outside the account menu", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const layoutSource = readFileSync(path.resolve(currentDir, "+layout.svelte"), "utf8");
+    const accountPanelStart = layoutSource.indexOf('<div class="account-menu__panel">');
+    const accountPanelSource = layoutSource.slice(accountPanelStart);
+
+    expect(layoutSource).toContain("function concernBoxHref(): string");
+    expect(layoutSource).toContain('class="app-topbar-concern-link"');
+    expect(layoutSource).toContain('href={concernBoxHref()}');
+    expect(layoutSource).toContain('aria-current={isActive(concernBoxHref()) ? "page" : undefined}');
+    expect(layoutSource).toMatch(/app-topbar-concern-link[\s\S]*?<div class="app-topbar-tools">/);
+    expect(accountPanelSource).not.toContain('href="/learning/kummerkasten"');
+    expect(accountPanelSource).not.toContain('href="/teaching/kummerkasten"');
+  });
+
+  it("keeps all topbar actions reachable on narrow screens", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const cssSource = readFileSync(path.resolve(currentDir, "../lib/styles/app.css"), "utf8");
+
+    expect(cssSource).toMatch(/\.app-topbar-concern-link\s*\{[^}]*height:\s*var\(--topbar-tool-height\);/s);
+    expect(cssSource).toMatch(/@media \(max-width: 640px\)[\s\S]*?\.app-topbar-controls\s*\{[^}]*width:\s*100%;[^}]*justify-content:\s*space-between;/s);
+    expect(cssSource).toMatch(/@media \(max-width: 640px\)[\s\S]*?\.account-trigger__name\s*\{[^}]*display:\s*none;/s);
+  });
+
   it("styles the account trigger and panel with hard edges", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const cssSource = readFileSync(path.resolve(currentDir, "../lib/styles/app.css"), "utf8");

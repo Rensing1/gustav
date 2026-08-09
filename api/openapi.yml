@@ -873,7 +873,7 @@ components:
           type: string
         kind:
           type: string
-          enum: [markdown, file]
+          enum: [markdown, file, simulation]
         body_md:
           type: string
           nullable: true
@@ -2250,28 +2250,28 @@ components:
           description: 1-based ordering within the section
         kind:
           type: string
-          enum: [markdown, file]
+          enum: [markdown, file, simulation]
           description: Material content type.
         body_md:
           type: string
-          description: Markdown content shown to students once the section is released (only for `kind=markdown`).
+          description: Markdown body for text materials or an optional orientation for simulations.
           nullable: true
         filename_original:
           type: string
-          description: Original filename provided by the teacher (only for `kind=file`).
+          description: Original filename provided by the teacher (for `kind=file` and `kind=simulation`).
         storage_key:
           type: string
-          description: Storage path used for the uploaded file (only for `kind=file`).
+          description: Storage path used for the uploaded asset (for `kind=file` and `kind=simulation`).
         mime_type:
           type: string
-          description: MIME type of the uploaded file (only for `kind=file`).
+          description: MIME type of the uploaded asset (for `kind=file` and `kind=simulation`).
         size_bytes:
           type: integer
           minimum: 1
-          description: Size of the uploaded file in bytes (only for `kind=file`).
+          description: Size of the uploaded asset in bytes (for `kind=file` and `kind=simulation`).
         sha256:
           type: string
-          description: Hex-encoded SHA-256 checksum of the uploaded file (only for `kind=file`).
+          description: Hex-encoded SHA-256 checksum of the uploaded asset (for `kind=file` and `kind=simulation`).
         alt_text:
           type: string
           maxLength: 500
@@ -2292,7 +2292,7 @@ components:
           maxLength: 200
         body_md:
           type: string
-          description: Markdown body authored by the teacher
+          description: Markdown body for text materials or orientation text for simulations
     MaterialUpdate:
       type: object
       properties:
@@ -2307,7 +2307,7 @@ components:
         alt_text:
           type: string
           maxLength: 500
-          description: Alternative text for file materials (ignored for markdown)
+          description: Alternative text for file materials (rejected for markdown and simulation)
     MaterialReorder:
       type: object
       required: [material_ids]
@@ -2324,6 +2324,11 @@ components:
       type: object
       required: [filename, mime_type, size_bytes]
       properties:
+        kind:
+          type: string
+          enum: [file, simulation]
+          default: file
+          description: Uploaded material kind. Omitted values remain compatible with file uploads.
         filename:
           type: string
           description: Original filename supplied by the teacher
@@ -2334,10 +2339,10 @@ components:
           type: integer
           minimum: 1
           maximum: 20971520
-          description: Declared file size in bytes
+          description: Declared asset size in bytes. Simulations are limited to 5242880 bytes by the server.
     MaterialUploadIntentResponse:
       type: object
-      required: [intent_id, material_id, storage_key, url, headers, accepted_mime_types, max_size_bytes, expires_at]
+      required: [intent_id, material_id, kind, storage_key, url, headers, accepted_mime_types, max_size_bytes, expires_at]
       properties:
         intent_id:
           type: string
@@ -2345,6 +2350,9 @@ components:
         material_id:
           type: string
           format: uuid
+        kind:
+          type: string
+          enum: [file, simulation]
         storage_key:
           type: string
           description: Storage key that must be used during upload
@@ -2389,6 +2397,9 @@ components:
           type: string
           description: Optional alternative text for accessibility
           maxLength: 500
+        body_md:
+          type: string
+          description: Optional Markdown orientation shown above a simulation. Rejected for file materials.
     MaterialDownloadUrlResponse:
       type: object
       required: [url, expires_at]
@@ -2846,20 +2857,20 @@ components:
           maxLength: 200
         kind:
           type: string
-          enum: [markdown, file]
+          enum: [markdown, file, simulation]
         body_md:
           type: string
-          description: Markdown content (only for materials with kind=markdown)
+          description: Markdown content or optional simulation orientation
           nullable: true
         mime_type:
           type: string
           nullable: true
-          description: MIME type for file materials (null for markdown)
+          description: MIME type for stored file and simulation materials (null for markdown)
         size_bytes:
           type: integer
           nullable: true
           minimum: 1
-          description: Declared file size (bytes) for file materials
+          description: Declared asset size for file and simulation materials
         filename_original:
           type: string
           nullable: true
@@ -2872,6 +2883,11 @@ components:
             Stable authenticated GUSTAV URL for a visible file material.
             Student-facing payloads use the canonical material route; legacy
             section-based routes may continue to work as compatibility aliases.
+        simulation_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Stable authenticated GUSTAV player URL for a visible simulation material.
         alt_text:
           type: string
           nullable: true
@@ -6759,6 +6775,44 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  /api/learning/courses/{course_id}/materials/{material_id}/simulation:
+    get:
+      tags: [Learning]
+      summary: Stream a learner-visible interactive simulation
+      description: >-
+        Streams self-contained HTML through GUSTAV after the same membership,
+        release and modular-unlock checks as other learner-visible materials.
+        The response is sandboxed by CSP and is never redirected to storage.
+      operationId: streamLearningMaterialSimulation
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: course_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: material_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Sandboxed simulation HTML streamed successfully
+          headers:
+            Cache-Control:
+              schema: { type: string, example: private, no-store }
+            Content-Security-Policy:
+              schema: { type: string }
+            Content-Disposition:
+              schema: { type: string, example: inline }
+          content:
+            text/html:
+              schema: { type: string }
+        '400': { description: Invalid UUID, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '404': { description: Simulation not found or not visible, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Visibility lookup or storage unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file:
     get:
@@ -12192,7 +12246,7 @@ paths:
   /api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents:
     post:
       tags: [Teaching]
-      summary: Create upload intent for file material (author only)
+      summary: Create upload intent for a file or simulation material (author only)
       operationId: createSectionMaterialUploadIntent
       security:
         - cookieAuth: []
@@ -12243,6 +12297,7 @@ paths:
               - invalid_unit_id
               - invalid_section_id
               - invalid_filename
+              - invalid_material_kind
               - mime_not_allowed
               - size_exceeded
           content:
@@ -12297,7 +12352,7 @@ paths:
               $ref: '#/components/schemas/MaterialFileFinalizeRequest'
       responses:
         '201':
-          description: File material created
+          description: Uploaded material created
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -12331,6 +12386,9 @@ paths:
               - invalid_title
               - mime_not_allowed
               - invalid_alt_text
+              - invalid_body_md
+              - invalid_simulation_html
+              - simulation_not_self_contained
           content:
             application/json:
               schema:
@@ -12428,6 +12486,45 @@ paths:
         '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Material not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: Service unavailable (storage not configured), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/teaching/units/{unit_id}/materials/{material_id}/simulation:
+    get:
+      tags: [Teaching]
+      summary: Stream a simulation for author preview
+      description: >-
+        Streams an authored self-contained HTML simulation with the production
+        sandbox policy. The HTML is never exposed through a signed storage URL.
+      operationId: streamTeachingMaterialSimulation
+      security:
+        - cookieAuth: []
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: material_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Sandboxed simulation HTML streamed successfully
+          headers:
+            Cache-Control:
+              schema: { type: string, example: private, no-store }
+            Content-Security-Policy:
+              schema: { type: string }
+            Content-Disposition:
+              schema: { type: string, example: inline }
+          content:
+            text/html:
+              schema: { type: string }
+        '400': { description: Invalid UUID, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Simulation not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Storage unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/modules/{module_id}/materials:
     post:

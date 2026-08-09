@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import uuid
+from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 from typing import Any
 import importlib
@@ -81,6 +82,9 @@ class FakeStorageAdapter:
         self.head_calls: list[dict[str, Any]] = []
         self.presign_download_calls: list[dict[str, Any]] = []
         self.delete_calls: list[dict[str, Any]] = []
+        self.payload: bytes | None = None
+        self.content_type = "application/pdf"
+        self.content_length = 1024
 
     def presign_upload(self, **kwargs):
         self.presign_upload_calls.append(kwargs)
@@ -93,7 +97,13 @@ class FakeStorageAdapter:
 
     def head_object(self, **kwargs) -> dict[str, Any]:
         self.head_calls.append(kwargs)
-        return {"content_type": "application/pdf", "content_length": 1024}
+        return {"content_type": self.content_type, "content_length": self.content_length}
+
+    def read_object(self, **kwargs) -> bytes:
+        if self.payload is None:
+            raise RuntimeError("missing_test_payload")
+        assert len(self.payload) <= int(kwargs["max_bytes"])
+        return self.payload
 
     def delete_object(self, **kwargs) -> None:
         self.delete_calls.append(kwargs)
@@ -289,6 +299,64 @@ async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter
         )
         assert lst.status_code == 200
         assert lst.json() == []
+
+
+@pytest.mark.anyio
+async def test_simulation_upload_finalize_preview_and_type_separation(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
+    """A teacher can publish valid HTML, but cannot obtain a raw file download URL."""
+    store = _session_store(monkeypatch)
+    from backend.tests.utils.db import require_db_or_skip
+    require_db_or_skip()
+    teacher = store.create(sub="teacher-simulation", name="Frau Simulation", roles=["teacher"])
+    html = b"<!doctype html><html><body><button>Start</button><script>let n=0</script></body></html>"
+    _reset_storage_adapter.payload = html
+    _reset_storage_adapter.content_type = "text/html; charset=utf-8"
+    _reset_storage_adapter.content_length = len(html)
+
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client, "Simulationen")
+        section = await _create_section(client, unit["id"])
+        intent_response = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={
+                "kind": "simulation",
+                "filename": "modell.html",
+                "mime_type": "text/html",
+                "size_bytes": len(html),
+            },
+        )
+        assert intent_response.status_code == 200
+        intent = intent_response.json()
+        assert intent["kind"] == "simulation"
+        assert intent["max_size_bytes"] == 5 * 1024 * 1024
+
+        finalize = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/finalize",
+            json={
+                "intent_id": intent["intent_id"],
+                "title": "Regelkreis",
+                "sha256": sha256(html).hexdigest(),
+                "body_md": "Verändere den Regler.",
+            },
+        )
+        assert finalize.status_code == 201
+        material = finalize.json()
+        assert material["kind"] == "simulation"
+        assert material["body_md"] == "Verändere den Regler."
+
+        preview = await client.get(
+            f"/api/teaching/units/{unit['id']}/materials/{material['id']}/simulation"
+        )
+        assert preview.status_code == 200
+        assert preview.content == html
+        assert "sandbox allow-scripts" in preview.headers["content-security-policy"]
+        assert "connect-src 'none'" in preview.headers["content-security-policy"]
+
+        raw_download = await client.get(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/{material['id']}/download-url"
+        )
+        assert raw_download.status_code == 404
 
 
 @pytest.mark.anyio

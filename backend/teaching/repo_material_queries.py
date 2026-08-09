@@ -136,6 +136,26 @@ def get_material_owned(*, dsn: str, psycopg_module, unit_id: str, section_id: st
         return None
     return _material_row_to_dict(row)
 
+
+def get_material_owned_in_unit(
+    *, dsn: str, psycopg_module, unit_id: str, material_id: str, author_id: str
+) -> Optional[dict]:
+    """Fetch one material from an authored unit without trusting a section id."""
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+            cur.execute(
+                f"""
+                select {_MATERIAL_COLUMNS_SQL}
+                  from public.unit_materials
+                 where unit_id = %s
+                   and id = %s
+                """,
+                (unit_id, material_id),
+            )
+            row = cur.fetchone()
+    return _material_row_to_dict(row) if row else None
+
 def update_material(
     *,
     dsn: str,
@@ -185,12 +205,14 @@ def update_material(
                     raise ValueError("invalid_title")
                 updates.append(("title", t))
             if not _is_unset(body_md):
-                if material_kind != "markdown":
+                if material_kind not in {"markdown", "simulation"}:
                     raise ValueError("invalid_body_md")
                 if body_md is None or not isinstance(body_md, str):
                     raise ValueError("invalid_body_md")
                 updates.append(("body_md", body_md))
             if not _is_unset(alt_text):
+                if material_kind != "file":
+                    raise ValueError("invalid_alt_text")
                 if alt_text is None:
                     updates.append(("alt_text", None))
                 elif not isinstance(alt_text, str):
@@ -310,6 +332,7 @@ def create_file_upload_intent(
     filename: str,
     mime_type: str,
     size_bytes: int,
+    material_kind: str = "file",
     expires_at: datetime,
 ) -> Dict[str, Any]:
     with psycopg_module.connect(dsn) as conn:
@@ -325,15 +348,16 @@ def create_file_upload_intent(
                 """
                 insert into public.upload_intents (
                     id, material_id, unit_id, section_id, author_id,
-                    storage_key, filename, mime_type, size_bytes, expires_at
+                    storage_key, filename, mime_type, size_bytes, material_kind, expires_at
                 )
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 returning id::text,
                           material_id::text,
                           storage_key,
                           filename,
                           mime_type,
                           size_bytes,
+                          material_kind,
                           expires_at,
                           consumed_at
                 """,
@@ -347,6 +371,7 @@ def create_file_upload_intent(
                     filename,
                     mime_type,
                     size_bytes,
+                    material_kind,
                     expires_at,
                 ),
             )
@@ -359,8 +384,9 @@ def create_file_upload_intent(
         "filename": row[3],
         "mime_type": row[4],
         "size_bytes": int(row[5]),
-        "expires_at": row[6],
-        "consumed_at": row[7],
+        "material_kind": row[6],
+        "expires_at": row[7],
+        "consumed_at": row[8],
     }
 
 def get_upload_intent_owned(
@@ -383,6 +409,7 @@ def get_upload_intent_owned(
                        filename,
                        mime_type,
                        size_bytes,
+                       material_kind,
                        expires_at,
                        consumed_at
                 from public.upload_intents
@@ -403,8 +430,9 @@ def get_upload_intent_owned(
         "filename": row[3],
         "mime_type": row[4],
         "size_bytes": int(row[5]),
-        "expires_at": row[6],
-        "consumed_at": row[7],
+        "material_kind": row[6],
+        "expires_at": row[7],
+        "consumed_at": row[8],
     }
 
 def finalize_upload_intent_create_material(
@@ -417,6 +445,7 @@ def finalize_upload_intent_create_material(
     author_id: str,
     title: str,
     alt_text: Optional[str],
+    body_md: str = "",
     sha256: str,
 ) -> Tuple[Dict[str, Any], bool]:
     now = datetime.now(timezone.utc)
@@ -431,6 +460,7 @@ def finalize_upload_intent_create_material(
                        filename,
                        mime_type,
                        size_bytes,
+                       material_kind,
                        expires_at,
                        consumed_at
                 from public.upload_intents
@@ -452,6 +482,7 @@ def finalize_upload_intent_create_material(
                 filename,
                 mime_type,
                 size_bytes,
+                material_kind,
                 expires_at,
                 consumed_at,
             ) = row
@@ -488,7 +519,7 @@ def finalize_upload_intent_create_material(
                     id, unit_id, section_id, title, body_md, position, kind,
                     storage_key, filename_original, mime_type, size_bytes, sha256, alt_text
                 )
-                values (%s, %s, %s, %s, %s, %s, 'file', %s, %s, %s, %s, %s, %s)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 returning {_MATERIAL_COLUMNS_SQL}
                 """,
                 (
@@ -496,8 +527,9 @@ def finalize_upload_intent_create_material(
                     unit_id,
                     section_id,
                     title,
-                    "",
+                    body_md,
                     next_pos,
+                    material_kind,
                     storage_key,
                     filename,
                     mime_type,

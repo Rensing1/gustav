@@ -31,6 +31,17 @@
     );
   }
 
+  let simulationRunning = $state(false);
+  let simulationRevision = $state(0);
+
+  function resetSimulation(): void {
+    simulationRevision += 1;
+  }
+
+  function closeSimulation(): void {
+    simulationRunning = false;
+  }
+
   const bodyId = $derived(`material-body-${material.id}`);
 </script>
 
@@ -64,6 +75,39 @@
           <div class="markdown-prose learning-material-prose">
             {@html renderMarkdown(material.body_md)}
           </div>
+        {:else if material.kind === "simulation"}
+          <section class="learning-material-simulation">
+            {#if material.body_md?.trim()}
+              <div class="markdown-prose learning-material-prose learning-material-simulation__orientation">
+                {@html renderMarkdown(material.body_md)}
+              </div>
+            {/if}
+            {#if material.simulation_url}
+              {#if simulationRunning}
+                <div class="learning-material-simulation__actions" aria-label="Simulationssteuerung">
+                  <button type="button" onclick={resetSimulation}>Zurücksetzen</button>
+                  <button type="button" onclick={closeSimulation}>Simulation schließen</button>
+                  <a href={material.simulation_url} target="_blank" rel="noreferrer">Separat öffnen</a>
+                </div>
+                {#key simulationRevision}
+                  <iframe
+                    class="learning-material-simulation__frame"
+                    src={material.simulation_url}
+                    title={`Simulation ${material.title}`}
+                    sandbox="allow-scripts"
+                    referrerpolicy="no-referrer"
+                    loading="lazy"
+                  ></iframe>
+                {/key}
+              {:else}
+                <button class="learning-material-simulation__start" type="button" onclick={() => (simulationRunning = true)}>
+                  Simulation starten
+                </button>
+              {/if}
+            {:else}
+              <p class="learning-work-item__file-meta">Simulation derzeit nicht verfügbar.</p>
+            {/if}
+          </section>
         {:else}
           <section class="learning-material-card__support learning-material-card__support--open">
             {#if hasPreviewUrl() && material.mime_type?.startsWith("image/")}

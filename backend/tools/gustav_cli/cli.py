@@ -251,6 +251,8 @@ def _build_parser() -> argparse.ArgumentParser:
             material_cmd.add_argument("--title", required=True)
             material_cmd.add_argument("--mime-type")
             material_cmd.add_argument("--alt-text")
+            material_cmd.add_argument("--kind", choices=("file", "simulation"), default="file")
+            material_cmd.add_argument("--body-md")
             material_cmd.add_argument("--json", action="store_true")
         if name == "edit":
             material_cmd.add_argument("--title")
@@ -707,16 +709,26 @@ def _materials(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> i
             stderr.write("Die angegebene Datei existiert nicht.\n")
             return 1
         content = source.read_bytes()
-        mime_type = args.mime_type or mimetypes.guess_type(str(source))[0] or "application/octet-stream"
+        if args.kind == "simulation" and args.alt_text is not None:
+            stderr.write("--alt-text ist nur für Datei-Materialien zulässig.\n")
+            return 1
+        mime_type = (
+            "text/html"
+            if args.kind == "simulation" and args.mime_type is None
+            else args.mime_type or mimetypes.guess_type(str(source))[0] or "application/octet-stream"
+        )
+        intent_payload: dict[str, object] = {
+            "filename": source.name,
+            "mime_type": mime_type,
+            "size_bytes": len(content),
+        }
+        if args.kind == "simulation":
+            intent_payload["kind"] = "simulation"
         status, intent = _http_json(
             "POST",
             f"{cfg.base_url}{base}/upload-intents",
             headers=_auth_headers(cfg),
-            json_body={
-                "filename": source.name,
-                "mime_type": mime_type,
-                "size_bytes": len(content),
-            },
+            json_body=intent_payload,
         )
         if status != 200 or not isinstance(intent, dict):
             stderr.write(f"API-Fehler ({status}): {intent}\n")
@@ -734,6 +746,8 @@ def _materials(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> i
         }
         if args.alt_text is not None:
             finalize_payload["alt_text"] = args.alt_text
+        if args.kind == "simulation" and args.body_md is not None:
+            finalize_payload["body_md"] = args.body_md
         return _request_with_config(
             cfg,
             method="POST",

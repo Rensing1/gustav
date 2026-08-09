@@ -4,15 +4,21 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
+from hashlib import sha256 as calculate_sha256
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 from uuid import uuid4
 
 from backend.teaching.storage import StorageAdapterProtocol
-from backend.storage.config import get_materials_bucket, get_materials_max_upload_bytes
+from backend.storage.config import (
+    get_materials_bucket,
+    get_materials_max_upload_bytes,
+    get_simulation_max_upload_bytes,
+)
 from backend.storage.keys import make_materials_key
 from backend.storage.upload_intents import normalize_upload_intent_headers
+from backend.teaching.services.simulation_validation import validate_simulation_html
 
 
 class MaterialsRepoProtocol(Protocol):
@@ -50,6 +56,10 @@ class MaterialsRepoProtocol(Protocol):
         self, unit_id: str, section_id: str, material_id: str, author_id: str
     ) -> Any | None: ...
 
+    def get_material_owned_in_unit(
+        self, unit_id: str, material_id: str, author_id: str
+    ) -> Any | None: ...
+
     def create_file_upload_intent(
         self,
         unit_id: str,
@@ -62,6 +72,7 @@ class MaterialsRepoProtocol(Protocol):
         filename: str,
         mime_type: str,
         size_bytes: int,
+        material_kind: str = "file",
         expires_at: datetime,
     ) -> Dict[str, Any]: ...
 
@@ -82,6 +93,7 @@ class MaterialsRepoProtocol(Protocol):
         *,
         title: str,
         alt_text: Optional[str],
+        body_md: str = "",
         sha256: str,
     ) -> Tuple[Dict[str, Any], bool]: ...
 
@@ -96,6 +108,7 @@ class MaterialFileSettings:
         "image/jpeg",
     )
     max_size_bytes: int = field(default_factory=get_materials_max_upload_bytes)
+    simulation_max_size_bytes: int = field(default_factory=get_simulation_max_upload_bytes)
     upload_intent_ttl_seconds: int = 3 * 60
     download_url_ttl_seconds: int = 45
     # Use centralized config to determine the default bucket name.
@@ -209,6 +222,34 @@ class MaterialsService:
     ) -> Any | None:
         return self.repo.get_material_owned(unit_id, section_id, material_id, author_id)
 
+    def load_simulation_html(
+        self,
+        unit_id: str,
+        material_id: str,
+        author_id: str,
+        *,
+        storage: StorageAdapterProtocol,
+    ) -> bytes:
+        """Read an authored simulation after enforcing type and size boundaries."""
+        if storage is None:
+            raise RuntimeError("storage_adapter_not_configured")
+        material = self.repo.get_material_owned_in_unit(unit_id, material_id, author_id)
+        if material is None:
+            raise LookupError("material_not_found")
+        if isinstance(material, dict):
+            kind = material.get("kind")
+            storage_key = material.get("storage_key")
+        else:
+            kind = getattr(material, "kind", None)
+            storage_key = getattr(material, "storage_key", None)
+        if kind != "simulation" or not storage_key:
+            raise LookupError("material_not_found")
+        return storage.read_object(
+            bucket=self.settings.storage_bucket,
+            key=str(storage_key),
+            max_bytes=self.settings.simulation_max_size_bytes,
+        )
+
     def delete_material(self, unit_id: str, section_id: str, material_id: str, author_id: str) -> None:
         deleted = self.repo.delete_material(unit_id, section_id, material_id, author_id)
         if not deleted:
@@ -232,6 +273,7 @@ class MaterialsService:
         filename: str,
         mime_type: str,
         size_bytes: int,
+        material_kind: str = "file",
         storage: StorageAdapterProtocol,
     ) -> Dict[str, Any]:
         if storage is None:
@@ -242,9 +284,22 @@ class MaterialsService:
         if not sanitized:
             raise ValueError("invalid_filename")
         normalized_mime = (mime_type or "").strip().lower()
-        if normalized_mime not in self.settings.accepted_mime_types:
+        normalized_kind = (material_kind or "file").strip().lower()
+        if normalized_kind not in {"file", "simulation"}:
+            raise ValueError("invalid_material_kind")
+        accepted_mime_types = (
+            ("text/html",) if normalized_kind == "simulation" else self.settings.accepted_mime_types
+        )
+        max_size_bytes = (
+            self.settings.simulation_max_size_bytes
+            if normalized_kind == "simulation"
+            else self.settings.max_size_bytes
+        )
+        if normalized_kind == "simulation" and not sanitized.lower().endswith(".html"):
+            raise ValueError("invalid_filename")
+        if normalized_mime not in accepted_mime_types:
             raise ValueError("mime_not_allowed")
-        if size_bytes <= 0 or size_bytes > self.settings.max_size_bytes:
+        if size_bytes <= 0 or size_bytes > max_size_bytes:
             raise ValueError("size_exceeded")
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=self.settings.upload_intent_ttl_seconds)
@@ -269,6 +324,7 @@ class MaterialsService:
             filename=original_name,
             mime_type=normalized_mime,
             size_bytes=size_bytes,
+            material_kind=normalized_kind,
             expires_at=expires_at,
         )
         presign = storage.presign_upload(
@@ -286,10 +342,11 @@ class MaterialsService:
             "intent_id": record["intent_id"],
             "material_id": record["material_id"],
             "storage_key": record["storage_key"],
+            "kind": normalized_kind,
             "url": presign["url"],
             "headers": headers,
-            "accepted_mime_types": list(self.settings.accepted_mime_types),
-            "max_size_bytes": self.settings.max_size_bytes,
+            "accepted_mime_types": list(accepted_mime_types),
+            "max_size_bytes": max_size_bytes,
             "expires_at": record["expires_at"].isoformat(),
         }
 
@@ -303,6 +360,7 @@ class MaterialsService:
         title: str,
         sha256: str,
         alt_text: Optional[str],
+        body_md: Optional[str] = None,
         storage: StorageAdapterProtocol,
     ) -> Tuple[Dict[str, Any], bool]:
         if storage is None:
@@ -355,7 +413,11 @@ class MaterialsService:
         content_type = head.get("content_type") or intent["mime_type"]
         # Accept content types with parameters (e.g., "application/pdf; charset=UTF-8").
         base_content_type = (str(content_type or "").split(";", 1)[0]).strip().lower()
-        if base_content_type not in self.settings.accepted_mime_types:
+        material_kind = str(intent.get("material_kind") or "file").strip().lower()
+        accepted_mime_types = (
+            ("text/html",) if material_kind == "simulation" else self.settings.accepted_mime_types
+        )
+        if base_content_type not in accepted_mime_types:
             storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
             raise ValueError("mime_not_allowed")
         if alt_text is not None and not isinstance(alt_text, str):
@@ -363,6 +425,30 @@ class MaterialsService:
         normalized_alt = (alt_text or "").strip() or None
         if normalized_alt is not None and len(normalized_alt) > 500:
             raise ValueError("invalid_alt_text")
+        if material_kind == "simulation":
+            if normalized_alt is not None:
+                raise ValueError("invalid_alt_text")
+            if body_md is not None and not isinstance(body_md, str):
+                raise ValueError("invalid_body_md")
+            normalized_body = body_md or ""
+            try:
+                payload = storage.read_object(
+                    bucket=self.settings.storage_bucket,
+                    key=intent["storage_key"],
+                    max_bytes=self.settings.simulation_max_size_bytes,
+                )
+                if len(payload) != int(intent["size_bytes"]):
+                    raise ValueError("checksum_mismatch")
+                if calculate_sha256(payload).hexdigest() != normalized_sha:
+                    raise ValueError("checksum_mismatch")
+                validate_simulation_html(payload)
+            except ValueError:
+                storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
+                raise
+        else:
+            if body_md not in {None, ""}:
+                raise ValueError("invalid_body_md")
+            normalized_body = ""
         material, created = self.repo.finalize_upload_intent_create_material(
             intent_id,
             unit_id,
@@ -370,6 +456,7 @@ class MaterialsService:
             author_id,
             title=normalized_title,
             alt_text=normalized_alt,
+            body_md=normalized_body,
             sha256=normalized_sha,
         )
         return material, created

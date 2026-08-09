@@ -68,6 +68,12 @@ export type LearnerBookWorkspaceCourse = LearnerVisualSmokeCourse & {
   previousSubmissionText: string;
 };
 
+export type SimulationMaterialCourse = {
+  courseId: string;
+  unitId: string;
+  sectionId: string;
+};
+
 async function createCourse(page: Page, title: string): Promise<string> {
   const response = await page.request.post(`${webBase}/api/teaching/courses`, {
     headers: apiHeaders("/teaching/courses"),
@@ -224,6 +230,22 @@ export async function seedTeacherStudentLabelCourse(
     await addCurrentLearnerToCourse(page, courseId, learnerSub);
   }
   return { courseId, unitId };
+}
+
+
+export async function seedSimulationMaterialCourse(
+  teacherPage: Page,
+  learnerPage: Page,
+  title: string
+): Promise<SimulationMaterialCourse> {
+  const learnerSub = await currentUserSub(learnerPage);
+  const courseId = await createCourse(teacherPage, `${title} Kurs`);
+  const unitId = await createUnit(teacherPage, `${title} Einheit`);
+  const sectionId = await createSection(teacherPage, unitId, "Simulationen");
+  const moduleId = await attachUnitToCourse(teacherPage, courseId, unitId);
+  await releaseSection(teacherPage, courseId, moduleId, sectionId);
+  await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
+  return { courseId, unitId, sectionId };
 }
 
 export async function seedTeacherAiUsageCourse(

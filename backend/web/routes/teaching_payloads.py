@@ -295,6 +295,7 @@ class MaterialCreatePayload(BaseModel):
 
 
 class MaterialUploadIntentPayload(BaseModel):
+    kind: str = Field(default="file", min_length=1, max_length=32)
     filename: str = Field(..., min_length=1, max_length=255)
     mime_type: str = Field(..., min_length=1, max_length=128)
     size_bytes: int = Field(..., ge=1)
@@ -304,7 +305,7 @@ class MaterialUploadIntentPayload(BaseModel):
     def _normalize_filename(cls, value: str) -> str:
         return value.strip()
 
-    @field_validator("mime_type")
+    @field_validator("mime_type", "kind")
     @classmethod
     def _normalize_mime(cls, value: str) -> str:
         return value.strip()
@@ -317,6 +318,7 @@ class MaterialFinalizePayload(BaseModel):
     sha256: str = Field(..., min_length=1, max_length=128)
     # Do not enforce max_length here to avoid FastAPI 422; service maps to 400 invalid_alt_text.
     alt_text: str | None = Field(default=None)
+    body_md: object | None = Field(default=None)
 
     @field_validator("intent_id", "title", "sha256", "alt_text")
     @classmethod

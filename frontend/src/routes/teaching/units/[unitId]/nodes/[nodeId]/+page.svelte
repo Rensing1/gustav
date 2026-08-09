@@ -118,7 +118,7 @@
   let expandedTaskId = $state<string | null>(null);
   let showCreateMaterial = $state(false);
   let showCreateTask = $state(false);
-  let createMaterialKind = $state<"markdown" | "file">("markdown");
+  let createMaterialKind = $state<"markdown" | "file" | "simulation">("markdown");
   let createTaskKind = $state<"native" | "h5p" | "visual" | "scratch" | "calliope" | "filius" | "dialog">("native");
   let handledForm: ActionData | undefined = undefined;
   let createMaterialCard = $state<HTMLElement | null>(null);
@@ -128,6 +128,8 @@
   let createMaterialClientError = $state<string | null>(null);
   let createMaterialUploadPending = $state(false);
   let createMaterialSelectedFile = $state<File | null>(null);
+  let simulationPreviewActive = $state<Record<string, boolean>>({});
+  let simulationPreviewRevision = $state<Record<string, number>>({});
   let editorMessage = $state<{ tone: "success" | "error"; text: string } | null>(null);
   let dialogPreviewInputs = $state<Record<string, string>>({});
   let dialogPreviews = $state<Record<string, { pending: boolean; error: string | null; reply: string | null; starters: string[] }>>({});
@@ -388,7 +390,9 @@
 
   function createMaterialClientUploadError(reason: string): string {
     if (reason === "mime_not_allowed") {
-      return "Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.";
+      return createMaterialKind === "simulation"
+        ? "Bitte wähle eine selbstständige HTML-Datei aus."
+        : "Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.";
     }
     if (reason === "size_exceeded") {
       return "Datei zu groß. Bitte das Größenlimit beachten.";
@@ -397,7 +401,7 @@
   }
 
   async function handleCreateMaterialSubmit(event: SubmitEvent) {
-    if (createMaterialKind !== "file") {
+    if (createMaterialKind === "markdown") {
       createMaterialClientError = null;
       return;
     }
@@ -426,10 +430,13 @@
     createMaterialClientError = null;
 
     try {
-      const mimeType = String(file.type || "").trim().toLowerCase() || "application/octet-stream";
+      const mimeType = createMaterialKind === "simulation"
+        ? "text/html"
+        : String(file.type || "").trim().toLowerCase() || "application/octet-stream";
       const prepared = await prepareBrowserStorageUpload({
         intentUrl: createMaterialIntentUrl(),
         intentPayload: {
+          kind: createMaterialKind,
           filename: file.name || "material.bin",
           mime_type: mimeType,
           size_bytes: file.size
@@ -448,7 +455,7 @@
         fileInput.value = "";
       }
 
-      preparedMaterialUploadName = file.name || "Datei";
+      preparedMaterialUploadName = file.name || (createMaterialKind === "simulation" ? "Simulation.html" : "Datei");
       formElement.requestSubmit();
     } catch (caught) {
       clearPreparedMaterialUpload();
@@ -514,7 +521,9 @@
   }
 
   function materialKindLabel(material: TeacherUnitNodeEditorMaterial): string {
-    return material.kind === "file" ? "Datei" : "Textmaterial";
+    if (material.kind === "file") return "Datei";
+    if (material.kind === "simulation") return "Interaktive Simulation";
+    return "Textmaterial";
   }
 
   function formatBytes(sizeBytes: number | null | undefined): string | null {
@@ -531,7 +540,7 @@
   }
 
   function materialMeta(material: TeacherUnitNodeEditorMaterial): string {
-    if (material.kind === "file") {
+    if (material.kind === "file" || material.kind === "simulation") {
       const parts = [
         material.filename_original ?? "Datei",
         material.mime_type ?? null,
@@ -545,6 +554,7 @@
 
   function materialOutlineMeta(material: TeacherUnitNodeEditorMaterial): string {
     if (material.kind === "markdown") return "Textmaterial";
+    if (material.kind === "simulation") return "Interaktive Simulation";
     const details = materialMeta(material);
     return details ? `Datei · ${details}` : "Datei";
   }
@@ -596,6 +606,25 @@
 
   function fileHref(material: TeacherUnitNodeEditorMaterial, disposition: "inline" | "attachment"): string {
     return `/teaching/units/${editorState.unit.id}/sections/${sectionId()}/materials/${material.id}/file?disposition=${disposition}`;
+  }
+
+  function simulationHref(material: TeacherUnitNodeEditorMaterial): string {
+    return `/api/teaching/units/${encodeURIComponent(editorState.unit.id)}/materials/${encodeURIComponent(material.id)}/simulation`;
+  }
+
+  function startSimulationPreview(materialId: string): void {
+    simulationPreviewActive = { ...simulationPreviewActive, [materialId]: true };
+  }
+
+  function resetSimulationPreview(materialId: string): void {
+    simulationPreviewRevision = {
+      ...simulationPreviewRevision,
+      [materialId]: (simulationPreviewRevision[materialId] ?? 0) + 1
+    };
+  }
+
+  function closeSimulationPreview(materialId: string): void {
+    simulationPreviewActive = { ...simulationPreviewActive, [materialId]: false };
   }
 
   function isPreviewableFile(material: TeacherUnitNodeEditorMaterial): boolean {
@@ -723,13 +752,13 @@
 
   $effect(() => {
     const materialKind = createMaterialValues().material_kind;
-    if (materialKind === "file" || materialKind === "markdown") {
+    if (materialKind === "file" || materialKind === "markdown" || materialKind === "simulation") {
       createMaterialKind = materialKind;
     }
   });
 
   $effect(() => {
-    if (createMaterialKind !== "file") {
+    if (createMaterialKind === "markdown") {
       clearPreparedMaterialUpload();
       createMaterialUploadPending = false;
     }
@@ -1152,6 +1181,7 @@
             <select bind:value={createMaterialKind} name="material_kind">
               <option value="markdown">Textmaterial</option>
               <option value="file">Datei</option>
+              <option value="simulation">Interaktive Simulation</option>
             </select>
           </label>
 
@@ -1176,6 +1206,36 @@
               <span>Alternativtext</span>
               <input name="alt_text" type="text" value={createMaterialValues().alt_text ?? ""} />
             </label>
+          {:else if createMaterialKind === "simulation"}
+            <label class="workspace-field">
+              <span>HTML-Simulation</span>
+              <input name="upload_file" type="file" accept=".html,text/html" onchange={handleCreateMaterialFileChange} />
+            </label>
+            {#if createMaterialUploadPending}
+              <p class="workspace-note">Simulation wird hochgeladen und geprüft …</p>
+            {:else if preparedMaterialUploadName}
+              <p class="workspace-note">Simulation vorbereitet: {preparedMaterialUploadName}</p>
+            {:else if isModuleEditor && hasDraft("new-material") && !createMaterialSelectedFile}
+              <p class="workspace-note">Wähle die HTML-Datei nach dem Neuladen erneut aus.</p>
+            {/if}
+            <div class="workspace-field">
+              <span>Kurze Orientierung (optional)</span>
+              {#if isModuleEditor}
+                <MarkdownEditor
+                  name="body_md"
+                  ariaLabel="Kurze Orientierung"
+                  value={restoredDraftText("new-material", "body_md", createMaterialValues().body_md ?? "")}
+                  placeholder="Was sollen die Lernenden beobachten oder verändern?"
+                  onInput={(value) => captureMarkdownDraft("new-material", "body_md", value)}
+                />
+              {:else}
+                <textarea name="body_md" rows="4" aria-label="Kurze Orientierung" placeholder="Was sollen die Lernenden beobachten oder verändern?">{createMaterialValues().body_md ?? ""}</textarea>
+              {/if}
+            </div>
+            <p class="workspace-note">
+              Verwende eine vollständig eingebettete HTML-Datei bis 5 MiB. Prüfe Tastaturbedienung, Alternativen zu Ziehgesten,
+              pausierbare Animationen, reduzierte Bewegung sowie Modellgrenzen, Datenstand und Quellen.
+            </p>
           {:else}
             <div class="workspace-field">
               <span>Inhalt</span>
@@ -1266,6 +1326,30 @@
                   </div>
                 {/if}
 
+                {#if material.kind === "simulation"}
+                  <div class="workspace-node-editor-simulation-preview">
+                    {#if simulationPreviewActive[material.id]}
+                      <div class="workspace-node-editor-file-actions" aria-label="Simulationsvorschau steuern">
+                        <button class="workspace-link-action" type="button" onclick={() => resetSimulationPreview(material.id)}>Zurücksetzen</button>
+                        <button class="workspace-link-action" type="button" onclick={() => closeSimulationPreview(material.id)}>Vorschau schließen</button>
+                        <a class="workspace-link-action" href={simulationHref(material)} target="_blank" rel="noreferrer">Separat öffnen</a>
+                      </div>
+                      {#key simulationPreviewRevision[material.id] ?? 0}
+                        <iframe
+                          class="workspace-node-editor-simulation-frame"
+                          src={simulationHref(material)}
+                          title={`Vorschau ${material.title}`}
+                          sandbox="allow-scripts"
+                          referrerpolicy="no-referrer"
+                          loading="lazy"
+                        ></iframe>
+                      {/key}
+                    {:else}
+                      <button class="workspace-link-action" type="button" onclick={() => startSimulationPreview(material.id)}>Vorschau starten</button>
+                    {/if}
+                  </div>
+                {/if}
+
                 <form method="POST" action="?/saveMaterial" class="workspace-node-editor-card-form" use:enhance={enhanceEditorForm} data-draft-target={`material:${material.id}`} oninput={captureModuleDraft} onchange={captureModuleDraft}>
                   <input type="hidden" name="section_id" value={sectionId()} />
                   <input type="hidden" name="material_id" value={material.id} />
@@ -1276,19 +1360,19 @@
                     <input name="title" type="text" value={materialValues(material).title ?? material.title} />
                   </label>
 
-                  {#if material.kind === "markdown"}
+                  {#if material.kind === "markdown" || material.kind === "simulation"}
                     <div class="workspace-field">
-                      <span>Inhalt</span>
+                      <span>{material.kind === "simulation" ? "Kurze Orientierung (optional)" : "Inhalt"}</span>
                       {#if isModuleEditor}
                         <MarkdownEditor
                           name="body_md"
-                          ariaLabel="Inhalt"
+                          ariaLabel={material.kind === "simulation" ? "Kurze Orientierung" : "Inhalt"}
                           value={restoredDraftText(`material:${material.id}`, "body_md", materialValues(material).body_md ?? material.body_md ?? "")}
-                          placeholder="Material eingeben …"
+                          placeholder={material.kind === "simulation" ? "Was sollen die Lernenden beobachten oder verändern?" : "Material eingeben …"}
                           onInput={(value) => captureMarkdownDraft(`material:${material.id}`, "body_md", value)}
                         />
                       {:else}
-                        <textarea name="body_md" rows="7">{materialValues(material).body_md ?? material.body_md ?? ""}</textarea>
+                        <textarea name="body_md" rows={material.kind === "simulation" ? 4 : 7}>{materialValues(material).body_md ?? material.body_md ?? ""}</textarea>
                       {/if}
                     </div>
                   {:else}

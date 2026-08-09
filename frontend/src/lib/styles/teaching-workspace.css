@@ -1327,6 +1327,19 @@
   align-items: center;
 }
 
+.workspace-node-editor-simulation-preview {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.workspace-node-editor-simulation-frame {
+  display: block;
+  width: 100%;
+  height: clamp(26rem, 65dvh, 44rem);
+  border: 1px solid var(--color-border);
+  background: white;
+}
+
 .workspace-node-editor--content-only {
   max-width: 64rem;
 }

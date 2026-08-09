@@ -13,12 +13,13 @@ export type LearningCourseUnit = {
 export type LearningMaterial = {
   id: string;
   title: string;
-  kind: "markdown" | "file";
+  kind: "markdown" | "file" | "simulation";
   body_md?: string | null;
   mime_type?: string | null;
   size_bytes?: number | null;
   filename_original?: string | null;
   file_url?: string | null;
+  simulation_url?: string | null;
   alt_text?: string | null;
   position?: number | null;
 };

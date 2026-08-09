@@ -1121,6 +1121,36 @@
   max-height: min(34rem, 62svh);
 }
 
+.learning-material-simulation {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.learning-material-simulation__orientation > :first-child {
+  margin-top: 0;
+}
+
+.learning-material-simulation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.learning-material-simulation__actions button,
+.learning-material-simulation__actions a,
+.learning-material-simulation__start {
+  min-height: 2.75rem;
+}
+
+.learning-material-simulation__frame {
+  width: 100%;
+  height: clamp(26rem, 65dvh, 44rem);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: white;
+}
+
 .learning-work-item--task .learning-work-item__copy {
   display: block;
 }

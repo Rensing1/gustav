@@ -706,6 +706,17 @@ class DBTeachingRepo:
             author_id=author_id,
         )
 
+    def get_material_owned_in_unit(
+        self, unit_id: str, material_id: str, author_id: str
+    ) -> Optional[dict]:
+        return _repo_material_queries.get_material_owned_in_unit(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            unit_id=unit_id,
+            material_id=material_id,
+            author_id=author_id,
+        )
+
     def update_material(
         self,
         unit_id: str,
@@ -751,6 +762,7 @@ class DBTeachingRepo:
         filename: str,
         mime_type: str,
         size_bytes: int,
+        material_kind: str = "file",
         expires_at: datetime,
     ) -> Dict[str, Any]:
         return _repo_material_queries.create_file_upload_intent(
@@ -765,6 +777,7 @@ class DBTeachingRepo:
             filename=filename,
             mime_type=mime_type,
             size_bytes=size_bytes,
+            material_kind=material_kind,
             expires_at=expires_at,
         )
 
@@ -793,6 +806,7 @@ class DBTeachingRepo:
         *,
         title: str,
         alt_text: Optional[str],
+        body_md: str = "",
         sha256: str,
     ) -> Tuple[Dict[str, Any], bool]:
         return _repo_material_queries.finalize_upload_intent_create_material(
@@ -804,6 +818,7 @@ class DBTeachingRepo:
             author_id=author_id,
             title=title,
             alt_text=alt_text,
+            body_md=body_md,
             sha256=sha256,
         )
 

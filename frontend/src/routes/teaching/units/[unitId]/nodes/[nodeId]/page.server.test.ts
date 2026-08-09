@@ -219,6 +219,54 @@ describe("teacher node editor server helpers", () => {
     });
   });
 
+  it("finalizes simulation uploads with orientation but without file alt text", async () => {
+    backendRequestMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "simulation-1",
+          title: "Sitzverteilung",
+          kind: "simulation",
+          position: 1,
+          body_md: "Verändere die Sitze.",
+          mime_type: "text/html"
+        }),
+        { status: 201, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const form = new FormData();
+    form.set("section_id", "section-1");
+    form.set("material_kind", "simulation");
+    form.set("title", "Sitzverteilung");
+    form.set("body_md", "Verändere die Sitze.");
+    form.set("intent_id", "intent-simulation");
+    form.set("sha256", "b".repeat(64));
+
+    const result = await actions.createMaterial({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof actions.createMaterial>[0]["cookies"],
+      params: { unitId: "unit-1", nodeId: "node-1" },
+      request: requestWithFormData(form)
+    } as Parameters<typeof actions.createMaterial>[0]);
+
+    expect(backendRequestMock).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      "/api/teaching/units/unit-1/sections/section-1/materials/finalize",
+      expect.objectContaining({
+        body: JSON.stringify({
+          intent_id: "intent-simulation",
+          title: "Sitzverteilung",
+          sha256: "b".repeat(64),
+          body_md: "Verändere die Sitze."
+        })
+      })
+    );
+    expect(result).toMatchObject({
+      createMaterial: { ok: true, material_id: "simulation-1" }
+    });
+  });
+
   it("merges a created markdown material into the editor when the reread is stale", async () => {
     backendRequestMock.mockResolvedValueOnce(
       new Response(

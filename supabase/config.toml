@@ -110,7 +110,7 @@ file_size_limit = "50MiB"
 [storage.buckets.materials]
 public = false
 file_size_limit = "20MiB"
-allowed_mime_types = ["application/pdf", "image/png", "image/jpeg"]
+allowed_mime_types = ["application/pdf", "image/png", "image/jpeg", "text/html"]
 objects_path = "./storage/materials"
 
 # Learning submissions bucket for local dev/testing

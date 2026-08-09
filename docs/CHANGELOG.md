@@ -1,7 +1,11 @@
 # Changelog
 
 ## Unreleased
+### Features
+- feat(materials): Lehrkräfte können vollständig eingebettete HTML-Simulationen bis 5 MiB als exploratives Material mit optionaler Orientierung veröffentlichen. Vorschau und Lernansicht starten bewusst, lassen sich zurücksetzen und laufen in einer Offline-CSP-/Iframe-Sandbox ohne Tracking oder Ergebnisübertragung.
+
 ### Security (dev = prod)
+- security(simulations): Simulations-HTML wird beim Finalisieren bytegenau validiert und ausschließlich über berechtigungsgeprüfte GUSTAV-Player-Endpunkte ausgeliefert; direkte Storage-Downloads, Same-Origin-Rechte und Netzwerkverbindungen bleiben gesperrt.
 - security(cli): Teaching-Datei-Uploads, Datei-Downloads und H5P-Paket-Import/-Export/-Reset sind jetzt explizite `cliTokenAuth`-Capabilities mit getrennten `read`/`write`-Scopes; Browser-CSRF bleibt für Cookie-Flows unverändert aktiv.
 - security(cli): `gustav h5p import/reset --module-id` nutzt direkte Modul-Endpunkte, damit write-only CLI-Tokens ohne read-scoped `content-target`-Lookup funktionieren.
 - security(cli): Moduladressierte Material- und Aufgabenmutationen nutzen direkte Modul-Endpunkte, damit `write`-/`delete`-only CLI-Tokens keinen zusätzlichen read-scoped `content-target`-Lookup brauchen.
@@ -16,6 +20,7 @@
 - security(ssr): Internal SSR→API hops send an Origin header to satisfy strict CSRF.
 
 ### Config & Defaults
+- config(storage): `SIMULATION_MAX_UPLOAD_BYTES` begrenzt HTML-Simulationen auf maximal 5 MiB; der private Material-Bucket akzeptiert zusätzlich `text/html`.
 - config(storage): Clamp `LEARNING_MAX_UPLOAD_BYTES` / `MATERIALS_MAX_UPLOAD_BYTES` env overrides to the OpenAPI contract (10 MiB / 20 MiB) and ignore non-positive values to avoid accidental zero-byte policies.
 - config(urls): Default WEB_BASE and KC_PUBLIC_BASE_URL now use `https://…` on port 443 (Caddy TLS internal).
 - config(compose): Validate compose; avoid `host.docker.internal`; bind Ollama to loopback.

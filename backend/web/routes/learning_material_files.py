@@ -16,9 +16,9 @@ from urllib.parse import quote as _quote
 from uuid import UUID
 
 from backend.web.material_file_access import (
-    StudentMaterialFileMetadata,
+    StudentMaterialAssetMetadata,
+    load_student_material_asset_metadata_batch,
     load_student_material_file_metadata,
-    load_student_material_file_metadata_batch,
 )
 
 
@@ -52,6 +52,14 @@ def material_file_href(*, course_id: str, material_id: str, disposition: str) ->
     )
 
 
+def material_simulation_href(*, course_id: str, material_id: str) -> str:
+    """Return the stable same-origin sandboxed simulation URL."""
+    return (
+        f"/api/learning/courses/{_quote(str(course_id), safe='')}/materials/"
+        f"{_quote(str(material_id), safe='')}/simulation"
+    )
+
+
 def resolve_student_material_file_url(
     *,
     student_sub: str,
@@ -75,21 +83,22 @@ def resolve_student_material_file_url(
     return material_file_href(course_id=course_id, material_id=material_id, disposition="inline")
 
 
-def load_visible_material_file_metadata(
+def load_visible_material_asset_metadata(
     *,
     student_sub: str,
     course_id: str,
     material_ids: list[str],
-) -> dict[str, StudentMaterialFileMetadata]:
-    """Load visible file-material metadata for a student with one DB connection."""
+) -> dict[str, StudentMaterialAssetMetadata]:
+    """Load visible stored-material metadata with one fail-closed DB lookup."""
 
-    valid_material_ids = [str(material_id) for material_id in material_ids if _is_uuid_like(material_id)]
+    valid_material_ids = [
+        str(material_id) for material_id in material_ids if _is_uuid_like(material_id)
+    ]
     if not (student_sub and _is_uuid_like(course_id) and valid_material_ids):
         return {}
-
     repo = _get_repo()
     try:
-        return load_student_material_file_metadata_batch(
+        return load_student_material_asset_metadata_batch(
             repo=repo,
             student_sub=student_sub,
             course_id=str(course_id),
@@ -122,9 +131,11 @@ def attach_section_material_files(
         str(material.get("id") or "")
         for section in sections
         for material in (section.get("materials") or [])
-        if isinstance(section, dict) and isinstance(material, dict) and material.get("kind") == "file"
+        if isinstance(section, dict)
+        and isinstance(material, dict)
+        and material.get("kind") in {"file", "simulation"}
     ]
-    material_rows = load_visible_material_file_metadata(
+    material_rows = load_visible_material_asset_metadata(
         student_sub=student_sub,
         course_id=course_id,
         material_ids=material_ids,
@@ -137,13 +148,26 @@ def attach_section_material_files(
             material_payload = dict(material)
             if material_payload.get("kind") == "file":
                 material_id = str(material_payload.get("id") or "")
+                row = material_rows.get(material_id)
                 material_payload["file_url"] = (
-                    material_file_href(course_id=course_id, material_id=material_id, disposition="inline")
-                    if material_id in material_rows
+                    material_file_href(
+                        course_id=course_id, material_id=material_id, disposition="inline"
+                    )
+                    if row is not None and row.kind == "file"
                     else None
                 )
             else:
                 material_payload["file_url"] = None
+            if material_payload.get("kind") == "simulation":
+                material_id = str(material_payload.get("id") or "")
+                row = material_rows.get(material_id)
+                material_payload["simulation_url"] = (
+                    material_simulation_href(course_id=course_id, material_id=material_id)
+                    if row is not None and row.kind == "simulation"
+                    else None
+                )
+            else:
+                material_payload["simulation_url"] = None
             materials.append(material_payload)
         payload["materials"] = materials
         enriched.append(payload)
@@ -163,13 +187,13 @@ def attach_modular_material_files(
     _ = (unit_id, module_id)
 
     out = dict(payload)
-    material_rows = load_visible_material_file_metadata(
+    material_rows = load_visible_material_asset_metadata(
         student_sub=student_sub,
         course_id=course_id,
         material_ids=[
             str(material.get("id") or "")
             for material in (out.get("materials") or [])
-            if isinstance(material, dict) and material.get("kind") == "file"
+            if isinstance(material, dict) and material.get("kind") in {"file", "simulation"}
         ],
     )
     materials = []
@@ -177,13 +201,26 @@ def attach_modular_material_files(
         material_payload = dict(material)
         if material_payload.get("kind") == "file":
             material_id = str(material_payload.get("id") or "")
+            row = material_rows.get(material_id)
             material_payload["file_url"] = (
-                material_file_href(course_id=course_id, material_id=material_id, disposition="inline")
-                if material_id in material_rows
+                material_file_href(
+                    course_id=course_id, material_id=material_id, disposition="inline"
+                )
+                if row is not None and row.kind == "file"
                 else None
             )
         else:
             material_payload["file_url"] = None
+        if material_payload.get("kind") == "simulation":
+            material_id = str(material_payload.get("id") or "")
+            row = material_rows.get(material_id)
+            material_payload["simulation_url"] = (
+                material_simulation_href(course_id=course_id, material_id=material_id)
+                if row is not None and row.kind == "simulation"
+                else None
+            )
+        else:
+            material_payload["simulation_url"] = None
         materials.append(material_payload)
     out["materials"] = materials
     return out

@@ -196,8 +196,10 @@ async function finalizePreparedFileMaterial(
   unitId: string,
   sectionId: string,
   options: {
+    kind: "file" | "simulation";
     title: string;
     altText: string | null;
+    bodyMd: string;
     intentId: string;
     sha256: string;
     authRedirectPath: string;
@@ -216,7 +218,9 @@ async function finalizePreparedFileMaterial(
         intent_id: options.intentId,
         title: options.title,
         sha256: options.sha256,
-        alt_text: options.altText
+        ...(options.kind === "simulation"
+          ? { body_md: options.bodyMd }
+          : { alt_text: options.altText })
       })
     }
   );
@@ -474,7 +478,7 @@ export const actions: Actions = {
     }
 
     const payload: Record<string, unknown> = { title };
-    if (kind === "markdown") {
+    if (kind === "markdown" || kind === "simulation") {
       payload.body_md = bodyMd;
     } else {
       payload.alt_text = altText;
@@ -540,7 +544,7 @@ export const actions: Actions = {
     }
 
     let response: Response;
-    if (materialKind === "file") {
+    if (materialKind === "file" || materialKind === "simulation") {
       if (!uploadFile && !intentId && !sha256) {
         return fail(400, {
           createMaterial: {
@@ -560,8 +564,10 @@ export const actions: Actions = {
       }
 
       response = await finalizePreparedFileMaterial(fetch, cookies, params.unitId, sectionId, {
+        kind: materialKind,
         title,
-        altText,
+        altText: materialKind === "file" ? altText : null,
+        bodyMd,
         intentId,
         sha256,
         authRedirectPath
@@ -591,7 +597,7 @@ export const actions: Actions = {
     }
 
     if (!response.ok) {
-      if (materialKind === "file") {
+      if (materialKind === "file" || materialKind === "simulation") {
         const payload = (await response.json().catch(() => ({}))) as { detail?: string };
         const detail = payload.detail || "";
         if (detail === "intent_expired") {
@@ -609,7 +615,9 @@ export const actions: Actions = {
         if (detail === "mime_not_allowed") {
           return fail(response.status, {
             createMaterial: {
-              error: "Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.",
+              error: materialKind === "simulation"
+                ? "Bitte wähle eine selbstständige HTML-Datei aus."
+                : "Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.",
               values: {
                 ...values,
                 intent_id: "",
@@ -627,6 +635,16 @@ export const actions: Actions = {
                 intent_id: "",
                 sha256: ""
               }
+            }
+          });
+        }
+        if (detail === "invalid_simulation_html" || detail === "simulation_not_self_contained") {
+          return fail(response.status, {
+            createMaterial: {
+              error: detail === "simulation_not_self_contained"
+                ? "Die Simulation enthält externe Ressourcen, Navigationen oder Netzwerkzugriffe."
+                : "Die HTML-Datei ist keine vollständige, gültige UTF-8-Simulation.",
+              values: { ...values, intent_id: "", sha256: "" }
             }
           });
         }

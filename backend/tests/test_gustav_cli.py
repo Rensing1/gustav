@@ -823,6 +823,51 @@ def test_materials_upload_uses_intent_put_and_finalize(tmp_path, monkeypatch) ->
     ]
 
 
+def test_materials_upload_supports_self_contained_simulations(tmp_path, monkeypatch) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    source = tmp_path / "modell.html"
+    content = b"<!doctype html><html><body>Modell</body></html>"
+    source.write_bytes(content)
+    calls: list[tuple[str, str, dict[str, str] | None, object | None]] = []
+
+    def fake_json(method: str, url: str, *, headers=None, json_body=None):
+        calls.append((method, url, headers, json_body))
+        if url.endswith("/materials/upload-intents"):
+            return 200, {
+                "intent_id": "intent-sim",
+                "url": "https://storage.example/upload",
+                "headers": {"content-type": "text/html"},
+            }
+        return 201, {"id": "simulation-1", "kind": "simulation"}
+
+    monkeypatch.setattr(cli, "_http_json", fake_json)
+    monkeypatch.setattr(cli, "_http_bytes", lambda *args, **kwargs: (200, b""), raising=False)
+
+    code = cli.main(
+        [
+            "materials", "upload", "--unit-id", "unit-1", "--section-id", "section-1",
+            "--file", str(source), "--title", "Modell", "--kind", "simulation",
+            "--body-md", "Verändere den Regler.",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert calls[0][3] == {
+        "kind": "simulation",
+        "filename": "modell.html",
+        "mime_type": "text/html",
+        "size_bytes": len(content),
+    }
+    assert calls[1][3] == {
+        "intent_id": "intent-sim",
+        "title": "Modell",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "body_md": "Verändere den Regler.",
+    }
+
+
 def test_materials_download_refuses_overwrite_without_force(tmp_path, monkeypatch) -> None:
     _configure_test_cli(tmp_path, monkeypatch)
     target = tmp_path / "material.pdf"

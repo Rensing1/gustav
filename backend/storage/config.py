@@ -91,7 +91,14 @@ def get_materials_max_upload_bytes() -> int:
     return _parse_int_env("MATERIALS_MAX_UPLOAD_BYTES", contract_max, contract_max=contract_max)
 
 
+def get_simulation_max_upload_bytes() -> int:
+    """Maximum upload size for self-contained HTML simulations (5 MiB)."""
+    contract_max = 5 * 1024 * 1024
+    return _parse_int_env("SIMULATION_MAX_UPLOAD_BYTES", contract_max, contract_max=contract_max)
+
+
 __all__ += [
     "get_learning_max_upload_bytes",
     "get_materials_max_upload_bytes",
+    "get_simulation_max_upload_bytes",
 ]

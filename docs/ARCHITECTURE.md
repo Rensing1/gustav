@@ -276,6 +276,7 @@ E2E‑Tests (Identity):
 
 ### Storage (Supabase)
 - Self‑hosted via Supabase CLI. Storage ist privat; Zugriff ausschließlich über kurzlebige signierte URLs.
+- Interaktive Simulationen sind gespeicherte, ausführbare Materialien, aber keine Aufgaben. Der Presigned-Flow wird nur zum Upload genutzt. Beim Finalisieren prüft der Teaching-Use-Case tatsächliche Bytes, Hash, UTF-8 und Offline-Grenze; Learning und Teaching streamen validiertes HTML über eigene Endpunkte mit CSP- und Iframe-Sandbox ohne Same-Origin-Rechte. Zustand, Ergebnisse und Telemetrie verlassen die Simulation nicht.
 - Bucket: `materials` (lokal in `supabase/config.toml` konfiguriert; 20 MiB; PDF/PNG/JPEG).
 - Adapter: `backend/teaching/storage_supabase.py` implementiert Zugriff (presign upload/download, head, delete).
 - Wiring: In `backend/web/main.py` wird der Adapter automatisch aktiviert, wenn `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` gesetzt sind.

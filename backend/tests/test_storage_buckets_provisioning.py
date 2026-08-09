@@ -122,6 +122,17 @@ def test_local_supabase_config_allows_makecode_hex_in_submissions_bucket() -> No
     assert "application/x.filius.fls" in submissions_section
 
 
+def test_local_supabase_config_allows_html_only_in_private_materials_bucket() -> None:
+    """Self-contained simulation HTML must be uploadable to the private materials bucket."""
+    config = Path("supabase/config.toml").read_text(encoding="utf-8")
+
+    materials_section = config.split("[storage.buckets.materials]", maxsplit=1)[1]
+    materials_section = materials_section.split("\n[", maxsplit=1)[0]
+
+    assert "public = false" in materials_section
+    assert '"text/html"' in materials_section
+
+
 def test_filius_storage_migration_updates_allowlist_additively() -> None:
     """The Filius migration must preserve existing MIME entries instead of replacing them."""
     migration = Path("supabase/migrations/20260507120000_storage_submissions_bucket_allow_filius_fls.sql")

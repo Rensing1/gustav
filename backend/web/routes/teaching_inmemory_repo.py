@@ -669,6 +669,7 @@ class InMemoryTeachingRepo:
         filename: str,
         mime_type: str,
         size_bytes: int,
+        material_kind: str = "file",
         expires_at: datetime,
     ) -> Dict[str, Any]:
         if not self.section_exists_for_author(unit_id, section_id, author_id):
@@ -683,6 +684,7 @@ class InMemoryTeachingRepo:
             "filename": filename,
             "mime_type": mime_type,
             "size_bytes": size_bytes,
+            "material_kind": material_kind,
             "expires_at": expires_at,
             "consumed_at": None,
         }
@@ -694,6 +696,7 @@ class InMemoryTeachingRepo:
             "filename": filename,
             "mime_type": mime_type,
             "size_bytes": size_bytes,
+            "material_kind": material_kind,
             "expires_at": expires_at,
             "consumed_at": None,
         }
@@ -721,6 +724,7 @@ class InMemoryTeachingRepo:
             "filename": record["filename"],
             "mime_type": record["mime_type"],
             "size_bytes": record["size_bytes"],
+            "material_kind": record.get("material_kind", "file"),
             "expires_at": record["expires_at"],
             "consumed_at": record["consumed_at"],
         }
@@ -734,6 +738,7 @@ class InMemoryTeachingRepo:
         *,
         title: str,
         alt_text: Optional[str],
+        body_md: str = "",
         sha256: str,
     ) -> Tuple[Dict[str, Any], bool]:
         intent = self.upload_intents.get(intent_id)
@@ -761,11 +766,11 @@ class InMemoryTeachingRepo:
             unit_id=unit_id,
             section_id=section_id,
             title=title,
-            body_md="",
+            body_md=body_md,
             position=pos,
             created_at=now.isoformat(),
             updated_at=now.isoformat(),
-            kind="file",
+            kind=intent.get("material_kind", "file"),
             storage_key=intent["storage_key"],
             filename_original=intent["filename"],
             mime_type=intent["mime_type"],
@@ -789,6 +794,17 @@ class InMemoryTeachingRepo:
             return mat
         return None
 
+    def get_material_owned_in_unit(
+        self, unit_id: str, material_id: str, author_id: str
+    ) -> MaterialData | None:
+        unit = self.units.get(unit_id)
+        material = self.materials.get(material_id)
+        if unit is None or unit.author_id != author_id:
+            return None
+        if material is None or material.unit_id != unit_id:
+            return None
+        return material
+
     def update_material(
         self,
         unit_id: str,
@@ -811,12 +827,14 @@ class InMemoryTeachingRepo:
                 raise ValueError("invalid_title")
             mat.title = t
         if not _is_unset(body_md):
-            if mat.kind != "markdown":
+            if mat.kind not in {"markdown", "simulation"}:
                 raise ValueError("invalid_body_md")
             if body_md is None or not isinstance(body_md, str):
                 raise ValueError("invalid_body_md")
             mat.body_md = body_md
         if not _is_unset(alt_text):
+            if mat.kind != "file":
+                raise ValueError("invalid_alt_text")
             if alt_text is None:
                 mat.alt_text = None
             elif not isinstance(alt_text, str):

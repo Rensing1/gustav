@@ -33,6 +33,20 @@ class StudentMaterialFileMetadata:
     filename_original: str | None
 
 
+@dataclass(frozen=True)
+class StudentMaterialAssetMetadata:
+    """Visible stored material metadata, including its explicit kind."""
+
+    material_id: str
+    section_id: str
+    unit_id: str
+    kind: str
+    mime_type: str
+    size_bytes: int
+    storage_key: str
+    filename_original: str | None
+
+
 def _set_student_scope(cur, *, repo: object, student_sub: str, course_id: str) -> None:
     set_current_sub = getattr(repo, "_set_current_sub", None)
     if callable(set_current_sub):
@@ -138,6 +152,72 @@ def load_student_material_file_metadata_batch(
             for row in cur.fetchall() or []:
                 metadata = _coerce_row(row)
                 if metadata is not None:
+                    out[metadata.material_id] = metadata
+    except MaterialVisibilityLookupUnavailable:
+        raise
+    except Exception as exc:
+        raise MaterialVisibilityLookupUnavailable("visibility_lookup_failed") from exc
+    return out
+
+
+def load_student_material_asset_metadata(
+    *, repo: object, student_sub: str, course_id: str, material_id: str
+) -> StudentMaterialAssetMetadata | None:
+    """Return one visible stored material under student scope."""
+    rows = load_student_material_asset_metadata_batch(
+        repo=repo,
+        student_sub=student_sub,
+        course_id=course_id,
+        material_ids=[material_id],
+    )
+    return rows.get(str(material_id))
+
+
+def load_student_material_asset_metadata_batch(
+    *, repo: object, student_sub: str, course_id: str, material_ids: Iterable[str]
+) -> dict[str, StudentMaterialAssetMetadata]:
+    """Return visible file/simulation metadata keyed by material id."""
+    requested_ids = [str(material_id) for material_id in material_ids if str(material_id or "").strip()]
+    if not (student_sub and course_id and requested_ids):
+        return {}
+    dsn = _repo_dsn(repo)
+    out: dict[str, StudentMaterialAssetMetadata] = {}
+    try:
+        with open_repo_cursor(dsn=dsn) as (_conn, cur):
+            _set_student_scope(cur, repo=repo, student_sub=student_sub, course_id=course_id)
+            cur.execute(
+                """
+                select visible.material_id::text,
+                       visible.section_id::text,
+                       visible.unit_id::text,
+                       visible.kind,
+                       visible.mime_type,
+                       visible.size_bytes,
+                       visible.storage_key,
+                       visible.filename_original
+                  from public.get_material_asset_metadata_batch_for_student(
+                        %s,
+                        %s::uuid,
+                        %s::uuid[]
+                  ) visible
+                """,
+                (student_sub, course_id, requested_ids),
+            )
+            for row in cur.fetchall() or []:
+                try:
+                    metadata = StudentMaterialAssetMetadata(
+                        material_id=str(row[0]),
+                        section_id=str(row[1]),
+                        unit_id=str(row[2]),
+                        kind=str(row[3] or "").strip().lower(),
+                        mime_type=str(row[4] or "").strip().lower(),
+                        size_bytes=max(0, int(row[5] or 0)),
+                        storage_key=str(row[6] or "").strip(),
+                        filename_original=str(row[7]).strip() if row[7] is not None else None,
+                    )
+                except Exception:
+                    continue
+                if metadata.material_id and metadata.storage_key and metadata.kind:
                     out[metadata.material_id] = metadata
     except MaterialVisibilityLookupUnavailable:
         raise

@@ -28,6 +28,7 @@ from backend.web.routes.teaching_payloads import (
     MaterialUploadIntentPayload,
 )
 from backend.web.routes.teaching_serialization import _serialize_material
+from backend.web.simulation_player import build_simulation_response
 from backend.web.routes.teaching_shared import (
     _current_sub,
     _is_uuid_like,
@@ -98,6 +99,32 @@ def _wire_storage_if_configured():
     wire_storage = getattr(_teaching_module(), "_wire_storage", None)
     if callable(wire_storage):
         wire_storage()
+
+
+@teaching_unit_materials_router.get("/api/teaching/units/{unit_id}/materials/{material_id}/simulation")
+async def get_teaching_material_simulation(request: Request, unit_id: str, material_id: str):
+    """Stream an authored simulation with the same sandbox used for learners."""
+    user, error = _require_teacher(request)
+    if error:
+        return error
+    if not _is_uuid_like(unit_id) or not _is_uuid_like(material_id):
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400)
+    sub = _current_sub(user)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=_get_repo)
+    if guard:
+        return guard
+    try:
+        payload = _get_materials_service().load_simulation_html(
+            unit_id,
+            material_id,
+            sub,
+            storage=_storage_adapter(),
+        )
+    except LookupError:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    except (RuntimeError, ValueError):
+        return JSONResponse({"error": "service_unavailable"}, status_code=503)
+    return build_simulation_response(payload)
 
 
 @teaching_unit_materials_router.get("/api/teaching/units/{unit_id}/sections/{section_id}/materials")
@@ -279,7 +306,7 @@ async def delete_section_material(request: Request, unit_id: str, section_id: st
     material_snapshot = _serialize_material(material_obj)
     storage_key = material_snapshot.get("storage_key")
     material_kind = material_snapshot.get("kind")
-    if material_kind == "file" and storage_key:
+    if material_kind in {"file", "simulation"} and storage_key:
         try:
             delete_fn = getattr(_storage_adapter(), "delete_object", None)
             if callable(delete_fn):
@@ -343,13 +370,14 @@ async def create_section_material_upload_intent(
             filename=payload.filename,
             mime_type=payload.mime_type,
             size_bytes=int(payload.size_bytes),
+            material_kind=payload.kind,
             storage=_storage_adapter(),
         )
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     except ValueError as exc:
         detail = str(exc) or "invalid_input"
-        if detail not in {"mime_not_allowed", "size_exceeded", "invalid_filename"}:
+        if detail not in {"mime_not_allowed", "size_exceeded", "invalid_filename", "invalid_material_kind"}:
             detail = "invalid_input"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)
     except RuntimeError as exc:
@@ -396,6 +424,7 @@ async def finalize_section_material_upload(
             title=payload.title,
             sha256=payload.sha256,
             alt_text=payload.alt_text,
+            body_md=payload.body_md,
             storage=_storage_adapter(),
         )
     except LookupError:
@@ -408,6 +437,10 @@ async def finalize_section_material_upload(
             "invalid_title",
             "mime_not_allowed",
             "invalid_alt_text",
+            "invalid_body_md",
+            "invalid_simulation_html",
+            "simulation_not_self_contained",
+            "size_exceeded",
         }:
             detail = "invalid_input"
         return JSONResponse({"error": "bad_request", "detail": detail}, status_code=400)

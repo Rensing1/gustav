@@ -126,22 +126,26 @@ Siehe: `docs/references/gustav_cli.md`.
   - Body `{ material_ids: [uuid,…] }` muss exakt die aktuelle ID‑Menge enthalten
   - 200 mit neuer Reihenfolge; 400 (Duplikate/Inkonsistenz/Invalid‑UUID); 404/403
 
-Datei‑Flow (presigned Upload)
+Datei- und Simulations-Flow (presigned Upload)
 - `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents`
-  - Body `{ filename, mime_type, size_bytes }`
+  - Body `{ kind?: 'file'|'simulation', filename, mime_type, size_bytes }`; fehlendes `kind` bedeutet weiterhin `file`
   - 201 `{ intent_id, material_id, storage_key, url, headers, accepted_mime_types, max_size_bytes, expires_at }`
   - Akzeptierte MIME: `application/pdf`, `image/png`, `image/jpeg`; Max: `20 MiB`; TTL Upload‑URL: 3 min
+  - Simulation: genau eine `.html`-Datei mit `text/html`, vollständig eingebettet, maximal `5 MiB`
 - Upload via `PUT url` (aus Response) mit angegebenen `headers`
 - `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize`
-  - Body `{ intent_id, title[1..200], sha256, alt_text? }`
+  - Body Datei `{ intent_id, title[1..200], sha256, alt_text? }`; Simulation `{ intent_id, title, sha256, body_md? }`
   - 201 bei Neuerstellung, 200 wenn bereits finalisiert (idempotent)
   - 400 Fehlercodes u.a.: `invalid_title | checksum_mismatch | intent_expired | mime_not_allowed | invalid_alt_text`
+  - Simulationen werden serverseitig aus dem Storage gelesen, gegen SHA-256, UTF-8, vollständiges HTML und den Offline-Vertrag geprüft. Externe Ressourcen, Frames, Imports, Netzwerk- und Navigations-APIs werden abgewiesen.
 - Browser-/SSR-Schnitt:
   - Der eigentliche Datei-Upload läuft im Browser (`upload-intent -> PUT -> sha256 -> finalize`).
   - Die SvelteKit-Action finalisiert nur noch vorbereitete Uploads; sie lädt keine Presign-URL serverseitig hoch.
   - Ohne aktiviertes JavaScript bleibt Textmaterial möglich; Datei-Materialien werden mit einer klaren Fehlermeldung abgewiesen statt halb serverseitig versucht.
 - `GET /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url?disposition=inline|attachment`
   - 200 `{ url, expires_at }`; `Cache-Control: private, no-store`; 400 `invalid_disposition`; 403/404
+- `GET /api/teaching/units/{unit_id}/materials/{material_id}/simulation`
+  - Streamt eine Autorenvorschau mit derselben CSP-/Iframe-Sandbox wie die Lernansicht; niemals Redirect oder Presigned-URL.
 
 #### Aufgaben (Tasks) je Abschnitt
 - `GET /api/teaching/units/{unit_id}/sections/{section_id}/tasks` (Author only)

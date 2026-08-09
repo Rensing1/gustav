@@ -13,6 +13,8 @@ class StorageAdapterProtocol(Protocol):
 
     def delete_object(self, *, bucket: str, key: str) -> None: ...
 
+    def read_object(self, *, bucket: str, key: str, max_bytes: int) -> bytes: ...
+
     def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> Dict[str, Any]: ...
 
 
@@ -26,6 +28,9 @@ class NullStorageAdapter:
         raise RuntimeError("storage_adapter_not_configured")
 
     def delete_object(self, *, bucket: str, key: str) -> None:  # noqa: D401
+        raise RuntimeError("storage_adapter_not_configured")
+
+    def read_object(self, *, bucket: str, key: str, max_bytes: int) -> bytes:  # noqa: D401
         raise RuntimeError("storage_adapter_not_configured")
 
     def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> Dict[str, Any]:  # noqa: D401

@@ -24,6 +24,7 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
   - `LEARNING_STORAGE_BUCKET` (default: `submissions`)
   - `LEARNING_SUBMISSIONS_BUCKET` (legacy fallback). Solange ältere Deployments noch die alte Variable nutzen, wird sie automatisch als Ersatz gelesen – ein späteres Umbenennen kann daher ohne Downtime erfolgen.
   - `MATERIALS_MAX_UPLOAD_BYTES` (default: 20 MiB)
+  - `SIMULATION_MAX_UPLOAD_BYTES` (default/clamped: 5 MiB)
   - `LEARNING_MAX_UPLOAD_BYTES` (default: 10 MiB)
   - See `.env.example` for a ready-to-copy template; store real values in `.env` (gitignored).
   - Upload limit overrides are clamped to the OpenAPI contract (10 MiB learning / 20 MiB teaching). Non-positive values fall back to the defaults to avoid accidental zero-byte policies.
@@ -31,6 +32,7 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 ## Security
 - Use Service Role key only in the backend. Never expose keys to the browser.
 - Buckets are private; the app uses signed URLs with short TTLs (upload: 3 min, download: 45 s).
+- Simulations use signed URLs only for upload. Executable HTML is validated and streamed by authenticated GUSTAV endpoints with CSP `sandbox allow-scripts` and `connect-src 'none'`; raw download URLs are never returned.
 - Download URL responses include `Cache-Control: private, no-store` to avoid caching.
 - Filenames and path segments are sanitized in the service to avoid traversal and odd characters.
 - Learning uploads follow a closed validation chain: private bucket, presigned upload, storage integrity verification, byte-signature validation, then submission persistence and queueing. Signature mismatches fail with `invalid_upload_content`; logs for this gate must not include storage keys, hashes, user IDs, or object paths.

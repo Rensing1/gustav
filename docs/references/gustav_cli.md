@@ -135,14 +135,14 @@ Materialien können über einen linearen Abschnitt oder über ein Modul adressie
 ```bash
 gustav materials list --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--json]
 gustav materials create --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --title <titel> --body-md <markdown>
-gustav materials upload --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --file <pfad> --title <titel> [--mime-type <mime>] [--alt-text <text>] [--json]
+gustav materials upload --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --file <pfad> --title <titel> [--kind file|simulation] [--mime-type <mime>] [--alt-text <text>] [--body-md <orientierung>] [--json]
 gustav materials download <material-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --output <pfad> [--force]
 gustav materials edit <material-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--title <titel>] [--body-md <markdown>] [--alt-text <text>]
 gustav materials delete <material-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --yes
 gustav materials reorder --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --ids <material-id>...
 ```
 
-`upload` nutzt den bestehenden sicheren Datei-Flow der Teaching-API: Upload-Intent erstellen, Datei per Presigned `PUT` hochladen, lokalen SHA-256 berechnen und anschließend finalisieren. Unterstützt werden die MIME-Typen des API-Vertrags: `application/pdf`, `image/png` und `image/jpeg` bis 20 MiB. `download` schreibt nur mit `--force` über eine bestehende lokale Datei.
+`upload` nutzt den bestehenden sicheren Upload-Intent-/Finalize-Flow. Dateien unterstützen PDF, PNG und JPEG bis 20 MiB. `--kind simulation` erwartet eine vollständig eingebettete HTML-Datei bis 5 MiB; `--body-md` setzt den optionalen Orientierungstext. `--alt-text` ist nur für Dateien zulässig. `download` schreibt nur mit `--force` über eine bestehende lokale Datei; Simulations-HTML wird nicht über den Download-Befehl herausgegeben.
 
 Bei lesenden Materialbefehlen mit `--module-id` löst die CLI intern das versteckte Inhaltsziel des Moduls auf:
 

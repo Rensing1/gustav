@@ -214,7 +214,7 @@ export type TeacherUnitWorkspaceEdge = {
 export type TeacherUnitNodeEditorMaterial = {
   id: string;
   title: string;
-  kind: "markdown" | "file";
+  kind: "markdown" | "file" | "simulation";
   position: number;
   body_md?: string | null;
   mime_type?: string | null;

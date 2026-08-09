@@ -210,6 +210,24 @@ class SupabaseStorageAdapter(StorageAdapterProtocol):
             norm_key = norm_key[len(prefix):]
         b.remove([norm_key])
 
+    def read_object(self, *, bucket: str, key: str, max_bytes: int) -> bytes:
+        """Read a small object while enforcing the caller's hard byte limit."""
+        b = self._bucket(bucket)
+        norm_key = key.lstrip("/")
+        prefix = f"{bucket}/"
+        if norm_key.startswith(prefix):
+            norm_key = norm_key[len(prefix):]
+        result = b.download(norm_key)
+        if isinstance(result, bytes):
+            payload = result
+        elif hasattr(result, "content"):
+            payload = bytes(result.content)
+        else:
+            payload = bytes(result)
+        if len(payload) > max_bytes:
+            raise ValueError("size_exceeded")
+        return payload
+
     def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str) -> Dict[str, Any]:
         b = self._bucket(bucket)
         norm_key = key.lstrip("/")

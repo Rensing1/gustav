@@ -16,11 +16,13 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-from backend.storage.config import get_materials_max_upload_bytes
+from backend.storage.config import get_materials_max_upload_bytes, get_simulation_max_upload_bytes
 from backend.web.material_file_access import (
     MaterialVisibilityLookupUnavailable,
+    load_student_material_asset_metadata,
     load_student_material_file_metadata,
 )
+from backend.web.simulation_player import build_simulation_response
 
 
 learning_material_file_router = APIRouter(tags=["Learning"])
@@ -59,6 +61,49 @@ def _teaching_storage_adapter() -> object | None:
 
 async def _download_storage_object_via_presign(**kwargs):  # noqa: ANN003
     return await _learning_module()._download_storage_object_via_presign(**kwargs)
+
+
+@learning_material_file_router.get("/api/learning/courses/{course_id}/materials/{material_id}/simulation")
+async def get_material_simulation(request: Request, course_id: str, material_id: str):
+    """Stream a visible simulation without revealing a storage URL."""
+    user, error = _require_student(request)
+    if error:
+        return error
+    try:
+        UUID(course_id)
+        UUID(material_id)
+    except ValueError:
+        return JSONResponse(
+            {"error": "bad_request", "detail": "invalid_uuid"},
+            status_code=400,
+            headers=_cache_headers_error(),
+        )
+    try:
+        metadata = load_student_material_asset_metadata(
+            repo=_get_repo(),
+            student_sub=str(user.get("sub", "")),
+            course_id=course_id,
+            material_id=material_id,
+        )
+    except MaterialVisibilityLookupUnavailable:
+        return JSONResponse(
+            {"error": "service_unavailable", "detail": "authorization_unavailable"},
+            status_code=503,
+            headers=_cache_headers_error(),
+        )
+    if metadata is None or metadata.kind != "simulation" or metadata.mime_type != "text/html":
+        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
+
+    payload = await _download_storage_object_via_presign(
+        bucket=(__import__("backend.teaching.services.materials", fromlist=["MaterialFileSettings"]).MaterialFileSettings().storage_bucket),
+        key=metadata.storage_key,
+        disposition="inline",
+        max_bytes=get_simulation_max_upload_bytes(),
+        adapter=_teaching_storage_adapter(),
+    )
+    if payload is None:
+        return JSONResponse({"error": "service_unavailable"}, status_code=503, headers=_cache_headers_error())
+    return build_simulation_response(payload)
 
 
 @learning_material_file_router.get("/api/learning/courses/{course_id}/materials/{material_id}/file")

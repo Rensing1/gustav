@@ -66,7 +66,7 @@ def test_teacher_unit_node_editor_contract_exists() -> None:
 
     material = spec["components"]["schemas"]["TeacherUnitNodeEditorMaterial"]
     assert material["required"] == ["id", "title", "kind", "position"]
-    assert material["properties"]["kind"]["enum"] == ["markdown", "file"]
+    assert material["properties"]["kind"]["enum"] == ["markdown", "file", "simulation"]
     assert material["properties"]["body_md"]["nullable"] is True
     assert material["properties"]["position"]["type"] == "integer"
     assert material["properties"]["mime_type"]["nullable"] is True

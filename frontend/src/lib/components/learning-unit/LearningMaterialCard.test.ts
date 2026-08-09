@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
 
 import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
@@ -10,6 +10,37 @@ import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
 import LearningMaterialCard from "./LearningMaterialCard.svelte";
 
 describe("LearningMaterialCard", () => {
+  it("starts, resets and closes simulations only after an explicit action", async () => {
+    render(LearningMaterialCard, {
+      props: {
+        material: {
+          id: "simulation-1",
+          title: "Sitzverteilung",
+          kind: "simulation",
+          body_md: "Verändere die **Anzahl der Sitze**.",
+          mime_type: "text/html",
+          simulation_url: "/api/learning/courses/course/materials/simulation-1/simulation"
+        },
+        expanded: true
+      }
+    });
+
+    expect(screen.getByText("Anzahl der Sitze")).toBeInTheDocument();
+    expect(document.querySelector(".learning-material-simulation__frame")).toBeNull();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Simulation starten" }));
+    const firstFrame = document.querySelector(".learning-material-simulation__frame");
+    expect(firstFrame).not.toBeNull();
+    expect(firstFrame).toHaveAttribute("sandbox", "allow-scripts");
+    expect(firstFrame).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(screen.getByRole("link", { name: "Separat öffnen" })).toHaveAttribute("target", "_blank");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Zurücksetzen" }));
+    expect(document.querySelector(".learning-material-simulation__frame")).not.toBe(firstFrame);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Simulation schließen" }));
+    expect(document.querySelector(".learning-material-simulation__frame")).toBeNull();
+  });
   it("renders markdown materials as prose instead of a raw pre block", () => {
     render(LearningMaterialCard, {
       props: {

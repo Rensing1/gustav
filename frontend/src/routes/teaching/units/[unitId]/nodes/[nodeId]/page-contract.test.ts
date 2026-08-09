@@ -34,6 +34,17 @@ describe("teacher node editor contract", () => {
     expect(routeSource).toContain('<input name="sha256" type="hidden" value=');
   });
 
+  it("offers self-contained simulations with an explicit sandboxed preview", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain('<option value="simulation">Interaktive Simulation</option>');
+    expect(routeSource).toContain('accept=".html,text/html"');
+    expect(routeSource).toContain("Vorschau starten");
+    expect(routeSource).toContain('sandbox="allow-scripts"');
+    expect(routeSource).toContain('referrerpolicy="no-referrer"');
+  });
+
   it("renders accessible inline status messages for editor actions", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

@@ -23,6 +23,11 @@ Hinweis (Breaking, 2025‑10‑28): `LearningSectionCore` verlangt jetzt das Fel
   - Cache: `Cache-Control: private, no-store`.
   - Query `include`: CSV‑Liste im Stil `form`, `explode: false`.
 
+- `GET /api/learning/courses/{course_id}/materials/{material_id}/simulation`
+  - Liefert freigegebenes, selbstständiges HTML nur nach Mitgliedschafts-, Release- und Modul-Unlock-Prüfung.
+  - Die Simulation startet in der Oberfläche erst nach einer bewussten Aktion und läuft ohne Same-Origin-Recht, Netzwerk, Popups, Navigation, persistente Zustände oder Ergebnisübertragung.
+  - `Zurücksetzen` erzeugt das Iframe neu; `Schließen` entfernt es vollständig.
+
 - `GET /api/learning/courses/{course_id}/tasks/{task_id}/submissions?limit&offset`
   - Liefert die eigenen Abgaben zu einer Aufgabe (`limit [1..100]`, default 20; `offset ≥ 0`).
   - Sortierung: `created_at desc`, sekundär `attempt_nr desc` (stabile Reihenfolge bei gleichen Timestamps).

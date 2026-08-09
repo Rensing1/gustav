@@ -12,6 +12,7 @@
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission, LearningTask } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
+  import { untrack } from "svelte";
 
   let {
     learnerSub = null,
@@ -22,7 +23,6 @@
     unitType,
     moduleId = null,
     history = [],
-    historyState = "loaded",
     domId = undefined,
     expanded = true,
     submitted = false,
@@ -49,7 +49,6 @@
     hideDialogPauseAction = false,
     enhanceSubmit = undefined,
     onToggle = null,
-    onToggleReviewPanel = null,
     onDismissFeedbackStatus = null,
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
@@ -73,7 +72,6 @@
     unitType: "linear" | "modular";
     moduleId?: string | null;
     history?: LearningSubmission[];
-    historyState?: SubmissionHistoryLoadState;
     domId?: string;
     expanded?: boolean;
     submitted?: boolean;
@@ -100,7 +98,6 @@
     hideDialogPauseAction?: boolean;
     enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
-    onToggleReviewPanel?: (() => void) | null;
     onDismissFeedbackStatus?: (() => void) | null;
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
@@ -122,18 +119,20 @@
     onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
 
-  type SummaryTab = "submission" | "feedback" | "evaluation";
   type SubmissionMode = "text" | "upload";
   type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
   type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
   type CompactTaskTone = "new" | "draft" | "pending" | "final" | "error";
-  let activeSummaryTab = $state<SummaryTab>("submission");
   let draftText = $state("");
   let editorMode = $state<SubmissionMode>("text");
   let selectedUploadFile = $state<File | null>(null);
   let hideExistingUpload = $state(false);
   let uploadInput = $state<HTMLInputElement | null>(null);
   let lastSubmissionFocused = $state(false);
+  let lastFeedbackPending = $state(false);
+  let lastReviewPanelOpen = $state(untrack(() => reviewPanelOpen));
+  let feedbackDisclosureOpen = $state(false);
+  let submissionDisclosureOpen = $state(untrack(() => reviewPanelOpen));
 
   function uploadOnly(): boolean {
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius";
@@ -158,10 +157,6 @@
 
   function hasFinalSubmission(): boolean {
     return Boolean(latestFinalSubmissionAt());
-  }
-
-  function canFinalizeLatestDraft(): boolean {
-    return latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "completed";
   }
 
   function latestSubmission(): LearningSubmission | null {
@@ -194,10 +189,6 @@
       .find((line) => line.length > 0);
 
     return firstNonEmptyLine ?? taskTitle;
-  }
-
-  function showSubmissionSummary(): boolean {
-    return task.kind !== "h5p" && reviewPanelOpen && hasSubmission();
   }
 
   function usesCompactTaskLayout(): boolean {
@@ -274,7 +265,8 @@
     if (key) {
       window.localStorage.removeItem(key);
     }
-    draftText = key ? window.sessionStorage.getItem(key) ?? "" : "";
+    const storedDraft = key ? window.sessionStorage.getItem(key) : null;
+    draftText = storedDraft ?? (latestSubmission()?.kind === "text" ? latestSubmission()?.text_body ?? "" : "");
   }
 
   function setEditorMode(next: SubmissionMode) {
@@ -377,25 +369,41 @@
     return submission ? buildSubmissionArtifactView(submission) : null;
   }
 
-  function evaluationSummary(submission: LearningSubmission): string {
-    const score = submission.analysis_json?.score;
-    if (typeof score === "number") {
-      return `Punktestand: ${score}`;
-    }
-    if (submission.score_raw !== null && submission.score_raw !== undefined) {
-      return `${submission.score_raw}/${submission.score_max ?? 0}`;
-    }
-    return submission.analysis_status;
+  function hasEvaluation(submission: LearningSubmission): boolean {
+    return Boolean(submission.analysis_json?.criteria_results?.length);
   }
 
-  function summaryPanelLabel(tab: SummaryTab): string {
-    if (tab === "submission") {
-      return "Abgabe";
+  function hasInlineResponse(): boolean {
+    const submission = latestSubmission();
+    return Boolean(submission && task.kind !== "dialog" && task.kind !== "h5p");
+  }
+
+  function canOfferFinalization(): boolean {
+    const submission = latestSubmission();
+    return Boolean(
+      submission &&
+      submission.intent === "feedback" &&
+      submission.analysis_status === "completed"
+    );
+  }
+
+  function currentDraftMatchesFeedback(): boolean {
+    const submission = latestSubmission();
+    if (!submission || !canOfferFinalization()) {
+      return false;
     }
-    if (tab === "feedback") {
-      return "Rückmeldung";
+    if (editorMode === "text") {
+      return submission.kind === "text" && draftText.trim() === (submission.text_body ?? "").trim();
     }
-    return "Auswertung";
+    return isUploadSubmission(submission) && !selectedUploadFile && !hideExistingUpload;
+  }
+
+  function editingLocked(): boolean {
+    return feedbackPending || (reviewPanelOpen && hasFinalSubmission());
+  }
+
+  function feedbackActionLabel(): string {
+    return canOfferFinalization() ? "Rückmeldung erneut einholen" : "Rückmeldung einholen";
   }
 
   function feedbackPendingMessage(): string | null {
@@ -430,26 +438,6 @@
       return "Du musst nichts erneut abgeben. GUSTAV prüft den Stand weiter.";
     }
     return null;
-  }
-
-  function historyStateMessage(): string | null {
-    if (latestSubmission()) {
-      return null;
-    }
-    if (historyState === "loading") {
-      return "Die Abgabe wird geladen ...";
-    }
-    if (historyState === "failed") {
-      return "Die Abgabe konnte nicht geladen werden. Bitte versuche es erneut.";
-    }
-    if ((historyState === "not_loaded" || historyState === "unavailable") && hasSubmission()) {
-      return "Die gespeicherte Abgabe ist momentan nicht verfügbar.";
-    }
-    return null;
-  }
-
-  function renderEvaluationCriteria(submission: LearningSubmission): boolean {
-    return Boolean(submission.analysis_json?.criteria_results?.length);
   }
 
   function statusHeadline(): string {
@@ -515,13 +503,8 @@
   }
 
   $effect(() => {
-    if (!reviewPanelOpen) {
-      activeSummaryTab = "submission";
-    }
-  });
-
-  $effect(() => {
-    if (submissionFocused && !lastSubmissionFocused) {
+    const workspaceActive = submissionFocused || reviewPanelOpen;
+    if (workspaceActive && !lastSubmissionFocused) {
       const nextMode = preferredEditorMode();
       editorMode = nextMode;
       if (nextMode === "text") {
@@ -533,7 +516,26 @@
         uploadInput.value = "";
       }
     }
-    lastSubmissionFocused = submissionFocused;
+    lastSubmissionFocused = workspaceActive;
+  });
+
+  $effect(() => {
+    if (lastFeedbackPending && !feedbackPending && message === "feedback") {
+      feedbackDisclosureOpen = true;
+      selectedUploadFile = null;
+      hideExistingUpload = false;
+      if (uploadInput) {
+        uploadInput.value = "";
+      }
+    }
+    lastFeedbackPending = feedbackPending;
+  });
+
+  $effect(() => {
+    if (reviewPanelOpen && !lastReviewPanelOpen) {
+      submissionDisclosureOpen = true;
+    }
+    lastReviewPanelOpen = reviewPanelOpen;
   });
 
 </script>
@@ -561,16 +563,6 @@
       </div>
 
       <div class="learning-task-row__actions">
-        {#if hasSubmission() && task.kind !== "h5p"}
-          <button
-            class:workspace-top-action--active={reviewPanelOpen}
-            class="workspace-top-action workspace-top-action--quiet"
-            type="button"
-            onclick={() => onToggleReviewPanel?.()}
-          >
-            Meine Abgabe
-          </button>
-        {/if}
         <button
           class:workspace-top-action--active={submissionFocused}
           class:workspace-top-action--accent={!hasSubmission()}
@@ -587,25 +579,6 @@
         >
           {actionLabel()}
         </button>
-        {#if task.kind !== "h5p" && canFinalizeLatestDraft()}
-          <form method="POST" use:enhance={enhanceSubmit}>
-            <input type="hidden" name="task_id" value={task.id} />
-            <input type="hidden" name="task_kind" value={task.kind} />
-            <input type="hidden" name="unit_type" value={unitType} />
-            {#if moduleId}
-              <input type="hidden" name="module_id" value={moduleId} />
-            {/if}
-            <button
-              class="workspace-top-action workspace-top-action--accent"
-              name="submission_intent"
-              type="submit"
-              value="submit"
-              disabled={feedbackPending}
-            >
-              Endgültig abgeben
-            </button>
-          </form>
-        {/if}
       </div>
     </section>
   {:else if !workspaceOnly}
@@ -642,8 +615,6 @@
               tone={feedbackMessageTone()}
               title={feedbackPendingMessage()!}
               description={feedbackMessageDescription()}
-              actionLabel={message === "feedback" ? "Rückmeldung ansehen" : null}
-              onAction={message === "feedback" ? onToggleReviewPanel : null}
               onDismiss={onDismissFeedbackStatus}
               dismissible={feedbackMessageTone() === "error"}
             />
@@ -666,7 +637,7 @@
           {/if}
         {/if}
 
-        {#if submissionFocused}
+        {#if submissionFocused || reviewPanelOpen}
           <section class="learning-task-inline-editor">
             {#if !workspaceOnly}
               <header class="learning-task-inline-editor__header">
@@ -680,7 +651,7 @@
                   <p class="learning-task-inline-editor__copy">Die Bearbeitung bleibt Teil derselben Arbeitsfläche.</p>
                 {/if}
               </div>
-              {#if task.kind !== "dialog"}
+              {#if task.kind !== "dialog" && !reviewPanelOpen}
                 <button
                   class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
                   type="button"
@@ -690,6 +661,82 @@
                 </button>
               {/if}
               </header>
+            {/if}
+
+            {#if hasInlineResponse()}
+              <section class="learning-task-inline-response" aria-label="Rückmeldung zu deiner Abgabe">
+                <p class="learning-task-inline-response__meta">
+                  Zu deiner Abgabe · {latestSubmissionOrThrow().created_at}
+                </p>
+
+                <div class="learning-response-group">
+                  {#if latestSubmissionOrThrow().feedback_md}
+                    <details class="learning-response-panel" bind:open={feedbackDisclosureOpen}>
+                      <summary>Rückmeldung</summary>
+                      <div class="learning-response-panel__body markdown-prose">
+                        {@html renderMarkdown(latestSubmissionOrThrow().feedback_md ?? "")}
+                      </div>
+                    </details>
+                  {/if}
+
+                  {#if hasEvaluation(latestSubmissionOrThrow())}
+                    <details class="learning-response-panel">
+                      <summary>Auswertung</summary>
+                      <div class="learning-response-panel__body">
+                        <ul class="learning-unit-criteria">
+                          {#each latestSubmissionOrThrow().analysis_json?.criteria_results ?? [] as criterion}
+                            <li>
+                              <strong>{criterion.criterion}</strong>
+                              {#if criterion.score !== undefined && criterion.score !== null}
+                                : {criterion.score}/{criterion.max_score ?? 10}
+                              {/if}
+                              {#if criterion.explanation_md}
+                                <div class="markdown-prose">
+                                  {@html renderMarkdown(criterion.explanation_md)}
+                                </div>
+                              {/if}
+                            </li>
+                          {/each}
+                        </ul>
+                      </div>
+                    </details>
+                  {/if}
+
+                  <details class="learning-response-panel" bind:open={submissionDisclosureOpen}>
+                    <summary>Meine Abgabe</summary>
+                    <div class="learning-response-panel__body">
+                      {#if submittedFile()?.mime.startsWith("image/")}
+                        <div class="learning-task-submission-summary__asset">
+                          <img alt="Abgabevorschau" class="learning-task-submission-summary__image" src={submittedFile()?.url} />
+                          <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
+                          <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
+                        </div>
+                      {:else if submittedFile()?.mime === "application/pdf"}
+                        <div class="learning-task-submission-summary__asset">
+                          <iframe
+                            class="learning-task-submission-summary__frame"
+                            src={submittedFile()?.url}
+                            title={`Abgabe ${latestSubmissionOrThrow().created_at}`}
+                          ></iframe>
+                          <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
+                          <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
+                        </div>
+                      {:else if submittedArtifact()}
+                        <LearningSubmissionArtifactView submission={latestSubmissionOrThrow()} />
+                      {:else if submittedFile()}
+                        <div class="learning-task-submission-summary__asset">
+                          <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
+                          <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
+                        </div>
+                      {:else if latestSubmissionOrThrow().text_body}
+                        <div class="markdown-prose">
+                          {@html renderMarkdown(latestSubmissionOrThrow().text_body ?? "")}
+                        </div>
+                      {/if}
+                    </div>
+                  </details>
+                </div>
+              </section>
             {/if}
 
             {#if task.kind === "dialog"}
@@ -732,8 +779,8 @@
                   name={`answer-mode-${task.id}`}
                   value={editorMode}
                   options={[
-                    { value: "text", label: "Text schreiben" },
-                    { value: "upload", label: "Datei hochladen" }
+                    { value: "text", label: "Text schreiben", disabled: editingLocked() },
+                    { value: "upload", label: "Datei hochladen", disabled: editingLocked() }
                   ]}
                   onValueChange={(value) => setEditorMode(value as SubmissionMode)}
                 />
@@ -754,14 +801,33 @@
                         name="text_body"
                         value={draftText}
                         placeholder="Schreibe hier deine Lösung."
+                        disabled={editingLocked()}
                         onInput={updateDraft}
                       />
                     </section>
                     <div class="learning-submission-editor__actions">
-                      <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={feedbackPending}>
-                        Rückmeldung einholen
+                      <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={editingLocked()}>
+                        {feedbackActionLabel()}
                       </button>
+                      {#if canOfferFinalization()}
+                        <button
+                          class="workspace-top-action workspace-top-action--accent"
+                          name="submission_intent"
+                          type="submit"
+                          value="submit"
+                          disabled={editingLocked() || !currentDraftMatchesFeedback()}
+                        >
+                          Endgültig abgeben
+                        </button>
+                      {/if}
                     </div>
+                    {#if canOfferFinalization()}
+                      <p class="learning-submission-editor__final-hint">
+                        {currentDraftMatchesFeedback()
+                          ? "Diese Fassung kann endgültig abgegeben werden."
+                          : "Für diese Fassung zuerst Rückmeldung einholen."}
+                      </p>
+                    {/if}
                   </form>
                 </div>
               {/if}
@@ -783,6 +849,7 @@
                       name="upload_file"
                       type="file"
                       accept={uploadAccept()}
+                      disabled={editingLocked()}
                       onchange={handleUploadSelection}
                     />
                   </label>
@@ -796,6 +863,7 @@
                         <button
                           class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
                           type="button"
+                          disabled={editingLocked()}
                           onclick={clearUploadSelection}
                         >
                           Entfernen
@@ -805,16 +873,17 @@
                   {:else if currentUploadSubmission()}
                     <section class="learning-submission-upload__selected" aria-label="Bisherige Datei">
                       <div>
-                        <p class="learning-submission-upload__selected-name">Bisherige Datei</p>
+                        <p class="learning-submission-upload__selected-name">Aktuelle Datei</p>
                         <p class="learning-submission-upload__selected-meta">{fileSummary(currentUploadSubmission()!)}</p>
                       </div>
                       <div class="learning-submission-upload__selected-actions">
                         <button
                           class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
                           type="button"
-                          onclick={clearUploadSelection}
+                          disabled={editingLocked()}
+                          onclick={triggerUploadPicker}
                         >
-                          Entfernen
+                          Andere Datei auswählen
                         </button>
                       </div>
                     </section>
@@ -825,16 +894,34 @@
                       name="submission_intent"
                       type={onSubmitUploadFeedback ? "button" : "submit"}
                       value="feedback"
-                      disabled={feedbackPending || !hasUploadReadyForSubmit()}
+                      disabled={editingLocked() || !hasUploadReadyForSubmit()}
                       onclick={() => {
                         if (onSubmitUploadFeedback) {
                           submitUploadFeedback();
                         }
                       }}
                     >
-                      Rückmeldung einholen
+                      {feedbackActionLabel()}
                     </button>
+                    {#if canOfferFinalization()}
+                      <button
+                        class="workspace-top-action workspace-top-action--accent"
+                        name="submission_intent"
+                        type="submit"
+                        value="submit"
+                        disabled={editingLocked() || !currentDraftMatchesFeedback()}
+                      >
+                        Endgültig abgeben
+                      </button>
+                    {/if}
                   </div>
+                  {#if canOfferFinalization()}
+                    <p class="learning-submission-editor__final-hint">
+                      {currentDraftMatchesFeedback()
+                        ? "Diese Fassung kann endgültig abgegeben werden."
+                        : "Für diese Fassung zuerst Rückmeldung einholen."}
+                    </p>
+                  {/if}
                 </form>
               </div>
             {/if}
@@ -846,16 +933,6 @@
         {:else}
           {#if !usesCompactTaskLayout()}
             <div class="learning-task-cta-row">
-              {#if hasSubmission() && task.kind !== "h5p"}
-                <button
-                  class:workspace-top-action--active={reviewPanelOpen}
-                  class="workspace-top-action workspace-top-action--quiet"
-                  type="button"
-                  onclick={() => onToggleReviewPanel?.()}
-                >
-                  Meine Abgabe
-                </button>
-              {/if}
               <button
                 class:workspace-top-action--accent={!hasSubmission()}
                 class:workspace-top-action--quiet={hasSubmission()}
@@ -871,154 +948,7 @@
               >
                 {actionLabel()}
               </button>
-              {#if task.kind !== "h5p" && canFinalizeLatestDraft()}
-                <form method="POST" use:enhance={enhanceSubmit}>
-                  <input type="hidden" name="task_id" value={task.id} />
-                  <input type="hidden" name="task_kind" value={task.kind} />
-                  <input type="hidden" name="unit_type" value={unitType} />
-                  {#if moduleId}
-                    <input type="hidden" name="module_id" value={moduleId} />
-                  {/if}
-                  <button
-                    class="workspace-top-action workspace-top-action--accent"
-                    name="submission_intent"
-                    type="submit"
-                    value="submit"
-                    disabled={feedbackPending}
-                  >
-                    Endgültig abgeben
-                  </button>
-                </form>
-              {/if}
             </div>
-          {/if}
-          {#if showSubmissionSummary()}
-            <section class="learning-task-submission-summary" aria-label="Meine Abgabe">
-              <header class="learning-task-submission-summary__header">
-                <div class="learning-task-submission-summary__copy">
-                  <p class="workspace-label">Meine Abgabe</p>
-                  {#if latestSubmission()}
-                    <p class="learning-task-submission-summary__meta">{latestSubmissionOrThrow().created_at}</p>
-                  {/if}
-                </div>
-              </header>
-
-              {#if usesCompactTaskLayout()}
-                <div class="markdown-prose learning-task-inline-editor__statement">
-                  {@html renderMarkdown(task.instruction_md)}
-                </div>
-              {/if}
-
-              <div class="learning-task-submission-summary__tabs" role="tablist" aria-label="Letzte Abgabe">
-                <button
-                  class:workspace-tab--active={activeSummaryTab === "submission"}
-                  class="workspace-tab"
-                  role="tab"
-                  type="button"
-                  aria-selected={activeSummaryTab === "submission"}
-                  onclick={() => (activeSummaryTab = "submission")}
-                >
-                  Abgabe
-                </button>
-                <button
-                  class:workspace-tab--active={activeSummaryTab === "feedback"}
-                  class="workspace-tab"
-                  role="tab"
-                  type="button"
-                  aria-selected={activeSummaryTab === "feedback"}
-                  onclick={() => (activeSummaryTab = "feedback")}
-                >
-                  Rückmeldung
-                </button>
-                <button
-                  class:workspace-tab--active={activeSummaryTab === "evaluation"}
-                  class="workspace-tab"
-                  role="tab"
-                  type="button"
-                  aria-selected={activeSummaryTab === "evaluation"}
-                  onclick={() => (activeSummaryTab = "evaluation")}
-                >
-                  Auswertung
-                </button>
-              </div>
-
-              <div class="learning-task-submission-summary__panel" role="tabpanel" aria-label={summaryPanelLabel(activeSummaryTab)}>
-                {#if activeSummaryTab === "submission"}
-                  {#if task.kind === "dialog" && latestSubmission()?.dialog_session_id}
-                    <LearningDialogWorkspace {learnerSub} {courseId} {task} existingSessionId={latestSubmission()?.dialog_session_id ?? null} readOnly={true} />
-                  {:else if latestSubmission() && submittedArtifact()}
-                    <LearningSubmissionArtifactView submission={latestSubmissionOrThrow()} />
-                  {:else if latestSubmission() && latestSubmissionOrThrow().text_body}
-                    <div class="markdown-prose">
-                      {@html renderMarkdown(latestSubmissionOrThrow().text_body)}
-                    </div>
-                  {:else if submittedFile()?.mime.startsWith("image/")}
-                    <div class="learning-task-submission-summary__asset">
-                      <img alt="Abgabevorschau" class="learning-task-submission-summary__image" src={submittedFile()?.url} />
-                      <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
-                      <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
-                    </div>
-                  {:else if submittedFile()?.mime === "application/pdf"}
-                    <div class="learning-task-submission-summary__asset">
-                      <iframe
-                        class="learning-task-submission-summary__frame"
-                        src={submittedFile()?.url}
-                        title={`Abgabe ${latestSubmissionOrThrow().created_at}`}
-                      ></iframe>
-                      <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
-                      <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
-                    </div>
-                  {:else if submittedFile()}
-                    <div class="learning-task-submission-summary__asset">
-                      <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
-                      <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
-                    </div>
-                  {:else if latestSubmission()}
-                    <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
-                  {:else if feedbackPending}
-                    <p class="learning-task-submission-summary__plain">Die aktuelle Abgabe wird vorbereitet.</p>
-                  {:else if historyStateMessage()}
-                    <p class="learning-task-submission-summary__plain">{historyStateMessage()}</p>
-                  {:else}
-                    <p class="learning-task-submission-summary__plain">Es liegt noch keine Abgabe vor.</p>
-                  {/if}
-                {:else if activeSummaryTab === "feedback"}
-                  {#if latestSubmission() && latestSubmissionOrThrow().feedback_md}
-                    <div class="markdown-prose">
-                      {@html renderMarkdown(latestSubmissionOrThrow().feedback_md)}
-                    </div>
-                  {:else if historyStateMessage()}
-                    <p class="learning-task-submission-summary__plain">{historyStateMessage()}</p>
-                  {:else}
-                    <p class="learning-task-submission-summary__plain">Es liegt noch keine Rückmeldung vor.</p>
-                  {/if}
-                {:else}
-                  {#if latestSubmission() && renderEvaluationCriteria(latestSubmissionOrThrow())}
-                    <ul class="learning-unit-criteria">
-                      {#each latestSubmissionOrThrow().analysis_json?.criteria_results ?? [] as criterion}
-                        <li>
-                          <strong>{criterion.criterion}</strong>
-                          {#if criterion.score !== undefined && criterion.score !== null}
-                            : {criterion.score}/{criterion.max_score ?? 10}
-                          {/if}
-                          {#if criterion.explanation_md}
-                            <div class="markdown-prose">
-                              {@html renderMarkdown(criterion.explanation_md)}
-                            </div>
-                          {/if}
-                        </li>
-                      {/each}
-                    </ul>
-                  {:else if latestSubmission()}
-                    <p class="learning-task-submission-summary__plain">{evaluationSummary(latestSubmissionOrThrow())}</p>
-                  {:else if historyStateMessage()}
-                    <p class="learning-task-submission-summary__plain">{historyStateMessage()}</p>
-                  {:else}
-                    <p class="learning-task-submission-summary__plain">Es liegt noch keine Auswertung vor.</p>
-                  {/if}
-                {/if}
-              </div>
-            </section>
           {/if}
         {/if}
       </div>

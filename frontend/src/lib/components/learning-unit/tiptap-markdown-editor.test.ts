@@ -48,4 +48,20 @@ describe("Tiptap Markdown adapter", () => {
     expect(editor.hasNode("codeBlock")).toBe(false);
     editor.destroy();
   });
+
+  it("can switch the editing surface between locked and editable", () => {
+    const host = document.createElement("div");
+    const editor = createTiptapMarkdownEditor({
+      element: host,
+      content: "Entwurf",
+      placeholder: "Material",
+      editable: false,
+      onUpdate: vi.fn()
+    });
+
+    expect(host.querySelector('[contenteditable="false"]')).not.toBeNull();
+    editor.setEditable(true);
+    expect(host.querySelector('[contenteditable="true"]')).not.toBeNull();
+    editor.destroy();
+  });
 });

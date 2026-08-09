@@ -22,15 +22,36 @@ const submission: LearningSubmission = {
 };
 
 describe("LearningResponseGroup", () => {
-  it("renders submission, feedback and evaluation as related disclosure blocks", () => {
+  it("renders feedback, evaluation and submission as ordered disclosure blocks", () => {
     render(LearningResponseGroup, {
       props: {
-        submission
+        submission: {
+          ...submission,
+          analysis_json: {
+            schema: "learning.v1",
+            criteria_results: [{ criterion: "Klarheit", score: 8, max_score: 10 }]
+          }
+        }
       }
     });
 
-    expect(screen.getByText("Abgabe")).toBeInTheDocument();
-    expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);
-    expect(screen.getByText("Bewertung")).toBeInTheDocument();
+    const group = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    expect(Array.from(group.querySelectorAll("summary"), (summary) => summary.textContent?.trim())).toEqual([
+      "Rückmeldung",
+      "Auswertung",
+      "Meine Abgabe"
+    ]);
+  });
+
+  it("omits empty feedback and evaluation disclosures", () => {
+    render(LearningResponseGroup, {
+      props: {
+        submission: { ...submission, feedback_md: null, analysis_json: null }
+      }
+    });
+
+    const group = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    expect(Array.from(group.querySelectorAll("summary"), (summary) => summary.textContent?.trim())).toEqual(["Meine Abgabe"]);
+    expect(screen.queryByText(/liegt noch keine/i)).toBeNull();
   });
 });

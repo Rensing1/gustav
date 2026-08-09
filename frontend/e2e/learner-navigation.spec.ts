@@ -18,7 +18,7 @@ async function pageFor(browser: Browser): Promise<{ context: BrowserContext; pag
 }
 
 test("@feature-acceptance follows graph, reading, task and feedback as one authenticated learning path", async ({ browser }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const unique = Date.now();
   const teacherEmail = `navigation_teacher_${unique}@${emailDomain}`;
   const learnerEmail = `navigation_learner_${unique}@${emailDomain}`;
@@ -44,6 +44,7 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     );
     await expect(learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" })).toBeVisible();
     await expectNoViewportOverflow(learner.page);
+    await expect(learner.page.locator(".learning-markdown-editor__toolbar")).toBeVisible();
     await expectLearnerTaskTheme(learner.page, "light");
     const workbench = learner.page.getByRole("region", { name: "Aufgabe bearbeiten" });
     const book = learner.page.getByRole("complementary", { name: "Aufgabe und Kontext" });
@@ -92,16 +93,44 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
 
     await learner.page.setViewportSize({ width: 1024, height: 768 });
     await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
-    await expect(learner.page.getByText("Aufgabe wird weiterbearbeitet.")).toBeVisible();
-    await expect(learner.page.getByRole("button", { name: "Zurück zur Aufgabe" })).toBeVisible();
+    await expect(learner.page.getByRole("region", { name: "Laufende Aufgabe" })).toHaveCount(0);
+    await expect(learner.page.getByText("Entwurf geöffnet")).toHaveCount(0);
+    await expect(learner.page.getByRole("button", { name: "Zurück zum Entwurf" })).toHaveCount(0);
+
+    await learner.page.setViewportSize({ width: 390, height: 844 });
+    await expectNoViewportOverflow(learner.page);
+    await learner.page.setViewportSize({ width: 1024, height: 768 });
+    await learner.page.evaluate(({ taskId, moduleId }) => {
+      const workspaceKey = Object.keys(window.sessionStorage).find(
+        (key) => key.startsWith("gustav.learning.workspace:") && key.endsWith(":tab")
+      );
+      if (!workspaceKey) throw new Error("learner workspace tab state missing");
+      const staleState = JSON.parse(window.sessionStorage.getItem(workspaceKey) ?? "{}") as Record<string, unknown>;
+      staleState.surface = "graph";
+      staleState.activeTask = {
+        itemKey: `task:${taskId}`,
+        taskId,
+        moduleId,
+        status: "editing",
+        editorMode: "text"
+      };
+      window.sessionStorage.setItem(workspaceKey, JSON.stringify(staleState));
+    }, { taskId: seeded.taskId, moduleId: seeded.graphModuleId });
+    await learner.page.reload();
+    await expect(learner.page.getByRole("region", { name: "Laufende Aufgabe" })).toHaveCount(0);
+    await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
+    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+    await expect(textEditor).toContainText("Dieser Entwurf bleibt beim Wechsel erhalten.");
+
+    await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
     await learner.page.getByRole("button", { name: /Quellen/ }).click();
-    await expect(learner.page).toHaveURL(
-      new RegExp(`\\?module=${seeded.graphModuleId}&task=${seeded.taskId}$`)
-    );
-    await expect(workbench.getByRole("button", { name: "Materialien", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
+    await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
+    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+    const materialsSwitch = workbench.getByRole("button", { name: "Materialien", exact: true });
+    await materialsSwitch.click();
+    await expect(materialsSwitch).toHaveAttribute("aria-pressed", "true");
+    await book.getByRole("button", { name: "Modul Quellen ein- oder ausklappen" }).click();
     const contextImage = book.getByRole("img", { name: seeded.contextImageAltText });
     await expect(contextImage).toBeVisible();
     await expect.poll(() => contextImage.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
@@ -119,13 +148,8 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     await workbench.getByRole("button", { name: "Aufgabe", exact: true }).click();
     await expect(textEditor).toContainText("Dieser Entwurf bleibt beim Wechsel erhalten.");
     await answerFormat.getByText("Datei hochladen", { exact: true }).click();
-    await expect(learner.page.getByText("beleg.pdf")).toBeVisible();
-
-    await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
-    await learner.page.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
-    await expect(learner.page).toHaveURL(
-      new RegExp(`\\?module=${seeded.graphModuleId}&task=${seeded.taskId}$`)
-    );
+    await expect(learner.page.getByText("beleg.pdf")).toHaveCount(0);
+    await expect(learner.page.getByLabel("Datei auswählen")).toHaveValue("");
 
     await answerFormat.getByText("Text schreiben", { exact: true }).click();
     await textEditor.fill("Digitale Kommunikation braucht klare Regeln, weil Grundrechte auch online gelten.");
@@ -135,8 +159,63 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     await expect(feedbackStatus.getByRole("status")).toContainText("Rückmeldung wird erstellt");
     await expect(learner.page.locator(".learning-task-feedback-status")).toHaveCount(1);
     await expect(feedbackStatus.getByRole("status")).toContainText("Rückmeldung ist bereit", { timeout: 120_000 });
-    await feedbackStatus.getByRole("button", { name: "Rückmeldung ansehen" }).click();
-    await expect(workbench.getByRole("region", { name: "Meine Abgabe" })).toBeVisible();
+    await expect(learner.page).toHaveURL(
+      new RegExp(`\\?module=${seeded.graphModuleId}&task=${seeded.taskId}$`)
+    );
+    const responseGroup = workbench.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    await expect(responseGroup).toBeVisible();
+    await expect(responseGroup.locator("details").filter({ hasText: "Rückmeldung" }).first()).toHaveAttribute("open", "");
+    await expect(textEditor).toHaveAttribute("contenteditable", "true");
+
+    await textEditor.fill("Digitale Kommunikation braucht klare und überprüfbare Regeln.");
+    await expect(responseGroup).toBeVisible();
+    await expect(learner.page.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
+    await expect(learner.page.getByText("Für diese Fassung zuerst Rückmeldung einholen.").first()).toBeVisible();
+    await learner.page.getByRole("button", { name: "Rückmeldung erneut einholen" }).click();
+    await expect(feedbackStatus.getByRole("status")).toContainText("Rückmeldung wird erstellt");
+    await expect(feedbackStatus.getByRole("status")).toContainText("Rückmeldung ist bereit", { timeout: 120_000 });
+    await expect(learner.page.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+
+    await learner.page.goto(
+      `/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}&task=${seeded.taskId}&panel=result`
+    );
+    const directResponseGroup = learner.page.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    await expect(directResponseGroup).toBeVisible();
+    await expect(directResponseGroup.locator("details").last()).toHaveAttribute("open", "");
+    await expect(learner.page.getByRole("button", { name: "Meine Abgabe" })).toHaveCount(0);
+
+    const directAnswerFormat = learner.page.getByRole("group", { name: "Antwortform" });
+    await directAnswerFormat.getByText("Datei hochladen", { exact: true }).click();
+    const uploadInput = learner.page.getByLabel("Datei auswählen");
+    await uploadInput.setInputFiles({
+      name: "skizze.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGN87mPDwMDAxMDAwMDAAAASCQFz7+pmVQAAAABJRU5ErkJggg==",
+        "base64"
+      )
+    });
+    await expect(learner.page.getByRole("region", { name: "Ausgewählte Datei" })).toContainText("skizze.png");
+    await learner.page.getByRole("button", { name: "Rückmeldung erneut einholen" }).click();
+    await expect(uploadInput).toBeDisabled();
+    await expect(feedbackStatus.getByRole("status")).toContainText("Rückmeldung wird erstellt");
+    await expect(feedbackStatus.getByRole("status")).toContainText("Rückmeldung ist bereit", { timeout: 120_000 });
+    await expect(learner.page.getByRole("region", { name: "Bisherige Datei" })).toContainText("Aktuelle Datei");
+    await expect(uploadInput).toHaveValue("");
+    await expect(directResponseGroup.getByRole("img", { name: "Abgabevorschau" })).toBeVisible();
+
+    await expect(learner.page.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    await learner.page.getByRole("button", { name: "Endgültig abgeben" }).click();
+    await expect(feedbackStatus.getByRole("status")).toContainText("Aufgabe abgegeben", { timeout: 120_000 });
+    await expect(uploadInput).toBeDisabled();
+
+    await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
+    await expect(learner.page.getByRole("region", { name: "Laufende Aufgabe" })).toHaveCount(0);
+    await expect(learner.page.getByText("Aufgabe wird weiterbearbeitet.")).toHaveCount(0);
+
+    await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
+    await learner.page.getByRole("button", { name: "Erneut bearbeiten" }).click();
+    await expect(learner.page.getByLabel("Datei auswählen")).toBeEnabled();
   } finally {
     await learner.context.close();
     await teacher.context.close();

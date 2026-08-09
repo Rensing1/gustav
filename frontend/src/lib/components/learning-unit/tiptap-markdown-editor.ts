@@ -9,6 +9,7 @@ type HeadingLevel = 1 | 2 | 3;
 export type TiptapMarkdownEditor = {
   getMarkdown: () => string;
   setMarkdown: (markdown: string, notify?: boolean) => void;
+  setEditable: (editable: boolean) => void;
   setBlockType: (level: HeadingLevel | null) => void;
   toggleBold: () => void;
   toggleItalic: () => void;
@@ -31,6 +32,7 @@ type CreateEditorOptions = {
   content: string;
   placeholder: string;
   ariaLabel?: string;
+  editable?: boolean;
   onUpdate: (markdown: string) => void;
   onStateChange?: () => void;
 };
@@ -45,6 +47,7 @@ export function createTiptapMarkdownEditor(options: CreateEditorOptions): Tiptap
     element: options.element,
     content: options.content,
     contentType: "markdown",
+    editable: options.editable ?? true,
     extensions: [
       StarterKit.configure({
         blockquote: false,
@@ -82,6 +85,9 @@ export function createTiptapMarkdownEditor(options: CreateEditorOptions): Tiptap
     getMarkdown: () => editor.getMarkdown(),
     setMarkdown(markdown, notify = false) {
       editor.commands.setContent(markdown, { contentType: "markdown", emitUpdate: notify });
+    },
+    setEditable(editable) {
+      editor.setEditable(editable);
     },
     setBlockType(level) {
       if (level === null) {

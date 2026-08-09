@@ -80,6 +80,19 @@ export function defaultLearnerWorkspaceState(): LearnerWorkspaceState {
   };
 }
 
+/**
+ * Returns the state used when a learner leaves the task surface for the graph.
+ * The graph never owns a task workspace: browser drafts remain in their own
+ * task-scoped storage and are restored only through the regular task entry.
+ */
+export function learningPathState(state: LearnerWorkspaceState): LearnerWorkspaceState {
+  return {
+    ...state,
+    surface: "graph",
+    activeTask: null
+  };
+}
+
 export function learnerWorkspaceStorageKeys(
   learnerSub: string | null,
   courseId: string,
@@ -188,6 +201,9 @@ export function normalizeLearnerWorkspaceState(
   const readingCandidate = safeString(rawContext.readingReferenceKey);
   const legacyMode = (candidate as Partial<LearnerWorkspaceState> & { mode?: unknown }).mode;
   const requestedSurface = candidate.surface ?? (legacyMode === "working" ? "task" : "reading");
+  if (requestedSurface === "graph") {
+    activeTask = null;
+  }
   const surface: LearnerWorkspaceSurface = requestedSurface === "task" && activeTask
     ? "task"
     : requestedSurface === "graph"

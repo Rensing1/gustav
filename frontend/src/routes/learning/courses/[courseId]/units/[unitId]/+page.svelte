@@ -1,7 +1,7 @@
 <script lang="ts">
   import { applyAction } from "$app/forms";
   import { browser } from "$app/environment";
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
 
   import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
@@ -49,6 +49,7 @@
   } from "$lib/learning-unit/layout";
   import {
     defaultLearnerWorkspaceState,
+    learningPathState,
     learnerWorkspaceStorageKeys,
     readLearnerWorkspaceState,
     serializeLearnerWorkspacePersistentState,
@@ -122,7 +123,6 @@
   let closedModuleUndoTimer: number | null = null;
 
   let rebuildToken = 0;
-
   function isModularUnit(): boolean {
     return data.selectedUnit?.unit.unit_type === "modular";
   }
@@ -256,6 +256,10 @@
       return;
     }
 
+    if (item.task.has_submission) {
+      await ensureSubmissionHistoryLoaded(item.task.id);
+    }
+
     setLearnerWorkspaceState({
       ...learnerWorkspace,
       surface: "task",
@@ -336,11 +340,7 @@
 
   function showLearningPath() {
     if (learnerWorkspace.surface === "task" && learnerWorkspace.activeTask) {
-      setLearnerWorkspaceState({
-        ...learnerWorkspace,
-        surface: "graph",
-        activeTask: learnerWorkspace.activeTask
-      });
+      setLearnerWorkspaceState(learningPathState(learnerWorkspace));
       syncLearnerNavigation({ surface: "graph", moduleId: null, taskId: null, panel: null }, "push");
       return;
     }
@@ -352,34 +352,22 @@
     syncLearnerNavigation({ surface: "graph", moduleId: null, taskId: null, panel: null }, "replace");
   }
 
-  function returnToActiveTask() {
-    const task = learnerWorkspace.activeTask;
-    if (!task) return;
-    setLearnerWorkspaceState({ ...learnerWorkspace, surface: "task" });
-    syncLearnerNavigation(
-      {
-        surface: "task",
-        moduleId: task.moduleId,
-        taskId: task.taskId,
-        panel: task.status === "result" ? "result" : null
-      },
-      "replace"
-    );
-  }
-
   async function restoreSurfaceFromUrl() {
     if (!browser) return;
     const url = new URL(window.location.href);
     const requestedModuleId = url.searchParams.get("module");
     const requestedTaskId = url.searchParams.get("task") ?? url.searchParams.get("history");
-    const resultRequested = url.searchParams.get("panel") === "result" || url.searchParams.has("history");
+    const resultRequested =
+      url.searchParams.get("panel") === "result" ||
+      url.searchParams.has("history") ||
+      Boolean(requestedTaskId && requestedTaskId === actionTaskId());
 
     if (isModularUnit()) {
       if (!requestedModuleId || !openableModuleIds().has(requestedModuleId)) {
         setLearnerWorkspaceState({
           ...learnerWorkspace,
           surface: "graph",
-          activeTask: learnerWorkspace.activeTask
+          activeTask: null
         });
         syncLearnerNavigation({ surface: "graph", moduleId: null, taskId: null, panel: null }, "replace");
         return;
@@ -804,6 +792,12 @@
     );
   }
 
+  async function restoreOpenModulesInBackground(moduleIds: string[]) {
+    const pendingIds = moduleIds.filter((moduleId) => !moduleCache[moduleId]);
+    await Promise.all(pendingIds.map((moduleId) => ensureModuleLoaded(moduleId)));
+    restoreHistoryContext();
+  }
+
   function setModularWorkspaceState(next: ModularWorkspaceState) {
     modularWorkspace = next;
   }
@@ -1199,14 +1193,6 @@
     };
   }
 
-  async function toggleReviewPanel(taskId: string) {
-    const entries = await ensureSubmissionHistoryLoaded(taskId);
-    if (!entries.length && submissionHistoryStateByTask[taskId] !== "loaded") {
-      return;
-    }
-    markActiveTaskResult(taskId);
-  }
-
   function dismissFeedbackStatus(taskId: string) {
     if (feedbackStatusTaskId !== taskId) {
       return;
@@ -1566,8 +1552,14 @@
       });
       setModularWorkspaceState(seeded);
       setLearnerWorkspaceState({ ...stored, openedModuleIds: seeded.openTabs });
+      const directTaskRequested = Boolean(data.requestedTaskId && data.activeModule);
       if (seeded.view === "content" && seeded.openTabs.length > 0) {
-        void restoreOpenModules(seeded.openTabs);
+        if (directTaskRequested) {
+          modularRestoreState = "ready";
+          void restoreOpenModulesInBackground(seeded.openTabs);
+        } else {
+          void restoreOpenModules(seeded.openTabs);
+        }
       } else {
         modularRestoreState = "idle";
       }
@@ -1594,10 +1586,15 @@
   });
 
   $effect(() => {
-    if (data.historyTaskId) {
-      setTaskHistory(data.historyTaskId, data.history);
-    }
-    submissionMessageState = data.message;
+    const historyTaskId = data.historyTaskId;
+    const history = data.history;
+    const message = data.message;
+    untrack(() => {
+      if (historyTaskId) {
+        setTaskHistory(historyTaskId, history);
+      }
+      submissionMessageState = message;
+    });
   });
 
   $effect(() => {
@@ -1629,33 +1626,6 @@
     if (!isModularUnit() || modularRestoreState === "ready") {
       restoreHistoryContext();
     }
-  });
-
-  $effect(() => {
-    if (!workspaceReady || !actionTaskId()) {
-      return;
-    }
-
-    const itemKey = taskItemKey(actionTaskId() as string);
-    if (!currentContentItems().some((item) => item.key === itemKey)) {
-      return;
-    }
-
-    const item = currentContentItems().find((candidate) => candidate.key === itemKey);
-    if (!item?.task) {
-      return;
-    }
-    setLearnerWorkspaceState({
-      ...learnerWorkspace,
-      surface: "task",
-      activeTask: {
-        itemKey,
-        taskId: item.task.id,
-        moduleId: item.moduleId ?? null,
-        status: "result",
-        editorMode: null
-      }
-    });
   });
 
   $effect(() => {
@@ -1741,16 +1711,6 @@
     </section>
 
     {#if learnerWorkspace.surface === "graph"}
-      {#if learnerWorkspace.activeTask}
-        <section class="learning-path-task-return" aria-label="Laufende Aufgabe">
-          <div class="learning-unit-layout-frame learning-path-task-return__inner">
-            <p><strong>Aufgabe wird weiterbearbeitet.</strong> Öffne ein Modul, um dessen Materialien hinzuzunehmen.</p>
-            <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={returnToActiveTask}>
-              Zurück zur Aufgabe
-            </button>
-          </div>
-        </section>
-      {/if}
       <LearningUnitOverview graph={graphState} nodes={flowNodes} edges={flowEdges} />
     {/if}
 
@@ -1832,7 +1792,6 @@
                 onContextScroll={rememberContextScroll}
                 onWorkScroll={rememberWorkScroll}
                 onReaderScroll={rememberReaderScroll}
-                onToggleReviewPanel={toggleReviewPanel}
                 onDismissFeedbackStatus={dismissFeedbackStatus}
                 onProgressPersisted={handleProgressPersisted}
               />
@@ -1894,7 +1853,6 @@
             onContextScroll={rememberContextScroll}
             onWorkScroll={rememberWorkScroll}
             onReaderScroll={rememberReaderScroll}
-            onToggleReviewPanel={toggleReviewPanel}
             onDismissFeedbackStatus={dismissFeedbackStatus}
             onProgressPersisted={handleProgressPersisted}
           />

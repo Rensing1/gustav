@@ -72,6 +72,18 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain('surface: "graph"');
   });
 
+  it("never exposes a tab-local task return action in the graph", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("learningPathState(learnerWorkspace)");
+    expect(routeSource).not.toContain("function returnToActiveTask");
+    expect(routeSource).not.toContain("learning-path-task-return");
+    expect(routeSource).not.toContain("Entwurf geöffnet");
+    expect(routeSource).not.toContain("Zurück zum Entwurf");
+    expect(routeSource).not.toContain("Aufgabe wird weiterbearbeitet.");
+  });
+
   it("passes the authenticated learner id to inline task draft persistence", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
@@ -117,6 +129,30 @@ describe("learning unit route contract", () => {
     expect(serverSource).not.toContain("const uploadResponse = await fetch(uploadUrl");
     expect(serverSource).not.toContain("/upload-intents");
     expect(serverSource).not.toContain("throw redirect(303");
+  });
+
+  it("restores a directly linked task before unrelated saved modules", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("const directTaskRequested = Boolean(data.requestedTaskId && data.activeModule)");
+    expect(routeSource).toContain("void restoreOpenModulesInBackground(seeded.openTabs)");
+  });
+
+  it("does not repeatedly reapply the same result state after an enhanced form action", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("requestedTaskId === actionTaskId()");
+    expect(routeSource).not.toContain("if (!workspaceReady || !actionTaskId())");
+  });
+
+  it("applies server-provided history without subscribing to state changed by the history helper", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain('import { onMount, tick, untrack } from "svelte";');
+    expect(routeSource).toMatch(/\$effect\(\(\) => \{\s*const historyTaskId = data\.historyTaskId;[\s\S]*?untrack\(\(\) => \{[\s\S]*?setTaskHistory\(historyTaskId, history\)/);
   });
 
   it("shows a clear message when uploaded bytes do not match the expected content type", () => {

@@ -407,9 +407,11 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
 - Es gibt keine gleichrangigen Umschalter `Übersicht | Inhalte`. Ein Modulaufruf
   wechselt aus dem Lernpfad in die Leseansicht, `Aufgabe beginnen` von dort in
   den eigenen Aufgabenraum.
-- Die kanonische URL verwendet `module`, `task` und für die Ergebnisansicht
-  `panel=result`. Browser-Zurück und sichtbare Rückwege durchlaufen dieselben
-  Stufen. Alte `view`- und `history`-Links werden sicher normalisiert.
+- Die kanonische URL verwendet `module` und `task`. Ein bestehender Link mit
+  `panel=result` bleibt kompatibel, öffnet aber denselben Aufgabenraum und dort
+  die Offenlegung `Meine Abgabe`. Browser-Zurück und sichtbare Rückwege
+  durchlaufen dieselben Stufen. Alte `view`- und `history`-Links werden sicher
+  normalisiert.
 - Die URL bestimmt nach einem Neuladen die sichtbare Stufe. Schülerbezogene
   lokale Speicherung ergänzt nur geöffnete Module, Lesepositionen, Kontext und
   Entwürfe.
@@ -440,7 +442,8 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
   beliebig
 - Der Abstand vom Modulkopf zum ersten Abschnitt ist größer als der Abstand vom
   Abschnittslabel zu seinem Block
-- Rückmeldung und Bewertung erscheinen als technische Disclosure-Familie
+- Rückmeldung, Auswertung und die zugehörige Abgabe erscheinen als kantige,
+  technische Disclosure-Familie, niemals als Pill- oder Tabnavigation
 - kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile statt
   redundanter Status-/Titellabels
 - Lange Aufgaben dürfen in dieser Vorschau höchstens zwei Zeilen belegen. Unter
@@ -481,6 +484,34 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
   endgültige Abgabe verbleibt als Ergebnis im Aufgabenraum.
 - Der Aufgabenraum bleibt flach: keine Modulkarte, keine wiederholte
   Aufgabenzeile und keine vollständigen Rahmen um Kontext oder Bearbeitung.
+- Beim Wechsel zum Lernpfad endet der temporäre Aufgabenraum. Der Modulgraph
+  zeigt keine tab-lokale Aufgabenmeldung und keinen direkten Rücksprung, weil
+  dort weder Verfügbarkeit noch Abgabestatus zuverlässig bestimmt werden.
+  Ein tab-lokaler Textentwurf bleibt aufgabenbezogen gespeichert und erscheint
+  beim regulären Öffnen der Aufgabenzeile wieder. Nach einer endgültigen
+  Abgabe beginnt ein neuer Versuch ausschließlich über `Erneut bearbeiten`.
+- `Aufgabe beginnen`, `Entwurf weiterbearbeiten` und `Erneut bearbeiten`
+  öffnen denselben Text- oder Datei-Arbeitsbereich. Ein tab-lokaler Textentwurf
+  hat beim Wiedereinstieg Vorrang; andernfalls wird der Text der neuesten
+  Abgabe geladen. Eine vorhandene Datei erscheint als Vorschau mit Metadaten
+  und der Aktion `Andere Datei auswählen`; ein natives Dateifeld wird niemals
+  vorbefüllt.
+- Oberhalb der Bearbeitung steht in fester Reihenfolge die bedingte
+  Disclosure-Familie `Rückmeldung`, `Auswertung`, `Meine Abgabe`.
+  `Rückmeldung` setzt `feedback_md`, `Auswertung` mindestens ein tatsächliches
+  Kriterienergebnis voraus. Leere Bereiche und Platzhalter werden nicht
+  gerendert. `Meine Abgabe` zeigt unverändert den Snapshot, auf den sich die
+  Hinweise beziehen.
+- `Rückmeldung einholen` wechselt nicht auf eine andere Seite. Während der
+  Verarbeitung sind Editor, Antwortform, Dateiauswahl und Abgabeaktionen
+  gesperrt. Nach erfolgreicher Verarbeitung öffnet sich `Rückmeldung` inline,
+  ohne den Tastaturfokus ungefragt zu verschieben. Beim späteren Wiedereinstieg
+  bleiben alle Offenlegungen zunächst geschlossen.
+- Weicht die sichtbare Fassung vom zuletzt rückgemeldeten Snapshot ab, bleibt
+  die bisherige Rückmeldung lesbar, aber `Endgültig abgeben` ist mit dem Hinweis
+  `Für diese Fassung zuerst Rückmeldung einholen.` deaktiviert. Nach der
+  Finalisierung bleibt der Aufgabenraum sichtbar und wird schreibgeschützt; ein
+  erlaubter weiterer Versuch öffnet ihn erneut zur Bearbeitung.
 
 - Die linke Fläche funktioniert als fortlaufende Buchseite. Sie zeigt bei
   modularen Lerneinheiten ausschließlich Module, die der Schüler zuvor im

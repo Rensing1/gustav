@@ -72,7 +72,6 @@
     onContextScroll = null,
     onWorkScroll = null,
     onReaderScroll = null,
-    onToggleReviewPanel = null,
     onDismissFeedbackStatus = null,
     onProgressPersisted = null
   }: {
@@ -131,7 +130,6 @@
     onContextScroll?: ((scrollTop: number) => void) | null;
     onWorkScroll?: ((scrollTop: number) => void) | null;
     onReaderScroll?: ((scrollTop: number) => void) | null;
-    onToggleReviewPanel?: ((taskId: string) => void | Promise<void>) | null;
     onDismissFeedbackStatus?: ((taskId: string) => void) | null;
     onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
@@ -345,7 +343,6 @@
                   {unitType}
                   moduleId={item.moduleId ?? null}
                   history={taskHistory(task.id)}
-                  historyState={historyStateByTask[task.id] ?? "not_loaded"}
                   domId={`task-row-${task.id}`}
                   expanded={true}
                   compactLayout={true}
@@ -360,7 +357,6 @@
                   submissionFocused={false}
                   reviewPanelOpen={false}
                   enhanceSubmit={enhanceTaskForm?.(task.id)}
-                  onToggleReviewPanel={() => onToggleReviewPanel?.(task.id)}
                   onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
                   onEnterSubmissionWorkspace={() => onBeginTask(item.key, "text")}
                   onEnterUploadWorkspace={() => onBeginTask(item.key, preferredMode(task))}
@@ -501,7 +497,6 @@
           {unitType}
           moduleId={activeItem.moduleId ?? null}
           history={taskHistory(task.id)}
-          historyState={historyStateByTask[task.id] ?? "not_loaded"}
           domId={`task-workspace-${task.id}`}
           expanded={true}
           compactLayout={true}
@@ -522,7 +517,7 @@
           feedbackPending={feedbackPendingTaskId === task.id}
           feedbackStatusMessage={feedbackStatusTaskId === task.id ? feedbackStatusMessage : null}
           pendingIntent={feedbackPendingTaskId === task.id ? pendingSubmissionIntent : null}
-          submissionFocused={workStatus === "editing"}
+          submissionFocused={true}
           initialSubmissionMode={activeEditorMode}
           reviewPanelOpen={workStatus === "result"}
           enhanceSubmit={enhanceTaskForm?.(task.id)}
@@ -536,7 +531,6 @@
           onToggleDialogSubmission={onToggleContextSubmission}
           onCloseDialogContextModule={onCloseModule}
           onUndoCloseDialogContextModule={onUndoCloseModule}
-          onToggleReviewPanel={() => onToggleReviewPanel?.(task.id)}
           onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
           onSubmitUploadFeedback={onSubmitUploadFeedback}
           {onProgressPersisted}

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultLearnerWorkspaceState,
   LEARNER_WORKSPACE_STORAGE_VERSION,
+  learningPathState,
   learnerWorkspaceStorageKeys,
   normalizeLearnerWorkspaceState,
   readLearnerWorkspaceState,
@@ -114,7 +115,7 @@ describe("learner workspace state", () => {
     expect(normalized.context.focusedModuleId).toBeNull();
   });
 
-  it("preserves an active task while the graph is used as material selection", () => {
+  it("drops a stale active task when a graph state is restored", () => {
     const normalized = normalizeLearnerWorkspaceState(
       {
         surface: "graph",
@@ -134,7 +135,34 @@ describe("learner workspace state", () => {
     );
 
     expect(normalized.surface).toBe("graph");
-    expect(normalized.activeTask?.taskId).toBe("task-open");
+    expect(normalized.activeTask).toBeNull();
+  });
+
+  it("ends every temporary task context when returning to the learning path", () => {
+    const editingState: LearnerWorkspaceState = {
+      ...defaultLearnerWorkspaceState(),
+      surface: "task",
+      activeTask: {
+        itemKey: "task:task-open",
+        taskId: "task-open",
+        moduleId: "module-open",
+        status: "editing",
+        editorMode: "text"
+      }
+    };
+    const resultState: LearnerWorkspaceState = {
+      ...editingState,
+      activeTask: { ...editingState.activeTask!, status: "result" }
+    };
+
+    expect(learningPathState(editingState)).toMatchObject({
+      surface: "graph",
+      activeTask: null
+    });
+    expect(learningPathState(resultState)).toMatchObject({
+      surface: "graph",
+      activeTask: null
+    });
   });
 
   it("keeps disclosure state for released sections in a linear unit", () => {

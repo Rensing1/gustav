@@ -86,7 +86,8 @@ test("@feature-acceptance reads a document stack without losing the active task"
     await expect(book.getByText(seeded.previousSubmissionText)).toBeVisible();
     await expect(workbench.getByRole("region", { name: "Dokument groß lesen" })).toHaveCount(0);
 
-    const editor = exercise.getByRole("textbox");
+    await expect(exercise.locator(".learning-markdown-editor__toolbar")).toBeVisible();
+    const editor = exercise.locator('.learning-markdown-editor__surface [contenteditable="true"]');
     await editor.fill("Dieser Entwurf muss während des Lesens erhalten bleiben.");
     await book.getByRole("button", { name: `${seeded.longMaterialTitle} groß lesen` }).click();
     const reader = workbench.getByRole("region", { name: "Dokument groß lesen" });

@@ -8,12 +8,14 @@
     value = "",
     placeholder = "Schreibe hier deine Lösung.",
     ariaLabel = name,
+    disabled = false,
     onInput = null
   }: {
     name?: string;
     value?: string;
     placeholder?: string;
     ariaLabel?: string;
+    disabled?: boolean;
     onInput?: ((nextValue: string) => void) | null;
   } = $props();
 
@@ -28,6 +30,7 @@
   let linkPanelOpen = $state(false);
   let linkValue = $state("");
   let linkError = $state("");
+  let appliedDisabled = $state<boolean | null>(null);
   let removeFormListeners: (() => void) | null = null;
 
   function setCurrentValue(nextValue: string, notify = true) {
@@ -70,7 +73,7 @@
   }
 
   function run(command: (activeEditor: TiptapMarkdownEditor) => void) {
-    if (!editor) {
+    if (!editor || disabled) {
       return;
     }
     command(editor);
@@ -83,7 +86,7 @@
   }
 
   function applyLink() {
-    if (!editor?.setLink(linkValue)) {
+    if (disabled || !editor?.setLink(linkValue)) {
       linkError = "Bitte eine vollständige http- oder https-Adresse eingeben.";
       return;
     }
@@ -104,6 +107,7 @@
         content: fallbackValue,
         placeholder,
         ariaLabel,
+        editable: !disabled,
         onUpdate: (nextValue) => {
           if (nextValue !== currentValue) {
             setCurrentValue(nextValue);
@@ -141,11 +145,24 @@
       editor.setMarkdown(nextValue);
     }
   });
+
+  $effect(() => {
+    const activeEditor = editor;
+    const nextDisabled = disabled;
+    if (activeEditor && appliedDisabled !== nextDisabled) {
+      appliedDisabled = nextDisabled;
+      activeEditor.setEditable(!nextDisabled);
+    }
+    if (nextDisabled) {
+      linkPanelOpen = false;
+    }
+  });
 </script>
 
-<div class="learning-markdown-editor">
-  {#if editorReady}
-    <div class="learning-markdown-editor__toolbar" role="toolbar" aria-label="Text formatieren">
+<div class:learning-markdown-editor--disabled={disabled} class="learning-markdown-editor">
+  <fieldset class="learning-markdown-editor__controls" disabled={disabled}>
+    {#if editorReady}
+      <div class="learning-markdown-editor__toolbar" role="toolbar" aria-label="Text formatieren">
       <select
         aria-label="Absatzformat"
         onchange={(event) => {
@@ -173,17 +190,18 @@
           <button type="button" onclick={() => run((item) => item.deleteTable())}>Tabelle löschen</button>
         </span>
       {/if}
-    </div>
-    {#if linkPanelOpen}
-      <div class="learning-markdown-editor__link-panel">
-        <label for={`${name}-link`}>Link-Adresse</label>
-        <input id={`${name}-link`} type="url" bind:value={linkValue} placeholder="https://example.org" onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); applyLink(); } }} />
-        <button type="button" onclick={applyLink}>Übernehmen</button>
-        <button type="button" onclick={() => { linkValue = ""; applyLink(); }}>Entfernen</button>
-        {#if linkError}<span class="learning-markdown-editor__link-error">{linkError}</span>{/if}
       </div>
+      {#if linkPanelOpen}
+        <div class="learning-markdown-editor__link-panel">
+          <label for={`${name}-link`}>Link-Adresse</label>
+          <input id={`${name}-link`} type="url" bind:value={linkValue} placeholder="https://example.org" onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); applyLink(); } }} />
+          <button type="button" onclick={applyLink}>Übernehmen</button>
+          <button type="button" onclick={() => { linkValue = ""; applyLink(); }}>Entfernen</button>
+          {#if linkError}<span class="learning-markdown-editor__link-error">{linkError}</span>{/if}
+        </div>
+      {/if}
     {/if}
-  {/if}
+  </fieldset>
   <div bind:this={host} class="learning-markdown-editor__surface"></div>
   <textarea
     aria-label={editorReady ? undefined : ariaLabel}
@@ -192,6 +210,7 @@
     rows="12"
     value={fallbackValue}
     {placeholder}
+    {disabled}
     oninput={(event) => setCurrentValue((event.currentTarget as HTMLTextAreaElement).value)}
   ></textarea>
   <input type="hidden" name={editorReady ? name : undefined} value={currentValue} />

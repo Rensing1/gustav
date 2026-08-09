@@ -59,6 +59,15 @@ describe("MarkdownWysiwygEditor", () => {
     expect(source).toContain("formData?.set(name, nextValue);");
   });
 
+  it("propagates a disabled state to Tiptap, toolbar controls and the textarea fallback", () => {
+    const source = readFileSync(editorSourcePath, "utf8");
+
+    expect(source).toContain("disabled?: boolean");
+    expect(source).toContain("activeEditor.setEditable(!nextDisabled)");
+    expect(source).toMatch(/<fieldset[^>]*disabled=\{disabled\}/s);
+    expect(source).toMatch(/<textarea[\s\S]*\{disabled\}/s);
+  });
+
   it("keeps the Tiptap surface scrollable on touch devices", () => {
     const css = readWorkspaceCssBundle(stylesDir);
     const proseMirrorRules = Array.from(

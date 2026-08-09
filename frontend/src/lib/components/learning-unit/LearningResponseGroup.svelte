@@ -3,9 +3,11 @@
   import type { LearningSubmission } from "$lib/types/learning";
 
   let {
-    submission
+    submission,
+    openPanel = null
   }: {
     submission: LearningSubmission;
+    openPanel?: "feedback" | "evaluation" | "submission" | null;
   } = $props();
 
   function fileSummary(): string {
@@ -16,49 +18,54 @@
     return `${first.mime} · ${Math.max(1, Math.round(first.size / 1024))} KB`;
   }
 
-  function evaluationSummary(): string {
-    const score = submission.analysis_json?.score;
-    if (typeof score === "number") {
-      return `Punktestand: ${score}`;
-    }
-    if (submission.score_raw !== null && submission.score_raw !== undefined) {
-      return `${submission.score_raw}/${submission.score_max ?? 0}`;
-    }
-    return submission.analysis_status;
+  function hasEvaluation(): boolean {
+    return (submission.analysis_json?.criteria_results?.length ?? 0) > 0;
   }
 </script>
 
-<section class="learning-response-group" aria-label="Abgabe und Auswertung">
-  <details class="learning-response-panel">
-    <summary>Abgabe</summary>
+<section class="learning-response-group" aria-label="Rückmeldung zu deiner Abgabe">
+  {#if submission.feedback_md}
+    <details class="learning-response-panel" open={openPanel === "feedback"}>
+      <summary>Rückmeldung</summary>
+      <div class="learning-response-panel__body markdown-prose">
+        {@html renderMarkdown(submission.feedback_md)}
+      </div>
+    </details>
+  {/if}
+
+  {#if hasEvaluation()}
+    <details class="learning-response-panel" open={openPanel === "evaluation"}>
+      <summary>Auswertung</summary>
+      <div class="learning-response-panel__body">
+        <ul class="learning-unit-criteria">
+          {#each submission.analysis_json?.criteria_results ?? [] as criterion}
+            <li>
+              <strong>{criterion.criterion}</strong>
+              {#if criterion.score !== undefined && criterion.score !== null}
+                : {criterion.score}/{criterion.max_score ?? 10}
+              {/if}
+              {#if criterion.explanation_md}
+                <div class="markdown-prose">
+                  {@html renderMarkdown(criterion.explanation_md)}
+                </div>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </div>
+    </details>
+  {/if}
+
+  <details class="learning-response-panel" open={openPanel === "submission"}>
+    <summary>Meine Abgabe</summary>
     <div class="learning-response-panel__body">
       {#if submission.text_body}
         <div class="markdown-prose">
-          <p>{submission.text_body}</p>
+          {@html renderMarkdown(submission.text_body)}
         </div>
       {:else}
         <p>{fileSummary()}</p>
       {/if}
-    </div>
-  </details>
-
-  <details class="learning-response-panel">
-    <summary>Rückmeldung</summary>
-    <div class="learning-response-panel__body">
-      {#if submission.feedback_md}
-        <div class="markdown-prose">
-          {@html renderMarkdown(submission.feedback_md)}
-        </div>
-      {:else}
-        <p>Es liegt noch keine Rückmeldung vor.</p>
-      {/if}
-    </div>
-  </details>
-
-  <details class="learning-response-panel">
-    <summary>Bewertung</summary>
-    <div class="learning-response-panel__body">
-      <p>{evaluationSummary()}</p>
     </div>
   </details>
 </section>

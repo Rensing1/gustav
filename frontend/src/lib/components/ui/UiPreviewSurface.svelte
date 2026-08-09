@@ -32,7 +32,14 @@
       schema: "learning.v1",
       score: 8,
       text: "Stabil",
-      criteria_results: []
+      criteria_results: [
+        {
+          criterion: "Klarheit",
+          score: 8,
+          max_score: 10,
+          explanation_md: "Die Begründung ist nachvollziehbar aufgebaut."
+        }
+      ]
     }
   };
 
@@ -645,7 +652,7 @@
     <article class="preview-card">
       <p class="preview-card__eyebrow">Rückmeldung</p>
       <h2>Feedback-Familie</h2>
-      <LearningResponseGroup submission={sampleSubmission} />
+      <LearningResponseGroup submission={sampleSubmission} openPanel="feedback" />
     </article>
 
     <article class="preview-card">

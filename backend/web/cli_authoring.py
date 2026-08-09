@@ -151,6 +151,47 @@ CLI_AUTHORING_CAPABILITIES: tuple[CLIAuthoringCapability, ...] = (
         "/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}/h5p/reset",
         "write",
     ),
+    CLIAuthoringCapability("GET", "/api/teaching/courses", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/courses", "write"),
+    CLIAuthoringCapability("GET", "/api/teaching/courses/{course_id}", "read"),
+    CLIAuthoringCapability("PATCH", "/api/teaching/courses/{course_id}", "write"),
+    CLIAuthoringCapability("POST", "/api/teaching/courses/{course_id}/archive", "write"),
+    CLIAuthoringCapability("POST", "/api/teaching/courses/{course_id}/restore", "write"),
+    CLIAuthoringCapability("POST", "/api/teaching/courses/archive-batch", "write"),
+    CLIAuthoringCapability("GET", "/api/teaching/courses/{course_id}/deletion-impact", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/courses/{course_id}/deletion-jobs", "delete"),
+    CLIAuthoringCapability("GET", "/api/teaching/course-deletion-jobs", "read"),
+    CLIAuthoringCapability("GET", "/api/teaching/course-deletion-jobs/{job_id}", "read"),
+    CLIAuthoringCapability("GET", "/api/teaching/courses/{course_id}/members", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/courses/{course_id}/members", "write"),
+    CLIAuthoringCapability(
+        "DELETE",
+        "/api/teaching/courses/{course_id}/members/{student_sub}",
+        "delete",
+    ),
+    CLIAuthoringCapability("GET", "/api/teaching/courses/{course_id}/modules", "read"),
+    CLIAuthoringCapability("POST", "/api/teaching/courses/{course_id}/modules", "write"),
+    CLIAuthoringCapability(
+        "POST",
+        "/api/teaching/courses/{course_id}/modules/reorder",
+        "write",
+    ),
+    CLIAuthoringCapability(
+        "DELETE",
+        "/api/teaching/courses/{course_id}/modules/{module_id}",
+        "delete",
+    ),
+    CLIAuthoringCapability(
+        "GET",
+        "/api/teaching/courses/{course_id}/modules/{module_id}/sections",
+        "read",
+    ),
+    CLIAuthoringCapability(
+        "PATCH",
+        "/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility",
+        "write",
+    ),
+    CLIAuthoringCapability("GET", "/api/users/search", "read"),
 )
 
 

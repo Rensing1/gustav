@@ -156,6 +156,60 @@ def test_h5p_editor_json_endpoints_remain_cookie_only_for_cli_package_workflow()
         assert "x-required-cli-scopes" not in op
 
 
+def test_openapi_documents_cli_scopes_for_course_authoring() -> None:
+    spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
+
+    expectations = [
+        ("/api/teaching/courses", "get", ["read"]),
+        ("/api/teaching/courses", "post", ["write"]),
+        ("/api/teaching/courses/{course_id}", "get", ["read"]),
+        ("/api/teaching/courses/{course_id}", "patch", ["write"]),
+        ("/api/teaching/courses/{course_id}/archive", "post", ["write"]),
+        ("/api/teaching/courses/{course_id}/restore", "post", ["write"]),
+        ("/api/teaching/courses/archive-batch", "post", ["write"]),
+        ("/api/teaching/courses/{course_id}/deletion-impact", "get", ["read"]),
+        ("/api/teaching/courses/{course_id}/deletion-jobs", "post", ["delete"]),
+        ("/api/teaching/course-deletion-jobs", "get", ["read"]),
+        ("/api/teaching/course-deletion-jobs/{job_id}", "get", ["read"]),
+        ("/api/teaching/courses/{course_id}/members", "get", ["read"]),
+        ("/api/teaching/courses/{course_id}/members", "post", ["write"]),
+        ("/api/teaching/courses/{course_id}/members/{student_sub}", "delete", ["delete"]),
+        ("/api/teaching/courses/{course_id}/modules", "get", ["read"]),
+        ("/api/teaching/courses/{course_id}/modules", "post", ["write"]),
+        ("/api/teaching/courses/{course_id}/modules/reorder", "post", ["write"]),
+        ("/api/teaching/courses/{course_id}/modules/{module_id}", "delete", ["delete"]),
+        ("/api/teaching/courses/{course_id}/modules/{module_id}/sections", "get", ["read"]),
+        ("/api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility", "patch", ["write"]),
+        ("/api/users/search", "get", ["read"]),
+    ]
+    for path, method, scopes in expectations:
+        operation = spec["paths"][path][method]
+        assert {"cookieAuth": []} in operation["security"], f"{method.upper()} {path}"
+        assert {"cliTokenAuth": []} in operation["security"], f"{method.upper()} {path}"
+        assert operation["x-required-cli-scopes"] == scopes, f"{method.upper()} {path}"
+
+
+def test_dialog_preview_and_full_user_list_remain_cookie_only() -> None:
+    spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
+
+    for path, method in (
+        ("/api/teaching/units/{unit_id}/tasks/{task_id}/dialog-preview", "post"),
+        ("/api/users/list", "get"),
+    ):
+        operation = spec["paths"][path][method]
+        assert operation["security"] == [{"cookieAuth": []}]
+        assert "x-required-cli-scopes" not in operation
+
+
+def test_course_update_requires_non_null_subject_and_grade_level() -> None:
+    spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
+    properties = spec["components"]["schemas"]["CourseUpdate"]["properties"]
+
+    assert properties["subject"].get("nullable") is not True
+    assert properties["grade_level"].get("nullable") is not True
+    assert properties["term"]["nullable"] is True
+
+
 def test_openapi_documents_h5p_import_upload_limit_response() -> None:
     spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
 

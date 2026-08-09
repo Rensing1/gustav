@@ -84,3 +84,27 @@ def test_main_delegates_cli_authoring_capabilities_to_dedicated_module() -> None
     assert "CLI_AUTHORING_CAPABILITIES" not in source
     assert "def _path_matches_template" not in source
     assert "def _cli_capability_for_request" not in source
+
+
+def test_registered_course_cli_operations_are_documented_and_authorized() -> None:
+    from backend.tools.gustav_cli.operations import COURSE_AUTHORING_OPERATIONS
+    from backend.web.cli_authoring import CLI_AUTHORING_CAPABILITIES
+
+    spec = yaml.safe_load((PROJECT_ROOT / "api/openapi.yml").read_text(encoding="utf-8"))
+    documented = {
+        (method.upper(), path)
+        for path, methods in spec["paths"].items()
+        for method, operation in methods.items()
+        if isinstance(operation, dict) and {"cliTokenAuth": []} in operation.get("security", [])
+    }
+    authorized = {
+        (capability.method, capability.path_template)
+        for capability in CLI_AUTHORING_CAPABILITIES
+    }
+    registered = {
+        (operation.method, operation.path_template)
+        for operation in COURSE_AUTHORING_OPERATIONS.values()
+    }
+
+    assert registered <= documented
+    assert registered <= authorized

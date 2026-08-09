@@ -236,6 +236,85 @@ async def test_cli_bearer_is_rejected_for_cookie_only_teaching_unit_prefix_paths
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
+    ("method", "path", "json_body"),
+    [
+        (
+            "GET",
+            "/api/teaching/units/11111111-1111-1111-1111-111111111111/sections/22222222-2222-2222-2222-222222222222/tasks/33333333-3333-3333-3333-333333333333/h5p/editor-model",
+            None,
+        ),
+        (
+            "POST",
+            "/api/teaching/units/11111111-1111-1111-1111-111111111111/sections/22222222-2222-2222-2222-222222222222/tasks/33333333-3333-3333-3333-333333333333/h5p/save",
+            {},
+        ),
+        (
+            "POST",
+            "/api/teaching/units/11111111-1111-1111-1111-111111111111/tasks/33333333-3333-3333-3333-333333333333/dialog-preview",
+            {"operation": "initial_starters", "messages": []},
+        ),
+        ("GET", "/api/users/list?role=student", None),
+    ],
+)
+async def test_cli_bearer_cannot_cross_browser_only_authoring_boundaries(
+    monkeypatch,
+    method: str,
+    path: str,
+    json_body,
+):
+    _, created = _install_cli_token(
+        monkeypatch,
+        scopes=["read", "write", "delete"],
+        roles=["teacher"],
+    )
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.request(
+            method,
+            path,
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+            json=json_body,
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("scopes", "method", "path", "json_body"),
+    [
+        (["read"], "GET", "/api/teaching/courses/not-a-uuid", None),
+        (
+            ["write"],
+            "POST",
+            "/api/teaching/courses",
+            {"title": "", "subject": "Informatik", "grade_level": "10", "school_year_start": 2026},
+        ),
+        (["read"], "GET", "/api/users/search?q=Ada&role=student", None),
+    ],
+)
+async def test_cli_bearer_reaches_new_course_authoring_routes(
+    monkeypatch,
+    scopes: list[str],
+    method: str,
+    path: str,
+    json_body,
+):
+    _, created = _install_cli_token(monkeypatch, scopes=scopes, roles=["teacher"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.request(
+            method,
+            path,
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+            json=json_body,
+        )
+
+    assert response.status_code != 401
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
     ("method", "path", "json_body", "expected_status"),
     [
         (

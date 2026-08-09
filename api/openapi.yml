@@ -1786,11 +1786,9 @@ components:
         subject:
           type: string
           maxLength: 100
-          nullable: true
         grade_level:
           type: string
           maxLength: 32
-          nullable: true
         term:
           type: string
           maxLength: 32
@@ -5923,6 +5921,8 @@ paths:
       operationId: listModuleSectionsWithVisibility
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -8964,6 +8964,8 @@ paths:
       operationId: listCourses
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       parameters:
         - in: query
           name: limit
@@ -9009,6 +9011,8 @@ paths:
       operationId: createCourse
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "RLS: ownership enforced; only the author can read this resource."
@@ -9064,6 +9068,8 @@ paths:
       operationId: getCourse
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -9105,6 +9111,8 @@ paths:
       operationId: updateCourse
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
         - "RLS: author-only policies scope sections to the calling teacher."
@@ -9160,7 +9168,8 @@ paths:
       tags: [Teaching]
       summary: Archive an owned active course
       operationId: archiveCourse
-      security: [{ cookieAuth: [] }]
+      security: [{ cookieAuth: [] }, { cliTokenAuth: [] }]
+      x-required-cli-scopes: [write]
       x-security-notes:
         - "CSRF: strict same-origin validation is required."
         - "RLS and the owner-bound database function restrict archival to the course owner."
@@ -9182,7 +9191,8 @@ paths:
       tags: [Teaching]
       summary: Restore an owned archived course after accidental archival
       operationId: restoreCourse
-      security: [{ cookieAuth: [] }]
+      security: [{ cookieAuth: [] }, { cliTokenAuth: [] }]
+      x-required-cli-scopes: [write]
       x-security-notes:
         - "CSRF: strict same-origin validation is required."
         - "RLS and the owner-bound database function restrict restoration to the course owner."
@@ -9203,7 +9213,8 @@ paths:
       tags: [Teaching]
       summary: Archive multiple owned courses atomically
       operationId: archiveCoursesBatch
-      security: [{ cookieAuth: [] }]
+      security: [{ cookieAuth: [] }, { cliTokenAuth: [] }]
+      x-required-cli-scopes: [write]
       x-security-notes:
         - "CSRF: strict same-origin validation is required."
         - "The owner-bound database function validates every course before changing any course."
@@ -9230,7 +9241,8 @@ paths:
       tags: [Teaching]
       summary: Preview the current consequences of permanently deleting a course
       operationId: getCourseDeletionImpact
-      security: [{ cookieAuth: [] }]
+      security: [{ cookieAuth: [] }, { cliTokenAuth: [] }]
+      x-required-cli-scopes: [read]
       parameters:
         - in: path
           name: course_id
@@ -9247,7 +9259,8 @@ paths:
       tags: [Teaching]
       summary: Queue strongly confirmed permanent course deletion
       operationId: createCourseDeletionJob
-      security: [{ cookieAuth: [] }]
+      security: [{ cookieAuth: [] }, { cliTokenAuth: [] }]
+      x-required-cli-scopes: [delete]
       x-security-notes:
         - "CSRF: strict same-origin validation is required."
         - "The server rechecks ownership, the exact title and explicit student-data-loss confirmation."
@@ -9275,7 +9288,8 @@ paths:
       tags: [Teaching]
       summary: List permanent course deletion jobs owned by the current teacher
       operationId: listCourseDeletionJobs
-      security: [{ cookieAuth: [] }]
+      security: [{ cookieAuth: [] }, { cliTokenAuth: [] }]
+      x-required-cli-scopes: [read]
       x-security-notes:
         - "RLS and an explicit owner predicate restrict results to the authenticated teacher."
       parameters:
@@ -9305,7 +9319,8 @@ paths:
       tags: [Teaching]
       summary: Read one permanent course deletion job owned by the current teacher
       operationId: getCourseDeletionJob
-      security: [{ cookieAuth: [] }]
+      security: [{ cookieAuth: [] }, { cliTokenAuth: [] }]
+      x-required-cli-scopes: [read]
       x-security-notes:
         - "Unknown and foreign job identifiers both return 404 to prevent existence disclosure."
       parameters:
@@ -9331,6 +9346,8 @@ paths:
       operationId: listCourseMembers
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       x-security-notes:
         - "RLS: author-only policies control material visibility."
         - "RLS: course_memberships select returns rows only for the logged-in student (self-only)"
@@ -9381,6 +9398,8 @@ paths:
       operationId: addCourseMember
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -9449,6 +9468,8 @@ paths:
       operationId: removeCourseMember
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [delete]
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -12753,6 +12774,8 @@ paths:
       operationId: listCourseModules
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -12785,6 +12808,8 @@ paths:
       operationId: createCourseModule
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
       x-security-notes:
         - "CSRF: Same-origin required (Origin/Referer must match server origin)."
       x-permissions:
@@ -12831,6 +12856,8 @@ paths:
       operationId: reorderCourseModules
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -12911,6 +12938,8 @@ paths:
       operationId: deleteCourseModule
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [delete]
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -12961,6 +12990,8 @@ paths:
       operationId: updateModuleSectionVisibility
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [write]
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -13087,6 +13118,8 @@ paths:
       operationId: searchUsers
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       x-permissions:
         requiredRoles: [teacher, admin]
       parameters:

@@ -11,6 +11,7 @@ Dieses Dokument beschreibt die aktuelle Architektur von GUSTAV (Stand: alpha‑2
 
 ## High‑Level Komponenten
 - Frontend (`frontend/`): SvelteKit ist die neue primäre Web-Plattform und fungiert als Browser-BFF. Dort liegen App-Shell, Navigation, Fehler-UX und der Session-Bootstrap für komplexe Räume.
+- Meldungsarchitektur: Seiten halten Aktionszustände lokal; `frontend/src/lib/components/ui/StatusMessage.svelte` vereinheitlicht semantische Aktionsmeldungen und ihre Lebensdauer, `FieldError.svelte` feldbezogene Fehler. Ein globaler Meldungsstore ist bewusst nicht Teil der Architektur. Fachzustände wie eine laufende Auswertung bleiben unabhängig von kurzlebigen Bestätigungen erhalten.
 - API‑Adapter (`backend/web/`): FastAPI wird aus der bisherigen SSR/HTMX-Mischarchitektur in Richtung API-only überführt. Neue Produktpfade entstehen dort nicht mehr.
 - Legacy-Webbestand (`backend/web/`): FastAPI mit serverseitigem Rendern (SSR) und HTMX für progressive Interaktivität. Enthält aktuell Routen, UI‑Komponenten und statische Assets.
   - HTMX‑Kontrakt (Navigation): Bei HTMX‑Navigation liefern Routen ausschließlich das Haupt‑Fragment (Inhalt von `#main-content`) und genau eine Sidebar als Out‑of‑Band‑Swap (`<aside id="sidebar" hx-swap-oob="true">`). Dadurch bleibt der Toggle‑State stabil und es entstehen keine doppelten Container. Die Hilfsfunktion `_layout_response` kapselt dieses Verhalten.

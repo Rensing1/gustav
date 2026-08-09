@@ -2,6 +2,7 @@
   import { enhance } from "$app/forms";
   import { onMount } from "svelte";
   import type { SubmitFunction } from "@sveltejs/kit";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
 
   let {
     kind,
@@ -83,7 +84,7 @@
       </div>
     </div>
     <p><strong>{title}</strong> wird unwiderruflich gelöscht.</p>
-    {#if error}<p class="workspace-note workspace-note--error" role="alert">{error}</p>{/if}
+    {#if error}<StatusMessage tone="error" title="Löschen nicht möglich" description={error} focusOnMount={true} />{/if}
     <form method="POST" action={kind === "material" ? "?/deleteMaterial" : "?/deleteTask"} use:enhance={enhanceDeleteForm}>
       <input type="hidden" name="section_id" value={sectionId} />
       <input type="hidden" name={kind === "material" ? "material_id" : "task_id"} value={id} />

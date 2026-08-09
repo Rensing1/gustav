@@ -17,8 +17,8 @@ async function pageFor(browser: Browser): Promise<{ context: BrowserContext; pag
   return { context, page: await context.newPage() };
 }
 
-test("@feature-acceptance follows graph, reading and task as one authenticated learning path", async ({ browser }) => {
-  test.setTimeout(90_000);
+test("@feature-acceptance follows graph, reading, task and feedback as one authenticated learning path", async ({ browser }) => {
+  test.setTimeout(180_000);
   const unique = Date.now();
   const teacherEmail = `navigation_teacher_${unique}@${emailDomain}`;
   const learnerEmail = `navigation_learner_${unique}@${emailDomain}`;
@@ -126,6 +126,17 @@ test("@feature-acceptance follows graph, reading and task as one authenticated l
     await expect(learner.page).toHaveURL(
       new RegExp(`\\?module=${seeded.graphModuleId}&task=${seeded.taskId}$`)
     );
+
+    await answerFormat.getByText("Text schreiben", { exact: true }).click();
+    await textEditor.fill("Digitale Kommunikation braucht klare Regeln, weil Grundrechte auch online gelten.");
+    await learner.page.getByRole("button", { name: "Rückmeldung einholen" }).click();
+
+    const feedbackStatus = workbench.locator(".learning-task-feedback-status");
+    await expect(feedbackStatus.getByRole("status")).toContainText("Rückmeldung wird erstellt");
+    await expect(learner.page.locator(".learning-task-feedback-status")).toHaveCount(1);
+    await expect(feedbackStatus.getByRole("status")).toContainText("Rückmeldung ist bereit", { timeout: 120_000 });
+    await feedbackStatus.getByRole("button", { name: "Rückmeldung ansehen" }).click();
+    await expect(workbench.getByRole("region", { name: "Meine Abgabe" })).toBeVisible();
   } finally {
     await learner.context.close();
     await teacher.context.close();

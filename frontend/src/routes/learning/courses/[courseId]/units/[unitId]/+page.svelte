@@ -4,6 +4,7 @@
   import { onMount, tick } from "svelte";
 
   import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import LearnerContentWorkspace from "$lib/components/learning-unit/LearnerContentWorkspace.svelte";
   import LearningUnitOverview from "$lib/components/learning-unit/LearningUnitOverview.svelte";
   import {
@@ -1005,10 +1006,10 @@
 
         if (matchingSubmission?.analysis_status === "completed") {
           setTaskHistory(taskId, entries);
-          submissionMessageState = "feedback";
+          submissionMessageState = intent === "submit" ? "submitted" : "feedback";
           feedbackPendingTaskId = null;
-          feedbackStatusTaskId = null;
-          feedbackStatusMessage = null;
+          feedbackStatusTaskId = taskId;
+          feedbackStatusMessage = intent === "submit" ? "Aufgabe abgegeben" : "Rückmeldung ist bereit";
           pendingSubmissionIntent = null;
           if (intent === "submit") {
             markActiveTaskResult(taskId);
@@ -1163,11 +1164,11 @@
               payload.finalizedSubmission,
               ...historyForTask(payload.finalizedTaskId).filter((entry) => entry.id !== payload.finalizedSubmission?.id)
             ]);
-            submissionMessageState = payload.message ?? "submitted";
+            submissionMessageState = "submitted";
             feedbackPendingTaskId = null;
-            feedbackStatusTaskId = null;
+            feedbackStatusTaskId = payload.finalizedTaskId;
             pendingSubmissionIntent = null;
-            feedbackStatusMessage = null;
+            feedbackStatusMessage = "Aufgabe abgegeben";
             markActiveTaskResult(payload.finalizedTaskId);
             await refreshModularGraph().catch(() => undefined);
             return;
@@ -1202,6 +1203,18 @@
     const entries = await ensureSubmissionHistoryLoaded(taskId);
     if (!entries.length && submissionHistoryStateByTask[taskId] !== "loaded") {
       return;
+    }
+    markActiveTaskResult(taskId);
+  }
+
+  function dismissFeedbackStatus(taskId: string) {
+    if (feedbackStatusTaskId !== taskId) {
+      return;
+    }
+    feedbackStatusTaskId = null;
+    feedbackStatusMessage = null;
+    if (submissionMessageState === "feedback" || submissionMessageState === "submitted") {
+      submissionMessageState = null;
     }
   }
 
@@ -1685,15 +1698,15 @@
 
 <div bind:this={workspaceRoot} class="workspace-page workspace-page--learner-unit-content learning-unit-space">
   {#if data.message === "submitted"}
-    <p class="flash flash-success learning-unit-flash">Abgabe gespeichert.</p>
+    <div class="learning-unit-flash"><StatusMessage tone="success" title="Abgabe gespeichert" /></div>
   {/if}
 
   {#if modularRestoreMessage}
-    <p class="flash flash-error learning-unit-flash">{modularRestoreMessage}</p>
+    <div class="learning-unit-flash"><StatusMessage tone="error" title="Lernraum nicht wiederhergestellt" description={modularRestoreMessage} /></div>
   {/if}
 
   {#if form?.message}
-    <p class="flash flash-error learning-unit-flash">{form.message}</p>
+    <div class="learning-unit-flash"><StatusMessage tone="error" title="Aktion nicht abgeschlossen" description={form.message} focusOnMount={true} /></div>
   {/if}
 
   {#if isModularUnit()}
@@ -1755,18 +1768,17 @@
               </section>
             {:else if modularWorkspace.activeTab && moduleErrors[modularWorkspace.activeTab]}
               <section class="workspace-panel learning-unit-empty-state">
-                <p class="workspace-note workspace-note--error">{moduleErrors[modularWorkspace.activeTab]}</p>
-                <button
-                  class="workspace-top-action workspace-top-action--quiet"
-                  type="button"
-                  onclick={() => {
+                <StatusMessage
+                  tone="error"
+                  title="Modul nicht geladen"
+                  description={moduleErrors[modularWorkspace.activeTab]}
+                  actionLabel="Erneut versuchen"
+                  onAction={() => {
                     if (modularWorkspace.activeTab) {
                       void ensureModuleLoaded(modularWorkspace.activeTab);
                     }
                   }}
-                >
-                  Erneut versuchen
-                </button>
+                />
               </section>
             {:else}
               <LearnerContentWorkspace
@@ -1821,6 +1833,7 @@
                 onWorkScroll={rememberWorkScroll}
                 onReaderScroll={rememberReaderScroll}
                 onToggleReviewPanel={toggleReviewPanel}
+                onDismissFeedbackStatus={dismissFeedbackStatus}
                 onProgressPersisted={handleProgressPersisted}
               />
             {/if}
@@ -1882,6 +1895,7 @@
             onWorkScroll={rememberWorkScroll}
             onReaderScroll={rememberReaderScroll}
             onToggleReviewPanel={toggleReviewPanel}
+            onDismissFeedbackStatus={dismissFeedbackStatus}
             onProgressPersisted={handleProgressPersisted}
           />
         </section>

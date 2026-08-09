@@ -3,6 +3,7 @@
   import ModeSwitch from "$lib/components/ui/ModeSwitch.svelte";
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import QuietList from "$lib/components/ui/QuietList.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -26,10 +27,10 @@
     />
 
     {#if form?.archive?.error}
-      <p class="workspace-form-error">{form.archive.error}</p>
+      <StatusMessage tone="error" title="Beitrag nicht archiviert" description={form.archive.error} focusOnMount={true} />
     {/if}
     {#if form?.restore?.error}
-      <p class="workspace-form-error">{form.restore.error}</p>
+      <StatusMessage tone="error" title="Beitrag nicht wiederhergestellt" description={form.restore.error} focusOnMount={true} />
     {/if}
 
     {#if data.concernBox.entries.length}

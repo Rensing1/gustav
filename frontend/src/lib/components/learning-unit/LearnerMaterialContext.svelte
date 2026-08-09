@@ -2,6 +2,7 @@
   import { tick } from "svelte";
 
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import type { LearningSubmission } from "$lib/types/learning";
 
@@ -147,7 +148,7 @@
               </div>
             {:else if module.error}
               <div class="learner-material-context__tree-item learner-material-context__tree-item--status">
-                <p class="workspace-note workspace-note--error">{module.error}</p>
+                <StatusMessage tone="error" title="Material nicht verfügbar" description={module.error} />
               </div>
             {:else if module.loaded}
               {#if materials.length}
@@ -203,7 +204,7 @@
                           </div>
                         {:else if state === "failed"}
                           <div class="learner-material-context__tree-item learner-material-context__tree-item--status">
-                            <p class="workspace-note workspace-note--error">Die Abgabe zu {item.title} konnte nicht geladen werden.</p>
+                            <StatusMessage tone="error" title="Abgabe nicht verfügbar" description={`Die Abgabe zu ${item.title} konnte nicht geladen werden.`} />
                           </div>
                         {:else if history(taskId).length}
                           <div class="learner-material-context__tree-item learner-material-context__tree-item--submission">
@@ -233,9 +234,13 @@
   </div>
 
   {#if closedModuleTitle}
-    <div class="learner-material-context__undo" role="status">
-      <span>Modul „{closedModuleTitle}“ geschlossen.</span>
-      <button type="button" onclick={() => onUndoCloseModule?.()}>Rückgängig</button>
+    <div class="learner-material-context__undo">
+      <StatusMessage
+        tone="info"
+        title={`Modul „${closedModuleTitle}“ geschlossen.`}
+        actionLabel="Rückgängig"
+        onAction={() => onUndoCloseModule?.()}
+      />
     </div>
   {/if}
 </section>

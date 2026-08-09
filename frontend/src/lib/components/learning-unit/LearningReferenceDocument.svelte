@@ -1,6 +1,7 @@
 <script lang="ts">
   import { renderMarkdown } from "$lib/utils/markdown";
   import LearningDialogTranscriptDocument from "$lib/components/learning-unit/LearningDialogTranscriptDocument.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearningMaterial, LearningSubmission } from "$lib/types/learning";
 
   let {
@@ -142,7 +143,7 @@
         <section class="learner-reference-document__file">
           {#if material.file_url && isImageMime(material.mime_type)}
             {#if imageFailed(material.file_url)}
-              <p class="workspace-note workspace-note--error">Das Bild konnte nicht geladen werden.</p>
+              <StatusMessage tone="error" title="Bild nicht verfügbar" description="Das Bild konnte nicht geladen werden." />
             {:else}
               <img
                 class="learner-reference-document__image"
@@ -170,7 +171,7 @@
               Separat öffnen
             </a>
           {:else}
-            <p class="workspace-note workspace-note--error">Die Datei ist derzeit nicht verfügbar.</p>
+            <StatusMessage tone="error" title="Datei nicht verfügbar" description="Die Datei ist derzeit nicht verfügbar." />
           {/if}
         </section>
       {:else if primarySubmission()}
@@ -194,7 +195,7 @@
           {/if}
           {#if file && isImageMime(file.mime)}
             {#if imageFailed(file.url)}
-              <p class="workspace-note workspace-note--error">Das Bild konnte nicht geladen werden.</p>
+              <StatusMessage tone="error" title="Bild nicht verfügbar" description="Das Bild konnte nicht geladen werden." />
             {:else}
               <img
                 class="learner-reference-document__image"

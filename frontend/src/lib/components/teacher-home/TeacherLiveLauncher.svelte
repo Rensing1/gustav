@@ -1,5 +1,6 @@
 <script lang="ts">
   import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
 
   type CourseOption = {
     id: string;
@@ -113,12 +114,14 @@
       </select>
     </label>
 
-    <div class="teacher-live-launcher__status" aria-live="polite">
+    <div class="teacher-live-launcher__status">
       {#if unitsError}
-        <p class="workspace-form-error">Lerneinheiten konnten nicht geladen werden.</p>
-        <button class="workspace-link-action workspace-link-action--quiet" type="button" onclick={retryUnits}>
-          Erneut versuchen
-        </button>
+        <StatusMessage
+          tone="error"
+          title="Lerneinheiten konnten nicht geladen werden."
+          actionLabel="Erneut versuchen"
+          onAction={retryUnits}
+        />
       {:else if selectedCourseId && !unitsLoading && !units.length}
         <p class="workspace-empty">Diesem Kurs ist noch keine Lerneinheit zugeordnet.</p>
       {/if}

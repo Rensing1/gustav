@@ -25,6 +25,7 @@
   import GraphUnitNode from "$lib/components/teacher-unit-graph/GraphUnitNode.svelte";
   import GraphInspectorPanel from "$lib/components/ui/GraphInspectorPanel.svelte";
   import TeacherGraphWorkspaceFrame from "$lib/components/ui/TeacherGraphWorkspaceFrame.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";
   import {
     buildTeacherUnitFlow,
@@ -1106,7 +1107,7 @@
           <input name="title" type="text" value={createSectionValues().title ?? ""} />
         </label>
         {#if actionError(form?.createSection)}
-          <p class="workspace-note workspace-note--error">{actionError(form?.createSection)}</p>
+          <StatusMessage tone="error" title="Abschnitt nicht erstellt" description={actionError(form?.createSection)} focusOnMount={true} />
         {/if}
         <div class="workspace-unit-commandbar-popover__actions">
           <button class="workspace-link-action" type="submit">Anlegen</button>
@@ -1169,7 +1170,11 @@
 
       {#if graphMessage}
         <Panel position="top-center">
-          <p class={`teacher-flow-status teacher-flow-status--${graphMessage.tone}`}>{graphMessage.text}</p>
+          <StatusMessage
+            tone={graphMessage.tone}
+            title={graphMessage.text}
+            onDismiss={() => (graphMessage = null)}
+          />
         </Panel>
       {/if}
     </SvelteFlow>
@@ -1193,7 +1198,7 @@
               <p class="workspace-note">Die neue Phase wird hinter der ausgewählten Phase eingefügt.</p>
             {/if}
             {#if actionError(form?.createPhase)}
-              <p class="workspace-note workspace-note--error">{actionError(form?.createPhase)}</p>
+              <StatusMessage tone="error" title="Phase nicht erstellt" description={actionError(form?.createPhase)} focusOnMount={true} />
             {/if}
             <div class="workspace-unit-commandbar-popover__actions">
               <button class="workspace-link-action" type="submit">Phase anlegen</button>
@@ -1220,7 +1225,7 @@
                 </select>
               </label>
               {#if actionError(form?.createModule)}
-                <p class="workspace-note workspace-note--error">{actionError(form?.createModule)}</p>
+                <StatusMessage tone="error" title="Modul nicht erstellt" description={actionError(form?.createModule)} focusOnMount={true} />
               {/if}
               <div class="workspace-unit-commandbar-popover__actions">
                 <button class="workspace-link-action" type="submit">Modul anlegen</button>
@@ -1235,7 +1240,7 @@
               <input name="title" type="text" value={localSelection.section.title} />
             </label>
             {#if actionError(form?.saveSection)}
-              <p class="workspace-note workspace-note--error">{actionError(form?.saveSection)}</p>
+              <StatusMessage tone="error" title="Abschnitt nicht gespeichert" description={actionError(form?.saveSection)} focusOnMount={true} />
             {/if}
             <div class="workspace-unit-commandbar-popover__actions">
               <button class="workspace-link-action" type="submit">Speichern</button>
@@ -1252,7 +1257,7 @@
               <input name="title" type="text" value={localSelection.phase.title} />
             </label>
             {#if actionError(form?.savePhase)}
-              <p class="workspace-note workspace-note--error">{actionError(form?.savePhase)}</p>
+              <StatusMessage tone="error" title="Phase nicht gespeichert" description={actionError(form?.savePhase)} focusOnMount={true} />
             {/if}
             <div class="workspace-unit-commandbar-popover__actions">
               <button class="workspace-link-action" type="submit">Speichern</button>
@@ -1303,7 +1308,7 @@
               />
             </label>
             {#if actionError(form?.saveModule)}
-              <p class="workspace-note workspace-note--error">{actionError(form?.saveModule)}</p>
+              <StatusMessage tone="error" title="Modul nicht gespeichert" description={actionError(form?.saveModule)} focusOnMount={true} />
             {/if}
             <div class="workspace-unit-commandbar-popover__actions">
               <button class="workspace-link-action" type="submit">Speichern</button>
@@ -1374,7 +1379,7 @@
           <textarea name="summary" rows="4">{form?.saveUnit?.values?.summary ?? workspaceState.unit.summary ?? ""}</textarea>
         </label>
         {#if form?.saveUnit?.error}
-          <p class="workspace-note workspace-note--error">{form.saveUnit.error}</p>
+          <StatusMessage tone="error" title="Lerneinheit nicht gespeichert" description={form.saveUnit.error} focusOnMount={true} />
         {/if}
         <div class="dialog-card__actions">
           <button class="workspace-link-action" type="submit">Speichern</button>
@@ -1407,7 +1412,7 @@
           <input name="confirmation" type="text" autocomplete="off" />
         </label>
         {#if form?.deleteUnit?.error}
-          <p class="workspace-note workspace-note--error">{form.deleteUnit.error}</p>
+          <StatusMessage tone="error" title="Lerneinheit nicht gelöscht" description={form.deleteUnit.error} focusOnMount={true} />
         {/if}
         <div class="dialog-card__actions">
           <button class="workspace-link-action workspace-link-action--danger" type="submit">Lerneinheit endgültig löschen</button>

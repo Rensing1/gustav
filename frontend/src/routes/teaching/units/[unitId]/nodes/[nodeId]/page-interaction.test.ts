@@ -270,10 +270,45 @@ describe("teacher node editor page", () => {
       }
     });
 
-    expect(screen.getByText("Material angelegt.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Material angelegt.");
     expect(screen.getByRole("button", { name: /Arbeitsblatt/ })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Arbeitsblatt")).toBeInTheDocument();
     expect(screen.queryByText(/Datei vorbereitet:/i)).not.toBeInTheDocument();
+  });
+
+  it("places a simulation action error before the fields and marks the recovery field", () => {
+    render(Page, {
+      props: {
+        data: { ...sampleData, contentSelection: { kind: "new-material" } },
+        form: {
+          createMaterial: {
+            error: "Die Simulation enthält externe Ressourcen, Navigationen oder Netzwerkzugriffe.",
+            field: "upload_file",
+            requires_reupload: true,
+            values: {
+              material_kind: "simulation",
+              title: "Sitzverteilung",
+              body_md: "Verändere die Sitze.",
+              intent_id: "",
+              sha256: ""
+            }
+          }
+        } as never
+      }
+    });
+
+    const alert = screen.getByRole("alert");
+    const file = screen.getByLabelText("HTML-Simulation");
+    expect(alert).toHaveTextContent("Simulation konnte nicht hinzugefügt werden");
+    expect(alert).toHaveTextContent("erneut aus");
+    expect(alert.compareDocumentPosition(file) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(file).toHaveAttribute("aria-invalid", "true");
+    expect(file).toHaveAttribute("aria-describedby", "create-material-upload-error");
+    expect(screen.getByDisplayValue("Sitzverteilung")).toBeInTheDocument();
+    expect(screen.getByLabelText("Kurze Orientierung")).toHaveValue("Verändere die Sitze.");
+    expect(screen.getByLabelText("Kurze Orientierung").closest(".workspace-field")).toHaveClass(
+      "workspace-field--compact-editor"
+    );
   });
 
   it("shows a local accessible error when reordering fails", () => {

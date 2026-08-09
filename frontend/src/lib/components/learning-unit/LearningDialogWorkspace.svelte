@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission, LearningTask } from "$lib/types/learning";
@@ -268,7 +269,7 @@
 
 <section class="dialog-workspace" aria-label="KI-Dialog">
   {#if pending && !session}<p>Lädt …</p>{/if}
-  {#if error}<p class="flash flash-error">{error}</p>{/if}
+  {#if error}<StatusMessage tone="error" title="Dialog konnte nicht fortgesetzt werden" description={error} />{/if}
   {#if session}
     <nav class="dialog-workspace__switch" aria-label="Arbeitsbereich wählen">
       <button

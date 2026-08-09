@@ -5,6 +5,7 @@
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/ui/MarkdownEditor.svelte";
   import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { learningSubmissionFailureMessage } from "$lib/utils/learning-failures";
   import {
@@ -243,7 +244,7 @@
   {#if activeTab === "submit"}
     <div class="learning-submission-workspace__body">
       {#if errorMessage}
-        <p class="flash flash-error">{errorMessage}</p>
+        <StatusMessage tone="error" title="Abgabe nicht möglich" description={errorMessage} focusOnMount={true} />
       {/if}
 
       {#if !uploadOnly()}
@@ -346,7 +347,7 @@
       {#if historyLoading}
         <p class="learning-unit-empty-copy">Verlauf wird geladen …</p>
       {:else if historyError}
-        <p class="workspace-note workspace-note--error">{historyError}</p>
+        <StatusMessage tone="error" title="Abgabeverlauf nicht verfügbar" description={historyError} />
       {:else if historyEntries.length}
         <div class="learning-submission-history__stack">
           {#each historyEntries as submission}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { TeacherUnitNodeEditorNode, TeacherUnitNodeEditorSettings } from "$lib/types/home";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
 
   let {
     node,
@@ -59,7 +60,7 @@
     {/if}
 
     {#if error}
-      <p class="workspace-form-error">{error}</p>
+      <StatusMessage tone="error" title="Änderungen nicht gespeichert" description={error} focusOnMount={true} />
     {/if}
 
     <div class="workspace-inline-actions">

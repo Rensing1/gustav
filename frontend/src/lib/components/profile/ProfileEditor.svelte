@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AppProfileCliToken, AppProfileView } from "$lib/types/profile";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
 
   let {
     profile,
@@ -60,11 +61,11 @@
       </label>
 
       {#if displayNameError}
-        <p class="workspace-form-error">{displayNameError}</p>
+        <StatusMessage tone="error" title="Anzeigename nicht gespeichert" description={displayNameError} focusOnMount={true} />
       {/if}
 
       {#if saved === "display-name"}
-        <p class="concern-box-composer__success">Der Anzeigename wurde gespeichert.</p>
+        <StatusMessage tone="success" title="Der Anzeigename wurde gespeichert." />
       {/if}
 
       <div class="workspace-inline-actions">
@@ -107,11 +108,11 @@
       {/if}
 
       {#if nameError}
-        <p class="workspace-form-error">{nameError}</p>
+        <StatusMessage tone="error" title="Name nicht gespeichert" description={nameError} focusOnMount={true} />
       {/if}
 
       {#if saved === "name"}
-        <p class="concern-box-composer__success">Vor- und Nachname wurden gespeichert.</p>
+        <StatusMessage tone="success" title="Vor- und Nachname wurden gespeichert." />
       {/if}
 
       <div class="workspace-inline-actions">
@@ -139,7 +140,7 @@
 
     {#if createdCliToken}
       <div class="workspace-form">
-        <p class="concern-box-composer__success">Dieses Token wird nur jetzt angezeigt.</p>
+        <StatusMessage tone="warning" title="Token jetzt sicher kopieren" description="Dieses Token wird nur jetzt angezeigt." announcement="off" dismissible={false} />
         <code>{createdCliToken}</code>
       </div>
     {/if}
@@ -166,11 +167,11 @@
       </div>
 
       {#if cliTokenError}
-        <p class="workspace-form-error">{cliTokenError}</p>
+        <StatusMessage tone="error" title="CLI-Token nicht geändert" description={cliTokenError} focusOnMount={true} />
       {/if}
 
       {#if saved === "cli-token-revoked"}
-        <p class="concern-box-composer__success">Das CLI-Token wurde widerrufen.</p>
+        <StatusMessage tone="success" title="Das CLI-Token wurde widerrufen." />
       {/if}
 
       <div class="workspace-inline-actions">

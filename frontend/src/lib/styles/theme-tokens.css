@@ -20,6 +20,8 @@
   --color-warning-soft: rgba(141, 90, 0, 0.14);
   --color-danger: #ba1a1a;
   --color-danger-soft: rgba(186, 26, 26, 0.14);
+  --color-info: #28647a;
+  --color-info-soft: rgba(40, 100, 122, 0.14);
   --color-shadow: 4px 4px 0 0 rgba(27, 27, 27, 0.98);
   --font-display: "Space Grotesk", "Manrope", "Inter", sans-serif;
   --font-reading: "Inter", "Work Sans", "Nunito", sans-serif;
@@ -66,6 +68,8 @@
   --color-warning-soft: rgba(214, 177, 112, 0.18);
   --color-danger: #ffb4ab;
   --color-danger-soft: rgba(255, 180, 171, 0.18);
+  --color-info: #9fcbe0;
+  --color-info-soft: rgba(159, 203, 224, 0.18);
   --color-shadow: 4px 4px 0 0 rgba(240, 241, 241, 0.4);
   --app-bg-dot-color: rgba(240, 241, 241, 0.2);
 }

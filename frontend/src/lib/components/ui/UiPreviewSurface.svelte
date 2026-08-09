@@ -10,6 +10,7 @@
   import GraphInspectorPanel from "./GraphInspectorPanel.svelte";
   import GraphStageFrame from "./GraphStageFrame.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
+  import StatusMessage from "./StatusMessage.svelte";
   import QuietList from "./QuietList.svelte";
   import QuietListEntry from "./QuietListEntry.svelte";
   import TeacherGraphWorkspaceFrame from "./TeacherGraphWorkspaceFrame.svelte";
@@ -229,7 +230,7 @@
       >
         {#snippet canvas()}
           <div class="preview-graph-reference">
-            <div class="teacher-flow-status teacher-flow-status--success">Phase gespeichert.</div>
+            <StatusMessage tone="success" title="Phase gespeichert." autoDismissMs={null} announcement="off" />
 
             <div class="preview-graph-sample teacher-flow-shell">
               <div class="preview-graph-sample__phase">

@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import TeacherCourseUnitList from "$lib/components/teacher-course/TeacherCourseUnitList.svelte";
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import WorkspaceDrawer from "$lib/components/ui/WorkspaceDrawer.svelte";
   import { withoutQueryParameters } from "$lib/components/ui/workspace-drawer-url";
   import type { ActionData, PageData } from "./$types";
@@ -128,14 +129,12 @@
   <PageActionHead backHref="/teaching/courses" backLabel="← Kurse" title={data.course.title} copy={courseMetadata} />
 
   {#if readOnly}
-    <div class="teacher-course-workspace__status" role="status">
-      <strong>Archiviert · schreibgeschützt</strong>
-    </div>
+    <StatusMessage tone="info" title="Archiviert · schreibgeschützt" announcement="off" dismissible={false} />
   {/if}
 
   {#if missingMetadata.length}
-    <div class="teacher-course-workspace__status teacher-course-workspace__status--warning" role="status">
-      <span><strong>Kursdaten unvollständig:</strong> {missingMetadata.join(", ")}</span>
+    <div>
+      <StatusMessage tone="warning" title="Kursdaten unvollständig:" description={missingMetadata.join(", ")} announcement="off" dismissible={false} />
       <a class="workspace-text-button" href={pageHref({ course: "1" })} onclick={openCourseDrawer}>Ergänzen</a>
     </div>
   {/if}
@@ -159,7 +158,7 @@
     />
 
     {#if form?.removeUnit?.error}
-      <p class="workspace-form-error" role="alert">{form.removeUnit.error}</p>
+      <StatusMessage tone="error" title="Lerneinheit nicht entfernt" description={form.removeUnit.error} focusOnMount={true} />
     {/if}
   </section>
 
@@ -251,7 +250,7 @@
         {/if}
 
         {#if form?.saveCourse?.error}
-          <p class="workspace-form-error">{form.saveCourse.error}</p>
+          <StatusMessage tone="error" title="Kursdaten nicht gespeichert" description={form.saveCourse.error} focusOnMount={true} />
         {/if}
 
         <div class="workspace-inline-actions">
@@ -263,8 +262,8 @@
       <form method="POST" action={readOnly ? "?/restoreCourse" : "?/archiveCourse"} class="workspace-form">
         <p class="workspace-label">{readOnly ? "Kurs wiederherstellen" : "Kurs archivieren"}</p>
         <p class="workspace-note">{readOnly ? "Nur verwenden, um eine versehentliche Archivierung zu korrigieren." : "Beendet die aktive Unterrichtsnutzung und erhält Lernleistungen schreibgeschützt."}</p>
-        {#if form?.archiveCourse?.error}<p class="workspace-form-error">{form.archiveCourse.error}</p>{/if}
-        {#if form?.restoreCourse?.error}<p class="workspace-form-error">{form.restoreCourse.error}</p>{/if}
+        {#if form?.archiveCourse?.error}<StatusMessage tone="error" title="Kurs nicht archiviert" description={form.archiveCourse.error} focusOnMount={true} />{/if}
+        {#if form?.restoreCourse?.error}<StatusMessage tone="error" title="Kurs nicht wiederhergestellt" description={form.restoreCourse.error} focusOnMount={true} />{/if}
         <button class="workspace-link-action" type="submit">{readOnly ? "Wiederherstellen" : "Archivieren"}</button>
       </form>
 
@@ -284,7 +283,7 @@
         </label>
 
         {#if form?.deleteCourse?.error}
-          <p class="workspace-form-error">{form.deleteCourse.error}</p>
+          <StatusMessage tone="error" title="Kurs nicht gelöscht" description={form.deleteCourse.error} focusOnMount={true} />
         {/if}
 
         <div class="workspace-inline-actions">
@@ -347,7 +346,7 @@
       {/if}
 
       {#if form?.removeMember?.error}
-        <p class="workspace-form-error">{form.removeMember.error}</p>
+        <StatusMessage tone="error" title="Mitglied nicht entfernt" description={form.removeMember.error} focusOnMount={true} />
       {/if}
   </WorkspaceDrawer>
 {/if}
@@ -401,7 +400,7 @@
       {/if}
 
       {#if form?.addMember?.error}
-        <p class="workspace-form-error">{form.addMember.error}</p>
+        <StatusMessage tone="error" title="Mitglied nicht hinzugefügt" description={form.addMember.error} focusOnMount={true} />
       {/if}
     </div>
   </div>
@@ -438,7 +437,7 @@
         {/if}
 
         {#if form?.addUnit?.error}
-          <p class="workspace-form-error">{form.addUnit.error}</p>
+          <StatusMessage tone="error" title="Lerneinheit nicht hinzugefügt" description={form.addUnit.error} focusOnMount={true} />
         {/if}
 
         <div class="workspace-inline-actions">

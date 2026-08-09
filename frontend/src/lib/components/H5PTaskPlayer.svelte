@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import StatusMessage, { type StatusMessageTone } from "$lib/components/ui/StatusMessage.svelte";
   import { loadH5PWebcomponentsModule } from "$lib/runtime/h5p-webcomponents";
 
   let {
@@ -24,6 +25,13 @@
       return expiredSessionMessage;
     }
     return raw || "H5P konnte nicht geladen werden.";
+  }
+
+  function statusTone(message: string): StatusMessageTone {
+    if (message.startsWith("Lade")) return "progress";
+    if (/^(Bereit|Gespeichert)/.test(message)) return "success";
+    if (message.startsWith("Kein H5P-Inhalt")) return "warning";
+    return "error";
   }
 
   function extractScore(statement: unknown): { raw: number; max: number } | null {
@@ -59,7 +67,7 @@
 
   onMount(() => {
     if (!root || !contentId) {
-      status = "Kein H5P-Inhalt verknuepft.";
+      status = "Kein H5P-Inhalt verknüpft.";
       return;
     }
 
@@ -193,5 +201,5 @@
 
 <div class="h5p-task-player">
   <div bind:this={root}></div>
-  <p class="h5p-status">{status}</p>
+  <div class="h5p-status"><StatusMessage tone={statusTone(status)} title={status} dismissible={false} /></div>
 </div>

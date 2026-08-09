@@ -1,4 +1,6 @@
 <script lang="ts">
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
+
   export type TeacherCourseUnit = {
     id: string;
     module_id: string;
@@ -131,7 +133,7 @@
       {/each}
       <div>
         <strong>Reihenfolge geändert</strong>
-        {#if reorderError}<p class="workspace-form-error" role="alert">{reorderError}</p>{/if}
+        {#if reorderError}<StatusMessage tone="error" title="Reihenfolge nicht gespeichert" description={reorderError} focusOnMount={true} />{/if}
       </div>
       <div class="workspace-inline-actions">
         <button class="workspace-link-action" type="submit">Reihenfolge speichern</button>

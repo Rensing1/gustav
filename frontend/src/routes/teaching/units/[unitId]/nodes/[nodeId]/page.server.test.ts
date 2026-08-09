@@ -502,10 +502,35 @@ describe("teacher node editor server helpers", () => {
       status: 400,
       data: {
         createMaterial: {
-          error: "Datei-Uploads benötigen aktiviertes JavaScript."
+          error: "Datei-Uploads benötigen aktiviertes JavaScript.",
+          field: "upload_file"
         }
       }
     });
     expect(backendRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("identifies the title field when material creation has no title", async () => {
+    const form = new FormData();
+    form.set("section_id", "section-1");
+    form.set("material_kind", "simulation");
+    form.set("title", "");
+
+    const result = await actions.createMaterial({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof actions.createMaterial>[0]["cookies"],
+      params: { unitId: "unit-1", nodeId: "node-1" },
+      request: requestWithFormData(form)
+    } as Parameters<typeof actions.createMaterial>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        createMaterial: {
+          error: "Bitte gib einen Titel für das Material ein.",
+          field: "title"
+        }
+      }
+    });
   });
 });

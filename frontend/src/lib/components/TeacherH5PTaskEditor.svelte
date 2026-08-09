@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import StatusMessage, { type StatusMessageTone } from "$lib/components/ui/StatusMessage.svelte";
   import { loadH5PTaskEditorModule, type H5PTaskEditorMount } from "$lib/runtime/h5p-task-editor";
 
   let {
@@ -26,6 +27,13 @@
     return raw || "H5P konnte nicht geladen werden.";
   }
 
+  function statusTone(message: string): StatusMessageTone {
+    if (/^(Lade|Importiere|Exportiere|Setze|Speichere)/.test(message)) return "progress";
+    if (/(Bereit|geladen|gespeichert|importiert|abgeschlossen)/i.test(message)) return "success";
+    if (/^(Noch kein|Die H5P-Editor-Oberfläche ist unvollständig)/.test(message)) return "warning";
+    return "error";
+  }
+
   onMount(() => {
     if (!root) {
       status = "Der H5P-Editor konnte nicht initialisiert werden.";
@@ -34,6 +42,11 @@
 
     let disposed = false;
     let mountHandle: H5PTaskEditorMount | undefined;
+    const handleStatus = (event: Event) => {
+      const message = (event as CustomEvent<{ message?: string }>).detail?.message;
+      if (message) status = message;
+    };
+    root.addEventListener("gustav:h5p-status", handleStatus);
 
     async function install(): Promise<void> {
       const module = await loadH5PTaskEditorModule();
@@ -53,6 +66,7 @@
 
     return () => {
       disposed = true;
+      root?.removeEventListener("gustav:h5p-status", handleStatus);
       mountHandle?.destroy();
       mountHandle = undefined;
     };
@@ -83,6 +97,7 @@
       <button class="workspace-button" data-role="h5p-save" type="button">H5P speichern</button>
     </div>
   </div>
-  <p class="teacher-h5p-editor__status" data-role="h5p-status">{status}</p>
+  <span data-role="h5p-status" hidden>{status}</span>
+  <StatusMessage tone={statusTone(status)} title={status} dismissible={false} />
   <div data-role="h5p-editor-host"></div>
 </div>

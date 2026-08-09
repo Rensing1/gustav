@@ -1,5 +1,6 @@
 <script lang="ts">
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { ActionData, PageData } from "./$types";
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -19,16 +20,16 @@
   </PageActionHead>
 
   {#if form?.exportJob}
-    <p class="learning-portfolio__status" role="status">Der Export wird erstellt. Du kannst diese Seite später erneut öffnen.</p>
+    <StatusMessage tone="progress" title="Export wird erstellt" description="Du kannst diese Seite später erneut öffnen." />
   {/if}
   {#if data.portfolio.latest_export?.status === "ready" && data.portfolio.latest_export.download_href}
     <p class="learning-portfolio__status"><a class="workspace-link-action" href={data.portfolio.latest_export.download_href}>Fertiges Lernarchiv herunterladen</a></p>
   {:else if data.portfolio.latest_export?.status === "pending" || data.portfolio.latest_export?.status === "generating"}
     <p class="learning-portfolio__status">Ein Export wird derzeit erstellt.</p>
   {:else if data.portfolio.latest_export?.status === "failed"}
-    <p class="workspace-form-error">Der letzte Export konnte nicht erstellt werden ({data.portfolio.latest_export.error_code || "unbekannter Fehler"}).</p>
+    <StatusMessage tone="error" title="Export fehlgeschlagen" description={`Der letzte Export konnte nicht erstellt werden (${data.portfolio.latest_export.error_code || "unbekannter Fehler"}).`} />
   {/if}
-  {#if form?.exportError}<p class="workspace-form-error">{form.exportError}</p>{/if}
+  {#if form?.exportError}<StatusMessage tone="error" title="Export nicht gestartet" description={form.exportError} focusOnMount={true} />{/if}
 
   <div class="learning-portfolio__list">
     {#each data.portfolio.submissions as submission}

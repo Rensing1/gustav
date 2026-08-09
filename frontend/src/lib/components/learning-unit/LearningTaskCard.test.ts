@@ -817,6 +817,8 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.getByText("Entwurf wird ausgewertet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rückmeldung einholen" })).toBeDisabled();
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveClass("status-message--progress");
   });
 
   it("shows the first feedback pending state inside the open editor even without a review panel", () => {
@@ -834,9 +836,78 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByText("Rückmeldung wird erstellt ...")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Rückmeldung wird erstellt ...");
     expect(screen.getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
+  });
+
+  it("changes a long-running feedback request to a warning without duplicating the message", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 6",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true,
+        feedbackPending: true,
+        feedbackStatusMessage: "Die Rückmeldung dauert länger als üblich ...",
+        pendingIntent: "feedback"
+      }
+    });
+
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveClass("status-message--warning");
+  });
+
+  it("offers the completed feedback without opening it automatically", async () => {
+    const onToggleReviewPanel = vi.fn();
+    const onDismissFeedbackStatus = vi.fn();
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 6",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true,
+        message: "feedback",
+        feedbackStatusMessage: "Rückmeldung ist bereit",
+        history: [
+          {
+            id: "submission-ready",
+            attempt_nr: 1,
+            kind: "text",
+            intent: "feedback",
+            created_at: "2026-08-09T08:00:00+00:00",
+            analysis_status: "completed",
+            feedback_md: "Gut erklärt."
+          }
+        ],
+        onToggleReviewPanel,
+        onDismissFeedbackStatus
+      }
+    });
+
+    expect(screen.getByRole("status")).toHaveClass("status-message--success");
+    expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "Rückmeldung ansehen" }));
+    expect(onToggleReviewPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a processing failure visible as an alert", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 6",
+        unitType: "linear",
+        expanded: true,
+        feedbackStatusMessage: "Die Rückmeldung konnte nicht erstellt werden."
+      }
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Die Rückmeldung konnte nicht erstellt werden.");
   });
 
   it("shows a completed final submission as closed review state with a retry action", () => {

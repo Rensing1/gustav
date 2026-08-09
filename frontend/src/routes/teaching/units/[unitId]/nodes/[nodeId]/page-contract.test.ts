@@ -29,7 +29,11 @@ describe("teacher node editor contract", () => {
 
     expect(routeSource).toContain('action="?/createMaterial"');
     expect(routeSource).toContain('enctype="multipart/form-data"');
-    expect(routeSource).toContain('<input name="upload_file" type="file" onchange={handleCreateMaterialFileChange} />');
+    expect(routeSource).toContain('name="upload_file"');
+    expect(routeSource).toContain('onchange={handleCreateMaterialFileChange}');
+    expect(routeSource).toContain('onsubmitcapture={handleCreateMaterialSubmit}');
+    expect(routeSource).not.toContain('onsubmit={handleCreateMaterialSubmit}');
+    expect(routeSource).toContain("event.stopImmediatePropagation();");
     expect(routeSource).toContain('<input name="intent_id" type="hidden" value=');
     expect(routeSource).toContain('<input name="sha256" type="hidden" value=');
   });
@@ -50,8 +54,9 @@ describe("teacher node editor contract", () => {
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
     expect(routeSource).toContain("editorMessage");
-    expect(routeSource).toContain("workspace-note--${editorMessage.tone}");
-    expect(routeSource).toContain('role={editorMessage.tone === "error" ? "alert" : "status"}');
+    expect(routeSource).toContain("<StatusMessage");
+    expect(routeSource).toContain("tone={editorMessage.tone}");
+    expect(routeSource).toContain("title={editorMessage.text}");
   });
 
   it("keeps create actions available in the compact content stage without duplicating them on desktop", () => {

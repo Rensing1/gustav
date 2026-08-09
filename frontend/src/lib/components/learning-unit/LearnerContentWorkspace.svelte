@@ -5,6 +5,7 @@
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
   import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
   import WorkspaceOutline from "$lib/components/ui/WorkspaceOutline.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { ContentGroup, LearnerMaterialContextModule, LearningContentItem } from "$lib/learning-unit/workspace";
   import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
@@ -72,6 +73,7 @@
     onWorkScroll = null,
     onReaderScroll = null,
     onToggleReviewPanel = null,
+    onDismissFeedbackStatus = null,
     onProgressPersisted = null
   }: {
     learnerSub?: string | null;
@@ -130,6 +132,7 @@
     onWorkScroll?: ((scrollTop: number) => void) | null;
     onReaderScroll?: ((scrollTop: number) => void) | null;
     onToggleReviewPanel?: ((taskId: string) => void | Promise<void>) | null;
+    onDismissFeedbackStatus?: ((taskId: string) => void) | null;
     onProgressPersisted?: (() => void | Promise<void>) | null;
   } = $props();
 
@@ -350,12 +353,15 @@
                   message={submissionMessage}
                   errorMessage={submissionErrorTaskId === task.id ? submissionErrorMessage : null}
                   feedbackPending={feedbackPendingTaskId === task.id}
-                  feedbackStatusMessage={feedbackStatusTaskId === task.id ? feedbackStatusMessage : null}
+                  feedbackStatusMessage={mode === "orienting" && feedbackStatusTaskId === task.id
+                    ? feedbackStatusMessage
+                    : null}
                   pendingIntent={feedbackPendingTaskId === task.id ? pendingSubmissionIntent : null}
                   submissionFocused={false}
                   reviewPanelOpen={false}
                   enhanceSubmit={enhanceTaskForm?.(task.id)}
                   onToggleReviewPanel={() => onToggleReviewPanel?.(task.id)}
+                  onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
                   onEnterSubmissionWorkspace={() => onBeginTask(item.key, "text")}
                   onEnterUploadWorkspace={() => onBeginTask(item.key, preferredMode(task))}
                   {onProgressPersisted}
@@ -531,6 +537,7 @@
           onCloseDialogContextModule={onCloseModule}
           onUndoCloseDialogContextModule={onUndoCloseModule}
           onToggleReviewPanel={() => onToggleReviewPanel?.(task.id)}
+          onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
           onSubmitUploadFeedback={onSubmitUploadFeedback}
           {onProgressPersisted}
         />
@@ -540,7 +547,7 @@
     </div>
   {:else}
     <section class="learning-unit-empty-state" aria-label="Aufgabe nicht verfügbar">
-      <p class="workspace-note workspace-note--error">Diese Aufgabe ist nicht mehr verfügbar.</p>
+      <StatusMessage tone="error" title="Aufgabe nicht verfügbar" description="Diese Aufgabe ist nicht mehr verfügbar." />
       <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={onPauseTask}>Zurück zu den Inhalten</button>
     </section>
   {/if}

@@ -100,7 +100,9 @@ describe("teacher course detail page", () => {
       }
     });
 
-    expect(screen.getByRole("status")).toHaveTextContent("Kursdaten unvollständig: Fach, Jahrgang, Schuljahr");
+    expect(screen.getByText("Kursdaten unvollständig:").closest("section")).toHaveTextContent(
+      "Kursdaten unvollständig: Fach, Jahrgang, Schuljahr"
+    );
     expect(screen.queryByRole("link", { name: "Lerneinheit hinzufügen" })).not.toBeInTheDocument();
     expect(screen.queryByText("Nicht gesetzt")).not.toBeInTheDocument();
 

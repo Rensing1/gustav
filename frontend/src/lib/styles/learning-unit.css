@@ -357,18 +357,6 @@
 
 .learning-unit-flash {
   margin: 0;
-  padding: 0.85rem 1rem;
-  border-radius: 1rem;
-}
-
-.flash-success {
-  background: rgba(86, 148, 111, 0.14);
-  color: #33673b;
-}
-
-.flash-error {
-  background: rgba(180, 99, 122, 0.14);
-  color: #8c4351;
 }
 
 .learning-unit-toolbar {
@@ -1427,6 +1415,16 @@
   display: grid;
   gap: 0.2rem;
   padding-top: 0.85rem;
+}
+
+.learning-task-feedback-status {
+  margin-bottom: var(--space-4);
+}
+
+.learning-task-feedback-status--active {
+  position: sticky;
+  top: var(--space-3);
+  z-index: 4;
 }
 
 .learning-task-status__headline {

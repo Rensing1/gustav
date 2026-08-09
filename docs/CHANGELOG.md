@@ -27,6 +27,9 @@
 - ai(defaults): Vision=`qwen2.5vl:3b`, Feedback=`gpt-oss:latest`.
 - config(csrf): Prod/stage startup now requires dedicated `APP_CSRF_TOKEN_SECRET` (placeholder/dummy values rejected).
 ### UI
+- ui(messages): Fehler, Erfolg, Warnungen und laufende Vorgänge verwenden gemeinsame, barrierefreie Meldungskarten mit zentraler Semantik, Fokusführung, Hell-/Dunkelmodus und sichtbarkeitsabhängiger Sechs-Sekunden-Frist für Erfolge.
+- ui(learning): Die Aufgabenfläche zeigt während der KI-Auswertung genau eine persistente Fortschrittsmeldung, nach 60 Sekunden einen unverrückten Verzögerungshinweis und nach Abschluss kurz eine Aktion zur fertigen Rückmeldung; endgültige Abgaben öffnen weiterhin automatisch das Ergebnis.
+- ui(simulations): Der Materialeditor erhält eine kompakte Orientierungseingabe und erklärt abgelehnte Simulationsdateien samt bereinigten Fundstellen und notwendiger erneuter Dateiauswahl, ohne Titel oder Orientierung zu verlieren.
 - ui(navigation): Der rollenabhängige Kummerkasten ist jetzt als dauerhaft sichtbare, mobil erreichbare Aktion in der Kopfleiste statt im Kontomenü verlinkt.
 - ui(learning): Task-Formular sendet per HTMX und tauscht nur das Verlaufs-Fragment (kein Full-Page-Reload). PRG-Fallback ohne HTMX bleibt erhalten; Erfolgsbanner via HX-Trigger.
 - ui(learning): Verlauf aktualisiert sich automatisch (hx-trigger="every 2s") solange der neueste Versuch pending ist; Polling stoppt bei completed.
@@ -41,6 +44,7 @@
 - ai(vision): `_call_model` kapselt nun alle Ollama-Aufrufe (Timeouts, Markdown-Unwrap, Images-Handling), sodass `extract()` nur noch orchestriert und Tests den Helper gezielt prüfen können.
 
 ### Docs (updates)
+- docs(ui): Der Designvertrag dokumentiert gemeinsame Aktionsmeldungen, Feldfehler, Live-Regionen, Fokusführung und transiente Lebensdauer.
 - docs(cli): `docs/references/gustav_cli.md` dokumentiert Datei-Material-Upload/-Download, H5P-Paketbefehle und Task-Kinds für `native|h5p|visual|scratch|calliope|filius`.
 - docs(config): `.env.example` und `docs/references/config_matrix.md` dokumentieren `H5P_INTERNAL_SHARED_SECRET` für interne Web→H5P-CLI-Aufrufe.
 - docs(reference): Neue Referenz `docs/references/gustav_cli.md` dokumentiert die Teaching-Authoring-CLI, CLI-Tokens, Scopes, aktuelle Befehle, Beispiele und Grenzen.

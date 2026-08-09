@@ -2,6 +2,7 @@
   import { enhance } from "$app/forms";
   import { onMount } from "svelte";
   import type { SubmitFunction } from "@sveltejs/kit";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
 
   import type { GraphDeletionImpact } from "$lib/teacher-unit-workspace/graph-deletion-impact";
 
@@ -115,7 +116,7 @@
     </ul>
 
     {#if error}
-      <p class="workspace-note workspace-note--error" role="alert">{error}</p>
+      <StatusMessage tone="error" title="Löschen nicht möglich" description={error} focusOnMount={true} />
     {/if}
 
     <form method="POST" {action} use:enhance={enhanceDeleteForm}>

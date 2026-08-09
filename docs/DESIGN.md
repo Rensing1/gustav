@@ -262,6 +262,17 @@ Regeln:
 - vollständige Tastaturbedienbarkeit
 - semantische Struktur bleibt trotz technischer Stilrichtung erhalten
 
+### 9.1 Meldungen und Validierungsfehler
+
+Aktionsmeldungen verwenden ausschließlich die gemeinsamen Komponenten `StatusMessage` und `FieldError`. `StatusMessage` ist eine kompakte Karte mit Symbol, Überschrift, optionaler Beschreibung und optionaler Wiederherstellungsaktion. Farbe unterstützt die Bedeutung, ersetzt aber weder Symbol noch Text.
+
+- Neue Aktionsfehler werden als `alert` angekündigt, bleiben bis zur Behebung oder zum Schließen sichtbar und führen den Fokus zum ersten ungültigen Feld oder zur Meldung.
+- Erfolg und laufende Vorgänge werden höflich als `status` angekündigt und stehlen keinen Fokus. Erfolg verschwindet nach sechs sichtbaren Sekunden; die Frist pausiert bei verborgenem Dokument, Hover und Fokus innerhalb der Meldung.
+- Laufende Vorgänge bleiben an ihren Fachzustand gebunden. Es gibt weder künstliche Prozentwerte noch einen unabhängigen globalen Meldungsspeicher.
+- Statische Hinweise besitzen keine Live-Region. Toasts bleiben folgenlosen Bestätigungen wie „Link kopiert“ vorbehalten.
+- Feldfehler stehen unmittelbar am Feld, sind über `aria-describedby` verbunden und ergänzen eine zusammenfassende Aktionsmeldung oberhalb des Formulars.
+- Bewegung wird bei `prefers-reduced-motion` abgeschaltet; semantische Meldungsfarben sind für Hell- und Dunkelmodus definiert.
+
 ## 10. Komponentenfamilien der ersten Welle
 
 Die bestehende Komponentenarchitektur bleibt erhalten.

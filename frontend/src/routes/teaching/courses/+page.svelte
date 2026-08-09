@@ -1,5 +1,6 @@
 <script lang="ts">
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -82,7 +83,7 @@
       {:else}
         <p class="workspace-empty">Keine aktiven Kurse für diese Auswahl.</p>
       {/each}
-      {#if form?.archiveSelected?.error}<p class="workspace-form-error">{form.archiveSelected.error}</p>{/if}
+      {#if form?.archiveSelected?.error}<StatusMessage tone="error" title="Kurse nicht archiviert" description={form.archiveSelected.error} focusOnMount={true} />{/if}
     </form>
   {:else}
     <div class="workspace-course-catalog__list">
@@ -110,7 +111,7 @@
       {:else}
         <p class="workspace-empty">Das Kursarchiv ist leer.</p>
       {/each}
-      {#if form?.restoreCourse?.error}<p class="workspace-form-error">{form.restoreCourse.error}</p>{/if}
+      {#if form?.restoreCourse?.error}<StatusMessage tone="error" title="Kurs nicht wiederhergestellt" description={form.restoreCourse.error} focusOnMount={true} />{/if}
     </div>
   {/if}
 </div>
@@ -130,7 +131,7 @@
         </div>
         <datalist id="course-subjects"><option value="Informatik"></option><option value="Politik-Wirtschaft"></option><option value="Mathematik"></option><option value="Deutsch"></option></datalist>
         <datalist id="course-grades"><option value="5"></option><option value="6"></option><option value="7"></option><option value="8"></option><option value="9"></option><option value="10"></option><option value="Jahrgangsübergreifend"></option></datalist>
-        {#if form?.createCourse?.error}<p class="workspace-form-error">{form.createCourse.error}</p>{/if}
+        {#if form?.createCourse?.error}<StatusMessage tone="error" title="Kurs nicht erstellt" description={form.createCourse.error} focusOnMount={true} />{/if}
         <div class="workspace-inline-actions"><button class="primary-button" type="submit">Kurs anlegen</button><button class="ghost-button" type="button" onclick={() => (createDialogOpen = false)}>Abbrechen</button></div>
       </form>
     </div>

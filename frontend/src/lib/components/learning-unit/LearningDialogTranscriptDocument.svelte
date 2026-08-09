@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
 
   type TranscriptTurn = {
     id: string;
@@ -41,7 +42,7 @@
 </script>
 
 {#if failed}
-  <p class="workspace-note workspace-note--error">Der Dialogverlauf konnte nicht geladen werden.</p>
+  <StatusMessage tone="error" title="Dialogverlauf nicht verfügbar" description="Der Dialogverlauf konnte nicht geladen werden." />
 {:else if transcript}
   <div class="learner-reference-transcript" role="log" aria-label="Früherer Dialogverlauf">
     <article class="learner-reference-transcript__message learner-reference-transcript__message--ai">

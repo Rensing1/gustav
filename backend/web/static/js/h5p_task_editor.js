@@ -234,8 +234,10 @@
       null;
 
     const setStatus = (msg) => {
-      if (!statusEl || disposed) return;
-      statusEl.textContent = msg || '';
+      if (disposed) return;
+      const message = msg || '';
+      root.dispatchEvent(new CustomEvent('gustav:h5p-status', { detail: { message } }));
+      if (statusEl) statusEl.textContent = message;
     };
 
     const setHiddenContentId = (cid) => {

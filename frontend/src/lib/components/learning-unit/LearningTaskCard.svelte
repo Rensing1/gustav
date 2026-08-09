@@ -6,6 +6,7 @@
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/ui/MarkdownEditor.svelte";
   import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
+  import StatusMessage, { type StatusMessageTone } from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -49,6 +50,7 @@
     enhanceSubmit = undefined,
     onToggle = null,
     onToggleReviewPanel = null,
+    onDismissFeedbackStatus = null,
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
     onExitSubmissionWorkspace = null,
@@ -99,6 +101,7 @@
     enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
     onToggleReviewPanel?: (() => void) | null;
+    onDismissFeedbackStatus?: (() => void) | null;
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
     onExitSubmissionWorkspace?: (() => void) | null;
@@ -199,14 +202,6 @@
 
   function usesCompactTaskLayout(): boolean {
     return compactLayout;
-  }
-
-  function showInlinePendingNote(): boolean {
-    return Boolean(submissionFocused && feedbackPendingMessage() && !showSubmissionSummary());
-  }
-
-  function showStandalonePendingNote(): boolean {
-    return Boolean(!submissionFocused && feedbackPendingMessage() && !showSubmissionSummary());
   }
 
   function fileSummary(submission: LearningSubmission): string {
@@ -413,6 +408,30 @@
     return feedbackStatusMessage;
   }
 
+  function feedbackMessageTone(): StatusMessageTone {
+    if (feedbackPending) {
+      return feedbackStatusMessage?.includes("dauert länger") ? "warning" : "progress";
+    }
+    if (message === "feedback" || message === "submitted") {
+      return "success";
+    }
+    if (feedbackStatusMessage === "Die Abgabe wird geladen ...") {
+      return "progress";
+    }
+    return "error";
+  }
+
+  function feedbackMessageDescription(): string | null {
+    const tone = feedbackMessageTone();
+    if (tone === "progress") {
+      return "Du kannst währenddessen in GUSTAV weiterarbeiten.";
+    }
+    if (tone === "warning") {
+      return "Du musst nichts erneut abgeben. GUSTAV prüft den Stand weiter.";
+    }
+    return null;
+  }
+
   function historyStateMessage(): string | null {
     if (latestSubmission()) {
       return null;
@@ -614,6 +633,23 @@
 
     {#if workspaceOnly || expanded || usesCompactTaskLayout()}
       <div class="learning-work-item__body">
+        {#if feedbackPendingMessage()}
+          <div
+            class:learning-task-feedback-status--active={submissionFocused || workspaceOnly}
+            class="learning-task-feedback-status"
+          >
+            <StatusMessage
+              tone={feedbackMessageTone()}
+              title={feedbackPendingMessage()!}
+              description={feedbackMessageDescription()}
+              actionLabel={message === "feedback" ? "Rückmeldung ansehen" : null}
+              onAction={message === "feedback" ? onToggleReviewPanel : null}
+              onDismiss={onDismissFeedbackStatus}
+              dismissible={feedbackMessageTone() === "error"}
+            />
+          </div>
+        {/if}
+
         {#if !usesCompactTaskLayout()}
           <div class="markdown-prose">
             {@html renderMarkdown(task.instruction_md)}
@@ -654,10 +690,6 @@
                 </button>
               {/if}
               </header>
-            {/if}
-
-            {#if showInlinePendingNote()}
-              <p class="workspace-note">{feedbackPendingMessage()}</p>
             {/if}
 
             {#if task.kind === "dialog"}
@@ -808,13 +840,10 @@
             {/if}
 
             {#if errorMessage}
-              <p class="flash flash-error">{errorMessage}</p>
+              <StatusMessage tone="error" title="Abgabe nicht möglich" description={errorMessage} focusOnMount={true} />
             {/if}
           </section>
         {:else}
-          {#if showStandalonePendingNote()}
-            <p class="workspace-note">{feedbackPendingMessage()}</p>
-          {/if}
           {#if !usesCompactTaskLayout()}
             <div class="learning-task-cta-row">
               {#if hasSubmission() && task.kind !== "h5p"}
@@ -873,10 +902,6 @@
                   {/if}
                 </div>
               </header>
-
-              {#if feedbackPendingMessage()}
-                <p class="workspace-note">{feedbackPendingMessage()}</p>
-              {/if}
 
               {#if usesCompactTaskLayout()}
                 <div class="markdown-prose learning-task-inline-editor__statement">
@@ -958,9 +983,7 @@
                     <p class="learning-task-submission-summary__plain">Es liegt noch keine Abgabe vor.</p>
                   {/if}
                 {:else if activeSummaryTab === "feedback"}
-                  {#if feedbackPendingMessage()}
-                    <p class="workspace-note">{feedbackPendingMessage()}</p>
-                  {:else if latestSubmission() && latestSubmissionOrThrow().feedback_md}
+                  {#if latestSubmission() && latestSubmissionOrThrow().feedback_md}
                     <div class="markdown-prose">
                       {@html renderMarkdown(latestSubmissionOrThrow().feedback_md)}
                     </div>
@@ -988,8 +1011,6 @@
                     </ul>
                   {:else if latestSubmission()}
                     <p class="learning-task-submission-summary__plain">{evaluationSummary(latestSubmissionOrThrow())}</p>
-                  {:else if feedbackPendingMessage()}
-                    <p class="workspace-note">{feedbackPendingMessage()}</p>
                   {:else if historyStateMessage()}
                     <p class="learning-task-submission-summary__plain">{historyStateMessage()}</p>
                   {:else}

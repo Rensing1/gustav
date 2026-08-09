@@ -3,6 +3,7 @@
   import TeacherUnitsCatalogList from "$lib/components/teacher-units-catalog/TeacherUnitsCatalogList.svelte";
   import TeacherUnitsCatalogToolbar from "$lib/components/teacher-units-catalog/TeacherUnitsCatalogToolbar.svelte";
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -136,7 +137,7 @@
         </fieldset>
 
         {#if form?.createUnit?.error}
-          <p class="workspace-form-error">{form.createUnit.error}</p>
+          <StatusMessage tone="error" title="Lerneinheit nicht erstellt" description={form.createUnit.error} focusOnMount={true} />
         {/if}
 
         <div class="workspace-form-actions">

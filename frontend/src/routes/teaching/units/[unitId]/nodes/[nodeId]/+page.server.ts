@@ -538,6 +538,7 @@ export const actions: Actions = {
       return fail(400, {
         createMaterial: {
           error: "Bitte gib einen Titel für das Material ein.",
+          field: "title",
           values
         }
       });
@@ -547,18 +548,20 @@ export const actions: Actions = {
     if (materialKind === "file" || materialKind === "simulation") {
       if (!uploadFile && !intentId && !sha256) {
         return fail(400, {
-          createMaterial: {
-            error: "Bitte wähle eine Datei aus.",
-            values
+            createMaterial: {
+              error: "Bitte wähle eine Datei aus.",
+              field: "upload_file",
+              values
           }
         });
       }
 
       if (!intentId || !sha256) {
         return fail(400, {
-          createMaterial: {
-            error: "Datei-Uploads benötigen aktiviertes JavaScript.",
-            values
+            createMaterial: {
+              error: "Datei-Uploads benötigen aktiviertes JavaScript.",
+              field: "upload_file",
+              values
           }
         });
       }
@@ -575,9 +578,10 @@ export const actions: Actions = {
     } else {
       if (!bodyMd.trim()) {
         return fail(400, {
-          createMaterial: {
-            error: "Bitte gib Titel und Inhalt für das Material ein.",
-            values
+            createMaterial: {
+              error: "Bitte gib Titel und Inhalt für das Material ein.",
+              field: "body_md",
+              values
           }
         });
       }
@@ -604,6 +608,8 @@ export const actions: Actions = {
           return fail(response.status, {
             createMaterial: {
               error: "Die Upload-Freigabe ist abgelaufen. Bitte wähle die Datei erneut aus.",
+              field: "upload_file",
+              requires_reupload: true,
               values: {
                 ...values,
                 intent_id: "",
@@ -618,6 +624,8 @@ export const actions: Actions = {
               error: materialKind === "simulation"
                 ? "Bitte wähle eine selbstständige HTML-Datei aus."
                 : "Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.",
+              field: "upload_file",
+              requires_reupload: true,
               values: {
                 ...values,
                 intent_id: "",
@@ -630,6 +638,8 @@ export const actions: Actions = {
           return fail(response.status, {
             createMaterial: {
               error: "Die Datei konnte nicht bestätigt werden. Bitte wähle sie erneut aus.",
+              field: "upload_file",
+              requires_reupload: true,
               values: {
                 ...values,
                 intent_id: "",
@@ -644,6 +654,8 @@ export const actions: Actions = {
               error: detail === "simulation_not_self_contained"
                 ? "Die Simulation enthält externe Ressourcen, Navigationen oder Netzwerkzugriffe."
                 : "Die HTML-Datei ist keine vollständige, gültige UTF-8-Simulation.",
+              field: "upload_file",
+              requires_reupload: true,
               values: { ...values, intent_id: "", sha256: "" }
             }
           });

@@ -12,8 +12,11 @@
   import TeacherH5PTaskEditor from "$lib/components/TeacherH5PTaskEditor.svelte";
   import TeacherNodeEditorProperties from "$lib/components/teacher-node-editor/TeacherNodeEditorProperties.svelte";
   import TeacherNodeEditorSection from "$lib/components/teacher-node-editor/TeacherNodeEditorSection.svelte";
+  import FieldError from "$lib/components/ui/FieldError.svelte";
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import MarkdownEditor from "$lib/components/ui/MarkdownEditor.svelte";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
+  import { findSimulationExternalReferences } from "$lib/teacher-node-editor/simulation-findings";
   import {
     contentSelectionParam,
     draftStorageKey,
@@ -92,6 +95,16 @@
     return typeof candidate.error === "string" ? candidate.error : null;
   }
 
+  function actionField(value: unknown): string | null {
+    if (!value || typeof value !== "object") return null;
+    const candidate = value as { field?: unknown };
+    return typeof candidate.field === "string" ? candidate.field : null;
+  }
+
+  function actionRequiresReupload(value: unknown): boolean {
+    return Boolean(value && typeof value === "object" && (value as { requires_reupload?: unknown }).requires_reupload);
+  }
+
   function actionMaterialId(value: unknown): string | null {
     if (!value || typeof value !== "object") {
       return null;
@@ -128,6 +141,10 @@
   let createMaterialClientError = $state<string | null>(null);
   let createMaterialUploadPending = $state(false);
   let createMaterialSelectedFile = $state<File | null>(null);
+  let simulationExternalFindings = $state<string[]>([]);
+  let ignoredCreateMaterialAction = $state<unknown>(null);
+  let createMaterialTitleInput = $state<HTMLInputElement | null>(null);
+  let createMaterialUploadInput = $state<HTMLInputElement | null>(null);
   let simulationPreviewActive = $state<Record<string, boolean>>({});
   let simulationPreviewRevision = $state<Record<string, number>>({});
   let editorMessage = $state<{ tone: "success" | "error"; text: string } | null>(null);
@@ -384,6 +401,42 @@
     createMaterialClientError = null;
   }
 
+  function visibleCreateMaterialAction(): unknown {
+    return form?.createMaterial === ignoredCreateMaterialAction ? null : form?.createMaterial;
+  }
+
+  function createMaterialError(): string | null {
+    return createMaterialClientError ?? actionError(visibleCreateMaterialAction());
+  }
+
+  function createMaterialErrorField(): string | null {
+    if (createMaterialClientError) return "upload_file";
+    return actionField(visibleCreateMaterialAction());
+  }
+
+  function createMaterialErrorTitle(): string {
+    return createMaterialKind === "simulation"
+      ? "Simulation konnte nicht hinzugefügt werden"
+      : "Material konnte nicht hinzugefügt werden";
+  }
+
+  function createMaterialErrorDescription(): string {
+    const error = createMaterialError() ?? "Bitte prüfe deine Eingaben.";
+    if (createMaterialKind !== "simulation" || !actionRequiresReupload(visibleCreateMaterialAction())) return error;
+    const findings = simulationExternalFindings.length
+      ? ` Gefundene Verweise: ${simulationExternalFindings.join(", ")}.`
+      : "";
+    return `${error}${findings} Die abgelehnte Datei wurde entfernt. Korrigiere sie und wähle sie anschließend erneut aus.`;
+  }
+
+  function dismissCreateMaterialActionError(): void {
+    ignoredCreateMaterialAction = form?.createMaterial;
+  }
+
+  function focusCreateMaterialUpload(): void {
+    createMaterialUploadInput?.click();
+  }
+
   function createMaterialIntentUrl(): string {
     return `/api/teaching/units/${editorState.unit.id}/sections/${sectionId()}/materials/upload-intents`;
   }
@@ -426,6 +479,9 @@
     }
 
     event.preventDefault();
+    // SvelteKit builds its FormData before the enhance callback runs. Stop the
+    // first event so only the resubmission contains the prepared intent data.
+    event.stopImmediatePropagation();
     createMaterialUploadPending = true;
     createMaterialClientError = null;
 
@@ -466,9 +522,14 @@
     }
   }
 
-  function handleCreateMaterialFileChange(event: Event) {
+  async function handleCreateMaterialFileChange(event: Event) {
     clearPreparedMaterialUpload();
+    dismissCreateMaterialActionError();
     createMaterialSelectedFile = (event.currentTarget as HTMLInputElement).files?.[0] ?? null;
+    simulationExternalFindings = [];
+    if (createMaterialKind === "simulation" && createMaterialSelectedFile) {
+      simulationExternalFindings = findSimulationExternalReferences(await createMaterialSelectedFile.text());
+    }
   }
 
   function restoreCreateMaterialFile() {
@@ -747,6 +808,8 @@
     createMaterialClientError = null;
     createMaterialUploadPending = false;
     createMaterialSelectedFile = null;
+    simulationExternalFindings = [];
+    ignoredCreateMaterialAction = null;
     restoredDraftValues = {};
   });
 
@@ -861,6 +924,7 @@
     }
     if (actionError(form.createMaterial)) {
       editorMessage = null;
+      ignoredCreateMaterialAction = null;
       showCreateMaterial = true;
       if (isModuleEditor) selectModuleContent({ kind: "new-material" });
       if (!createMaterialValues().intent_id || !createMaterialValues().sha256) {
@@ -997,12 +1061,11 @@
     data-module-stage={moduleSelection.kind === "overview" ? "contents" : "editor"}
   >
     {#if editorMessage}
-      <p
-        class={`workspace-note workspace-note--${editorMessage.tone} teacher-flow-status teacher-flow-status--${editorMessage.tone}`}
-        role={editorMessage.tone === "error" ? "alert" : "status"}
-      >
-        {editorMessage.text}
-      </p>
+      <StatusMessage
+        tone={editorMessage.tone}
+        title={editorMessage.text}
+        onDismiss={() => (editorMessage = null)}
+      />
     {/if}
 
     {#if isModuleEditor}
@@ -1167,7 +1230,7 @@
           class="workspace-node-editor-card-form"
           bind:this={createMaterialForm}
           use:enhance={enhanceEditorForm}
-          onsubmit={handleCreateMaterialSubmit}
+          onsubmitcapture={handleCreateMaterialSubmit}
           data-draft-target="new-material"
           oninput={captureModuleDraft}
           onchange={captureModuleDraft}
@@ -1175,6 +1238,22 @@
           <input type="hidden" name="section_id" value={sectionId()} />
           <input name="intent_id" type="hidden" value={createMaterialValues().intent_id ?? ""} />
           <input name="sha256" type="hidden" value={createMaterialValues().sha256 ?? ""} />
+
+          {#if createMaterialError()}
+            <StatusMessage
+              tone="error"
+              title={createMaterialErrorTitle()}
+              description={createMaterialErrorDescription()}
+              actionLabel={createMaterialErrorField() === "upload_file" ? "Andere Datei wählen" : null}
+              onAction={createMaterialErrorField() === "upload_file" ? focusCreateMaterialUpload : null}
+              onDismiss={() => {
+                createMaterialClientError = null;
+                dismissCreateMaterialActionError();
+              }}
+              focusOnMount={Boolean(actionError(visibleCreateMaterialAction()))}
+              invalidField={createMaterialErrorField() === "title" ? createMaterialTitleInput : createMaterialUploadInput}
+            />
+          {/if}
 
           <label class="workspace-field">
             <span>Materialtyp</span>
@@ -1187,14 +1266,37 @@
 
           <label class="workspace-field">
             <span>Titel</span>
-            <input name="title" type="text" value={createMaterialValues().title ?? ""} />
+            <input
+              bind:this={createMaterialTitleInput}
+              name="title"
+              type="text"
+              value={createMaterialValues().title ?? ""}
+              aria-invalid={createMaterialErrorField() === "title" ? "true" : undefined}
+              aria-describedby={createMaterialErrorField() === "title" ? "create-material-title-error" : undefined}
+              oninput={() => {
+                if (createMaterialErrorField() === "title") dismissCreateMaterialActionError();
+              }}
+            />
           </label>
+          {#if createMaterialErrorField() === "title"}
+            <FieldError id="create-material-title-error" message="Bitte gib einen Titel ein." />
+          {/if}
 
           {#if createMaterialKind === "file"}
             <label class="workspace-field">
               <span>Datei</span>
-              <input name="upload_file" type="file" onchange={handleCreateMaterialFileChange} />
+              <input
+                bind:this={createMaterialUploadInput}
+                name="upload_file"
+                type="file"
+                aria-invalid={createMaterialErrorField() === "upload_file" ? "true" : undefined}
+                aria-describedby={createMaterialErrorField() === "upload_file" ? "create-material-upload-error" : undefined}
+                onchange={handleCreateMaterialFileChange}
+              />
             </label>
+            {#if createMaterialErrorField() === "upload_file"}
+              <FieldError id="create-material-upload-error" message="Bitte wähle eine passende Datei aus." />
+            {/if}
             {#if createMaterialUploadPending}
               <p class="workspace-note">Datei wird hochgeladen und vorbereitet …</p>
             {:else if preparedMaterialUploadName}
@@ -1209,8 +1311,24 @@
           {:else if createMaterialKind === "simulation"}
             <label class="workspace-field">
               <span>HTML-Simulation</span>
-              <input name="upload_file" type="file" accept=".html,text/html" onchange={handleCreateMaterialFileChange} />
+              <input
+                bind:this={createMaterialUploadInput}
+                name="upload_file"
+                type="file"
+                accept=".html,text/html"
+                aria-invalid={createMaterialErrorField() === "upload_file" ? "true" : undefined}
+                aria-describedby={createMaterialErrorField() === "upload_file" ? "create-material-upload-error" : undefined}
+                onchange={handleCreateMaterialFileChange}
+              />
             </label>
+            {#if createMaterialErrorField() === "upload_file"}
+              <FieldError
+                id="create-material-upload-error"
+                message={actionRequiresReupload(visibleCreateMaterialAction())
+                  ? "Korrigiere die Datei und wähle sie erneut aus."
+                  : "Bitte wähle eine selbstständige HTML-Datei aus."}
+              />
+            {/if}
             {#if createMaterialUploadPending}
               <p class="workspace-note">Simulation wird hochgeladen und geprüft …</p>
             {:else if preparedMaterialUploadName}
@@ -1218,7 +1336,7 @@
             {:else if isModuleEditor && hasDraft("new-material") && !createMaterialSelectedFile}
               <p class="workspace-note">Wähle die HTML-Datei nach dem Neuladen erneut aus.</p>
             {/if}
-            <div class="workspace-field">
+            <div class="workspace-field workspace-field--compact-editor">
               <span>Kurze Orientierung (optional)</span>
               {#if isModuleEditor}
                 <MarkdownEditor
@@ -1251,14 +1369,6 @@
                 <textarea name="body_md" rows="7">{createMaterialValues().body_md ?? ""}</textarea>
               {/if}
             </div>
-          {/if}
-
-          {#if createMaterialClientError}
-            <p class="workspace-note workspace-note--error">{createMaterialClientError}</p>
-          {/if}
-
-          {#if actionError(form?.createMaterial)}
-            <p class="workspace-note workspace-note--error">{actionError(form?.createMaterial)}</p>
           {/if}
 
           <div class="workspace-node-editor-card-actions">
@@ -1387,7 +1497,7 @@
                   {/if}
 
                   {#if materialError(material)}
-                    <p class="workspace-note workspace-note--error">{materialError(material)}</p>
+                    <StatusMessage tone="error" title="Material nicht geändert" description={materialError(material)} focusOnMount={true} />
                   {/if}
 
                   <div class="workspace-node-editor-card-actions">
@@ -1504,7 +1614,7 @@
           <input name="h5p_content_id" type="hidden" value={createTaskValues().h5p_content_id ?? ""} />
 
           {#if actionError(form?.createTask)}
-            <p class="workspace-note workspace-note--error">{actionError(form?.createTask)}</p>
+            <StatusMessage tone="error" title="Aufgabe nicht erstellt" description={actionError(form?.createTask)} focusOnMount={true} />
           {/if}
 
           <div class="workspace-node-editor-card-actions">
@@ -1635,7 +1745,7 @@
                         <p>Die Vorschau wird nicht gespeichert. Speichere Änderungen zuerst.</p>
                         <label class="workspace-field"><span>Probeantwort eines Schülers</span><textarea rows="3" value={dialogPreviewInputs[task.id] ?? ""} oninput={(event) => (dialogPreviewInputs[task.id] = event.currentTarget.value)}></textarea></label>
                         <button class="workspace-link-action" type="button" disabled={dialogPreviews[task.id]?.pending || !(dialogPreviewInputs[task.id] ?? "").trim()} onclick={() => previewDialog(task)}>KI-Antwort testen</button>
-                        {#if dialogPreviews[task.id]?.error}<p class="workspace-note workspace-note--error">{dialogPreviews[task.id].error}</p>{/if}
+                        {#if dialogPreviews[task.id]?.error}<StatusMessage tone="error" title="Vorschau nicht verfügbar" description={dialogPreviews[task.id].error} />{/if}
                         {#if dialogPreviews[task.id]?.reply}<div class="markdown-prose">{@html renderMarkdown(dialogPreviews[task.id].reply ?? "")}</div>{/if}
                         {#if dialogPreviews[task.id]?.starters.length}<p>Satzanfänge: {dialogPreviews[task.id].starters.join(" · ")}</p>{/if}
                       </details>
@@ -1666,7 +1776,7 @@
                   </details>
 
                   {#if taskError(task)}
-                    <p class="workspace-note workspace-note--error">{taskError(task)}</p>
+                    <StatusMessage tone="error" title="Aufgabe nicht geändert" description={taskError(task)} focusOnMount={true} />
                   {/if}
 
                   <div class="workspace-node-editor-card-actions">

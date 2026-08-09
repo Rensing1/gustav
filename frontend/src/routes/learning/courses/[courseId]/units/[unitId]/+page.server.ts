@@ -272,7 +272,7 @@ export const actions: Actions = {
     const mode = submissionMode(task, uploadFile, textBody);
     if (!mode) {
       return fail(400, {
-        message: "Bitte gib Text ein oder waehle eine passende Datei aus.",
+        message: "Bitte gib Text ein oder wähle eine passende Datei aus.",
         taskId
       });
     }

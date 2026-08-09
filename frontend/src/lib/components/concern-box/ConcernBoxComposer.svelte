@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ConcernBoxCourseOption } from "$lib/types/home";
+  import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
 
   export type ConcernBoxComposerValues = {
     courseId: string;
@@ -58,11 +59,11 @@
     </label>
 
     {#if error}
-      <p class="workspace-form-error">{error}</p>
+      <StatusMessage tone="error" title="Beitrag nicht gesendet" description={error} focusOnMount={true} />
     {/if}
 
     {#if sent}
-      <p class="concern-box-composer__success">Dein Beitrag wurde gesendet.</p>
+      <StatusMessage tone="success" title="Dein Beitrag wurde gesendet." />
     {/if}
 
     <div class="workspace-inline-actions">

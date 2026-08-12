@@ -889,7 +889,8 @@ def _print_module_graph(body: object, *, stdout: TextIO) -> None:
         stdout.write(
             "MODULE\t"
             f"{module.get('position', '')}\t{module.get('id', '')}\t"
-            f"{module.get('phase_id', '')}\t{module.get('title', '')}\t"
+            f"{module.get('phase_id', '')}\t{module.get('module_kind', 'learning')}\t"
+            f"{module.get('title', '')}\t"
             f"{module.get('required_prereq_count', 0)}\n"
         )
     for edge in sorted(
@@ -945,6 +946,8 @@ def _task_payload(
         payload["criteria"] = []
     if partial and getattr(args, "clear_teacher_context", False):
         payload["teacher_context_md"] = None
+    if partial and getattr(args, "clear_model_solution", False):
+        payload["model_solution_md"] = None
     if partial and getattr(args, "clear_due_at", False):
         payload["due_at"] = None
     if partial and getattr(args, "clear_max_attempts", False):

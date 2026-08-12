@@ -54,6 +54,48 @@ def test_units_create_sends_explicit_unit_type(tmp_path, monkeypatch, extra, exp
     assert calls[0][2] == expected
 
 
+def test_native_practice_task_create_sends_complete_teacher_contract(
+    tmp_path, monkeypatch
+) -> None:
+    _configure(tmp_path, monkeypatch)
+    calls = _capture(monkeypatch, [(201, {"id": "task-1", "kind": "native"})])
+
+    code, _, stderr = _run(
+        [
+            "tasks",
+            "create",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "practice-1",
+            "--instruction-md",
+            "Erkläre den Algorithmus.",
+            "--criterion",
+            "nennt den Zweck",
+            "--criterion",
+            "begründet das Vorgehen",
+            "--teacher-context-md",
+            "Bewerte die fachliche Begründung.",
+            "--model-solution-md",
+            "Der Algorithmus löst das Problem schrittweise.",
+        ]
+    )
+
+    assert code == 0, stderr
+    assert calls == [
+        (
+            "POST",
+            f"{BASE_URL}/api/teaching/units/unit-1/modules/practice-1/tasks",
+            {
+                "instruction_md": "Erkläre den Algorithmus.",
+                "criteria": ["nennt den Zweck", "begründet das Vorgehen"],
+                "teacher_context_md": "Bewerte die fachliche Begründung.",
+                "model_solution_md": "Der Algorithmus löst das Problem schrittweise.",
+            },
+        )
+    ]
+
+
 def _dialog_config() -> dict[str, object]:
     return {
         "partner_name": "Ada",
@@ -218,6 +260,7 @@ def test_tasks_edit_clear_flags_send_explicit_empty_values(tmp_path, monkeypatch
             "section-1",
             "--clear-criteria",
             "--clear-teacher-context",
+            "--clear-model-solution",
             "--clear-due-at",
             "--clear-max-attempts",
         ]
@@ -227,6 +270,7 @@ def test_tasks_edit_clear_flags_send_explicit_empty_values(tmp_path, monkeypatch
     assert calls[0][2] == {
         "criteria": [],
         "teacher_context_md": None,
+        "model_solution_md": None,
         "due_at": None,
         "max_attempts": None,
     }
@@ -237,6 +281,7 @@ def test_tasks_edit_clear_flags_send_explicit_empty_values(tmp_path, monkeypatch
     [
         ["--criterion", "Kriterium", "--clear-criteria"],
         ["--teacher-context-md", "Kontext", "--clear-teacher-context"],
+        ["--model-solution-md", "Lösung", "--clear-model-solution"],
         ["--due-at", "2026-09-01T08:00:00Z", "--clear-due-at"],
         ["--max-attempts", "3", "--clear-max-attempts"],
     ],
@@ -272,6 +317,7 @@ def test_modules_list_renders_complete_graph_and_empty_state(tmp_path, monkeypat
                 "title": "Transfer",
                 "position": 1,
                 "required_prereq_count": 1,
+                "module_kind": "practice",
             },
             {
                 "id": "m1",
@@ -279,6 +325,7 @@ def test_modules_list_renders_complete_graph_and_empty_state(tmp_path, monkeypat
                 "title": "Grundlagen",
                 "position": 1,
                 "required_prereq_count": 0,
+                "module_kind": "learning",
             },
         ],
         "edges": [{"from_module_id": "m1", "to_module_id": "m2"}],
@@ -295,8 +342,8 @@ def test_modules_list_renders_complete_graph_and_empty_state(tmp_path, monkeypat
     assert stdout.splitlines() == [
         "PHASE\t1\tp1\tStart",
         "PHASE\t2\tp2\tEnde",
-        "MODULE\t1\tm1\tp1\tGrundlagen\t0",
-        "MODULE\t1\tm2\tp2\tTransfer\t1",
+        "MODULE\t1\tm1\tp1\tlearning\tGrundlagen\t0",
+        "MODULE\t1\tm2\tp2\tpractice\tTransfer\t1",
         "EDGE\tm1\tm2",
     ]
     assert empty_code == 0

@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
-MIGRATION = ROOT / "supabase" / "migrations" / "20260808150000_practice_sessions.sql"
+MIGRATION = ROOT / "supabase" / "migrations" / "20260812122000_practice_sessions.sql"
 
 
 def _sql() -> str:
@@ -37,4 +37,3 @@ def test_modular_state_source_is_extended_for_practice_due_counts() -> None:
     assert "p_include_practice boolean" in sql
     assert "module_kind text" in sql
     assert "due_tasks_count integer" in sql
-

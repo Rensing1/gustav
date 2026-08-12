@@ -118,7 +118,7 @@ Phasen gelten für modulare Lerneinheiten.
 
 ```bash
 gustav modules list --unit-id <unit-id> [--json]
-gustav modules create --unit-id <unit-id> --phase-id <phase-id> --title <titel>
+gustav modules create --unit-id <unit-id> --phase-id <phase-id> --title <titel> [--module-kind learning|practice]
 gustav modules edit <module-id> --unit-id <unit-id> [--title <titel>] [--required-prereq-count <n>]
 gustav modules delete <module-id> --unit-id <unit-id> --yes
 gustav modules reorder --unit-id <unit-id> --phase-id <phase-id> --ids <module-id>...
@@ -127,7 +127,7 @@ gustav module-edges create --unit-id <unit-id> --from <module-id> --to <module-i
 gustav module-edges delete --unit-id <unit-id> --from <module-id> --to <module-id> --yes
 ```
 
-`modules list` liest den Modulgraphen der Lerneinheit. `modules reorder` ordnet Module innerhalb einer Phase bzw. verschiebt sie in die angegebene Phase, sofern die Graph-Regeln der API das erlauben.
+`modules list` liest den Modulgraphen einschließlich `module_kind`. Ohne `--json` steht der Modultyp in der fünften `MODULE`-Spalte. `modules reorder` ordnet Module innerhalb einer Phase bzw. verschiebt sie in die angegebene Phase, sofern die Graph-Regeln der API das erlauben. Der Modultyp wird nur beim Anlegen gewählt und kann später nicht geändert werden.
 
 ### Materialien
 
@@ -157,13 +157,13 @@ Mutierende Materialbefehle mit `--module-id` verwenden direkte Modul-Endpunkte. 
 
 ```bash
 gustav tasks list --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--json]
-gustav tasks create --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --instruction-md <markdown> [--criterion <text>]... [--kind native|h5p|visual|scratch|calliope|filius|dialog] [--dialog-config <json-pfad>]
-gustav tasks edit <task-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--instruction-md <markdown>] [--criterion <text> | --clear-criteria] [--teacher-context-md <markdown> | --clear-teacher-context] [--due-at <iso> | --clear-due-at] [--max-attempts <n> | --clear-max-attempts] [--kind native|h5p|visual|scratch|calliope|filius|dialog] [--dialog-config <json-pfad>]
+gustav tasks create --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --instruction-md <markdown> [--criterion <text>]... [--teacher-context-md <markdown>] [--model-solution-md <markdown>] [--kind native|h5p|visual|scratch|calliope|filius|dialog] [--dialog-config <json-pfad>]
+gustav tasks edit <task-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) [--instruction-md <markdown>] [--criterion <text> | --clear-criteria] [--teacher-context-md <markdown> | --clear-teacher-context] [--model-solution-md <markdown> | --clear-model-solution] [--due-at <iso> | --clear-due-at] [--max-attempts <n> | --clear-max-attempts] [--kind native|h5p|visual|scratch|calliope|filius|dialog] [--dialog-config <json-pfad>]
 gustav tasks delete <task-id> --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --yes
 gustav tasks reorder --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --ids <task-id>...
 ```
 
-Mehrere Kriterien werden durch wiederholtes `--criterion` übergeben. Die vier `--clear-*`-Optionen senden explizit `[]` beziehungsweise `null`; nicht genannte Felder bleiben unverändert. Setter und zugehöriges Clear-Flag schließen sich gegenseitig aus.
+Mehrere Kriterien werden durch wiederholtes `--criterion` übergeben. Die fünf `--clear-*`-Optionen senden explizit `[]` beziehungsweise `null`; nicht genannte Felder bleiben unverändert. Setter und zugehöriges Clear-Flag schließen sich gegenseitig aus. Native Aufgaben in einem Übungsmodul benötigen mindestens ein Kriterium, Lehrkraft-Kontext und Musterlösung; `due_at` und `max_attempts` sind dort nicht zulässig.
 
 Die CLI sendet kein read-only `kind`-Feld, sondern die im API-Vertrag vorgesehenen Konfigurationsblöcke. Für `visual`, `scratch`, `calliope` und `filius` sind das aktuell leere Marker-Konfigurationen. Für `h5p` wird zunächst eine H5P-Aufgabe ohne verknüpften Inhalt erstellt; das Paket wird anschließend über `gustav h5p import` verknüpft.
 
@@ -258,6 +258,42 @@ gustav tasks create \
   --instruction-md "Erkläre Bubble Sort an einem eigenen Beispiel." \
   --criterion "nennt Vergleich benachbarter Elemente" \
   --criterion "beschreibt eine vollständige Sortierrunde"
+```
+
+Ein Übungsmodul kann vollständig über dieselben Lehrkraft-Endpunkte angelegt werden:
+
+```bash
+gustav modules create \
+  --unit-id <unit-id> \
+  --phase-id <phase-id> \
+  --title "Sortieren üben" \
+  --module-kind practice
+
+gustav module-edges create \
+  --unit-id <unit-id> \
+  --from <lernmodul-id> \
+  --to <übungsmodul-id>
+
+gustav tasks create \
+  --unit-id <unit-id> \
+  --module-id <übungsmodul-id> \
+  --instruction-md "Erkläre Bubble Sort ohne Hilfsmittel." \
+  --criterion "nennt den Vergleich benachbarter Elemente" \
+  --criterion "beschreibt den Abbruch" \
+  --teacher-context-md "Bewerte ausschließlich die fachliche Erklärung." \
+  --model-solution-md "Bubble Sort vergleicht wiederholt benachbarte Elemente und endet nach einer Runde ohne Tausch."
+
+gustav tasks create \
+  --unit-id <unit-id> \
+  --module-id <übungsmodul-id> \
+  --instruction-md "Bearbeite das Sortierquiz." \
+  --kind h5p
+
+gustav h5p import \
+  --unit-id <unit-id> \
+  --module-id <übungsmodul-id> \
+  --task-id <h5p-task-id> \
+  --file sortierquiz.h5p
 ```
 
 ## Grenzen der aktuellen Version

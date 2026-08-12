@@ -3,7 +3,7 @@
 from pathlib import Path
 
 
-MIGRATION = Path("supabase/migrations/20260808170000_practice_completion_helpers.sql")
+MIGRATION = Path("supabase/migrations/20260812123000_practice_completion_helpers.sql")
 
 
 def test_worker_helpers_are_hardened_and_narrowly_granted() -> None:

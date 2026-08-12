@@ -5,8 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS = (
-    ROOT / "supabase" / "migrations" / "20260808133000_practice_authoring.sql",
-    ROOT / "supabase" / "migrations" / "20260808140000_practice_module_existing_content_guard.sql",
+    ROOT / "supabase" / "migrations" / "20260812120000_practice_authoring.sql",
+    ROOT / "supabase" / "migrations" / "20260812121000_practice_module_existing_content_guard.sql",
 )
 
 

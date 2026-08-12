@@ -11,9 +11,9 @@ Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Te
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 131
+- Inventarisierte Dateien: 132
 - Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 0
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 93
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 94
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 13
 - Statische Migrationstests ohne echte DB-Verbindung: 9

@@ -55,7 +55,19 @@ def test_practice_session_create_contract_has_mode_selection_and_limits() -> Non
     assert create["properties"]["mode"]["enum"] == ["due", "exam"]
     assert create["properties"]["stacks"]["minItems"] == 1
     assert create["properties"]["stacks"]["maxItems"] == 50
-    assert schemas["SessionBootstrap"]["properties"]["practice_enabled"]["type"] == "boolean"
+    assert "practice_enabled" not in schemas["SessionBootstrap"]["properties"]
+    responses = _spec()["paths"]["/api/learning/practice/sessions"]["post"]["responses"]
+    assert "503" not in responses
+
+
+def test_current_practice_item_identifies_its_latest_attempt() -> None:
+    item = _spec()["components"]["schemas"]["LearningPracticeSessionItem"]
+    assert "latest_attempt_id" in item["required"]
+    assert item["properties"]["latest_attempt_id"] == {
+        "type": "string",
+        "format": "uuid",
+        "nullable": True,
+    }
 
 
 def test_practice_attempt_contract_separates_native_and_token_bound_h5p_inputs() -> None:

@@ -66,6 +66,9 @@ def test_browser_and_finished_data_complete_one_h5p_presentation_once() -> None:
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(lambda _: complete(), range(2)))
         assert results[0] == results[1]
+        assert service.get_session(student, session["id"])["current_item"][
+            "latest_attempt_id"
+        ] == results[0]["attempt_id"]
         attempt = service.get_attempt(student, results[0]["attempt_id"])
         assert attempt["classification"] == "secure"
         with psycopg.connect(_admin_dsn()) as conn:

@@ -9,5 +9,4 @@ export type SessionBootstrap = {
   user: SessionBootstrapUser;
   start_target: "/learning" | "/teaching";
   spaces: string[];
-  practice_enabled: boolean;
 };

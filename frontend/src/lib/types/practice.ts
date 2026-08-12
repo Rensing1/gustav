@@ -21,6 +21,7 @@ export type LearningPracticeSessionItem = {
   instruction_md: string;
   criteria: string[];
   h5p_content_id: string | null;
+  latest_attempt_id: string | null;
 };
 
 export type LearningPracticeSession = {

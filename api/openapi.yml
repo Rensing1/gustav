@@ -153,7 +153,7 @@ components:
             $ref: '#/components/schemas/Role'
     SessionBootstrap:
       type: object
-      required: [user, start_target, spaces, practice_enabled]
+      required: [user, start_target, spaces]
       properties:
         user:
           $ref: '#/components/schemas/SessionBootstrapUser'
@@ -166,9 +166,6 @@ components:
           description: Top-level product spaces the shell should expose for the current role.
           items:
             type: string
-        practice_enabled:
-          type: boolean
-          description: Whether students may start new practice sessions.
       example:
         user:
           sub: "teacher-123"
@@ -3575,7 +3572,7 @@ components:
     LearningPracticeSessionItem:
       type: object
       additionalProperties: false
-      required: [id, course_id, practice_module_id, task_id, position, status, presentation_number, kind, instruction_md, criteria]
+      required: [id, course_id, practice_module_id, task_id, position, status, presentation_number, kind, instruction_md, criteria, latest_attempt_id]
       properties:
         id: { type: string, format: uuid }
         course_id: { type: string, format: uuid }
@@ -3590,6 +3587,7 @@ components:
           type: array
           items: { type: string }
         h5p_content_id: { type: string, nullable: true }
+        latest_attempt_id: { type: string, format: uuid, nullable: true }
     LearningPracticeSession:
       type: object
       additionalProperties: false
@@ -5270,7 +5268,6 @@ paths:
         '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: A selected stack is unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '409': { description: An active session already exists, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '503': { description: Practice session creation is disabled, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/learning/practice/sessions/{session_id}:
     get:
       tags: [Learning]

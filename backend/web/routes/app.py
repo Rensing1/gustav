@@ -81,7 +81,6 @@ from backend.web.routes.app_session_helpers import (
     start_target_for_role as _start_target_for_role,
     user_payload as _user_payload,
 )
-from backend.learning.practice.config import practice_sessions_enabled
 from backend.web.routes.app_teacher_concern_routes import (
     app_teacher_concern_router,
     archive_teacher_concern_box_entry as archive_teacher_concern_box_entry,  # noqa: F401
@@ -291,7 +290,6 @@ async def get_session_bootstrap(request: Request):
         "user": _user_payload(user),
         "start_target": _start_target_for_role(primary_role),
         "spaces": _spaces_for_role(primary_role),
-        "practice_enabled": practice_sessions_enabled(),
     }
     return JSONResponse(body, headers=_private_headers())
 

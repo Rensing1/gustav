@@ -73,21 +73,7 @@ async def test_active_session_returns_204_when_none_exists(app: FastAPI) -> None
 
 
 @pytest.mark.anyio
-async def test_new_session_is_disabled_by_default(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("ENABLE_PRACTICE_SESSIONS", raising=False)
-    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post(
-            "/api/learning/practice/sessions",
-            headers={"Origin": "http://test"},
-            json={"mode": "due", "stacks": [{"course_id": "course-1", "practice_module_id": "module-1"}]},
-        )
-    assert response.status_code == 503
-    assert response.json()["detail"] == "practice_disabled"
-
-
-@pytest.mark.anyio
-async def test_enabled_session_creation_returns_201(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ENABLE_PRACTICE_SESSIONS", "true")
+async def test_session_creation_is_always_available(app: FastAPI) -> None:
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/learning/practice/sessions",

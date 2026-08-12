@@ -23,4 +23,13 @@ describe("root layout contract", () => {
     expect(layoutSource).toContain("return /^\\/live(?:$|\\/|\\?)/.test(page.url.pathname);");
     expect(layoutSource).toContain("class:workspace-inner--live-wide={hasLiveWorkspaceShell()}");
   });
+
+  it("always exposes practice navigation to learners", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const layoutSource = readFileSync(path.resolve(currentDir, "+layout.svelte"), "utf8");
+
+    expect(layoutSource).toContain('href: "/learning/practice"');
+    expect(layoutSource).not.toContain("requiresPractice");
+    expect(layoutSource).not.toContain("practice_enabled");
+  });
 });

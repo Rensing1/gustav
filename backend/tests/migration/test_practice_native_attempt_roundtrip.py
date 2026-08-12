@@ -76,6 +76,7 @@ def test_native_attempt_completion_solution_and_supported_retry_are_atomic() -> 
             stacks=[{"course_id": str(ids["course"]), "practice_module_id": str(ids["module"])}],
         )
         item = session["current_item"]
+        assert item["latest_attempt_id"] is None
         accepted = service.create_native_attempt(
             student,
             session["id"],
@@ -90,6 +91,9 @@ def test_native_attempt_completion_solution_and_supported_retry_are_atomic() -> 
             answer_text="Wiederholter Request",
             idempotency_key="native-attempt-1",
         ) == accepted
+        assert service.get_session(student, session["id"])["current_item"][
+            "latest_attempt_id"
+        ] == accepted["attempt_id"]
 
         with psycopg.connect(_admin_dsn()) as conn:
             complete_worker_practice_attempt(
@@ -116,6 +120,9 @@ def test_native_attempt_completion_solution_and_supported_retry_are_atomic() -> 
             answer_text="Zweiter Versuch",
             idempotency_key="native-attempt-2",
         )
+        assert service.get_session(student, session["id"])["current_item"][
+            "latest_attempt_id"
+        ] == second["attempt_id"]
         with psycopg.connect(_admin_dsn()) as conn:
             complete_worker_practice_attempt(
                 conn=conn,

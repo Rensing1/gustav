@@ -8,7 +8,6 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-from backend.learning.practice.config import practice_sessions_enabled
 from backend.learning.practice.repo_db import DBPracticeRepo
 from backend.learning.practice.service import ActivePracticeSessionError, PracticeService
 from backend.web.routes.security import _is_same_origin
@@ -39,8 +38,6 @@ def _error(status: int, detail: str, **extra: Any) -> JSONResponse:
         "detail": detail,
         **extra,
     }
-    if status == 503:
-        body["error"] = "service_unavailable"
     return JSONResponse(body, status_code=status, headers=_NO_STORE)
 
 
@@ -99,8 +96,6 @@ async def create_practice_session(request: Request):
     csrf_error = _csrf(request)
     if csrf_error:
         return csrf_error
-    if not practice_sessions_enabled():
-        return _error(503, "practice_disabled")
     try:
         payload = await request.json()
         if not isinstance(payload, dict):

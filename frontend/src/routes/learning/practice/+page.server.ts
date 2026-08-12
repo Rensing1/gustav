@@ -12,35 +12,20 @@ import type { LearningPracticeAttempt, LearningPracticeSession, LearningPractice
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
   const authRedirectPath = currentPath(url);
-  const bootstrap = await requireParentSpaceBootstrap(parent, authRedirectPath, "learning");
+  await requireParentSpaceBootstrap(parent, authRedirectPath, "learning");
   const breadcrumbs = [{ label: "Lernraum", href: "/learning" }, { label: "Üben" }];
   const activeSession = await readTypedJsonOrNull<LearningPracticeSession>(
     fetch,
     cookies,
     "/api/learning/practice/sessions/active"
   );
-  if (!bootstrap.practice_enabled && !activeSession) {
-    return {
-      breadcrumbs,
-      hidePageHeading: true,
-      pageTitle: "Üben",
-      enabled: false,
-      stacks: [] as LearningPracticeStack[],
-      activeSession: null as LearningPracticeSession | null,
-      attempt: null as LearningPracticeAttempt | null,
-      attemptKey: randomUUID()
-    };
-  }
-
-  const stackResponse = bootstrap.practice_enabled
-    ? await requireBackendJson<{ stacks: LearningPracticeStack[] }>(
+  const stackResponse = await requireBackendJson<{ stacks: LearningPracticeStack[] }>(
       fetch,
       cookies,
       "/api/learning/practice/stacks",
       { authRedirectPath }
-    )
-    : { stacks: [] as LearningPracticeStack[] };
-  const attemptId = url.searchParams.get("attempt_id");
+    );
+  const attemptId = activeSession?.current_item?.latest_attempt_id;
   const attempt = attemptId
     ? await readTypedJsonOrNull<LearningPracticeAttempt>(
         fetch,
@@ -56,7 +41,6 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     breadcrumbs,
     hidePageHeading: true,
     pageTitle: "Üben",
-    enabled: true,
     stacks: stackResponse.stacks,
     selectedStack,
     activeSession,
@@ -136,8 +120,8 @@ export const actions: Actions = {
       const error = (await readErrorDetail(response)) ?? "practice_request_failed";
       return fail(response.status, { practice: { error } });
     }
-    const accepted = (await response.json()) as { attempt_id: string };
-    throw redirect(303, `/learning/practice?attempt_id=${encodeURIComponent(accepted.attempt_id)}`);
+    await response.json();
+    throw redirect(303, "/learning/practice");
   },
   solution: async (event) => {
     const form = await event.request.formData();

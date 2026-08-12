@@ -24,11 +24,7 @@
 <div class="workspace-page learning-home">
   <h2>Üben</h2>
 
-  {#if !data.enabled}
-    <section class="workspace-panel">
-      <p class="workspace-empty">Übungssitzungen sind derzeit nicht freigeschaltet.</p>
-    </section>
-  {:else if data.activeSession}
+  {#if data.activeSession}
     <section class="workspace-panel">
       <p>{data.activeSession.completed_items} von {data.activeSession.total_items} Aufgaben abgeschlossen</p>
       {#if data.activeSession.current_item}
@@ -38,6 +34,9 @@
         {/if}
         {#if data.activeSession.current_item.status === "active"}
           {#if data.activeSession.current_item.kind === "native"}
+            {#if data.attempt?.status === "failed"}
+              <p role="alert">Die Auswertung ist technisch fehlgeschlagen. Du kannst deine Antwort erneut senden.</p>
+            {/if}
             <form method="POST" action="?/attempt">
               <input type="hidden" name="session_id" value={data.activeSession.id} />
               <input type="hidden" name="item_id" value={data.activeSession.current_item.id} />

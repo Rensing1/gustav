@@ -298,12 +298,20 @@ class DBPracticeRepo:
         if str(row[2]) == "active":
             cur.execute(
                 """
-                select id::text, course_id::text, practice_module_id::text,
-                       task_id::text, position, status, presentation_number,
-                       task_kind, instruction_md, criteria, h5p_content_id
-                  from public.learning_practice_session_items
-                 where session_id=%s::uuid
-                   and status in ('active', 'awaiting_analysis', 'feedback')
+                select item.id::text, item.course_id::text, item.practice_module_id::text,
+                       item.task_id::text, item.position, item.status, item.presentation_number,
+                       item.task_kind, item.instruction_md, item.criteria, item.h5p_content_id,
+                       latest_attempt.id::text
+                  from public.learning_practice_session_items item
+                  left join lateral (
+                    select attempt.id
+                      from public.learning_practice_attempts attempt
+                     where attempt.session_item_id = item.id
+                     order by attempt.created_at desc, attempt.id desc
+                     limit 1
+                  ) latest_attempt on true
+                 where item.session_id=%s::uuid
+                   and item.status in ('active', 'awaiting_analysis', 'feedback')
                  limit 1
                 """,
                 (session_id,),
@@ -322,6 +330,7 @@ class DBPracticeRepo:
                     "instruction_md": str(item[8]),
                     "criteria": list(item[9] or []),
                     "h5p_content_id": str(item[10]) if item[10] is not None else None,
+                    "latest_attempt_id": str(item[11]) if item[11] is not None else None,
                 }
         return {
             "id": str(row[0]),

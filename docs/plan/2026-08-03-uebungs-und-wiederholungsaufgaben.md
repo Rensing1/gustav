@@ -118,8 +118,7 @@ Rechtschreibung, sprachliche Eleganz oder Aussprache beeinflussen die Auswertung
 ### 2.7 Technische Betriebsgrenzen
 
 - Eine Sitzung darf höchstens 50 ausgewählte Übungsstapel und höchstens 1.000 Snapshot-Aufgaben enthalten. Diese Grenzen dienen ausschließlich dem Schutz von API und Datenbank und sind keine pädagogische Paketgröße.
-- `ENABLE_PRACTICE_SESSIONS=false` ist der sichere Standard. Bei Deaktivierung werden Einstieg und neue Sitzungen gesperrt; bereits aktive Sitzungen bleiben fortsetzbar und können beendet werden.
-- Verliert ein Lernender während einer Sitzung die Kursmitgliedschaft oder wird ein Stapel wieder gesperrt, werden noch nicht angenommene Items dieses Stapels zugriffsbedingt übersprungen. Andere gültige Stapel laufen weiter; eine leere Sitzung endet automatisch. Bereits angenommene Versuche werden technisch und fachlich abgeschlossen.
+- Übungssitzungen sind nach Auslieferung ohne gesonderten Schalter verfügbar.
 - Gleichzeitige Änderungen einer bereits angezeigten Aufgabe erhalten in Version 1 keine eigene Versions- oder Konfliktlogik.
 
 ## 3. Befund in der aktuellen Architektur
@@ -548,7 +547,6 @@ Refactor:
 - Tokens sind zufällig, kurzlebig beziehungsweise einmal verwendbar und fachlich an Schüler, Sitzung, Item und Präsentation gebunden.
 - Logs und Telemetrie enthalten keine Antworttexte, Musterlösungen oder vollständigen KI-Ausgaben.
 - Bestehende Kurs-, Task- und Submission-Löschregeln werden in Migrationstests für alle neuen Fremdschlüssel nachvollzogen.
-- Das in allen Umgebungen identisch ausgewertete Feature-Flag `ENABLE_PRACTICE_SESSIONS` aktiviert oder deaktiviert neue Practice-Sitzungen für den Pilot. Es ist standardmäßig `false`; ein Rollback löscht keine Zustände oder Versuche und blockiert keine bereits aktive Sitzung.
 - Lokal und Produktion verwenden dieselben Migrationen, ENV-Namen, Containerpfade und RLS-Regeln.
 
 ## 11. Nicht Bestandteil des ersten Releases
@@ -557,6 +555,7 @@ Refactor:
 - Lehrkraft-Diagnostics-Ansicht,
 - automatisch erzeugte Aufgaben, Varianten oder Musterlösungen,
 - Practice-Unterstützung für lineare Lerneinheiten,
+- Kursentzug während einer aktiven Übungssitzung,
 - Materialien in Übungsmodulen,
 - `visual`-, `scratch`-, `calliope`-, `filius`- oder `dialog`-Aufgaben,
 - ein eigener Status für unsichere KI-Bewertungen,

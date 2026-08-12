@@ -32,14 +32,12 @@
     {
       href: "/learning",
       label: "Lernraum",
-      requiredSpace: "learning",
-      requiresPractice: false
+      requiredSpace: "learning"
     },
     {
       href: "/learning/practice",
       label: "Üben",
-      requiredSpace: "learning",
-      requiresPractice: true
+      requiredSpace: "learning"
     }
   ];
 
@@ -47,20 +45,17 @@
     {
       href: "/teaching/courses",
       label: "Kurse",
-      requiredSpace: "teaching",
-      requiresPractice: false
+      requiredSpace: "teaching"
     },
     {
       href: "/teaching/units",
       label: "Lerneinheiten",
-      requiredSpace: "teaching",
-      requiresPractice: false
+      requiredSpace: "teaching"
     },
     {
       href: "/live",
       label: "Live",
-      requiredSpace: "live",
-      requiresPractice: false
+      requiredSpace: "live"
     }
   ];
 
@@ -263,7 +258,7 @@
       {:else}
         <nav class:space-nav--learner-unit={isLearnerUnitWorkspaceRoute()} class="space-nav" aria-label="Hauptnavigation">
           {#each primaryNavItems() as item}
-            {#if data.bootstrap?.spaces?.includes(item.requiredSpace) && (!item.requiresPractice || data.bootstrap.practice_enabled)}
+            {#if data.bootstrap?.spaces?.includes(item.requiredSpace)}
               <a
                 href={item.href}
                 aria-current={isPrimaryActive(item.href) ? "page" : undefined}

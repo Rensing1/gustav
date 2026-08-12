@@ -47,6 +47,19 @@ function firstId(output: string): string {
   return id;
 }
 
+function writeMinimalH5p(target: string): void {
+  const fixture = resolve(projectRoot, "backend/tests_e2e/fixtures/h5p/minimal");
+  const program = [
+    "import pathlib, sys, zipfile",
+    "source = pathlib.Path(sys.argv[1])",
+    "target = pathlib.Path(sys.argv[2])",
+    "with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:",
+    "    for path in sorted(source.rglob('*')):",
+    "        if path.is_file(): archive.write(path, path.relative_to(source).as_posix())"
+  ].join("\n");
+  execFileSync(python, ["-c", program, fixture, target], { cwd: projectRoot });
+}
+
 test("@feature-acceptance CLI authors a modular dialog unit and releases it in a course", async ({ page }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
@@ -63,6 +76,7 @@ test("@feature-acceptance CLI authors a modular dialog unit and releases it in a
   try {
     await page.goto("/profile");
     await page.getByLabel("Tokenname").fill(tokenLabel);
+    await page.getByLabel("read", { exact: true }).check();
     await page.getByLabel("write", { exact: true }).check();
     await page.getByLabel("delete", { exact: true }).check();
     await page.getByRole("button", { name: "CLI-Token erstellen" }).click();
@@ -130,6 +144,115 @@ test("@feature-acceptance CLI authors a modular dialog unit and releases it in a
       "--dialog-config",
       dialogPath
     ]);
+
+    const practiceModuleId = firstId(
+      runCli(configRoot, [
+        "modules",
+        "create",
+        "--unit-id",
+        unit.id,
+        "--phase-id",
+        phaseId,
+        "--title",
+        "Wiederholen",
+        "--module-kind",
+        "practice"
+      ])
+    );
+    runCli(configRoot, [
+      "module-edges",
+      "create",
+      "--unit-id",
+      unit.id,
+      "--from",
+      unitModuleId,
+      "--to",
+      practiceModuleId
+    ]);
+    const nativeTaskId = firstId(
+      runCli(configRoot, [
+        "tasks",
+        "create",
+        "--unit-id",
+        unit.id,
+        "--module-id",
+        practiceModuleId,
+        "--instruction-md",
+        "Erkläre den TDD-Zyklus.",
+        "--criterion",
+        "Die drei Phasen werden korrekt erklärt.",
+        "--teacher-context-md",
+        "Achte auf Rot, Grün und Refactoring.",
+        "--model-solution-md",
+        "Zuerst scheitert der Test, dann wird er minimal erfüllt und anschließend verbessert."
+      ])
+    );
+    runCli(configRoot, [
+      "tasks",
+      "edit",
+      nativeTaskId,
+      "--unit-id",
+      unit.id,
+      "--module-id",
+      practiceModuleId,
+      "--model-solution-md",
+      "Rot zeigt die Lücke, Grün schließt sie und Refactoring verbessert den Entwurf."
+    ]);
+    const h5pTaskId = firstId(
+      runCli(configRoot, [
+        "tasks",
+        "create",
+        "--unit-id",
+        unit.id,
+        "--module-id",
+        practiceModuleId,
+        "--instruction-md",
+        "Bearbeite die H5P-Wiederholung.",
+        "--kind",
+        "h5p"
+      ])
+    );
+    const h5pPath = resolve(configRoot, "minimal.h5p");
+    writeMinimalH5p(h5pPath);
+    runCli(configRoot, [
+      "h5p",
+      "import",
+      "--unit-id",
+      unit.id,
+      "--module-id",
+      practiceModuleId,
+      "--task-id",
+      h5pTaskId,
+      "--file",
+      h5pPath,
+      "--json"
+    ]);
+    const practiceTasks = JSON.parse(
+      runCli(configRoot, [
+        "tasks",
+        "list",
+        "--unit-id",
+        unit.id,
+        "--module-id",
+        practiceModuleId,
+        "--json"
+      ])
+    ) as Array<{
+      id: string;
+      kind: string;
+      teacher_context_md: string | null;
+      model_solution_md: string | null;
+      h5p: { content_id: string } | null;
+    }>;
+    expect(practiceTasks).toHaveLength(2);
+    expect(practiceTasks.find((task) => task.id === nativeTaskId)).toMatchObject({
+      kind: "native",
+      teacher_context_md: "Achte auf Rot, Grün und Refactoring.",
+      model_solution_md: "Rot zeigt die Lücke, Grün schließt sie und Refactoring verbessert den Entwurf."
+    });
+    expect(practiceTasks.find((task) => task.id === h5pTaskId)?.h5p?.content_id).toBeTruthy();
+    const readableModules = runCli(configRoot, ["modules", "list", "--unit-id", unit.id]);
+    expect(readableModules).toContain("practice");
     const course = JSON.parse(
       runCli(configRoot, [
         "courses",

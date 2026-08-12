@@ -274,12 +274,12 @@ test-visual-smoke:
 .PHONY: test-feature-acceptance
 test-feature-acceptance:
 	@cd frontend && node tooling/check-playwright-browser.mjs
-	@cd frontend && npm run test:e2e -- --grep @feature-acceptance
+	@cd frontend && NODE_EXTRA_CA_CERTS=../.tmp/caddy-root.crt npm run test:e2e -- --grep @feature-acceptance
 
 .PHONY: test-dev-accounts
 test-dev-accounts:
 	@cd frontend && node tooling/check-playwright-browser.mjs
-	@cd frontend && RUN_DEV_ACCOUNTS=1 npm run test:e2e -- --grep @dev-accounts --output ../.tmp/playwright-dev-accounts
+	@cd frontend && NODE_EXTRA_CA_CERTS=../.tmp/caddy-root.crt RUN_DEV_ACCOUNTS=1 npm run test:e2e -- --grep @dev-accounts --output ../.tmp/playwright-dev-accounts
 
 .PHONY: verify-feature
 verify-feature:

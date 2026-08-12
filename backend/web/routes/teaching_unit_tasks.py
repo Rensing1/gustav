@@ -402,6 +402,21 @@ async def reorder_section_tasks(
     return JSONResponse(content=[_serialize_task(task) for task in ordered], status_code=200)
 
 
+@teaching_unit_tasks_router.get("/api/teaching/units/{unit_id}/modules/{module_id}/tasks")
+async def list_module_tasks(request: Request, unit_id: str, module_id: str):
+    """List teacher-visible tasks through the public module abstraction."""
+
+    section_id, error = teaching_authoring._resolve_module_section_for_authoring_read(
+        request,
+        unit_id=unit_id,
+        module_id=module_id,
+        repo_provider=_get_repo,
+    )
+    if error:
+        return error
+    return await list_section_tasks(request, unit_id, str(section_id))
+
+
 @teaching_unit_tasks_router.post("/api/teaching/units/{unit_id}/modules/{module_id}/tasks")
 async def create_module_task(
     request: Request,

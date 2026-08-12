@@ -60,6 +60,7 @@ def test_unit_task_router_owns_handlers_without_teaching_delegation() -> None:
         "update_section_task",
         "delete_section_task",
         "reorder_section_tasks",
+        "list_module_tasks",
         "create_module_task",
         "update_module_task",
         "delete_module_task",

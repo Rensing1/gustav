@@ -135,7 +135,7 @@ For repeatable local development and browser testing, provision the dedicated te
 make dev-accounts
 ```
 
-The command is idempotent. Credentials remain only in the ignored local `.env`; never print or commit them. Use `make reset-dev-accounts` only when all data owned by the dedicated development teacher may be replaced with the defined mixed learning state. `make test-dev-accounts` runs the opt-in browser smoke for both personas, including modular graph states, H5P, the resumable AI dialog, and diagnostics.
+The command is idempotent. Credentials remain only in the ignored local `.env`; never print or commit them. Use `make reset-dev-accounts` only when all data owned by the dedicated development teacher may be replaced with the defined mixed learning state. `make test-dev-accounts` runs the opt-in browser smoke for both personas, including modular graph states, native and H5P practice sessions, the resumable AI dialog, and diagnostics.
 
 The application, identity, and storage services must remain local. A remote AI provider such as Mistral is supported only through HTTPS. See [the E2E guide](docs/tests/e2e_howto.md#lokale-browser-personas) for setup, safety boundaries, expected fixture state, and troubleshooting.
 

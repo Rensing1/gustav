@@ -40,9 +40,9 @@ Für wiederholbare manuelle Prüfungen stehen eine feste Dev-Lehrkraft und ein f
 make dev-accounts
 ```
 
-Der erste Lauf ergänzt fehlende `DEV_TEACHER_*`- und `DEV_STUDENT_*`-Werte, provisioniert beide Konten in Keycloak und erstellt den Kurs „GUSTAV Browser-Test“ mit der modularen Lerneinheit „Digitale Systeme untersuchen“. Ein erneuter Lauf lässt eine vollständige Landschaft unverändert.
+Der erste Lauf ergänzt fehlende `DEV_TEACHER_*`- und `DEV_STUDENT_*`-Werte, provisioniert beide Konten in Keycloak und erstellt den Kurs „GUSTAV Browser-Test“ mit der modularen Lerneinheit „Digitale Systeme untersuchen“. Ein erneuter Lauf lässt eine vollständige Landschaft unverändert. Eine noch vollständige ältere Fixture ohne Übungsmodule wird additiv erweitert; der vorhandene Lernstand bleibt dabei erhalten.
 
-Die Fixture enthält drei Phasen, sechs verzweigte Module, Markdown-, Bild- und PDF-Materialien sowie native, visuelle, Scratch-, Calliope-, Filius-, H5P- und Dialogaufgaben. Der Schüler besitzt eine ausgewertete Einstiegsabgabe und einen fortsetzbaren KI-Dialog; dadurch sind erledigte, offene und gesperrte Module sowie Diagnostikdaten gleichzeitig prüfbar.
+Die Fixture enthält drei Phasen, sechs verzweigte Lernmodule und zwei Übungsmodule, Markdown-, Bild- und PDF-Materialien sowie native, visuelle, Scratch-, Calliope-, Filius-, H5P- und Dialogaufgaben. Das native Übungsmodul besitzt Kriterien, Lehrkraft-Kontext und Musterlösung; das zweite Übungsmodul bindet den importierten H5P-Inhalt ein. Der Schüler besitzt eine ausgewertete Einstiegsabgabe und einen fortsetzbaren KI-Dialog; dadurch sind erledigte, offene und gesperrte Module, beide Übungsstapel sowie Diagnostikdaten gleichzeitig prüfbar.
 
 Der Reset löscht alle Kurse und Lerneinheiten der dedizierten Dev-Lehrkraft und baut die definierte Landschaft neu auf. Andere Konten bleiben unberührt:
 

@@ -4,7 +4,8 @@
 ### Features
 - feat(cli): Die Teaching-CLI erstellt modulare Lerneinheiten und Dialogaufgaben, leert optionale Aufgabenfelder explizit, rendert Modulgraphen lesbar und verwaltet Kurse, Mitglieder, Kursmodule, Freischaltungen und Löschaufträge vollständig.
 - feat(materials): Lehrkräfte können vollständig eingebettete HTML-Simulationen bis 5 MiB als exploratives Material mit optionaler Orientierung veröffentlichen. Vorschau und Lernansicht starten bewusst, lassen sich zurücksetzen und laufen in einer Offline-CSP-/Iframe-Sandbox ohne Tracking oder Ergebnisübertragung.
-- feat(practice): Übungsmodule, globale Stapelauswahl, persistente Sitzungen, native KI-Auswertung und H5P-Wiederholungen mit dem freigegebenen `gustav-practice-v1`-Scheduler sind implementiert. Musterlösungen bleiben bis zum auditierten Abruf geschützt; Browser- und `finishedData`-H5P-Meldungen schließen tokengebunden und idempotent ab.
+- feat(practice): Übungsmodule, globale Stapelauswahl, persistente Sitzungen, native KI-Auswertung und H5P-Wiederholungen mit dem freigegebenen `gustav-practice-v1`-Scheduler sind implementiert. Practice-Authoring ist vollständig in Lehrkraftoberfläche und CLI verfügbar; Musterlösungen bleiben bis zum auditierten Abruf geschützt, Browser- und `finishedData`-H5P-Meldungen schließen tokengebunden und idempotent ab.
+- test(dev-accounts): Die feste modulare Dev-Lerneinheit enthält zusätzlich ein natives und ein H5P-Übungsmodul. Der Chromium-Smoke prüft beide mit echter Schüler-Persona, KI-Auswertung und Reload-Persistenz über die vertraute lokale CA.
 
 ### Security (dev = prod)
 - security(cli): Kursauthoring und gezielte Schülersuche verwenden explizite `read`/`write`/`delete`-Capabilities; H5P-Editor-JSON, Dialogvorschau und vollständige Benutzerlisten bleiben cookiegebunden.

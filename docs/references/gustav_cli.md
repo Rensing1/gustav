@@ -184,7 +184,7 @@ Für Dialogaufgaben müssen `--kind dialog` und `--dialog-config` gemeinsam ange
 
 Unbekannte Felder, fehlende Pflichtwerte und Grenzwertverletzungen werden lokal abgelehnt. Interne Rollen- und Lernzieltexte erscheinen dabei nicht in Fehlermeldungen. Die kostenverursachende Dialogvorschau bleibt browsergebunden.
 
-Mutierende Aufgabenbefehle mit `--module-id` verwenden direkte Modul-Endpunkte. `create`, `edit` und `reorder` benötigen nur `write`; `delete` benötigt nur `delete`. `list --module-id` bleibt eine Leseoperation und nutzt weiterhin den Content-Target-Resolver.
+Aufgabenbefehle mit `--module-id` verwenden direkte Modul-Endpunkte. `list` benötigt ausschließlich `read`; `create`, `edit` und `reorder` benötigen nur `write`; `delete` benötigt nur `delete`. Keiner dieser Befehle führt eine zusätzliche versteckte Leseabfrage aus.
 
 ### H5P-Pakete
 

@@ -72,17 +72,19 @@
               {#if data.attempt.due_at}<p>Nächste Fälligkeit: {new Date(data.attempt.due_at).toLocaleString("de-DE")}</p>{/if}
             </section>
           {/if}
-          {#if form?.practice?.solution}
-            <section aria-live="polite">
-              <h4>Musterlösung</h4>
-              <p>{form.practice.solution}</p>
-            </section>
-          {:else}
-            <form method="POST" action="?/solution">
-              <input type="hidden" name="session_id" value={data.activeSession.id} />
-              <input type="hidden" name="item_id" value={data.activeSession.current_item.id} />
-              <button type="submit">Musterlösung anzeigen</button>
-            </form>
+          {#if data.activeSession.current_item.kind === "native"}
+            {#if form?.practice?.solution}
+              <section aria-live="polite">
+                <h4>Musterlösung</h4>
+                <p>{form.practice.solution}</p>
+              </section>
+            {:else}
+              <form method="POST" action="?/solution">
+                <input type="hidden" name="session_id" value={data.activeSession.id} />
+                <input type="hidden" name="item_id" value={data.activeSession.current_item.id} />
+                <button type="submit">Musterlösung anzeigen</button>
+              </form>
+            {/if}
           {/if}
           <form method="POST" action="?/continue">
             <input type="hidden" name="session_id" value={data.activeSession.id} />

@@ -11,7 +11,8 @@ Als Entwickler oder Codex-Agent möchte ich mich lokal mit einer festen Lehrkraf
 - Given die vier Dev-Zugangsdaten fehlen in `.env`, when die Dev-Accounts provisioniert werden, then ergänzt das Werkzeug sichere lokale Werte, ohne bestehende Konfiguration zu überschreiben.
 - Given Web, Keycloak oder Storage verweist nicht auf einen lokalen Host, when Provisionierung oder Reset beginnt, then bricht das Werkzeug vor jeder Mutation ab.
 - Given der konfigurierte KI-Dienst liegt entfernt, when seine Adresse HTTPS verwendet, then darf die Provisionierung den regulären Provider verwenden; entfernte HTTP-Adressen bleiben verboten.
-- Given noch keine Testlandschaft existiert, when `make dev-accounts` läuft, then entstehen genau ein Kurs und eine modulare Lerneinheit mit drei Phasen, sechs Modulen und dem festgelegten Abhängigkeitsgraphen.
+- Given noch keine Testlandschaft existiert, when `make dev-accounts` läuft, then entstehen genau ein Kurs und eine modulare Lerneinheit mit drei Phasen, sechs Lernmodulen, zwei Übungsmodulen und dem festgelegten Abhängigkeitsgraphen.
+- Given eine vollständige ältere Testlandschaft ohne Übungsmodule existiert, when `make dev-accounts` läuft, then werden ein natives und ein H5P-Übungsmodul additiv ergänzt, ohne den vorhandenen Lernstand zurückzusetzen.
 - Given die Testlandschaft existiert vollständig, when `make dev-accounts` erneut läuft, then bleiben Identitäten, Inhalte und Lernstand unverändert.
 - Given die Schüler-Persona öffnet den Lernpfad, when die Fixture vollständig ist, then sind Einstieg `done`, drei Erarbeitungsmodule `open` und Transfer sowie Abschluss `locked`.
 - Given H5P und KI sind erreichbar, when die Fixture erzeugt wird, then existieren echtes H5P-Content und eine fortsetzbare Dialogsitzung mit einem generierten Zug.
@@ -28,7 +29,7 @@ Als Entwickler oder Codex-Agent möchte ich mich lokal mit einer festen Lehrkraf
 ## Testzuordnung
 
 - Unit-/Contract-Tests prüfen URL-Guard, Passwort- und Domainableitung, schonende `.env`-Aktualisierung, Fixture-Graph, Aufgabenvielfalt, Zustandsmanifest und H5P-Bereinigungsgrenzen.
-- Ein opt-in Playwright-Test prüft beide echten Logins, Rollen, Graphzustände, Materialien, Aufgabenarten, H5P-Player, Dialogfortsetzung und Diagnostik.
+- Ein opt-in Playwright-Test prüft beide echten Logins, Rollen, Graphzustände, Materialien, Aufgabenarten, eine native Übung mit KI-Auswertung und Musterlösung, eine H5P-Übung, Reload-Persistenz, Dialogfortsetzung und Diagnostik.
 - Der Dev-Account-Anteil bleibt Entwicklungsinfrastruktur. Da die notwendige Lifecycle-Korrektur den bestehenden nutzerseitigen Kurslöschablauf betrifft, wird der vorhandene authentifizierte `@feature-acceptance`-Kurslöschtest um Jobstatus, Idempotenz und tatsächlichen Abschluss erweitert. `make test-dev-accounts` bleibt der Browsernachweis für die Testlandschaft.
 
 ## Ergänzung: robuste Kurslöschung

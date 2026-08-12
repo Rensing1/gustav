@@ -267,6 +267,48 @@ FIXTURE_SPEC: dict[str, Any] = {
                         },
                     ],
                 },
+                {
+                    "key": "practice_native",
+                    "title": "Grundlagen wiederholen",
+                    "module_kind": "practice",
+                    "required_prereq_count": 1,
+                    "materials": [],
+                    "tasks": [
+                        {
+                            "key": "practice_native_task",
+                            "kind": "native",
+                            "instruction_md": (
+                                "Erkläre das EVA-Prinzip an einem selbst gewählten digitalen System."
+                            ),
+                            "criteria": [
+                                "Eingabe, Verarbeitung und Ausgabe werden korrekt zugeordnet.",
+                                "Das gewählte Beispiel ist nachvollziehbar erklärt.",
+                            ],
+                            "teacher_context_md": (
+                                "Bewerte fachlich knapp und ermutige zu einem konkreten Beispiel."
+                            ),
+                            "model_solution_md": (
+                                "Bei einem Fahrkartenautomaten ist die Auswahl des Ziels die Eingabe. "
+                                "Das System berechnet den Preis und zeigt ihn als Ausgabe an."
+                            ),
+                        }
+                    ],
+                },
+                {
+                    "key": "practice_h5p",
+                    "title": "Interaktiv wiederholen",
+                    "module_kind": "practice",
+                    "required_prereq_count": 1,
+                    "materials": [],
+                    "tasks": [
+                        {
+                            "key": "practice_h5p_task",
+                            "kind": "h5p",
+                            "instruction_md": "Bearbeite die interaktive Wiederholungsaufgabe.",
+                            "criteria": [],
+                        }
+                    ],
+                },
             ],
         },
         {
@@ -353,7 +395,11 @@ FIXTURE_EDGES: tuple[tuple[str, str], ...] = (
     ("programming", "transfer"),
     ("interactive", "transfer"),
     ("transfer", "finish"),
+    ("start", "practice_native"),
+    ("start", "practice_h5p"),
 )
+
+PRACTICE_MODULE_KEYS = frozenset({"practice_native", "practice_h5p"})
 
 
 def require_local_url(value: str) -> None:
@@ -525,14 +571,47 @@ def _is_complete_fixture_state(state: dict[str, Any] | None) -> bool:
     )
 
 
+def _is_additive_practice_upgrade_state(state: dict[str, Any] | None) -> bool:
+    """Recognize the previous complete fixture without accepting arbitrary state."""
+
+    if not isinstance(state, dict) or state.get("status") not in {"complete", "upgrading"}:
+        return False
+    scalar_keys = ("course_id", "unit_id", "h5p_content_id", "dialog_session_id")
+    if any(not str(state.get(key) or "").strip() for key in scalar_keys):
+        return False
+    expected_modules = {str(module["key"]) for _, module in _iter_modules()}
+    expected_tasks = {
+        str(task["key"]) for _, module in _iter_modules() for task in module["tasks"]
+    }
+    legacy_modules = expected_modules - PRACTICE_MODULE_KEYS
+    legacy_tasks = expected_tasks - {"practice_native_task", "practice_h5p_task"}
+    module_ids = state.get("module_ids")
+    section_ids = state.get("section_ids")
+    task_ids = state.get("task_ids")
+    return (
+        isinstance(module_ids, dict)
+        and legacy_modules <= set(module_ids) <= expected_modules
+        and isinstance(section_ids, dict)
+        and legacy_modules <= set(section_ids) <= expected_modules
+        and isinstance(task_ids, dict)
+        and legacy_tasks <= set(task_ids) <= expected_tasks
+    )
+
+
 def fixture_decision(state: dict[str, Any] | None, *, course_count: int) -> str:
     """Choose an idempotent action without guessing about untracked existing data."""
 
     status = str((state or {}).get("status") or "")
+    if status == "complete" and course_count == 1:
+        if _is_complete_fixture_state(state):
+            return "ready"
+        if _is_additive_practice_upgrade_state(state):
+            return "upgrade"
+        return "rebuild"
+    if status == "upgrading" and course_count == 1:
+        return "upgrade" if _is_additive_practice_upgrade_state(state) else "rebuild"
     if status == "complete" and not _is_complete_fixture_state(state):
         return "rebuild"
-    if status == "complete" and course_count == 1:
-        return "ready"
     # A "building" marker proves that the tool owns an interrupted fixture. It
     # is therefore safe to remove that partial state and start again.
     if status == "building":
@@ -1082,7 +1161,7 @@ def _task_payload(task: dict[str, Any], *, h5p_content_id: str) -> dict[str, Any
         "instruction_md": task["instruction_md"],
         "criteria": task.get("criteria", []),
     }
-    for optional in ("teacher_context_md", "max_attempts"):
+    for optional in ("teacher_context_md", "model_solution_md", "max_attempts"):
         if optional in task:
             payload[optional] = task[optional]
     kind = task["kind"]
@@ -1427,7 +1506,7 @@ def create_landscape(
     marker is persisted before global H5P content or product data is created.
     """
 
-    state: dict[str, Any] = {"status": "building", "version": 2}
+    state: dict[str, Any] = {"status": "building", "version": 3}
     write_state(config.state_path, state)
 
     h5p_content_id = _import_h5p(teacher)
@@ -1493,7 +1572,11 @@ def create_landscape(
             "POST",
             f"/api/teaching/units/{unit_id}/modules",
             expected=(201,),
-            body={"title": module["title"], "phase_id": phase_ids[phase["title"]]},
+            body={
+                "title": module["title"],
+                "phase_id": phase_ids[phase["title"]],
+                "module_kind": module.get("module_kind", "learning"),
+            },
         )
         module_id = str(created_module["id"])
         module_ids[module["key"]] = module_id
@@ -1619,6 +1702,218 @@ def create_landscape(
     return state
 
 
+def upgrade_landscape_with_practice(
+    config: DevConfig,
+    *,
+    teacher: BrowserSession,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    """Add the Practice fixture to the previous landscape without resetting learners.
+
+    The authenticated teacher must own the recorded unit and course. Progress is
+    stored after every created resource so an interrupted local upgrade can be
+    resumed without duplicating modules or tasks.
+    """
+
+    upgraded = dict(state)
+    upgraded.update({"status": "upgrading", "version": 3})
+    module_ids = dict(upgraded.get("module_ids") or {})
+    section_ids = dict(upgraded.get("section_ids") or {})
+    task_ids = dict(upgraded.get("task_ids") or {})
+    upgraded.update(
+        {"module_ids": module_ids, "section_ids": section_ids, "task_ids": task_ids}
+    )
+    write_state(config.state_path, upgraded)
+
+    unit_id = str(upgraded["unit_id"])
+    course_id = str(upgraded["course_id"])
+    phases = teacher.request(
+        "GET",
+        f"/api/teaching/units/{unit_id}/phases",
+        expected=(200,),
+    ).json()
+    if not isinstance(phases, list):
+        raise RuntimeError("Practice fixture upgrade failed: phase list missing")
+    practice_phase = next(
+        (phase for phase in phases if str(phase.get("title")) == "Erarbeitung"),
+        None,
+    )
+    if practice_phase is None:
+        raise RuntimeError("Practice fixture upgrade failed: target phase missing")
+    practice_phase_id = str(practice_phase["id"])
+
+    graph = _api_json(
+        teacher,
+        "GET",
+        f"/api/teaching/units/{unit_id}/modules/graph",
+        expected=(200,),
+    )
+    graph_modules = list(graph.get("modules") or [])
+    course_modules = teacher.request(
+        "GET",
+        f"/api/teaching/courses/{course_id}/modules",
+        expected=(200,),
+    ).json()
+    if not isinstance(course_modules, list):
+        raise RuntimeError("Practice fixture upgrade failed: course module list missing")
+    course_module = next(
+        (item for item in course_modules if str(item.get("unit_id")) == unit_id),
+        None,
+    )
+    if course_module is None:
+        raise RuntimeError("Practice fixture upgrade failed: course module missing")
+    course_module_id = str(course_module["id"])
+    h5p_content_id = str(upgraded["h5p_content_id"])
+
+    practice_modules = [
+        module for _, module in _iter_modules() if module["key"] in PRACTICE_MODULE_KEYS
+    ]
+    for module in practice_modules:
+        key = str(module["key"])
+        module_id = str(module_ids.get(key) or "")
+        if not module_id:
+            existing = next(
+                (
+                    item
+                    for item in graph_modules
+                    if str(item.get("title")) == str(module["title"])
+                    and str(item.get("module_kind") or "learning") == "practice"
+                ),
+                None,
+            )
+            if existing is None:
+                existing = _api_json(
+                    teacher,
+                    "POST",
+                    f"/api/teaching/units/{unit_id}/modules",
+                    expected=(201,),
+                    body={
+                        "title": module["title"],
+                        "phase_id": practice_phase_id,
+                        "module_kind": "practice",
+                    },
+                )
+                graph_modules.append(existing)
+            module_id = str(existing["id"])
+            module_ids[key] = module_id
+            write_state(config.state_path, upgraded)
+
+        target = _api_json(
+            teacher,
+            "GET",
+            f"/api/teaching/units/{unit_id}/modules/{module_id}/content-target",
+            expected=(200,),
+        )
+        section_id = str(target["section_id"])
+        section_ids[key] = section_id
+        for task in module["tasks"]:
+            task_key = str(task["key"])
+            if not str(task_ids.get(task_key) or ""):
+                existing_tasks = teacher.request(
+                    "GET",
+                    f"/api/teaching/units/{unit_id}/modules/{module_id}/tasks",
+                    expected=(200,),
+                ).json()
+                if not isinstance(existing_tasks, list):
+                    raise RuntimeError("Practice fixture upgrade failed: task list missing")
+                existing_task = next(
+                    (
+                        item
+                        for item in existing_tasks
+                        if str(item.get("kind")) == str(task["kind"])
+                        and str(item.get("instruction_md")) == str(task["instruction_md"])
+                    ),
+                    None,
+                )
+                if existing_task is None:
+                    existing_task = _api_json(
+                        teacher,
+                        "POST",
+                        f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+                        expected=(201,),
+                        body=_task_payload(task, h5p_content_id=h5p_content_id),
+                    )
+                task_ids[task_key] = str(existing_task["id"])
+                write_state(config.state_path, upgraded)
+
+        _api_json(
+            teacher,
+            "PATCH",
+            f"/api/teaching/units/{unit_id}/modules/{module_id}",
+            expected=(200,),
+            body={"required_prereq_count": int(module["required_prereq_count"])},
+        )
+        _api_json(
+            teacher,
+            "PATCH",
+            f"/api/teaching/courses/{course_id}/modules/{course_module_id}/sections/{section_id}/visibility",
+            expected=(200,),
+            body={"visible": True},
+        )
+        write_state(config.state_path, upgraded)
+
+    graph = _api_json(
+        teacher,
+        "GET",
+        f"/api/teaching/units/{unit_id}/modules/graph",
+        expected=(200,),
+    )
+    modules_in_target_phase = [
+        str(item["id"])
+        for item in graph.get("modules") or []
+        if str(item.get("phase_id")) == practice_phase_id
+        and str(item["id"]) not in {str(module_ids[key]) for key in PRACTICE_MODULE_KEYS}
+    ]
+    practice_ids = [str(module_ids[key]) for key in ("practice_native", "practice_h5p")]
+    if any(
+        str(item.get("phase_id")) != practice_phase_id
+        for item in graph.get("modules") or []
+        if str(item.get("id")) in practice_ids
+    ):
+        reordered = teacher.request(
+            "POST",
+            f"/api/teaching/units/{unit_id}/phases/{practice_phase_id}/modules/reorder",
+            expected=(200,),
+            json_body={"module_ids": modules_in_target_phase + practice_ids},
+        ).json()
+        if not isinstance(reordered, list):
+            raise RuntimeError("Practice fixture upgrade failed: module reorder missing")
+
+    for phase in phases:
+        if str(phase.get("title")) == "Üben":
+            teacher.request(
+                "DELETE",
+                f"/api/teaching/units/{unit_id}/phases/{phase['id']}",
+                expected=(204,),
+            )
+
+    graph = _api_json(
+        teacher,
+        "GET",
+        f"/api/teaching/units/{unit_id}/modules/graph",
+        expected=(200,),
+    )
+    existing_edges = {
+        (str(edge.get("from")), str(edge.get("to"))) for edge in graph.get("edges") or []
+    }
+    for source, target in FIXTURE_EDGES:
+        if target not in PRACTICE_MODULE_KEYS:
+            continue
+        edge = (str(module_ids[source]), str(module_ids[target]))
+        if edge not in existing_edges:
+            _api_json(
+                teacher,
+                "POST",
+                f"/api/teaching/units/{unit_id}/modules/edges",
+                expected=(201,),
+                body={"from_module_id": edge[0], "to_module_id": edge[1]},
+            )
+
+    upgraded["status"] = "complete"
+    write_state(config.state_path, upgraded)
+    return upgraded
+
+
 def _sessions(
     config: DevConfig, credentials: dict[str, str]
 ) -> tuple[BrowserSession, BrowserSession]:
@@ -1668,6 +1963,13 @@ def ensure_command(config: DevConfig) -> None:
     if decision == "ready":
         print(
             f"Dev-Accounts und modulare Testlandschaft sind bereit. Zugangsdaten: {config.env_path}"
+        )
+        return
+    if decision == "upgrade":
+        upgrade_landscape_with_practice(config, teacher=teacher, state=state or {})
+        print(
+            "Dev-Accounts und modulare Testlandschaft wurden um Übungsmodule ergänzt. "
+            f"Zugangsdaten: {config.env_path}"
         )
         return
     if decision == "rebuild":

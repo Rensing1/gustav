@@ -10,7 +10,7 @@ Status: Stable
 - `make reset-local` – Supabase DB reset + Services recreate (Hinweis: Keys rotieren; `.env` ggf. via `supabase status` aktualisieren)
 - `make dev-accounts` – lokale Lehrer-/Schüler-Personas und die vollständige modulare Browser-Testlandschaft idempotent provisionieren
 - `make reset-dev-accounts` – nach vollständigem Preflight ausschließlich die Daten der Dev-Lehrkraft über idempotente Kurslöschaufträge löschen, deren Abschluss überwachen und die modulare Testlandschaft neu aufbauen; ein privates Recovery-Manifest ermöglicht die sichere Wiederaufnahme
-- `make test-dev-accounts` – beide Personas, Graphzustände, H5P, Dialog und Diagnostik im opt-in Chromium-Smoke mit isoliertem Artefaktordner prüfen
+- `make test-dev-accounts` – beide Personas, Graphzustände, native und H5P-Übungssitzungen, Dialog und Diagnostik im opt-in Chromium-Smoke mit isoliertem Artefaktordner und der vertrauten lokalen Caddy-CA prüfen
 - `make db-login-user` – Login‑User erstellen/aktualisieren (IN ROLE gustav_limited)
 - `make learning-worker-db-login-user` – Worker-Login‑User erstellen/aktualisieren (dedizierte Worker-Rechte)
 - `make test` – Unit/Integration

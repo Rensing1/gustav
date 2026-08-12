@@ -984,7 +984,7 @@ def _tasks(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
     resolved = _authoring_resource_base(
         "tasks",
         args,
-        module_direct_commands={"create", "edit", "delete", "reorder"},
+        module_direct_commands={"list", "create", "edit", "delete", "reorder"},
         stderr=stderr,
     )
     if resolved is None:

@@ -887,7 +887,7 @@ class DBPracticeRepo:
                 cur.execute(
                     """
                     select item.id, item.presentation_number,
-                           attempt.classification
+                           attempt.classification, item.solution_viewed_at
                       from public.learning_practice_session_items item
                       join lateral (
                         select classification
@@ -903,7 +903,9 @@ class DBPracticeRepo:
                 current = cur.fetchone()
                 if not current:
                     raise ValueError("practice_feedback_pending")
-                needs_retry = int(current[1]) == 1 and str(current[2]) != "secure"
+                needs_retry = int(current[1]) == 1 and (
+                    str(current[2]) != "secure" or current[3] is not None
+                )
                 if needs_retry:
                     cur.execute(
                         "update public.learning_practice_session_items set status='retry_queued', presentation_number=2 where id=%s",

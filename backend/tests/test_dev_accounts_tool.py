@@ -133,8 +133,15 @@ def test_fixture_spec_is_modular_diverse_and_has_two_of_three_convergence() -> N
         "Transfer",
     ]
     modules = {module["key"]: module for phase in spec["phases"] for module in phase["modules"]}
-    assert len(modules) == 6
+    assert len(modules) == 8
     assert modules["transfer"]["required_prereq_count"] == 2
+    assert modules["practice_native"]["module_kind"] == "practice"
+    assert modules["practice_h5p"]["module_kind"] == "practice"
+    assert modules["practice_native"]["materials"] == []
+    assert modules["practice_h5p"]["materials"] == []
+    native_practice = modules["practice_native"]["tasks"][0]
+    assert native_practice["kind"] == "native"
+    assert native_practice["model_solution_md"]
     assert set(dev_accounts.FIXTURE_EDGES) == {
         ("start", "analysis"),
         ("start", "programming"),
@@ -143,7 +150,11 @@ def test_fixture_spec_is_modular_diverse_and_has_two_of_three_convergence() -> N
         ("programming", "transfer"),
         ("interactive", "transfer"),
         ("transfer", "finish"),
+        ("start", "practice_native"),
+        ("start", "practice_h5p"),
     }
+    practice_keys = {"practice_native", "practice_h5p"}
+    assert not any(source in practice_keys for source, _ in dev_accounts.FIXTURE_EDGES)
 
     kinds = {task["kind"] for module in modules.values() for task in module["tasks"]}
     assert kinds == {"native", "visual", "scratch", "calliope", "filius", "h5p", "dialog"}
@@ -484,10 +495,23 @@ def _complete_state() -> dict[str, object]:
     }
 
 
+def _legacy_complete_state() -> dict[str, object]:
+    state = _complete_state()
+    for key in dev_accounts.PRACTICE_MODULE_KEYS:
+        state["module_ids"].pop(key)  # type: ignore[union-attr]
+        state["section_ids"].pop(key)  # type: ignore[union-attr]
+    state["task_ids"].pop("practice_native_task")  # type: ignore[union-attr]
+    state["task_ids"].pop("practice_h5p_task")  # type: ignore[union-attr]
+    state["version"] = 2
+    return state
+
+
 @pytest.mark.parametrize(
     ("state", "course_count", "expected"),
     [
         (_complete_state(), 1, "ready"),
+        (_legacy_complete_state(), 1, "upgrade"),
+        ({**_legacy_complete_state(), "status": "upgrading"}, 1, "upgrade"),
         (_complete_state(), 0, "rebuild"),
         ({"status": "complete"}, 1, "rebuild"),
         ({"status": "building"}, 0, "rebuild"),
@@ -530,6 +554,9 @@ def test_make_targets_keep_provision_reset_and_browser_smoke_explicit() -> None:
     smoke = body("test-dev-accounts")
     assert "RUN_DEV_ACCOUNTS=1" in smoke
     assert "@dev-accounts" in smoke
+    assert "NODE_EXTRA_CA_CERTS=../.tmp/caddy-root.crt" in smoke
+    acceptance = body("test-feature-acceptance")
+    assert "NODE_EXTRA_CA_CERTS=../.tmp/caddy-root.crt" in acceptance
     assert "test-dev-accounts" not in body("verify")
 
 

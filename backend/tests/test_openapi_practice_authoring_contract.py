@@ -13,6 +13,10 @@ def _schemas() -> dict:
     return spec["components"]["schemas"]
 
 
+def _spec() -> dict:
+    return yaml.safe_load((ROOT / "api" / "openapi.yml").read_text(encoding="utf-8"))
+
+
 def test_teaching_module_contract_exposes_immutable_module_kind() -> None:
     schemas = _schemas()
     module = schemas["TeachingUnitModule"]
@@ -48,3 +52,14 @@ def test_teacher_node_editor_exposes_practice_context() -> None:
 
     assert node["module_kind"]["enum"] == ["learning", "practice"]
     assert settings["module_kind"]["enum"] == ["learning", "practice"]
+
+
+def test_module_scoped_task_list_is_contracted_for_cli_read_scope() -> None:
+    operation = _spec()["paths"][
+        "/api/teaching/units/{unit_id}/modules/{module_id}/tasks"
+    ]["get"]
+    assert operation["x-required-cli-scopes"] == ["read"]
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/Task"},
+    }

@@ -121,3 +121,51 @@ def _resolve_module_section_for_authoring_mutation(
     if not section_id:
         return None, _private_error({"error": "not_found"}, status_code=404)
     return section_id, None
+
+
+def _resolve_module_section_for_authoring_read(
+    request: Request,
+    *,
+    unit_id: str,
+    module_id: str,
+    repo_provider: Callable[[], Any] | None = None,
+) -> tuple[str | None, Response | JSONResponse | None]:
+    """Resolve an owned module to its backing section for one read request.
+
+    Unlike mutation routes, this path deliberately has no CSRF check and only
+    requires the CLI `read` scope. The section id stays an internal detail, so
+    clients can list module tasks without making a hidden resolver request.
+    """
+
+    repo = _get_repo(repo_provider)
+    user, error = _require_teacher(request)
+    if error:
+        return None, error
+    if not _is_uuid_like(unit_id):
+        return None, _private_error(
+            {"error": "bad_request", "detail": "invalid_unit_id"}, status_code=400
+        )
+    if not _is_uuid_like(module_id):
+        return None, _private_error(
+            {"error": "bad_request", "detail": "invalid_module_id"}, status_code=400
+        )
+    sub = _current_sub(user)
+    guard = teaching_guards._guard_unit_author(unit_id, sub, repo_provider=lambda: repo)
+    if guard:
+        return None, guard
+    if not hasattr(repo, "get_unit_module_for_author"):
+        return None, _private_error(
+            {"error": "service_unavailable", "detail": "modular_repo_unavailable"},
+            status_code=503,
+        )
+    try:
+        section_id = _get_unit_module_section_id_for_author(
+            repo, unit_id=unit_id, module_id=module_id, author_id=sub
+        )
+    except LookupError:
+        return None, _private_error({"error": "not_found"}, status_code=404)
+    except PermissionError:
+        return None, _private_error({"error": "forbidden"}, status_code=403)
+    if not section_id:
+        return None, _private_error({"error": "not_found"}, status_code=404)
+    return section_id, None

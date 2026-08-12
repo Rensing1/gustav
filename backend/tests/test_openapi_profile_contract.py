@@ -127,6 +127,7 @@ def test_openapi_documents_cli_scopes_for_authoring_resources() -> None:
         ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/reorder", "post", ["write"]),
         ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/upload-intents", "post", ["write"]),
         ("/api/teaching/units/{unit_id}/modules/{module_id}/materials/finalize", "post", ["write"]),
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks", "get", ["read"]),
         ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks", "post", ["write"]),
         ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}", "patch", ["write"]),
         ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}", "delete", ["delete"]),
@@ -226,6 +227,7 @@ def test_openapi_documents_module_authoring_repo_unavailable_responses() -> None
     spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
 
     expectations = [
+        ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks", "get"),
         ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks", "post"),
         ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}", "patch"),
         ("/api/teaching/units/{unit_id}/modules/{module_id}/tasks/{task_id}", "delete"),

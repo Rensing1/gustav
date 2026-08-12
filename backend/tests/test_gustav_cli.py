@@ -623,9 +623,22 @@ def test_tasks_create_sends_instruction_and_criteria(tmp_path, monkeypatch) -> N
     )
 
 
-def test_tasks_mutations_with_module_id_use_module_endpoints_without_read_resolver(tmp_path, monkeypatch) -> None:
+def test_tasks_commands_with_module_id_use_module_endpoints_without_read_resolver(tmp_path, monkeypatch) -> None:
     _configure_test_cli(tmp_path, monkeypatch)
-    calls = _capture_http(monkeypatch, [(201, {}), (200, {}), (204, None), (200, [])])
+    calls = _capture_http(monkeypatch, [(200, []), (201, {}), (200, {}), (204, None), (200, [])])
+
+    assert cli.main(
+        [
+            "tasks",
+            "list",
+            "--unit-id",
+            "unit-1",
+            "--module-id",
+            "module-1",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    ) == 0
 
     assert cli.main(
         [
@@ -689,6 +702,12 @@ def test_tasks_mutations_with_module_id_use_module_endpoints_without_read_resolv
     ) == 0
 
     assert calls == [
+        (
+            "GET",
+            "https://gustav.example/api/teaching/units/unit-1/modules/module-1/tasks",
+            {"Authorization": "Bearer gustav_cli_token_secret"},
+            None,
+        ),
         (
             "POST",
             "https://gustav.example/api/teaching/units/unit-1/modules/module-1/tasks",

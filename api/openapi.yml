@@ -12012,6 +12012,37 @@ paths:
         '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/teaching/units/{unit_id}/modules/{module_id}/tasks:
+    get:
+      tags: [Teaching]
+      summary: List tasks in a module-backed section (author only)
+      operationId: listModuleTasks
+      security:
+        - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
+      x-permissions: { requiredRole: teacher, authorOnly: true }
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: module_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Ordered teacher-visible tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Task' }
+        '400': { description: Invalid path, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Module or unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Service unavailable (modular repo unavailable), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
       tags: [Teaching]
       summary: Create a task in a module-backed section (author only)

@@ -129,13 +129,13 @@ def test_native_attempt_completion_solution_and_supported_retry_are_atomic() -> 
             complete_worker_practice_attempt(
                 conn=conn,
                 submission_id=_submission_id(conn, accepted["attempt_id"]),
-                analysis_json=_analysis(6),
-                feedback_md="Noch nicht ganz sicher.",
+                analysis_json=_analysis(10),
+                feedback_md="Sicher gelöst.",
             )
             conn.commit()
         completed = service.get_attempt(student, accepted["attempt_id"])
         assert completed["status"] == "completed"
-        assert completed["classification"] == "partial"
+        assert completed["classification"] == "secure"
         first_due = completed["due_at"]
 
         assert service.reveal_solution(student, session["id"], item["id"]) == {

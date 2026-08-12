@@ -299,7 +299,8 @@ export async function seedTeacherVisualSmokeUnit(page: Page, title: string): Pro
 export async function seedLearnerPracticeCourse(
   teacherPage: Page,
   learnerPage: Page,
-  title: string
+  title: string,
+  includeNativeTask = true
 ): Promise<LearnerPracticeCourse> {
   const learnerSub = await currentUserSub(learnerPage);
   const courseId = await createCourse(teacherPage, `${title} Kurs`);
@@ -318,12 +319,14 @@ export async function seedLearnerPracticeCourse(
   );
   await expectApiOk(targetResponse);
   const sectionId = (await targetResponse.json()).section_id as string;
-  await createTask(teacherPage, unitId, sectionId, {
-    instruction_md: "Erkläre, warum ein Test zuerst rot sein soll.",
-    criteria: ["Die Antwort erklärt den Zweck eines zunächst fehlschlagenden Tests."],
-    teacher_context_md: "Bewerte, ob die Rückmeldung den beobachtbaren TDD-Zyklus erklärt.",
-    model_solution_md: "Ein zunächst roter Test beweist, dass er die noch fehlende Funktion wirklich prüft."
-  });
+  if (includeNativeTask) {
+    await createTask(teacherPage, unitId, sectionId, {
+      instruction_md: "Erkläre, warum ein Test zuerst rot sein soll.",
+      criteria: ["Die Antwort erklärt den Zweck eines zunächst fehlschlagenden Tests."],
+      teacher_context_md: "Bewerte, ob die Rückmeldung den beobachtbaren TDD-Zyklus erklärt.",
+      model_solution_md: "Ein zunächst roter Test beweist, dass er die noch fehlende Funktion wirklich prüft."
+    });
+  }
   const courseModuleId = await attachUnitToCourse(teacherPage, courseId, unitId);
   await releaseSection(teacherPage, courseId, courseModuleId, sectionId);
   await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);

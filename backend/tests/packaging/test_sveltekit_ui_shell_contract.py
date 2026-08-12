@@ -156,12 +156,13 @@ def test_design_system_styles_are_split_into_ordered_responsibility_bundles() ->
     assert entrypoint_path.is_file(), f"Missing design-system entrypoint: {entrypoint_path}"
     entrypoint_src = entrypoint_path.read_text(encoding="utf-8")
     expected_lines = [
-        "@layer reset, tokens, base, typography, primitives, learning, teaching, auth, overrides;",
+        "@layer reset, tokens, base, typography, primitives, learning, practice, teaching, auth, overrides;",
         '@import "./theme-tokens.css" layer(tokens);',
         '@import "./app.css" layer(base);',
         '@import "./typography.css" layer(typography);',
         '@import "./ui-primitives.css" layer(primitives);',
         '@import "./learning-unit.css" layer(learning);',
+        '@import "./practice.css" layer(practice);',
         '@import "./teaching-workspace.css" layer(teaching);',
         '@import "./auth-theme.css" layer(auth);',
         '@import "./overrides.css" layer(overrides);',

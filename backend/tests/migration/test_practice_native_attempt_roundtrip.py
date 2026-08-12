@@ -77,6 +77,8 @@ def test_native_attempt_completion_solution_and_supported_retry_are_atomic() -> 
             stacks=[{"course_id": str(ids["course"]), "practice_module_id": str(ids["module"])}],
         )
         item = session["current_item"]
+        assert item["module_title"] == "Stapel"
+        assert "criteria" not in item
         assert item["latest_attempt_id"] is None
         def submit_once(answer: str) -> dict:
             local_service = PracticeService(DBPracticeRepo(_app_dsn()))
@@ -164,7 +166,18 @@ def test_native_attempt_completion_solution_and_supported_retry_are_atomic() -> 
         supported = service.get_attempt(student, second["attempt_id"])
         assert supported["classification"] == "partial"
         assert supported["due_at"] == first_due
-        assert service.continue_session(student, session["id"])["status"] == "ended"
+        ended = service.continue_session(student, session["id"])
+        assert ended["status"] == "ended"
+        assert ended["end_reason"] == "completed"
+        assert ended["summary"]["answered_items"] == 1
+        assert ended["summary"]["skipped_items"] == 0
+        assert ended["summary"]["pending_items"] == 0
+        assert ended["summary"]["classification_counts"] == {
+            "secure": 0,
+            "partial": 1,
+            "insufficient": 0,
+        }
+        assert ended["summary"]["next_due_at"] == first_due
     finally:
         with psycopg.connect(_admin_dsn()) as conn:
             with conn.cursor() as cur:

@@ -131,8 +131,9 @@ class DBPracticeRepo:
         self._set_course(cur, course_id)
         cur.execute(
             """
-            select module.section_id::text
+            select module.section_id::text, section.title
               from public.unit_modules module
+              join public.unit_sections section on section.id = module.section_id
               join public.course_modules course_module on course_module.unit_id = module.unit_id
               join lateral public.get_modular_unit_module_states_for_student(
                 %s, %s::uuid, module.unit_id, true
@@ -149,7 +150,7 @@ class DBPracticeRepo:
         row = cur.fetchone()
         if not row:
             raise LookupError("practice_stack_not_found")
-        section_id = str(row[0])
+        section_id, module_title = str(row[0]), str(row[1])
         cur.execute(
             """
             select task.id::text,
@@ -172,6 +173,7 @@ class DBPracticeRepo:
             {
                 "course_id": course_id,
                 "practice_module_id": module_id,
+                "module_title": module_title,
                 "task_id": str(task[0]),
                 "task_kind": str(task[1]),
                 "instruction_md": str(task[2]),
@@ -222,14 +224,16 @@ class DBPracticeRepo:
                 rng.shuffle(items)
                 status = "active" if items else "ended"
                 ended_at = None if items else datetime.now(timezone.utc)
+                end_reason = None if items else "empty"
                 try:
                     cur.execute(
                         """
-                        insert into public.learning_practice_sessions (student_sub, mode, status, ended_at)
-                        values (%s, %s, %s, %s)
+                        insert into public.learning_practice_sessions
+                          (student_sub, mode, status, ended_at, end_reason)
+                        values (%s, %s, %s, %s, %s)
                         returning id::text
                         """,
-                        (student_sub, mode, status, ended_at),
+                        (student_sub, mode, status, ended_at, end_reason),
                     )
                 except psycopg.errors.UniqueViolation as exc:
                     raise ActivePracticeSessionError("") from exc
@@ -245,16 +249,17 @@ class DBPracticeRepo:
                 cur.executemany(
                     """
                     insert into public.learning_practice_session_items (
-                      session_id, course_id, practice_module_id, task_id,
+                      session_id, course_id, practice_module_id, module_title, task_id,
                       task_kind, instruction_md, criteria, h5p_content_id,
                       position, status
-                    ) values (%s::uuid, %s::uuid, %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s)
+                    ) values (%s::uuid, %s::uuid, %s::uuid, %s, %s::uuid, %s, %s, %s, %s, %s, %s)
                     """,
                     [
                         (
                             session_id,
                             item["course_id"],
                             item["practice_module_id"],
+                            item["module_title"],
                             item["task_id"],
                             item["task_kind"],
                             item["instruction_md"],
@@ -275,7 +280,7 @@ class DBPracticeRepo:
     def _session_payload(self, cur, *, student_sub: str, session_id: str) -> dict | None:  # noqa: ANN001
         cur.execute(
             """
-            select id::text, mode, status, started_at, ended_at
+            select id::text, mode, status, started_at, ended_at, end_reason
               from public.learning_practice_sessions
              where id=%s::uuid and student_sub=%s
             """,
@@ -299,7 +304,7 @@ class DBPracticeRepo:
             cur.execute(
                 """
                 select item.id::text, item.course_id::text, item.practice_module_id::text,
-                       item.task_id::text, item.position, item.status, item.presentation_number,
+                       item.module_title, item.task_id::text, item.position, item.status, item.presentation_number,
                        item.task_kind, item.instruction_md, item.criteria, item.h5p_content_id,
                        latest_attempt.id::text
                   from public.learning_practice_session_items item
@@ -322,25 +327,75 @@ class DBPracticeRepo:
                     "id": str(item[0]),
                     "course_id": str(item[1]),
                     "practice_module_id": str(item[2]),
-                    "task_id": str(item[3]),
-                    "position": int(item[4]),
-                    "status": str(item[5]),
-                    "presentation_number": int(item[6]),
-                    "kind": str(item[7]),
-                    "instruction_md": str(item[8]),
-                    "criteria": list(item[9] or []),
-                    "h5p_content_id": str(item[10]) if item[10] is not None else None,
-                    "latest_attempt_id": str(item[11]) if item[11] is not None else None,
+                    "module_title": str(item[3]),
+                    "task_id": str(item[4]),
+                    "position": int(item[5]),
+                    "status": str(item[6]),
+                    "presentation_number": int(item[7]),
+                    "kind": str(item[8]),
+                    "instruction_md": str(item[9]),
+                    "h5p_content_id": str(item[11]) if item[11] is not None else None,
+                    "latest_attempt_id": str(item[12]) if item[12] is not None else None,
                 }
+        summary = None
+        if str(row[2]) == "ended":
+            cur.execute(
+                """
+                select count(latest_completed.session_item_id)::int,
+                       count(*) filter (
+                         where item.status = 'skipped'
+                           and latest_completed.session_item_id is null
+                       )::int,
+                       count(*) filter (where pending.session_item_id is not null)::int,
+                       count(*) filter (where latest_completed.classification = 'secure')::int,
+                       count(*) filter (where latest_completed.classification = 'partial')::int,
+                       count(*) filter (where latest_completed.classification = 'insufficient')::int,
+                       min(latest_completed.resulting_due_at)
+                  from public.learning_practice_session_items item
+                  left join lateral (
+                    select attempt.session_item_id, attempt.classification,
+                           attempt.resulting_due_at
+                      from public.learning_practice_attempts attempt
+                     where attempt.session_item_id = item.id
+                       and attempt.status = 'completed'
+                     order by attempt.completed_at desc nulls last, attempt.created_at desc,
+                              attempt.id desc
+                     limit 1
+                  ) latest_completed on true
+                  left join lateral (
+                    select attempt.session_item_id
+                      from public.learning_practice_attempts attempt
+                     where attempt.session_item_id = item.id
+                       and attempt.status = 'pending'
+                     limit 1
+                  ) pending on true
+                 where item.session_id = %s::uuid
+                """,
+                (session_id,),
+            )
+            aggregate = cur.fetchone()
+            summary = {
+                "answered_items": int(aggregate[0] or 0),
+                "skipped_items": int(aggregate[1] or 0),
+                "pending_items": int(aggregate[2] or 0),
+                "classification_counts": {
+                    "secure": int(aggregate[3] or 0),
+                    "partial": int(aggregate[4] or 0),
+                    "insufficient": int(aggregate[5] or 0),
+                },
+                "next_due_at": aggregate[6].isoformat() if aggregate[6] else None,
+            }
         return {
             "id": str(row[0]),
             "mode": str(row[1]),
             "status": str(row[2]),
             "started_at": row[3].isoformat(),
             "ended_at": row[4].isoformat() if row[4] else None,
+            "end_reason": str(row[5]) if row[5] else None,
             "total_items": int(total or 0),
             "completed_items": int(completed or 0),
             "current_item": current_item,
+            "summary": summary,
         }
 
     def get_active_session(self, *, student_sub: str) -> dict | None:
@@ -866,7 +921,7 @@ class DBPracticeRepo:
             )
             return
         cur.execute(
-            "update public.learning_practice_sessions set status='ended', ended_at=now() where id=%s::uuid and status='active'",
+            "update public.learning_practice_sessions set status='ended', ended_at=now(), end_reason='completed' where id=%s::uuid and status='active'",
             (session_id,),
         )
 
@@ -977,7 +1032,7 @@ class DBPracticeRepo:
                         (session_uuid,),
                     )
                     cur.execute(
-                        "update public.learning_practice_sessions set status='ended', ended_at=now() where id=%s::uuid",
+                        "update public.learning_practice_sessions set status='ended', ended_at=now(), end_reason='stopped' where id=%s::uuid",
                         (session_uuid,),
                     )
                     conn.commit()

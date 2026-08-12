@@ -85,6 +85,8 @@ def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_stat
         due_session = service.create_session(student, mode="due", stacks=selection)
         assert due_session["total_items"] == 1
         assert due_session["current_item"]["task_id"] == str(ids["task_due"])
+        assert due_session["current_item"]["module_title"] == "Practice stack"
+        assert "criteria" not in due_session["current_item"]
         assert "teacher_context_md" not in due_session["current_item"]
         assert "model_solution_md" not in due_session["current_item"]
         assert service.repo.get_session(
@@ -95,6 +97,14 @@ def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_stat
 
         ended = service.skip_item(student, due_session["id"], due_session["current_item"]["id"])
         assert ended["status"] == "ended"
+        assert ended["end_reason"] == "completed"
+        assert ended["summary"] == {
+            "answered_items": 0,
+            "skipped_items": 1,
+            "pending_items": 0,
+            "classification_counts": {"secure": 0, "partial": 0, "insufficient": 0},
+            "next_due_at": None,
+        }
         exam_session = service.create_session(student, mode="exam", stacks=selection)
         assert exam_session["total_items"] == 2
 
@@ -111,6 +121,7 @@ def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_stat
             exam_session["current_item"]["id"],
         )
         assert ended_after_access_loss["status"] == "ended"
+        assert ended_after_access_loss["end_reason"] == "completed"
 
         with psycopg.connect(_admin_dsn()) as conn:
             with conn.cursor() as cur:

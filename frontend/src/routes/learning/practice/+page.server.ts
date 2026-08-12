@@ -9,6 +9,7 @@ import {
 } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import type { LearningPracticeAttempt, LearningPracticeSession, LearningPracticeStack } from "$lib/types/practice";
+import { practiceErrorMessage } from "$lib/practice/practice-presentation";
 
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
   const authRedirectPath = currentPath(url);
@@ -37,15 +38,18 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
   const selectedStack = stackResponse.stacks.some(
     (stack) => `${stack.course_id}:${stack.practice_module_id}` === requestedStack
   ) ? requestedStack : null;
+  const selectedMode: "due" | "exam" = url.searchParams.get("mode") === "exam" ? "exam" : "due";
   return {
     breadcrumbs,
     hidePageHeading: true,
     pageTitle: "Üben",
     stacks: stackResponse.stacks,
     selectedStack,
+    selectedMode,
     activeSession,
     attempt,
-    attemptKey: randomUUID()
+    attemptKey: randomUUID(),
+    nowIso: new Date().toISOString()
   };
 };
 
@@ -68,9 +72,13 @@ async function mutate(
     } catch {
       // The status remains sufficient when an upstream proxy returned no JSON.
     }
-    return fail(response.status, { practice: { error: detail } });
+    return fail(response.status, { practice: { error: practiceErrorMessage(detail) } });
   }
-  throw redirect(303, "/learning/practice");
+  const session = (await response.json()) as LearningPracticeSession;
+  const destination = session.status === "ended"
+    ? `/learning/practice/sessions/${encodeURIComponent(session.id)}/summary`
+    : "/learning/practice";
+  throw redirect(303, destination);
 }
 
 export const actions: Actions = {
@@ -118,7 +126,7 @@ export const actions: Actions = {
     );
     if (!response.ok) {
       const error = (await readErrorDetail(response)) ?? "practice_request_failed";
-      return fail(response.status, { practice: { error } });
+      return fail(response.status, { practice: { error: practiceErrorMessage(error) } });
     }
     await response.json();
     throw redirect(303, "/learning/practice");
@@ -135,7 +143,7 @@ export const actions: Actions = {
     );
     if (!response.ok) {
       const error = (await readErrorDetail(response)) ?? "practice_request_failed";
-      return fail(response.status, { practice: { error } });
+      return fail(response.status, { practice: { error: practiceErrorMessage(error) } });
     }
     const solution = (await response.json()) as { model_solution_md: string };
     return { practice: { solution: solution.model_solution_md } };

@@ -13,15 +13,29 @@ export type LearningPracticeSessionItem = {
   id: string;
   course_id: string;
   practice_module_id: string;
+  module_title: string;
   task_id: string;
   position: number;
   status: "active" | "awaiting_analysis" | "feedback" | "retry_queued";
   presentation_number: 1 | 2;
   kind: "native" | "h5p";
   instruction_md: string;
-  criteria: string[];
   h5p_content_id: string | null;
   latest_attempt_id: string | null;
+};
+
+export type LearningPracticeClassificationCounts = {
+  secure: number;
+  partial: number;
+  insufficient: number;
+};
+
+export type LearningPracticeSessionSummary = {
+  answered_items: number;
+  skipped_items: number;
+  pending_items: number;
+  classification_counts: LearningPracticeClassificationCounts;
+  next_due_at: string | null;
 };
 
 export type LearningPracticeSession = {
@@ -30,9 +44,11 @@ export type LearningPracticeSession = {
   status: "active" | "ended";
   started_at: string;
   ended_at: string | null;
+  end_reason: "completed" | "stopped" | "empty" | null;
   total_items: number;
   completed_items: number;
   current_item: LearningPracticeSessionItem | null;
+  summary: LearningPracticeSessionSummary | null;
 };
 
 export type LearningPracticeAttempt = {

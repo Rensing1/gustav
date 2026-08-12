@@ -2,11 +2,22 @@
 
 **Stand:** 12. August 2026
 
-**Status:** produktionsreif implementiert und abgenommen; Scheduler-Gate 0 am 8. August 2026 geschlossen, vollständige technische Abnahme am 12. August 2026
+**Status:** produktionsreif implementiert und am 12. August 2026 vollständig abgenommen
 
 **Codebasis:** `/home/felix/gustav-alpha2`
 
-**Abnahmenachweis:** `make verify-feature` ist mit 2.366 bestandenen Python-Tests, 491 Frontend-Tests, 62 H5P-Tests, fehlerfreiem Svelte-Check, Produktionsbuild und allen 16 aktiven Feature-Acceptance-Reisen grün. Die Practice-Reise läuft ohne Feature-Flag im regulären Gate und prüft authentifiziert Lehrkraft-Authoring, Native und H5P, zweite Präsentationen, KI-Auswertung, Musterlösung, Reload-Persistenz und frische H5P-Kontexte. Der separate CLI-Rundlauf prüft Practice-Modul, eingehende Kante, native Pflichtfelder, Bearbeiten, Listen sowie H5P-Import über echte API- und Datenbankpfade. `make test-dev-accounts` ist mit der additiv erweiterten Dev-Lerneinheit und echter Schüler-Persona grün; `make docker-validate` ist ebenfalls erfolgreich. Native und H5P-Roundtrips einschließlich paralleler Native- und H5P-Anfragen laufen gegen die lokal vollständig migrierte PostgreSQL-Datenbank.
+**Abnahmenachweis:** `make verify-feature` ist mit 2.368 bestandenen Python-Tests, 503 Frontend-Tests, 62 H5P-Tests, fehlerfreiem Svelte-Check, Produktionsbuild und allen 16 aktiven Feature-Acceptance-Reisen grün. Die Practice-Reise läuft ohne Feature-Flag im regulären Gate und prüft authentifiziert Lehrkraft-Authoring, Native und H5P, zweite Präsentationen, KI-Auswertung, Musterlösung, Reload-Persistenz, frische H5P-Kontexte sowie regulären und vorzeitigen Abschluss. Der separate CLI-Rundlauf prüft Practice-Modul, eingehende Kante, native Pflichtfelder, Bearbeiten, Listen sowie H5P-Import über echte API- und Datenbankpfade. `make test-dev-accounts` ist mit der additiv erweiterten Dev-Lerneinheit sowie echter Lehrkraft- und Schüler-Persona grün; `make docker-validate` ist ebenfalls erfolgreich. Native und H5P-Roundtrips einschließlich paralleler Native- und H5P-Anfragen laufen gegen die lokal vollständig migrierte PostgreSQL-Datenbank.
+
+## UI-Vertrag für Auswahl, Bearbeitung und Abschluss
+
+Die Practice-Oberfläche folgt vier klar getrennten Zuständen: Stapelauswahl, Aufgabenbearbeitung, Rückmeldung und Sitzungsabschluss. Die Route orchestriert diese Zustände; wiederverwendbare Komponenten besitzen ihre Darstellung und lokale Interaktion selbst. Practice-spezifische Gestaltung verwendet ausschließlich die globalen Farb-, Abstands-, Typografie-, Radius- und Fokustokens in einem eigenen CSS-Layer.
+
+- Die Stapelauswahl zeigt klickbare Karten mit Modul, Kurs, Lerneinheit sowie fälligen und gesamten Aufgaben. Die beiden Modi werden als verständliche Auswahl mit Hilfetext statt als technisches Select dargestellt.
+- Die Bearbeitung zeigt genau eine Aufgabe, einen semantischen Fortschritt und eine eindeutige Primäraktion. Bewertungskriterien, Lehrkraft-Kontext, Musterlösung und technische IDs sind weder im studentischen Vertrag noch im DOM verfügbar.
+- Aufgabenstellung, Rückmeldung und autorisiert abgerufene Musterlösung werden über den bestehenden bereinigenden Markdown-Renderer ausgegeben. Rohes Markdown wird nicht angezeigt.
+- Die Rückmeldung priorisiert Einstufung, kurze formative Rückmeldung, nächste Wiederholung und den nächsten Schritt. Exakte Scheduler-Zeitstempel werden durch relative Angaben ersetzt.
+- Der reguläre Abschluss würdigt den Lernfortschritt mit den drei Lernständen `secure`, `partial` und `insufficient`. Ein bewusst vorzeitiger Abschluss bleibt neutral und weist übersprungene Aufgaben separat aus. Ein leerer Fälligkeits-Snapshot erklärt, dass heute nichts ansteht.
+- Alle Zustände funktionieren in hellem und dunklem Theme, bei 320 CSS-Pixeln Breite ohne horizontales Scrollen sowie vollständig per Tastatur. Fehler und asynchrone Auswertungen verwenden persistente, semantische Live-Regions.
 
 ## 1. Ziel und User Stories
 
@@ -78,11 +89,11 @@ Nicht im ersten Release enthalten sind Mikrofoneingabe, Transkription und die Le
 
 ### 2.5 Auswertung und Rückmeldung
 
-Die drei sichtbaren Einstufungen heißen:
+Die drei internen Einstufungen erhalten folgende sichtbare Beschriftungen:
 
-- `mastered`: „sicher beherrscht“,
-- `partial`: „teilweise beherrscht“,
-- `insufficient`: „nicht ausreichend“.
+- `mastered` beziehungsweise öffentlich `secure`: „Sicher beantwortet“,
+- `partial`: „Teilweise beantwortet“,
+- `insufficient`: „Noch nicht sicher“.
 
 Bei KI-ausgewerteten Freitextaufgaben gilt mit gleichgewichteten Kriterienwerten `c_i` auf der vorhandenen Skala von 0 bis 10:
 
@@ -590,5 +601,5 @@ Vor dem ersten Code-Slice müssen folgende Bedingungen erfüllt sein:
 1. Gate 0 ist fachlich freigegeben und durch Golden-Vektoren vollständig spezifiziert.
 2. `api/openapi.yml`, aktuelle Migrationen und ENV-Konfiguration wurden erneut auf Lokal-ist-Prod-Kompatibilität geprüft.
 3. Die gegenwärtigen unabhängigen Änderungen im Arbeitsbaum sind abgeschlossen oder sauber von der Feature-Arbeit getrennt.
-4. Die Implementierung beginnt auf einem dafür vorgesehenen Feature-Branch und folgt in jedem Slice Contract-first sowie Red-Green-Refactor.
+4. Die Implementierung erfolgt wie für diesen Release vereinbart direkt auf dem lokalen `master` und folgt in jedem Slice Contract-first sowie Red-Green-Refactor.
 5. Kein Schedulerparameter, keine Musterlösung und keine sichtbare Einstufung wird dem Sprachmodell zur freien Entscheidung überlassen.

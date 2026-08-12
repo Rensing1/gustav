@@ -1,11 +1,11 @@
-import { expect, test, type Browser } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { login } from "./support/auth";
 import { webBase } from "./support/e2e-env";
 
-const practiceFeedback = /Sicher beherrscht|Teilweise beherrscht|Noch nicht ausreichend/;
+const practiceFeedback = /Sicher beantwortet|Teilweise beantwortet|Noch nicht sicher/;
 
 type FixtureState = {
   status: string;
@@ -51,6 +51,23 @@ async function authenticatedPage(browser: Browser, email: string, password: stri
   const page = await context.newPage();
   await login(page, email, password);
   return { context, page };
+}
+
+async function selectAllPracticeTasks(page: Page): Promise<void> {
+  const radio = page.getByRole("radio", { name: /Alle Aufgaben üben/ });
+  await radio.focus();
+  await radio.press("Space");
+  await expect(radio).toBeChecked();
+}
+
+async function endPracticeSession(page: Page): Promise<void> {
+  const endButton = page.getByRole("button", { name: "Sitzung beenden" });
+  if (!await endButton.isVisible()) return;
+  await endButton.click();
+  const dialog = page.getByRole("dialog", { name: "Möchtest du die Übung jetzt beenden?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Sitzung beenden" }).click();
+  await expect(page.getByRole("heading", { name: "Übung beendet" })).toBeVisible();
 }
 
 test("@dev-accounts exposes the complete modular browser landscape to both personas", async ({ browser }) => {
@@ -164,34 +181,32 @@ test("@dev-accounts exposes the complete modular browser landscape to both perso
     await expect(learner.page.getByRole("region", { name: "Dialog fortsetzen" })).toBeVisible();
 
     await learner.page.goto("/learning/practice");
-    const staleSessionEnd = learner.page.getByRole("button", { name: "Sitzung beenden" });
-    if (await staleSessionEnd.isVisible()) {
-      await staleSessionEnd.click();
-    }
+    await endPracticeSession(learner.page);
 
     await learner.page.goto(
       `/learning/practice?course_id=${state.course_id}&practice_module_id=${state.module_ids.practice_native}`
     );
     await expect(learner.page.getByText(/Grundlagen wiederholen/)).toBeVisible();
-    await learner.page.getByLabel("Modus").selectOption("exam");
-    await learner.page.getByRole("button", { name: "Übung starten" }).click();
+    await selectAllPracticeTasks(learner.page);
+    await learner.page.getByRole("button", { name: /Aufgabe starten/ }).click();
+    await expect(learner.page.getByText(/^Kriterien:/)).toHaveCount(0);
     await learner.page.getByLabel("Deine Antwort").fill(
       "Bei einer Suchmaschine ist der Suchbegriff die Eingabe, die Suche die Verarbeitung und die Trefferliste die Ausgabe."
     );
-    await learner.page.getByRole("button", { name: "Antwort zur Auswertung senden" }).click();
+    await learner.page.getByRole("button", { name: "Antwort prüfen" }).click();
     await expect(learner.page.getByRole("heading", { name: practiceFeedback })).toBeVisible({ timeout: 90_000 });
     await learner.page.reload();
     await expect(learner.page.getByRole("heading", { name: practiceFeedback })).toBeVisible();
-    await learner.page.getByRole("button", { name: "Musterlösung anzeigen" }).click();
+    await learner.page.getByRole("button", { name: "Musterlösung ansehen" }).click();
     await expect(learner.page.getByRole("heading", { name: "Musterlösung" })).toBeVisible();
-    await learner.page.getByRole("button", { name: "Sitzung beenden" }).click();
+    await endPracticeSession(learner.page);
 
     await learner.page.goto(
       `/learning/practice?course_id=${state.course_id}&practice_module_id=${state.module_ids.practice_h5p}`
     );
     await expect(learner.page.getByText(/Interaktiv wiederholen/)).toBeVisible();
-    await learner.page.getByLabel("Modus").selectOption("exam");
-    await learner.page.getByRole("button", { name: "Übung starten" }).click();
+    await selectAllPracticeTasks(learner.page);
+    await learner.page.getByRole("button", { name: /Aufgabe starten/ }).click();
     const practicePlayer = learner.page.locator("h5p-player");
     await expect(practicePlayer).toBeVisible({ timeout: 30_000 });
     await practicePlayer.evaluate((element) => {
@@ -208,8 +223,8 @@ test("@dev-accounts exposes the complete modular browser landscape to both perso
     await expect(learner.page.getByRole("heading", { name: practiceFeedback })).toBeVisible({ timeout: 30_000 });
     await learner.page.reload();
     await expect(learner.page.getByRole("heading", { name: practiceFeedback })).toBeVisible();
-    await expect(learner.page.getByRole("button", { name: "Musterlösung anzeigen" })).toHaveCount(0);
-    await learner.page.getByRole("button", { name: "Sitzung beenden" }).click();
+    await expect(learner.page.getByRole("button", { name: "Musterlösung ansehen" })).toHaveCount(0);
+    await endPracticeSession(learner.page);
 
     await teacher.page.goto(`/diagnostics/courses/${state.course_id}`);
     await expect(teacher.page.getByRole("heading", { name: "GUSTAV Browser-Test" })).toBeVisible();

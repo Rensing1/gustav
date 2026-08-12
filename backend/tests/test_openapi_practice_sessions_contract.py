@@ -40,7 +40,7 @@ def test_practice_responses_do_not_contract_hidden_teacher_content() -> None:
     schemas = _spec()["components"]["schemas"]
     item = schemas["LearningPracticeSessionItem"]["properties"]
     stack = schemas["LearningPracticeStack"]["properties"]
-    for hidden in ("teacher_context_md", "model_solution_md"):
+    for hidden in ("criteria", "teacher_context_md", "model_solution_md"):
         assert hidden not in item
         assert hidden not in stack
     assert {"module_kind", "due_tasks_count"} <= set(
@@ -68,6 +68,24 @@ def test_current_practice_item_identifies_its_latest_attempt() -> None:
         "format": "uuid",
         "nullable": True,
     }
+    assert "module_title" in item["required"]
+
+
+def test_ended_practice_session_contract_exposes_a_safe_summary() -> None:
+    schemas = _spec()["components"]["schemas"]
+    session = schemas["LearningPracticeSession"]
+    summary = schemas["LearningPracticeSessionSummary"]
+
+    assert {"end_reason", "summary"} <= set(session["required"])
+    assert session["properties"]["end_reason"]["enum"] == ["completed", "stopped", "empty"]
+    assert set(summary["required"]) == {
+        "answered_items",
+        "skipped_items",
+        "pending_items",
+        "classification_counts",
+        "next_due_at",
+    }
+    assert "criteria" not in summary["properties"]
 
 
 def test_practice_attempt_contract_separates_native_and_token_bound_h5p_inputs() -> None:

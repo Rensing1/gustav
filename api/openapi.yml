@@ -3572,36 +3572,56 @@ components:
     LearningPracticeSessionItem:
       type: object
       additionalProperties: false
-      required: [id, course_id, practice_module_id, task_id, position, status, presentation_number, kind, instruction_md, criteria, latest_attempt_id]
+      required: [id, course_id, practice_module_id, module_title, task_id, position, status, presentation_number, kind, instruction_md, latest_attempt_id]
       properties:
         id: { type: string, format: uuid }
         course_id: { type: string, format: uuid }
         practice_module_id: { type: string, format: uuid }
+        module_title: { type: string, minLength: 1 }
         task_id: { type: string, format: uuid }
         position: { type: integer, minimum: 1 }
         status: { type: string, enum: [active, awaiting_analysis, feedback, retry_queued] }
         presentation_number: { type: integer, minimum: 1, maximum: 2 }
         kind: { type: string, enum: [native, h5p] }
         instruction_md: { type: string }
-        criteria:
-          type: array
-          items: { type: string }
         h5p_content_id: { type: string, nullable: true }
         latest_attempt_id: { type: string, format: uuid, nullable: true }
+    LearningPracticeClassificationCounts:
+      type: object
+      additionalProperties: false
+      required: [secure, partial, insufficient]
+      properties:
+        secure: { type: integer, minimum: 0, maximum: 1000 }
+        partial: { type: integer, minimum: 0, maximum: 1000 }
+        insufficient: { type: integer, minimum: 0, maximum: 1000 }
+    LearningPracticeSessionSummary:
+      type: object
+      additionalProperties: false
+      required: [answered_items, skipped_items, pending_items, classification_counts, next_due_at]
+      properties:
+        answered_items: { type: integer, minimum: 0, maximum: 1000 }
+        skipped_items: { type: integer, minimum: 0, maximum: 1000 }
+        pending_items: { type: integer, minimum: 0, maximum: 1000 }
+        classification_counts: { $ref: '#/components/schemas/LearningPracticeClassificationCounts' }
+        next_due_at: { type: string, format: date-time, nullable: true }
     LearningPracticeSession:
       type: object
       additionalProperties: false
-      required: [id, mode, status, started_at, total_items, completed_items, current_item]
+      required: [id, mode, status, started_at, ended_at, end_reason, total_items, completed_items, current_item, summary]
       properties:
         id: { type: string, format: uuid }
         mode: { type: string, enum: [due, exam] }
         status: { type: string, enum: [active, ended] }
         started_at: { type: string, format: date-time }
         ended_at: { type: string, format: date-time, nullable: true }
+        end_reason: { type: string, enum: [completed, stopped, empty], nullable: true }
         total_items: { type: integer, minimum: 0, maximum: 1000 }
         completed_items: { type: integer, minimum: 0, maximum: 1000 }
         current_item:
           allOf: [{ $ref: '#/components/schemas/LearningPracticeSessionItem' }]
+          nullable: true
+        summary:
+          allOf: [{ $ref: '#/components/schemas/LearningPracticeSessionSummary' }]
           nullable: true
     LearningPracticeAttemptCreate:
       oneOf:

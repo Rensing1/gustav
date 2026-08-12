@@ -32,7 +32,7 @@ function minimalH5pPackage(): Buffer {
   return execFileSync(python, ["-c", program, fixture], { cwd: projectRoot });
 }
 
-const feedbackHeading = /Sicher beherrscht|Teilweise beherrscht|Noch nicht ausreichend/;
+const feedbackHeading = /Sicher beantwortet|Teilweise beantwortet|Noch nicht sicher/;
 
 test("@feature-acceptance teacher authors and learner completes native and H5P practice", async ({ browser }) => {
   test.setTimeout(300_000);
@@ -124,7 +124,7 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
       `/learning/practice?course_id=${seeded.courseId}&practice_module_id=${seeded.practiceModuleId}`
     );
     await expect(learner.page.getByRole("heading", { name: "Üben" })).toBeVisible();
-    await learner.page.getByRole("button", { name: "Übung starten" }).click();
+    await learner.page.getByRole("button", { name: /Aufgaben starten/ }).click();
     const h5pContexts = new Set<string>();
     let nativePresentations = 0;
     let h5pPresentations = 0;
@@ -136,8 +136,10 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
       if (activeResponse.status() === 204) break;
       expect(activeResponse.ok(), await activeResponse.text()).toBe(true);
       const active = await activeResponse.json() as {
-        current_item: { kind: "native" | "h5p"; presentation_number: number };
+        current_item: { kind: "native" | "h5p"; presentation_number: number; criteria?: string[] };
       };
+      expect(active.current_item).not.toHaveProperty("criteria");
+      await expect(learner.page.getByText(/^Kriterien:/)).toHaveCount(0);
 
       if (active.current_item.kind === "native") {
         nativePresentations += 1;
@@ -145,12 +147,12 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
         await learner.page.getByLabel("Deine Antwort").fill(
           nativePresentations === 1 ? "Ich weiß es noch nicht." : "Ein roter Test weist die fehlende Funktion nach."
         );
-        await learner.page.getByRole("button", { name: "Antwort zur Auswertung senden" }).click();
+        await learner.page.getByRole("button", { name: "Antwort prüfen" }).click();
         await expect(learner.page.getByRole("heading", { name: feedbackHeading })).toBeVisible({ timeout: 60_000 });
         await learner.page.reload();
         await expect(learner.page.getByRole("heading", { name: feedbackHeading })).toBeVisible();
         if (active.current_item.presentation_number === 1) {
-          await learner.page.getByRole("button", { name: "Musterlösung anzeigen" }).click();
+          await learner.page.getByRole("button", { name: "Musterlösung ansehen" }).click();
           await expect(learner.page.getByText(/Ein zunächst roter Test beweist/)).toBeVisible();
         }
       } else {
@@ -180,16 +182,34 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
         await expect(learner.page.getByRole("heading", { name: feedbackHeading })).toBeVisible({ timeout: 30_000 });
         await learner.page.reload();
         await expect(learner.page.getByRole("heading", { name: feedbackHeading })).toBeVisible();
-        await expect(learner.page.getByRole("button", { name: "Musterlösung anzeigen" })).toHaveCount(0);
+        await expect(learner.page.getByRole("button", { name: "Musterlösung ansehen" })).toHaveCount(0);
       }
 
-      await learner.page.getByRole("button", { name: "Weiter" }).click();
+      await learner.page.getByRole("button", { name: "Nächste Aufgabe" }).click();
     }
 
     expect(nativePresentations).toBe(2);
     expect(h5pPresentations).toBe(2);
     expect(h5pContexts.size).toBe(2);
-    await expect(learner.page.getByText(/Übungsstapel auswählen|keine offenen Übungsstapel/)).toBeVisible();
+    await expect(learner.page.getByRole("heading", { name: "Übung geschafft" })).toBeVisible();
+    await expect(learner.page.getByText("2 Aufgaben bearbeitet")).toBeVisible();
+
+    await learner.page.getByRole("link", { name: "Weitere Themen üben" }).click();
+    const stackCheckbox = learner.page.getByRole("checkbox", { name: /Wiederholen/ });
+    await stackCheckbox.focus();
+    await stackCheckbox.press("Space");
+    await expect(stackCheckbox).toBeChecked();
+    const allTasksRadio = learner.page.getByRole("radio", { name: /Alle Aufgaben üben/ });
+    await allTasksRadio.focus();
+    await allTasksRadio.press("Space");
+    await expect(allTasksRadio).toBeChecked();
+    await learner.page.getByRole("button", { name: "2 Aufgaben starten" }).click();
+    await learner.page.getByRole("button", { name: "Sitzung beenden" }).click();
+    const endDialog = learner.page.getByRole("dialog", { name: "Möchtest du die Übung jetzt beenden?" });
+    await expect(endDialog).toBeVisible();
+    await endDialog.getByRole("button", { name: "Sitzung beenden" }).click();
+    await expect(learner.page.getByRole("heading", { name: "Übung beendet" })).toBeVisible();
+    await expect(learner.page.getByRole("link", { name: "Neue Übung auswählen" })).toBeVisible();
   } finally {
     await learner.context.close();
     await teacher.context.close();

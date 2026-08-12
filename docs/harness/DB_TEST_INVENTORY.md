@@ -11,12 +11,12 @@ Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Te
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 132
+- Inventarisierte Dateien: 133
 - Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 0
 - Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 94
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 13
-- Statische Migrationstests ohne echte DB-Verbindung: 9
+- Statische Migrationstests ohne echte DB-Verbindung: 10
 
 ## Marker-Regel
 `missing-db-marker` ist ein Fehlerzustand: Jede echte DB/RLS-Testdatei braucht `db_read` oder `db_write`. Test-Infrastruktur wie `conftest.py` und `backend/tests/utils/*` bleibt bewusst markerfrei und wird als `test-infra` klassifiziert.
@@ -53,6 +53,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/migration/test_practice_h5p_parallel_roundtrip.py | real-db | db_write | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_practice_native_attempt_roundtrip.py | real-db | db_write | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_practice_session_roundtrip.py | real-db | db_write | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
+| backend/tests/migration/test_practice_session_summary_migration_contract.py | migration-static | - | no-db-marker-needed | migration | Keep static migration contract unless it opens a DB connection |
 | backend/tests/migration/test_practice_sessions_migration_contract.py | migration-static | - | no-db-marker-needed | migration, rls | Keep static migration contract unless it opens a DB connection |
 | backend/tests/migration/test_rls_exec_privileges.py | real-db | db_write | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db, rls | Keep marker and isolation visible |
 | backend/tests/migration/test_simulation_material_schema_contract.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |

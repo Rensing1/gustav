@@ -516,13 +516,14 @@ def _process_job(
             analysis_json=feedback_result.analysis_json,
             feedback_md=feedback_result.feedback_md,
         )
-        if payload.get("practice_attempt_id"):
-            complete_worker_practice_attempt(
+        if payload.get("practice_attempt_id") and not _complete_practice_attempt_or_fail(
                 conn=conn,
-                submission_id=job.submission_id,
+                job=job,
                 analysis_json=feedback_result.analysis_json,
                 feedback_md=feedback_result.feedback_md,
-            )
+        ):
+            conn.commit()
+            return
         telemetry.increment_counter("ai_worker_processed_total", status="completed")
         _delete_job(conn, job_id=job.id)
         conn.commit()
@@ -630,13 +631,14 @@ def _process_job(
             analysis_json=feedback_result.analysis_json,
             feedback_md=feedback_result.feedback_md,
         )
-        if payload.get("practice_attempt_id"):
-            complete_worker_practice_attempt(
+        if payload.get("practice_attempt_id") and not _complete_practice_attempt_or_fail(
                 conn=conn,
-                submission_id=job.submission_id,
+                job=job,
                 analysis_json=feedback_result.analysis_json,
                 feedback_md=feedback_result.feedback_md,
-            )
+        ):
+            conn.commit()
+            return
         telemetry.increment_counter("ai_worker_processed_total", status="completed")
         _delete_job(conn, job_id=job.id)
         conn.commit()
@@ -810,16 +812,56 @@ def _process_job(
         analysis_json=feedback_result.analysis_json,
         feedback_md=feedback_result.feedback_md,
     )
-    if payload.get("practice_attempt_id"):
-        complete_worker_practice_attempt(
+    if payload.get("practice_attempt_id") and not _complete_practice_attempt_or_fail(
             conn=conn,
-            submission_id=job.submission_id,
+            job=job,
             analysis_json=feedback_result.analysis_json,
             feedback_md=feedback_result.feedback_md,
-        )
+    ):
+        conn.commit()
+        return
     telemetry.increment_counter("ai_worker_processed_total", status="completed")
     _delete_job(conn, job_id=job.id)
     conn.commit()
+
+
+def _complete_practice_attempt_or_fail(
+    *, conn: Connection, job: QueuedJob, analysis_json: dict, feedback_md: str
+) -> bool:
+    """Complete a practice attempt or persist invalid AI output as a terminal failure.
+
+    A malformed criteria result is a technical analysis error. It must remain
+    auditable, reopen the item for a fresh submission and never mutate the
+    scheduler. Unexpected completion errors still propagate to the worker's
+    ordinary transaction rollback path.
+    """
+
+    try:
+        complete_worker_practice_attempt(
+            conn=conn,
+            submission_id=job.submission_id,
+            analysis_json=analysis_json,
+            feedback_md=feedback_md,
+        )
+    except ValueError as exc:
+        if str(exc) != "invalid_practice_analysis":
+            raise
+        error_code = "practice_analysis_invalid"
+        _update_submission_failed(
+            conn=conn,
+            submission_id=job.submission_id,
+            error_code=error_code,
+            message="Practice analysis did not satisfy the ten-point criteria contract.",
+        )
+        fail_worker_practice_attempt(
+            conn=conn,
+            submission_id=job.submission_id,
+            error_code=error_code,
+        )
+        _mark_job_failed(conn=conn, job_id=job.id, error_code=error_code)
+        telemetry.increment_counter("ai_worker_failed_total", error_code=error_code)
+        return False
+    return True
 
 
 def _resolve_analysis_mode(

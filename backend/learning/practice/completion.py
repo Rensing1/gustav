@@ -22,19 +22,18 @@ from backend.learning.practice.scheduler import (
 
 
 def fulfillment_from_analysis(analysis: dict, criteria: Sequence[str]) -> float:
-    """Return the weighted fulfillment ratio from trusted criterion positions.
+    """Return the equal average of trusted ten-point criterion results.
 
     Every configured criterion must have exactly one result in the original
-    order. Scores are divided by their declared maxima and aggregated by
-    points, so a criterion with a larger maximum has the intended weight.
+    order. The AI contract always scores each criterion from zero to ten;
+    accepting any other maximum would make the deterministic result ambiguous.
     """
 
     results = analysis.get("criteria_results") if isinstance(analysis, dict) else None
     if not criteria or not isinstance(results, list) or len(results) != len(criteria):
         raise ValueError("invalid_practice_analysis")
 
-    earned = 0.0
-    possible = 0.0
+    normalized_scores: list[float] = []
     for expected, result in zip(criteria, results, strict=True):
         if not isinstance(result, dict) or str(result.get("criterion") or "") != str(expected):
             raise ValueError("invalid_practice_analysis")
@@ -43,13 +42,10 @@ def fulfillment_from_analysis(analysis: dict, criteria: Sequence[str]) -> float:
             maximum = float(result["max_score"])
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("invalid_practice_analysis") from exc
-        if not math.isfinite(score) or not math.isfinite(maximum) or maximum <= 0 or not 0 <= score <= maximum:
+        if not math.isfinite(score) or not math.isfinite(maximum) or maximum != 10 or not 0 <= score <= 10:
             raise ValueError("invalid_practice_analysis")
-        earned += score
-        possible += maximum
-    if possible <= 0:
-        raise ValueError("invalid_practice_analysis")
-    return earned / possible
+        normalized_scores.append(score / 10)
+    return sum(normalized_scores) / len(normalized_scores)
 
 
 def complete_worker_practice_attempt(

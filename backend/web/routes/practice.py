@@ -206,7 +206,7 @@ async def create_practice_attempt(request: Request, session_id: str, item_id: st
         return _error(404, "practice_session_not_found")
     except ValueError as exc:
         detail = str(exc)
-        status = 409 if detail.startswith("practice_item_") else 400
+        status = 409 if detail.startswith("practice_item_") or detail == "practice_idempotency_conflict" else 400
         return _error(status, detail)
     return JSONResponse(attempt, status_code=202, headers=_NO_STORE)
 

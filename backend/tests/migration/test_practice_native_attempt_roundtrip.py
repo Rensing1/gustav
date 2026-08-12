@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import os
 import random
 from uuid import uuid4
@@ -28,11 +29,11 @@ def _app_dsn() -> str:
     return os.getenv("DATABASE_URL") or "postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres"
 
 
-def _analysis(score: int) -> dict:
+def _analysis(score: int, *, max_score: int = 10) -> dict:
     return {
         "schema": "criteria.v2",
         "criteria_results": [
-            {"criterion": "Kriterium", "score": score, "max_score": 10, "explanation_md": "Test"}
+            {"criterion": "Kriterium", "score": score, "max_score": max_score, "explanation_md": "Test"}
         ],
     }
 
@@ -77,23 +78,52 @@ def test_native_attempt_completion_solution_and_supported_retry_are_atomic() -> 
         )
         item = session["current_item"]
         assert item["latest_attempt_id"] is None
-        accepted = service.create_native_attempt(
-            student,
-            session["id"],
-            item["id"],
-            answer_text="Erster Versuch",
-            idempotency_key="native-attempt-1",
-        )
-        assert service.create_native_attempt(
-            student,
-            session["id"],
-            item["id"],
-            answer_text="Wiederholter Request",
-            idempotency_key="native-attempt-1",
-        ) == accepted
+        def submit_once(answer: str) -> dict:
+            local_service = PracticeService(DBPracticeRepo(_app_dsn()))
+            return local_service.create_native_attempt(
+                student,
+                session["id"],
+                item["id"],
+                answer_text=answer,
+                idempotency_key="native-attempt-1",
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(submit_once, ["Erster Versuch", "Paralleler Request"]))
+        assert results[0] == results[1]
+        accepted = results[0]
         assert service.get_session(student, session["id"])["current_item"][
             "latest_attempt_id"
         ] == accepted["attempt_id"]
+        with psycopg.connect(_admin_dsn()) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select count(*), count(submission_id) from public.learning_practice_attempts where session_item_id=%s::uuid",
+                    (item["id"],),
+                )
+                assert cur.fetchone() == (1, 1)
+                cur.execute(
+                    "select count(*) from public.learning_submission_jobs where submission_id=%s::uuid",
+                    (_submission_id(conn, accepted["attempt_id"]),),
+                )
+                assert cur.fetchone()[0] == 1
+
+        with psycopg.connect(_admin_dsn()) as conn:
+            with pytest.raises(ValueError, match="invalid_practice_analysis"):
+                complete_worker_practice_attempt(
+                    conn=conn,
+                    submission_id=_submission_id(conn, accepted["attempt_id"]),
+                    analysis_json=_analysis(6, max_score=9),
+                    feedback_md="Ungültige Auswertung",
+                )
+            conn.rollback()
+        with psycopg.connect(_admin_dsn()) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select count(*) from public.learning_practice_states where course_id=%s and student_sub=%s and task_id=%s",
+                    (ids["course"], student, ids["task"]),
+                )
+                assert cur.fetchone()[0] == 0
 
         with psycopg.connect(_admin_dsn()) as conn:
             complete_worker_practice_attempt(

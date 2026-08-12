@@ -119,6 +119,24 @@ async def test_native_attempt_is_accepted_for_async_analysis(app: FastAPI) -> No
 
 
 @pytest.mark.anyio
+async def test_reused_idempotency_key_for_another_item_is_stable_conflict(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def conflict(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise ValueError("practice_idempotency_conflict")
+
+    monkeypatch.setattr(practice._service(), "create_native_attempt", conflict)
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/learning/practice/sessions/11111111-1111-1111-1111-111111111111/items/33333333-3333-3333-3333-333333333333/attempts",
+            headers={"Origin": "http://test", "Idempotency-Key": "reused-key"},
+            json={"answer_text": "Antwort"},
+        )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "practice_idempotency_conflict"
+
+
+@pytest.mark.anyio
 async def test_foreign_attempt_is_fail_closed_404(app: FastAPI) -> None:
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(

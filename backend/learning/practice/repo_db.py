@@ -383,21 +383,8 @@ class DBPracticeRepo:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 self._set_student(cur, student_sub)
-                cur.execute(
-                    """
-                    select attempt.id::text, attempt.status, attempt.session_id::text,
-                           attempt.session_item_id::text
-                      from public.learning_practice_attempts attempt
-                     where attempt.student_sub=%s and attempt.idempotency_key_hash=%s
-                    """,
-                    (student_sub, key_hash),
-                )
-                existing = cur.fetchone()
-                if existing:
-                    if str(existing[2]) != session_uuid or str(existing[3]) != item_uuid:
-                        raise ValueError("practice_idempotency_conflict")
-                    return {"attempt_id": str(existing[0]), "status": str(existing[1])}
-
+                # Lock ownership and item state before interpreting the key. A
+                # concurrent duplicate then observes the first committed row.
                 cur.execute(
                     """
                     select session.mode, session.status, item.course_id::text,
@@ -415,6 +402,28 @@ class DBPracticeRepo:
                 row = cur.fetchone()
                 if not row:
                     raise LookupError("practice_session_not_found")
+
+                # The row lock serializes duplicates for the same item. The
+                # advisory lock also covers accidental reuse across two items.
+                cur.execute(
+                    "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"{student_sub}:{key_hex}",),
+                )
+                cur.execute(
+                    """
+                    select attempt.id::text, attempt.status, attempt.session_id::text,
+                           attempt.session_item_id::text
+                      from public.learning_practice_attempts attempt
+                     where attempt.student_sub=%s and attempt.idempotency_key_hash=%s
+                    """,
+                    (student_sub, key_hash),
+                )
+                existing = cur.fetchone()
+                if existing:
+                    if str(existing[2]) != session_uuid or str(existing[3]) != item_uuid:
+                        raise ValueError("practice_idempotency_conflict")
+                    return {"attempt_id": str(existing[0]), "status": str(existing[1])}
+
                 mode, session_status, course_id, module_id, task_id = map(str, row[:5])
                 task_kind, item_status = str(row[5]), str(row[6])
                 presentation_number = int(row[7])

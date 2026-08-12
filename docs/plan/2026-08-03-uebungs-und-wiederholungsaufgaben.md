@@ -1,12 +1,12 @@
 # Implementierungsplan: Übungs- und Wiederholungsaufgaben
 
-**Stand:** 8. August 2026
+**Stand:** 12. August 2026
 
-**Status:** implementiert und für den Pilotbetrieb abgenommen; Scheduler-Gate 0 am 8. August 2026 geschlossen, technische Abnahme am 8. August 2026
+**Status:** produktionsreif implementiert und abgenommen; Scheduler-Gate 0 am 8. August 2026 geschlossen, vollständige technische Abnahme am 12. August 2026
 
 **Codebasis:** `/home/felix/gustav-alpha2`
 
-**Abnahmenachweis:** `make verify-feature` (2.296 Python- und 453 Frontend-Tests sowie 11 aktive Feature-Acceptance-Reisen grün; Practice-Reise bei sicherem Standardflag im Gesamtgate übersprungen und separat mit aktiviertem Flag grün) sowie `make docker-validate` erfolgreich. Native und H5P-Roundtrips einschließlich paralleler H5P-Doppelmeldung laufen gegen die lokal migrierte PostgreSQL-Datenbank.
+**Abnahmenachweis:** `make verify-feature` ist mit 2.366 bestandenen Python-Tests, 491 Frontend-Tests, 62 H5P-Tests, fehlerfreiem Svelte-Check, Produktionsbuild und allen 16 aktiven Feature-Acceptance-Reisen grün. Die Practice-Reise läuft ohne Feature-Flag im regulären Gate und prüft authentifiziert Lehrkraft-Authoring, Native und H5P, zweite Präsentationen, KI-Auswertung, Musterlösung, Reload-Persistenz und frische H5P-Kontexte. Der separate CLI-Rundlauf prüft Practice-Modul, eingehende Kante, native Pflichtfelder, Bearbeiten, Listen sowie H5P-Import über echte API- und Datenbankpfade. `make test-dev-accounts` ist mit der additiv erweiterten Dev-Lerneinheit und echter Schüler-Persona grün; `make docker-validate` ist ebenfalls erfolgreich. Native und H5P-Roundtrips einschließlich paralleler Native- und H5P-Anfragen laufen gegen die lokal vollständig migrierte PostgreSQL-Datenbank.
 
 ## 1. Ziel und User Stories
 

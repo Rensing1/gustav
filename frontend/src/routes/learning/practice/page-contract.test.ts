@@ -25,4 +25,11 @@ describe("practice page contract", () => {
     expect(sessionType).toContain("latest_attempt_id: string | null;");
     expect(sessionType).not.toContain("criteria: string[];");
   });
+
+  it("keeps polling until the attempt and session item form a settled view", () => {
+    const page = readFileSync("src/routes/learning/practice/+page.svelte", "utf8");
+
+    expect(page).toContain("practiceSessionNeedsPolling");
+    expect(page).not.toContain('data.attempt?.status !== "pending"');
+  });
 });

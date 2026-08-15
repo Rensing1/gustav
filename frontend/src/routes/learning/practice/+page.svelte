@@ -4,6 +4,7 @@
   import PracticeSessionWorkspace from "$lib/components/practice/PracticeSessionWorkspace.svelte";
   import PracticeStackSelector from "$lib/components/practice/PracticeStackSelector.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
+  import { practiceSessionNeedsPolling } from "$lib/practice/practice-presentation";
   import type { PageData } from "./$types";
 
   let { data, form }: {
@@ -12,7 +13,9 @@
   } = $props();
 
   $effect(() => {
-    if (!browser || data.attempt?.status !== "pending") return;
+    const itemStatus = data.activeSession?.current_item?.status ?? null;
+    const attemptStatus = data.attempt?.status ?? null;
+    if (!browser || !practiceSessionNeedsPolling(itemStatus, attemptStatus)) return;
     const timer = window.setTimeout(() => void invalidateAll(), 1500);
     return () => window.clearTimeout(timer);
   });

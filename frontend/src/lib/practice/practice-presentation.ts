@@ -1,4 +1,11 @@
-import type { LearningPracticeAttempt } from "$lib/types/practice";
+import type { LearningPracticeAttempt, LearningPracticeSessionItem } from "$lib/types/practice";
+
+export function practiceSessionNeedsPolling(
+  itemStatus: LearningPracticeSessionItem["status"] | null,
+  attemptStatus: LearningPracticeAttempt["status"] | null
+): boolean {
+  return itemStatus === "awaiting_analysis" || attemptStatus === "pending";
+}
 
 export function practiceClassificationLabel(
   classification: LearningPracticeAttempt["classification"]

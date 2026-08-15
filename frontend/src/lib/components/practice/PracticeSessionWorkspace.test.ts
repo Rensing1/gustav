@@ -54,4 +54,33 @@ describe("PracticeSessionWorkspace", () => {
     expect(screen.getByText("Erkläre", { exact: false })).toBeVisible();
     expect(document.body.textContent).not.toContain("criteria");
   });
+
+  it("allows a new submission after a technical analysis failure", () => {
+    render(PracticeSessionWorkspace, {
+      props: {
+        session: {
+          ...session,
+          current_item: {
+            ...session.current_item,
+            status: "active"
+          }
+        },
+        attempt: {
+          id: "attempt-1",
+          status: "failed",
+          classification: null,
+          fulfillment: null,
+          feedback_md: null,
+          due_at: null
+        },
+        attemptKey: "fresh-key",
+        solution: null,
+        nowIso: "2026-08-12T12:00:00Z"
+      }
+    });
+
+    expect(screen.getByText("Die Auswertung konnte nicht abgeschlossen werden")).toBeVisible();
+    expect(screen.getByLabelText("Deine Antwort")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Antwort prüfen" })).toBeEnabled();
+  });
 });

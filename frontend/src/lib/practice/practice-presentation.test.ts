@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { practiceClassificationLabel, practiceDueLabel, practiceErrorMessage } from "./practice-presentation";
+import {
+  practiceSessionNeedsPolling,
+  practiceClassificationLabel,
+  practiceDueLabel,
+  practiceErrorMessage
+} from "./practice-presentation";
 
 describe("practice presentation labels", () => {
   it("uses learner-facing classification language", () => {
@@ -24,4 +29,19 @@ describe("practice presentation labels", () => {
     expect(practiceErrorMessage("practice_request_failed")).toBe("Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es erneut.");
     expect(practiceErrorMessage("unexpected_internal_code")).toBe("Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es erneut.");
   });
+
+  it.each([
+    ["awaiting_analysis", "pending", true],
+    ["awaiting_analysis", "completed", true],
+    ["awaiting_analysis", "failed", true],
+    ["active", "pending", true],
+    ["feedback", "completed", false],
+    ["active", "failed", false],
+    [null, null, false]
+  ] as const)(
+    "polls item status %s with attempt status %s: %s",
+    (itemStatus, attemptStatus, expected) => {
+      expect(practiceSessionNeedsPolling(itemStatus, attemptStatus)).toBe(expected);
+    }
+  );
 });

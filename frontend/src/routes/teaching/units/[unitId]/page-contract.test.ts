@@ -199,7 +199,7 @@ describe("teacher unit graph route contract", () => {
     const serverSource = readFileSync(path.resolve(currentDir, "+page.server.ts"), "utf8");
 
     expect(serverSource).toContain('showDeleteDialog: url.searchParams.get("delete") == "1"');
-    expect(serverSource).toContain("wideWorkspaceShell: true");
+    expect(serverSource).toContain('workspaceLayout: "wide"');
     expect(source).toContain("Lerneinheit bearbeiten");
     expect(source).toContain('aria-label="Lerneinheitsaktionen"');
     expect(source).toContain('href={pageHref({ delete: "1" })}>Lerneinheit löschen</a>');

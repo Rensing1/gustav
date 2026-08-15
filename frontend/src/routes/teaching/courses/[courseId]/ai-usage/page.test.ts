@@ -13,7 +13,7 @@ function pageData(totalTokens = 1_600, unknownEvents = 2): PageData {
     hidePageHeading: true,
     pageCopy: "Technischer Verbrauch nach Modell und Nutzungsart",
     pageTitle: "KI-Nutzung",
-    wideWorkspaceShell: true,
+    workspaceLayout: "wide",
     filterValues: { fromDate: "", toDate: "", unitId: "" },
     units: [{ id: "unit-1", title: "Lineare Funktionen" }],
     usage: {

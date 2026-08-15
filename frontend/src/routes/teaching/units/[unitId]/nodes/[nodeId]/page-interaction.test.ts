@@ -12,7 +12,7 @@ const sampleData: PageData = {
   appSessionActive: false,
   breadcrumbs: [],
   hidePageHeading: true,
-  wideWorkspaceShell: true,
+  workspaceLayout: "wide",
   pageTitle: "Orientierung",
   contentSelection: { kind: "overview" },
   incomingPrerequisiteCount: 0,

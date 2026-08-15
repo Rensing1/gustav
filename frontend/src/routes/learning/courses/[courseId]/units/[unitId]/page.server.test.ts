@@ -334,7 +334,8 @@ describe("learning unit route load", () => {
       parent: vi.fn(async () => ({
         bootstrap: null,
         appSessionActive: false,
-        theme: "light"
+        theme: "light",
+        workspaceLayout: "standard"
       })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/learning/courses/course-1/units/unit-1?view=overview&module=module-7")
     } as Parameters<typeof load>[0])) as Exclude<Awaited<ReturnType<typeof load>>, void>;
@@ -358,7 +359,8 @@ describe("learning unit route load", () => {
       parent: vi.fn(async () => ({
         bootstrap: null,
         appSessionActive: false,
-        theme: "light"
+        theme: "light",
+        workspaceLayout: "standard"
       })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/learning/courses/course-1/units/unit-1?module=module-7")
     } as Parameters<typeof load>[0])) as Exclude<Awaited<ReturnType<typeof load>>, void>;
@@ -382,7 +384,7 @@ describe("learning unit route load", () => {
       fetch: vi.fn() as unknown as typeof fetch,
       cookies: {} as Parameters<typeof load>[0]["cookies"],
       params: { courseId: "course-1", unitId: "unit-1" },
-      parent: vi.fn(async () => ({ bootstrap: null, appSessionActive: false, theme: "light" })) as Parameters<typeof load>[0]["parent"],
+      parent: vi.fn(async () => ({ bootstrap: null, appSessionActive: false, theme: "light", workspaceLayout: "standard" })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/learning/courses/course-1/units/unit-1?module=module-7&task=task-1&panel=result")
     } as Parameters<typeof load>[0])) as Exclude<Awaited<ReturnType<typeof load>>, void>;
 
@@ -402,7 +404,8 @@ describe("learning unit route load", () => {
       parent: vi.fn(async () => ({
         bootstrap: null,
         appSessionActive: false,
-        theme: "light"
+        theme: "light",
+        workspaceLayout: "standard"
       })) as Parameters<typeof load>[0]["parent"],
       url: new URL("http://test.local/learning/courses/course-1/units/unit-1?module=module-7")
     } as Parameters<typeof load>[0]);
@@ -434,7 +437,8 @@ describe("learning unit route load", () => {
             spaces: ["learning"]
           },
           appSessionActive: true,
-          theme: "light"
+          theme: "light",
+          workspaceLayout: "standard"
         })) as Parameters<typeof load>[0]["parent"],
         url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
       } as Parameters<typeof load>[0]);

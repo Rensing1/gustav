@@ -56,7 +56,8 @@ describe("learning course route load", () => {
         parent: vi.fn(async () => ({
           bootstrap: null,
           appSessionActive: false,
-          theme: "light"
+          theme: "light",
+          workspaceLayout: "standard"
         })) as Parameters<typeof load>[0]["parent"],
         url: new URL("http://test.local/learning/courses/course-1")
       } as Parameters<typeof load>[0]);

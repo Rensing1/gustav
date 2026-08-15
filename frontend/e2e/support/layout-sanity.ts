@@ -52,6 +52,32 @@ export async function expectNoViewportOverflow(page: Page): Promise<void> {
   expect(overflow.bodyWidth).toBeLessThanOrEqual(overflow.viewportWidth + 4);
 }
 
+export async function expectWorkspaceMeasure(page: Page, maxWidth: number): Promise<void> {
+  const geometry = await page.evaluate(() => {
+    const workspace = document.querySelector<HTMLElement>(".workspace-inner");
+    const body = document.querySelector<HTMLElement>(".workspace-body");
+    if (!workspace || !body) throw new Error("Workspace shell is incomplete");
+    const workspaceBox = workspace.getBoundingClientRect();
+    const bodyBox = body.getBoundingClientRect();
+    return {
+      viewportWidth: window.innerWidth,
+      workspaceLeft: workspaceBox.left,
+      workspaceRight: window.innerWidth - workspaceBox.right,
+      workspaceWidth: workspaceBox.width,
+      bodyWidth: bodyBox.width
+    };
+  });
+
+  expect(Math.abs(geometry.workspaceLeft - geometry.workspaceRight)).toBeLessThanOrEqual(2);
+  expect(Math.abs(geometry.bodyWidth - geometry.workspaceWidth)).toBeLessThanOrEqual(2);
+  expect(geometry.workspaceWidth).toBeLessThanOrEqual(maxWidth + 2);
+  if (geometry.viewportWidth >= maxWidth + 48) {
+    expect(geometry.workspaceWidth).toBeGreaterThanOrEqual(maxWidth - 2);
+  } else {
+    expect(geometry.workspaceWidth).toBeGreaterThanOrEqual(geometry.viewportWidth - 64);
+  }
+}
+
 function normalizedColorChannels(color: string): number[] {
   const hex = color.trim().match(/^#([0-9a-f]{6})$/i)?.[1];
   if (hex) {

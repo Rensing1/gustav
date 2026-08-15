@@ -40,7 +40,7 @@ describe("teacher course catalog contract", () => {
   });
 
   it("shares width, table rhythm and responsive catalog rules with units", () => {
-    expect(serverSource).toContain("wideWorkspaceShell: true");
+    expect(serverSource).toContain('workspaceLayout: "wide"');
     expect(pageSource).toContain("teacher-catalog");
     expect(unitsPageSource).toContain("teacher-catalog");
     expect(pageSource).toContain("teacher-catalog__columns");

@@ -21,7 +21,9 @@
 }
 
 .learning-portfolio {
+  width: 100%;
   max-width: 64rem;
+  margin-inline: auto;
 }
 
 .learning-portfolio__list {
@@ -67,11 +69,6 @@
 .learning-unit-space.workspace-page--learner-unit-content {
   width: 100%;
   min-width: 0;
-}
-
-/* The learner shell and the global header share the same horizontal grid. */
-.workspace-inner--learner-unit-wide {
-  width: min(100%, var(--layout-content-max));
 }
 
 .learning-unit-layout-rail {
@@ -154,6 +151,11 @@
 
 .learning-home {
   gap: 1.2rem;
+}
+
+.learning-home > .quiet-list,
+.learning-home-past > .quiet-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
 }
 
 .learning-home-header {

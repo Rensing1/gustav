@@ -151,7 +151,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     showAddUnitDialog: url.searchParams.get("add-unit") == "1",
     showCourseDrawer: url.searchParams.get("course") == "1",
     showMembersDrawer: url.searchParams.get("members") == "1",
-    wideWorkspaceShell: true,
+    workspaceLayout: "wide",
   };
 };
 

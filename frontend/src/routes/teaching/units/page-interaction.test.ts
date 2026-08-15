@@ -18,7 +18,7 @@ const sampleData: PageData = {
   appSessionActive: false,
   breadcrumbs: [],
   hidePageHeading: true,
-  wideWorkspaceShell: true,
+  workspaceLayout: "wide",
   showCreateDialog: false,
   pageTitle: "Lerneinheiten",
   pageCopy: "",

@@ -2890,10 +2890,6 @@
 }
 
 @media (max-width: 720px) {
-  .workspace-body {
-    width: 100%;
-  }
-
   .preview-shell-sample__topbar,
   .preview-workspace-grid,
   .learning-work-item__start-card-actions,

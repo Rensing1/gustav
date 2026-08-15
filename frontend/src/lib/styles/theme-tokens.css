@@ -35,7 +35,12 @@
   --space-6: 2rem;
   --space-7: 3rem;
   --space-8: 4rem;
+  --layout-compact-max: 42rem;
   --layout-content-max: 80rem;
+  --layout-wide-max: 112rem;
+  --layout-canvas-max: 144rem;
+  --layout-reading-max: 68ch;
+  --layout-form-max: 52rem;
   --radius-s: 0;
   --radius-m: 0;
   --radius-l: 2px;

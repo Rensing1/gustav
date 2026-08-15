@@ -30,8 +30,9 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     assert "course_id" in loader_source
     assert "unit_id" in loader_source
     assert "task_id" in loader_source
-    assert "wideWorkspaceShell: true" in loader_source
-    assert "liveWideWorkspaceShell: true" in loader_source
+    assert 'workspaceLayout: "canvas"' in loader_source
+    assert "wideWorkspaceShell" not in loader_source
+    assert "liveWideWorkspaceShell" not in loader_source
     assert "selected_student_panel" in page_source
     assert "live-kpi-section" in page_source
     assert "live-workspace" in page_source

@@ -3,7 +3,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from "@pla
 import { login } from "./support/auth";
 import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
-import { expectNoViewportOverflow } from "./support/layout-sanity";
+import { expectNoViewportOverflow, expectWorkspaceMeasure } from "./support/layout-sanity";
 import { seedLearnerNavigationCourse } from "./support/seed-data";
 
 const password = "Passw0rd!e2e";
@@ -48,6 +48,10 @@ test("@feature-acceptance keeps the concern box one click away for learners and 
 
     await learnerConcernLink.click();
     await expect(learner.page).toHaveURL(/\/learning\/kummerkasten$/);
+    await expectWorkspaceMeasure(learner.page, 672);
+    await learner.page.setViewportSize({ width: 1024, height: 768 });
+    await expectWorkspaceMeasure(learner.page, 672);
+    await learner.page.setViewportSize({ width: 390, height: 844 });
     await expect(learnerConcernLink).toHaveAttribute("aria-current", "page");
     await learner.page.getByLabel("Konto-Menü").click();
     const learnerAccountMenu = learner.page.locator(".account-menu__panel");

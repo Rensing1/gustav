@@ -3,6 +3,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from "@pla
 import { login } from "./support/auth";
 import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
+import { expectNoViewportOverflow, expectWorkspaceMeasure } from "./support/layout-sanity";
 import { seedLearnerVisualSmokeCourse } from "./support/seed-data";
 
 const password = "Passw0rd!e2e";
@@ -56,9 +57,19 @@ test("@feature-acceptance teacher archives a course and learner exports only per
     await teacher.page.getByRole("link", { name: seeded.courseTitle, exact: true }).click();
     await expect(teacher.page.getByText("Archiviert · schreibgeschützt")).toBeVisible();
 
+    await learner.page.setViewportSize({ width: 1440, height: 900 });
     await learner.page.goto("/learning");
+    await expectWorkspaceMeasure(learner.page, 1280);
     await expect(learner.page.getByRole("heading", { name: "Vergangene Kurse" })).toBeVisible();
     await learner.page.getByRole("link", { name: seeded.courseTitle }).click();
+    await expectNoViewportOverflow(learner.page);
+    await expectWorkspaceMeasure(learner.page, 1280);
+    const portfolioGeometry = await learner.page.locator(".learning-portfolio").evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: window.innerWidth - box.right, width: box.width };
+    });
+    expect(Math.abs(portfolioGeometry.left - portfolioGeometry.right)).toBeLessThanOrEqual(2);
+    expect(portfolioGeometry.width).toBeLessThanOrEqual(1026);
     await expect(learner.page.getByText("Meine frühere Einordnung bleibt als eigene Abgabe verfügbar.")).toBeVisible();
     await learner.page.getByRole("button", { name: "Lernleistung exportieren" }).click();
     await expect(learner.page.getByRole("status")).toContainText("Export wird erstellt");

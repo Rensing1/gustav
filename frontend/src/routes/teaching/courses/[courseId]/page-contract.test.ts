@@ -12,7 +12,7 @@ const appStylesSource = readFileSync(path.resolve(currentDir, "../../../../lib/s
 
 describe("teacher course workspace contract", () => {
   it("uses the wide shared heading and one flat course workspace", () => {
-    expect(serverSource).toContain("wideWorkspaceShell: true");
+    expect(serverSource).toContain('workspaceLayout: "wide"');
     expect(pageSource).toContain('PageActionHead');
     expect(pageSource).toContain('TeacherCourseUnitList');
     expect(pageSource).toContain('teacher-course-workspace');

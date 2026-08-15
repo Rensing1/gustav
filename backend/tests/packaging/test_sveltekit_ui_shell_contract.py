@@ -18,11 +18,13 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 def test_frontend_contains_shared_ui_shell_stylesheet() -> None:
     style_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "app.css"
+    primitive_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "ui-primitives.css"
     token_path = REPO_ROOT / "frontend" / "src" / "lib" / "styles" / "theme-tokens.css"
 
     assert style_path.is_file(), f"Missing shared app stylesheet: {style_path}"
 
     src = style_path.read_text(encoding="utf-8")
+    primitive_src = primitive_path.read_text(encoding="utf-8")
     token_src = token_path.read_text(encoding="utf-8")
 
     for needle in (
@@ -35,7 +37,6 @@ def test_frontend_contains_shared_ui_shell_stylesheet() -> None:
         ".account-menu",
         ".account-trigger",
         ".account-trigger__initial",
-        ".workspace-shell",
         ".workspace-topbar",
         ".workspace-breadcrumbs",
         ".workspace-section",
@@ -44,6 +45,22 @@ def test_frontend_contains_shared_ui_shell_stylesheet() -> None:
         ".sheet-panel",
     ):
         assert needle in src, f"Expected shared UI shell token/class {needle!r} in {style_path}"
+
+    for needle in (
+        ".workspace-shell",
+        ".workspace-inner",
+        ".workspace-body",
+        ".workspace-inner--compact",
+        ".workspace-inner--wide",
+        ".workspace-inner--canvas",
+    ):
+        assert needle in primitive_src, (
+            f"Expected structural workspace primitive {needle!r} in {primitive_path}"
+        )
+
+    assert ".workspace-shell" not in src
+    assert ".workspace-inner" not in src
+    assert ".workspace-body" not in src
 
     for needle in (
         "--color-bg-base",

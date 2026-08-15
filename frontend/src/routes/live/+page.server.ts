@@ -109,12 +109,11 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     detail,
     liveCursorSeed: summary?.cursor ?? null,
     livePollIntervalSeconds: loadLivePollIntervalSeconds(),
-    liveWideWorkspaceShell: true,
     selectedCourseId,
     selectedStudentSub,
     selectedTaskId,
     selectedUnitId,
     summary,
-    wideWorkspaceShell: true
+    workspaceLayout: "canvas"
   };
 };

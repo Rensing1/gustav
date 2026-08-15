@@ -83,7 +83,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
   return {
     breadcrumbs,
     hidePageHeading: true,
-    wideWorkspaceShell: true,
+    workspaceLayout: "wide",
     pageTitle: workspace.unit.title,
     showEditDialog: url.searchParams.get("edit") == "1",
     showDeleteDialog: url.searchParams.get("delete") == "1",

@@ -34,6 +34,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     breadcrumbs,
     home,
     pageCopy: "Mitgliedschaft bleibt als eigene ruhige Detailfläche innerhalb des Kurskontexts erreichbar.",
-    pageTitle: "Mitglieder"
+    pageTitle: "Mitglieder",
+    workspaceLayout: "compact"
   };
 };

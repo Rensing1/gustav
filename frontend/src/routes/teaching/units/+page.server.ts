@@ -28,7 +28,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     breadcrumbs,
     catalog,
     hidePageHeading: true,
-    wideWorkspaceShell: true,
+    workspaceLayout: "wide",
     showCreateDialog: url.searchParams.get("create") === "1",
     pageTitle: "Lerneinheiten",
     pageCopy: ""

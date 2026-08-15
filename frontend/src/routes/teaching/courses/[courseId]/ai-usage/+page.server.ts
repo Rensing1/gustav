@@ -53,6 +53,6 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     pageTitle: "KI-Nutzung",
     units: context.units.map((unit) => ({ id: unit.id, title: unit.title })),
     usage: courseUsageForBrowser(usage),
-    wideWorkspaceShell: true
+    workspaceLayout: "wide"
   };
 };

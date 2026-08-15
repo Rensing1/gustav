@@ -22,7 +22,8 @@ def test_frontend_contains_teacher_units_catalog_page() -> None:
     assert "url.searchParams" in loader_src
     assert "breadcrumbs" in loader_src
     assert "hidePageHeading" in loader_src
-    assert "wideWorkspaceShell" in loader_src
+    assert 'workspaceLayout: "wide"' in loader_src
+    assert "wideWorkspaceShell" not in loader_src
     assert "export const actions" in loader_src
     assert "/api/teaching/units" in loader_src
 

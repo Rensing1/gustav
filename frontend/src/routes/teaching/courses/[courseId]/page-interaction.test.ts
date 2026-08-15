@@ -39,7 +39,7 @@ function courseData(overrides: Partial<PageData["course"]> = {}): PageData {
     showAddUnitDialog: false,
     showCourseDrawer: false,
     showMembersDrawer: false,
-    wideWorkspaceShell: true
+    workspaceLayout: "wide"
   };
 }
 

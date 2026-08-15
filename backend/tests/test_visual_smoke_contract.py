@@ -43,7 +43,8 @@ def test_ui_lab_requests_the_wide_shell_for_responsive_component_references() ->
         REPO_ROOT / "frontend" / "src" / "routes" / "ui-lab" / "+page.server.ts"
     ).read_text(encoding="utf-8")
 
-    assert "wideWorkspaceShell: true" in source
+    assert 'workspaceLayout: "wide"' in source
+    assert "wideWorkspaceShell" not in source
 
 
 def test_visual_smoke_support_helpers_cover_auth_seed_and_layout_sanity() -> None:

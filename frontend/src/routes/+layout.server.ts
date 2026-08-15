@@ -16,6 +16,7 @@ export const load: LayoutServerLoad = async ({ fetch, cookies }) => {
   return {
     bootstrap,
     appSessionActive,
-    theme
+    theme,
+    workspaceLayout: "standard"
   };
 };

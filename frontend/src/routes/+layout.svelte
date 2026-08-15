@@ -20,6 +20,7 @@
   import type { Snippet } from "svelte";
   import type { BreadcrumbItem } from "$lib/types/navigation";
   import type { ThemePreference } from "$lib/types/theme";
+  import type { WorkspaceLayout } from "$lib/types/workspace-layout";
   import type { LayoutData } from "./$types";
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
@@ -157,28 +158,12 @@
       : currentCopy();
   }
 
-  function isTeacherUnitWorkspaceRoute(): boolean {
-    return /^\/teaching\/units\/[^/]+$/.test(page.url.pathname);
-  }
-
   function isLearnerUnitWorkspaceRoute(): boolean {
     return /^\/learning\/courses\/[^/]+\/units\/[^/]+$/.test(page.url.pathname);
   }
 
-  function routeRequestsWideWorkspaceShell(): boolean {
-    return page.data.wideWorkspaceShell === true;
-  }
-
-  function routeRequestsLiveWorkspaceShell(): boolean {
-    return /^\/live(?:$|\/|\?)/.test(page.url.pathname);
-  }
-
-  function hasWideWorkspaceShell(): boolean {
-    return routeRequestsWideWorkspaceShell() || isTeacherUnitWorkspaceRoute() || isLearnerUnitWorkspaceRoute();
-  }
-
-  function hasLiveWorkspaceShell(): boolean {
-    return routeRequestsLiveWorkspaceShell();
+  function workspaceLayout(): WorkspaceLayout {
+    return page.data.workspaceLayout ?? "standard";
   }
 
   function closeAccountMenuOnWindowClick(event: MouseEvent): void {
@@ -307,14 +292,13 @@
     <div
       class="workspace-inner"
       class:workspace-inner--auth={isAuthLayout()}
-      class:workspace-inner--wide={hasWideWorkspaceShell()}
-      class:workspace-inner--live-wide={hasLiveWorkspaceShell()}
-      class:workspace-inner--learner-unit-wide={isLearnerUnitWorkspaceRoute()}
+      class:workspace-inner--compact={workspaceLayout() === "compact"}
+      class:workspace-inner--wide={workspaceLayout() === "wide"}
+      class:workspace-inner--canvas={workspaceLayout() === "canvas"}
     >
       {#if !isAuthLayout()}
         <header
           class="workspace-header"
-          class:workspace-header--measure={isLearnerUnitWorkspaceRoute()}
           class:workspace-header--breadcrumbs-wide={isLearnerUnitWorkspaceRoute()}
           class:workspace-header--learner-unit={isLearnerUnitWorkspaceRoute()}
         >
@@ -344,11 +328,7 @@
         </header>
       {/if}
 
-      <div
-        class="workspace-body"
-        class:workspace-body--auth={isAuthLayout()}
-        class:workspace-body--wide={hasWideWorkspaceShell()}
-      >
+      <div class="workspace-body" class:workspace-body--auth={isAuthLayout()}>
         {@render children()}
       </div>
     </div>

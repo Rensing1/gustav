@@ -33,6 +33,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     hidePageHeading: true,
     pageTitle: "Profil",
     pageCopy: "",
+    workspaceLayout: "compact",
     saved: url.searchParams.get("saved")
   };
 };

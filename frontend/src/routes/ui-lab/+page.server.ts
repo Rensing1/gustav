@@ -7,6 +7,6 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 
   return {
     bootstrap,
-    wideWorkspaceShell: true
+    workspaceLayout: "wide"
   };
 };

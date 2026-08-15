@@ -18,7 +18,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
   return {
     home,
     hidePageHeading: true,
-    wideWorkspaceShell: true,
+    workspaceLayout: "wide",
     pageTitle: "Weiterarbeiten"
   };
 };

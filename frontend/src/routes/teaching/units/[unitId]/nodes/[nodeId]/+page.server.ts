@@ -365,7 +365,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
   return {
     breadcrumbs,
     hidePageHeading: true,
-    wideWorkspaceShell: editor.node.kind === "module",
+    workspaceLayout: editor.node.kind === "module" ? "wide" : "compact",
     pageTitle: editor.node.editor_title,
     editor,
     contentSelection: parseContentSelection(url.searchParams.get("content"), editor),

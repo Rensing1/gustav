@@ -28,7 +28,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     concernBox,
     hidePageHeading: true,
     pageTitle: "Kummerkasten",
-    pageCopy: ""
+    pageCopy: "",
+    workspaceLayout: "compact"
   };
 };
 

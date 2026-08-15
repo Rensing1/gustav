@@ -6,7 +6,8 @@ import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import {
   expectLearnerMaterialContrast,
   expectLearnerTaskTheme,
-  expectNoViewportOverflow
+  expectNoViewportOverflow,
+  expectWorkspaceMeasure
 } from "./support/layout-sanity";
 import { seedLearnerNavigationCourse } from "./support/seed-data";
 
@@ -32,7 +33,13 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     await login(learner.page, learnerEmail, password);
     const seeded = await seedLearnerNavigationCourse(teacher.page, learner.page, `Lernweg ${unique}`);
 
+    await learner.page.setViewportSize({ width: 1440, height: 900 });
+    await learner.page.goto("/learning");
+    await expectWorkspaceMeasure(learner.page, 1280);
+    await learner.page.goto(`/learning/courses/${seeded.courseId}`);
+    await expectWorkspaceMeasure(learner.page, 1280);
     await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
+    await expectWorkspaceMeasure(learner.page, 1280);
     await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
     await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
     await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.graphModuleId}$`));

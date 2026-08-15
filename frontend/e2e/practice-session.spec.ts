@@ -7,6 +7,7 @@ import { login } from "./support/auth";
 import { apiHeaders } from "./support/api";
 import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
+import { expectNoViewportOverflow, expectWorkspaceMeasure } from "./support/layout-sanity";
 import { seedLearnerPracticeCourse } from "./support/seed-data";
 
 const password = "Passw0rd!e2e";
@@ -124,7 +125,38 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
       `/learning/practice?course_id=${seeded.courseId}&practice_module_id=${seeded.practiceModuleId}`
     );
     await expect(learner.page.getByRole("heading", { name: "Üben" })).toBeVisible();
+    const accountControl = learner.page.locator(".account-trigger");
+    const stackMetadata = learner.page.locator(".practice-stack-card small");
+    for (const viewport of [
+      { name: "desktop", width: 1440, height: 900, columns: 2 },
+      { name: "tablet", width: 1024, height: 768, columns: 1 },
+      { name: "mobile", width: 390, height: 844, columns: 1 }
+    ]) {
+      await learner.page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await expectNoViewportOverflow(learner.page);
+      await expectWorkspaceMeasure(learner.page, 1280);
+      const columns = await learner.page.locator(".practice-selection__form").evaluate((element) =>
+        getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean).length
+      );
+      expect(columns).toBe(viewport.columns);
+      await expect(learner.page).toHaveScreenshot(`practice-selection-light-${viewport.name}.png`, {
+        animations: "disabled",
+        caret: "hide",
+        mask: [accountControl, stackMetadata]
+      });
+    }
+    await learner.page.setViewportSize({ width: 1024, height: 768 });
+    await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+    await expect(learner.page).toHaveScreenshot("practice-selection-dark-tablet.png", {
+      animations: "disabled",
+      caret: "hide",
+      mask: [accountControl, stackMetadata]
+    });
+    await learner.page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+    await learner.page.setViewportSize({ width: 1440, height: 900 });
     await learner.page.getByRole("button", { name: /Aufgaben starten/ }).click();
+    const sessionPositionHeading = learner.page.locator(".practice-session__topline h2");
+    await expect(sessionPositionHeading).toBeVisible();
     const h5pContexts = new Set<string>();
     let nativePresentations = 0;
     let h5pPresentations = 0;
@@ -140,15 +172,35 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
       };
       expect(active.current_item).not.toHaveProperty("criteria");
       await expect(learner.page.getByText(/^Kriterien:/)).toHaveCount(0);
+      await expectNoViewportOverflow(learner.page);
+      await expectWorkspaceMeasure(learner.page, 1280);
+      const sessionColumns = await learner.page.locator(".practice-session__layout").evaluate((element) =>
+        getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean).length
+      );
+      expect(sessionColumns).toBe(2);
 
       if (active.current_item.kind === "native") {
         nativePresentations += 1;
         await expect(learner.page.getByText("Erkläre, warum ein Test zuerst rot sein soll.")).toBeVisible();
+        if (nativePresentations === 1) {
+          await expect(learner.page).toHaveScreenshot("practice-native-answer-light-desktop.png", {
+            animations: "disabled",
+            caret: "hide",
+            mask: [accountControl, sessionPositionHeading]
+          });
+        }
         await learner.page.getByLabel("Deine Antwort").fill(
           nativePresentations === 1 ? "Ich weiß es noch nicht." : "Ein roter Test weist die fehlende Funktion nach."
         );
         await learner.page.getByRole("button", { name: "Antwort prüfen" }).click();
         await expect(learner.page.getByRole("heading", { name: feedbackHeading })).toBeVisible({ timeout: 60_000 });
+        if (nativePresentations === 1) {
+          await expect(learner.page).toHaveScreenshot("practice-feedback-light-desktop.png", {
+            animations: "disabled",
+            caret: "hide",
+            mask: [accountControl, sessionPositionHeading, learner.page.locator(".practice-feedback__body"), learner.page.locator(".practice-feedback__due")]
+          });
+        }
         await learner.page.reload();
         await expect(learner.page.getByRole("heading", { name: feedbackHeading })).toBeVisible();
         if (active.current_item.presentation_number === 1) {
@@ -162,6 +214,13 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
         const contextId = await player.getAttribute("context-id");
         expect(contextId).toBeTruthy();
         h5pContexts.add(contextId!);
+        if (h5pPresentations === 1) {
+          await expect(learner.page).toHaveScreenshot("practice-h5p-light-desktop.png", {
+            animations: "disabled",
+            caret: "hide",
+            mask: [accountControl, sessionPositionHeading]
+          });
+        }
         await player.evaluate((element, input) => {
           element.dispatchEvent(new CustomEvent("xAPI", {
             detail: {
@@ -193,6 +252,20 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
     expect(h5pContexts.size).toBe(2);
     await expect(learner.page.getByRole("heading", { name: "Übung geschafft" })).toBeVisible();
     await expect(learner.page.getByText("2 Aufgaben bearbeitet")).toBeVisible();
+    await expect(learner.page).toHaveScreenshot("practice-summary-light-desktop.png", {
+      animations: "disabled",
+      caret: "hide",
+      mask: [accountControl, learner.page.locator(".practice-summary__due")]
+    });
+    await learner.page.setViewportSize({ width: 1024, height: 768 });
+    await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+    await expect(learner.page).toHaveScreenshot("practice-summary-dark-tablet.png", {
+      animations: "disabled",
+      caret: "hide",
+      mask: [accountControl, learner.page.locator(".practice-summary__due")]
+    });
+    await learner.page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+    await learner.page.setViewportSize({ width: 1440, height: 900 });
 
     await learner.page.getByRole("link", { name: "Weitere Themen üben" }).click();
     const stackCheckbox = learner.page.getByRole("checkbox", { name: /Wiederholen/ });

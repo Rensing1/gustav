@@ -83,4 +83,28 @@ describe("PracticeSessionWorkspace", () => {
     expect(screen.getByLabelText("Deine Antwort")).toBeEnabled();
     expect(screen.getByRole("button", { name: "Antwort prüfen" })).toBeEnabled();
   });
+
+  it("separates the task from the responsive session context", () => {
+    const { container } = render(PracticeSessionWorkspace, {
+      props: {
+        session,
+        attempt: {
+          id: "attempt-1",
+          status: "completed",
+          classification: "partial",
+          fulfillment: 0.7,
+          feedback_md: "Guter Anfang.",
+          due_at: null
+        },
+        attemptKey: "key-1",
+        solution: null,
+        nowIso: "2026-08-12T12:00:00Z"
+      }
+    });
+
+    const rail = screen.getByRole("complementary", { name: "Sitzungsfortschritt" });
+    expect(container.querySelector(".practice-session__main")).toBeInTheDocument();
+    expect(rail).toContainElement(screen.getByRole("progressbar"));
+    expect(rail).toContainElement(screen.getByRole("button", { name: "Sitzung beenden" }));
+  });
 });

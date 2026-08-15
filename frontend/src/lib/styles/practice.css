@@ -1,9 +1,16 @@
+.practice-page {
+  min-width: 0;
+  width: 100%;
+  container-type: inline-size;
+}
+
 .practice-selection,
 .practice-session,
 .practice-summary {
   display: grid;
   gap: var(--space-5);
-  width: min(100%, 52rem);
+  min-width: 0;
+  width: 100%;
 }
 
 .practice-intro,
@@ -24,6 +31,7 @@
 
 .practice-intro > p:last-child,
 .practice-summary__hero > p:last-child {
+  max-width: var(--layout-reading-max);
   margin: 0;
   color: var(--color-text-muted);
   line-height: 1.6;
@@ -58,6 +66,17 @@
 .practice-selection__form {
   display: grid;
   gap: var(--space-6);
+}
+
+.practice-selection__topics,
+.practice-selection__setup {
+  min-width: 0;
+}
+
+.practice-selection__setup {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
 }
 
 .practice-fieldset {
@@ -178,7 +197,7 @@
 }
 
 .practice-mode-picker {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
 }
 
 .practice-mode-picker legend {
@@ -216,7 +235,7 @@
 }
 
 .practice-selection__notice {
-  margin: calc(-1 * var(--space-3)) 0 0;
+  margin: 0;
   padding: var(--space-3);
   border-left: 3px solid var(--color-info);
   background: var(--color-info-soft);
@@ -294,9 +313,32 @@
   outline-offset: 3px;
 }
 
-.practice-session__topline {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+.practice-session__layout {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.practice-session__topline,
+.practice-session__main {
+  min-width: 0;
+}
+
+.practice-session__rail {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+}
+
+.practice-session__count {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.45;
 }
 
 .practice-text-action {
@@ -305,6 +347,12 @@
   border: 0;
   background: transparent;
   color: var(--color-text-muted);
+}
+
+.practice-session__rail .practice-text-action {
+  width: 100%;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-line);
 }
 
 .practice-progress {
@@ -338,6 +386,7 @@
 }
 
 .practice-task-card__instruction {
+  max-width: var(--layout-reading-max);
   padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--color-line);
   font-size: 1.1rem;
@@ -413,6 +462,7 @@
 }
 
 .practice-feedback__body {
+  max-width: var(--layout-reading-max);
   padding: var(--space-4);
   border-left: 3px solid var(--color-success);
   background: var(--color-success-soft);
@@ -486,7 +536,7 @@
 
 .practice-summary__metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
   gap: var(--space-3);
 }
 
@@ -519,6 +569,47 @@
   justify-content: center;
 }
 
+@container (min-width: 64rem) {
+  .practice-selection__form {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 20rem);
+    align-items: start;
+  }
+
+  .practice-selection__setup {
+    padding-left: var(--space-6);
+    border-left: 1px solid var(--color-line);
+  }
+
+  .practice-selection__footer {
+    display: grid;
+    justify-items: stretch;
+  }
+
+  .practice-selection__footer .practice-button {
+    width: 100%;
+  }
+
+  .practice-session__layout {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 20rem);
+    grid-template-areas:
+      "heading rail"
+      "main rail";
+    align-items: start;
+  }
+
+  .practice-session__topline {
+    grid-area: heading;
+  }
+
+  .practice-session__main {
+    grid-area: main;
+  }
+
+  .practice-session__rail {
+    grid-area: rail;
+  }
+}
+
 @media (max-width: 42rem) {
   .practice-stack-card {
     grid-template-columns: auto minmax(0, 1fr);
@@ -535,16 +626,11 @@
   }
 
   .practice-selection__footer,
-  .practice-session__topline,
   .practice-task-card__actions,
   .practice-summary__actions,
   .practice-end-dialog__actions {
     align-items: stretch;
     grid-template-columns: 1fr;
-  }
-
-  .practice-session__topline {
-    display: grid;
   }
 
   .practice-text-action {

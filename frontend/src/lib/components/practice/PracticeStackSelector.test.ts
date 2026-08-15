@@ -47,4 +47,15 @@ describe("PracticeStackSelector", () => {
     expect(screen.getByText("Für diese Auswahl ist heute nichts fällig.")).toBeVisible();
     expect(screen.getByRole("button", { name: "0 Aufgaben starten" })).toBeDisabled();
   });
+
+  it("keeps topics and session setup in separate responsive regions", () => {
+    const { container } = render(PracticeStackSelector, {
+      props: { stacks, selectedStack: null, selectedMode: "due" }
+    });
+
+    expect(container.querySelector(".practice-selection__topics")).toBeInTheDocument();
+    expect(container.querySelector(".practice-selection__setup")).toBeInTheDocument();
+    expect(container.querySelector(".practice-selection__setup .practice-mode-picker")).toBeInTheDocument();
+    expect(container.querySelector(".practice-selection__setup .practice-selection__footer")).toBeInTheDocument();
+  });
 });

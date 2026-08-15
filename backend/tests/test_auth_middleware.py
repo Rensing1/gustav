@@ -119,6 +119,8 @@ async def test_allowlist_paths_not_redirected():
     # StaticFiles responses can be streaming; avoid exercising them via ASGITransport
     # here and instead assert the middleware's allowlist predicate directly.
     assert is_public_path("/static/css/gustav.css")
+    assert is_public_path("/api/course-invitations/preview")
+    assert not is_public_path("/api/course-invitations/redeem")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r_auth = await client.get("/auth/login", follow_redirects=False)

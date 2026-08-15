@@ -154,6 +154,30 @@ def test_keycloak_configures_smtp_via_env_vars():
         assert key in environment, f"{key} must be configured on keycloak service for SMTP"
 
 
+def test_existing_learning_worker_reuses_keycloak_smtp_configuration():
+    """Invitation delivery belongs in the existing worker and shares one relay."""
+
+    compose = load_compose()
+    services = compose.get("services", {})
+    worker = services.get("learning-worker")
+    assert worker, "learning-worker service is missing in compose file"
+    assert "course-invite-mail" not in services
+
+    lines = _environment_lines(worker)
+    for name in [
+        "KC_SMTP_HOST",
+        "KC_SMTP_PORT",
+        "KC_SMTP_USER",
+        "KC_SMTP_PASSWORD",
+        "KC_SMTP_FROM",
+        "KC_SMTP_FROM_NAME",
+        "KC_SMTP_STARTTLS",
+        "COURSE_INVITE_SIGNING_SECRET",
+        "WEB_BASE",
+    ]:
+        assert any(line.startswith(f"{name}=") for line in lines), name
+
+
 def test_keycloak_build_receives_registration_domain_whitelist():
     """Keycloak build must receive the same domain whitelist as app and BFF.
 

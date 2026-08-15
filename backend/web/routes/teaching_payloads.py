@@ -405,9 +405,21 @@ class AddMember(BaseModel):
     name: str | None = None  # ignored by API, accepted for compatibility
 
 
+class CourseInvitationTokenPayload(BaseModel):
+    # Loose input keeps every malformed capability on the same fail-closed 404 path.
+    token: object | None = None
+
+
+class CourseInvitationEmailPayload(BaseModel):
+    # The BFF converts its multi-line field before crossing the API boundary.
+    recipients: list[str] = Field(min_length=1, max_length=100)
+
+
 __all__ = [
     "AddMember",
     "CourseCreate",
+    "CourseInvitationEmailPayload",
+    "CourseInvitationTokenPayload",
     "CourseModuleCreatePayload",
     "CourseModuleReorderPayload",
     "CourseUpdate",

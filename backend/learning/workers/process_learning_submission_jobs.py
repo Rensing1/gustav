@@ -47,6 +47,7 @@ from backend.learning.practice.completion import (
     complete_worker_practice_attempt,
     fail_worker_practice_attempt,
 )
+from backend.teaching.course_invitation_mail import process_course_invitation_mail_once
 
 try:  # pragma: no cover - optional dependency in some environments
     import psycopg
@@ -1383,10 +1384,18 @@ def run_forever(
     feedback_adapter: FeedbackAdapterProtocol,
     poll_interval: float = 0.5,
     lifecycle_storage_adapter=None,
+    course_invite_mail_processor=process_course_invitation_mail_once,
+    mail_poll_interval: float = 5.0,
 ) -> None:
-    """Continuously process jobs until interrupted."""
+    """Continuously process learning, lifecycle and Teaching mail queues.
+
+    The invitation queue is polled on its own small cadence so an idle learning
+    queue does not require a second service, while also avoiding extra database
+    sessions on every half-second learning poll.
+    """
     import time
 
+    next_mail_poll = 0.0
     while True:
         processed = run_once(
             dsn=dsn,
@@ -1398,6 +1407,17 @@ def run_forever(
                 dsn=dsn,
                 storage_adapter=lifecycle_storage_adapter,
             ) or processed
+        now_monotonic = time.monotonic()
+        if now_monotonic >= next_mail_poll:
+            try:
+                processed = course_invite_mail_processor(dsn=dsn) or processed
+            except Exception as exc:
+                # Teaching mail is best-effort and must never stop learning jobs.
+                LOG.error(
+                    "course_invite_mail.processor_failed error=%s",
+                    type(exc).__name__,
+                )
+            next_mail_poll = now_monotonic + max(0.0, mail_poll_interval)
         if not processed:
             time.sleep(poll_interval)
 

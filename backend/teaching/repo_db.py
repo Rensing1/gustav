@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 
 from backend.teaching import repo_row_mappers as _repo_row_mappers
 from backend.teaching import repo_live_queries as _repo_live_queries
+from backend.teaching import repo_invitation_queries as _repo_invitation_queries
 from backend.teaching import repo_material_queries as _repo_material_queries
 from backend.teaching import repo_member_queries as _repo_member_queries
 from backend.teaching import repo_section_queries as _repo_section_queries
@@ -1517,6 +1518,91 @@ class DBTeachingRepo:
             psycopg_module=psycopg,
             course_id=course_id,
             student_sub=student_sub,
+        )
+
+    def create_course_invitation(self, course_id: str, owner_sub: str, nonce: str) -> dict | None:
+        return _repo_invitation_queries.create_invitation(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            owner_sub=owner_sub,
+            nonce=nonce,
+        )
+
+    def get_active_course_invitation(self, course_id: str, owner_sub: str) -> dict | None:
+        return _repo_invitation_queries.get_active_invitation(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            owner_sub=owner_sub,
+        )
+
+    def revoke_course_invitation(
+        self, course_id: str, invitation_id: str, owner_sub: str
+    ) -> bool:
+        return _repo_invitation_queries.revoke_invitation(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            invitation_id=invitation_id,
+            owner_sub=owner_sub,
+        )
+
+    def preview_course_invitation(self, invitation_id: str, nonce: str) -> dict | None:
+        return _repo_invitation_queries.preview_invitation(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            invitation_id=invitation_id,
+            nonce=nonce,
+        )
+
+    def redeem_course_invitation(
+        self, invitation_id: str, nonce: str, student_sub: str
+    ) -> dict | None:
+        return _repo_invitation_queries.redeem_invitation(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            invitation_id=invitation_id,
+            nonce=nonce,
+            student_sub=student_sub,
+        )
+
+    def queue_course_invite_mail_batch(
+        self,
+        course_id: str,
+        invitation_id: str,
+        owner_sub: str,
+        deliveries: list[dict[str, str]],
+    ) -> dict | None:
+        return _repo_invitation_queries.queue_mail_batch(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            invitation_id=invitation_id,
+            owner_sub=owner_sub,
+            deliveries=deliveries,
+        )
+
+    def get_course_invite_mail_status(
+        self, course_id: str, invitation_id: str, owner_sub: str
+    ) -> dict | None:
+        return _repo_invitation_queries.get_mail_status(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            invitation_id=invitation_id,
+            owner_sub=owner_sub,
+        )
+
+    def retry_course_invite_mail_deliveries(
+        self, course_id: str, invitation_id: str, owner_sub: str
+    ) -> int | None:
+        return _repo_invitation_queries.retry_mail_deliveries(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            invitation_id=invitation_id,
+            owner_sub=owner_sub,
         )
 
     def create_concern_box_entry(

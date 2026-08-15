@@ -56,6 +56,7 @@ def is_public_path(path: str) -> bool:
     return path.startswith(("/auth/", "/static/")) or path in (
         "/health",
         "/favicon.ico",
+        "/api/course-invitations/preview",
     )
 
 

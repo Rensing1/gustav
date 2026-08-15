@@ -186,6 +186,16 @@ services:
       - LEARNING_WORKER_DB_PASSWORD=${LEARNING_WORKER_DB_PASSWORD:-CHANGE_ME_DEV}
       - LEARNING_WORKER_DATABASE_URL=${LEARNING_WORKER_DATABASE_URL:-postgresql://${LEARNING_WORKER_DB_USER:-gustav_worker}:${LEARNING_WORKER_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
       - LEARNING_DATABASE_URL=${LEARNING_DATABASE_URL:-postgresql://${LEARNING_WORKER_DB_USER:-gustav_worker}:${LEARNING_WORKER_DB_PASSWORD:-CHANGE_ME_DEV}@supabase_db_gustav-alpha2:5432/postgres}
+      # Course invitations reuse this worker and the exact relay already used by Keycloak.
+      - COURSE_INVITE_SIGNING_SECRET=${COURSE_INVITE_SIGNING_SECRET:-}
+      - WEB_BASE=${WEB_BASE:-https://app.localhost}
+      - KC_SMTP_HOST=${KC_SMTP_HOST:-}
+      - KC_SMTP_PORT=${KC_SMTP_PORT:-587}
+      - KC_SMTP_USER=${KC_SMTP_USER:-}
+      - KC_SMTP_PASSWORD=${KC_SMTP_PASSWORD:-}
+      - KC_SMTP_FROM=${KC_SMTP_FROM:-}
+      - KC_SMTP_FROM_NAME=${KC_SMTP_FROM_NAME:-GUSTAV-Lernplattform}
+      - KC_SMTP_STARTTLS=${KC_SMTP_STARTTLS:-true}
       # Learning AI (DSPy-only via OpenAI-compatible endpoint; no path rules, no implicit "/v1")
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}

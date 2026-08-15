@@ -11,12 +11,12 @@ Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Te
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 133
+- Inventarisierte Dateien: 136
 - Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 0
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 94
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 96
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 13
-- Statische Migrationstests ohne echte DB-Verbindung: 10
+- Statische Migrationstests ohne echte DB-Verbindung: 11
 
 ## Marker-Regel
 `missing-db-marker` ist ein Fehlerzustand: Jede echte DB/RLS-Testdatei braucht `db_read` oder `db_write`. Test-Infrastruktur wie `conftest.py` und `backend/tests/utils/*` bleibt bewusst markerfrei und wird als `test-infra` klassifiziert.
@@ -31,6 +31,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/migration/test_concern_box_entries_rls.py | real-db | db_read | marked-db | migration, psycopg-connect, psycopg-import, requires-db, rls | Keep marker and isolation visible |
 | backend/tests/migration/test_course_archive_lifecycle_migration.py | migration-static | - | no-db-marker-needed | migration, rls | Keep static migration contract unless it opens a DB connection |
 | backend/tests/migration/test_course_deletion_worker_boundary.py | real-db | db_write | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
+| backend/tests/migration/test_course_invitations_migration.py | migration-static | - | no-db-marker-needed | migration | Keep static migration contract unless it opens a DB connection |
 | backend/tests/migration/test_course_memberships_rls_delete_policy.py | real-db | db_write | marked-db | migration, psycopg-connect, psycopg-import, requires-db, rls | Keep marker and isolation visible |
 | backend/tests/migration/test_dialog_tasks_schema.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, psycopg-required, requires-db, rls | Keep marker and isolation visible |
 | backend/tests/migration/test_import_snapshot_backup.py | migration-static | - | no-db-marker-needed | migration, supabase | Keep static migration contract unless it opens a DB connection |
@@ -67,6 +68,8 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/test_api_me_with_db_session_store.py | real-db | db_write | marked-db | env:SESSION_TEST_DSN | Keep marker and isolation visible |
 | backend/tests/test_app_sessions_rls_live.py | real-db | db_write | marked-db | env:RLS_TEST_DSN, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, rls | Keep marker and isolation visible |
 | backend/tests/test_app_storage_wiring.py | storage-or-config | - | no-db-marker-needed | supabase | Keep service-free unless it reaches the real DB |
+| backend/tests/test_course_invitation_mail_db.py | real-db | db_write | marked-db | psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
+| backend/tests/test_course_invitations_api.py | real-db | db_write | marked-db | psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/test_db_required_gate_contract.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_db_security_roles.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_DSN, psycopg-connect, psycopg-import | Keep marker and isolation visible |
 | backend/tests/test_db_session_store.py | real-db | db_write | marked-db | env:SESSION_TEST_DSN | Keep marker and isolation visible |

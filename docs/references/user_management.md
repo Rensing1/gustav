@@ -112,10 +112,8 @@ Bezeichnung entsteht im Identity-Adapter; Frontends formatieren sie nicht neu.
 ## E-Mail-Verifikation
 
 - Keycloak-Realm `gustav`:
-  - Aktueller Übergangszustand: `verifyEmail=false`, `emailTheme=gustav` (branded Login- und E-Mail-Theme).
-  - Begründung: Der E-Mail-/SMTP-Versand ist noch nicht in allen Umgebungen zuverlässig, daher wird die E-Mail-Verifikation im Realm derzeit nicht erzwungen.
-  - Zielbild: Sobald SMTP stabil ist, sollte die Referenzkonfiguration `verifyEmail=true` setzen; neue Deployments können dies als „secure by default“-Empfehlung übernehmen.
-  - Keycloak verschickt Verifizierungs- und Passwort-Reset-E-Mails über SMTP (siehe unten), wenn diese Flows im IdP aktiviert sind.
+  - Die Referenzkonfiguration erzwingt `verifyEmail=true` und verwendet `emailTheme=gustav`.
+  - Keycloak verschickt Verifizierungs- und Passwort-Reset-E-Mails über das konfigurierte SMTP-Relay (siehe unten).
 - GUSTAVs Callback (`/auth/callback`):
   - Liest das Claim `email_verified` zwar aus dem ID-Token, erzwingt aber keinen eigenen Block basierend auf diesem Flag.
   - GUSTAV vertraut darauf, dass Keycloak nur solche Benutzer aktiviert/anmeldbar macht, die den schulischen Anforderungen entsprechen (z. B. über Admin-Workflows).
@@ -127,13 +125,13 @@ Bezeichnung entsteht im Identity-Adapter; Frontends formatieren sie nicht neu.
   - Self-Service-Reset per E-Mail ist im Realm `gustav` aktiviert (`resetPasswordAllowed=true`).
   - Der Endpunkt `/auth/forgot` leitet auf die Keycloak-Reset-Credentials-Seite; Keycloak verschickt die Passwort-Reset-E-Mail.
   - Der Link in der E-Mail führt auf die „Neues Passwort setzen“-Seite im GUSTAV-Login-Theme (Update-Password-Template).
-- Zusätzlich können Admins bei Bedarf über Keycloak-Admin-Aktionen (z. B. „Execute actions › UPDATE_PASSWORD“) ein Reset erzwingen; GUSTAV sendet weiterhin keine eigenen Passwort-Reset-E-Mails.
+- Zusätzlich können Admins bei Bedarf über Keycloak-Admin-Aktionen (z. B. „Execute actions › UPDATE_PASSWORD“) ein Reset erzwingen; Passwort-Reset-E-Mails bleiben ausschließlich bei Keycloak.
 
 ## SMTP & E-Mail-Theme (Keycloak)
 
 ### SMTP-Konfiguration (Umgebung)
 
-Die Keycloak-Containerkonfiguration bezieht SMTP-Settings aus Env-Variablen (lokal = Prod, gleiche Namen).  
+Keycloak und der bestehende GUSTAV-Hintergrundworker beziehen ihre SMTP-Settings aus denselben Env-Variablen (lokal = Prod, gleiche Namen). Keycloak ist für Verifikation und Passwort-Reset zuständig; der Worker sendet Kurs-Einladungen. Es gibt keinen zusätzlichen Maildienst oder Container.
 Im Repo werden neutrale Platzhalter verwendet; vor Produktivbetrieb müssen diese pro Schule angepasst werden:
 
 - `KC_SMTP_HOST=smtp.school.example`
@@ -155,6 +153,17 @@ Diese Werte werden in `docker-compose.yml` auf die Quarkus-/Keycloak-SMTP-Konfig
 - `KC_SPI_EMAIL_SENDER_DEFAULT_PASSWORD`
 - `KC_SPI_EMAIL_SENDER_DEFAULT_AUTH`
 - `KC_SPI_EMAIL_SENDER_DEFAULT_STARTTLS`
+
+Der Worker akzeptiert für Kurs-Einladungen ausschließlich `KC_SMTP_STARTTLS=true` und erzwingt STARTTLS mit normaler Zertifikatsprüfung. Bei fehlender oder deaktivierter TLS-Konfiguration nimmt er keine Nachricht aus der Queue. Danach authentifiziert er sich mit `KC_SMTP_USER` und `KC_SMTP_PASSWORD`. Logs enthalten weder Empfängeradressen noch Klassenlinks oder Nachrichtentexte. Temporäre SMTP- und Netzfehler werden mit gedeckeltem Backoff bis zu fünf Zustellversuchen erneut verarbeitet; permanente Fehler bleiben endgültig und werden durch die manuelle Wiederholungsaktion nicht erneut versendet.
+
+## Kurs-Einladung und automatische Mitgliedschaft
+
+- Nur der Owner eines aktiven, vollständig konfigurierten Kurses kann unter „Mitglieder verwalten“ → „Klasse einladen“ einen Klassenlink erzeugen.
+- Der gemeinsame Link ist fest 24 Stunden gültig. Ein neuer Link widerruft den bisherigen sofort; Archivierung widerruft ihn ebenfalls und eine spätere Wiederherstellung reaktiviert ihn nicht.
+- Derselbe Link kann kopiert, als QR-Code heruntergeladen, im nativen Browser-Vollbild beziehungsweise im seitenfüllenden Fallback angezeigt und an bis zu 100 deduplizierte Schul-E-Mail-Adressen gesendet werden. Der Fallback sperrt den Hintergrund für Tastatur und assistive Bedienung, hält den Fokus auf der Schließen-Aktion und entfernt beim Schließen seinen eigenen Browser-History-Eintrag.
+- Der Link trägt das Capability-Token ausschließlich im URL-Fragment. Die Einladungsseite entfernt es aus der Browserhistorie, prüft es per Request Body und speichert die akzeptierte Beitrittsabsicht in einem signierten Cookie mit `HttpOnly; Secure; SameSite=Lax`.
+- Neue Lernende durchlaufen die normale Keycloak-Registrierung samt E-Mail-Bestätigung, bestehende Lernende den normalen Login. Nach dem Auth-Rücksprung löst GUSTAV die Einladung serverseitig ein. Läuft der Link vorher ab oder wird er widerrufen, entsteht keine Mitgliedschaft.
+- Erneute Einlösung ist idempotent. Wurde ein über diesen Link beigetretenes Mitglied entfernt, blockiert derselbe Link den Wiedereintritt; erst eine bewusste Rotation durch die Lehrkraft erlaubt ihn wieder.
 
 ### E-Mail-Theme
 

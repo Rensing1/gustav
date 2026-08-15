@@ -2,12 +2,14 @@
 
 ## Unreleased
 ### Features
+- feat(course-invites): Lehrkräfte können einen 24 Stunden gültigen Klassenlink als kopierbaren Link, lokalen QR-Code mit Vollbild-Fallback und einzelne E-Mail-Einladungen bereitstellen; neue oder bestehende Lernende werden nach Keycloak-Registrierung beziehungsweise Login automatisch dem Kurs zugeordnet.
 - feat(cli): Die Teaching-CLI erstellt modulare Lerneinheiten und Dialogaufgaben, leert optionale Aufgabenfelder explizit, rendert Modulgraphen lesbar und verwaltet Kurse, Mitglieder, Kursmodule, Freischaltungen und Löschaufträge vollständig.
 - feat(materials): Lehrkräfte können vollständig eingebettete HTML-Simulationen bis 5 MiB als exploratives Material mit optionaler Orientierung veröffentlichen. Vorschau und Lernansicht starten bewusst, lassen sich zurücksetzen und laufen in einer Offline-CSP-/Iframe-Sandbox ohne Tracking oder Ergebnisübertragung.
 - feat(practice): Übungsmodule, globale Stapelauswahl, persistente Sitzungen, native KI-Auswertung und H5P-Wiederholungen mit dem freigegebenen `gustav-practice-v1`-Scheduler sind implementiert. Practice-Authoring ist vollständig in Lehrkraftoberfläche und CLI verfügbar; Musterlösungen bleiben bis zum auditierten Abruf geschützt, Browser- und `finishedData`-H5P-Meldungen schließen tokengebunden und idempotent ab.
 - test(dev-accounts): Die feste modulare Dev-Lerneinheit enthält zusätzlich ein natives und ein H5P-Übungsmodul. Der Chromium-Smoke prüft beide mit echter Schüler-Persona, KI-Auswertung und Reload-Persistenz über die vertraute lokale CA.
 
 ### Security (dev = prod)
+- security(course-invites): Signierte Capability-Tokens bleiben aus Datenbank und Zugriffslogs heraus, Einlösung und Rotation sind atomar, RLS-/Owner-/Rollenprüfungen greifen fail-closed und temporäre Versandadressen werden nach Erfolg sofort beziehungsweise nach Fehlschlag spätestens nach sieben Tagen entfernt.
 - security(cli): Kursauthoring und gezielte Schülersuche verwenden explizite `read`/`write`/`delete`-Capabilities; H5P-Editor-JSON, Dialogvorschau und vollständige Benutzerlisten bleiben cookiegebunden.
 - security(h5p): Der taskgebundene Browser-Proxy erhält die bereits geprüfte öffentliche Origin über den internen Web→H5P-Hop, sodass der H5P-Sidecar seine eigene Same-Origin-Prüfung beibehält und Editor-JSON cookiegebunden speichern kann.
 - security(simulations): Simulations-HTML wird beim Finalisieren bytegenau validiert und ausschließlich über berechtigungsgeprüfte GUSTAV-Player-Endpunkte ausgeliefert; direkte Storage-Downloads, Same-Origin-Rechte und Netzwerkverbindungen bleiben gesperrt.
@@ -32,6 +34,7 @@
 - ai(defaults): Vision=`qwen2.5vl:3b`, Feedback=`gpt-oss:latest`.
 - config(csrf): Prod/stage startup now requires dedicated `APP_CSRF_TOKEN_SECRET` (placeholder/dummy values rejected).
 ### UI
+- ui(course-invites): Die QR-Präsentation nutzt bevorzugt den echten Browser-Vollbildmodus und fällt bei Ablehnung auf ein kontrastreiches seitenfüllendes Overlay mit Escape-, Zurück- und Fokusbehandlung zurück.
 - ui(messages): Fehler, Erfolg, Warnungen und laufende Vorgänge verwenden gemeinsame, barrierefreie Meldungskarten mit zentraler Semantik, Fokusführung, Hell-/Dunkelmodus und sichtbarkeitsabhängiger Sechs-Sekunden-Frist für Erfolge.
 - ui(learning): Die Aufgabenfläche zeigt während der KI-Auswertung genau eine persistente Fortschrittsmeldung, nach 60 Sekunden einen unverrückten Verzögerungshinweis und nach Abschluss kurz eine Aktion zur fertigen Rückmeldung; endgültige Abgaben öffnen weiterhin automatisch das Ergebnis.
 - ui(simulations): Der Materialeditor erhält eine kompakte Orientierungseingabe und erklärt abgelehnte Simulationsdateien samt bereinigten Fundstellen und notwendiger erneuter Dateiauswahl, ohne Titel oder Orientierung zu verlieren.
@@ -49,6 +52,7 @@
 - ai(vision): `_call_model` kapselt nun alle Ollama-Aufrufe (Timeouts, Markdown-Unwrap, Images-Handling), sodass `extract()` nur noch orchestriert und Tests den Helper gezielt prüfen können.
 
 ### Docs (updates)
+- docs(course-invites): Architektur, Benutzerverwaltung, gemeinsamer SMTP-Betrieb, Keycloak-`verifyEmail=true` und QR-Vollbildbedienung sind dokumentiert.
 - docs(cli): Die CLI-Referenz dokumentiert Dialog-JSON, Clear-Semantik, Kursverwaltung und die unveränderten Browsergrenzen.
 - docs(ui): Der Designvertrag dokumentiert gemeinsame Aktionsmeldungen, Feldfehler, Live-Regionen, Fokusführung und transiente Lebensdauer.
 - docs(cli): `docs/references/gustav_cli.md` dokumentiert Datei-Material-Upload/-Download, H5P-Paketbefehle und Task-Kinds für `native|h5p|visual|scratch|calliope|filius`.
@@ -64,6 +68,7 @@
 - docs(env): `.env.example` referenziert jetzt die passenden Doku-Seiten statt langer Inline-Kommentare (Config-Matrix, Identity, Storage, Learning-AI).
 
 ### Tests (updates)
+- tests(course-invites): Vertrag-, Datenbank-, API-, Worker- und Komponentenprüfungen sowie ein `@feature-acceptance`-Rundlauf decken QR-Fallback, echte Keycloak-Registrierung, SMTP-Verifikation und automatischen Kursbeitritt ab.
 - tests(cli): Contract-, Scope- und CLI-Tests decken modulare Units, Dialogkonfiguration, Clear-Flags, Modulgraphen und die vollständige Kursauthoring-Oberfläche ab.
 - tests(cli): CLI-Regressionen sichern Task-Kind-Marker, Material-Upload-Flow und H5P-Paket-Import.
 - tests(learning-adapters): Neu `test_local_vision_images_param.py` stellt sicher, dass der Vision-Adapter `images=[<b64>]` übergibt.

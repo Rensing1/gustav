@@ -50,6 +50,18 @@ Geplant (siehe `docs/bounded_contexts.md:1`):
 - Lernexporte und endgültige Kurslöschungen laufen über private, wiederholbare
   Worker-Aufträge. Die Webanwendung veröffentlicht weder interne Speicherpfade
   noch unvollständige Archive.
+- Kurs-Einladungen gehören zum Teaching-Kontext. Pro aktivem Kurs existiert
+  höchstens ein gemeinsamer, 24 Stunden gültiger Capability-Link. Das
+  versionierte Token enthält Einladungs-ID und zufällige Nonce und wird mit
+  `COURSE_INVITE_SIGNING_SECRET` signiert; das vollständige Token wird weder in
+  PostgreSQL noch in Logs gespeichert. Rotation, Widerruf, Kursarchivierung und
+  Einlösung laufen atomar über eng begrenzte `SECURITY DEFINER`-Funktionen.
+- Der öffentliche Vorschau-Endpunkt gibt ausschließlich Kurstitel und
+  Ablaufzeit aus. Das Token reist im URL-Fragment, wird vom Browser aus der
+  Historie entfernt und als signierte, sichere Beitrittsabsicht durch den
+  bestehenden Keycloak-Login beziehungsweise die Registrierung getragen.
+  Erst nach erfolgreicher Authentifizierung darf eine Lernendenrolle den Link
+  einlösen.
 - `learning`: Einreichungen, Aufgaben, Karteikarten (Spaced Repetition)
 - `diagnostics`: diagnostische Lehrkräfte-Sichten und Lernendenprofile
 - `core`: geteilte Basistypen (IDs, Zeit, Fehler, Policies)
@@ -182,6 +194,32 @@ Fehlerbilder ist `docs/references/auth_sessions_and_cookies.md`.
 - Cookies: httpOnly, Secure, SameSite; CSRF‑Schutz bei Formularen.
 - CORS: Nicht nötig in SSR‑Setup (gleiche Origin); bei zukünftiger SPA strikt konfigurieren.
 - Logging: Keine sensiblen Inhalte; zweckgebundenes Monitoring.
+
+### Klassenlink, QR-Code und Einladungsversand
+
+- Die Lehrkraftoberfläche erzeugt den QR-Code lokal mit dem paketierten
+  `qrcode`-Modul (Fehlerkorrektur `H`, ausreichende Ruhezone). Es gibt keinen
+  externen QR- oder Trackingdienst.
+- Die Vollbildaktion verwendet nach einem Benutzerklick zunächst die native
+  Fullscreen API. Bei Ablehnung oder fehlender Unterstützung rendert dieselbe
+  Komponente ein seitenfüllendes Overlay. Beide Varianten bleiben unabhängig
+  vom Theme schwarz auf weiß und verändern keine Kurs- oder Einladungsdaten.
+  Der Fallback setzt den übrigen Dokumentbaum auf `inert`, hält den Fokus in
+  der Schließen-Aktion und synchronisiert Schaltfläche, Escape und
+  Browser-Zurück über genau einen temporären History-Eintrag.
+- Der bestehende `learning-worker` verarbeitet zusätzlich eine isolierte
+  Teaching-Mail-Queue. Keycloak-Verifikation, Passwort-Reset und
+  Kurs-Einladungen teilen sich dasselbe konfigurierte SMTP-Relay und dieselben
+  `KC_SMTP_*`-Werte; ein zusätzlicher Maildienst ist nicht Teil der Architektur.
+- Jede Empfängeradresse erhält eine eigene Nachricht. Erfolgreiche
+  Klartextadressen werden unmittelbar entfernt, endgültig fehlgeschlagene
+  spätestens nach sieben Tagen. Ein einladungsspezifischer HMAC-Digest schützt
+  vor Doppelversand, ohne die Adresse dauerhaft aufzubewahren.
+- Der Worker akzeptiert für diesen Capability-Versand nur STARTTLS mit normaler
+  Zertifikatsprüfung. Temporäre SMTP- und Netzfehler bleiben bis maximal fünf
+  Versuche retryfähig; permanente oder ausgeschöpfte Fehler sind final.
+  Konfigurations- und Repositoryfehler des Mailpfads werden PII-frei isoliert
+  und beenden die übrige Lernverarbeitung nicht.
 
 ## Datenbank & Migrationen
 - PostgreSQL (Supabase). Migrationen als versionierte SQL‑Dateien unter `supabase/migrations/`.

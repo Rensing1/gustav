@@ -16,6 +16,8 @@ Owner: Platform/App
 | KC | KC_BASE_URL | https://id.localhost | HTTPS FQDN | env/.env | IdP Base |
 | KC | KC_PUBLIC_BASE_URL | https://id.localhost | HTTPS FQDN | env/.env | IdP Public |
 | KC | KC_REALM | gustav | gustav | env/.env | Realm |
+| KC/Worker | KC_SMTP_* | smtp.school.example / 587, STARTTLS=true | Relay-Secrets, STARTTLS zwingend | env/.env | Gemeinsames Relay für Keycloak-Systemmails und Kurs-Einladungen |
+| Web/Worker | COURSE_INVITE_SIGNING_SECRET | CHANGE_ME… | Eigenständiges Secret, mindestens 32 zufällige Bytes | env/.env | Signatur und datensparsame HMAC-Digests für Klassenlinks |
 | Supabase | SUPABASE_URL | http://127.0.0.1:54321 | FQDN | env/.env | Storage/API |
 | Supabase | SUPABASE_SERVICE_ROLE_KEY | DUMMY_DO_NOT_USE | Secret | env/.env | Backend Storage |
 | Web/H5P | H5P_INTERNAL_SHARED_SECRET | CHANGE_ME_DEV | Secret | env/.env | Interne Web→H5P-Authentifizierung für CLI-Paket-Workflows |
@@ -34,3 +36,5 @@ Hinweise:
 - Start‑Guard blockiert in PROD/Stage Logins als `gustav_limited`.
 - Start‑Guard blockiert unsichere Keycloak‑URLs (http→Fehler); nutze https.
 - Start‑Guard blockiert Dummy‑Schlüssel (`SUPABASE_SERVICE_ROLE_KEY=DUMMY_DO_NOT_USE`).
+- `COURSE_INVITE_SIGNING_SECRET` darf nicht mit Session-, CSRF- oder SMTP-Secrets geteilt werden. Eine Rotation macht vorhandene Klassenlinks absichtlich ungültig.
+- Der Kurs-Einladungsworker verweigert bei `KC_SMTP_STARTTLS=false` den Versand, bevor eine Nachricht geleast wird; diese Sicherheitsgrenze ist lokal und in Produktion identisch.

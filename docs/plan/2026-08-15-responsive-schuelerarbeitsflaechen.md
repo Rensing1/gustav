@@ -1,6 +1,6 @@
 # Implementierungsplan: Responsive Schülerarbeitsflächen und Practice-Layout
 
-**Status:** freigegeben  
+**Status:** freigegeben
 **Freigabedatum:** 15. August 2026
 
 ## User Story
@@ -20,23 +20,40 @@ Dieser Plan ergänzt den [Practice-Implementierungsplan](./2026-08-03-uebungs-un
 
 ## BDD-Szenarien und Testzuordnung
 
-1. **Standardarbeitsfläche auf Desktop**  
-   Given eine Standard-Schülerseite, when sie auf Desktop dargestellt wird, then teilen sich Header und Inhalt eine zentrierte Arbeitsfläche bis 80 rem.  
+1. **Standardarbeitsfläche auf Desktop**
+
+   Given eine Standard-Schülerseite, when sie auf Desktop dargestellt wird, then teilen sich Header und Inhalt eine zentrierte Arbeitsfläche bis 80 rem.
+
    Nachweis: Layout-Contract-Test und authentifizierter Playwright-Breitentest.
-2. **Practice auf Tablet**  
-   Given eine Tabletbreite unter 64 rem, when Auswahl oder Sitzung angezeigt wird, then ist die Darstellung einspaltig, füllt die verfügbare Breite und erzeugt kein horizontales Scrollen.  
+
+2. **Practice auf Tablet**
+
+   Given eine Tabletbreite unter 64 rem, when Auswahl oder Sitzung angezeigt wird, then ist die Darstellung einspaltig, füllt die verfügbare Breite und erzeugt kein horizontales Scrollen.
+
    Nachweis: Komponentenvertrag, visuelle Regression und Playwright-Breitentest.
-3. **Practice auf Desktop**  
-   Given mindestens 64 rem Containerbreite, when Auswahl oder Sitzung angezeigt wird, then stehen Hauptinhalt und Konfiguration beziehungsweise Kontextleiste zweispaltig.  
+
+3. **Practice auf Desktop**
+
+   Given mindestens 64 rem Containerbreite, when Auswahl oder Sitzung angezeigt wird, then stehen Hauptinhalt und Konfiguration beziehungsweise Kontextleiste zweispaltig.
+
    Nachweis: CSS-Contract-Test und visuelle Regression.
-4. **Bewusst kompakte Seiten**  
-   Given Profil oder Kummerkasten, when der neue Shell-Vertrag greift, then bleibt die Seite auf 42 rem begrenzt und zentriert.  
+
+4. **Bewusst kompakte Seiten**
+
+   Given Profil oder Kummerkasten, when der neue Shell-Vertrag greift, then bleibt die Seite auf 42 rem begrenzt und zentriert.
+
    Nachweis: Route- und Playwright-Breitentest.
-5. **Bestehende Spezialarbeitsflächen**  
-   Given eine Wide-, Canvas- oder Auth-Seite, when die Shell umgestellt wird, then behält sie ihre vorgesehene Maximalbreite und ihr bisheriges Verhalten.  
+
+5. **Bestehende Spezialarbeitsflächen**
+
+   Given eine Wide-, Canvas- oder Auth-Seite, when die Shell umgestellt wird, then behält sie ihre vorgesehene Maximalbreite und ihr bisheriges Verhalten.
+
    Nachweis: Layout-Contract- und bestehende visuelle Tests.
-6. **Practice-Fachverhalten**  
-   Given eine native oder H5P-Sitzung, when Aufgabe, Auswertung, Rückmeldung oder Abschluss dargestellt werden, then bleiben Polling, Reload-Persistenz und Informationsschutz unverändert.  
+
+6. **Practice-Fachverhalten**
+
+   Given eine native oder H5P-Sitzung, when Aufgabe, Auswertung, Rückmeldung oder Abschluss dargestellt werden, then bleiben Polling, Reload-Persistenz und Informationsschutz unverändert.
+
    Nachweis: bestehender und erweiterter `@feature-acceptance`-Test.
 
 ## Umsetzung

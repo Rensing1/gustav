@@ -122,4 +122,3 @@ def test_learning_task_keeps_all_fields_optional() -> None:
     )
     assert repo.created is not None
     assert repo.created["model_solution_md"] is None
-

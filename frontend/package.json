@@ -27,7 +27,8 @@
     "elkjs": "^0.11.0",
     "isomorphic-dompurify": "3.19.0",
     "jose": "6.2.3",
-    "markdown-it": "14.3.0"
+    "markdown-it": "14.3.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
@@ -38,6 +39,7 @@
     "@testing-library/svelte": "^5.2.8",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^24.0.0",
+    "@types/qrcode": "^1.5.5",
     "jsdom": "^26.1.0",
     "postcss": "8.5.19",
     "svelte": "5.56.6",

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { replaceState } from "$app/navigation";
-  import { page } from "$app/state";
+  import { goto } from "$app/navigation";
   import TeacherCourseUnitList from "$lib/components/teacher-course/TeacherCourseUnitList.svelte";
+  import CourseInvitationPanel from "$lib/components/teacher-course/CourseInvitationPanel.svelte";
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import WorkspaceDrawer from "$lib/components/ui/WorkspaceDrawer.svelte";
@@ -14,6 +14,7 @@
   let addMemberDialogOpen = $state(false);
   let courseDrawerOpen = $state(false);
   let membersDrawerOpen = $state(false);
+  let inviteDrawerOpen = $state(false);
   let memberFilter = $state("");
   let pendingMemberRemoval = $state<string | null>(null);
 
@@ -45,6 +46,16 @@
     removeDrawerQuery("members", "add-member", "member-q");
   }
 
+  function openInviteDrawer(): void {
+    membersDrawerOpen = false;
+    inviteDrawerOpen = true;
+  }
+
+  function closeInviteDrawer(): void {
+    inviteDrawerOpen = false;
+    removeDrawerQuery("invite");
+  }
+
   function removeDrawerQuery(...names: string[]): void {
     if (typeof window === "undefined") {
       return;
@@ -53,7 +64,9 @@
     const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const nextHref = withoutQueryParameters(window.location.href, names);
     if (nextHref !== currentHref) {
-      replaceState(nextHref, page.state);
+      // Re-run the page load so query-driven drawer props cannot reopen the
+      // drawer from stale client data after a subsequent reload.
+      void goto(nextHref, { replaceState: true, noScroll: true, keepFocus: true });
     }
   }
 
@@ -118,6 +131,14 @@
 
   $effect(() => {
     membersDrawerOpen = Boolean(data.showMembersDrawer) || Boolean(form?.removeMember);
+  });
+
+  $effect(() => {
+    inviteDrawerOpen = Boolean(data.showInviteDrawer)
+      || Boolean(form?.createInvitation)
+      || Boolean(form?.revokeInvitation)
+      || Boolean(form?.sendInvitationEmails)
+      || Boolean(form?.retryInvitationEmails);
   });
 </script>
 
@@ -306,6 +327,7 @@
       {#if canMutate}
         <div class="workspace-inline-actions">
           <a class="workspace-link-action" href={pageHref({ members: "1", "add-member": "1" })}>Mitglied hinzufügen</a>
+          <a class="workspace-link-action" href={pageHref({ invite: "1" })} onclick={openInviteDrawer}>Klasse einladen</a>
         </div>
       {/if}
 
@@ -348,6 +370,38 @@
       {#if form?.removeMember?.error}
         <StatusMessage tone="error" title="Mitglied nicht entfernt" description={form.removeMember.error} focusOnMount={true} />
       {/if}
+  </WorkspaceDrawer>
+{/if}
+
+{#if inviteDrawerOpen && canMutate}
+  <WorkspaceDrawer labelledBy="invite-drawer-title" onClose={closeInviteDrawer}>
+    <div class="workspace-modal-header">
+      <div>
+        <p class="workspace-modal-eyebrow">{data.course.title}</p>
+        <h2 id="invite-drawer-title">Klasse einladen</h2>
+      </div>
+      <button class="workspace-text-button" type="button" onclick={closeInviteDrawer}>Schließen</button>
+    </div>
+
+    {#if form?.createInvitation?.error}
+      <StatusMessage tone="error" title="Klassenlink nicht erstellt" description={form.createInvitation.error} focusOnMount={true} />
+    {/if}
+    {#if form?.revokeInvitation?.error}
+      <StatusMessage tone="error" title="Klassenlink nicht widerrufen" description={form.revokeInvitation.error} focusOnMount={true} />
+    {/if}
+    {#if form?.sendInvitationEmails?.error}
+      <StatusMessage tone="error" title="Einladungen nicht versendet" description={form.sendInvitationEmails.error} focusOnMount={true} />
+    {/if}
+    {#if form?.retryInvitationEmails?.error}
+      <StatusMessage tone="error" title="Versand nicht wiederholt" description={form.retryInvitationEmails.error} focusOnMount={true} />
+    {/if}
+
+    <CourseInvitationPanel
+      courseId={data.course.id}
+      courseTitle={data.course.title}
+      invitation={data.invitation}
+      failedRecipients={data.invitationFailedRecipients}
+    />
   </WorkspaceDrawer>
 {/if}
 

@@ -17,6 +17,28 @@ type LearnerProfile = {
   displayName?: string;
 };
 
+type RealmRepresentation = {
+  smtpServer?: Record<string, string>;
+  [key: string]: unknown;
+};
+
+function configuredRealmSmtp(): Record<string, string> {
+  const configured: Record<string, string> = {
+    host: process.env.KC_SMTP_HOST?.trim() || "smtp.school.example",
+    port: process.env.KC_SMTP_PORT?.trim() || "587",
+    from: process.env.KC_SMTP_FROM?.trim() || "noreply@school.example",
+    fromDisplayName: process.env.KC_SMTP_FROM_NAME?.trim() || "GUSTAV-Lernplattform",
+    auth: process.env.KC_SMTP_AUTH?.trim() || "true",
+    starttls: process.env.KC_SMTP_STARTTLS?.trim() || "true",
+    ssl: "false"
+  };
+  const user = process.env.KC_SMTP_USER?.trim();
+  const password = process.env.KC_SMTP_PASSWORD?.trim();
+  if (user) configured.user = user;
+  if (password) configured.password = password;
+  return configured;
+}
+
 async function keycloakAdminContext(): Promise<APIRequestContext> {
   return request.newContext({
     baseURL: kcBase,
@@ -150,4 +172,50 @@ export async function ensureLearnerUserProfile(
   profile: LearnerProfile
 ): Promise<string> {
   return ensureUserWithRole(email, password, "student", profile);
+}
+
+export async function useTemporaryRealmSmtp(
+  smtpServer: Record<string, string>
+): Promise<() => Promise<void>> {
+  const kc = await keycloakAdminContext();
+  let original: Record<string, string> | undefined;
+  try {
+    const token = await adminToken(kc);
+    const currentResponse = await kc.get(`/admin/realms/${realm}`, {
+      headers: adminHeaders(token)
+    });
+    expect(currentResponse.ok(), await currentResponse.text()).toBe(true);
+    const current = await currentResponse.json() as RealmRepresentation;
+    // A killed previous test may have left the capture server configured.
+    // In that case restore the repository's real SMTP settings, not the stale test endpoint.
+    original = current.smtpServer?.host === "gustav-frontend" || current.smtpServer?.port === "2526"
+      ? configuredRealmSmtp()
+      : current.smtpServer;
+    const update = await kc.put(`/admin/realms/${realm}`, {
+      headers: adminHeaders(token),
+      data: { ...current, smtpServer }
+    });
+    expect([200, 204]).toContain(update.status());
+  } finally {
+    await kc.dispose();
+  }
+
+  return async () => {
+    const restoreContext = await keycloakAdminContext();
+    try {
+      const token = await adminToken(restoreContext);
+      const currentResponse = await restoreContext.get(`/admin/realms/${realm}`, {
+        headers: adminHeaders(token)
+      });
+      expect(currentResponse.ok(), await currentResponse.text()).toBe(true);
+      const current = await currentResponse.json() as RealmRepresentation;
+      const update = await restoreContext.put(`/admin/realms/${realm}`, {
+        headers: adminHeaders(token),
+        data: { ...current, smtpServer: original ?? {} }
+      });
+      expect([200, 204]).toContain(update.status());
+    } finally {
+      await restoreContext.dispose();
+    }
+  };
 }

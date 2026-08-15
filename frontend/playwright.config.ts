@@ -8,7 +8,6 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL,
-    ignoreHTTPSErrors: true,
     trace: "retain-on-failure"
   },
   projects: [

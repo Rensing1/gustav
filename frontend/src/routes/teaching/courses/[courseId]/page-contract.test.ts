@@ -39,10 +39,21 @@ describe("teacher course workspace contract", () => {
   });
 
   it("uses the shared accessible drawer instead of duplicating its shell", () => {
-    expect(pageSource.match(/<WorkspaceDrawer/g)).toHaveLength(2);
+    expect(pageSource.match(/<WorkspaceDrawer/g)).toHaveLength(3);
     expect(pageSource).not.toContain('workspace-modal--drawer');
     expect(pageSource).not.toContain('aria-label="Drawer schließen"');
     expect(pageSource).toContain('removeDrawerQuery("course")');
     expect(pageSource).toContain('removeDrawerQuery("members", "add-member", "member-q")');
+  });
+
+  it("keeps missing invitations distinct from backend failures", () => {
+    expect(serverSource).toContain("invitationResponse.status === 404");
+    expect(serverSource).toContain("throw new BackendRequestError(invitationResponse)");
+    expect(serverSource).toContain("throw new BackendRequestError(statusResponse)");
+  });
+
+  it("sends invitation recipients with the OpenAPI array shape", () => {
+    expect(serverSource).toContain("splitCourseInviteRecipients(recipients)");
+    expect(serverSource).not.toContain("JSON.stringify({ recipients })");
   });
 });

@@ -28,6 +28,8 @@ function courseData(overrides: Partial<PageData["course"]> = {}): PageData {
     },
     deletionImpact: null,
     hidePageHeading: true,
+    invitation: null,
+    invitationFailedRecipients: [],
     memberSearchQuery: "",
     memberSearchResults: [],
     members: [
@@ -38,6 +40,7 @@ function courseData(overrides: Partial<PageData["course"]> = {}): PageData {
     showAddMemberDialog: false,
     showAddUnitDialog: false,
     showCourseDrawer: false,
+    showInviteDrawer: false,
     showMembersDrawer: false,
     workspaceLayout: "wide"
   };

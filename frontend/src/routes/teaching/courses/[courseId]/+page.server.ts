@@ -1,6 +1,7 @@
 import type { Actions, PageServerLoad } from "./$types";
 
-import { backendRequest, requireBackendJson } from "$lib/server/api";
+import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
+import { splitCourseInviteRecipients } from "$lib/server/course-invite-recipients";
 import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 import type { Cookies } from "@sveltejs/kit";
@@ -26,6 +27,20 @@ type CourseMember = {
   sub: string;
   name: string;
   joined_at: string;
+};
+
+type CourseInvitation = {
+  id: string;
+  course_id: string;
+  invite_url: string;
+  expires_at: string;
+  created_at: string;
+  redemption_count: number;
+  email_status: { pending: number; sent: number; failed: number };
+};
+
+type CourseInvitationMailStatus = CourseInvitation["email_status"] & {
+  failed_recipients: string[];
 };
 
 type CourseModule = {
@@ -120,6 +135,40 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     : null;
   const memberSearchQuery = (url.searchParams.get("member-q") ?? "").trim();
   let memberSearchResults: DirectoryStudent[] = [];
+  let invitation: CourseInvitation | null = null;
+  let invitationFailedRecipients: string[] = [];
+
+  if (url.searchParams.get("invite") == "1") {
+    const invitationResponse = await backendRequest(
+      fetch,
+      cookies,
+      `/api/teaching/courses/${params.courseId}/invitations/active`,
+      { authRedirectPath }
+    );
+    if (invitationResponse.status === 404) {
+      invitation = null;
+    } else if (!invitationResponse.ok) {
+      throw new BackendRequestError(invitationResponse);
+    } else {
+      invitation = await invitationResponse.json() as CourseInvitation;
+      const statusResponse = await backendRequest(
+        fetch,
+        cookies,
+        `/api/teaching/courses/${params.courseId}/invitations/${invitation.id}/email-deliveries/status`,
+        { authRedirectPath }
+      );
+      if (!statusResponse.ok) {
+        throw new BackendRequestError(statusResponse);
+      }
+      const status = await statusResponse.json() as CourseInvitationMailStatus;
+      invitation.email_status = {
+        pending: status.pending,
+        sent: status.sent,
+        failed: status.failed
+      };
+      invitationFailedRecipients = status.failed_recipients;
+    }
+  }
 
   if (url.searchParams.get("add-member") == "1" && memberSearchQuery.length >= 2) {
     const candidates = await requireBackendJson<DirectoryStudent[]>(
@@ -139,6 +188,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     course: workspace.course,
     deletionImpact,
     hidePageHeading: true,
+    invitation,
+    invitationFailedRecipients,
     memberSearchQuery,
     memberSearchResults,
     members: workspace.members.map((member) => ({
@@ -150,12 +201,90 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
     showAddMemberDialog: url.searchParams.get("add-member") == "1",
     showAddUnitDialog: url.searchParams.get("add-unit") == "1",
     showCourseDrawer: url.searchParams.get("course") == "1",
+    showInviteDrawer: url.searchParams.get("invite") == "1",
     showMembersDrawer: url.searchParams.get("members") == "1",
     workspaceLayout: "wide",
   };
 };
 
 export const actions: Actions = {
+  createInvitation: async ({ fetch, cookies, params, url }) => {
+    const response = await backendRequest(
+      fetch,
+      cookies,
+      `/api/teaching/courses/${params.courseId}/invitations`,
+      {
+        method: "POST",
+        includeSameOrigin: true,
+        authRedirectPath: currentPath(url)
+      }
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { detail?: string };
+      return fail(response.status, {
+        createInvitation: {
+          error: payload.detail === "course_metadata_incomplete"
+            ? "Vervollständige zuerst Fach, Jahrgang und Schuljahr."
+            : "Der Klassenlink konnte nicht erstellt werden."
+        }
+      });
+    }
+    throw redirect(303, `/teaching/courses/${params.courseId}?invite=1`);
+  },
+  revokeInvitation: async ({ fetch, cookies, params, request, url }) => {
+    const invitationId = String((await request.formData()).get("invitation_id") ?? "").trim();
+    if (!invitationId) return fail(400, { revokeInvitation: { error: "Die Einladung fehlt." } });
+    const response = await backendRequest(
+      fetch,
+      cookies,
+      `/api/teaching/courses/${params.courseId}/invitations/${encodeURIComponent(invitationId)}`,
+      { method: "DELETE", includeSameOrigin: true, authRedirectPath: currentPath(url) }
+    );
+    if (!response.ok) {
+      return fail(response.status, { revokeInvitation: { error: "Der Link konnte nicht widerrufen werden." } });
+    }
+    throw redirect(303, `/teaching/courses/${params.courseId}?invite=1`);
+  },
+  sendInvitationEmails: async ({ fetch, cookies, params, request, url }) => {
+    const formData = await request.formData();
+    const invitationId = String(formData.get("invitation_id") ?? "").trim();
+    const recipients = String(formData.get("recipients") ?? "").trim();
+    if (!invitationId || !recipients) {
+      return fail(400, { sendInvitationEmails: { error: "Gib mindestens eine Schul-E-Mail-Adresse ein." } });
+    }
+    const response = await backendRequest(
+      fetch,
+      cookies,
+      `/api/teaching/courses/${params.courseId}/invitations/${encodeURIComponent(invitationId)}/email-deliveries`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ recipients: splitCourseInviteRecipients(recipients) }),
+        includeSameOrigin: true,
+        authRedirectPath: currentPath(url)
+      }
+    );
+    if (!response.ok) {
+      return fail(response.status, {
+        sendInvitationEmails: { error: "Prüfe die Adressen und die zugelassenen Schul-Domains." }
+      });
+    }
+    throw redirect(303, `/teaching/courses/${params.courseId}?invite=1`);
+  },
+  retryInvitationEmails: async ({ fetch, cookies, params, request, url }) => {
+    const invitationId = String((await request.formData()).get("invitation_id") ?? "").trim();
+    if (!invitationId) return fail(400, { retryInvitationEmails: { error: "Die Einladung fehlt." } });
+    const response = await backendRequest(
+      fetch,
+      cookies,
+      `/api/teaching/courses/${params.courseId}/invitations/${encodeURIComponent(invitationId)}/email-deliveries/retry`,
+      { method: "POST", includeSameOrigin: true, authRedirectPath: currentPath(url) }
+    );
+    if (!response.ok) {
+      return fail(response.status, { retryInvitationEmails: { error: "Der erneute Versand konnte nicht gestartet werden." } });
+    }
+    throw redirect(303, `/teaching/courses/${params.courseId}?invite=1`);
+  },
   saveCourse: async ({ fetch, cookies, params, request, url }) => {
     const formData = await request.formData();
     const title = String(formData.get("title") ?? "").trim();

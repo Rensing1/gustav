@@ -1267,6 +1267,14 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "@types/qrcode",
+      "policy": "allowed",
+      "version": "1.5.5",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "@types/resolve",
       "policy": "allowed",
       "version": "1.20.2",
@@ -1381,6 +1389,14 @@
       "license": "MIT",
       "name": "ansi-styles",
       "policy": "allowed",
+      "version": "4.3.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ansi-styles",
+      "policy": "allowed",
       "version": "5.2.0",
       "workspace": "frontend"
     },
@@ -1443,6 +1459,14 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "camelcase",
+      "policy": "allowed",
+      "version": "5.3.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "chai",
       "policy": "allowed",
       "version": "6.2.2",
@@ -1458,10 +1482,34 @@
     },
     {
       "ecosystem": "node",
+      "license": "ISC",
+      "name": "cliui",
+      "policy": "allowed",
+      "version": "6.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
       "license": "MIT",
       "name": "clsx",
       "policy": "allowed",
       "version": "2.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "color-convert",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "color-name",
+      "policy": "allowed",
+      "version": "1.1.4",
       "workspace": "frontend"
     },
     {
@@ -1611,6 +1659,14 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "decamelize",
+      "policy": "allowed",
+      "version": "1.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "decimal.js",
       "policy": "allowed",
       "version": "10.6.0",
@@ -1643,6 +1699,14 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "dijkstrajs",
+      "policy": "allowed",
+      "version": "1.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "dom-accessibility-api",
       "policy": "allowed",
       "version": "0.5.16",
@@ -1670,6 +1734,14 @@
       "name": "elkjs",
       "policy": "allowed",
       "version": "0.11.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "emoji-regex",
+      "policy": "allowed",
+      "version": "8.0.0",
       "workspace": "frontend"
     },
     {
@@ -1771,6 +1843,14 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "find-up",
+      "policy": "allowed",
+      "version": "4.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "fsevents",
       "policy": "allowed",
       "version": "2.3.2",
@@ -1790,6 +1870,14 @@
       "name": "function-bind",
       "policy": "allowed",
       "version": "1.1.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "get-caller-file",
+      "policy": "allowed",
+      "version": "2.0.5",
       "workspace": "frontend"
     },
     {
@@ -1854,6 +1942,14 @@
       "name": "is-core-module",
       "policy": "allowed",
       "version": "2.16.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "is-fullwidth-code-point",
+      "policy": "allowed",
+      "version": "3.0.0",
       "workspace": "frontend"
     },
     {
@@ -1958,6 +2054,14 @@
       "name": "locate-character",
       "policy": "allowed",
       "version": "3.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "locate-path",
+      "policy": "allowed",
+      "version": "5.0.0",
       "workspace": "frontend"
     },
     {
@@ -2091,6 +2195,30 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "p-limit",
+      "policy": "allowed",
+      "version": "2.3.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "p-locate",
+      "policy": "allowed",
+      "version": "4.1.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "p-try",
+      "policy": "allowed",
+      "version": "2.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "parse5",
       "policy": "allowed",
       "version": "7.3.0",
@@ -2102,6 +2230,14 @@
       "name": "parse5",
       "policy": "allowed",
       "version": "8.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "path-exists",
+      "policy": "allowed",
+      "version": "4.0.0",
       "workspace": "frontend"
     },
     {
@@ -2150,6 +2286,14 @@
       "name": "playwright-core",
       "policy": "allowed",
       "version": "1.59.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "pngjs",
+      "policy": "allowed",
+      "version": "5.0.0",
       "workspace": "frontend"
     },
     {
@@ -2291,6 +2435,14 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "qrcode",
+      "policy": "allowed",
+      "version": "1.5.4",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "react-is",
       "policy": "allowed",
       "version": "17.0.2",
@@ -2315,9 +2467,25 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "require-directory",
+      "policy": "allowed",
+      "version": "2.1.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "require-from-string",
       "policy": "allowed",
       "version": "2.0.2",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "require-main-filename",
+      "policy": "allowed",
+      "version": "2.0.0",
       "workspace": "frontend"
     },
     {
@@ -2378,6 +2546,14 @@
     },
     {
       "ecosystem": "node",
+      "license": "ISC",
+      "name": "set-blocking",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
       "license": "MIT",
       "name": "set-cookie-parser",
       "policy": "allowed",
@@ -2422,6 +2598,22 @@
       "name": "std-env",
       "policy": "allowed",
       "version": "4.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "string-width",
+      "policy": "allowed",
+      "version": "4.2.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "strip-ansi",
+      "policy": "allowed",
+      "version": "6.0.1",
       "workspace": "frontend"
     },
     {
@@ -2698,10 +2890,26 @@
     },
     {
       "ecosystem": "node",
+      "license": "ISC",
+      "name": "which-module",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
       "license": "MIT",
       "name": "why-is-node-running",
       "policy": "allowed",
       "version": "2.3.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "wrap-ansi",
+      "policy": "allowed",
+      "version": "6.2.0",
       "workspace": "frontend"
     },
     {
@@ -2726,6 +2934,30 @@
       "name": "xmlchars",
       "policy": "allowed",
       "version": "2.2.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "y18n",
+      "policy": "allowed",
+      "version": "4.0.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "yargs",
+      "policy": "allowed",
+      "version": "15.4.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "yargs-parser",
+      "policy": "allowed",
+      "version": "18.1.3",
       "workspace": "frontend"
     },
     {
@@ -4268,9 +4500,9 @@
     "h5p-service/package-lock.json"
   ],
   "summary": {
-    "node_entries": 513,
+    "node_entries": 542,
     "python_entries": 16,
     "review_required_entries": 0,
-    "total_entries": 529
+    "total_entries": 558
   }
 }

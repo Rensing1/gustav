@@ -42,6 +42,6 @@ Status: Stable
 - `OPENAI_BASE_URL`/`AI_TEXT_MODEL` – für Dev-Accounts ist ein erreichbarer Loopback-Endpunkt oder ein entfernter HTTPS-KI-Provider wie Mistral mit öffentlichem CA-Bundle zulässig; die Produktdienste selbst bleiben strikt lokal
 
 ## Hinweis (KISS)
-- `make up` installiert keine Zertifikate. Vor `make trust-local-ca` Firefox und Codex vollständig schließen und danach neu starten. Nach einer Neuerstellung des Caddy-Daten-Volumes den Status erneut prüfen.
+- `make up` installiert keine Zertifikate. Die automatischen 72-Stunden-Leaf-Erneuerungen benötigen keinen neuen Vertrauensimport. Nur nach einer Root-CA-Rotation, etwa durch Neuerstellung des Volumes `caddy_data`, Firefox und Codex vollständig schließen, `make trust-local-ca` ausführen und beide Browser neu starten.
 - RUN_* Flags (`RUN_E2E`, `RUN_SUPABASE_E2E`, `RUN_OPENAI_E2E`) immer zusammen mit den passenden Markern laufen lassen (`-m e2e` / `-m supabase_integration` / `-m openai_integration`). Sonst mischt man bewusst „ohne externe Services“ mit „mit echten Services“ und bekommt vermeidbare Rotläufe.
 - Wenn `verify-preflight-db` fehlschlägt: zuerst `supabase migration up && make db-login-user` ausführen (alternativ `make reset-local`), dann `make verify` erneut starten.

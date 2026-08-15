@@ -30,6 +30,8 @@ make trust-local-ca
 
 `make trust-local-ca` benötigt `certutil` aus dem Debian-/Ubuntu-Paket `libnss3-tools` und verwendet für den System-Trust-Store sichtbar `sudo`. Das Ziel ist idempotent und verändert ausschließlich den festen Eintrag `GUSTAV Caddy Local CA`. Nach einer Installation oder CA-Rotation müssen Firefox und Codex vollständig neu gestartet werden.
 
+Caddy erneuert die lokalen Server- beziehungsweise Leaf-Zertifikate automatisch; GUSTAV verwendet dafür eine Laufzeit von 72 Stunden. Diese reguläre Erneuerung ändert die Root-CA nicht und benötigt daher kein erneutes `make trust-local-ca`. Erst wenn das persistente Docker-Volume `caddy_data` gelöscht oder beispielsweise durch `docker compose down -v` neu erzeugt wurde, entsteht eine neue Root-CA. Dann zeigt `make local-ca-status` den abweichenden Fingerabdruck, und nach vollständig geschlossenen Browsern ersetzt `make trust-local-ca` ausschließlich den verwalteten GUSTAV-Eintrag.
+
 Für die visuellen Playwright-Smokes wird einmalig `make playwright-bootstrap` ausgeführt. `make test-visual-smoke` prüft den Chromium-Browser vor dem Start und meldet den Bootstrap-Befehl frühzeitig, statt erst am Ende des produktnahen Profils zu scheitern.
 
 ## Lokale Browser-Personas
@@ -59,6 +61,7 @@ Nach einem erfolgreichen Reset gilt derselbe erwartete Lernstand: „Start und �
 
 ## Typische Fehler
 - Health 502/Timeout → Web nicht erreichbar (Logs prüfen: `docker compose logs -n 200 web`).
-- `ERR_CERT_AUTHORITY_INVALID` in Firefox/Codex → `make local-ca-status`, danach Browser schließen und `make trust-local-ca` ausführen.
+- `ERR_CERT_AUTHORITY_INVALID` in Firefox/Codex → `make local-ca-status`; nur bei fehlendem oder abweichendem Root-Fingerabdruck Browser vollständig schließen, `make trust-local-ca` ausführen und Browser neu starten.
+- `ERR_CERT_DATE_INVALID` trotz übereinstimmender Root-CA → Systemzeit und Gültigkeitszeitraum des Leaf-Zertifikats prüfen, Caddy und anschließend den betroffenen Browser neu starten; die TLS-Prüfung niemals abschalten.
 - 500 bei `/auth/callback` → Session-DB nicht erreichbar (`SESSION_DATABASE_URL` zeigt fälschlich auf `127.0.0.1:54322` im Container).
 - 401 bei `/api/me` → meist Folgefehler von `/auth/callback` (Cookie wird nicht gesetzt).

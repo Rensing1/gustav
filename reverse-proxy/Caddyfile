@@ -26,19 +26,28 @@
   reverse_proxy gustav-frontend:3000
 }
 
+# Keep local leaf certificates stable long enough for browser-based development.
+(local_tls) {
+  tls {
+    issuer internal {
+      lifetime 72h
+    }
+  }
+}
+
 # Local development (internal CA)
 app.localhost:443 {
-  tls internal
+  import local_tls
   import app_proxy
 }
 
 localhost:443 {
-  tls internal
+  import local_tls
   reverse_proxy gustav-alpha2:8000
 }
 
 id.localhost:443 {
-  tls internal
+  import local_tls
   reverse_proxy keycloak:8080 {
     # Keycloak 24 does not add all cookie flags on detached error flows.
     # The IdP is always served over HTTPS here, so enforce the GUSTAV cookie floor at the proxy boundary.
@@ -48,6 +57,6 @@ id.localhost:443 {
 
 # Public Supabase gateway for browser access to Storage API (dev = prod)
 supabase.localhost:443 {
-  tls internal
+  import local_tls
   reverse_proxy supabase_kong_gustav-alpha2:8000
 }

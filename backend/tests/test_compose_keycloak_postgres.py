@@ -108,6 +108,21 @@ def test_caddy_hardens_keycloak_set_cookie_headers():
     assert "Secure; SameSite=Lax" in caddyfile
 
 
+def test_caddy_uses_one_shared_72_hour_local_tls_policy():
+    """Local hosts should renew one consistent certificate policy less often."""
+    caddyfile = Path("reverse-proxy/Caddyfile").read_text(encoding="utf-8")
+
+    assert caddyfile.count("(local_tls) {") == 1
+    assert caddyfile.count("issuer internal") == 1
+    assert caddyfile.count("lifetime 72h") == 1
+    assert "tls internal" not in caddyfile
+
+    for host in ("app.localhost", "localhost", "id.localhost", "supabase.localhost"):
+        assert f"{host}:443 {{\n  import local_tls" in caddyfile
+
+    assert caddyfile.count("import local_tls") == 4
+
+
 def test_keycloak_configures_smtp_via_env_vars():
     """Keycloak must be wired for SMTP via explicit env vars.
 

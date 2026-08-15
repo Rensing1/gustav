@@ -1,6 +1,6 @@
 # Lokale Caddy-CA für Browser-Vertrauen
 
-Status: Implementiert; die einmalige lokale Installation und Browserabnahme stehen noch aus
+Status: Implementiert und lokal abgenommen am 15. August 2026
 
 ## User Story
 
@@ -9,6 +9,7 @@ Als Entwickler möchte ich die von Caddy verwendete lokale Root-CA ausdrücklich
 ## Umfang und Architekturentscheidung
 
 - `tls internal`, HTTPS, Secure-Cookies und die bestehenden öffentlichen URLs bleiben unverändert.
+- Die lokalen Leaf-Zertifikate gelten 72 Stunden statt Caddys standardmäßigen 12 Stunden. Eine gemeinsame Caddy-Regel verhindert Abweichungen zwischen den lokalen Hosts und reduziert Zertifikatswechsel im internen Codex-Browser.
 - Die Installation ist ein ausdrücklich aufzurufender lokaler Entwicklungsschritt. `make up` verändert keine Vertrauensspeicher.
 - Es wird nur Caddys öffentliche Root-CA exportiert. Private Schlüssel bleiben im Docker-Volume.
 - Der Helfer unterstützt Linux sowie klassische, Snap- und Flatpak-Firefox-Profile.
@@ -64,14 +65,15 @@ Automatisierter Test: Ergänzungen in `backend/tests/test_makefile_targets.py`.
 ## Umsetzungsergebnis
 
 - Der Helfer und seine Make-Ziele sind implementiert und durch 26 fokussierte Tests abgedeckt.
-- `make verify` ist erfolgreich: 2165 Python-Tests bestanden, 78 wurden übersprungen; außerdem bestanden 412 Frontend- und 62 H5P-Tests.
+- `app.localhost`, `localhost`, `id.localhost` und `supabase.localhost` verwenden eine gemeinsame interne TLS-Regel mit 72 Stunden Leaf-Laufzeit. Root- und Intermediate-CA bleiben unverändert.
+- Die Folgeabnahme ist erfolgreich: `make verify` bestand mit 2369 Python-Tests, 78 übersprungenen Tests, 512 Frontend- und 62 H5P-Tests; `make docker-validate` ist ebenfalls grün.
 - Die vorhandene Feature-Acceptance-Suite ist mit zehn bestandenen Tests grün.
-- Die lokale Caddy-CA ist im System-Vertrauensspeicher vorhanden. Die Installation in Chromium/Codex und Firefox benötigt auf dem Entwicklungsrechner einmalig `libnss3-tools`, anschließend `make trust-local-ca` und einen vollständigen Neustart beider Browser.
-- Der strikte Playwright-Smoke sowie die Abnahme in Firefox und im internen Codex-Browser folgen nach diesem lokalen Neustart. Sie sind keine verbleibende Codeänderung.
+- Die unveränderte lokale Caddy-CA ist im System-, Chromium/Codex- und Firefox-Vertrauensspeicher vorhanden. Firefox und der interne Codex-Browser erreichen `app.localhost` und `id.localhost` ohne Zertifikatsausnahme.
 
 ## Sicherheits- und Fehlerregeln
 
 - Vor einer Änderung werden Quelle, CA-Eigenschaft, Gültigkeit und SHA-256-Fingerabdruck geprüft.
+- Eine reguläre Leaf-Erneuerung erfordert keinen erneuten Vertrauensimport. `make trust-local-ca` ist nur nach einer geänderten Root-CA nötig, insbesondere nach dem Löschen oder Neuerstellen des Docker-Volumes `caddy_data`.
 - `certutil` verwaltet einen festen Eintrag `GUSTAV Caddy Local CA`; fremde Einträge werden nie verändert.
 - Systemweite Installation benötigt einen sichtbaren `sudo`-Schritt. Pakete werden nicht automatisch installiert.
 - Status ist strikt lesend. Installation und Neustart der Browser bleiben ausdrücklich und transparent.

@@ -1,88 +1,112 @@
 # Bounded Contexts
 
-Last reviewed: 2026-03-23
+Stand: Version 0.0.4. Zuletzt geprüft: 2026-08-16.
 
-Dieses Dokument beschreibt die fachliche Aufteilung (Bounded Contexts) in GUSTAV alpha‑2.
-Es ist bewusst konzeptionell gehalten. Terminologie bitte konsistent mit `docs/glossary.md` verwenden.
+Dieses Dokument beschreibt die fachliche Aufteilung von GUSTAV. Die Kontexte sind fachliche Verantwortungsgrenzen; sie müssen nicht jeweils genau einem technischen Prozess oder einem einzelnen Verzeichnis entsprechen. Terminologie wird konsistent mit `docs/glossary.md` verwendet.
 
-## Kontexte (alpha‑2)
-1. **`identity_access` (Benutzerverwaltung)**: Authentifizierung/Session‑Handling und Rollen/Identität als minimaler, datenschutzfreundlicher Kontext für alle nachgelagerten Bereiche.
-2. **`teaching` (Unterrichten)**: Lehrkräfte erstellen/verwalten wiederverwendbare Inhalte (`Unit`) und organisieren sie in Kursen inkl. Freigaben.
-3. **`learning` (Lernen)**: Schüler bearbeiten freigegebene Inhalte, erstellen Abgaben (`Submission`) und erhalten Auswertung/Feedback.
-4. **`diagnostics` (Diagnostik)**: Aggregierte und operative Sichten für Lehrkräfte. Der Kontext wird im SvelteKit-Refactor explizit von `teaching` getrennt.
+## Kontexte
+
+1. **`identity_access` (Benutzerverwaltung):** Authentifizierung, Rollen, Identität, Sessions und technische Zugangsmittel.
+2. **`teaching` (Unterrichten):** Wiederverwendbare Lerninhalte, Kurse, Mitgliedschaften, Kurseinladungen, Freigaben und Authoring.
+3. **`learning` (Lernen):** Sichtbarer Lernweg, Bearbeitung, Abgaben, Feedback, Dialoge, Portfolio und Übungssitzungen.
+4. **`diagnostics` (Diagnostik):** Datensparsame Leseprojektionen für Unterrichtsbeobachtung, Lernstandsübersicht und Live-Begleitung.
 
 ## `identity_access` (Benutzerverwaltung)
 
-Ziel: Andere Kontexte sollen Nutzer eindeutig adressieren können, ohne E‑Mail/PII als technische Schlüssel zu verwenden.
+### Verantwortung
 
-**Verantwortung**
-- Login/SSO via Keycloak (OIDC Authorization Code Flow + PKCE)
-- Serverseitige App‑Session (`gustav_session` Cookie) und Ableitung eines minimalen User‑Kontexts
-- Bereitstellung eines **UserContextDTO** (kontextübergreifend), der ohne PII auskommt:
-  - `sub` (OIDC Subject, stabiler opaker String)
-  - `roles` (Realm‑Rollen, gefiltert auf `student|teacher|admin`)
-  - `name` (Anzeigename; z. B. aus `gustav_display_name` oder Fallback‑Humanisierung)
+- Login und Registrierung über Keycloak mit OIDC Authorization Code Flow und PKCE;
+- serverseitige App- und Browser-BFF-Sessions;
+- Rollen `student`, `teacher` und `admin`;
+- minimale Identitätsprojektion für andere Kontexte;
+- CLI-Tokens mit expliziten, eng begrenzten Capabilities;
+- Passwort-Reset, E-Mail-Verifikation und sichere Abmeldung.
 
-**Nicht-Ziele**
-- Keine Speicherung/Weitergabe von Passwörtern oder Passwort‑Hashes in der App‑Domäne.
-- E‑Mail ist (wenn überhaupt) ein IdP‑Attribut, aber kein fachlicher Identifikator für nachgelagerte Kontexte.
+### Geteiltes Modell
 
-Siehe Referenz: `docs/references/user_management.md`.
+Andere Kontexte erhalten nur den benötigten User Context:
+
+- `sub`: stabiler, opaker OIDC-Bezeichner;
+- `roles`: gefilterte GUSTAV-Rollen;
+- `name`: Anzeigename für die Oberfläche.
+
+E-Mail-Adresse, Tokens und Keycloak-Interna sind keine allgemeinen kontextübergreifenden Attribute.
 
 ## `teaching` (Unterrichten)
 
-Ziel: Lehrkräfte modellieren Lerninhalte und steuern Sichtbarkeit im Kurs.
+### Verantwortung
 
-**Kernbegriffe**
-- `Course` (Kurs): organisatorische Hülle; enthält Mitglieder und Kurs‑Konfiguration.
-- `CourseModule` (Kursmodul): Beziehung zwischen `Course` und `Unit` inkl. Reihenfolge im Kurs.
-- `Unit` (Lerneinheit): wiederverwendbarer Inhaltsbaustein (autor‑scoped).
-- `Section` (Abschnitt): Unterteilung einer Unit; kleinste Einheit für Freigaben.
-- `Material` (Material): Markdown oder Datei‑Material innerhalb eines Abschnitts.
-- `Task` (Aufgabe): Aufgaben innerhalb eines Abschnitts, inkl. Kriterien für Auswertung.
-- `Release`/Sichtbarkeit: pro Kursmodul/Abschnitt wird Sichtbarkeit geschaltet (Freigabe).
+- Kurse anlegen, archivieren, wiederherstellen und kontrolliert löschen;
+- Kursmitgliedschaften verwalten;
+- Kurseinladungen erzeugen, rotieren, widerrufen und nach erfolgreicher Authentifizierung einlösen;
+- wiederverwendbare Lerneinheiten und deren Modulgraphen authoren;
+- Phasen, Lernmodule, Übungsmodule, Abschnitte, Materialien und Aufgaben verwalten;
+- Lerneinheiten einem Kurs zuordnen und Inhalte freigeben;
+- Authoring über Weboberfläche und capability-begrenzte CLI ermöglichen.
 
-**Datenhoheit**
-- `teaching` ist Quelle der Wahrheit für Struktur (Kurse/Units/Sections/Materials/Tasks) und Freigaben.
+### Fachliche Grenzen
 
-Siehe Referenzen: `docs/references/teaching.md`, `docs/database_schema.md`.
+- Eine `Unit` ist wiederverwendbar und zunächst nicht an einen Kurs gebunden.
+- Ein `Course Module` ordnet eine `Unit` in einen konkreten `Course` ein.
+- Eine `Release` steuert die Sichtbarkeit im Kurskontext.
+- Eine `Course Invitation` ist eine zeitlich begrenzte Capability für den Beitritt zu genau einem Kurs.
+- Authoring legt Aufgaben und Übungsangebote fest, speichert aber keinen individuellen Lernfortschritt.
 
 ## `learning` (Lernen)
 
-Ziel: Schüler bearbeiten freigegebene Aufgaben und erhalten Feedback/Auswertung.
+### Verantwortung
 
-**Kernbegriffe**
-- `Submission` (Abgabe): immutable Einreichung eines Schülers zu einer Aufgabe.
-  - enthält u. a. `analysis_status`, `analysis_json` (Auswertung) und `feedback_md` (Rückmeldung)
-  - Versuchszähler wird serverseitig geführt (attempts/max_attempts)
+- nur freigegebene Kurse, Lerneinheiten und Module anzeigen;
+- Lernweg und Voraussetzungen aus dem Modulgraphen ableiten;
+- Entwürfe und endgültige Abgaben verwalten;
+- Datei-, Bild-, PDF-, Simulations-, H5P- und Dialogabläufe koordinieren;
+- KI-gestützte Analyse und formatives Feedback verarbeiten;
+- frühere Arbeiten, Portfolio und Exporte bereitstellen;
+- Übungsstapel, Übungssitzungen, Versuche und Wiederholungszustände verwalten.
 
-**Abhängigkeiten**
-- `learning` konsumiert Struktur/Freigaben aus `teaching` (fail‑closed: ohne Freigabe kein Zugriff).
-- Für Lehrkräfte‑Sichten (z. B. Live‑Übersicht) liefert `learning` aggregierte Abgabe‑Signale, nicht die Roh‑Inhalte.
+### Fachliche Grenzen
 
-Siehe Referenzen: `docs/references/learning.md`, `docs/references/learning_ai.md`.
+- `Submission` und `Practice State` gehören der lernenden Person.
+- Sichtbarkeit und Mitgliedschaft werden an Repository- und Datenbankgrenzen durchgesetzt.
+- KI-Anbieter sind austauschbare Adapter; Analyse- und Feedbackverträge gehören zum Learning-Kontext.
+- Teaching darf Lernstände über freigegebene Diagnostikprojektionen lesen, aber nicht die Learning-Historie als eigenes Modell duplizieren.
 
-## Beziehungen zwischen den Kontexten (Context Map)
+## `diagnostics` (Diagnostik)
+
+### Verantwortung
+
+- Kursmatrix und Lernendenprofil als eigene Read Models bereitstellen;
+- aktuelle Unterrichtsaktivität für den Live-Arbeitsraum projizieren;
+- Teaching-Struktur und Learning-Ereignisse datensparsam zusammenführen;
+- Lehrkräften Hinweise für pädagogische Entscheidungen geben, ohne automatische Urteile über Lernende zu fällen.
+
+`diagnostics` ist ein etablierter eigener Kontext. Die SvelteKit-Räume `/diagnostics` und `/live` konsumieren seine Read Models; Mutationen bleiben in `teaching` beziehungsweise `learning`.
+
+## Context Map
 
 ```mermaid
-graph TD
-    subgraph "Upstream"
-        identity_access[identity_access]
-        teaching[teaching]
-    end
+flowchart LR
+    identity_access["identity_access"]
+    teaching["teaching"]
+    learning["learning"]
+    diagnostics["diagnostics"]
 
-    subgraph "Downstream"
-        learning[learning]
-        diagnostics[diagnostics]
-    end
+    identity_access -- "User Context (sub, roles, name)" --> teaching
+    identity_access -- "User Context (sub, roles, name)" --> learning
+    identity_access -- "User Context (sub, roles, name)" --> diagnostics
 
-    identity_access -- UserContextDTO (sub, roles, name) --> teaching
-    identity_access -- UserContextDTO (sub, roles, name) --> learning
-    identity_access -- UserContextDTO (sub, roles, name) --> diagnostics
+    teaching -- "Course, Structure, Release" --> learning
+    teaching -- "Structure" --> diagnostics
+    learning -- "Submissions and Progress" --> diagnostics
 
-    teaching -- Released content (structure + visibility) --> learning
-
-    learning -- Aggregates (e.g. latest submissions status) --> teaching
-    learning -- Aggregates --> diagnostics
-    teaching -- Structure --> diagnostics
+    learning -- "Membership status" --> teaching
 ```
+
+## Technische Zuordnung
+
+- `backend/identity_access/` enthält die wichtigsten Identity-&-Access-Adapter und Modelle.
+- `backend/teaching/` enthält Teaching-Services und Persistenzadapter.
+- `backend/learning/` enthält Learning Use Cases, Practice, Worker und KI-Adapter.
+- Diagnostik ist gegenwärtig vor allem durch explizite Read Models und API-Endpunkte abgebildet; die fachliche Grenze gilt unabhängig von der Paketstruktur.
+- `frontend/src/routes/` bildet die Produkträume ab, enthält aber keine dauerhafte fachliche Persistenz.
+- `backend/web/` übersetzt HTTP und Auth-Kontext; es ist selbst kein Bounded Context.

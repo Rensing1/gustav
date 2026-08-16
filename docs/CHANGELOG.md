@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+
+_No entries yet._
+
+## 0.0.4 — 2026-08-16
+
 ### Features
 - feat(course-invites): Lehrkräfte können einen 24 Stunden gültigen Klassenlink als kopierbaren Link, lokalen QR-Code mit Vollbild-Fallback und einzelne E-Mail-Einladungen bereitstellen; neue oder bestehende Lernende werden nach Keycloak-Registrierung beziehungsweise Login automatisch dem Kurs zugeordnet.
 - feat(cli): Die Teaching-CLI erstellt modulare Lerneinheiten und Dialogaufgaben, leert optionale Aufgabenfelder explizit, rendert Modulgraphen lesbar und verwaltet Kurse, Mitglieder, Kursmodule, Freischaltungen und Löschaufträge vollständig.

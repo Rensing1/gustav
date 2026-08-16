@@ -1,241 +1,188 @@
-# GUSTAV — AI-assisted learning platform for schools (alpha3 / 0.0.3)
+<p align="center">
+  <img src="frontend/static/gustav-logo.png" alt="GUSTAV logo" width="120">
+</p>
 
-GUSTAV (recursive acronym in German: "GUSTAV unterstützt Schüler tadellos als Vertretungslehrer") is a self-hosted learning platform for classroom use. It helps teachers prepare linear and modular learning units, release content step by step in a course, collect student submissions, and support a feedback cycle in which work, feedback, revision, and further teaching decisions inform each other.
+# GUSTAV
 
-This is a personal public project by a teacher, not a startup product and not a polished SaaS offering. Status: **alpha3 / 0.0.3** (breaking changes expected).
+**AI-assisted learning platform for schools · Version 0.0.4 · early alpha**
 
-In practice, the flow is meant to be cyclical rather than one-directional: a teacher prepares and releases content, students work on it, GUSTAV helps generate feedback and make progress visible, students revise their work, and that in turn becomes the basis for further pedagogical and didactic decisions. AI is part of that cycle, but it is a tool inside the process, not the point of the project.
+GUSTAV is a learning platform that I am developing as a teacher for real classroom use. It grew out of a practical question: How can software help students learn more effectively while helping teachers understand and improve the learning process—without taking pedagogical judgement out of their hands?
 
-## Why this project exists
+The name is a recursive German acronym: **GUSTAV unterstützt Schüler tadellos als Vertretungslehrer**. Despite the name, GUSTAV is not intended to replace teachers. It supports a learning cycle in which teachers prepare and release content, students work on it, feedback leads to revision, and the resulting learning progress informs further teaching decisions. AI is one tool within this cycle, not the purpose of the project.
 
-GUSTAV exists because I want to develop teaching practice and software in parallel, in public, and against the same reality: the classroom.
+## What I hope GUSTAV can contribute
 
-The project is not meant to "digitize school" in a vague or sales-driven sense. It is meant to test what useful digital support for teaching can look like when the software is shaped by real classroom use, and when classroom practice can react back to the software instead of being forced into a closed product.
+I see considerable potential in bringing several forms of learning support together in one place.
 
-I also consider Free and Open Source Software the better foundation for education than proprietary systems. In education, software should be inspectable, understandable, adaptable, and shareable. That is not only a personal conviction; I think it follows from the educational setting itself. For GUSTAV, openness is tied to transparency, self-determination, and the possibility that others can examine, critique, host, improve, and build on the platform.
+GUSTAV acts as a central hub where students can find materials, activities, and the structure of their learning journey. Its module graph makes that journey visible and serves as an advance organizer: students can see how topics and activities relate to each other and where their current work fits into the wider sequence.
+
+Students can receive timely, pedagogically grounded feedback and use it to revise their work. Practice modules help them revisit and consolidate important concepts instead of encountering them only once. At the same time, patterns in students’ work can help teachers make informed decisions about what to revisit, where additional support is needed, and how their teaching can be improved.
+
+My hope is that these elements can contribute to better learning processes and, ultimately, better learning outcomes. GUSTAV has a great deal of potential, but that potential should be examined through classroom practice and evidence rather than treated as a promise that has already been proven.
+
+## A tour of GUSTAV
+
+The gallery shows the real GUSTAV 0.0.4 interface with dedicated, non-personal development data.
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/assets/readme/teacher-course-overview.jpg" alt="Teacher course overview in GUSTAV"><br>
+      <strong>Courses at a glance</strong><br>
+      Teachers organize courses and see the current teaching context in one place.
+    </td>
+    <td width="50%">
+      <img src="docs/assets/readme/teacher-authoring.jpg" alt="Authoring a modular learning unit in GUSTAV"><br>
+      <strong>Designing a learning journey</strong><br>
+      Linear and modular learning units connect materials, tasks, phases, and dependencies.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/assets/readme/course-invitation.jpg" alt="Course invitation link and QR code in GUSTAV"><br>
+      <strong>Inviting a class</strong><br>
+      Teachers can share a short-lived class link, present a QR code, or send individual invitations.
+    </td>
+    <td width="50%">
+      <img src="docs/assets/readme/learner-workspace.jpg" alt="Student learning workspace with material and task in GUSTAV"><br>
+      <strong>Learning in context</strong><br>
+      Students work with materials and tasks while keeping the wider learning path visible.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/assets/readme/formative-feedback.jpg" alt="Formative feedback and revision cycle in GUSTAV"><br>
+      <strong>Feedback that leads to revision</strong><br>
+      Timely formative feedback helps students reconsider and improve their work.
+    </td>
+    <td width="50%">
+      <img src="docs/assets/readme/practice-progress.jpg" alt="Practice selection and learning progress in GUSTAV"><br>
+      <strong>Practising important concepts</strong><br>
+      Practice modules support deliberate repetition and make progress visible.
+    </td>
+  </tr>
+</table>
 
 ## What GUSTAV can do today
 
-- Create and manage courses, reusable learning units, sections, materials, and tasks
-- Support both `linear` and `modular` learning units; modular units can use phases, modules, and dependency-based progression
-- Release sections per course or unlock modular content per student, instead of exposing everything at once
-- Accept student submissions as text and uploads
-- Process submissions asynchronously for analysis and formative feedback
-- Make progress and recent submission status visible to teachers during ongoing classroom work
-- Support interactive H5P-based tasks alongside native and upload-based task types
-- Authenticate users via Keycloak with server-side sessions
-- Keep data and files in Supabase Postgres/Storage with SQL migrations and a contract-first API in `api/openapi.yml`
+For teaching and course organization, GUSTAV can:
 
-If you are a teacher, the useful question is probably: "Would this support parts of my own teaching?"
+- create and manage courses, reusable learning units, sections, materials, and tasks;
+- combine linear learning sequences with modular paths, phases, and dependency graphs;
+- release content step by step for a course or unlock modular content for individual students;
+- invite learners through a time-limited class link, QR code, or individual email;
+- show current progress and recent submission states during ongoing classroom work.
 
-If you are a developer, the useful question is probably: "What does a classroom-driven learning platform actually look like in code, architecture, and tradeoffs?"
+For students, GUSTAV can:
+
+- provide a structured learning workspace with text, files, embedded simulations, native tasks, and H5P content;
+- accept answers as text or file uploads;
+- process submissions asynchronously and provide formative feedback;
+- support revision instead of treating the first submission as the end of the learning process;
+- offer native and H5P-based practice sessions for revisiting important concepts.
+
+Under the hood, GUSTAV uses Keycloak for identity, Supabase Postgres and Storage for data, a contract-first OpenAPI description, and a separate learning worker for asynchronous analysis and feedback.
 
 ## AI transparency
 
-GUSTAV uses AI in two different ways, and it is important to keep them separate.
+GUSTAV uses AI for the analysis of student submissions and for formative feedback. The current learning pipeline is built around DSPy programs and operator-configured OpenAI-compatible model endpoints, with local infrastructure options such as Ollama.
 
-In the product, AI is used for analysis and formative feedback on student submissions. The current learning pipeline is built around DSPy-based prompts/programs and operator-configured OpenAI-compatible endpoints, with local infrastructure options such as Ollama in the overall setup.
+AI-generated feedback is not authoritative. It must remain open to correction and be used within a pedagogical process for which teachers retain responsibility.
 
-In development, AI tools are used as conversation, drafting, review, and debugging aids. They help explore implementation options and documentation wording, but they do not replace pedagogical judgment, architectural decisions, code review, or responsibility for what ends up in the project.
+AI tools are also used during development as aids for discussion, drafting, review, and debugging. They do not replace pedagogical judgement, architectural decisions, tests, code review, or responsibility for the published project.
 
-## Trying it locally
+## Project status
 
-### Prerequisites
+Version 0.0.4 is an early alpha. The former server-rendered product interface has been retired, and SvelteKit is now GUSTAV's product frontend. The backend's Clean Architecture boundaries are established and protected by automated checks.
+
+GUSTAV is already used and tested through realistic classroom workflows, but it is not a finished product. Breaking changes should be expected.
+
+Important current limitations include:
+
+- IServ single sign-on is planned but not finished;
+- AI feedback requires critical pedagogical use and careful model configuration;
+- H5P adds operational and security complexity;
+- production operation requires an independent privacy, security, backup, and deployment assessment.
+
+The honest status of the project is part of its openness: publishing GUSTAV means making work in progress, trade-offs, and unresolved questions visible rather than claiming completeness.
+
+## Try GUSTAV locally
+
+The local environment mirrors the production architecture and is the best way to explore the project safely.
+
+Prerequisites:
 
 - Linux
-- Docker + Docker Compose
+- Docker with Docker Compose
 - Supabase CLI
-- Free ports `80` and `443` (for `https://app.localhost`)
-
-### Start
-
-Recommended path (`make` wrappers):
+- GNU Make
+- free local ports `80` and `443`
 
 ```bash
 git clone https://github.com/Rensing1/gustav.git gustav
 cd gustav
 
 cp .env.example .env
-
-# Start local Supabase services.
 supabase start
-
-# Apply SQL migrations (first-time setup).
 supabase db reset --yes
-
-# Update SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env (see `.env.example` for guidance).
 supabase status
 
-# Provision local DB login users used by app and worker.
+# Copy the local Supabase URL and keys reported above into .env, then continue.
 make db-login-user
 make learning-worker-db-login-user
-
-# Start the local app stack and copy the local Caddy root CA helper file.
 make up
 ```
 
-Manual path (explicit CLI steps):
+Open `https://app.localhost`. GUSTAV uses a local Caddy certificate authority and never weakens TLS or secure-cookie checks for development. The [E2E and browser setup guide](docs/tests/e2e_howto.md) explains certificate trust, repeatable teacher and student personas, and common setup problems.
 
-```bash
-git clone https://github.com/Rensing1/gustav.git gustav
-cd gustav
+## Self-hosting
 
-cp .env.example .env
+GUSTAV is self-hostable, but an early-alpha installation outside local evaluation requires the operator to take responsibility for TLS, domains, secrets, identity and email configuration, backups, updates, monitoring, and school-specific privacy compliance.
 
-supabase start
-supabase db reset --yes
-supabase status
+H5P packages and libraries are treated as trusted executable content and require additional operational care. This public repository deliberately does not ship school- or provider-specific production runbooks.
 
-# Update SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env.
-make db-login-user
-make learning-worker-db-login-user
+## Development and quality
 
-mkdir -p .tmp/dev_uploads .tmp
-touch .tmp/caddy-root.crt
+GUSTAV is developed in public with a few non-negotiable principles:
 
-# Start the app stack (frontend + web + keycloak + caddy + learning-worker + h5p).
-docker compose up -d --build
-```
+- **pedagogy first:** technology should support learning and professional judgement;
+- **security and privacy first:** education data deserves strict authorization, minimal exposure, and fail-closed behavior;
+- **Free and Open Source:** educational software should be inspectable, adaptable, and shareable;
+- **contract-first APIs:** API changes begin in `api/openapi.yml`;
+- **test-driven development:** behavior is described by a failing test before implementation;
+- **Clean Architecture:** business rules should remain independent of web frameworks and infrastructure.
 
-Open:
-- App: `https://app.localhost`
-
-Notes:
-- Caddy uses an internal local CA (`tls internal`). Your browser may show a TLS warning unless you trust the CA.
-- If `app.localhost` / `id.localhost` do not resolve to `127.0.0.1`, add them to `/etc/hosts` (see `docs/references/network_topology.md`).
-- The local setup is the best starting point if you want to understand or evaluate the platform.
-
-### Trust local HTTPS in Firefox and Chromium/Codex
-
-`make up` exports only Caddy's public root CA to `.tmp/caddy-root.crt`; it never changes host or browser trust stores automatically. Inspect the current state first:
-
-```bash
-make local-ca-status
-```
-
-On Debian/Ubuntu, install the NSS command-line tool once if the status output requests it:
-
-```bash
-sudo apt install libnss3-tools
-```
-
-Then close Firefox and Codex completely and run the explicit, idempotent trust step:
-
-```bash
-make trust-local-ca
-```
-
-The command validates the current CA before installing it in the Linux system store, Chromium's shared NSS database, and active classic, Snap, or Flatpak Firefox profiles. Restart Firefox and Codex afterwards. If the Caddy data volume is deleted and recreated, the local CA changes; `make local-ca-status` will report the stale fingerprint and `make trust-local-ca` will replace only GUSTAV's managed certificate entry.
-
-### Reusable teacher and student browser personas
-
-For repeatable local development and browser testing, provision the dedicated teacher and student personas together with the modular test landscape:
-
-```bash
-make dev-accounts
-```
-
-The command is idempotent. Credentials remain only in the ignored local `.env`; never print or commit them. Use `make reset-dev-accounts` only when all data owned by the dedicated development teacher may be replaced with the defined mixed learning state. `make test-dev-accounts` runs the opt-in browser smoke for both personas, including modular graph states, native and H5P practice sessions, the resumable AI dialog, and diagnostics.
-
-The application, identity, and storage services must remain local. A remote AI provider such as Mistral is supported only through HTTPS. See [the E2E guide](docs/tests/e2e_howto.md#lokale-browser-personas) for setup, safety boundaries, expected fixture state, and troubleshooting.
-
-## Self-hosting notes
-
-GUSTAV is self-hostable, but at this stage it should be approached as an experimental system that is best explored locally first.
-
-Running it outside a local evaluation setup means taking responsibility for infrastructure and operations yourself, including at least:
-
-- TLS and domain setup
-- secrets management
-- SMTP / identity configuration
-- backups and restore strategy
-- deployment and update workflow
-- school-specific privacy and compliance review
-
-If you want to use H5P, you should plan for additional operational and security complexity. In GUSTAV, H5P runs as a dedicated sidecar service behind `/h5p/*`, and H5P packages/libraries are treated as trusted content rather than as harmless static files.
-
-This public repository does not ship production runbooks. Production use therefore requires your own operational decisions and your own validation process. See `.env.example` and [docs/ARCHITECTURE.md](/home/felix/gustav-alpha2/docs/ARCHITECTURE.md) for the current technical baseline.
-
-## Current limitations and open problems
-
-This README should not pretend that GUSTAV is further along than it is.
-
-- The project is still in `alpha3 / 0.0.3`. Breaking changes are expected.
-- The architecture is in transition: `frontend/` hosts the new SvelteKit application shell, while `backend/web/` still contains transition and legacy-style responsibilities.
-- The intended Clean Architecture split is not fully extracted yet; some UI- and adapter-near logic still lives in the web layer.
-- IServ SSO is planned, but not finished.
-- AI-generated analysis and feedback are useful, but they are not authoritative and must be used critically in educational practice.
-- H5P support exists, but it adds operational and security overhead compared to plain text, file, or native task flows.
-- The public roadmap is not mature yet; `docs/ROADMAP.md` is currently a placeholder.
-- This repository is open about direction and intent, but not yet complete in documentation for production operations.
-
-That is intentional. The point of publishing GUSTAV is not to claim completeness, but to show work in progress, document decisions in the open, and invite scrutiny and collaboration.
-
-## Tests
-
-Most common:
+Common checks:
 
 ```bash
 make test
-make verify-preflight-db
-```
-
-Full verification:
-
-```bash
 make verify
 ```
 
-`make verify` is intentionally heavyweight. It chains preflight checks, Python tests,
-H5P sidecar tests, Supabase integration tests, OpenAI-compatible endpoint smoke
-tests, and E2E tests.
+Changes with a user-facing workflow additionally require the authenticated feature-acceptance suite through `make verify-feature`. See the [Make target reference](docs/references/make_targets.md) for prerequisites and narrower checks.
 
-If `make verify-preflight-db` reports owner drift on `public.learning_submissions`,
-use the official local repair path:
+## A personal project, open to collaboration
 
-```bash
-make reset-local
-```
+GUSTAV is a personal Free and Open Source project. I develop it alongside my work as a teacher and share it publicly because I believe educational software should be understandable, adaptable, open to scrutiny, and shaped by the people who use it.
 
-See `docs/references/make_targets.md` for all targets and prerequisites.
+Although GUSTAV began in my own teaching practice, it does not have to remain a one-person project. Teachers, students, developers, designers, researchers, self-hosters, and anyone interested in thoughtful educational technology are warmly invited to help improve it.
+
+There are many useful ways to contribute: try GUSTAV, share a classroom perspective, report a problem, question a pedagogical or technical decision, improve the documentation, suggest an accessible design, or contribute code. You do not need to be a professional software developer to make a valuable contribution.
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before preparing a larger contribution. Bugs, ideas, and pedagogical questions can be raised through [GitHub Issues](https://github.com/Rensing1/gustav/issues). Never include student data, credentials, or other personal information in an issue, log, screenshot, or example.
 
 ## Documentation
 
-Start here:
-
-- Architecture: [docs/ARCHITECTURE.md](/home/felix/gustav-alpha2/docs/ARCHITECTURE.md)
-- Domain boundaries: [docs/bounded_contexts.md](/home/felix/gustav-alpha2/docs/bounded_contexts.md)
-- API contract: [api/openapi.yml](/home/felix/gustav-alpha2/api/openapi.yml)
-
-Useful references:
-
-- Teaching: `docs/references/teaching.md`
-- Teaching Authoring CLI: `docs/references/gustav_cli.md`
-- Learning: `docs/references/learning.md`
-- Identity & sessions: `docs/references/user_management.md`
-- Storage wiring: `docs/references/storage_and_gateway.md`
-- Research notes: `docs/research/`
-- Changelog: `docs/CHANGELOG.md`
-- Roadmap: `docs/ROADMAP.md`
-
-## Contributing and feedback
-
-You are welcome to use this repository in different ways:
-
-- as a teacher who wants to see what this kind of platform could look like
-- as a developer who wants to inspect or improve the implementation
-- as a self-hoster who wants to try the system and report back
-
-If you open an issue, please include:
-
-- steps to reproduce
-- expected vs actual behavior
-- relevant logs (for example `docker compose logs --tail=200 web`), with secrets and PII removed
-- `supabase status` output (with keys redacted)
-- your OS + Docker/Supabase CLI versions
-
-Concrete criticism is welcome. Bug reports, architectural objections, operational notes, and pedagogical questions are all useful.
+- [Architecture](docs/ARCHITECTURE.md)
+- [Bounded contexts](docs/bounded_contexts.md)
+- [Domain glossary](docs/glossary.md)
+- [OpenAPI contract](api/openapi.yml)
+- [Teaching reference](docs/references/teaching.md)
+- [Learning reference](docs/references/learning.md)
+- [Local browser and E2E guide](docs/tests/e2e_howto.md)
+- [Changelog](docs/CHANGELOG.md)
+- [Roadmap](docs/ROADMAP.md)
 
 ## License
 
-AGPL-3.0. See `LICENCE.md` (and `docs/LICENCE.md`). Third-party notices: `THIRD_PARTY_NOTICES.md`.
+GUSTAV is licensed under the [GNU Affero General Public License v3](LICENCE.md). Additional information about bundled components is available in [docs/LICENCE.md](docs/LICENCE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

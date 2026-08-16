@@ -48,7 +48,7 @@ def create_app_auth_only(
 
     environment = environment_provider or (lambda: "dev")
     static_dir = Path(__file__).parent / "static"
-    sub = FastAPI(title="GUSTAV alpha-2 (auth-only)", description="Auth slice", version="0.0.2")
+    sub = FastAPI(title="GUSTAV (auth-only)", description="Auth slice", version="0.0.4")
     sub.state.runtime = SimpleNamespace(
         settings=_AuthOnlySettings(environment),
         oidc_config=oidc_config or load_oidc_config(),

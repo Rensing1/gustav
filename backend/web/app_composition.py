@@ -76,9 +76,9 @@ def create_app_shell() -> FastAPI:
     """Create the base FastAPI shell with GUSTAV metadata."""
 
     app = FastAPI(
-        title="GUSTAV alpha-2",
+        title="GUSTAV",
         description="KI-gestützte Lernplattform",
-        version="0.0.2",
+        version="0.0.4",
     )
     _REGISTERED_APPS.add(app)
     return app

@@ -35,10 +35,9 @@ def test_openapi_materials_download_url_documents_no_store_header():
     assert "Cache-Control" in headers, "download-url 200 should document Cache-Control header"
 
 
-def test_openapi_version_matches_app_minor():
+def test_openapi_version_matches_release_version():
     spec = _load_spec()
-    # App currently advertises version 0.0.2 in backend/web/main.py
-    assert spec["info"]["version"].startswith("0.0.2"), "OpenAPI version should be 0.0.2 to match app"
+    assert spec["info"]["version"] == "0.0.4"
 
 
 def test_openapi_me_example_uses_offset_format():

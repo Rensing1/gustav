@@ -76,7 +76,7 @@ def test_frontend_contains_shared_ui_shell_stylesheet() -> None:
         assert needle in token_src, f"Expected global design token {needle!r} in {token_path}"
 
 
-def test_root_layout_uses_alpha3_shell_primitives() -> None:
+def test_root_layout_uses_current_shell_primitives() -> None:
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
 
     src = layout_path.read_text(encoding="utf-8")

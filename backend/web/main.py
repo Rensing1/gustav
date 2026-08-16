@@ -1,4 +1,4 @@
-"GUSTAV alpha-2"
+"GUSTAV web application"
 from __future__ import annotations
 
 from functools import partial

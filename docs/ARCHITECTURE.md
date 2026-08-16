@@ -1,372 +1,173 @@
-# GUSTAV Architektur (alpha‑2)
+# GUSTAV – Architektur
 
-Dieses Dokument beschreibt die aktuelle Architektur von GUSTAV (Stand: alpha‑2) sowie den geplanten Ausbau. Ziel ist eine verständliche, lehrbare Struktur gemäß unseren Projektprinzipien: KISS, Security‑first, FOSS, Clean Architecture, API Contract‑First und TDD (Red‑Green‑Refactor).
+Stand: Version 0.0.4, zuletzt geprüft am 2026-08-16.
 
-## Ziele und Leitlinien
-- KISS & Lesbarkeit: Code ist einfach, nachvollziehbar und gut kommentiert.
-- Security‑first: Minimalprinzip, DSGVO‑Konformität, spätere RLS‑Durchsetzung auf DB‑Ebene.
-- Contract‑First: Änderungen an der API beginnen im Vertrag `api/openapi.yml:1`.
-- TDD: Erst Tests (pytest), dann minimaler Code, dann Refactor.
-- Clean Architecture: Fachlogik getrennt von Frameworks (FastAPI, Supabase, etc.).
+Dieses Dokument beschreibt die gegenwärtige Architektur von GUSTAV. Verbindliche Detailverträge liegen in `api/openapi.yml`, den Migrationen unter `supabase/migrations/` und den thematischen Referenzen unter `docs/references/`.
 
-## High‑Level Komponenten
-- Frontend (`frontend/`): SvelteKit ist die neue primäre Web-Plattform und fungiert als Browser-BFF. Dort liegen App-Shell, Navigation, Fehler-UX und der Session-Bootstrap für komplexe Räume.
-- Meldungsarchitektur: Seiten halten Aktionszustände lokal; `frontend/src/lib/components/ui/StatusMessage.svelte` vereinheitlicht semantische Aktionsmeldungen und ihre Lebensdauer, `FieldError.svelte` feldbezogene Fehler. Ein globaler Meldungsstore ist bewusst nicht Teil der Architektur. Fachzustände wie eine laufende Auswertung bleiben unabhängig von kurzlebigen Bestätigungen erhalten.
-- API‑Adapter (`backend/web/`): FastAPI wird aus der bisherigen SSR/HTMX-Mischarchitektur in Richtung API-only überführt. Neue Produktpfade entstehen dort nicht mehr.
-- Legacy-Webbestand (`backend/web/`): FastAPI mit serverseitigem Rendern (SSR) und HTMX für progressive Interaktivität. Enthält aktuell Routen, UI‑Komponenten und statische Assets.
-  - HTMX‑Kontrakt (Navigation): Bei HTMX‑Navigation liefern Routen ausschließlich das Haupt‑Fragment (Inhalt von `#main-content`) und genau eine Sidebar als Out‑of‑Band‑Swap (`<aside id="sidebar" hx-swap-oob="true">`). Dadurch bleibt der Toggle‑State stabil und es entstehen keine doppelten Container. Die Hilfsfunktion `_layout_response` kapselt dieses Verhalten.
-  - Auth‑Redirects (HTMX): Für `/auth/login` und `/auth/register` antwortet der Server bei HTMX‑Requests mit `204 No Content` und setzt `HX-Redirect` auf die Ziel‑URL (statt 302). Header: `Cache-Control: private, no-store`, `Vary: HX-Request`.
-  - Unauth‑HTMX (401): Bei fehlender Session antwortet die Middleware mit `401` und `HX-Redirect: /auth/login`. Sicherheit: `Cache-Control: private, no-store` und `Vary: HX-Request` werden gesetzt, um Caching‑Anomalien zu vermeiden.
-- API‑Vertrag (`api/openapi.yml:1`): Quelle der Wahrheit für öffentliche Endpunkte. Tests validieren Verhalten gegen den Vertrag.
-- Datenbank: PostgreSQL via Supabase; Migrationen unter `supabase/migrations/` verwaltet. RLS aktiviert;
-  der Teaching‑Kontext nutzt standardmäßig eine Limited‑Role‑DSN (`gustav_limited`).
-- Legacy‑Code: `legacy-code-alpha1/` bleibt Referenz, wird aber nicht direkt erweitert.
- - Live‑Ansicht (Unterricht): Realtime via leichtgewichtigem Polling‑Delta statt SSE. Siehe `docs/references/teaching_live.md`. Delta überträgt nur Minimalstatus (IDs/Flags), keine Inhalte. Cursor‑Semantik ist robust gegenüber kleiner Clock‑Skew. Das Polling‑Intervall der Lehrer‑Live‑Ansicht ist über `GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS` (Sekunden, Default: 3) konfigurierbar; SSR und JS lesen denselben Wert (Konfiguration statt hartkodiertem Intervall). Ungültige Werte fallen defensiv auf 3 Sekunden zurück. Das SSR‑Delta‑Fragment setzt für alle Pfade (inkl. Fehler) `Cache-Control: private, no-store` und `Vary: Origin` und propagiert Upstream‑Fehler (z. B. 5xx) statt sie als „keine Änderungen“ zu verschleiern. Die Detailansicht der letzten Abgabe (`TeachingLatestSubmission`) stellt dabei die Trennung „Rückmeldung“ (`feedback_md`) vs. „Auswertung“ (`analysis_json` im Kriterien‑Schema) konsistent bereit.
- - H5P‑Review (Unterricht): Das read-only Review-Credential enthält ausschließlich die für Lehrkraft-, Schüler-, Aufgaben- und Inhaltsbindung nötigen Claims und ist mit AES-256-GCM verschlüsselt. Der Browser transportiert es nie in einer URL, sondern zunächst als Bearer-Header und danach in einem kurzlebigen, auf `/h5p` begrenzten, review-spezifischen HttpOnly-Cookie. Die nachgelagerte User-State-URL enthält nur eine opake `review_id`, die aus dem zufälligen AES-GCM-Nonce abgeleitet wird und den passenden Cookie auswählt. Dadurch bleiben parallele Reviews getrennt; Credential und Personenkennungen gelangen nicht in die URL. Der H5P-Adapter prüft Ablauf, Handle und fachliche Bindungen fail-closed.
+## Leitlinien
 
-## Schichten (Clean Architecture)
-1) Domain (geplant)
-   - Entities, Value Objects, Domain Events
-   - Framework‑frei, nur reine Python‑Logik
-2) Application / Use Cases (geplant)
-   - Orchestriert Use Cases, Ports/Interfaces zu Infrastruktur
-   - Keine Kenntnis von FastAPI/HTTP
-3) Interface Adapters (heute)
-   - `backend/web/` als Web‑Adapter (FastAPI, SSR, HTMX)
-   - Übersetzt HTTP <-> Use Cases (sobald vorhanden)
-4) Frameworks & Drivers (heute)
-   - FastAPI, Uvicorn, später Supabase SDK, Redis für Sessions
+- **Pädagogik vor Technik:** Die Software unterstützt Lernen und professionelles pädagogisches Urteil.
+- **KISS und Lehrbarkeit:** Schichten, Abhängigkeiten und Sicherheitsentscheidungen sollen auch für Lernende nachvollziehbar bleiben.
+- **Security und Privacy by Design:** Autorisierung, Datensparsamkeit, RLS und bereinigte Fehlermeldungen sind Teil der Architektur.
+- **Clean Architecture:** Fachliche Regeln bleiben von FastAPI, SvelteKit, DSPy, PostgreSQL und Supabase unabhängig.
+- **Contract First:** Öffentliche HTTP-Verträge beginnen in `api/openapi.yml`.
+- **TDD:** Verhalten wird durch Tests beschrieben, bevor die minimale Implementierung entsteht.
+- **Lokal = Produktion:** Compose, Hostnamen, Migrationen, Sicherheitsgrenzen und Konfigurationsnamen sind in beiden Umgebungen gleich.
 
-Diese Trennung wird inkrementell umgesetzt. Aktuell befindet sich noch UI‑naher Code im Web‑Adapter, Use Cases sind noch nicht extrahiert.
+## Systemüberblick
 
-## Bounded Contexts (Domänenzuschnitte)
-Geplant (siehe `docs/bounded_contexts.md:1`):
-- `identity_access`: Nutzer, Rollen, AuthN/AuthZ (IServ/Supabase)
-- `teaching`: Kurse, Lerneinheiten, Abschnitte, Freischaltung, Live-Unterrichts-Ansicht
-- Der Kurslebenszyklus trennt `active`, `archived` und den vorübergehenden
-  Löschzustand `deleting`. Ehemalige Mitgliedschaften und finale
-  Aufgabensnapshots erhalten das persönliche Lernarchiv, während gewöhnliche
-  Lern- und Unterrichtswege ausschließlich aktive Kurse verwenden.
-- Lernexporte und endgültige Kurslöschungen laufen über private, wiederholbare
-  Worker-Aufträge. Die Webanwendung veröffentlicht weder interne Speicherpfade
-  noch unvollständige Archive.
-- Kurs-Einladungen gehören zum Teaching-Kontext. Pro aktivem Kurs existiert
-  höchstens ein gemeinsamer, 24 Stunden gültiger Capability-Link. Das
-  versionierte Token enthält Einladungs-ID und zufällige Nonce und wird mit
-  `COURSE_INVITE_SIGNING_SECRET` signiert; das vollständige Token wird weder in
-  PostgreSQL noch in Logs gespeichert. Rotation, Widerruf, Kursarchivierung und
-  Einlösung laufen atomar über eng begrenzte `SECURITY DEFINER`-Funktionen.
-- Der öffentliche Vorschau-Endpunkt gibt ausschließlich Kurstitel und
-  Ablaufzeit aus. Das Token reist im URL-Fragment, wird vom Browser aus der
-  Historie entfernt und als signierte, sichere Beitrittsabsicht durch den
-  bestehenden Keycloak-Login beziehungsweise die Registrierung getragen.
-  Erst nach erfolgreicher Authentifizierung darf eine Lernendenrolle den Link
-  einlösen.
-- `learning`: Einreichungen, Aufgaben, Karteikarten (Spaced Repetition)
-- `diagnostics`: diagnostische Lehrkräfte-Sichten und Lernendenprofile
-- `core`: geteilte Basistypen (IDs, Zeit, Fehler, Policies)
+```text
+Browser
+  |
+  v
+Caddy (TLS und Routing)
+  |-- Produktoberfläche ----------> SvelteKit-Browser-BFF
+  |                                  |
+  |                                  v
+  |-- /api, /health, interne BFF --> FastAPI-API-Adapter
+  |                                  |
+  |                                  v
+  |                         Fachkontexte und Repositories
+  |                                  |
+  |                                  v
+  |                         PostgreSQL / Supabase Storage
+  |
+  |-- /h5p -----------------------> isolierter H5P-Service
+  |
+  `-- id.localhost ---------------> Keycloak
 
-Im Code spiegeln sich diese Kontexte perspektivisch als Pakete unter `backend/` wider. Startpunkt ist aktuell der Web-Adapter; die Extraktion der Use Cases folgt, sobald erste API-Funktionen entstehen.
+Learning-Worker --> Learning Use Cases --> DSPy-Adapter --> konfigurierter KI-Anbieter
+```
 
-### Teaching: Aufgaben (Tasks) MVP
-- API: `GET|POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks`, `PATCH|DELETE /tasks/{task_id}`, `POST /tasks/reorder` (authorOnly, Teacher-role).
-- Vertrag: `Task.kind` unterstützt `native|h5p|visual`. Konfiguration erfolgt über optionale Nested-Objekte `h5p` (z. B. `content_id`) bzw. `visual` (Upload‑Only).
-- Security model: H5P‑Packages gelten als **trusted content** (ausführbarer Code) und dürfen nur von `teacher`/`admin` importiert/verwaltet werden.
-- Scope: H5P‑Content ist bewusst **global wiederverwendbar** (nicht kurs‑gebunden). Student‑Zugriff bleibt kurs‑gebunden über Access‑Checks auf freigeschaltete Tasks (fail‑closed).
-- Use Case Layer: `teaching.services.tasks.TasksService` normalisiert Eingaben (Criteria, Hints, Due-Date, Max-Attempts) und delegiert an das Repo (`TasksRepoProtocol`).
-- Persistenz: Supabase-Migration legt `public.unit_tasks` mit RLS, Triggern für Positionsresequenzierung und DEFERRABLE Unique-Constraint an.
-- Tests: API-Integrationstests spiegeln die BDD-Szenarien (CRUD, Reorder, Fehlerfälle); dedizierte Unit-Tests prüfen den Service isoliert.
- - Validierung & Semantik:
-   - Pfadparameter werden früh validiert; ungültige UUIDs führen zu `400 bad_request` mit `invalid_unit_id`, `invalid_section_id` oder `invalid_task_id`.
-   - `criteria`-Einträge müssen nicht-leere Strings sein (`minLength: 1`).
-   - `due_at` akzeptiert ISO-8601 mit Zeitzone, inkl. `Z` (UTC), und wird zu `+00:00` normalisiert.
-  - DELETE-Endpunkte liefern `204 No Content` ohne Body.
+### SvelteKit-Browser-BFF
 
-### Learning: KI-Feedback (DSPy-Pipeline, Überblick)
-- Bounded Context: `learning` verarbeitet Schüler-**Einreichungen** (`learning_submissions`) und ordnet ihnen KI-Analyse und KI-Feedback zu (siehe `docs/bounded_contexts.md`).
-- Schichten:
-  - Worker / Use Case (geplant): holt offene Jobs aus `learning_submissions`, orchestriert Vision- und Feedback-Adapter und schreibt `analysis_json` + `feedback_md` zurück.
-  - Adapter: `backend/learning/adapters/vision_*` (OCR) und `backend/learning/adapters/local_feedback.py` (Feedback).
-  - DSPy-Programm: `backend/learning/adapters/dspy/feedback_program.py` kapselt die eigentliche LLM-Logik.
-- DSPy-only Feedback-Pipeline:
-  - Analyse: `run_structured_analysis(...)` (`programs.py`) ruft `dspy.Predict(FeedbackAnalysisSignature)` auf und liefert ein `CriteriaAnalysis`-Objekt, das in `criteria.v2` normalisiert wird (`_parse_to_v2(...)`).
-  - Feedback: `run_structured_feedback(...)` (`programs.py`) ruft `dspy.Predict(FeedbackSynthesisSignature)` auf und erzeugt einen Fließtext `feedback_md` für Lernende.
-  - Fallbacks: Wenn DSPy-Analyse oder -Feedback fehlschlagen, wird **innerhalb des DSPy-Pfads** ein deterministisches `criteria.v2`-Objekt und ein neutraler Feedback-Text erzeugt (keine zusätzlichen LM-Aufrufe).
-- Adapter-Verhalten:
-  - Der lokale Feedback-Adapter (`local_feedback.py`) ruft vorzugsweise `dspy.feedback_program.analyze_feedback(...)` auf und arbeitet ausschließlich mit dem Port-Typ `FeedbackResult`.
-  - Nur wenn DSPy nicht verfügbar oder nicht konfiguriert ist, fällt der Adapter auf einen einfachen Ollama-Prompt zurück und erzeugt weiterhin ein `criteria.v2`-Payload, damit API-Vertrag und DB-Schema unverändert bleiben.
-  - Dieses Design trennt die fachliche Sicht (Einreichung → Analyse → Feedback) von der technischen LM-Orchestrierung (DSPy), sodass Schüler:innen am Code die Architektur nachvollziehen können, ohne alle LLM-Details kennen zu müssen (siehe `docs/references/LLM-Prompts.md`).
+`frontend/` ist die produktive Weboberfläche. SvelteKit übernimmt:
 
-## Sicherheits- und Caching‑Leitlinien (Web)
-- Personalisierte SSR‑Antworten (Nutzer im `request.state.user`) setzen standardmäßig `Cache-Control: private, no-store` (siehe `_layout_response`).
-- Auth‑Start und -Register: `Vary: HX-Request` wird gesetzt, um Caches zwischen 204‑HTMX und 302‑Redirect zu unterscheiden.
+- App-Shell, Navigation und rollenbezogene Arbeitsräume;
+- serverseitige Seitenkomposition und View Models;
+- kurzlebige Browser-BFF-Sessions und Token-Aktualisierung;
+- sichere Weiterleitung von Lese- und Schreibzugriffen an FastAPI;
+- UI-Zustände, Formulare, barrierefreie Rückmeldungen und progressive Interaktion.
 
-## Ordnerstruktur (aktuell)
-- `api/openapi.yml` – API‑Vertrag (Contract‑First)
-- `backend/web/` – Web‑Adapter (FastAPI, SSR/HTMX)
-  - `main.py` – Routen und Seitenaufbau
-  - `components/` – UI‑Bausteine
-  - `static/` – CSS/JS/Assets
-  - `models/` – vorläufige UI‑Modelle/Mocks
-- `docs/` – Projektdokumentation
-  - `glossary.md` – Begriffe (bitte konsistent mit API/DB nutzen)
-  - `bounded_contexts.md` – Kontextzuschnitte
-  - `database_schema.md` – Schema‑Übersicht (aus Migrationen abgeleitet)
-  - `UI-UX-Leitfaden.md` – Richtlinien für Gestaltung/Interaktionen
-- `Dockerfile`, `docker-compose.yml` – Containerisierung (Dev‑Setup)
-  - Runtime Layout: Der Container kopiert `backend/web/` sowie die Domänenpakete `identity_access`, `teaching` und `backend/learning`. `PYTHONPATH=/app:/app/backend` stellt sicher, dass Import-Pfade (`from backend.learning...`) sowohl lokal als auch im Image identisch bleiben.
-  - Keycloak läuft in allen Umgebungen gegen den dedizierten Compose-Service `keycloak-db` (PostgreSQL 16) anstelle des früheren lokalen Volumes. Startparameter (`KC_DB_URL`, Benutzer/Passwort) kommen aus `.env` bzw. Secret-Store; die Datenbank hält Realm- und Benutzerzustand persistent.
-- `legacy-code-alpha1/` – Referenz Altcode
+Die Produkträume `learning`, `teaching`, `diagnostics` und `live` werden ausschließlich hier dargestellt. Das verbindliche visuelle System steht in `docs/DESIGN.md`.
 
-Weitere wichtige Ordner:
-- `supabase/migrations/` – SQL‑Migrationen (via Supabase CLI)
-- `backend/tests/` – pytest‑Tests für API/Use Cases
-- `docs/ROADMAP.md`, `docs/CHANGELOG.md`, `docs/LICENCE.md`, `docs/research/*`, `docs/plan/*`
+### FastAPI-API-Adapter
 
-## Request‑Flow (heute)
-1) Browser sendet Request an FastAPI (`backend/web/main.py:1`).
-2) Web‑Adapter rendert HTML (SSR) mit Komponenten und liefert statische Assets aus.
-3) HTMX nutzt Teilaktualisierungen, bleibt aber servergetrieben (kein volles SPA‑Bundle nötig).
+`backend/web/` ist der HTTP- und Kompositionsadapter. FastAPI übernimmt:
 
-Sobald Use Cases extrahiert sind: Route -> DTO/Command -> Use Case -> Port -> Adapter/Repo -> Response DTO -> Presenter/View.
+- öffentliche, durch OpenAPI beschriebene Fachendpunkte;
+- interne Browser-BFF-Endpunkte und den Auth-Bridge-Vertrag;
+- Authentifizierungs- und Autorisierungsgrenzen;
+- DTO-Validierung, HTTP-Fehlerabbildung und sichere Cache-Header;
+- Wiring von Repositories, Storage, Workern und Laufzeitkonfiguration.
 
-### HTMX Sidebar Fragment Contract
-- Vollständige Seitenanfragen (`HX-Request` fehlt) erhalten weiterhin das komplette Dokument inklusive Toggle-Button und Sidebar.
-- HTMX-Navigation (`HX-Request: true`) liefert ausschließlich das `<main id="main-content">`-Fragment und genau ein `<aside id="sidebar" hx-swap-oob="true">`.
-- Der Helper `_layout_response()` in `backend/web/main.py` erzwingt diese Trennung; alle SSR-Routen müssen ihn verwenden, damit der JS-Toggle-Status bestehen bleibt und keine zweite Sidebar gerendert wird.
+FastAPI registriert keine aktiven Legacy-Produktseiten mehr. Ehemalige SSR-/HTMX-Produktpfade werden ausschließlich über einen kleinen Retirement-Adapter kontrolliert mit `410 Gone` beziehungsweise einem sicheren Redirect beantwortet. Verbliebene HTML-Helfer dienen nur dieser Rückzugskompatibilität oder isolierten Inhalten wie Simulationsdarstellungen; sie sind kein zweites Frontend.
 
-### Identity & Auth – vereinfachte Integration (DEV/PROD)
+### Fachkontexte
 
-- DEV (hostbasiert, einfach & robust):
-  - Caddy routet hostbasiert:
-    - `https://app.localhost` → Frontend (`frontend/`, SvelteKit Browser-BFF)
-    - `https://app.localhost/api/*`, `/internal/*`, `/health` → Web (`backend/web/`, FastAPI)
-    - `https://app.localhost/h5p/*` → H5P-Sidecar
-    - `https://id.localhost` → Keycloak (IdP)
-  - Persistenz (DEV): Keycloak speichert Realm und Benutzer im Compose-internen Postgres-Service `keycloak-db` (PostgreSQL 16) mit Volume `keycloak_pg_data`. Der Service ist über `depends_on.condition=service_healthy` als Startbedingung definiert, damit Keycloak erst nach erfolgreichem `pg_isready` hochfährt.
-    PROD nutzt dieselbe Konfiguration, aber `KC_DB_URL` zeigt auf eine gemanagte Instanz (TLS, Backups, Secret-Store); `KC_DB_URL_PROPERTIES` sollte dort mindestens `sslmode=require` setzen.
-  - Vorteil: keine Pfadpräfixe/Rewrite‑Komplexität, korrekte Hostname‑Links, klare Trennung.
-  - Setup: `/etc/hosts` → `127.0.0.1 app.localhost id.localhost`.
-- PROD (Security‑first, geringe App‑Komplexität):
-  - `/auth/login|register|forgot` leiten zur gebrandeten Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
-  - GUSTAV verarbeitet keine Passwörter; Browser arbeiten nur mit opaken
-    Cookies. Die Details zu BFF-Session und App-Session sind in
-    `docs/references/auth_sessions_and_cookies.md` dokumentiert.
+Die fachliche Verantwortung ist in vier Bounded Contexts aufgeteilt:
 
-#### Keycloak Theme (GUSTAV)
-- Pfad: `keycloak/themes/gustav/login`
-  - Templates: `templates/login.ftl`, `templates/register.ftl`, `templates/login-reset-password.ftl`
-  - Styles: `resources/css/gustav.css` (kompaktes Layout über .kc‑* Klassen)
-  - Gemeinsames Basis‑CSS: Das kanonische App‑CSS `backend/web/static/css/gustav.css` wird beim Keycloak‑Image‑Build als `resources/css/app-gustav-base.css` in das Theme kopiert. So teilen sich IdP‑UI und App dieselbe Styles‑Quelle – ohne Runtime‑Volumes.
-  - i18n: `messages/messages_de.properties` (DE‑Texte)
-- Realm‑Konfiguration: `keycloak/realm-gustav.json:1`
-  - `loginTheme: "gustav"`, `internationalizationEnabled: true`, `defaultLocale: "de"`, `supportedLocales: ["de","en"]`
+- `identity_access`: Keycloak, Identität, Rollen, App- und BFF-Sessions sowie CLI-Tokens;
+- `teaching`: Kurse, Mitgliedschaften, Kurseinladungen, Lerneinheiten, Modulgraphen, Inhalte und Freigaben;
+- `learning`: Lernwege, Abgaben, Dialoge, KI-Verarbeitung, Portfolio, Exporte und Übungssitzungen;
+- `diagnostics`: lesende, datensparsame Projektionen für Unterrichtsdiagnostik und Live-Begleitung.
 
-#### Vereinheitlichter Flow
-- Direct‑Grant und SSR‑Formulare wurden entfernt. Sowohl in DEV als auch PROD leiten `/auth/login|register|forgot` zur Keycloak‑UI (Authorization‑Code‑Flow mit PKCE).
+Die fachliche Context Map steht in `docs/bounded_contexts.md`; kanonische Begriffe stehen in `docs/glossary.md`.
 
-#### Ablauf Authorization‑Code‑Flow
-1) Browser: `GET /auth/login` (GUSTAV) → 302 zu IdP `…/protocol/openid-connect/auth` (Host: `id.localhost`).
-2) Login auf IdP‑UI (gebrandet). `GET /auth/register` nutzt ebenfalls den Auth‑Endpoint und setzt `kc_action=register` (statt altem `…/registrations`‑Pfad), optional mit `login_hint`.
-3) IdP → Redirect zu `REDIRECT_URI` (z. B. `https://app.localhost/auth/callback`).
-4) SvelteKit tauscht den Code gegen Tokens am internen Token‑Endpoint
-   (`KC_BASE_URL`) und verifiziert das ID‑Token.
-5) SvelteKit legt die BFF-Session an und synchronisiert danach die stabile
-   Backend-App-Session.
-6) Der Callback setzt `gustav_bff_session` und `gustav_session`
-   (httpOnly; Secure; SameSite=lax, host-only).
-6) HTMX-Anfragen (Sidebar-Link) erhalten statt 302 ein `204` mit `HX-Redirect`, damit der Browser trotzdem voll zur IdP-URL navigiert und der PKCE-State bestehen bleibt.
+## Clean-Architecture-Schichten
 
-Die kanonische Referenz für Cookies, Session-TTLs, interne BFF-Grenzen und
-Fehlerbilder ist `docs/references/auth_sessions_and_cookies.md`.
+### Fachlogik und Application Layer
 
-## API Contract‑First (Vorgehen)
-1) API‑Änderung zuerst im Vertrag: `api/openapi.yml:1`.
-2) BDD‑Szenarien formulieren (Given‑When‑Then).
-3) pytest‑Test gegen die definierte Spezifikation schreiben (lokale Test‑DB, externe Abhängigkeiten mocken).
-4) Minimalen Code implementieren (Web‑Adapter + Use Case), bis der Test grün ist.
-5) Refactoring: Aufräumen, Entkopplung, Performance/Security prüfen.
+Framework-unabhängige Use Cases und Services liegen in den jeweiligen Kontextpaketen, beispielsweise unter:
 
-## Sicherheit & Datenschutz (Grundsätze)
-- AuthN: Keycloak (OIDC Authorization Code Flow mit PKCE). IServ‑Anbindung (SSO) ist geplant.
-- DB‑Zugriff: RLS‑Prinzip (Row Level Security) – Architektur bereitet darauf vor.
-- PII‑Minimierung: Nur notwendige personenbezogene Daten speichern.
-- Cookies: httpOnly, Secure, SameSite; CSRF‑Schutz bei Formularen.
-- CORS: Nicht nötig in SSR‑Setup (gleiche Origin); bei zukünftiger SPA strikt konfigurieren.
-- Logging: Keine sensiblen Inhalte; zweckgebundenes Monitoring.
+- `backend/learning/usecases/`;
+- `backend/learning/practice/`;
+- `backend/teaching/services/`;
+- `backend/identity_access/`.
 
-### Klassenlink, QR-Code und Einladungsversand
+Ports werden als kleine Python-Protokolle an der konsumierenden Schicht definiert. Use Cases und Services importieren weder FastAPI noch Request-, Response- oder Router-Typen.
 
-- Die Lehrkraftoberfläche erzeugt den QR-Code lokal mit dem paketierten
-  `qrcode`-Modul (Fehlerkorrektur `H`, ausreichende Ruhezone). Es gibt keinen
-  externen QR- oder Trackingdienst.
-- Die Vollbildaktion verwendet nach einem Benutzerklick zunächst die native
-  Fullscreen API. Bei Ablehnung oder fehlender Unterstützung rendert dieselbe
-  Komponente ein seitenfüllendes Overlay. Beide Varianten bleiben unabhängig
-  vom Theme schwarz auf weiß und verändern keine Kurs- oder Einladungsdaten.
-  Der Fallback setzt den übrigen Dokumentbaum auf `inert`, hält den Fokus in
-  der Schließen-Aktion und synchronisiert Schaltfläche, Escape und
-  Browser-Zurück über genau einen temporären History-Eintrag.
-- Der bestehende `learning-worker` verarbeitet zusätzlich eine isolierte
-  Teaching-Mail-Queue. Keycloak-Verifikation, Passwort-Reset und
-  Kurs-Einladungen teilen sich dasselbe konfigurierte SMTP-Relay und dieselben
-  `KC_SMTP_*`-Werte; ein zusätzlicher Maildienst ist nicht Teil der Architektur.
-- Jede Empfängeradresse erhält eine eigene Nachricht. Erfolgreiche
-  Klartextadressen werden unmittelbar entfernt, endgültig fehlgeschlagene
-  spätestens nach sieben Tagen. Ein einladungsspezifischer HMAC-Digest schützt
-  vor Doppelversand, ohne die Adresse dauerhaft aufzubewahren.
-- Der Worker akzeptiert für diesen Capability-Versand nur STARTTLS mit normaler
-  Zertifikatsprüfung. Temporäre SMTP- und Netzfehler bleiben bis maximal fünf
-  Versuche retryfähig; permanente oder ausgeschöpfte Fehler sind final.
-  Konfigurations- und Repositoryfehler des Mailpfads werden PII-frei isoliert
-  und beenden die übrige Lernverarbeitung nicht.
+Nicht jede einfache CRUD-Operation besitzt eine eigene Use-Case-Klasse. Einige ältere API-Adapter orchestrieren Repository-Aufrufe noch direkt. Das ist begrenzter Refactoring-Spielraum innerhalb etablierter Grenzen und keine noch ausstehende Architektur-Migration. Neue Fachregeln gehören in framework-unabhängige Services oder Use Cases.
 
-## Datenbank & Migrationen
-- PostgreSQL (Supabase). Migrationen als versionierte SQL‑Dateien unter `supabase/migrations/`.
-- Infrastrukturfehler bleiben kontextgebunden: `DBTeachingRepo` übersetzt `psycopg.OperationalError` an seiner Adaptergrenze in `TeachingRepositoryUnavailable`; Teaching-Router und Ownership-Guards reichen diesen Fehler unverändert an den zentralen HTTP-Handler weiter. Es gibt kein globales Mapping von Treiberfehlern auf einen Teaching-Detailcode.
-- Sicherheitskritische Teaching-Leseprojektionen verwenden ihre migrierten SECURITY-DEFINER-Helper als verbindlichen Schema-Vertrag. Fehlt ein erforderlicher Helper, übersetzt der Adapter dies ebenfalls in `TeachingRepositoryUnavailable` (`503`); ein direkter Tabellen-Fallback ist nicht zulässig, weil er je nach Datenbankrolle andere RLS-Sichtbarkeit besitzen könnte. Unerwartete Projektionsfehler werden als private `500 internal_error`-Antworten ausgegeben und nicht als fachliches „keine Abgabe“ oder „nicht gefunden“ verschleiert.
-- Die synchrone PostgreSQL-Readiness-Prüfung von `/health` läuft als synchrone FastAPI-Route im Worker-Threadpool und blockiert dadurch keine parallelen Async-Requests.
-- Namenskonventionen: snake_case Tabellen/Spalten, Präfixe pro Kontext (z. B. `learning_submissions`).
-- Test‑DB: Separate Testumgebung für pytest, Transaktions‑Rollback/Fixture‑Strategie.
+### Interface- und Infrastrukturadapter
 
-## Tests & Qualität (TDD)
-- Speicherort Tests: `backend/tests/` (API‑Tests, Use‑Case‑Tests, Adapter‑Tests)
-- Philosophie: Spezifikationsnahe Tests, klein anfangen, dann breiter testen.
-- Tools: pytest, httpx TestClient, Factory‑Fixtures; Lint/Format analog Repo‑Standards (später).
+- `backend/web/`: HTTP, Auth-Bridge, Serialisierung und Komposition;
+- `backend/*/repo_db.py`: PostgreSQL-Adapter mit RLS- und Helper-Verträgen;
+- `backend/learning/adapters/`: DSPy-, Vision-, Feedback- und Dialogadapter;
+- `backend/storage/`: Binärspeicher-Ports und Supabase-Adapter;
+- `backend/identity_access/`: Keycloak- und Sessionadapter;
+- `h5p-service/`: isolierter H5P-Driver mit eigener Sicherheitsgrenze.
 
-E2E‑Tests (Identity):
-- Testdatei: `backend/tests_e2e/test_identity_login_register_logout_e2e.py`
-- Registrierung – Validierungen/Fehlerfälle: `backend/tests_e2e/test_identity_register_validation_e2e.py`
-- Voraussetzung: `docker compose up -d caddy web keycloak` und Hosts‑Eintrag `127.0.0.1 app.localhost id.localhost`.
-- Ausführung:
-  - Alle Tests inkl. E2E: `.venv/bin/pytest -q`
-  - Nur E2E: `RUN_E2E=1 WEB_BASE=https://app.localhost KC_BASE_URL=https://id.localhost .venv/bin/pytest -q -m e2e`
+Direkte Datenbankverbindungen oder Supabase-Client-Erzeugung aus Routen sind verboten. `make test-architecture-boundaries` führt dafür `backend.tools.architecture_boundary_scan` gegen eine Null-Baseline aus und blockiert neues Grenzwachstum.
 
-### Auth Router & Security (aktualisiert)
-- Routenorganisation: Auth‑Endpunkte liegen im Router `backend/web/routes/auth.py` und werden in `backend/web/main.py` eingebunden. Die Slim‑App in Tests nutzt denselben Router, um Drift zu vermeiden.
-- `/api/me`: Antworten enthalten `Cache-Control: private, no-store` zur Verhinderung von Caching von Auth‑Zuständen.
-- Vereinheitlichter Logout: `GET /auth/logout` löscht die App‑Session (Cookie) und leitet zur End‑Session beim IdP; danach Rückkehr zur Erfolgsseite (`/auth/logout/success`). Optional ist ein interner absoluter Redirect‑Pfad erlaubt; unsichere oder zu lange Werte werden ignoriert.
+## Zentrale Abläufe
 
-#### Auth‑Erzwingung (Middleware)
-- Allowlist: `/auth/*`, `/health`, `/static/*`, `/favicon.ico` werden nie umgeleitet.
-- HTML‑Anfragen ohne Session: `302` Redirect zu `/auth/login`.
-- JSON‑/API‑Anfragen ohne Session (Pfad beginnt mit `/api/`): `401` JSON mit `Cache-Control: private, no-store`.
-- HTMX‑Requests ohne Session: `401` mit Header `HX-Redirect: /auth/login`.
-- Bei erfolgreicher Authentifizierung setzt die Middleware `request.state.user = { sub, name, role, roles }` für SSR; die primäre Rolle wird deterministisch nach Priorität gewählt (admin > teacher > student).
+### Authentifizierter Browserzugriff
 
-#### Sicherheits‑Härtung (Auth)
-- `/auth/callback` liefert bei allen Fehlern `400` mit `Cache-Control: private, no-store` (nicht cachebar).
-- `/auth/login` ignoriert einen client‑übergebenen `state` vollständig; `state` wird ausschließlich serverseitig erzeugt und validiert (CSRF‑Schutz).
-- Redirect‑Parameter sind nur als interne absolute Pfade erlaubt. Server‑seitig erzwungenes Pattern (spiegelt OpenAPI): `^(?!.*//)(?!.*\\.\\.)/[A-Za-z0-9._\-/]*$`, `maxLength: 256`. Doppelte Slashes (`//`) und Pfadtraversalen (`..`) sind nicht erlaubt. Ungültige Werte werden ignoriert (Login → `/`, Logout → `/auth/logout/success`).
-- `/auth/logout` verwendet, falls verfügbar, `id_token_hint` für bessere IdP‑Kompatibilität; andernfalls `client_id`.
+1. Der Browser ruft eine SvelteKit-Seite auf.
+2. SvelteKit liest die serverseitige BFF-Session und erneuert Tokens bei Bedarf.
+3. Der Browser-BFF ruft FastAPI mit der dafür vorgesehenen internen oder öffentlichen Authentifizierung auf.
+4. FastAPI bildet die Identität auf einen minimalen User Context aus `sub`, Rollen und Anzeigename ab.
+5. Repository und Datenbank erzwingen Ownership, Mitgliedschaft, Sichtbarkeit und RLS.
+6. SvelteKit rendert das View Model; private Antworten bleiben `private, no-store`.
 
-#### CSRF‑Strategie (Browser‑Flows)
-- Same‑Site Cookies: `SameSite=lax` + `Secure` (dev = prod). Lax erlaubt Top‑Level OIDC‑Redirects, ohne Drittanbieter‑Kontexte zuzulassen.
-- Server prüft bei schreibenden Endpunkten die **Origin** (Same‑Origin‑Pflicht):
-  - Learning: z. B. `POST /api/learning/.../submissions`
-  - Teaching: alle Schreib‑APIs (z. B. `POST /api/teaching/courses`, `POST/PATCH /api/teaching/units`, Reorder/Materials/Tasks/Members)
-  Fehlt `Origin`, wird als Fallback die **Referer**‑Origin herangezogen.
-- Um diesen Fallback zu unterstützen und dennoch keine sensiblen Daten zu leaken,
-  wird global `Referrer-Policy: strict-origin-when-cross-origin` gesetzt.
+Details: `docs/references/auth_sessions_and_cookies.md` und `docs/references/user_management.md`.
 
-#### Content Security Policy (CSP)
-- Entwicklung: CSP erlaubt Inline‑Skripte/‑Styles zur besseren DX (`script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'`).
-- Produktion: CSP ist strikt, ohne `unsafe-inline` für Skripte/Styles (`script-src 'self'; style-src 'self'`).
+### Teaching und Authoring
 
-#### API-Caching-Policy
-- Personalisierte API‑Antworten (Teaching/Users) werden mit `Cache-Control: private, no-store` geliefert.
-- Gilt für GET‑Listen/Details und ebenso für erfolgreiche POST/PATCH (201/200),
-  um Proxy‑/Browser‑Caching sensibler Daten auszuschließen.
-- Ziel: Keine Zwischenspeicherung in geteilten Proxies/Browsern; verhindert ungewolltes Leaken von personenbezogenen Daten.
+Lehrkräfte bearbeiten Kurse und wiederverwendbare Lerneinheiten im SvelteKit-Arbeitsraum. Die Oberfläche verwendet objektorientierte Teaching-Endpunkte für Mutationen und dedizierte Read Models für komplexe Räume. Modulare Lerneinheiten bestehen aus Phasen, Lernmodulen, Übungsmodulen, Abschnitten und gerichteten Kanten. Freigaben binden Inhalte an einen Kurs, ohne die wiederverwendbare Lerneinheit zu duplizieren.
 
-#### Redirect‑URI‑Sicherheit
-- `redirect_uri` wird dynamisch nur dann auf den Request‑Host gesetzt, wenn
-  dieser Host gegen `WEB_BASE` (oder die konfigurierte `OIDC_CFG.redirect_uri`)
-  übereinstimmt. Bei Mismatch wird die statische `redirect_uri` verwendet.
+Kurseinladungen gehören zum Teaching-Kontext. Pro aktivem Kurs existiert höchstens eine aktive, 24 Stunden gültige Einladung. Das Capability-Token liegt weder vollständig in PostgreSQL noch in Logs, reist ausschließlich im URL-Fragment und wird erst nach erfolgreichem Keycloak-Login beziehungsweise Registrierung eingelöst. Rotation, Widerruf, Archivierung und Einlösung sind atomar. QR-Codes werden lokal im Browser erzeugt; der Worker nutzt für einzelne Einladungsmails dasselbe konfigurierte SMTP-Relay wie Keycloak.
 
-#### Nonce & Session‑TTL
-- Nonce: Beim Start des Login‑Flows generiert die App zusätzlich zum `state` eine OIDC‑`nonce`. Diese wird in der Authorization‑URL mitgegeben und beim Callback gegen das `nonce`‑Claim des ID‑Tokens geprüft. Mismatch → `400` + `Cache-Control: private, no-store`.
-- Session‑TTL & Cookies: GUSTAV trennt Access-Token-Ablauf, BFF-Session-TTL
-  und App-Session-TTL. Der aktuelle Default für BFF- und App-Session beträgt
-  24 Stunden. Details siehe
-  `docs/references/auth_sessions_and_cookies.md`.
-- /api/me: liefert zusätzlich `expires_at` (UTC‑ISO‑8601), damit Clients die Restlaufzeit anzeigen können. Antworten sind nie cachebar.
+Details: `docs/references/teaching.md` und `docs/references/user_management.md`.
 
-## Deployment & Betrieb
-- Containerisiert über `Dockerfile` und `docker-compose.yml`.
-- Reverse‑Proxy: Caddy (hostbasiertes Routing). Lokal ist Port `443` gemappt (TLS, `tls internal`).
-- Entwicklungsstart: `docker compose up --build`. Web und Learning-Worker laufen ohne Quellcode-Bind-Mount aus dem gebauten Image, damit lokal dasselbe Artefakt wie in Produktion geprüft wird. Zugriff: `app.localhost` und `id.localhost`.
-- Readiness: `GET /health` prüft die erforderliche Teaching-Datenbank. Solange der separat verwaltete Supabase-Stack nicht erreichbar ist, antwortet der Webdienst mit `503`; beim nächsten Aufruf wird die Verbindung ohne Web-Neustart erneut versucht. Antworten sind nicht cachebar (`Cache-Control: private, no-store`).
+### Learning und KI-Verarbeitung
 
-#### Migration & Ops Notes
-- Hinweis: Dieses öffentliche Repo enthält keine produktionsspezifischen Runbooks/Ops-Skripte.
-- Hardware Cutover Playbook: `docs/migration/hardware_cutover_playbook.md`.
-- DB Provisioning/DSN/Netz: `docs/references/db_provisioning.md`, `docs/references/config_matrix.md`, `docs/references/network_topology.md`, `docs/references/compose_env.md`.
-- Make‑Ziele: `docs/references/make_targets.md`.
-- E2E How‑To: `docs/tests/e2e_howto.md`.
+1. Eine lernende Person sieht nur freigegebene Inhalte ihres Kurses.
+2. Abgaben werden idempotent gespeichert und erzeugen bei Bedarf einen Job.
+3. Der Worker beansprucht Jobs konkurrierungssicher, führt externe KI-Aufrufe außerhalb von Datenbanktransaktionen aus und persistiert ausschließlich validierte Ergebnisse.
+4. Vision-, Feedback- und Dialogprogramme verwenden DSPy über klar begrenzte Adapter.
+5. Die Oberfläche lädt Status, Auswertung und formatives Feedback nach und unterstützt Überarbeitung beziehungsweise endgültige Abgabe.
 
-#### Startup-Sicherheitsprüfung (Production/Staging)
-- Beim Start prüft die App grundlegende Sicherheitsbedingungen und beendet sich bei Fehlkonfigurationen:
-  - `SUPABASE_SERVICE_ROLE_KEY` muss gesetzt sein und darf nicht der Platzhalter `DUMMY_DO_NOT_USE` sein.
-  - `DATABASE_URL` darf in PROD kein `sslmode=disable` enthalten (TLS erzwingen).
-  - `DATABASE_URL` darf in PROD/Stage nicht als Benutzer `gustav_limited` authentifizieren. Diese Rolle ist NOLOGIN; verwende einen umgebungsspezifischen Login (z. B. `gustav_app`), der `IN ROLE gustav_limited` ist.
-- In DEV/TEST sind diese Prüfungen deaktiviert, um lokale Entwicklung zu erleichtern.
-- Lokale DB-Drifts werden über `make verify-preflight-db` früh erkannt. Wenn der Check für `public.learning_submissions` einen Owner-Drift meldet und `supabase migration up` lokal deshalb scheitern würde, ist der offizielle Reparaturweg `make reset-local`.
+Prompts, Schülertexte und Providerantworten werden nicht in Anwendungslogs geschrieben. Telemetrie beschränkt sich auf technische, bereinigte Zähler und Fehlercodes.
 
-### Storage (Supabase)
-- Self‑hosted via Supabase CLI. Storage ist privat; Zugriff ausschließlich über kurzlebige signierte URLs.
-- Interaktive Simulationen sind gespeicherte, ausführbare Materialien, aber keine Aufgaben. Der Presigned-Flow wird nur zum Upload genutzt. Beim Finalisieren prüft der Teaching-Use-Case tatsächliche Bytes, Hash, UTF-8 und Offline-Grenze; Learning und Teaching streamen validiertes HTML über eigene Endpunkte mit CSP- und Iframe-Sandbox ohne Same-Origin-Rechte. Zustand, Ergebnisse und Telemetrie verlassen die Simulation nicht.
-- Bucket: `materials` (lokal in `supabase/config.toml` konfiguriert; 20 MiB; PDF/PNG/JPEG).
-- Adapter: `backend/teaching/storage_supabase.py` implementiert Zugriff (presign upload/download, head, delete).
-- Wiring: In `backend/web/main.py` wird der Adapter automatisch aktiviert, wenn `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` gesetzt sind.
-- ENV: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SUPABASE_STORAGE_BUCKET` (default: `materials`). Siehe `.env.example` und `docs/references/storage_and_gateway.md`.
+Details: `docs/references/learning.md` und `docs/references/learning_ai.md`.
 
-#### Storage-Bootstrap (nur Dev/CI)
-- Script: `backend/storage/bootstrap.py` stellt über die Supabase-REST-API sicher, dass die Lehr‑ (`SUPABASE_STORAGE_BUCKET`/`materials`) und Lern-Buckets (`LEARNING_STORAGE_BUCKET`/`submissions`) existieren.
-- Opt-in: Das Script läuft ausschließlich, wenn `AUTO_CREATE_STORAGE_BUCKETS=true` gesetzt ist (z. B. bei `docker compose run --rm web python -m backend.storage.bootstrap`). Standardwert in `.env.example` und `docker-compose.yml` ist `false`.
-- Produktionsregel: Prod/Stage setzen das Flag _nie_. Bucket-/Policy-Änderungen erfolgen ausschließlich über Migrationen oder explizite Admin-Schritte (Supabase-Konsole/Terraform). Der Startup-Guard (`backend/web/config.ensure_secure_config_on_startup`) beendet Prod-Builds, falls das Flag fälschlich aktiv ist.
-- Sicherheit: Das Script benötigt die Service-Role (`SUPABASE_SERVICE_ROLE_KEY`), erstellt nur fehlende Buckets (idempotent) und ändert keine Policies. Logs enthalten Warnungen, falls trotz Aktivierung Buckets fehlen – so wird ersichtlich, dass ein manueller Eingriff nötig ist.
+### H5P
 
-### RLS & Ordering (Teaching/Sections)
-- RLS‑Identität: Heute setzt jede DB‑Operation `SET LOCAL app.current_sub = '<sub>'` (psycopg), sodass Policies die Aufrufer‑Identität kennen. Dieses Muster wird mittelfristig durch JWT/Claims in Policies ersetzt (separater Plan).
-- Rollen‑Trennung: `gustav_limited` definiert die Berechtigungen (RLS/Grants) und ist NOLOGIN. Die Anwendung verbindet sich über einen umgebungsspezifischen Login‑User (z. B. `gustav_app`), der `IN ROLE gustav_limited` ist.
-- Author‑Scope: `unit_sections` ist über `units.author_id = app.current_sub` abgesichert (SELECT/INSERT/UPDATE/DELETE).
-- Atomare Reorder: Unique `(unit_id, position)` ist DEFERRABLE; Reorder setzt `SET CONSTRAINTS … DEFERRED` und updated alle Positionen in einer Transaktion.
-- Concurrency: Neue `position` wird mit Row‑Lock auf die Unit‑Sections ermittelt, um doppelte Positionen zu vermeiden.
+Der H5P-Service ist ein isolierter Driver. Browserzugriff erhält kurzlebige, zweckgebundene Berechtigungen. Inhalte und Bibliotheken gelten als vertrauenswürdiger ausführbarer Inhalt und dürfen nur durch berechtigte Lehrkräfte importiert oder bearbeitet werden. Same-Origin-, Cookie- und interner Service-Authentifizierungsschutz bleiben an jeder Übergabe erhalten.
 
-#### SSR‑UI für Abschnitte (API‑only)
-- Seite `/units/{unit_id}` lädt/ändert ausschließlich über die Teaching‑API:
-  - Unit: `GET /api/teaching/units/{unit_id}` (authorOnly)
-  - Sections: `GET /api/teaching/units/{unit_id}/sections`
-  - Create: `POST /api/teaching/units/{unit_id}/sections`
-  - Delete: `DELETE /api/teaching/units/{unit_id}/sections/{section_id}`
-  - Reorder: `POST /api/teaching/units/{unit_id}/sections/reorder`
-- Der DOM enthält immer einen stabilen Sortable‑Container (auch bei leerer Liste) zur sofortigen Reinitialisierung nach HTMX‑Swaps.
-- Drag & Drop löst einen Fetch mit `credentials: same-origin` und `X‑CSRF‑Token` aus; es gibt keine parallelen HTMX‑Reorder‑Requests.
-- Fehlerfälle: API-Fehlercodes (z.B. `invalid_title`, `not_found`) werden UI-seitig angezeigt; fehlgeschlagene Reorder-Requests melden sich per Alert.
+## Daten, Sicherheit und Betrieb
 
-#### SSR‑UI für Materialien & Aufgaben
-- Abschnitts‑Detailseite `/units/{unit_id}/sections/{section_id}` zeigt nur die Listen (Materialien, Aufgaben) und zwei klare Aktionen „+ Material“ / „+ Aufgabe“.
-- Erstellen erfolgt auf getrennten Seiten:
-  - `/units/{u}/sections/{s}/materials/new`: Text‑Material (title, body_md) und Datei‑Upload (Intent → Upload → Finalize). CSRF in beiden Formularen. Bei Datei‑Material Finalize erzeugt Material per API.
-  - `/units/{u}/sections/{s}/tasks/new`: Anweisung, 0–10 Kriterien, Hinweise, optional `due_at` und `max_attempts`.
-- Per‑Entry‑Detailseiten:
-  - Material: `/units/{u}/sections/{s}/materials/{m}` mit Bearbeiten/Löschen; bei Datei‑Material wird „Download anzeigen“ (presigned URL) eingeblendet.
-  - Aufgabe: `/units/{u}/sections/{s}/tasks/{t}` mit Bearbeiten/Löschen (inkl. Kriterien/Hinweise/due_at/max_attempts).
-- PRG‑Muster: POST der UI routet immer zur API und leitet danach (303) zur passenden SSR‑Seite zurück.
+- `supabase/migrations/` ist die einzige Quelle der Wahrheit für das Datenbankschema.
+- Die Anwendung verwendet eine begrenzte Datenbankrolle; privilegierte Migrationen und Worker-Zugriffe sind getrennt.
+- RLS und eng begrenzte `SECURITY DEFINER`-Funktionen schützen fachliche Projektionen und atomare Abläufe.
+- Supabase Storage ist privat. Downloads und Uploads erfolgen über kurzlebige, geprüfte Intents oder Proxy-Grenzen.
+- Secrets liegen ausschließlich in der Umgebung. Produktion und lokale Umgebung verwenden dieselben Namen und Startprüfungen.
+- Personenbezogene Daten, Tokens, Prompts und Inhaltsdaten dürfen nicht in Logs, Beispielen oder öffentlichen Tickets erscheinen.
+- Ein produktiver Schulbetrieb benötigt ein eigenes Datenschutz-, Backup-, Monitoring- und Wiederherstellungskonzept.
 
-### Lokaler Betrieb & UFW
-- Standard‑Empfehlung: Nur der Proxy (Caddy) published den Port; Services (web, keycloak) sind intern → UFW muss keine zusätzlichen Regeln erlauben.
-- Optional LAN‑Betrieb: Port‑Bindung von Caddy auf `0.0.0.0:443`; UFW‑Regel: `allow from <LAN‑CIDR> to any port 443 proto tcp`.
+## Quellstruktur
 
-## Migrationspfad zu einer getrennten SPA (optional)
-Wenn UI‑Anforderungen wachsen (Offline, State‑heavy, App‑Store), kann ein separates `frontend/` entstehen. Schritte:
-1) API aus SSR‑Routen herauslösen, strikt nach Vertrag (`api/openapi.yml`).
-2) Auth‑Flow und CORS für Mehr‑Origin konfigurieren.
-3) SSR weiter für Server‑Seiten oder reine API fahren; SPA konsumiert JSON.
+- `frontend/` – SvelteKit-Produktoberfläche und Browser-BFF;
+- `backend/web/` – FastAPI-API-Adapter und Runtime-Komposition;
+- `backend/identity_access/` – Identität, Sessions und Keycloak-Adapter;
+- `backend/teaching/` – Teaching-Modelle, Services und Persistenzadapter;
+- `backend/learning/` – Learning Use Cases, Practice, Worker und KI-Adapter;
+- `backend/storage/` – Storage-Ports und Adapter;
+- `h5p-service/` – isolierter H5P-Service;
+- `api/openapi.yml` – öffentlicher API-Vertrag;
+- `supabase/migrations/` – versioniertes Datenbankschema;
+- `reverse-proxy/` – Caddy-Konfiguration;
+- `docs/` – Architektur, Referenzen, Entscheidungen und wissenschaftliche Grundlagen;
+- `legacy-code-alpha1/` – historische Referenz, nicht Teil der aktiven Runtime.
 
-## Zusammenarbeit & Dokumentation
-- Begriffe konsistent mit `docs/glossary.md:1` verwenden.
-- Kontextzuschnitte aus `docs/bounded_contexts.md:1` beachten.
-- DB‑Änderungen synchron zu `docs/database_schema.md:1` dokumentieren (generiert aus Migrationen oder manuell als Übersicht).
-- Größere Änderungen vorab in `docs/plan/` skizzieren; Ergebnisse und Entscheidungen nachvollziehbar halten.
+## Qualitätsgrenzen
+
+- `make verify` prüft Backend, Frontend, H5P, OpenAPI, Importgrenzen, Repository-Sicherheit und Dokumentationsverträge.
+- `make verify-feature` ergänzt für nutzerseitige Änderungen den authentifizierten Browser-Rundlauf.
+- `make test-architecture-boundaries` schützt Clean-Architecture-Grenzen mit `architecture-boundary-scan`.
+- `make test-route-map` hält die technische Route Map synchron und bestätigt, dass es keine aktiven Legacy-Produktseiten gibt.
+- `make docker-validate` prüft Compose-, Proxy- und Image-Verträge bei Infrastrukturänderungen.
+
+Weitere Nachweise stehen unter `docs/harness/` und `docs/tests/e2e_howto.md`.

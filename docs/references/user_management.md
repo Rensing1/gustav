@@ -1,5 +1,7 @@
 # Benutzerverwaltung (Identity & Access) — Referenz
 
+Stand: Version 0.0.4, zuletzt geprüft am 2026-08-16.
+
 Ziel: Übersicht über Authentifizierung, Session-Handling und den UserContextDTO, damit nachgelagerte Kontexte (z. B. „Unterrichten“) Nutzer stabil und datenschutzfreundlich adressieren.
 
 Für die kanonische technische Referenz zu Login-Flow, Cookies, BFF-Session,
@@ -102,7 +104,7 @@ Bezeichnung entsteht im Identity-Adapter; Frontends formatieren sie nicht neu.
   - Wird als vorausgefüllte E-Mail im Registrierungsformular verwendet.
   - Vor dem Redirect prüft GUSTAV optional die Domain:
     - Env-Variable `ALLOWED_REGISTRATION_DOMAINS` (kommagetrennt, z. B. `@school.example`)
-    - Bei erlaubter Domain → normaler Redirect (302/204, je nach HTMX).
+    - Bei erlaubter Domain → normaler OIDC-Registrierungsstart über den SvelteKit-Browser-BFF.
     - Bei nicht erlaubter oder offensichtlich ungültiger E-Mail → `400` mit JSON  
       `{ error: "invalid_email_domain", detail: "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: <Liste aus ALLOWED_REGISTRATION_DOMAINS>" }`.
 - Dieselbe Env-Variable steuert auch den Keycloak-Realm-Import beim Image-Build (`docker compose up -d --build`); damit lesen App, Browser-BFF und IdP dieselbe Quelle der Wahrheit.
@@ -181,10 +183,12 @@ Der Worker akzeptiert für Kurs-Einladungen ausschließlich `KC_SMTP_STARTTLS=tr
     - Footer mit Support-Hinweis: „Bei Fragen melde dich unter: support@school.example“.
 
 ## Integration in UI
-- Sidebar zeigt den Anzeigenamen (`name`) und die primäre Rolle (Priorität: admin > teacher > student).
-- HTMX: Unauthentisierte Teil‑Requests → `401` mit `HX-Redirect: /auth/login`.
+- Die SvelteKit-Top-Bar zeigt den Anzeigenamen (`name`) und ausschließlich die für die aktuellen Rollen erlaubten Produkträume.
+- Geschützte SvelteKit-Seiten lesen die gemeinsame Session-Projektion im Root-Layout. Fehlt oder verfällt die BFF-Session, wird der sichere OIDC-Wiederanmeldungsfluss gestartet.
+- Der Browser spricht für komplexe Seiten primär mit SvelteKit. FastAPI bleibt Auth-Bridge und API-Adapter; ehemalige HTMX-Produktpfade sind nicht mehr aktiv.
 
-## Erweiterungen (Ausblick)
-- Persistente Sessions aktivieren via `SESSIONS_BACKEND=db` und DSN (psycopg3).
-- IServ‑Anbindung (OIDC/SAML) und Account‑Linking über `sub`/E‑Mail.
-- Rollen‑Guards als wiederverwendbare Policies für „Unterrichten“.
+## Aktueller Betriebsstand und Ausblick
+- Das verbindliche Compose-Profil verwendet mit `SESSIONS_BACKEND=db` persistente App-Sessions. In-Memory-Stores sind explizite Test-Doubles und kein produktiver Fallback.
+- Auch BFF-Sessions und CLI-Tokens werden im normalen Compose-Betrieb datenbankgestützt und fail-closed betrieben.
+- Rollen- und Ownership-Guards sind als wiederverwendbare Policies beziehungsweise zentrale Adaptergrenzen etabliert.
+- Eine IServ-Anbindung und ein dafür geprüftes Account-Linking sind weiterhin geplant.

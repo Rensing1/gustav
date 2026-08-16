@@ -1,6 +1,19 @@
-# Database Schema Overview
+# Datenbankschema – ausgewählte sicherheitskritische Strukturen
 
-This document summarizes the production session table introduced for persistent sessions.
+Stand: Version 0.0.4, zuletzt geprüft am 2026-08-16.
+
+Dieses Dokument ist bewusst keine vollständige Spaltenreferenz. Die einzige Quelle der Wahrheit sind die geordneten SQL-Dateien unter `supabase/migrations/`; API-Payloads werden ausschließlich durch `api/openapi.yml` definiert. Hier werden ausgewählte Tabellenfamilien und Sicherheitsentscheidungen erklärt, bei denen eine reine Schemaauflistung den fachlichen Zusammenhang nicht ausreichend zeigt.
+
+## Tabellenfamilien im Überblick
+
+- Identity & Access: `app_sessions`, `bff_sessions`, `cli_tokens`;
+- Teaching: `courses`, `course_memberships`, `course_modules`, `units`, `unit_sections`, `unit_phases`, `unit_modules`, `unit_module_edges`, `unit_materials`, `unit_tasks`, `module_section_releases`;
+- Kurseinladungen: `course_invitations`, `course_invite_redemptions`, `course_invite_mail_batches`, `course_invite_mail_deliveries`;
+- Learning: `learning_submissions`, `learning_submission_jobs`, `learning_submission_task_snapshots`, Dialog- und Exporttabellen;
+- Practice: `learning_practice_states`, `learning_practice_sessions`, `learning_practice_session_stacks`, `learning_practice_session_items`, `learning_practice_attempts`;
+- Betrieb und Datenschutz: `storage_deletion_outbox`, `course_deletion_jobs`, `ai_usage_events`, `dialog_ai_usage_events`, `concern_box_entries`.
+
+Neue Tabellen oder Constraints werden ausschließlich per Migration ergänzt. Diese Übersicht darf deshalb niemals als Grundlage für manuelle Schemaänderungen verwendet werden.
 
 ## public.app_sessions
 
@@ -27,11 +40,22 @@ This document summarizes the production session table introduced for persistent 
 - DSN usage
   - Runtime (app): Use a limited-role DSN (e.g., `gustav_limited`) so RLS is always active.
   - Migrations: Apply via `supabase migration up` (runs as owner/service). The app does not need to switch DSNs.
-  - Sessions note: If `SESSIONS_BACKEND=db` is enabled, `public.app_sessions` requires a service-role DSN. Otherwise keep in-memory sessions to avoid service-role in the app.
+  - Sessions note: Das verbindliche Compose-Profil verwendet `SESSIONS_BACKEND=db`. In-Memory-Sessions sind ausschließlich Test-Doubles und kein produktiver Fallback.
 
 - RLS policies
   - Policies are defined in `supabase/migrations/20251020154107_teaching_rls_policies.sql`.
   - They rely on `SET LOCAL app.current_sub = '<sub>'` per transaction to identify the acting user.
+
+### Kurseinladungen
+
+Die Migrationen `20260815120000_course_invitations.sql`, `20260815121000_course_invitation_redeem_conflict_fix.sql` und `20260815214500_course_invitation_mail_retry_hardening.sql` definieren den aktuellen Vertrag.
+
+- `public.course_invitations` speichert Kursbindung, Ablauf, Widerruf und ausschließlich einen Digest der geheimen Nonce. Das vollständige Capability-Token wird nie persistiert.
+- `public.course_invite_redemptions` macht die Einlösung atomar und idempotent und verhindert den unbemerkten Wiedereintritt über eine bereits verwendete Einladung.
+- `public.course_invite_mail_batches` gruppiert einen Versandauftrag ohne dauerhaft eine Empfängerliste zu veröffentlichen.
+- `public.course_invite_mail_deliveries` hält temporäre Zustellarbeit. Erfolgreiche Klartextadressen werden sofort entfernt; endgültig fehlgeschlagene spätestens nach der festgelegten Aufbewahrungsfrist.
+- Eng begrenzte `SECURITY DEFINER`-Funktionen führen Rotation, Vorschau, Einlösung und Queue-Übergänge unter expliziten Rollen- und Ownership-Prüfungen aus.
+- Archivierung eines Kurses widerruft seine aktive Einladung atomar.
 
 ### `public.unit_materials`
 
@@ -160,3 +184,14 @@ Hinweise
 - DSN & RLS
   - Runtime (app): ausschließlich Limited‑Role‑DSN (`gustav_limited`), siehe `backend/learning/repo_db.py` (DSN‑Auflösung priorisiert `LEARNING_DATABASE_URL`).
   - Tests/Dev: Fallback‑DSNs greifen auf `127.0.0.1:54322` (Supabase CLI) zurück, damit RLS‑Pfad getestet wird.
+
+### Practice
+
+Practice-Daten sind lernenden-, kurs- und aufgabengebunden:
+
+- `public.learning_practice_states` speichert den versionierten Wiederholungszustand je Lernendem und Aufgabe.
+- `public.learning_practice_sessions` stellt höchstens eine aktive Sitzung je Lernendem sicher.
+- `public.learning_practice_session_stacks` und `public.learning_practice_session_items` frieren die Auswahl einer Sitzung als nachvollziehbaren Snapshot ein.
+- `public.learning_practice_attempts` protokolliert einzelne native oder H5P-Versuche und deren fachliche Einstufung.
+
+Der Scheduler-Vertrag ist versioniert (`gustav-practice-v1`). Musterlösungen und Auswertungsdetails dürfen nur über berechtigungsgeprüfte Helper beziehungsweise Endpunkte gelesen werden.

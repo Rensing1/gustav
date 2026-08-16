@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: GUSTAV API
-  version: 0.0.2
+  version: 0.0.4
   description: >-
     Contract-first API for authentication (Keycloak), Teaching, and Learning.
     Endpoints cover login redirect, callback handling, logout, session info,

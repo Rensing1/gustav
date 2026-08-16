@@ -29,8 +29,8 @@ def test_main_app_delegates_shell_composition_to_dedicated_module() -> None:
     source_lines = [line.strip() for line in source.splitlines()]
     assert "app = create_app_shell()" not in source_lines
     assert "mount_static_files(app, static_dir)" not in source_lines
-    assert main.app.title == "GUSTAV alpha-2"
-    assert main.app.version == "0.0.2"
+    assert main.app.title == "GUSTAV"
+    assert main.app.version == "0.0.4"
     assert any(getattr(route, "path", "") == "/static" for route in main.app.routes)
 
 
@@ -199,6 +199,10 @@ def test_main_delegates_auth_only_test_app_to_dedicated_module() -> None:
     assert "import secrets" not in source
     assert "from fastapi.staticfiles import StaticFiles" not in source
     assert "backend.web.main" not in module_source
+
+    auth_test_app = auth_only_app.create_app_auth_only()
+    assert auth_test_app.title == "GUSTAV (auth-only)"
+    assert auth_test_app.version == "0.0.4"
 
 
 def test_main_delegates_auth_bridge_routes_to_dedicated_router() -> None:

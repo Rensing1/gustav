@@ -1,300 +1,156 @@
-# Unterrichten (Teaching) — Referenz
+# Unterrichten (Teaching) – Referenz
 
-Ziel: Kursmanagement-API und -Schema dokumentieren. Lehrkräfte erstellen und verwalten Kurse, fügen Schüler hinzu/entfernen und sehen Mitglieder. Schüler sehen ihre belegten Kurse.
+Stand: Version 0.0.4, zuletzt geprüft am 2026-08-16.
+
+Diese Referenz beschreibt die fachlichen Fähigkeiten und technischen Grenzen des Teaching-Kontexts. `api/openapi.yml` ist die Quelle der Wahrheit für Endpunkte und Payloads; `supabase/migrations/` ist die Quelle der Wahrheit für das Schema.
+
+## Produktoberfläche
+
+Die Lehrkraftoberfläche liegt vollständig in SvelteKit:
+
+- `/teaching` – Einstieg in den Teaching-Raum;
+- `/teaching/courses` – aktive und archivierte Kurse;
+- `/teaching/courses/{courseId}` – Kurskontext, Mitglieder, Lerneinheiten und Kurseinladung;
+- `/teaching/units` – wiederverwendbare Lerneinheiten;
+- `/teaching/units/{unitId}` – Modulgraph und Struktur;
+- `/teaching/units/{unitId}/nodes/{nodeId}` – Inhalte und Einstellungen eines Graphknotens.
+
+SvelteKit komponiert Seiten und Form Actions als Browser-BFF. Fachliche Mutationen laufen über die Teaching-API; es gibt keine produktiven FastAPI-SSR-/HTMX-Seiten und keinen Repository-Bypass aus dem Frontend.
+
+## Kurse
+
+Ein `Course` ist die konkrete organisatorische Hülle für eine Lerngruppe. Pflichtmetadaten sind Titel, Fach, Klassenstufe und Schuljahresbeginn; ein Halbjahr kann ergänzt werden.
+
+Die API unterstützt insbesondere:
+
+- eigene aktive oder archivierte Kurse listen;
+- Kurs anlegen und Metadaten ändern;
+- Kurs archivieren und versehentliche Archivierung rückgängig machen;
+- mehrere Kurse gesammelt archivieren;
+- Löschfolgen vorab anzeigen und endgültige Löschung als wiederholbaren Hintergrundauftrag anstoßen;
+- Status eines eigenen Löschauftrags abfragen.
+
+Archivierte oder zur Löschung vorgemerkte Kurse werden Lernenden nicht als aktive Kurse angeboten. Schreibzugriffe sind der besitzenden Lehrkraft vorbehalten.
+
+## Mitgliedschaften
+
+`Course Membership` verbindet einen Kurs mit dem opaken OIDC-`sub` einer lernenden Person. API und UI speichern keine E-Mail-Adresse als fachlichen Schlüssel.
+
+Lehrkräfte können:
+
+- Mitglieder eines eigenen Kurses paginiert lesen;
+- Lernende über den Identity-&-Access-Directory-Adapter suchen;
+- Mitgliedschaften idempotent hinzufügen;
+- Mitgliedschaften entfernen.
+
+Anzeigenamen werden über den Directory-Adapter aus Keycloak aufgelöst. Teaching übernimmt keine Keycloak-Benutzerdatenbank und formatiert Identitäten nicht erneut.
+
+## Kurseinladungen (Course Invitations)
+
+Unter „Klasse einladen“ kann die besitzende Lehrkraft eines aktiven und vollständig konfigurierten Kurses eine gemeinsame Einladung erzeugen.
+
+- Pro Kurs existiert höchstens eine aktive Einladung.
+- Eine Einladung ist fest 24 Stunden gültig.
+- Eine neue Einladung widerruft die vorherige atomar.
+- Archivierung widerruft die Einladung; eine Wiederherstellung reaktiviert sie nicht.
+- Die Lehrkraft kann den Link kopieren, einen lokal erzeugten QR-Code anzeigen oder herunterladen und einzelne Einladungsmails versenden.
+- E-Mail-Empfänger werden dedupliziert und auf erlaubte Registrierungsdomains begrenzt.
+- Status und fehlgeschlagene Zustellungen können eingesehen; fehlgeschlagene Zustellungen können gezielt erneut eingeplant werden.
+
+Das Capability-Token liegt ausschließlich im URL-Fragment. Es wird weder vollständig gespeichert noch geloggt. Die öffentliche Vorschau erhält das Token explizit im Request Body und gibt nur Kurstitel und Ablaufzeit zurück. Nach Keycloak-Registrierung beziehungsweise Login löst ausschließlich eine lernende Person die Einladung atomar und idempotent ein.
+
+Wurde eine über diesen Link entstandene Mitgliedschaft später entfernt, verhindert derselbe Link einen unbeabsichtigten Wiedereintritt. Erst eine bewusste Rotation durch die Lehrkraft schafft eine neue Capability.
+
+Relevante API-Gruppen:
+
+- `/api/teaching/courses/{course_id}/invitations*` für Lehrkräfte;
+- `/api/course-invitations/preview` für die datensparsame Vorschau;
+- `/api/course-invitations/redeem` für den authentifizierten Beitritt.
+
+Details zum Auth-Rücksprung, Cookie und SMTP-Betrieb stehen in `docs/references/user_management.md`.
+
+## Lerneinheiten und Modulgraph
+
+Eine `Unit` ist wiederverwendbarer Unterrichtsinhalt und gehört ihrer Autorin beziehungsweise ihrem Autor. GUSTAV unterstützt:
+
+- `linear`: klassische Abschnitte mit kursbezogener Freigabe;
+- `modular`: Phasen, Graphknoten und gerichtete Voraussetzungen.
+
+Modulare Lerneinheiten bestehen aus:
+
+- `Unit Phase`: ordnet Graphknoten visuell und fachlich;
+- `Learning Module`: regulärer Lernschritt mit Material und Aufgaben;
+- `Practice Module`: wiederholbarer Übungsstapel ohne ausgehende Kanten;
+- `Graph Edge`: gerichtete Voraussetzung zwischen Knoten;
+- `required_prereq_count`: Anzahl benötigter Vorgänger für die Freischaltung.
+
+Die Teaching-API bietet objektorientierte Endpunkte für Units, Phasen, Module, Kanten und Inhalte sowie eigene Read Models für den SvelteKit-Arbeitsraum. Reihenfolgen werden serverseitig als vollständige ID-Mengen validiert, damit Duplikate und verlorene Elemente nicht unbemerkt übernommen werden.
+
+## Materialien
+
+Materialien gehören zu einem Abschnitt oder Modul. Unterstützte Arten:
+
+- `markdown`: Textinhalt;
+- `file`: private Datei mit geprüften Metadaten;
+- `simulation`: vollständig eingebettetes HTML mit optionaler Orientierung.
+
+Dateien und Simulationen verwenden den Ablauf `Upload Intent → Upload → Finalize`. Dabei werden Pfad, MIME-Typ, Größe, Hash und fachliche Bindung geprüft. Simulationen werden zusätzlich auf selbstenthaltene Inhalte untersucht und in einer Offline-Iframe-/CSP-Sandbox ausgeliefert.
+
+Direkte Storage-Keys erscheinen nicht in der Oberfläche. Vorschau und Download verwenden berechtigungsgeprüfte, kurzlebige Zugriffe.
+
+## Aufgaben
+
+Aufgaben besitzen eine Anweisung und abhängig vom Typ Kriterien, Lehrkraftkontext, Musterlösung oder typbezogene Konfiguration. Unterstützte Typen:
+
+- `native` – Text- oder Dateiabgabe mit formativem Feedback;
+- `h5p` – interaktive H5P-Aufgabe;
+- `visual` – bildbezogene Aufgabenstellung und visuelles Feedback;
+- `scratch` – Scratch-`.sb3`-Artefakt;
+- `calliope` – MakeCode-`.hex`-Artefakt;
+- `filius` – Filius-`.fls`-Artefakt;
+- `dialog` – KI-gestützter fachlicher Dialog.
+
+Übungsmodule erlauben nur wiederholbare native oder H5P-Aufgaben. Für native Übungsaufgaben sind Kriterien, Lehrkraftkontext und Musterlösung erforderlich; Abgabefrist und maximale Versuche sind dort nicht zulässig.
+
+## Kurszuordnung und Freigabe
+
+Ein `Course Module` ordnet eine wiederverwendbare Lerneinheit einem Kurs zu. Freigaben bestimmen, welche linearen Abschnitte beziehungsweise modularen Inhalte für Lernende sichtbar sind. Ownership, Kursmitgliedschaft und Sichtbarkeit werden nicht allein in der UI, sondern an Repository- und Datenbankgrenzen geprüft.
+
+Die Live- und Diagnostikräume greifen lesend auf eigene Projektionen zu. Details stehen in `docs/references/teaching_live.md` und `docs/bounded_contexts.md`.
 
 ## Teaching Authoring CLI
 
-Lehrkräfte können zentrale Authoring-Aufgaben auch über die GUSTAV CLI ausführen: Lerneinheiten, Abschnitte, Phasen, Module, Material und Aufgaben listen, erstellen, bearbeiten, löschen und umsortieren. Die CLI nutzt dieselben Teaching-Endpunkte wie die Weboberfläche und authentifiziert sich mit eigenen CLI-Tokens.
+Die GUSTAV CLI verwendet dieselben Teaching-Endpunkte wie die Weboberfläche. CLI-Tokens besitzen explizite `read`-, `write`- und `delete`-Capabilities. Cookiegebundene Browserfunktionen wie vollständige Benutzerlisten, H5P-Editor-JSON oder Dialogvorschau werden nicht durch breitere CLI-Rechte ersetzt.
 
-Siehe: `docs/references/gustav_cli.md`.
+Aufruf- und Sicherheitsdetails: `docs/references/gustav_cli.md`.
 
-## Endpunkte (API)
-- `GET /api/teaching/courses?limit&offset`
-  - Lehrer: eigene Kurse; Schüler: belegte Kurse
-  - 200 `[Course]`, 401/403 gemäß Auth-Middleware
-  - Cache: `Cache-Control: private, no-store`
-- `POST /api/teaching/courses` (Teacher only)
-  - Body `CourseCreate { title, subject?, grade_level?, term? }`
-  - 201 `Course`, 400 bei ungültigen Feldern, 403 wenn nicht `teacher`
-  - Cache: `Cache-Control: private, no-store`
-- `PATCH /api/teaching/courses/{course_id}` (Owner only)
-  - Body `CourseUpdate` (alle Felder optional)
-  - 200 `Course` oder 400/403/404
-- `DELETE /api/teaching/courses/{course_id}` (Owner only)
-  - 204, entfernt auch Mitgliedschaften; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
-  - CSRF: Same‑Origin erforderlich; Cache: `Cache-Control: private, no-store`
-- `GET /api/teaching/courses/{course_id}` (Owner only)
-  - 200 `Course`; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
-  - Cache: `Cache-Control: private, no-store`
-- `GET /api/teaching/courses/{course_id}/members?limit&offset` (Owner only)
-  - 200 `[CourseMember { sub, name, joined_at }]`; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
-  - Cache: `Cache-Control: private, no-store`
-- `POST /api/teaching/courses/{course_id}/members` (Owner only, idempotent)
-  - Body `{ student_sub }`
-  - 201 neu, 204 existierend, 400/403/404
-- `DELETE /api/teaching/courses/{course_id}/members/{student_sub}` (Owner only, idempotent)
-  - 204; 404 wenn Kurs nicht existiert; 403 wenn nicht Owner
-  - CSRF: Same‑Origin erforderlich; Cache: `Cache-Control: private, no-store`
-- `GET /api/users/search?q=&role=student&limit` (Users‑Namespace)
-  - Nur Teacher/Admin. Mindestlänge `q ≥ 2`, Limit-Cap `≤ 50`
-  - 200 `[{ sub, name }]`, 400/403
-- `GET /api/users/list?role=student&limit&offset` (Users‑Namespace)
-  - Nur Teacher/Admin. Paginierte Auflistung von Nutzern mit Rolle `student`
-  - 200 `[{ sub, name }]`, 400/403
+## Architektur und Persistenz
 
-### SSR‑UI: Mitglieder verwalten
-- Rechte Spalte (Schüler hinzufügen) lädt beim Seitenaufruf automatisch bis zu 50 Schüler (Rolle `student`) und schließt bereits eingeschriebene Mitglieder aus.
-- Das Suchfeld filtert diese Liste serverseitig (q) — es löst keine eigenständige Verzeichnissuche mehr aus.
-- Nach „Hinzufügen“ verschwindet der Schüler aus der Kandidatenliste und erscheint unter „Aktuelle Kursmitglieder“.
-- Nach „Entfernen“ verschwindet der Schüler aus „Aktuelle Kursmitglieder“ und taucht wieder in der Kandidatenliste auf.
+- HTTP-Adapter: aufgeteilte Router unter `backend/web/routes/teaching_*.py`;
+- fachliche Services: `backend/teaching/services/`;
+- PostgreSQL-Adapter: `backend/teaching/repo_db.py`;
+- Identity Directory: Adapter unter `backend/identity_access/`;
+- Storage: Ports und Adapter unter `backend/storage/` und `backend/teaching/storage_supabase.py`;
+- Browser-BFF: `frontend/src/routes/teaching/`.
 
-### Terminologie: student_sub vs. student_id
-- `student_sub` (API, DTO): Das OIDC‑Subject des Schülers, ein stabiler, undurchsichtiger Bezeichner ohne PII. Wird in API‑Requests/Responses verwendet.
-- `student_id` (DB‑Spalte): Speicherung desselben Wertes im Tabellen‑Schema (z. B. `public.course_memberships.student_id`).
-- Bedeutung: Beide meinen dasselbe Feld (OIDC `sub`). Die Benennung unterscheidet sich nur zwischen API (explizit `sub`) und Datenbank (allgemeines `*_id`). Eine Schema‑Angleichung ist perspektivisch möglich; heute gilt: synonym zu verstehen.
+Einige einfache Teaching-Routen orchestrieren Repository-Aufrufe direkt. Neue oder komplexe Fachregeln gehören in framework-unabhängige Services. FastAPI-Routen dürfen keine direkten PostgreSQL-Verbindungen oder Supabase-Clients erzeugen.
 
-### Lerneinheiten & Kursmodule
-- `GET /api/teaching/units?limit&offset` (Teacher only)
-  - 200 `[{ id, title, summary?, author_id, created_at, updated_at }]`
-  - Cache: `Cache-Control: private, no-store`
-- `GET /api/teaching/units/{unit_id}` (Author only)
-  - 200 `{ id, title, summary?, author_id, created_at, updated_at }`; 404 wenn Unit nicht existiert; 403 wenn nicht Autor
-  - Cache: `Cache-Control: private, no-store`
-- `POST /api/teaching/units` (Teacher only)
-  - Body `{ title, summary? }`, 201 `Unit` oder 400/403
-  - Cache: `Cache-Control: private, no-store`
-- `PATCH /api/teaching/units/{unit_id}` (Author only)
-  - 200 `Unit` oder 400/403/404
-- `DELETE /api/teaching/units/{unit_id}` (Author only)
-  - 204 oder 403/404
+## Sicherheit und Datenschutz
 
-#### SSR‑Seite „Abschnitte verwalten“
-- UI: `/units/{unit_id}` (nur Lehrkräfte)
-- Datenquelle: ausschließlich die Teaching‑API (kein Dummy‑Fallback). Reorder nutzt Fetch mit `credentials: same-origin` + `X‑CSRF‑Token` und spricht `POST /api/teaching/units/{unit_id}/sections/reorder` an.
-- `GET /api/teaching/courses/{course_id}/modules` (Owner only)
-  - 200 `[{ id, course_id, unit_id, position, context_notes?, created_at, updated_at }]`
-- `POST /api/teaching/courses/{course_id}/modules` (Owner only)
-  - Body `{ unit_id, context_notes? }`, 201 `CourseModule`; 403 wenn nicht Owner/Autor; 404 wenn Kurs/Unit fehlt; 409 bei Duplicate
-- `POST /api/teaching/courses/{course_id}/modules/reorder` (Owner only)
-  - Body `{ module_ids: [uuid,…] }` repräsentiert die Zielreihenfolge; 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen; 404/403 wie oben
-- `PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility` (Owner only)
-  - Body `{ visible: bool }`, 200 `ModuleSectionVisibility`
-  - 400 mit `detail`: `invalid_course_id | invalid_module_id | invalid_section_id | missing_visible | invalid_visible_type`
-  - 403 wenn nicht Owner oder bei CSRF‑Verletzung (`detail=csrf_violation`); 404 wenn Abschnitt nicht zum Modul gehört
-  - Cache: `Cache-Control: private, no-store`
-  - Fehlerantworten (400/403/404) senden ebenfalls `Cache-Control: private, no-store`.
- - `DELETE /api/teaching/courses/{course_id}/modules/{module_id}` (Owner only)
-   - 204; 404 wenn Modul unbekannt; 403 wenn nicht Owner
-   - CSRF: Same‑Origin erforderlich; Cache: `Cache-Control: private, no-store`
+- Owner- und Author-Prüfungen greifen fail-closed.
+- Schreibende Cookie-Flows benötigen Same-Origin-/CSRF-Schutz.
+- Antworten mit privaten Daten verwenden `Cache-Control: private, no-store`.
+- RLS und owner-gebundene `SECURITY DEFINER`-Helper schützen Datenbankzugriffe.
+- Personen werden fachlich über `sub`, nicht über E-Mail-Adressen, referenziert.
+- Capability-Tokens, SMTP-Adressen und Inhaltsdaten erscheinen nicht in Logs.
+- Fehlende sicherheitskritische DB-Helper führen zu `503`, nicht zu einem weniger geschützten Tabellen-Fallback.
 
-#### Abschnittsfreigaben (Owner) — SSR‑UI
-- Navigation: Modulliste → Button „Abschnitte freigeben“ → `/courses/{course_id}/modules/{module_id}/sections`.
-- Zeile je Abschnitt: links Badge+Titel, rechts Schalter „Freigegeben“. Bei aktivem Zustand erscheint der Hinweis „Freigegeben am <UTC‑ISO>“.
-- Aktion: Schalter sendet `hx-post` an `/courses/{course_id}/modules/{module_id}/sections/{section_id}/toggle`.
-  - Server ruft `PATCH /api/teaching/courses/{course_id}/modules/{module_id}/sections/{section_id}/visibility` (JSON `{ visible }`).
-  - Erfolgreich: Der Abschnitts‑Container (`#module-sections`) wird ersetzt und zeigt eine kurze Erfolgsmeldung „Änderung gespeichert“.
-  - Fehler: Status 400/403/404 wird an den Client propagiert; der Container bleibt unverändert.
-- Sicherheit: CSRF via Same‑Origin‑Prüfung (Origin/Referer müssen zur Server‑Origin passen). Kein Token nötig.
-  RLS/Owner‑Check erfolgt in der DB; Antworten setzen `Cache-Control: private, no-store`.
+## Verifikation
 
-#### Abschnitte (Sections) je Lerneinheit
-- `GET /api/teaching/units/{unit_id}/sections` (Author only)
-  - 200 `[{ id, unit_id, title, position, created_at, updated_at }]`; 403/404 gemäß Ownership‑Guard; 400 bei ungültiger UUID
-  - Cache: `Cache-Control: private, no-store`
-- `POST /api/teaching/units/{unit_id}/sections` (Author only)
-  - Body `{ title[1..200] }`, 201 `Section` am Ende (nächste `position`); 400/403/404
-- `PATCH /api/teaching/units/{unit_id}/sections/{section_id}` (Author only)
-  - Body `{ title[1..200] }` (optional, aber nicht leer), 200 `Section`; 400/404/403
-- `DELETE /api/teaching/units/{unit_id}/sections/{section_id}` (Author only)
-  - 204; verbleibende Abschnitte werden auf `position = 1..n` resequenziert; 400/404/403
-- `POST /api/teaching/units/{unit_id}/sections/reorder` (Author only)
-  - Body `{ section_ids: [uuid,…] }` muss exakt die aktuelle ID‑Menge enthalten
-  - 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen/Invalid‑UUID; 404 bei fachfremden IDs; 403 bei Ownership
+- OpenAPI-Vertrag: `backend/tests/test_openapi_teaching_*.py` und spezialisierte Contract-Tests;
+- API-Verhalten: `backend/tests/test_teaching_*.py`;
+- Datenbank und RLS: `backend/tests/migration/` sowie DB-markierte Repository-Tests;
+- SvelteKit: Tests unter `frontend/src/routes/teaching/`;
+- vollständiger Browserablauf: `@feature-acceptance`-Tests unter `frontend/e2e/`.
 
-#### Materialien (Materials) je Abschnitt
-- `GET /api/teaching/units/{unit_id}/sections/{section_id}/materials` (Author only)
-  - 200 `[{ id, unit_id, section_id, title, body_md?, position, kind, created_at, updated_at, ... }]`
-- `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials` (Author only)
-  - Markdown‑Material anlegen. Body `MaterialCreate { title[1..200], body_md }`
-  - 201 `Material` mit `kind='markdown'`; 400/403/404
-- `PATCH /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}` (Author only)
-  - Body `MaterialUpdate { title?, body_md?, alt_text? }`; `alt_text ≤ 500` (nur Dateien)
-  - 200 `Material`; 400/403/404
-- `DELETE /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}` (Author only)
-  - 204; resequenziert `position = 1..n` im Abschnitt; 403/404
-- `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials/reorder` (Author only)
-  - Body `{ material_ids: [uuid,…] }` muss exakt die aktuelle ID‑Menge enthalten
-  - 200 mit neuer Reihenfolge; 400 (Duplikate/Inkonsistenz/Invalid‑UUID); 404/403
-
-Datei- und Simulations-Flow (presigned Upload)
-- `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials/upload-intents`
-  - Body `{ kind?: 'file'|'simulation', filename, mime_type, size_bytes }`; fehlendes `kind` bedeutet weiterhin `file`
-  - 201 `{ intent_id, material_id, storage_key, url, headers, accepted_mime_types, max_size_bytes, expires_at }`
-  - Akzeptierte MIME: `application/pdf`, `image/png`, `image/jpeg`; Max: `20 MiB`; TTL Upload‑URL: 3 min
-  - Simulation: genau eine `.html`-Datei mit `text/html`, vollständig eingebettet, maximal `5 MiB`
-- Upload via `PUT url` (aus Response) mit angegebenen `headers`
-- `POST /api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize`
-  - Body Datei `{ intent_id, title[1..200], sha256, alt_text? }`; Simulation `{ intent_id, title, sha256, body_md? }`
-  - 201 bei Neuerstellung, 200 wenn bereits finalisiert (idempotent)
-  - 400 Fehlercodes u.a.: `invalid_title | checksum_mismatch | intent_expired | mime_not_allowed | invalid_alt_text`
-  - Simulationen werden serverseitig aus dem Storage gelesen, gegen SHA-256, UTF-8, vollständiges HTML und den Offline-Vertrag geprüft. Externe Ressourcen, Frames, Imports, Netzwerk- und Navigations-APIs werden abgewiesen.
-- Browser-/SSR-Schnitt:
-  - Der eigentliche Datei-Upload läuft im Browser (`upload-intent -> PUT -> sha256 -> finalize`).
-  - Die SvelteKit-Action finalisiert nur noch vorbereitete Uploads; sie lädt keine Presign-URL serverseitig hoch.
-  - Ohne aktiviertes JavaScript bleibt Textmaterial möglich; Datei-Materialien werden mit einer klaren Fehlermeldung abgewiesen statt halb serverseitig versucht.
-- `GET /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url?disposition=inline|attachment`
-  - 200 `{ url, expires_at }`; `Cache-Control: private, no-store`; 400 `invalid_disposition`; 403/404
-- `GET /api/teaching/units/{unit_id}/materials/{material_id}/simulation`
-  - Streamt eine Autorenvorschau mit derselben CSP-/Iframe-Sandbox wie die Lernansicht; niemals Redirect oder Presigned-URL.
-
-#### Aufgaben (Tasks) je Abschnitt
-- `GET /api/teaching/units/{unit_id}/sections/{section_id}/tasks` (Author only)
-  - 200 `[{ id, unit_id, section_id, instruction_md, criteria[], teacher_context_md?, due_at?, max_attempts?, position, kind, created_at, updated_at }]`
-- `POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks` (Author only)
-  - Body `TaskCreate { instruction_md, criteria?, teacher_context_md?, due_at?, max_attempts? }`
-  - 201 `Task`; 400 Val.-Fehler: `invalid_instruction_md | invalid_criteria | invalid_due_at | invalid_max_attempts | invalid_teacher_context_md`; 403/404
-- `PATCH /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}` (Author only)
-  - Body `TaskUpdate` (alle Felder optional; leere Werte sind ungültig, wo zutreffend)
-  - 200 `Task`; 400/403/404
-- `DELETE /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}` (Author only)
-  - 204; Resequenzierung `position = 1..n`; 403/404
-- `POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks/reorder` (Author only)
-  - Body `{ task_ids: [uuid,…] }` muss exakt die aktuelle ID‑Menge enthalten
-  - 200 mit neuer Reihenfolge; 400 bei Duplikaten/Inkonsistenzen/Invalid‑UUID; 404/403
-
-Validierungsregeln (Tasks)
-- `instruction_md`: Pflicht, nicht leer.
-- `criteria`: Liste aus 0..10 nicht‑leeren Strings.
-- `due_at`: ISO‑8601 mit Zeitzone; `...Z` wird akzeptiert (UTC).
-- `max_attempts`: Ganzzahl ≥ 1.
-- `kind`: read‑only, aktuell stets `native` (Forward‑Compat für H5P).
-
-Siehe OpenAPI: `api/openapi.yml` (Contract‑First, Quelle der Wahrheit).
-
-### SSR‑UI: Materialien & Aufgaben (Überblick)
-- `/units/{unit_id}/sections/{section_id}` zeigt nur Listen (Materialien, Aufgaben) sowie Aktionen „+ Material“ und „+ Aufgabe“.
-- Erstellen erfolgt auf separaten Seiten:
-  - Materialien: `/units/{u}/sections/{s}/materials/new` (Text oder Datei‑Upload mit Intent→Finalize)
-  - Aufgaben: `/units/{u}/sections/{s}/tasks/new` (instruction_md, Kriterien[0..10], teacher_context_md, due_at?, max_attempts?)
-- Detailseiten:
-  - Material: `/units/{u}/sections/{s}/materials/{m}` (Bearbeiten/Löschen, Inline‑Preview für Datei‑Materialien)
-  - Aufgabe: `/units/{u}/sections/{s}/tasks/{t}` (Bearbeiten/Löschen)
-- Sicherheit: CSRF in Formularen, `Cache-Control: private, no-store` für SSR, Delegation an API (kein Repo‑Bypass), PRG nach POST.
-  - PRG‑Semantik: Erfolgreiche POSTs verwenden `303 See Other` (z. B. `/units`, `/courses`).
-
-#### Datei‑Materialien & FilePreview
-- UI‑Komponente: `backend/web/components/file_preview.py` (`FilePreview`).
-- Verhalten:
-  - `image/*` → Inline‑`<img>` mit begrenzter Höhe (`file-preview file-preview--image`).
-  - `application/pdf` → Inline‑`<iframe>`‑Viewer (`file-preview file-preview--pdf`).
-  - andere MIME‑Typen → Fallback‑Downloadlink (`file-preview file-preview--download`).
-- Sicherheit:
-  - Verwendet ausschließlich kurzlebige Download‑URLs aus der Teaching‑API (`download-url?disposition=inline`); Bucket‑Keys werden nie direkt gerendert.
-  - SSR‑Seiten bleiben `Cache-Control: private, no-store`; Download‑URL‑Antworten behalten ihre eigenen No‑Store‑Header.
-- Accessibility & JS:
-  - Wrapper trägt `data-file-preview="true"`, `role="button"`, `tabindex="0"` und `aria-label="Dateivorschau vergrößern/verkleinern"` als Hook für Tastaturnavigation.
-  - JavaScript (`initFilePreviewZoom`) toggelt `file-preview--zoomed` bei Klick/Enter/Space auf dem Wrapper, lässt aber echte Links innerhalb des Fallback‑Viewers unverändert (keine Blockade von Downloads).
-  - Anfangszustand: SSR rendert nie `file-preview--zoomed`; der Zoom-State wird ausschließlich clientseitig gesetzt.
-
-## Schemas
-- `Course { id, title, subject?, grade_level?, term?, teacher_id, created_at, updated_at }`
-- `CourseCreate { title[1..200], subject?[≤100], grade_level?[≤32], term?[≤32] }`
-- `CourseUpdate` (alle optional; gültige Längen wie oben, Validierung durch Server)
-- `CourseMember { sub, name, joined_at }`
-
-## Datenbank (PostgreSQL/Supabase)
-Migration: `supabase/migrations/20251020150101_teaching_courses.sql`
-- `public.courses`
-  - `id uuid pk default gen_random_uuid()`
-  - `title text not null`
-  - `subject text null`, `grade_level text null`, `term text null`
-  - `teacher_id text not null`
-  - `created_at timestamptz default now()`, `updated_at timestamptz default now()`
-  - Trigger `trg_courses_updated_at` (setzt `updated_at`)
-  - Index `idx_courses_teacher(teacher_id)`
-- `public.course_memberships`
-  - `course_id uuid` fk → `courses(id)` on delete cascade
-  - `student_id text not null`, `created_at timestamptz default now()`
-  - PK `(course_id, student_id)`, Index `idx_course_memberships_student(student_id)`
-- RLS: aktiviert, Zugriff mit Limited‑Role‑DSN im Backend (keine Service‑Role zur Laufzeit). Keine Grants an `anon`/`authenticated`.
-
-Einheiten & Module: `supabase/migrations/20251021104017_teaching_units_modules.sql`
-- `public.units` (author‑scoped)
-  - `id uuid pk`, `title text not null`, `summary text null`, `author_id text not null`
-  - `created_at/updated_at` + Trigger, Index `idx_units_author(author_id)`
-- `public.course_modules` (per‑course order)
-  - `id uuid pk`, `course_id uuid fk`, `unit_id uuid fk`, `position int > 0`, `context_notes text`
-  - Uniques: `(course_id, position)` und `(course_id, unit_id)`; Trigger + Indizes
-- RLS: Policies für Select/Insert/Update/Delete (Owner/Author‑gebunden); `SET LOCAL app.current_sub` steuert Identität
-- Deferrable Constraint für Reorder: `supabase/migrations/20251021105921_teaching_course_modules_deferrable.sql`
-
-Abschnitte (Sections): `supabase/migrations/20251021121841_teaching_unit_sections.sql`
-- `public.unit_sections` (author‑scoped über Join auf `units`)
-  - `id uuid pk`, `unit_id uuid fk`, `title text not null`, `position int > 0`
-  - `created_at/updated_at` + Trigger; Index `idx_unit_sections_unit(unit_id)`
-- RLS: Select/Insert/Update/Delete nur, wenn `units.author_id = app.current_sub`
-- Ordering: Unique `(unit_id, position) DEFERRABLE INITIALLY IMMEDIATE` für atomare Reorders
-- Reorder‑Semantik: Mengen‑Gleichheit, keine Duplikate, nur UUIDs; Cross‑Unit‑IDs → 404
-
-Abschnittsfreigaben: `supabase/migrations/20251022135746_teaching_module_section_releases.sql`
-- `public.module_section_releases`
-  - `course_module_id uuid fk` → `course_modules(id)` on delete cascade
-  - `section_id uuid fk` → `unit_sections(id)` on delete cascade
-  - `visible boolean not null`
-  - `released_at timestamptz null` (Zeitpunkt der letzten Freigabe)
-  - `released_by text not null` (OIDC `sub` der Lehrkraft)
-  - PK `(course_module_id, section_id)`, Indizes auf `course_module_id`, `section_id`
-- RLS: Owner-only via Join `course_modules` ↔ `courses` (`teacher_id = app.current_sub`)
-- Insert/Update erzwingen Zugehörigkeit des Abschnitts zur Unit des Moduls sowie `released_by = caller`
-
-RLS Policies & DSN
-- Migration: `supabase/migrations/20251020154107_teaching_rls_policies.sql`
-- Folgeanpassungen:
-  - `supabase/migrations/20251020155746_teaching_rls_fix_and_sessions.sql` (Rekursion fix, Sessions‑RLS)
-  - `supabase/migrations/20251020174347_memberships_select_self_only_and_fn.sql` (SELECT Self‑Only + Helper‑Funktion; durch spätere Migration ersetzt)
-  - `supabase/migrations/20251020174657_memberships_insert_any_policy_restore.sql` (INSERT‑Policy für App‑Rolle)
-  - `supabase/migrations/20251020181043_memberships_select_any_restore.sql` (Zwischenstand – volle Leserechte; durch nächste Migration gehärtet)
-  - `supabase/migrations/20251020182801_memberships_owner_or_self_restore.sql` (Re-harden owner-or-self SELECT + Helper reapply)
-  - `supabase/migrations/20251020183625_memberships_self_only_fix.sql` (Owner-or-self SELECT finalisiert; INSERT bleibt App-gesteuert)
-  - `supabase/migrations/20251103170012_memberships_delete_force_rls.sql` (FORCE RLS + aktuelle Policies `memberships_select_owner_or_self` und `memberships_delete_owner_only`)
-  - `supabase/migrations/20251020184810_app_sessions_rls_restrict.sql` (Entzieht `gustav_limited` den Zugriff auf Sessions)
-- App-Runtime: Eine DSN mit Limited‑Role (z. B. `gustav_limited`). RLS greift immer.
-- Backend setzt je Query `SET LOCAL app.current_sub = '<sub>'`, damit Policies wissen, „wer“ handelt.
-- Owner‑Mitgliederliste erfolgt über `public.get_course_members(owner_sub, course_id, limit, offset)` (SECURITY DEFINER), um RLS‑Rekursionen zu vermeiden.
-- Migrationen laufen getrennt über das Supabase‑CLI (Owner/Service), die App muss nie umschalten.
- - Existence/Ownership‑Helper (SECURITY DEFINER): `supabase/migrations/20251021081254_teaching_course_existence_helpers.sql`
-   - `public.course_exists_for_owner(owner_sub text, course_id uuid) returns boolean`
-   - `public.course_exists(course_id uuid) returns boolean`
-
-Tests
-- API‑Tests erzeugen Daten über die API (RLS‑konform).
-- Optionaler RLS‑Test nutzt nur eine DSN (Limited) und seedet per `set_config('app.current_sub', ...)`.
-
-Anwenden lokal:
-- `supabase migration up`
-- Rückgängig: `supabase migration down 1`
-
-DSN (Beispiel): `DATABASE_URL=postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres`
-
-## Sicherheit & Datenschutz
-- Owner‑Policy: Nur Kurs‑Autor (teacher_id == sub) verwaltet Kurs/Mitglieder und sieht Mitgliederliste.
-- Kein PII in DTOs: Identität über `sub`; `name` wird für Mitglieder über Directory-Adapter aufgelöst.
-- Pagination mit Limit‑Cap (DoS‑Schutz). Suche: Mindestlänge `q`.
- - Responses der Auth‑abhängigen Endpunkte sind nicht cachebar (Middleware regelt 401 JSON).
-  - Semantik: Nicht‑existenter Kurs → 404 (Not Found); Nicht‑Owner → 403 (Forbidden). Gilt konsistent für Members‑Endpunkte und Delete.
-  - Sections/Units: Nicht‑existente Unit → 404; Nicht‑Author → 403 (über Guard mit Existenz‑Helpern). UUID‑Fehler → 400 (kein 422).
- - CSRF: Alle schreibenden Endpunkte (POST/PATCH/DELETE) erzwingen Same‑Origin; Erfolg/Fehler liefern `Cache-Control: private, no-store`, CSRF‑geschützte Antworten `Vary: Origin`.
-
-## Architektur & Adapter
-- Web‑Adapter: `backend/web/routes/teaching.py`, `backend/web/routes/users.py`
-- DB‑Repo: `backend/teaching/repo_db.py` (psycopg3)
-- Directory‑Adapter: `search_users_by_name` / `resolve_student_names` sind mockbar und sollen in Zukunft Keycloak anbinden.
-
-## Tests
-- API: `backend/tests/test_teaching_courses_api.py`, `backend/tests/test_teaching_courses_update_delete_api.py`, `backend/tests/test_users_search_api.py`
-- Repo (optional, benötigt DB): `backend/tests/test_teaching_repo_db_optional.py`
-
-## DSGVO / Audit
-- Timestamps `created_at`/`updated_at` an Kursen; `created_at` als `joined_at` bei Mitgliedschaften.
-- Keine Mailadressen oder weiteren personenbezogenen Daten in API‑DTOs.
-- Mitgliederliste auf Owner beschränkt.
+Für nutzerseitige Teaching-Änderungen ist `make verify-feature` der Abschlussnachweis.

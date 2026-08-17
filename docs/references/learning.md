@@ -56,15 +56,17 @@ Direkte Storage-Pfade werden nicht veröffentlicht.
 
 Abgaben sind unveränderliche Versuche einer lernenden Person zu einer Aufgabe. Je nach Aufgabentyp können Text oder ein zuvor hochgeladenes Artefakt verarbeitet werden; H5P-Ergebnisse werden idempotent aus signierten beziehungsweise tokengebundenen Ereignissen übernommen.
 
+Davon zu unterscheiden ist der ungesendete Editorentwurf: Er liegt ausschließlich im aktuellen Browsertab, ist an lernende Person, Kurs und Aufgabe gebunden und wird nie auf eine andere Aufgabe übertragen. Nach erfolgreicher endgültiger Abgabe wird nur der Entwurf dieser Aufgabe entfernt. Eine zur Rückmeldung gespeicherte Abgabe bleibt dagegen als unveränderlicher Versuch serverseitig erhalten.
+
 Der typische native Ablauf:
 
-1. Ein Entwurf wird über einen idempotenten Request gespeichert.
+1. Die aktuelle Fassung wird mit dem Intent `feedback` über einen idempotenten Request als unveränderlicher Versuch gespeichert.
 2. Bei Dateien wird zuvor ein Upload Intent erzeugt und das gespeicherte Artefakt anhand von Größe, Hash, MIME-Typ und Inhaltssignatur geprüft.
 3. Ein Hintergrundjob verarbeitet Vision beziehungsweise Feedback.
 4. Die Oberfläche fragt den Status nach und zeigt anschließend Auswertung und formative Rückmeldung.
 5. Nach Reflexion kann die lernende Person den aktuellen Entwurf endgültig abgeben.
 
-Der Server erzwingt Versuchslimits, Mitgliedschaft, Freigabe, Aufgabenbindung und Idempotenz. Die UI ergänzt Doppel-Submit-Schutz und Wiederherstellung bei abgelaufener Session, ist aber nicht die Sicherheitsgrenze.
+Der Server erzwingt Versuchslimits, Mitgliedschaft, Freigabe, Aufgabenbindung und Idempotenz. Die UI zeigt sowohl für Rückmeldung als auch für endgültige Abgabe sofort einen laufenden Zustand, ergänzt Doppel-Submit-Schutz und hält Erfolg oder bereinigte Fehler sichtbar. Sie unterstützt außerdem die Wiederherstellung bei abgelaufener Session, ist aber nicht die Sicherheitsgrenze.
 
 ## Verarbeitungsstatus
 

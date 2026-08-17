@@ -378,8 +378,12 @@ einen ruhigen Überblick.
 Unter `64rem` wird daraus der gestufte Ablauf `Inhalte → Bearbeiten`; die
 zurückliegende Stufe bleibt montiert und Entwürfe bleiben erhalten. Formwerte
 werden pro Lehrkraft, Lerneinheit, Modul und Ziel nur im aktuellen Browsertab
-gesichert. Dateiobjekte werden nie lokal gespeichert. Markdown-Materialien und
-Aufgabenstellungen verwenden denselben zentralen Editor wie Lernendenantworten.
+gesichert. Beim Öffnen eines bestehenden Inhalts wird sein fachlicher
+Ausgangszustand festgehalten. Erst eine davon abweichende Fassung gilt als
+Entwurf; bloßes Öffnen und Zurückgehen erzeugt keinen Entwurf, und eine exakte
+Rückkehr zum Ausgangszustand entfernt ihn wieder. Dateiobjekte werden nie lokal
+gespeichert. Markdown-Materialien und Aufgabenstellungen verwenden denselben
+zentralen Editor wie Lernendenantworten.
 Kriterien beginnen mit einem Eintrag und können bis höchstens zehn ergänzt und
 sortiert werden. Material- und Aufgabenlöschungen benötigen einen modalen
 Bestätigungsdialog.
@@ -445,11 +449,18 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
 - Rückmeldung, Auswertung und die zugehörige Abgabe erscheinen als kantige,
   technische Disclosure-Familie, niemals als Pill- oder Tabnavigation
 - kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile statt
-  redundanter Status-/Titellabels
-- Lange Aufgaben dürfen in dieser Vorschau höchstens zwei Zeilen belegen. Unter
-  `48rem` steht die Startaktion darunter und nimmt die verfügbare Breite ein.
+  redundanter Status-/Titellabels. Die Vorschau wird lesbar aus der
+  Markdown-Aufgabenstellung abgeleitet.
+- Lange oder mehrteilige Aufgaben dürfen in dieser Vorschau höchstens zwei
+  Zeilen belegen und erhalten den sichtbaren Hinweis `Weitere Angaben in der
+  Aufgabe`. Unter `48rem` steht die Startaktion darunter und nimmt die
+  verfügbare Breite ein.
 - Status wird primär über Balken und Tönung getragen
-- Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline
+- Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline.
+  In der kompakten Ansicht bleibt sie für native Text-/Dateiaufgaben, H5P und
+  KI-Dialoge direkt bei der Bearbeitung sichtbar. In der zweispaltigen Ansicht
+  wird sie nicht dupliziert, weil `Aufgabe & Kontext` sie bereits vollständig
+  zeigt.
 - Text-, Bild- und PDF-Materialien sind beim ersten Lesen geöffnet. Die gesamte
   linksbündige Titelzeile klappt ein Material zugänglich ein oder aus und zeigt
   `aria-expanded` sowie `aria-controls` an.
@@ -458,10 +469,12 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
   Vorschauhöhe und bieten eine Aktion zum separaten Öffnen.
 - Auf breiten Flächen gibt es genau zwei funktionale Bereiche: links `Aufgabe &
   Kontext`, rechts die Bearbeitung. Es gibt niemals eine dritte Spalte.
-- Ab `72rem` verfügbarer Komponentenbreite ist die Buchseite
+- Ab `60rem` verfügbarer Komponentenbreite ist die Buchseite
   `clamp(32rem, 44cqw, 38rem)` breit. Darunter wechseln `Aufgabe` und
   `Materialien` als montiert bleibende Vollbreitenansichten; unter `48rem`
-  werden Aktionsgruppen gestapelt.
+  werden Aktionsgruppen gestapelt. Ein übliches iPad mit 1024 CSS-Pixeln im
+  Querformat nutzt damit die zweispaltige Ansicht, im Hochformat bleibt die
+  kompakte Ansicht erhalten.
 - Breiten und Abstände werden responsiv bestimmt. Nutzereinstellungen bieten
   nur Navigation, `Klein | Standard | Groß` und das Zurücksetzen der
   Darstellung.
@@ -487,9 +500,11 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
 - Beim Wechsel zum Lernpfad endet der temporäre Aufgabenraum. Der Modulgraph
   zeigt keine tab-lokale Aufgabenmeldung und keinen direkten Rücksprung, weil
   dort weder Verfügbarkeit noch Abgabestatus zuverlässig bestimmt werden.
-  Ein tab-lokaler Textentwurf bleibt aufgabenbezogen gespeichert und erscheint
-  beim regulären Öffnen der Aufgabenzeile wieder. Nach einer endgültigen
-  Abgabe beginnt ein neuer Versuch ausschließlich über `Erneut bearbeiten`.
+  Ein tab-lokaler Textentwurf ist an lernende Person, Kurs und Aufgabe gebunden.
+  Beim Aufgabenwechsel wird ausschließlich der Entwurf genau dieser Aufgabe
+  geladen; Antworten anderer Aufgaben dürfen niemals erscheinen. Nach einer
+  endgültigen Abgabe wird nur der Entwurf dieser Aufgabe entfernt. Ein neuer
+  Versuch beginnt ausschließlich über `Erneut bearbeiten`.
 - `Aufgabe beginnen`, `Entwurf weiterbearbeiten` und `Erneut bearbeiten`
   öffnen denselben Text- oder Datei-Arbeitsbereich. Ein tab-lokaler Textentwurf
   hat beim Wiedereinstieg Vorrang; andernfalls wird der Text der neuesten
@@ -504,9 +519,13 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
   Hinweise beziehen.
 - `Rückmeldung einholen` wechselt nicht auf eine andere Seite. Während der
   Verarbeitung sind Editor, Antwortform, Dateiauswahl und Abgabeaktionen
-  gesperrt. Nach erfolgreicher Verarbeitung öffnet sich `Rückmeldung` inline,
-  ohne den Tastaturfokus ungefragt zu verschieben. Beim späteren Wiedereinstieg
-  bleiben alle Offenlegungen zunächst geschlossen.
+  gesperrt. Sowohl `Rückmeldung einholen` als auch `Endgültig abgeben` zeigen
+  unmittelbar einen sichtbaren Verarbeitungsstatus und verhindern weitere
+  Abgabeversuche. Erfolg bleibt in der Aufgabenfläche erkennbar; bereinigte
+  Fehler erscheinen dort mit einer möglichen nächsten Aktion. Nach
+  erfolgreicher Verarbeitung öffnet sich `Rückmeldung` inline, ohne den
+  Tastaturfokus ungefragt zu verschieben. Beim späteren Wiedereinstieg bleiben
+  alle Offenlegungen zunächst geschlossen.
 - Weicht die sichtbare Fassung vom zuletzt rückgemeldeten Snapshot ab, bleibt
   die bisherige Rückmeldung lesbar, aber `Endgültig abgeben` ist mit dem Hinweis
   `Für diese Fassung zuerst Rückmeldung einholen.` deaktiviert. Nach der
@@ -595,10 +614,11 @@ Verbindliche Regeln:
 - Sprecher werden technisch und eindeutig bezeichnet. Verwendete Satzanfänge
   bleiben als Hilfestellung sichtbar.
 - Satzanfänge sind rechteckige Sekundäraktionen, keine Chatblasen oder Pills.
-- Die Arbeitsfläche folgt demselben Kontextvertrag wie alle Aufgaben. Ab `72rem`
+- Die Arbeitsfläche folgt demselben Kontextvertrag wie alle Aufgaben. Ab `60rem`
   steht der Partner- und Kontextbereich mit `clamp(32rem, 44cqw, 38rem)` links
   neben dem Gespräch. Darunter wechseln `Aufgabe` und `Materialien` als
-  Vollbreitenansichten; beide bleiben dabei montiert.
+  Vollbreitenansichten; beide bleiben dabei montiert. Damit bleibt auch hier ein
+  übliches iPad im Querformat zweispaltig.
 - Aktuelle und angeheftete Materialien sowie eigene frühere Abgaben stehen auch
   während des Dialogs als fortlaufender Dokumentstapel im Partnerbereich. Der
   bewusst geöffnete Vollbreiten-Lesemodus verwendet dieselbe Komponente wie

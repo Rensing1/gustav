@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -69,7 +70,13 @@ def test_glossary_and_schema_notes_cover_course_invitations() -> None:
     assert "learning_practice_sessions" in schema
 
 
-def test_changelog_has_a_004_release_section() -> None:
+def test_changelog_uses_date_based_sections() -> None:
     changelog = _read("docs/CHANGELOG.md")
+    sections = [
+        line.removeprefix("## ")
+        for line in changelog.splitlines()
+        if line.startswith("## ")
+    ]
 
-    assert "## 0.0.4 — 2026-08-16" in changelog
+    assert sections[:2] == ["2026-08-17", "2026-08-16"]
+    assert all(re.fullmatch(r"\d{4}-\d{2}-\d{2}", section) for section in sections)

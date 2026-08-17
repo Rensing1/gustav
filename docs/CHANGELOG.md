@@ -1,10 +1,18 @@
 # Changelog
 
-## Unreleased
+## 2026-08-17
 
-_No entries yet._
+### Fixes
+- fix(learning): Die Aufgabenarbeitsfläche wechselt ab 60rem in die zweispaltige Ansicht, sodass übliche iPads im Querformat Aufgabe und Bearbeitung nebeneinander zeigen.
+- fix(learning): Tab-lokale Textentwürfe sind an lernende Person, Kurs und Aufgabe gebunden; beim Aufgabenwechsel wird ausschließlich der passende Entwurf wiederhergestellt und nach endgültiger Abgabe gezielt entfernt.
+- fix(learning): Die endgültige Abgabe zeigt sofort einen sichtbaren Verarbeitungsstatus, verhindert Doppel-Submits und hält Erfolg oder einen bereinigten Fehler verlässlich in der Aufgabenfläche fest.
+- fix(teaching): Das bloße Öffnen und unveränderte Verlassen bestehenden Materials erzeugt keinen Entwurf mehr; die Kennzeichnung folgt ausschließlich fachlichen Abweichungen vom Ausgangszustand.
+- fix(learning): Verkürzte Aufgaben erhalten bei weiteren Angaben einen deutlichen Hinweis; in der kompakten Bearbeitungsansicht bleibt die vollständige Aufgabenstellung bei nativen, H5P- und KI-Dialogaufgaben sichtbar.
 
-## 0.0.4 — 2026-08-16
+### Tests
+- test(learning): Authentifizierte Browser-Rundläufe decken iPad-Querformat, aufgabenbezogene Entwürfe, endgültige Abgaben, unveränderte Materialien und vollständige Aufgabenstellungen ab.
+
+## 2026-08-16
 
 ### Features
 - feat(course-invites): Lehrkräfte können einen 24 Stunden gültigen Klassenlink als kopierbaren Link, lokalen QR-Code mit Vollbild-Fallback und einzelne E-Mail-Einladungen bereitstellen; neue oder bestehende Lernende werden nach Keycloak-Registrierung beziehungsweise Login automatisch dem Kurs zugeordnet.

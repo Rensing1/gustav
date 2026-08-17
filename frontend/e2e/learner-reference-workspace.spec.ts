@@ -110,7 +110,7 @@ test("@feature-acceptance reads a document stack without losing the active task"
     expect(desktopScroll.work).toBe(0);
 
     for (const viewport of [
-      { width: 1024, height: 768 },
+      { width: 820, height: 1180 },
       { width: 390, height: 844 }
     ]) {
       await learner.page.setViewportSize(viewport);

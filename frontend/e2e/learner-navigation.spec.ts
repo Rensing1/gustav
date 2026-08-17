@@ -122,7 +122,7 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
 
     await learner.page.setViewportSize({ width: 390, height: 844 });
     await expectNoViewportOverflow(learner.page);
-    await learner.page.setViewportSize({ width: 1024, height: 768 });
+    await learner.page.setViewportSize({ width: 820, height: 1180 });
     await learner.page.evaluate(({ taskId, moduleId }) => {
       const workspaceKey = Object.keys(window.sessionStorage).find(
         (key) => key.startsWith("gustav.learning.workspace:") && key.endsWith(":tab")

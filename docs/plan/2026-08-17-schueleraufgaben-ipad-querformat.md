@@ -57,4 +57,5 @@ Die allgemeine Practice-Ansicht und die Lehrkraft-Oberfläche werden nicht verä
 - Native Aufgaben und Dialogaufgaben wechseln nun ab 60 rem Containerbreite in die Zweispaltenansicht.
 - Der Fallback für Browser ohne Container Queries wechselt ab 64 rem Ansichtsbreite.
 - Der authentifizierte Browsernachweis bestätigt bei 1024 px zwei sichtbare Spalten ohne horizontales Überlaufen und bei 820 px die kompakte Einspaltenansicht.
+- Die bestehenden Lernpfad-, Referenzarbeitsbereich- und Dialogprüfungen verwenden 1024 px nun ausschließlich für die Zweispaltenansicht und 820 px für Abläufe mit dem kompakten Umschalter; die visuellen Dialogreferenzen wurden entsprechend geprüft und aktualisiert.
 - Automatisierter Nachweis: `frontend/e2e/learner-task-responsive.spec.ts` mit `@feature-acceptance`.

@@ -1,6 +1,6 @@
 # Implementierungsplan: Entwurfsstatus im Materialeditor nur bei echten Änderungen
 
-**Status:** zur Umsetzung freigegeben  
+**Status:** umgesetzt
 **Datum:** 17. August 2026
 
 ## Ausgangslage
@@ -54,3 +54,12 @@ Der Entwurfsstatus ist lokaler UI-Zustand. Die bestehenden Material-Endpunkte in
 3. Bei vollständiger Rückkehr zum Ausgangszustand den vorhandenen Entwurf entfernen.
 4. Snapshot- und Vergleichslogik in verständliche, frameworkfreie Hilfsfunktionen auslagern.
 5. Komponenten-, Seiten- und Playwright-Tests sowie abschließend `make verify-feature` ausführen.
+
+## Umsetzungsergebnis
+
+- Bestehende Materialien erhalten einen gespeicherten Ausgangs-Snapshot aus Materialtyp, Titel und je nach Typ Inhalt oder Alternativtext.
+- Formular- und Markdown-Ereignisse werden nur noch gespeichert, wenn sich der vollständige aktuelle Snapshot fachlich vom gespeicherten Material unterscheidet.
+- Stimmen nach einer Rücknahme alle Felder wieder mit dem gespeicherten Stand überein, werden Sitzungseintrag und „Entwurf“-Markierung automatisch entfernt.
+- Neue Materialien, Änderungen an anderen Inhalten und fehlgeschlagene echte Speicherungen behalten ihren bisherigen, getrennten Entwurfszustand.
+- Der authentifizierte Lehrkraft-Browsertest bestätigt Öffnen und Zurückgehen ohne Markierung, eine echte Änderung mit Markierung sowie Wiederherstellung und Verwerfen des Entwurfs.
+- Automatisierter Nachweis: erweiterter `frontend/e2e/teacher-graph-module-actions.spec.ts` mit `@feature-acceptance`.

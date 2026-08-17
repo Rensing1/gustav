@@ -21,6 +21,8 @@
     contentSelectionParam,
     draftStorageKey,
     formatPrerequisiteSummary,
+    hasMeaningfulDraftChanges,
+    type ModuleDraftSnapshot,
     type ModuleContentSelection
   } from "$lib/teacher-node-editor/module-content-state";
   import type {
@@ -269,12 +271,8 @@
     return draftTargets.includes(target);
   }
 
-  function captureModuleDraft(event: Event) {
-    if (!browser || !isModuleEditor) return;
-    const formElement = event.currentTarget as HTMLFormElement;
-    const target = formElement.dataset.draftTarget;
-    if (!target) return;
-    const values: Record<string, string | string[]> = {};
+  function collectDraftValues(formElement: HTMLFormElement): ModuleDraftSnapshot {
+    const values: ModuleDraftSnapshot = {};
     const formData = new FormData(formElement);
     for (const [name, entry] of formData.entries()) {
       if (entry instanceof File || ["section_id", "material_id", "task_id", "intent_id", "sha256"].includes(name)) continue;
@@ -282,16 +280,53 @@
       if (current === undefined) values[name] = entry;
       else values[name] = Array.isArray(current) ? [...current, entry] : [current, entry];
     }
+    return values;
+  }
+
+  function materialDraftBaseline(target: string): ModuleDraftSnapshot | null {
+    if (!target.startsWith("material:")) return null;
+    const materialId = target.slice("material:".length);
+    const material = editorState.materials.find((candidate) => candidate.id === materialId);
+    if (!material) return null;
+    const baseline: ModuleDraftSnapshot = {
+      kind: material.kind,
+      title: material.title
+    };
+    if (material.kind === "markdown" || material.kind === "simulation") {
+      baseline.body_md = material.body_md ?? "";
+    } else if (material.kind === "file") {
+      baseline.alt_text = material.alt_text ?? "";
+    }
+    return baseline;
+  }
+
+  function persistModuleDraft(target: string, values: ModuleDraftSnapshot) {
+    const baseline = materialDraftBaseline(target);
+    if (baseline && !hasMeaningfulDraftChanges(values, baseline)) {
+      clearModuleDraft(target);
+      return;
+    }
     sessionStorage.setItem(moduleDraftKey(target), JSON.stringify(values));
     if (!draftTargets.includes(target)) draftTargets = [...draftTargets, target];
   }
 
+  function captureModuleDraft(event: Event) {
+    if (!browser || !isModuleEditor) return;
+    const formElement = event.currentTarget as HTMLFormElement;
+    const target = formElement.dataset.draftTarget;
+    if (!target) return;
+    persistModuleDraft(target, collectDraftValues(formElement));
+  }
+
   function captureMarkdownDraft(target: string, name: "body_md" | "instruction_md", value: string) {
     if (!browser || !isModuleEditor) return;
-    const values = readDraft(target) ?? {};
+    const formElement = Array.from(document.querySelectorAll<HTMLFormElement>("form[data-draft-target]"))
+      .find((formItem) => formItem.dataset.draftTarget === target);
+    const values = formElement
+      ? collectDraftValues(formElement)
+      : { ...(materialDraftBaseline(target) ?? {}), ...(readDraft(target) ?? {}) };
     values[name] = value;
-    sessionStorage.setItem(moduleDraftKey(target), JSON.stringify(values));
-    if (!draftTargets.includes(target)) draftTargets = [...draftTargets, target];
+    persistModuleDraft(target, values);
   }
 
   function restoredDraftText(target: string, name: string, fallback: string): string {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("$app/navigation", () => ({ replaceState: vi.fn() }));
@@ -91,6 +91,71 @@ describe("teacher node editor page", () => {
 
     expect(screen.queryByLabelText("Materialtyp")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Inhalt auswählen" })).toBeInTheDocument();
+  });
+
+  it("does not mark an existing material as a draft when it is only opened and closed", async () => {
+    const data = {
+      ...sampleData,
+      editor: {
+        ...sampleData.editor,
+        materials: [
+          { id: "material-1", title: "Merkblatt", kind: "markdown" as const, body_md: "Gespeicherter Inhalt", position: 1 }
+        ]
+      }
+    } satisfies PageData;
+    render(Page, { props: { data, form: {} as never } });
+
+    await fireEvent.click(screen.getByRole("button", { name: /Merkblatt/ }));
+    await screen.findByRole("toolbar", { name: "Text formatieren" });
+    await fireEvent.input(screen.getByLabelText("Titel"), { target: { value: "Merkblatt" } });
+    await fireEvent.click(screen.getByRole("button", { name: "← Inhalte" }));
+
+    const outline = document.querySelector(".teacher-module-outline") as HTMLElement;
+    expect(within(outline).queryByText("Entwurf", { exact: true })).toBeNull();
+  });
+
+  it("removes the material draft marker after every field matches the saved material again", async () => {
+    const data = {
+      ...sampleData,
+      editor: {
+        ...sampleData.editor,
+        materials: [
+          { id: "material-1", title: "Merkblatt", kind: "markdown" as const, body_md: "Gespeicherter Inhalt", position: 1 }
+        ]
+      }
+    } satisfies PageData;
+    render(Page, { props: { data, form: {} as never } });
+
+    await fireEvent.click(screen.getByRole("button", { name: /Merkblatt/ }));
+    const title = screen.getByLabelText("Titel");
+    await fireEvent.input(title, { target: { value: "Merkblatt überarbeitet" } });
+    const outline = document.querySelector(".teacher-module-outline") as HTMLElement;
+    await waitFor(() => expect(within(outline).getByText("Entwurf", { exact: true })).toBeInTheDocument());
+
+    await fireEvent.input(title, { target: { value: "Merkblatt" } });
+    await waitFor(() => expect(within(outline).queryByText("Entwurf", { exact: true })).toBeNull());
+  });
+
+  it("marks only the material whose saved values were changed", async () => {
+    const data = {
+      ...sampleData,
+      editor: {
+        ...sampleData.editor,
+        materials: [
+          { id: "material-1", title: "Merkblatt A", kind: "markdown" as const, body_md: "Inhalt A", position: 1 },
+          { id: "material-2", title: "Merkblatt B", kind: "markdown" as const, body_md: "Inhalt B", position: 2 }
+        ]
+      }
+    } satisfies PageData;
+    render(Page, { props: { data, form: {} as never } });
+
+    const firstMaterial = screen.getByRole("button", { name: /Merkblatt A/ });
+    const secondMaterial = screen.getByRole("button", { name: /Merkblatt B/ });
+    await fireEvent.click(firstMaterial);
+    await fireEvent.input(screen.getByLabelText("Titel"), { target: { value: "Merkblatt A geändert" } });
+
+    expect(within(firstMaterial).getByText("Entwurf", { exact: true })).toBeInTheDocument();
+    expect(within(secondMaterial).queryByText("Entwurf", { exact: true })).toBeNull();
   });
 
   it("starts with one criterion and allows up to ten criteria", async () => {

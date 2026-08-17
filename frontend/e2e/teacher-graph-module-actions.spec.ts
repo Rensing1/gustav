@@ -174,6 +174,14 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
   await editorPane.locator('[contenteditable="true"][aria-label="Inhalt"]').fill("Ein kurzer Materialtext.");
   await editorPane.getByRole("button", { name: "Material hinzufügen" }).click();
   await expect(page.getByText("Material angelegt.")).toBeVisible();
+  const materialOutlineEntry = page.getByRole("button", { name: /E2E Merkblatt/ }).first();
+  await expect(materialOutlineEntry).not.toContainText("Entwurf");
+  await materialOutlineEntry.click();
+  await materialOutlineEntry.click();
+  await expect(editorPane.getByRole("toolbar", { name: "Text formatieren" })).toBeVisible();
+  await materialOutlineEntry.click();
+  await expect(materialOutlineEntry).not.toContainText("Entwurf");
+  await materialOutlineEntry.click();
 
   const editorGeometry = await page.evaluate(() => {
     const workspace = document.querySelector<HTMLElement>(".workspace-body");
@@ -203,6 +211,7 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
 
   await page.getByRole("button", { name: /E2E Merkblatt/ }).click();
   await editorPane.getByLabel("Titel").fill("E2E Merkblatt Entwurf");
+  await expect(materialOutlineEntry).toContainText("Entwurf");
   await expect(editorPane.getByRole("toolbar", { name: "Text formatieren" })).toBeVisible();
   await editorPane.locator('[contenteditable="true"][aria-label="Inhalt"]').fill("Geänderter Entwurfsinhalt.");
   await page.getByRole("button", { name: /Begründe deine Antwort/ }).click();

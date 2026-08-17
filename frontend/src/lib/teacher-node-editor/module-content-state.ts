@@ -10,6 +10,8 @@ type ContentIds = {
   tasks: Array<{ id: string }>;
 };
 
+export type ModuleDraftSnapshot = Record<string, string | string[]>;
+
 /**
  * Resolve an addressable editor selection without trusting the URL alone.
  * Only identifiers present in the authorized editor read model may be opened.
@@ -53,6 +55,22 @@ export function draftStorageKey(options: {
 }): string {
   const parts = [options.teacherSub, options.unitId, options.nodeId, options.target].map(encodeURIComponent);
   return `gustav:teacher-module-draft:v1:${parts.join(":")}`;
+}
+
+function normalizedDraftValue(value: string | string[] | undefined): string[] {
+  if (value === undefined || value === "") {
+    return [];
+  }
+  const entries = Array.isArray(value) ? value : [value];
+  return entries.length === 1 && entries[0] === "" ? [] : entries;
+}
+
+/** Compares form values by meaning, treating an absent optional field like an empty field. */
+export function hasMeaningfulDraftChanges(current: ModuleDraftSnapshot, baseline: ModuleDraftSnapshot): boolean {
+  const fields = new Set([...Object.keys(current), ...Object.keys(baseline)]);
+  return [...fields].some(
+    (field) => JSON.stringify(normalizedDraftValue(current[field])) !== JSON.stringify(normalizedDraftValue(baseline[field]))
+  );
 }
 
 export function formatPrerequisiteSummary(required: number, incoming: number): string {

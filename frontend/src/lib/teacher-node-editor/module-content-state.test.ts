@@ -4,6 +4,7 @@ import {
   contentSelectionParam,
   draftStorageKey,
   formatPrerequisiteSummary,
+  hasMeaningfulDraftChanges,
   parseContentSelection
 } from "./module-content-state";
 
@@ -63,5 +64,19 @@ describe("module content state", () => {
     expect(formatPrerequisiteSummary(0, 0)).toBe("Keine Voraussetzungen");
     expect(formatPrerequisiteSummary(1, 2)).toBe("Freigabe nach 1 von 2 Voraussetzungen");
     expect(formatPrerequisiteSummary(2, 3)).toBe("Freigabe nach 2 von 3 Voraussetzungen");
+  });
+
+  it("distinguishes unchanged, changed and fully reverted form snapshots", () => {
+    const baseline = {
+      kind: "markdown",
+      title: "Merkblatt",
+      body_md: "Gespeicherter Inhalt",
+      alt_text: ""
+    };
+
+    expect(hasMeaningfulDraftChanges({ ...baseline }, baseline)).toBe(false);
+    expect(hasMeaningfulDraftChanges({ ...baseline, title: "Merkblatt überarbeitet" }, baseline)).toBe(true);
+    expect(hasMeaningfulDraftChanges({ ...baseline, title: "Merkblatt" }, baseline)).toBe(false);
+    expect(hasMeaningfulDraftChanges({ kind: "markdown", title: "Merkblatt", body_md: "Gespeicherter Inhalt" }, baseline)).toBe(false);
   });
 });

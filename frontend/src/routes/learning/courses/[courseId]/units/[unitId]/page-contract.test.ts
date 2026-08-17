@@ -209,7 +209,8 @@ describe("learning unit route contract", () => {
     expect(workspaceSource).toContain('class="learner-task-workbench"');
     expect(workspaceSource).toContain('workspaceOnly={true}');
     expect(taskCardSource).toContain("learning-task-row__preview");
-    expect(taskCardSource).toContain("taskPreviewLine()");
+    expect(taskCardSource).toContain("taskPreview().text");
+    expect(taskCardSource).toContain("taskPreview().truncated");
     expect(taskCardSource).toContain("return `${taskTitle} beginnen`;");
     expect(taskCardSource).not.toContain("compactStatusLabel()");
     expect(workspaceSource).not.toContain("{history}");

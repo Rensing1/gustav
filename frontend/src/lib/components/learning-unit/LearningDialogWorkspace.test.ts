@@ -365,7 +365,7 @@ describe("LearningDialogWorkspace", () => {
     expect(css).toContain("container-type: inline-size");
     expect(css).toContain("container-name: learning-dialog");
     expect(css).toContain("@container learning-dialog (min-width: 42.5rem)");
-    expect(css).toContain("@container learning-dialog (min-width: 72rem)");
+    expect(css).toContain("@container learning-dialog (min-width: 60rem)");
     expect(css).not.toContain("@container learning-dialog (min-width: 64rem)");
     expect(css).toContain("@container learning-dialog (max-width: 21.999rem)");
     expect(css).toContain("@supports not (container-type: inline-size)");

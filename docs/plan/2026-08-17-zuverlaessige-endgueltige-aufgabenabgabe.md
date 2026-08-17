@@ -1,6 +1,6 @@
 # Implementierungsplan: Zuverlässige und sichtbare endgültige Aufgabenabgabe
 
-**Status:** zur Umsetzung freigegeben  
+**Status:** umgesetzt
 **Datum:** 17. August 2026
 
 ## Ausgangslage
@@ -79,3 +79,12 @@ Nach aktuellem Befund ist keine Schemaänderung erforderlich. Die bestehende Ide
 3. Text- und Dateiweg sowie bekannte 409-/400-/503-Antworten prüfen.
 4. Nur bei belegter Backend-Race-Condition Contract und gegebenenfalls Migration zuerst erweitern, danach API-/Repository-Test rot schreiben und minimal implementieren.
 5. Relevante Backend-, Frontend- und Playwright-Tests sowie abschließend `make verify-feature` ausführen.
+
+## Umsetzungsergebnis
+
+- „Rückmeldung einholen“ und „Endgültig abgeben“ starten nun denselben klaren Pending-Lebenszyklus; bei der Finalisierung erscheint sofort „Abgabe wird verarbeitet ...“.
+- Während einer laufenden Anfrage sind Editor, Moduswahl und beide Abgabeaktionen gesperrt. Eine zweite Formularanfrage wird bereits vor dem Netzwerkzugriff abgebrochen.
+- Bekannte Backend-Fehler wie `draft_not_ready`, `draft_missing`, `max_attempts_exceeded` und eine vorübergehend nicht erreichbare Speicherung werden in verständliche, handlungsorientierte deutsche Meldungen übersetzt.
+- Der bestehende REST-Vertrag, die transaktionale Finalisierung und die Datenbank-Idempotenz sind ausreichend; `api/openapi.yml` und das Schema mussten nicht verändert werden.
+- Der authentifizierte Browsernachweis prüft verzögerte Antwort, sichtbaren Pending-Zustand, gesperrte Aktionen, Doppelklickschutz, erfolgreichen Abschluss, aktualisierten Aufgabenstatus und die Entwurfsbereinigung.
+- Automatisierter Nachweis: `frontend/e2e/learner-task-finalization.spec.ts` mit `@feature-acceptance`; die vorhandenen Datenbank-Integrationstests für Text- und Datei-Finalisierung sind ebenfalls grün.

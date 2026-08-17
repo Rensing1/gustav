@@ -141,6 +141,17 @@ describe("learning unit route contract", () => {
     expect(serverSource).not.toContain("throw redirect(303");
   });
 
+  it("starts final submissions visibly and cancels duplicate form requests", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain('import { beginSubmissionAttempt } from "$lib/learning-unit/submission-finalization";');
+    expect(routeSource).toContain("const attempt = beginSubmissionAttempt(feedbackPendingTaskId, taskId, intent)");
+    expect(routeSource).toMatch(/if \(!attempt\.accepted\) \{\s*cancel\(\);/);
+    expect(routeSource).toContain("feedbackPendingTaskId = attempt.taskId");
+    expect(routeSource).toContain("feedbackStatusMessage = attempt.statusMessage");
+  });
+
   it("restores a directly linked task before unrelated saved modules", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

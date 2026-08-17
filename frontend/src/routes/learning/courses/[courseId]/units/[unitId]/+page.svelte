@@ -58,6 +58,7 @@
   } from "$lib/learning-unit/learner-workspace-state";
   import { learnerNavigationHref } from "$lib/learning-unit/learner-navigation";
   import { highlightedLearnerGraphModuleIds } from "$lib/learning-unit/graph-selection";
+  import { beginSubmissionAttempt } from "$lib/learning-unit/submission-finalization";
   import { clearSubmissionDraft } from "$lib/learning-unit/submission-drafts";
   import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type {
@@ -1130,19 +1131,22 @@
   }
 
   function enhanceTaskForm(taskId: string): SubmitFunction {
-    return ({ submitter }) => {
+    return ({ submitter, cancel }) => {
       if (!(submitter instanceof HTMLButtonElement)) {
         return;
       }
 
       const intent = submitter.value === "feedback" ? "feedback" : "submit";
-      setClientSubmissionError(null, null);
-      if (intent === "feedback") {
-        feedbackPendingTaskId = taskId;
-        feedbackStatusTaskId = taskId;
-        pendingSubmissionIntent = intent;
-        feedbackStatusMessage = "Rückmeldung wird erstellt ...";
+      const attempt = beginSubmissionAttempt(feedbackPendingTaskId, taskId, intent);
+      if (!attempt.accepted) {
+        cancel();
+        return;
       }
+      setClientSubmissionError(null, null);
+      feedbackPendingTaskId = attempt.taskId;
+      feedbackStatusTaskId = attempt.taskId;
+      pendingSubmissionIntent = attempt.intent;
+      feedbackStatusMessage = attempt.statusMessage;
 
       return async ({ result }) => {
         if (result.type === "success") {

@@ -682,6 +682,38 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
   });
 
+  it("shows and locks the editor while a final submission is being processed", async () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: { ...task, has_submission: true },
+        taskTitle: "Aufgabe 5",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true,
+        feedbackPending: true,
+        pendingIntent: "submit",
+        history: [
+          {
+            id: "submission-feedback",
+            attempt_nr: 1,
+            kind: "text",
+            intent: "feedback",
+            created_at: "2026-04-07T10:35:29+00:00",
+            analysis_status: "completed",
+            text_body: "Geprüfter Entwurf",
+            feedback_md: "Gut gemacht."
+          }
+        ]
+      }
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Abgabe wird verarbeitet ...");
+    expect(screen.getByRole("button", { name: "Rückmeldung erneut einholen" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
+    expect(document.querySelector('textarea[aria-label="text_body"]')).toBeDisabled();
+  });
+
   it("opens native tasks with one accessible answer format choice", () => {
     render(LearningTaskCard, {
       props: {

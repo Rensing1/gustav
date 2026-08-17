@@ -217,6 +217,40 @@ describe("learning unit route actions", () => {
     });
   });
 
+  it.each([
+    [409, "draft_not_ready", "Die Rückmeldung wird noch verarbeitet. Bitte versuche die endgültige Abgabe gleich noch einmal."],
+    [409, "draft_missing", "Es gibt noch keinen rückgemeldeten Entwurf. Hole zuerst eine Rückmeldung ein."],
+    [400, "max_attempts_exceeded", "Für diese Aufgabe sind keine weiteren endgültigen Abgaben möglich."],
+    [
+      503,
+      "submission_persistence_unavailable",
+      "Die endgültige Abgabe konnte wegen einer vorübergehenden Störung nicht gespeichert werden. Bitte versuche es erneut."
+    ]
+  ])("translates final submission error %s/%s", async (status, detail, expectedMessage) => {
+    mockModularLoad();
+    backendRequestMock.mockResolvedValue(jsonResponse({ error: "error", detail }, status));
+
+    const form = new FormData();
+    form.set("task_id", "task-1");
+    form.set("task_kind", "native");
+    form.set("unit_type", "modular");
+    form.set("module_id", "module-7");
+    form.set("submission_intent", "submit");
+
+    const result = await actions.default({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof actions.default>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      request: requestWithFormData(form),
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
+    } as Parameters<typeof actions.default>[0]);
+
+    expect(result).toMatchObject({
+      status,
+      data: { message: expectedMessage, taskId: "task-1" }
+    });
+  });
+
   it("rejects upload submissions in the route action so browser-direct upload stays the primary path", async () => {
     mockModularLoad();
 

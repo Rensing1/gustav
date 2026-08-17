@@ -5,6 +5,7 @@ import type { Actions, PageServerLoad } from "./$types";
 
 import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap, requireSpaceBootstrap } from "$lib/server/guards";
+import { finalSubmissionFailureMessage } from "$lib/learning-unit/submission-finalization";
 import type { SessionBootstrap } from "$lib/types/session-bootstrap";
 import type { LearnerHome } from "$lib/types/home";
 import type {
@@ -256,7 +257,7 @@ export const actions: Actions = {
       if (!response.ok) {
         const backendError = (await response.json().catch(() => ({}))) as { detail?: string; error?: string };
         return fail(response.status, {
-          message: backendError.detail || backendError.error || "Die finale Abgabe ist fehlgeschlagen.",
+          message: finalSubmissionFailureMessage(backendError.detail ?? backendError.error, response.status),
           taskId
         });
       }

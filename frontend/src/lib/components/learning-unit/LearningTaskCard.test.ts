@@ -342,17 +342,75 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByText("## Arbeitsauftrag")).toBeInTheDocument();
+    expect(screen.getByText(/Arbeitsauftrag Erkläre den Zusammenhang/)).toBeInTheDocument();
+    expect(screen.getByText("Weitere Angaben in der Aufgabe")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Aufgabe 3 beginnen" })).toBeInTheDocument();
     expect(screen.queryByText("Aufgabe offen")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Aufgabe 3" })).toBeNull();
-    expect(screen.queryByText(/Erkläre/i)).toBeNull();
+    expect(document.querySelector(".learning-task-inline-editor")).toBeNull();
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
     expect(document.querySelector(".learning-task-row__copy")).not.toBeNull();
     expect(document.querySelector(".learning-task-row__preview")).not.toBeNull();
     expect(document.querySelector(".learning-task-row__actions")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Pausieren" })).toBeNull();
   });
+
+  it("does not show a truncation hint for a short complete task preview", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: { ...task, instruction_md: "Nenne zwei Beispiele." },
+        taskTitle: "Aufgabe 3",
+        unitType: "modular",
+        expanded: true,
+        compactLayout: true
+      }
+    });
+
+    expect(screen.getByText("Nenne zwei Beispiele.")).toBeInTheDocument();
+    expect(screen.queryByText("Weitere Angaben in der Aufgabe")).toBeNull();
+  });
+
+  it("keeps the complete instruction in the workspace task surface", () => {
+    const { container } = render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 3",
+        unitType: "modular",
+        expanded: true,
+        compactLayout: true,
+        workspaceOnly: true,
+        submissionFocused: true
+      }
+    });
+
+    const statement = screen.getByRole("region", { name: "Vollständige Aufgabenstellung" });
+    expect(within(statement).getByRole("heading", { name: "Arbeitsauftrag" })).toBeInTheDocument();
+    expect(within(statement).getByText("Aspekt zwei")).toBeInTheDocument();
+    expect(container.querySelector(".learning-task-workspace-statement")).not.toBeNull();
+  });
+
+  it.each(["h5p", "visual"] as const)(
+    "keeps the complete instruction in the compact %s task workspace",
+    (kind) => {
+      render(LearningTaskCard, {
+        props: {
+          courseId: "course-1",
+          task: { ...task, kind, h5p: kind === "h5p" ? { content_id: null } : null },
+          taskTitle: "Aufgabe 3",
+          unitType: "modular",
+          expanded: true,
+          compactLayout: true,
+          workspaceOnly: true,
+          submissionFocused: true
+        }
+      });
+
+      const statement = screen.getByRole("region", { name: "Vollständige Aufgabenstellung" });
+      expect(within(statement).getByText("Aspekt zwei")).toBeInTheDocument();
+    }
+  );
 
   it("shows persisted draft affordances from task metadata before history is loaded", () => {
     render(LearningTaskCard, {
@@ -399,7 +457,7 @@ describe("LearningTaskCard", () => {
       }
     ];
 
-    const { rerender } = render(LearningTaskCard, {
+    const { container, rerender } = render(LearningTaskCard, {
       props: {
         courseId: "course-1",
         task,
@@ -415,7 +473,9 @@ describe("LearningTaskCard", () => {
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
     const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
     expect(within(responseGroup).getByText("Meine Abgabe").closest("details")).toHaveAttribute("open");
-    expect(screen.getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
+    const editor = container.querySelector(".learning-task-inline-editor");
+    expect(editor).not.toBeNull();
+    expect(within(editor as HTMLElement).getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
 
     await rerender({
       courseId: "course-1",
@@ -434,7 +494,9 @@ describe("LearningTaskCard", () => {
     expect(screen.queryByText("Die Bearbeitung bleibt Teil derselben Arbeitsfläche.")).toBeNull();
     expect(document.querySelector(".learning-task-inline-editor__statement")).not.toBeNull();
     expect(screen.getByRole("heading", { name: "Arbeitsauftrag" })).toBeInTheDocument();
-    expect(screen.getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
+    const activeEditor = container.querySelector(".learning-task-inline-editor");
+    expect(activeEditor).not.toBeNull();
+    expect(within(activeEditor as HTMLElement).getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
   });
 
   it("styles the compact modular task row as a preview-plus-actions layout", () => {
@@ -449,6 +511,9 @@ describe("LearningTaskCard", () => {
       /\.learning-task-row__preview\s*\{[^}]*font-size:\s*calc\(0\.86rem \* var\(--learning-unit-font-scale\)\);[^}]*-webkit-line-clamp:\s*2;[^}]*white-space:\s*normal;[^}]*text-overflow:\s*ellipsis;/s
     );
     expect(css).toMatch(/\.learning-task-row__actions\s*\{[^}]*justify-content:\s*flex-end;[^}]*justify-self:\s*end;/s);
+    expect(css).toMatch(/\.learning-task-row__more\s*\{[^}]*font-size:/s);
+    expect(css).toMatch(/\.learning-task-workspace-statement\s*\{[^}]*display:\s*block;/s);
+    expect(css).toMatch(/@container \(min-width:\s*60rem\)[\s\S]*\.learning-task-workspace-statement\s*\{[^}]*display:\s*none;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*padding:\s*0;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*border-left:\s*0;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*background:\s*transparent;/s);

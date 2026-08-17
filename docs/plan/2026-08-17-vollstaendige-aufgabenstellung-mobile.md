@@ -1,6 +1,6 @@
 # Implementierungsplan: Lange und mobile Aufgabenstellungen eindeutig anzeigen
 
-**Status:** zur Umsetzung freigegeben  
+**Status:** umgesetzt
 **Datum:** 17. August 2026
 
 ## Ausgangslage
@@ -60,3 +60,12 @@ Die vollständige `instruction_md` ist bereits Teil der Learning-Antwort. Es wer
 3. Die vollständige Aufgabenstellung in der kompakten Aufgabenfläche ergänzen und auf zweispaltigen Ansichten gezielt ausblenden.
 4. Dieselbe Regel für native, Dialog- und Spezialaufgaben verwenden, ohne Inhalte dauerhaft zu duplizieren.
 5. Komponenten-, Layout- und Playwright-Tests sowie abschließend `make verify-feature` ausführen.
+
+## Umsetzungsergebnis
+
+- Die Aufgabenübersicht erzeugt aus Markdown eine lesbare Vorschau und kennzeichnet längere beziehungsweise mehrteilige Aufgaben mit „Weitere Angaben in der Aufgabe“.
+- In der kompakten Bearbeitungsansicht steht die vollständige Aufgabenstellung direkt oberhalb der Lösung. Das gilt einheitlich für native, Upload-, H5P- und Dialogaufgaben.
+- Ab der zweispaltigen Arbeitsansicht bei 60 rem wird die zusätzliche Aufgabenstellung ausgeblendet, weil sie bereits vollständig in der Kontextspalte sichtbar ist.
+- Komponenten- und Logiktests decken kurze und lange Vorschauen sowie die unterschiedlichen Aufgabentypen ab.
+- Der authentifizierte `@feature-acceptance`-Browsertest bestätigt die vollständige Aufgabenstellung und fehlendes horizontales Überlaufen bei 390 px und 820 px sowie die nicht doppelte Darstellung bei 1024 px.
+- API-Vertrag und Datenbankschema mussten nicht verändert werden.

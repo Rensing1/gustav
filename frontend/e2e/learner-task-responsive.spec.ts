@@ -30,16 +30,21 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
     await learner.page.setViewportSize({ width: 1024, height: 768 });
     await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
     await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
+    const taskRow = learner.page.locator(".learning-task-row").first();
+    await expect(taskRow.getByText("Weitere Angaben in der Aufgabe")).toBeVisible();
     await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
 
     const workbench = learner.page.getByRole("region", { name: "Aufgabe bearbeiten" });
     const context = workbench.getByRole("complementary", { name: "Aufgabe und Kontext" });
     const task = workbench.getByRole("main", { name: "Bearbeitung" });
     const switcher = workbench.getByRole("navigation", { name: "Arbeitsbereich wählen" });
+    const compactStatement = workbench.getByRole("region", { name: "Vollständige Aufgabenstellung" });
 
     await expect(context).toBeVisible();
     await expect(task).toBeVisible();
     await expect(switcher).toBeHidden();
+    await expect(compactStatement).toBeHidden();
+    await expect(context.getByText("Begründe abschließend, welche Position dich überzeugt.")).toBeVisible();
     const landscapeColumns = await workbench.locator(".learner-task-workbench__desk").evaluate(
       (desk) => getComputedStyle(desk).gridTemplateColumns.split(" ").length
     );
@@ -50,10 +55,17 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
     await expect(context).toBeHidden();
     await expect(task).toBeVisible();
     await expect(switcher).toBeVisible();
+    await expect(compactStatement).toBeVisible();
+    await expect(compactStatement.getByText("Begründe abschließend, welche Position dich überzeugt.")).toBeVisible();
     const portraitColumns = await workbench.locator(".learner-task-workbench__desk").evaluate(
       (desk) => getComputedStyle(desk).gridTemplateColumns.split(" ").length
     );
     expect(portraitColumns).toBe(1);
+    await expectNoViewportOverflow(learner.page);
+
+    await learner.page.setViewportSize({ width: 390, height: 844 });
+    await expect(compactStatement).toBeVisible();
+    await expect(compactStatement.getByText("Begründe abschließend, welche Position dich überzeugt.")).toBeVisible();
     await expectNoViewportOverflow(learner.page);
   } finally {
     await learner.context.close();

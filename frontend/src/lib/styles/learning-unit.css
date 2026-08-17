@@ -1476,6 +1476,14 @@
   text-overflow: ellipsis;
 }
 
+.learning-task-row__more {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: calc(0.7rem * var(--learning-unit-label-scale));
+  font-weight: 650;
+  line-height: 1.25;
+}
+
 .learning-task-row__actions {
   display: flex;
   justify-content: flex-end;
@@ -4056,6 +4064,23 @@ button.learner-material-context__module-toggle:focus-visible,
   padding: 0;
 }
 
+.learning-task-workspace-statement {
+  display: block;
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-soft) 38%, var(--color-bg-surface) 62%);
+}
+
+.learning-task-workspace-statement > .workspace-label {
+  margin: 0 0 var(--space-2);
+}
+
+.learning-task-workspace-statement > .markdown-prose > :first-child,
+.learning-task-workspace-statement > .markdown-prose > :last-child {
+  margin-block: 0;
+}
+
 .learner-task-workbench img,
 .learner-task-workbench video,
 .learner-task-workbench iframe {
@@ -4076,6 +4101,10 @@ button.learner-material-context__module-toggle:focus-visible,
 
 /* Match the dialog workspace: landscape tablets use the deliberate two-column desk. */
 @container (min-width: 60rem) {
+  .learning-task-workspace-statement {
+    display: none;
+  }
+
   .learner-task-workbench {
     height: calc(100svh - 7.25rem);
     min-height: 36rem;
@@ -4214,6 +4243,10 @@ button.learner-material-context__module-toggle:focus-visible,
   }
 
   @media (min-width: 64rem) {
+    .learning-task-workspace-statement {
+      display: none;
+    }
+
     .learner-task-workbench__desk {
       grid-template-columns: minmax(32rem, 38rem) minmax(0, 1fr);
     }

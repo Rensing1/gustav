@@ -11,6 +11,7 @@
     legacySubmissionDraftStorageKey,
     submissionDraftStorageKey
   } from "$lib/learning-unit/submission-drafts";
+  import { taskInstructionPreview } from "$lib/learning-unit/task-preview";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -187,13 +188,8 @@
     return hasFinalSubmission() ? "Erneut bearbeiten" : "Entwurf weiterbearbeiten";
   }
 
-  function taskPreviewLine(): string {
-    const firstNonEmptyLine = task.instruction_md
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => line.length > 0);
-
-    return firstNonEmptyLine ?? taskTitle;
+  function taskPreview() {
+    return taskInstructionPreview(task.instruction_md, taskTitle);
   }
 
   function usesCompactTaskLayout(): boolean {
@@ -556,10 +552,13 @@
       class:learning-task-row--new={compactTaskTone() === "new"}
       class:learning-task-row--pending={compactTaskTone() === "pending"}
       class="learning-task-row"
-      aria-label={taskPreviewLine()}
+      aria-label={taskPreview().text}
     >
       <div class="learning-task-row__copy">
-        <p class="learning-task-row__preview">{taskPreviewLine()}</p>
+        <p class="learning-task-row__preview">{taskPreview().text}</p>
+        {#if taskPreview().truncated}
+          <p class="learning-task-row__more">Weitere Angaben in der Aufgabe</p>
+        {/if}
       </div>
 
       <div class="learning-task-row__actions">
@@ -606,6 +605,15 @@
 
     {#if workspaceOnly || expanded || usesCompactTaskLayout()}
       <div class="learning-work-item__body">
+        {#if workspaceOnly}
+          <section class="learning-task-workspace-statement" aria-label="Vollständige Aufgabenstellung">
+            <p class="workspace-label">Vollständige Aufgabe</p>
+            <div class="markdown-prose">
+              {@html renderMarkdown(task.instruction_md)}
+            </div>
+          </section>
+        {/if}
+
         {#if feedbackPendingMessage()}
           <div
             class:learning-task-feedback-status--active={submissionFocused || workspaceOnly}

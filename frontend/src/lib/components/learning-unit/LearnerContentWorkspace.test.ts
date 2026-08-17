@@ -182,7 +182,8 @@ describe("LearnerContentWorkspace", () => {
     const context = screen.getByRole("complementary", { name: "Aufgabe und Kontext" });
     const work = screen.getByRole("main", { name: "Bearbeitung" });
     expect(within(context).getByText("Begründe deine Position zur Chatkontrolle.")).toBeInTheDocument();
-    expect(within(work).queryByText("Begründe deine Position zur Chatkontrolle.")).not.toBeInTheDocument();
+    const compactStatement = within(work).getByRole("region", { name: "Vollständige Aufgabenstellung" });
+    expect(within(compactStatement).getByText("Begründe deine Position zur Chatkontrolle.")).toBeInTheDocument();
     expect(within(context).getByRole("heading", { name: /Grundlagen/, level: 4 })).toBeInTheDocument();
     expect(within(context).getByText("Aktuell")).toBeInTheDocument();
     expect(within(context).getByText("Grundrechte und Privatsphäre")).toBeInTheDocument();
@@ -231,6 +232,8 @@ describe("LearnerContentWorkspace", () => {
     expect(container.querySelector(".learner-task-context")).toBeNull();
     expect(container.querySelectorAll(".dialog-sidebar")).toHaveLength(1);
     expect(screen.getAllByRole("navigation", { name: "Arbeitsbereich wählen" })).toHaveLength(1);
+    const statement = screen.getByRole("region", { name: "Vollständige Aufgabenstellung" });
+    expect(within(statement).getByText("Untersuche die Quelle im Gespräch.")).toBeInTheDocument();
   });
 
   it("keeps task and material surfaces mounted while changing the compact view", async () => {
@@ -375,7 +378,7 @@ describe("LearnerContentWorkspace", () => {
     expect(css).toMatch(/\.learning-unit-stage--content\s*\{[^}]*container-type:\s*inline-size;/s);
     expect(css).toMatch(/\.learner-task-workbench-container\s*\{[^}]*grid-template-rows:\s*minmax\(3\.25rem,\s*auto\) auto;/s);
     expect(css).toMatch(/\.learner-task-workbench\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
-    expect(css).toContain("@container (min-width: 72rem)");
+    expect(css).toContain("@container (min-width: 60rem)");
     expect(css).toMatch(/grid-template-columns:\s*clamp\(32rem,\s*44cqw,\s*38rem\) minmax\(0,\s*1fr\)/);
     expect(css).not.toContain("@container learning-dialog (min-width: 64rem)");
     expect(css).toMatch(/\.learner-task-context__scroll\s*\{[^}]*overflow-y:\s*auto;/s);

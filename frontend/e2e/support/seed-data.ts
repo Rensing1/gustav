@@ -548,7 +548,8 @@ export async function seedLearnerNavigationCourse(
     "## Vertiefung\n\nDieses zweite Modulmaterial beginnt in der Arbeitsfläche eingeklappt."
   );
   const taskId = await createTask(teacherPage, unitId, sectionId, {
-    instruction_md: "Ordne das Material in zwei Sätzen ein.",
+    instruction_md:
+      "## Arbeitsauftrag\n\nOrdne das Material in zwei Sätzen ein.\n\nBeziehe beide Materialien ein und nenne mindestens einen konkreten Beleg.\n\nBegründe abschließend, welche Position dich überzeugt.",
     criteria: []
   });
   const secondTaskId = await createTask(teacherPage, unitId, sectionId, {

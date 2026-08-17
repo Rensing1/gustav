@@ -1,0 +1,62 @@
+import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+
+import { login } from "./support/auth";
+import { emailDomain, webBase } from "./support/e2e-env";
+import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
+import { expectNoViewportOverflow } from "./support/layout-sanity";
+import { seedLearnerNavigationCourse } from "./support/seed-data";
+
+const password = "Passw0rd!e2e";
+
+async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true });
+  return { context, page: await context.newPage() };
+}
+
+test("@feature-acceptance keeps the learner task desk split on landscape iPads", async ({ browser }) => {
+  const unique = Date.now();
+  const teacherEmail = `responsive_task_teacher_${unique}@${emailDomain}`;
+  const learnerEmail = `responsive_task_learner_${unique}@${emailDomain}`;
+  await ensureTeacherUser(teacherEmail, password);
+  await ensureLearnerUser(learnerEmail, password);
+
+  const teacher = await authenticatedPage(browser);
+  const learner = await authenticatedPage(browser);
+  try {
+    await login(teacher.page, teacherEmail, password);
+    await login(learner.page, learnerEmail, password);
+    const seeded = await seedLearnerNavigationCourse(teacher.page, learner.page, `Responsive Aufgabe ${unique}`);
+
+    await learner.page.setViewportSize({ width: 1024, height: 768 });
+    await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
+    await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
+    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+
+    const workbench = learner.page.getByRole("region", { name: "Aufgabe bearbeiten" });
+    const context = workbench.getByRole("complementary", { name: "Aufgabe und Kontext" });
+    const task = workbench.getByRole("main", { name: "Bearbeitung" });
+    const switcher = workbench.getByRole("navigation", { name: "Arbeitsbereich wählen" });
+
+    await expect(context).toBeVisible();
+    await expect(task).toBeVisible();
+    await expect(switcher).toBeHidden();
+    const landscapeColumns = await workbench.locator(".learner-task-workbench__desk").evaluate(
+      (desk) => getComputedStyle(desk).gridTemplateColumns.split(" ").length
+    );
+    expect(landscapeColumns).toBe(2);
+    await expectNoViewportOverflow(learner.page);
+
+    await learner.page.setViewportSize({ width: 820, height: 1180 });
+    await expect(context).toBeHidden();
+    await expect(task).toBeVisible();
+    await expect(switcher).toBeVisible();
+    const portraitColumns = await workbench.locator(".learner-task-workbench__desk").evaluate(
+      (desk) => getComputedStyle(desk).gridTemplateColumns.split(" ").length
+    );
+    expect(portraitColumns).toBe(1);
+    await expectNoViewportOverflow(learner.page);
+  } finally {
+    await learner.context.close();
+    await teacher.context.close();
+  }
+});

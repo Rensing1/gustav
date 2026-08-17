@@ -99,6 +99,22 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     await expect(learner.page.getByRole("group", { name: "Antwortform" })).toHaveCount(1);
 
     await learner.page.setViewportSize({ width: 1024, height: 768 });
+    const landscapeIpadLayout = await workbench.evaluate((workspace) => {
+      const desk = workspace.querySelector(".learner-task-workbench__desk");
+      const context = workspace.querySelector('[data-work-surface="materials"]');
+      const task = workspace.querySelector('[data-work-surface="task"]');
+      if (!(desk instanceof HTMLElement) || !(context instanceof HTMLElement) || !(task instanceof HTMLElement)) {
+        throw new Error("learner task surfaces are incomplete");
+      }
+      return {
+        columns: getComputedStyle(desk).gridTemplateColumns,
+        contextDisplay: getComputedStyle(context).display,
+        taskDisplay: getComputedStyle(task).display
+      };
+    });
+    expect(landscapeIpadLayout.columns.split(" ")).toHaveLength(2);
+    expect(landscapeIpadLayout.contextDisplay).not.toBe("none");
+    expect(landscapeIpadLayout.taskDisplay).not.toBe("none");
     await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
     await expect(learner.page.getByRole("region", { name: "Laufende Aufgabe" })).toHaveCount(0);
     await expect(learner.page.getByText("Entwurf geöffnet")).toHaveCount(0);

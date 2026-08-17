@@ -3074,7 +3074,8 @@
   }
 }
 
-@container learning-dialog (min-width: 72rem) {
+/* A landscape iPad has enough room to keep context and work visible together. */
+@container learning-dialog (min-width: 60rem) {
   .dialog-workspace,
   .dialog-layout {
     height: 100%;
@@ -4073,7 +4074,8 @@ button.learner-material-context__module-toggle:focus-visible,
   overflow-wrap: anywhere;
 }
 
-@container (min-width: 72rem) {
+/* Match the dialog workspace: landscape tablets use the deliberate two-column desk. */
+@container (min-width: 60rem) {
   .learner-task-workbench {
     height: calc(100svh - 7.25rem);
     min-height: 36rem;
@@ -4211,7 +4213,7 @@ button.learner-material-context__module-toggle:focus-visible,
     grid-template-columns: minmax(0, 1fr);
   }
 
-  @media (min-width: 80rem) {
+  @media (min-width: 64rem) {
     .learner-task-workbench__desk {
       grid-template-columns: minmax(32rem, 38rem) minmax(0, 1fr);
     }

@@ -1,6 +1,6 @@
 # Implementierungsplan: Zweispaltige Aufgabenbearbeitung auf iPads im Querformat
 
-**Status:** zur Umsetzung freigegeben  
+**Status:** umgesetzt
 **Datum:** 17. August 2026
 
 ## Ausgangslage
@@ -51,3 +51,10 @@ Die Änderung betrifft ausschließlich die Darstellung. `api/openapi.yml`, Backe
 ## Abgrenzung
 
 Die allgemeine Practice-Ansicht und die Lehrkraft-Oberfläche werden nicht verändert. Entscheidend ist die Aufgabenarbeitsfläche innerhalb einer Lerneinheit.
+
+## Umsetzungsergebnis
+
+- Native Aufgaben und Dialogaufgaben wechseln nun ab 60 rem Containerbreite in die Zweispaltenansicht.
+- Der Fallback für Browser ohne Container Queries wechselt ab 64 rem Ansichtsbreite.
+- Der authentifizierte Browsernachweis bestätigt bei 1024 px zwei sichtbare Spalten ohne horizontales Überlaufen und bei 820 px die kompakte Einspaltenansicht.
+- Automatisierter Nachweis: `frontend/e2e/learner-task-responsive.spec.ts` mit `@feature-acceptance`.

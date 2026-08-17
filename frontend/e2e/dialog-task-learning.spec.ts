@@ -13,7 +13,7 @@ async function authenticatedPage(browser: Browser): Promise<{ context: BrowserCo
   return { context, page: await context.newPage() };
 }
 
-async function expectDialogLayout(page: Page, mode: "desktop" | "tablet" | "mobile"): Promise<void> {
+async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promise<void> {
   const workspace = page.getByRole("region", { name: "KI-Dialog" });
   const partnerContext = workspace.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
   const composer = workspace.getByRole("region", { name: "Dialog fortsetzen" });
@@ -64,15 +64,11 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "tablet" | "mobi
   });
 
   if (mode === "desktop") {
-    expect(geometry.width, `desktop dialog geometry: ${JSON.stringify(geometry)}`).toBeGreaterThanOrEqual(1024);
+    expect(geometry.width, `split dialog geometry: ${JSON.stringify(geometry)}`).toBeGreaterThanOrEqual(960);
     expect(
       geometry.main.x,
       `desktop dialog geometry: ${JSON.stringify(geometry)}`
     ).toBeGreaterThan(geometry.sidebar.x + geometry.sidebar.width - 1);
-  }
-  if (mode === "tablet") {
-    expect(geometry.width).toBeGreaterThanOrEqual(680);
-    expect(geometry.width).toBeLessThan(1024);
   }
   if (mode === "mobile") {
     expect(geometry.width).toBeLessThan(680);
@@ -136,7 +132,7 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
       mask: [accountControl]
     });
     await learner.page.setViewportSize({ width: 1024, height: 768 });
-    await expectDialogLayout(learner.page, "tablet");
+    await expectDialogLayout(learner.page, "desktop");
     await expect(learner.page).toHaveScreenshot("learner-dialog-light-tablet.png", {
       animations: "disabled",
       caret: "hide",

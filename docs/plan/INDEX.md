@@ -11,6 +11,11 @@ Review cadence: monatlich während des Harness-Refactors
 Dieser Index ist die kuratierte Einstiegsliste für aktive und strategische Pläne. Er ersetzt keine Detailpläne.
 
 ## Aktiv
+- `docs/plan/2026-08-17-schueleraufgaben-ipad-querformat.md`: zweispaltige Aufgabenbearbeitung auf iPads im Querformat.
+- `docs/plan/2026-08-17-aufgabenbezogene-schuelerentwuerfe.md`: strikt nach Lernendem, Kurs und Aufgabe getrennte Textentwürfe.
+- `docs/plan/2026-08-17-zuverlaessige-endgueltige-aufgabenabgabe.md`: sichtbare, gesperrte und verständlich fehlschlagende Finalisierung.
+- `docs/plan/2026-08-17-materialeditor-entwurf-nur-bei-aenderung.md`: Entwurfsstatus nur bei semantisch geänderten Materialdaten.
+- `docs/plan/2026-08-17-vollstaendige-aufgabenstellung-mobile.md`: erkennbare Kürzung und vollständige Aufgabenstellung in kompakten Arbeitsflächen.
 - `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`: übergreifender Harness- und Refactor-Fahrplan.
 - `docs/plan/2026-07-02-harness-minimum-implementation.md`: konkrete PR-1-Umsetzung und Evidenz.
 - `docs/plan/2026-07-02-csrf-session-baseline.md`: konkrete PR-2-Umsetzung und Evidenz.

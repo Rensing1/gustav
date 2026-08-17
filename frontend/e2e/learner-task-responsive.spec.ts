@@ -9,7 +9,7 @@ import { seedLearnerNavigationCourse } from "./support/seed-data";
 const password = "Passw0rd!e2e";
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true });
+  const context = await browser.newContext({ baseURL: webBase });
   return { context, page: await context.newPage() };
 }
 
@@ -49,6 +49,16 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
       (desk) => getComputedStyle(desk).gridTemplateColumns.split(" ").length
     );
     expect(landscapeColumns).toBe(2);
+    await expectNoViewportOverflow(learner.page);
+
+    await learner.page.setViewportSize({ width: 1180, height: 820 });
+    await expect(context).toBeVisible();
+    await expect(task).toBeVisible();
+    await expect(switcher).toBeHidden();
+    const largeLandscapeColumns = await workbench.locator(".learner-task-workbench__desk").evaluate(
+      (desk) => getComputedStyle(desk).gridTemplateColumns.split(" ").length
+    );
+    expect(largeLandscapeColumns).toBe(2);
     await expectNoViewportOverflow(learner.page);
 
     await learner.page.setViewportSize({ width: 820, height: 1180 });

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from pathlib import Path
 
 
@@ -78,5 +79,8 @@ def test_changelog_uses_date_based_sections() -> None:
         if line.startswith("## ")
     ]
 
-    assert sections[:2] == ["2026-08-17", "2026-08-16"]
+    assert sections
     assert all(re.fullmatch(r"\d{4}-\d{2}-\d{2}", section) for section in sections)
+    parsed_sections = [date.fromisoformat(section) for section in sections]
+    assert len(set(parsed_sections)) == len(parsed_sections)
+    assert parsed_sections == sorted(parsed_sections, reverse=True)

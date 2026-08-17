@@ -8,7 +8,7 @@ import { seedLearnerNavigationCourse } from "./support/seed-data";
 const password = "Passw0rd!e2e";
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true });
+  const context = await browser.newContext({ baseURL: webBase });
   return { context, page: await context.newPage() };
 }
 

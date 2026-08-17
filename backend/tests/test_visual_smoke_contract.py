@@ -98,3 +98,10 @@ def test_visual_smoke_has_reproducible_browser_bootstrap_and_preflight() -> None
     source = preflight.read_text(encoding="utf-8")
     assert "chromium.executablePath()" in source
     assert "make playwright-bootstrap" in source
+
+
+def test_practice_feedback_snapshot_keeps_the_main_learning_surface_visible() -> None:
+    source = (REPO_ROOT / "frontend" / "e2e" / "practice-session.spec.ts").read_text(encoding="utf-8")
+
+    assert 'learner.page.locator(".practice-session__main")' not in source
+    assert 'learner.page.locator(".practice-feedback__body")' in source

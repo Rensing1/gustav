@@ -195,12 +195,21 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
         await learner.page.getByRole("button", { name: "Antwort prüfen" }).click();
         await expect(learner.page.getByRole("heading", { name: feedbackHeading })).toBeVisible({ timeout: 60_000 });
         if (nativePresentations === 1) {
+          const feedbackBody = learner.page.locator(".practice-feedback__body");
+          await expect(feedbackBody).toBeVisible();
+          await feedbackBody.evaluate((element) => {
+            element.textContent = "Deine Antwort benennt den Zweck des roten Tests und kann noch genauer begründet werden.";
+          });
+          const feedbackDue = learner.page.locator(".practice-feedback__due");
+          if (await feedbackDue.count()) {
+            await feedbackDue.evaluate((element) => {
+              element.textContent = "Nächste Wiederholung: später";
+            });
+          }
           await expect(learner.page).toHaveScreenshot("practice-feedback-light-desktop.png", {
             animations: "disabled",
             caret: "hide",
-            // AI feedback has variable length. Mask the full task card so its changing
-            // height cannot move a second mask and make the layout snapshot flaky.
-            mask: [accountControl, sessionPositionHeading, learner.page.locator(".practice-session__main")]
+            mask: [accountControl, sessionPositionHeading]
           });
         }
         await learner.page.reload();

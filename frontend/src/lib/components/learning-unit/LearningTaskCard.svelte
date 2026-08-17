@@ -11,7 +11,8 @@
     legacySubmissionDraftStorageKey,
     submissionDraftStorageKey
   } from "$lib/learning-unit/submission-drafts";
-  import { taskInstructionPreview } from "$lib/learning-unit/task-preview";
+  import { taskInstructionPreview, taskPreviewIsVisuallyClipped } from "$lib/learning-unit/task-preview";
+  import { finalSubmissionIdempotencyKey } from "$lib/learning-unit/submission-finalization";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -139,6 +140,7 @@
   let lastReviewPanelOpen = $state(untrack(() => reviewPanelOpen));
   let feedbackDisclosureOpen = $state(false);
   let submissionDisclosureOpen = $state(untrack(() => reviewPanelOpen));
+  let taskPreviewVisuallyClipped = $state(false);
 
   function uploadOnly(): boolean {
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius";
@@ -190,6 +192,26 @@
 
   function taskPreview() {
     return taskInstructionPreview(task.instruction_md, taskTitle);
+  }
+
+  function observeTaskPreview(node: HTMLElement, _previewText: string) {
+    const measure = () => {
+      taskPreviewVisuallyClipped = taskPreviewIsVisuallyClipped(node.scrollHeight, node.clientHeight);
+    };
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    resizeObserver?.observe(node);
+    window.addEventListener("resize", measure);
+    queueMicrotask(measure);
+
+    return {
+      update() {
+        queueMicrotask(measure);
+      },
+      destroy() {
+        resizeObserver?.disconnect();
+        window.removeEventListener("resize", measure);
+      }
+    };
   }
 
   function usesCompactTaskLayout(): boolean {
@@ -381,6 +403,10 @@
     );
   }
 
+  function currentFinalizationIdempotencyKey(): string | null {
+    return canOfferFinalization() ? finalSubmissionIdempotencyKey(latestSubmission()?.id) : null;
+  }
+
   function currentDraftMatchesFeedback(): boolean {
     const submission = latestSubmission();
     if (!submission || !canOfferFinalization()) {
@@ -555,8 +581,8 @@
       aria-label={taskPreview().text}
     >
       <div class="learning-task-row__copy">
-        <p class="learning-task-row__preview">{taskPreview().text}</p>
-        {#if taskPreview().truncated}
+        <p class="learning-task-row__preview" use:observeTaskPreview={taskPreview().text}>{taskPreview().text}</p>
+        {#if taskPreview().truncated || taskPreviewVisuallyClipped}
           <p class="learning-task-row__more">Weitere Angaben in der Aufgabe</p>
         {/if}
       </div>
@@ -803,6 +829,9 @@
                     {#if moduleId}
                       <input type="hidden" name="module_id" value={moduleId} />
                     {/if}
+                    {#if currentFinalizationIdempotencyKey()}
+                      <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
+                    {/if}
                     <section class="learning-submission-editor__field">
                       <span>Deine Lösung</span>
                       <MarkdownWysiwygEditor
@@ -847,6 +876,9 @@
                   <input type="hidden" name="unit_type" value={unitType} />
                   {#if moduleId}
                     <input type="hidden" name="module_id" value={moduleId} />
+                  {/if}
+                  {#if currentFinalizationIdempotencyKey()}
+                    <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
                   {/if}
                   <label class="learning-submission-upload__dropzone">
                     <span class="learning-submission-upload__title">{uploadTitle()}</span>

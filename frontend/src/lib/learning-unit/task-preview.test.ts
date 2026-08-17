@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { taskInstructionPreview } from "./task-preview";
+import { taskInstructionPreview, taskPreviewIsVisuallyClipped } from "./task-preview";
 
 describe("task instruction preview", () => {
   it("keeps a short one-line instruction complete without a truncation hint", () => {
@@ -22,5 +22,11 @@ describe("task instruction preview", () => {
 
   it("falls back to the task title for an empty instruction", () => {
     expect(taskInstructionPreview(" \n\n ", "Aufgabe 8")).toEqual({ text: "Aufgabe 8", truncated: false });
+  });
+
+  it("detects when the rendered two-line preview hides content", () => {
+    expect(taskPreviewIsVisuallyClipped(41, 40)).toBe(true);
+    expect(taskPreviewIsVisuallyClipped(40, 40)).toBe(false);
+    expect(taskPreviewIsVisuallyClipped(0, 0)).toBe(false);
   });
 });

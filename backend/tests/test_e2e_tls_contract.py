@@ -31,6 +31,13 @@ def test_make_e2e_requires_the_caddy_ca_and_tls_verification() -> None:
     assert "curl -sk" not in body
 
 
+def test_new_learner_task_acceptance_tests_keep_browser_tls_verification_enabled() -> None:
+    for spec_path in (ROOT / "frontend/e2e").glob("learner-task-*.spec.ts"):
+        source = spec_path.read_text(encoding="utf-8")
+
+        assert "ignoreHTTPSErrors: true" not in source, spec_path.name
+
+
 def test_e2e_fails_fast_when_tls_verification_is_not_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

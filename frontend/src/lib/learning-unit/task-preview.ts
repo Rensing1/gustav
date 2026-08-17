@@ -30,3 +30,8 @@ export function taskInstructionPreview(markdown: string, fallback: string): Task
     truncated: lines.length > 1 || text.length > 120
   };
 }
+
+/** Reports whether the browser's two-line clamp hides rendered instruction text. */
+export function taskPreviewIsVisuallyClipped(scrollHeight: number, clientHeight: number): boolean {
+  return clientHeight > 0 && scrollHeight > clientHeight;
+}

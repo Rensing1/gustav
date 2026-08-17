@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   beginSubmissionAttempt,
-  finalSubmissionFailureMessage
+  finalSubmissionIdempotencyKey,
+  finalSubmissionFailureMessage,
+  validatedFinalSubmissionIdempotencyKey
 } from "./submission-finalization";
 
 describe("submission finalization", () => {
@@ -16,7 +18,27 @@ describe("submission finalization", () => {
   });
 
   it("rejects another attempt while a submission request is active", () => {
-    expect(beginSubmissionAttempt("task-1", "task-1", "submit")).toEqual({ accepted: false });
+    expect(beginSubmissionAttempt("task-1", "task-1", "submit")).toEqual({
+      accepted: false,
+      statusMessage: "Diese Abgabe wird bereits verarbeitet."
+    });
+  });
+
+  it("explains when another task currently owns the submission slot", () => {
+    expect(beginSubmissionAttempt("task-1", "task-2", "submit")).toEqual({
+      accepted: false,
+      statusMessage: "Eine andere Abgabe wird bereits verarbeitet. Bitte warte kurz und versuche es dann erneut."
+    });
+  });
+
+  it("derives one stable finalization key from the reviewed submission", () => {
+    const submissionId = "123e4567-e89b-42d3-a456-426614174000";
+
+    expect(finalSubmissionIdempotencyKey(submissionId)).toBe(`finalize-${submissionId}`);
+    expect(finalSubmissionIdempotencyKey(submissionId)).toBe(`finalize-${submissionId}`);
+    expect(finalSubmissionIdempotencyKey("not-a-submission")).toBeNull();
+    expect(validatedFinalSubmissionIdempotencyKey(`finalize-${submissionId}`)).toBe(`finalize-${submissionId}`);
+    expect(validatedFinalSubmissionIdempotencyKey("finalize-not-a-submission")).toBeNull();
   });
 
   it.each([

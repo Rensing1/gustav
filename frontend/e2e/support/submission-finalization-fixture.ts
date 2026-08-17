@@ -22,29 +22,43 @@ function validatedSubject(value: string): string {
  * Inserts an already reviewed draft so the browser test exercises finalization
  * without depending on an external AI provider.
  */
-export async function prepareCompletedFeedbackDraft(input: {
+type CompletedFeedbackDraftInput = {
   courseId: string;
   taskId: string;
   learnerSub: string;
-  textBody: string;
-}): Promise<void> {
+} & (
+  | { kind?: "text"; textBody: string }
+  | { kind: "file"; textBody?: never }
+);
+
+export async function prepareCompletedFeedbackDraft(input: CompletedFeedbackDraftInput): Promise<void> {
   if (!e2eDatabaseUrl) {
     throw new Error("E2E_DATABASE_URL or SESSION_DATABASE_URL is required for submission finalization acceptance");
   }
   const courseId = validatedUuid(input.courseId, "course id");
   const taskId = validatedUuid(input.taskId, "task id");
   const learnerSub = validatedSubject(input.learnerSub);
-  const textBody = input.textBody.replaceAll("'", "''");
   const submissionId = randomUUID();
+  const isFile = input.kind === "file";
+  const kind = isFile ? "file" : "text";
+  const textBody = isFile ? "null" : `'${input.textBody.replaceAll("'", "''")}'`;
+  const storageKey = isFile
+    ? `'submissions/${courseId}/${taskId}/${learnerSub}/${submissionId}.pdf'`
+    : "null";
+  const mimeType = isFile ? "'application/pdf'" : "null";
+  const sizeBytes = isFile ? "128" : "null";
+  const sha256 = isFile ? `'${"0".repeat(64)}'` : "null";
   const sql = `
     insert into public.learning_submissions (
       id, course_id, task_id, section_id, student_sub, intent, kind,
-      text_body, attempt_nr, analysis_status, analysis_json, feedback_md,
+      text_body, storage_key, mime_type, size_bytes, sha256,
+      attempt_nr, analysis_status, analysis_json, feedback_md,
       created_at, completed_at
     ) values (
       '${submissionId}'::uuid, '${courseId}'::uuid, '${taskId}'::uuid,
       (select section_id from public.unit_tasks where id = '${taskId}'::uuid),
-      '${learnerSub}', 'feedback', 'text', '${textBody}', 1, 'completed',
+      '${learnerSub}', 'feedback', '${kind}', ${textBody}, ${storageKey}, ${mimeType}, ${sizeBytes}, ${sha256},
+      1, 'completed',
       '{"schema":"criteria.v2","criteria_results":[]}'::jsonb,
       'Die Fassung wurde geprüft und kann endgültig abgegeben werden.',
       now(), now()

@@ -1,7 +1,7 @@
 export type SubmissionIntent = "feedback" | "submit";
 
 export type SubmissionAttempt =
-  | { accepted: false }
+  | { accepted: false; statusMessage: string }
   | {
       accepted: true;
       taskId: string;
@@ -19,7 +19,13 @@ export function beginSubmissionAttempt(
   intent: SubmissionIntent
 ): SubmissionAttempt {
   if (pendingTaskId) {
-    return { accepted: false };
+    return {
+      accepted: false,
+      statusMessage:
+        pendingTaskId === taskId
+          ? "Diese Abgabe wird bereits verarbeitet."
+          : "Eine andere Abgabe wird bereits verarbeitet. Bitte warte kurz und versuche es dann erneut."
+    };
   }
   return {
     accepted: true,
@@ -27,6 +33,27 @@ export function beginSubmissionAttempt(
     intent,
     statusMessage: intent === "submit" ? "Abgabe wird verarbeitet ..." : "Rückmeldung wird erstellt ..."
   };
+}
+
+const submissionIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Derives a retry-safe finalization key from the reviewed feedback submission. */
+export function finalSubmissionIdempotencyKey(submissionId: string | null | undefined): string | null {
+  const normalizedSubmissionId = submissionId?.trim() ?? "";
+  if (!submissionIdPattern.test(normalizedSubmissionId)) {
+    return null;
+  }
+  return `finalize-${normalizedSubmissionId}`;
+}
+
+/** Accepts only finalization keys produced from a valid feedback submission id. */
+export function validatedFinalSubmissionIdempotencyKey(value: FormDataEntryValue | null): string | null {
+  if (typeof value !== "string" || !value.startsWith("finalize-")) {
+    return null;
+  }
+  const normalized = value.trim();
+  const expected = finalSubmissionIdempotencyKey(normalized.slice("finalize-".length));
+  return expected === normalized ? normalized : null;
 }
 
 /** Converts stable backend error codes into actionable learner-facing German. */

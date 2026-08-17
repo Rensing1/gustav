@@ -5,7 +5,10 @@ import type { Actions, PageServerLoad } from "./$types";
 
 import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap, requireSpaceBootstrap } from "$lib/server/guards";
-import { finalSubmissionFailureMessage } from "$lib/learning-unit/submission-finalization";
+import {
+  finalSubmissionFailureMessage,
+  validatedFinalSubmissionIdempotencyKey
+} from "$lib/learning-unit/submission-finalization";
 import type { SessionBootstrap } from "$lib/types/session-bootstrap";
 import type { LearnerHome } from "$lib/types/home";
 import type {
@@ -238,6 +241,13 @@ export const actions: Actions = {
     }
 
     if (submissionIntent === "submit") {
+      const idempotencyKey = validatedFinalSubmissionIdempotencyKey(form.get("finalization_idempotency_key"));
+      if (!idempotencyKey) {
+        return fail(400, {
+          message: "Die endgültige Abgabe ist nicht mehr aktuell. Bitte lade die Aufgabe neu.",
+          taskId
+        });
+      }
       const response = await backendRequest(
         fetch,
         cookies,
@@ -248,7 +258,7 @@ export const actions: Actions = {
           includeSameOrigin: true,
           headers: {
             "content-type": "application/json",
-            "idempotency-key": randomUUID()
+            "idempotency-key": idempotencyKey
           },
           body: JSON.stringify({})
         }

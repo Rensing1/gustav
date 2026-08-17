@@ -35,6 +35,12 @@ import { requireSpaceBootstrap } from "$lib/server/guards";
 const requireBackendJsonMock = vi.mocked(requireBackendJson);
 const backendRequestMock = vi.mocked(backendRequest);
 const requireSpaceBootstrapMock = vi.mocked(requireSpaceBootstrap);
+const finalizationIdempotencyKey = "finalize-123e4567-e89b-42d3-a456-426614174000";
+
+function setFinalSubmissionIntent(form: FormData): void {
+  form.set("submission_intent", "submit");
+  form.set("finalization_idempotency_key", finalizationIdempotencyKey);
+}
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -185,7 +191,7 @@ describe("learning unit route actions", () => {
     form.set("task_kind", "native");
     form.set("unit_type", "modular");
     form.set("module_id", "module-7");
-    form.set("submission_intent", "submit");
+    setFinalSubmissionIntent(form);
 
     const result = await actions.default({
       fetch: vi.fn() as unknown as typeof fetch,
@@ -201,7 +207,11 @@ describe("learning unit route actions", () => {
       "/api/learning/courses/course-1/tasks/task-1/submissions/finalize",
       expect.objectContaining({
         method: "POST",
-        includeSameOrigin: true
+        includeSameOrigin: true,
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": finalizationIdempotencyKey
+        }
       })
     );
     expect(result).toEqual({
@@ -214,6 +224,34 @@ describe("learning unit route actions", () => {
         files: [{ mime: "application/pdf", size: 2048, url: "http://storage.local/submission.pdf" }]
       },
       message: "submitted"
+    });
+  });
+
+  it("rejects a final submission without the reviewed submission key", async () => {
+    mockModularLoad();
+
+    const form = new FormData();
+    form.set("task_id", "task-1");
+    form.set("task_kind", "native");
+    form.set("unit_type", "modular");
+    form.set("module_id", "module-7");
+    form.set("submission_intent", "submit");
+
+    const result = await actions.default({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof actions.default>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      request: requestWithFormData(form),
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
+    } as Parameters<typeof actions.default>[0]);
+
+    expect(backendRequestMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        message: "Die endgültige Abgabe ist nicht mehr aktuell. Bitte lade die Aufgabe neu.",
+        taskId: "task-1"
+      }
     });
   });
 
@@ -235,7 +273,7 @@ describe("learning unit route actions", () => {
     form.set("task_kind", "native");
     form.set("unit_type", "modular");
     form.set("module_id", "module-7");
-    form.set("submission_intent", "submit");
+    setFinalSubmissionIntent(form);
 
     const result = await actions.default({
       fetch: vi.fn() as unknown as typeof fetch,
@@ -322,7 +360,7 @@ describe("learning unit route actions", () => {
     form.set("task_kind", "native");
     form.set("unit_type", "modular");
     form.set("module_id", "module-7");
-    form.set("submission_intent", "submit");
+    setFinalSubmissionIntent(form);
 
     try {
       await actions.default({

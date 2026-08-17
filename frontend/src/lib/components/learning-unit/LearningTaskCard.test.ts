@@ -371,6 +371,29 @@ describe("LearningTaskCard", () => {
     expect(screen.queryByText("Weitere Angaben in der Aufgabe")).toBeNull();
   });
 
+  it("shows a truncation hint when a one-line source is visually clipped", async () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          instruction_md: "Vergleiche die beiden Darstellungen sorgfältig und begründe anschließend deine Entscheidung nachvollziehbar."
+        },
+        taskTitle: "Aufgabe 3",
+        unitType: "modular",
+        expanded: true,
+        compactLayout: true
+      }
+    });
+
+    const preview = document.querySelector(".learning-task-row__preview") as HTMLParagraphElement;
+    Object.defineProperty(preview, "scrollHeight", { configurable: true, value: 60 });
+    Object.defineProperty(preview, "clientHeight", { configurable: true, value: 32 });
+    await fireEvent(window, new Event("resize"));
+
+    await waitFor(() => expect(screen.getByText("Weitere Angaben in der Aufgabe")).toBeInTheDocument());
+  });
+
   it("keeps the complete instruction in the workspace task surface", () => {
     const { container } = render(LearningTaskCard, {
       props: {
@@ -745,6 +768,39 @@ describe("LearningTaskCard", () => {
     const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor.value).toBe("Geprüfter Entwurf"));
     expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+  });
+
+  it("binds final submission forms to the reviewed submission", async () => {
+    const reviewedSubmissionId = "123e4567-e89b-42d3-a456-426614174000";
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: { ...task, has_submission: true },
+        taskTitle: "Aufgabe 5",
+        unitType: "linear",
+        expanded: true,
+        submissionFocused: true,
+        history: [
+          {
+            id: reviewedSubmissionId,
+            attempt_nr: 1,
+            kind: "text",
+            intent: "feedback",
+            created_at: "2026-04-07T10:35:29+00:00",
+            analysis_status: "completed",
+            text_body: "Geprüfter Entwurf",
+            feedback_md: "Gut gemacht."
+          }
+        ]
+      }
+    });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled());
+    const finalizationKeys = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input[name="finalization_idempotency_key"]')
+    );
+    expect(finalizationKeys).toHaveLength(2);
+    expect(finalizationKeys.every((input) => input.value === `finalize-${reviewedSubmissionId}`)).toBe(true);
   });
 
   it("shows and locks the editor while a final submission is being processed", async () => {

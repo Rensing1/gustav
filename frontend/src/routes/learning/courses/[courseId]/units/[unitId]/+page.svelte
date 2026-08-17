@@ -1139,6 +1139,7 @@
       const intent = submitter.value === "feedback" ? "feedback" : "submit";
       const attempt = beginSubmissionAttempt(feedbackPendingTaskId, taskId, intent);
       if (!attempt.accepted) {
+        setClientSubmissionError(taskId, attempt.statusMessage);
         cancel();
         return;
       }

@@ -147,7 +147,7 @@ describe("learning unit route contract", () => {
 
     expect(routeSource).toContain('import { beginSubmissionAttempt } from "$lib/learning-unit/submission-finalization";');
     expect(routeSource).toContain("const attempt = beginSubmissionAttempt(feedbackPendingTaskId, taskId, intent)");
-    expect(routeSource).toMatch(/if \(!attempt\.accepted\) \{\s*cancel\(\);/);
+    expect(routeSource).toMatch(/if \(!attempt\.accepted\) \{\s*setClientSubmissionError\(taskId, attempt\.statusMessage\);\s*cancel\(\);/);
     expect(routeSource).toContain("feedbackPendingTaskId = attempt.taskId");
     expect(routeSource).toContain("feedbackStatusMessage = attempt.statusMessage");
   });

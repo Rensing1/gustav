@@ -198,7 +198,9 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
           await expect(learner.page).toHaveScreenshot("practice-feedback-light-desktop.png", {
             animations: "disabled",
             caret: "hide",
-            mask: [accountControl, sessionPositionHeading, learner.page.locator(".practice-feedback__body"), learner.page.locator(".practice-feedback__due")]
+            // AI feedback has variable length. Mask the full task card so its changing
+            // height cannot move a second mask and make the layout snapshot flaky.
+            mask: [accountControl, sessionPositionHeading, learner.page.locator(".practice-session__main")]
           });
         }
         await learner.page.reload();

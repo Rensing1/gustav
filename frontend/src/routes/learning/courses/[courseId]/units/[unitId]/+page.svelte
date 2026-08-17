@@ -58,6 +58,7 @@
   } from "$lib/learning-unit/learner-workspace-state";
   import { learnerNavigationHref } from "$lib/learning-unit/learner-navigation";
   import { highlightedLearnerGraphModuleIds } from "$lib/learning-unit/graph-selection";
+  import { clearSubmissionDraft } from "$lib/learning-unit/submission-drafts";
   import type { TeacherFlowEdge } from "$lib/graph/teacher-unit-flow";
   import type {
     LearningSubmission,
@@ -1154,6 +1155,16 @@
             message?: string;
           };
           if (payload.finalizedTaskId && payload.finalizedSubmission) {
+            if (browser) {
+              const draftScope = {
+                learnerSub: data.user?.sub ?? null,
+                courseId: data.courseId,
+                taskId: payload.finalizedTaskId,
+                mode: "text" as const
+              };
+              clearSubmissionDraft(window.sessionStorage, draftScope);
+              clearSubmissionDraft(window.localStorage, draftScope);
+            }
             setTaskHistory(payload.finalizedTaskId, [
               payload.finalizedSubmission,
               ...historyForTask(payload.finalizedTaskId).filter((entry) => entry.id !== payload.finalizedSubmission?.id)

@@ -7,6 +7,10 @@
   import MarkdownWysiwygEditor from "$lib/components/ui/MarkdownEditor.svelte";
   import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
   import StatusMessage, { type StatusMessageTone } from "$lib/components/ui/StatusMessage.svelte";
+  import {
+    legacySubmissionDraftStorageKey,
+    submissionDraftStorageKey
+  } from "$lib/learning-unit/submission-drafts";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -129,6 +133,7 @@
   let hideExistingUpload = $state(false);
   let uploadInput = $state<HTMLInputElement | null>(null);
   let lastSubmissionFocused = $state(false);
+  let lastWorkspaceTaskId = $state<string | null>(null);
   let lastFeedbackPending = $state(false);
   let lastReviewPanelOpen = $state(untrack(() => reviewPanelOpen));
   let feedbackDisclosureOpen = $state(false);
@@ -235,19 +240,12 @@
     return isUploadSubmission(latestSubmission()) ? "upload" : "text";
   }
 
-  function draftStorageKey(mode: SubmissionMode = editorMode): string {
-    return `gustav.learning.submission-draft:${encodeURIComponent(String(learnerSub))}:${courseId}:${task.id}:${mode}`;
-  }
-
   function legacyDraftStorageKey(mode: SubmissionMode = editorMode): string {
-    return `gustav.learning.submission-draft:${courseId}:${task.id}:${mode}`;
+    return legacySubmissionDraftStorageKey({ courseId, taskId: task.id, mode });
   }
 
   function scopedDraftStorageKey(mode: SubmissionMode = editorMode): string | null {
-    if (!learnerSub) {
-      return null;
-    }
-    return draftStorageKey(mode);
+    return submissionDraftStorageKey({ learnerSub, courseId, taskId: task.id, mode });
   }
 
   function removeLegacyDraft(mode: SubmissionMode = editorMode) {
@@ -504,7 +502,8 @@
 
   $effect(() => {
     const workspaceActive = submissionFocused || reviewPanelOpen;
-    if (workspaceActive && !lastSubmissionFocused) {
+    const workspaceTaskChanged = workspaceActive && lastWorkspaceTaskId !== null && lastWorkspaceTaskId !== task.id;
+    if (workspaceActive && (!lastSubmissionFocused || workspaceTaskChanged)) {
       const nextMode = preferredEditorMode();
       editorMode = nextMode;
       if (nextMode === "text") {
@@ -517,6 +516,7 @@
       }
     }
     lastSubmissionFocused = workspaceActive;
+    lastWorkspaceTaskId = workspaceActive ? task.id : null;
   });
 
   $effect(() => {

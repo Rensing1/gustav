@@ -102,6 +102,16 @@ describe("learning unit route contract", () => {
     expect(taskCardSource).toContain("learnerSub");
   });
 
+  it("clears only the finalized task draft after a successful enhanced form action", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain('import { clearSubmissionDraft } from "$lib/learning-unit/submission-drafts";');
+    expect(routeSource).toContain("taskId: payload.finalizedTaskId");
+    expect(routeSource).toContain("clearSubmissionDraft(window.sessionStorage, draftScope)");
+    expect(routeSource).toContain("clearSubmissionDraft(window.localStorage, draftScope)");
+  });
+
   it("keeps feedback requests inline with local polling instead of a redirect-only flow", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

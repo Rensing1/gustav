@@ -1,6 +1,6 @@
 # Implementierungsplan: Aufgabenbezogene Schülerentwürfe im Texteditor
 
-**Status:** zur Umsetzung freigegeben  
+**Status:** umgesetzt
 **Datum:** 17. August 2026
 
 ## Ausgangslage
@@ -41,7 +41,7 @@ Als lernende Person möchte ich für jede Aufgabe einen getrennten Textentwurf e
 
    Given ein Entwurf wurde endgültig abgegeben, when die Abgabe bestätigt ist, then wird der lokale Textentwurf genau dieser Aufgabe entfernt; Entwürfe anderer Aufgaben bleiben erhalten.
 
-   Nachweis: Komponenten-/Seitenvertragstest und Playwright-Test.
+   Nachweis: Unit-Test der gezielten Speicherbereinigung und Seitenvertragstest; der vollständige Finalisierungsablauf wird zusätzlich im Akzeptanztest zu Problem 3 geprüft.
 
 ## API- und Datenbankbewertung
 
@@ -61,3 +61,11 @@ Der Entwurf bleibt bewusst tablokaler Browserzustand. Es werden keine Entwurfsin
 3. Nach erfolgreicher Finalisierung ausschließlich den Schlüssel der aktiven Aufgabe löschen.
 4. Zustandswechsel und Speicherzugriff in kleine, verständlich benannte Hilfsfunktionen aufteilen.
 5. Relevante Frontend-Tests, Playwright und abschließend `make verify-feature` ausführen.
+
+## Umsetzungsergebnis
+
+- Die geöffnete Aufgabenarbeitsfläche erkennt nun zusätzlich zur Sichtbarkeit auch einen Wechsel der fachlichen Aufgaben-ID und stellt daraufhin den passenden Entwurf wieder her.
+- Ein gemeinsamer, frameworkfreier Helfer erzeugt die nach Lernendem, Kurs, Aufgabe und Modus getrennten Speicherschlüssel.
+- Nach erfolgreicher endgültiger Abgabe werden ausschließlich der aufgabenbezogene Textentwurf und sein alter Legacy-Schlüssel entfernt; Entwürfe anderer Aufgaben bleiben bestehen.
+- Der authentifizierte Browsernachweis wechselt zwischen zwei Aufgaben, prüft den zunächst leeren zweiten Editor, zwei unterschiedliche Entwürfe sowie die Wiederherstellung nach einem Neuladen.
+- Automatisierter Nachweis: `frontend/e2e/learner-task-drafts.spec.ts` mit `@feature-acceptance`.

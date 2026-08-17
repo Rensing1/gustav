@@ -6,6 +6,10 @@
   import MarkdownWysiwygEditor from "$lib/components/ui/MarkdownEditor.svelte";
   import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
+  import {
+    legacySubmissionDraftStorageKey,
+    submissionDraftStorageKey
+  } from "$lib/learning-unit/submission-drafts";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { learningSubmissionFailureMessage } from "$lib/utils/learning-failures";
   import {
@@ -62,19 +66,12 @@
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius";
   }
 
-  function storageKey(): string {
-    return `gustav.learning.submission-draft:${encodeURIComponent(String(learnerSub))}:${courseId}:${task.id}:${mode}`;
-  }
-
   function legacyStorageKey(): string {
-    return `gustav.learning.submission-draft:${courseId}:${task.id}:${mode}`;
+    return legacySubmissionDraftStorageKey({ courseId, taskId: task.id, mode });
   }
 
   function scopedStorageKey(): string | null {
-    if (!learnerSub) {
-      return null;
-    }
-    return storageKey();
+    return submissionDraftStorageKey({ learnerSub, courseId, taskId: task.id, mode });
   }
 
   function removeLegacyDraft() {

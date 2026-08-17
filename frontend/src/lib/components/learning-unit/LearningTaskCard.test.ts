@@ -76,6 +76,62 @@ describe("LearningTaskCard", () => {
     expect(window.localStorage.getItem(legacyKey)).toBeNull();
   });
 
+  it("restores only the draft belonging to the task after an in-place task switch", async () => {
+    const firstTaskKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";
+    const secondTaskKey = "gustav.learning.submission-draft:student-2:course-1:task-2:text";
+    const secondTask: LearningTask = {
+      ...task,
+      id: "task-2",
+      instruction_md: "## Zweiter Arbeitsauftrag\n\nBegründe deine Antwort."
+    };
+    window.sessionStorage.setItem(firstTaskKey, "Entwurf für Aufgabe 1");
+
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 1",
+        unitType: "modular",
+        workspaceOnly: true,
+        submissionFocused: true,
+        initialSubmissionMode: "text"
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    await waitFor(() => expect(editor.value).toBe("Entwurf für Aufgabe 1"));
+
+    await rerender({
+      learnerSub: "student-2",
+      courseId: "course-1",
+      task: secondTask,
+      taskTitle: "Aufgabe 2",
+      unitType: "modular",
+      workspaceOnly: true,
+      submissionFocused: true,
+      initialSubmissionMode: "text"
+    });
+
+    await waitFor(() => expect(editor.value).toBe(""));
+    await fireEvent.input(editor, { target: { value: "Entwurf für Aufgabe 2" } });
+    expect(window.sessionStorage.getItem(firstTaskKey)).toBe("Entwurf für Aufgabe 1");
+    expect(window.sessionStorage.getItem(secondTaskKey)).toBe("Entwurf für Aufgabe 2");
+
+    await rerender({
+      learnerSub: "student-2",
+      courseId: "course-1",
+      task,
+      taskTitle: "Aufgabe 1",
+      unitType: "modular",
+      workspaceOnly: true,
+      submissionFocused: true,
+      initialSubmissionMode: "text"
+    });
+
+    await waitFor(() => expect(editor.value).toBe("Entwurf für Aufgabe 1"));
+  });
+
   it("falls back to the latest submitted text and keeps feedback in the open editor", async () => {
     render(LearningTaskCard, {
       props: {

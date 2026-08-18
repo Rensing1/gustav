@@ -53,6 +53,14 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
     await expect(teacher).toHaveURL(new RegExp(`/teaching/courses/${courseId}\\?invite=1$`));
     const inviteUrl = await teacher.getByRole("textbox", { name: "Klassenlink" }).inputValue();
     expect(inviteUrl).toContain("/invite#v1.");
+    const drawerLayout = await inviteDrawer.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth
+    }));
+    expect(drawerLayout.scrollWidth).toBeLessThanOrEqual(drawerLayout.clientWidth + 1);
+    await expect(inviteDrawer.getByRole("button", { name: "Im Vollbild anzeigen" })).toBeVisible();
+    await expect(inviteDrawer.getByRole("textbox", { name: /Schul-E-Mail-Adressen/ })).toBeVisible();
+    await expect(inviteDrawer.getByRole("button", { name: "Einladungen senden" })).toBeVisible();
 
     // Headless browsers do not consistently expose native fullscreen. Force the
     // documented denial path and verify the equal page-filling presentation.

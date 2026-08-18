@@ -53,12 +53,18 @@
 
   async function renderQr(): Promise<void> {
     if (!canvas || !invitation) return;
-    await QRCode.toCanvas(canvas, invitation.invite_url, {
+    const target = canvas;
+    await QRCode.toCanvas(target, invitation.invite_url, {
       errorCorrectionLevel: "H",
       margin: 4,
       width: 1024,
       color: { dark: "#000000", light: "#ffffff" }
     });
+    // qrcode adds 1024px inline display dimensions together with the sharp
+    // bitmap resolution. Remove only those CSS dimensions so the component's
+    // responsive rules can keep the narrow drawer usable.
+    target.style.removeProperty("width");
+    target.style.removeProperty("height");
   }
 
   function restoreTriggerFocus(): void {
@@ -119,8 +125,39 @@
     await tick();
     try {
       if (!fullscreenHost?.requestFullscreen) throw new Error("fullscreen_not_supported");
-      await fullscreenHost.requestFullscreen();
+      const fullscreenRequest = fullscreenHost.requestFullscreen();
+      await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(
+          () => reject(new Error("fullscreen_activation_timeout")),
+          500
+        );
+        fullscreenRequest.then(
+          () => {
+            window.clearTimeout(timeout);
+            resolve();
+          },
+          (error) => {
+            window.clearTimeout(timeout);
+            reject(error);
+          }
+        );
+      });
+      // Some embedded browsers resolve the API call and immediately drop the
+      // fullscreen element without dispatching a usable change event.
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      if (!fullscreenOpen) {
+        if (document.fullscreenElement === fullscreenHost && document.exitFullscreen) {
+          await document.exitFullscreen().catch(() => undefined);
+        }
+        return;
+      }
+      if (document.fullscreenElement !== fullscreenHost) {
+        throw new Error("fullscreen_not_active");
+      }
     } catch {
+      // A delayed browser response must not reopen or isolate a view that the
+      // teacher has already closed.
+      if (!fullscreenOpen) return;
       fallbackFullscreen = true;
       isolateFallbackBackground();
     }
@@ -295,23 +332,32 @@
 </section>
 
 <style>
-  .course-invite-panel { display: grid; gap: 1.25rem; }
+  .course-invite-panel { display: grid; gap: 1.25rem; min-width: 0; }
   .course-invite-panel h3 { margin: 0; }
   .course-invite-fullscreen {
     align-items: center;
     background: #fff;
+    box-sizing: border-box;
     color: #000;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     justify-content: center;
+    min-width: 0;
     padding: 1.25rem;
     text-align: center;
+    width: 100%;
   }
   .course-invite-fullscreen h2,
   .course-invite-fullscreen p { color: #000; margin: 0; }
-  .course-invite-qr { background: #fff; padding: 0.5rem; }
-  .course-invite-qr canvas { display: block; height: min(18rem, 60vw); width: min(18rem, 60vw); }
+  .course-invite-qr { background: #fff; box-sizing: border-box; max-width: 100%; padding: 0.5rem; }
+  .course-invite-qr canvas {
+    aspect-ratio: 1;
+    display: block;
+    height: auto;
+    max-width: 100%;
+    width: min(18rem, 100%);
+  }
   .course-invite-fullscreen--open,
   .course-invite-fullscreen:fullscreen {
     background: #fff;
@@ -325,7 +371,7 @@
   .course-invite-fullscreen--fallback { position: fixed; }
   .course-invite-fullscreen--open .course-invite-qr canvas,
   .course-invite-fullscreen:fullscreen .course-invite-qr canvas {
-    height: min(70vmin, 72rem);
+    height: auto;
     width: min(70vmin, 72rem);
   }
   .course-invite-close {

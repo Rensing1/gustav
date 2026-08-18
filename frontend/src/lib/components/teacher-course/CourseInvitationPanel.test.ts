@@ -54,16 +54,50 @@ describe("course invitation panel", () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(invitation.invite_url);
   });
 
+  it("keeps the high-resolution QR bitmap without the library's fixed display size", async () => {
+    toCanvas.mockImplementationOnce(async (...args: unknown[]) => {
+      const target = args[0] as HTMLCanvasElement;
+      // qrcode sets both the bitmap resolution and an inline CSS size. The
+      // latter must not be allowed to widen the narrow invitation drawer.
+      target.width = 1024;
+      target.height = 1024;
+      target.style.width = "1024px";
+      target.style.height = "1024px";
+    });
+
+    const { container } = render(CourseInvitationPanel, {
+      props: { courseId: "course-1", courseTitle: "Informatik 9a", invitation }
+    });
+    const canvas = container.querySelector("canvas");
+
+    await waitFor(() => expect(canvas?.width).toBe(1024));
+    expect(canvas?.height).toBe(1024);
+    expect(canvas?.style.width).toBe("");
+    expect(canvas?.style.height).toBe("");
+    expect(screen.getByRole("button", { name: "Im Vollbild anzeigen" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Schul-E-Mail-Adressen/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Einladungen senden" })).toBeInTheDocument();
+  });
+
   it("uses native fullscreen and returns focus when it closes", async () => {
     const historyBack = vi.spyOn(history, "back").mockImplementation(() => undefined);
-    const requestFullscreen = vi.fn(async () => undefined);
+    let fullscreenElement: Element | null = null;
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElement
+    });
+    const requestFullscreen = vi.fn(async function (this: HTMLElement) {
+      fullscreenElement = this;
+    });
     Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
       configurable: true,
       value: requestFullscreen
     });
     Object.defineProperty(document, "exitFullscreen", {
       configurable: true,
-      value: vi.fn(async () => undefined)
+      value: vi.fn(async () => {
+        fullscreenElement = null;
+      })
     });
 
     render(CourseInvitationPanel, {
@@ -75,10 +109,98 @@ describe("course invitation panel", () => {
     expect(screen.getByRole("dialog", { name: "QR-Code im Vollbild" })).toHaveClass(
       "course-invite-fullscreen--open"
     );
+    expect(screen.getByRole("dialog", { name: "QR-Code im Vollbild" })).not.toHaveClass(
+      "course-invite-fullscreen--fallback"
+    );
 
     await fireEvent.click(screen.getByRole("button", { name: "Vollbild schließen" }));
     expect(trigger).toHaveFocus();
     expect(historyBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the page-filling fallback when fullscreen resolves without becoming active", async () => {
+    vi.spyOn(history, "back").mockImplementation(() => undefined);
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: vi.fn(async () => undefined)
+    });
+
+    render(CourseInvitationPanel, {
+      props: { courseId: "course-1", courseTitle: "Informatik 9a", invitation }
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Im Vollbild anzeigen" }));
+
+    const overlay = screen.getByRole("dialog", { name: "QR-Code im Vollbild" });
+    await waitFor(() => expect(overlay).toHaveClass("course-invite-fullscreen--fallback"));
+  });
+
+  it("uses the fallback when fullscreen disappears before the next UI turn", async () => {
+    vi.spyOn(history, "back").mockImplementation(() => undefined);
+    let fullscreenElement: Element | null = null;
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElement
+    });
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: vi.fn(async function (this: HTMLElement) {
+        fullscreenElement = this;
+        window.setTimeout(() => {
+          fullscreenElement = null;
+        }, 0);
+      })
+    });
+
+    render(CourseInvitationPanel, {
+      props: { courseId: "course-1", courseTitle: "Informatik 9a", invitation }
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Im Vollbild anzeigen" }));
+
+    const overlay = screen.getByRole("dialog", { name: "QR-Code im Vollbild" });
+    await waitFor(() => expect(overlay).toHaveClass("course-invite-fullscreen--fallback"));
+  });
+
+  it("uses the fallback when the fullscreen request never settles", async () => {
+    vi.spyOn(history, "back").mockImplementation(() => undefined);
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: vi.fn(() => new Promise<void>(() => undefined))
+    });
+
+    render(CourseInvitationPanel, {
+      props: { courseId: "course-1", courseTitle: "Informatik 9a", invitation }
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Im Vollbild anzeigen" }));
+
+    const overlay = screen.getByRole("dialog", { name: "QR-Code im Vollbild" });
+    await waitFor(
+      () => expect(overlay).toHaveClass("course-invite-fullscreen--fallback"),
+      { timeout: 1000 }
+    );
+  });
+
+  it("does not activate the fallback after fullscreen was already closed", async () => {
+    vi.spyOn(history, "back").mockImplementation(() => undefined);
+    let rejectFullscreen: ((reason?: unknown) => void) | undefined;
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: vi.fn(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectFullscreen = reject;
+          })
+      )
+    });
+
+    render(CourseInvitationPanel, {
+      props: { courseId: "course-1", courseTitle: "Informatik 9a", invitation }
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Im Vollbild anzeigen" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Vollbild schließen" }));
+    rejectFullscreen?.(new Error("denied"));
+
+    const linkField = screen.getByRole("textbox", { name: "Klassenlink" });
+    await waitFor(() => expect(linkField.closest("label")?.inert).not.toBe(true));
   });
 
   it("isolates the fallback, traps focus and cleans history on Escape", async () => {

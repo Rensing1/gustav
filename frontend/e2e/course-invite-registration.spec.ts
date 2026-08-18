@@ -87,11 +87,10 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
     await learner.getByLabel("Schul-E-Mail").fill(learnerEmail);
     await learner.getByRole("button", { name: "Registrieren" }).click();
 
-    await expect(learner).toHaveURL(/https:\/\/id\.localhost\//);
-    if (!(await learner.locator("#display_name").isVisible().catch(() => false))) {
-      await learner.getByRole("link", { name: /Registrieren|Register/i }).click();
-    }
-
+    await expect(learner).toHaveURL(/https:\/\/id\.localhost\/realms\/gustav\/protocol\/openid-connect\/registrations/);
+    await expect(learner.getByRole("heading", { name: /Registrieren|Register/i })).toBeVisible();
+    await expect(learner.locator("#kc-register-form")).toBeVisible();
+    await expect(learner.locator("#kc-form-login")).toHaveCount(0);
     await learner.locator("#display_name").fill("E2E QR Lernender");
     await learner.locator("#email").fill(learnerEmail);
     await learner.locator("#password").fill(password);

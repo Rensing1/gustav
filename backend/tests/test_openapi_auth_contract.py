@@ -72,3 +72,11 @@ def test_openapi_documents_auth_callback_query_invariant():
         "oneOf": [{"required": ["code"]}, {"required": ["error"]}],
         "not": {"required": ["code", "error"]},
     }
+
+
+def test_openapi_documents_direct_keycloak_registration_endpoint():
+    spec = _load_spec()
+    operation = spec["paths"]["/auth/register"]["get"]
+
+    assert "/protocol/openid-connect/registrations" in operation["description"]
+    assert "kc_action=register" not in operation["description"]

@@ -3,7 +3,8 @@ Non-HTMX Auth redirects — ensure 302 Location and cache headers.
 
 Covers /auth/login and /auth/register without HX-Request, verifying:
 - 302 status
-- Location contains required params (state; kc_action=register)
+- Registration opens Keycloak's OIDC registration endpoint directly
+- Location contains the required state parameter
 - Security headers: Cache-Control: private, no-store; Vary: HX-Request
 """
 
@@ -51,7 +52,7 @@ async def test_login_redirect_302_has_location_and_cache_headers(monkeypatch: py
 
 
 @pytest.mark.anyio
-async def test_register_redirect_302_has_location_and_kc_action(monkeypatch: pytest.MonkeyPatch):
+async def test_register_redirect_302_opens_registration_endpoint(monkeypatch: pytest.MonkeyPatch):
     cfg = OIDCConfig(
         base_url="http://kc.localhost:8080",
         realm="gustav",
@@ -70,8 +71,9 @@ async def test_register_redirect_302_has_location_and_kc_action(monkeypatch: pyt
     assert r.headers.get("Vary") == "HX-Request"
 
     loc = r.headers.get("Location")
-    assert loc and "kc_action=register" in loc
-    # sanity: should also include state param
+    assert loc
     parsed = urlparse(loc)
+    assert parsed.path == "/realms/gustav/protocol/openid-connect/registrations"
     qs = parse_qs(parsed.query)
+    assert "kc_action" not in qs
     assert qs.get("state", [None])[0]

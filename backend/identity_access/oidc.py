@@ -42,6 +42,12 @@ class OIDCConfig:
         return f"{base}/realms/{self.realm}/protocol/openid-connect/auth"
 
     @property
+    def registration_endpoint(self) -> str:
+        """Return Keycloak's browser-facing OIDC self-registration endpoint."""
+        base = self.public_base_url or self.base_url
+        return f"{base}/realms/{self.realm}/protocol/openid-connect/registrations"
+
+    @property
     def token_endpoint(self) -> str:
         # Token exchange happens server-side; use internal base URL
         return f"{self.base_url}/realms/{self.realm}/protocol/openid-connect/token"
@@ -65,10 +71,18 @@ class OIDCClient:
         digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
         return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
-    def build_authorization_url(self, *, state: str, code_challenge: str, nonce: Optional[str] = None) -> str:
-        """Return the authorization URL for the configured realm/client.
+    def _build_flow_url(
+        self,
+        *,
+        endpoint: str,
+        state: str,
+        code_challenge: str,
+        nonce: Optional[str] = None,
+    ) -> str:
+        """Build a PKCE-protected browser flow URL for the configured client.
 
         Parameters
+        - endpoint: Browser-facing Keycloak flow endpoint
         - state: Opaque anti-CSRF token (and QR context if needed)
         - code_challenge: The S256 code challenge derived from the verifier
         - nonce: Optional OIDC replay protection value (recommended)
@@ -84,7 +98,38 @@ class OIDCClient:
         }
         if nonce:
             params["nonce"] = nonce
-        return f"{self.cfg.auth_endpoint}?{urlencode(params)}"
+        return f"{endpoint}?{urlencode(params)}"
+
+    def build_authorization_url(self, *, state: str, code_challenge: str, nonce: Optional[str] = None) -> str:
+        """Return the normal Keycloak authorization URL."""
+        return self._build_flow_url(
+            endpoint=self.cfg.auth_endpoint,
+            state=state,
+            code_challenge=code_challenge,
+            nonce=nonce,
+        )
+
+    def build_registration_url(self, *, state: str, code_challenge: str, nonce: Optional[str] = None) -> str:
+        """Return the direct Keycloak self-registration URL.
+
+        Parameters:
+            state: Opaque anti-CSRF value stored by the calling web adapter.
+            code_challenge: S256 challenge for the caller's PKCE verifier.
+            nonce: Optional replay-protection value for the resulting ID token.
+
+        Expected behavior:
+            Opens Keycloak's registration form while preserving the normal OIDC
+            authorization-code safeguards and callback.
+
+        Permissions:
+            Public browser flow; the realm must allow self-registration.
+        """
+        return self._build_flow_url(
+            endpoint=self.cfg.registration_endpoint,
+            state=state,
+            code_challenge=code_challenge,
+            nonce=nonce,
+        )
 
     def exchange_code_for_tokens(self, *, code: str, code_verifier: str) -> Dict[str, str]:
         """Exchange authorization code for tokens at token endpoint.

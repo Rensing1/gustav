@@ -13,7 +13,7 @@ BDD Scenarios (Given–When–Then)
   - Given `ALLOWED_REGISTRATION_DOMAINS=@school.example` in `.env`
   - And a user opens `/auth/register?login_hint=alice@school.example`
   - When the server validates the email domain
-  - Then the request is redirected (302 or HX-Redirect) to Keycloak with `kc_action=register`
+  - Then the request is redirected (302 or HX-Redirect) to Keycloak's OIDC registration endpoint
   - And no error banner is shown.
 - Edge: No login_hint Provided
   - Given `ALLOWED_REGISTRATION_DOMAINS` is configured

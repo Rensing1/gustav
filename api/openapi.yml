@@ -7698,11 +7698,12 @@ paths:
       tags: [Auth]
       summary: Redirect to IdP registration
       description: >-
-        Redirects to Keycloak with `kc_action=register`. The server generates and
-        includes a `nonce` parameter (replay protection) in the authorization request,
-        analogous to `/auth/login`. When `ALLOWED_REGISTRATION_DOMAINS` is configured
-        in the environment, the server MAY reject `login_hint` values whose email
-        domain is not on the allow-list and respond with `400` instead of redirecting.
+        Redirects directly to Keycloak's OIDC registration endpoint
+        `/realms/{realm}/protocol/openid-connect/registrations`. The server generates
+        and includes a `nonce` parameter (replay protection) in the authorization
+        request, analogous to `/auth/login`. When `ALLOWED_REGISTRATION_DOMAINS` is
+        configured in the environment, the server MAY reject `login_hint` values whose
+        email domain is not on the allow-list and respond with `400` instead of redirecting.
       operationId: startRegistration
       security: []
       parameters:

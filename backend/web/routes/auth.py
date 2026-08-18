@@ -306,7 +306,7 @@ async def auth_password(request: Request, redirect: str | None = None):
 @auth_router.get("/auth/register")
 async def auth_register(request: Request, login_hint: str | None = None, redirect: str | None = None):
     """
-    Redirect to Keycloak registration by hinting kc_action=register on the auth endpoint.
+    Redirect directly to Keycloak's OIDC self-registration endpoint.
 
     Why:
         Keep registration on the IdP while ensuring the authorization request
@@ -339,7 +339,7 @@ async def auth_register(request: Request, login_hint: str | None = None, redirec
     )
     oidc = OIDCClient(cfg)
     # Include nonce in the authorization request similar to /auth/login
-    url = oidc.build_authorization_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
+    url = oidc.build_registration_url(state=final_state, code_challenge=code_challenge, nonce=nonce)
     headers = {"Cache-Control": "private, no-store", "Vary": "HX-Request"}
 
     # Optional: environment-driven domain allow-list for self-service registration.
@@ -357,8 +357,6 @@ async def auth_register(request: Request, login_hint: str | None = None, redirec
         from urllib.parse import urlencode
 
         url = f"{url}{sep}{urlencode({'login_hint': login_hint})}"
-        sep = "&"
-    url = f"{url}{sep}kc_action=register"
     if request.headers.get("HX-Request"):
         headers["HX-Redirect"] = url
         return Response(status_code=204, headers=headers)

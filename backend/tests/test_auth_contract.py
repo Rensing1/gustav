@@ -9,6 +9,7 @@ interactions (Keycloak) are not performed here; we only assert HTTP contracts.
 import base64
 import importlib
 from http.cookies import SimpleCookie
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 import httpx
@@ -658,15 +659,13 @@ async def test_register_redirect_uses_oidc_cfg(monkeypatch: pytest.MonkeyPatch):
 
     assert resp.status_code == 302
     loc = resp.headers.get("location", "")
-    # We now use the standard auth endpoint with OIDC PKCE and hint register screen
-    assert loc.startswith("http://kc.example:8080/realms/school/protocol/openid-connect/auth")
-    assert "kc_action=register" in loc
+    assert loc.startswith("http://kc.example:8080/realms/school/protocol/openid-connect/registrations")
+    assert "kc_action" not in parse_qs(urlparse(loc).query)
 
 
 @pytest.mark.anyio
 async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPatch):
     from backend.identity_access.oidc import OIDCConfig
-    from urllib.parse import urlparse, parse_qs
 
     # Ensure allow-listing does not interfere with the happy-path redirect contract
     monkeypatch.delenv("ALLOWED_REGISTRATION_DOMAINS", raising=False)
@@ -685,10 +684,10 @@ async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyP
     assert resp.status_code == 302
     loc = resp.headers.get("location", "")
     url = urlparse(loc)
-    assert url.path.endswith("/realms/school/protocol/openid-connect/auth")
+    assert url.path.endswith("/realms/school/protocol/openid-connect/registrations")
     qs = parse_qs(url.query)
     assert qs.get("login_hint") == ["new@example.com"]
-    assert qs.get("kc_action") == ["register"]
+    assert "kc_action" not in qs
 
 
 @pytest.mark.anyio

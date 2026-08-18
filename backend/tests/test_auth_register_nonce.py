@@ -34,8 +34,8 @@ async def test_register_includes_nonce_param():
     qs = parse_qs(urlparse(loc).query)
     assert "nonce" in qs, "Authorization URL should include nonce for /auth/register"
     assert qs["nonce"][0], "nonce must be non-empty"
-    # Registration action param should be present as well
-    assert "kc_action=register" in loc
+    assert urlparse(loc).path.endswith("/protocol/openid-connect/registrations")
+    assert "kc_action" not in qs
 
 
 @pytest.mark.anyio

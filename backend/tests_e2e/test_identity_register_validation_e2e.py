@@ -105,14 +105,7 @@ def test_register_invalid_shows_error():
     r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=5)
     assert r.status_code == 200
     assert "gustav/css/gustav.css" in r.text
-    # Either we land directly on the register page or on the login page with a register link.
-    if "kc-register-form" not in r.text:
-        m = re.search(r"href=\"([^\"]*login-actions/registration[^\"]*)\"", r.text)
-        assert m, "Expected a registration link on login page"
-        reg_url = urljoin(r.url, m.group(1))
-        r = sess.get(reg_url, allow_redirects=True, timeout=5)
-        assert r.status_code == 200
-        assert "kc-register-form" in r.text
+    assert "kc-register-form" in r.text
 
     # The current theme may keep the password policy hint in i18n only.
     # The page must still expose the actual registration form fields.
@@ -146,12 +139,7 @@ def test_register_invalid_email_and_weak_password_show_error():
     sess = requests.Session()
     r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=5)
     assert r.status_code == 200
-    if "kc-register-form" not in r.text:
-        m = re.search(r"href=\"([^\"]*login-actions/registration[^\"]*)\"", r.text)
-        assert m, "Expected a registration link on login page"
-        r = sess.get(urljoin(r.url, m.group(1)), allow_redirects=True, timeout=5)
-        assert r.status_code == 200
-        assert "kc-register-form" in r.text
+    assert "kc-register-form" in r.text
 
     # 1) Invalid email format
     action, fields = _parse_register_form(r.text, r.url)
@@ -194,12 +182,7 @@ def test_register_password_mismatch_and_duplicate_email():
     sess = requests.Session()
     r = sess.get(f"{WEB_BASE}/auth/register", allow_redirects=True, timeout=5)
     assert r.status_code == 200
-    if "kc-register-form" not in r.text:
-        m = re.search(r"href=\"([^\"]*login-actions/registration[^\"]*)\"", r.text)
-        assert m
-        r = sess.get(urljoin(r.url, m.group(1)), allow_redirects=True, timeout=5)
-        assert r.status_code == 200
-        assert "kc-register-form" in r.text
+    assert "kc-register-form" in r.text
 
     # 1) Password confirmation mismatch
     action, fields = _parse_register_form(r.text, r.url)

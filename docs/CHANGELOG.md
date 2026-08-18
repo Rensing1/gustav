@@ -3,10 +3,12 @@
 ## 2026-08-18
 
 ### Fixes
+- fix(auth): Selbstregistrierungen aus Kurseinladungen und der allgemeinen Registrierungsseite öffnen unter Keycloak 24 direkt das Registrierungsformular, ohne irreführenden Umweg über die Anmeldemaske.
 - fix(course-invites): Der hochauflösende QR-Code bleibt im schmalen Einladungs-Drawer responsiv, sodass Vollbildaktion und E-Mail-Formular ohne horizontalen Überlauf erreichbar sind.
 - fix(course-invites): Der QR-Code lässt sich auch in eingebetteten Browsern verlässlich groß und zentral anzeigen; verspätete Vollbildantworten können einen bereits geschlossenen Dialog nicht erneut aktivieren.
 
 ### Tests
+- test(auth): Redirect-Verträge und der authentifizierte Kurseinladungs-Rundlauf verlangen den direkten Keycloak-Registrierungsendpunkt und akzeptieren keine Anmeldung als Fallback mehr.
 - test(course-invites): Komponenten- und authentifizierte Browserprüfungen sichern responsive QR-Darstellung, erreichbaren E-Mail-Versand, Vollbild-Fallback und das Schließen während einer laufenden Vollbildanfrage ab.
 
 ## 2026-08-17

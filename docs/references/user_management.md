@@ -99,7 +99,7 @@ Bezeichnung entsteht im Identity-Adapter; Frontends formatieren sie nicht neu.
 
 ## Registrierung & Domain-Whitelist
 
-- Registrierung findet ausschließlich bei Keycloak statt (`/auth/register` → Authorization-Endpunkt mit `kc_action=register`).
+- Registrierung findet ausschließlich bei Keycloak statt (`/auth/register` → OIDC-Registrierungsendpunkt `/protocol/openid-connect/registrations`). GUSTAV ändert dabei nicht die Sicherheitsparameter des Authorization-Code-Flows: `state`, `nonce`, PKCE und die geprüfte Callback-URL bleiben erhalten.
 - Optionaler Query-Parameter `login_hint`:
   - Wird als vorausgefüllte E-Mail im Registrierungsformular verwendet.
   - Vor dem Redirect prüft GUSTAV optional die Domain:

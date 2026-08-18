@@ -161,11 +161,11 @@ async def test_register_uses_app_runtime_state_store_and_oidc_config(
 
     assert response.status_code in (302, 303)
     location = response.headers.get("location", "")
-    assert "kc_action=register" in location
     parsed = urlparse(location)
     assert f"{parsed.scheme}://{parsed.netloc}" == "https://runtime-idp.example"
-    assert parsed.path == "/realms/runtime-realm/protocol/openid-connect/auth"
+    assert parsed.path == "/realms/runtime-realm/protocol/openid-connect/registrations"
     qs = parse_qs(parsed.query)
+    assert "kc_action" not in qs
     assert qs.get("client_id") == ["runtime-client"]
     assert qs.get("login_hint") == ["learner@example.com"]
     state = qs.get("state", [None])[0]

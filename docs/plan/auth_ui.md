@@ -481,7 +481,7 @@ Status: Vertrag ist aktualisiert (siehe `api/openapi.yml:1`), SSR‑GET‑Seiten
     - Fehlerfälle: fehlende Felder, ungültige E‑Mail, schwaches Passwort, Passwort≠Bestätigung, Duplicate‑E‑Mail.
     - Umsetzung: `backend/tests_e2e/test_identity_register_validation_e2e.py`
 11. **/auth/register Redirect modernisiert ✅**
-    - Statt `…/registrations` wird der Auth‑Endpoint mit `kc_action=register` verwendet. `login_hint` wird weitergereicht.
+    - Korrektur vom 18.08.2026: Keycloak 24 öffnet die Registrierung direkt über `…/protocol/openid-connect/registrations`; der frühere Versuch mit `kc_action=register` führte stattdessen zur Anmeldemaske. `login_hint`, `state`, `nonce` und PKCE werden weitergereicht.
 12. **Passwort‑Policy (DEV) ✅**
     - `length(8) and digits(1) and lowerCase(1) and upperCase(1)` (ohne `specialChars(1)`). Policy wird in E2E via Admin‑API gesetzt (deterministisch).
 9. **Review & Feedback**

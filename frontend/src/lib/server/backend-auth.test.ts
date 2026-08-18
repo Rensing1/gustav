@@ -110,6 +110,31 @@ function tokenResponse(): Response {
   );
 }
 
+describe("startRegisterFlow", () => {
+  it("opens the Keycloak registration endpoint directly with the OIDC safeguards", () => {
+    const cookies = new MemoryCookies();
+    const response = startRegisterFlow(
+      createEvent(
+        "https://app.localhost/auth/register?login_hint=alice%40school.example&redirect=/invite/complete",
+        cookies,
+        vi.fn() as never
+      )
+    );
+    const location = new URL(response.headers.get("location") || "");
+    const [flow] = decodeFlowCookie(String(cookies.get("gustav_bff_oidc_flow")));
+
+    expect(response.status).toBe(302);
+    expect(location.pathname).toBe("/realms/gustav/protocol/openid-connect/registrations");
+    expect(location.searchParams.get("kc_action")).toBeNull();
+    expect(location.searchParams.get("login_hint")).toBe("alice@school.example");
+    expect(location.searchParams.get("state")).toBe(flow.state);
+    expect(location.searchParams.get("nonce")).toBe(flow.nonce);
+    expect(location.searchParams.get("code_challenge")).toBeTruthy();
+    expect(location.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(flow.redirectPath).toBe("/invite/complete");
+  });
+});
+
 describe("handleAuthCallback", () => {
   beforeEach(() => {
     vi.clearAllMocks();

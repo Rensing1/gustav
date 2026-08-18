@@ -162,6 +162,11 @@ function authEndpoint(): string {
   return `${kcPublicBaseUrl()}/realms/${kcRealm()}/protocol/openid-connect/auth`;
 }
 
+function registrationEndpoint(): string {
+  // Keycloak 24 does not support prompt=create; this OIDC endpoint opens self-registration directly.
+  return `${kcPublicBaseUrl()}/realms/${kcRealm()}/protocol/openid-connect/registrations`;
+}
+
 function tokenEndpoint(): string {
   return `${kcBaseUrl()}/realms/${kcRealm()}/protocol/openid-connect/token`;
 }
@@ -258,8 +263,12 @@ function clearFlowCookie(event: RequestEvent): void {
   });
 }
 
-function buildAuthorizationUrl(flow: AuthFlowRecord, extraParams?: Record<string, string>): string {
-  const url = new URL(authEndpoint());
+function buildOidcFlowUrl(
+  endpoint: string,
+  flow: AuthFlowRecord,
+  extraParams?: Record<string, string>
+): string {
+  const url = new URL(endpoint);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", kcClientId());
   url.searchParams.set("redirect_uri", flow.redirectUri);
@@ -348,7 +357,7 @@ async function exchangeCodeForTokens(code: string, redirectUri: string, codeVeri
 export function startLoginFlow(event: RequestEvent): Response {
   const flow = createFlow(event.url, safeRedirectPath(event.url.searchParams.get("redirect")));
   addFlowCookie(event, flow);
-  return createRedirectResponse(buildAuthorizationUrl(flow));
+  return createRedirectResponse(buildOidcFlowUrl(authEndpoint(), flow));
 }
 
 export function startContinuationFlow(event: RequestEvent): Response {
@@ -375,7 +384,7 @@ export function startContinuationFlow(event: RequestEvent): Response {
   console.info("auth.continuity", {
     reason: "continuation_started"
   });
-  return createRedirectResponse(buildAuthorizationUrl(flow, { prompt: "none" }));
+  return createRedirectResponse(buildOidcFlowUrl(authEndpoint(), flow, { prompt: "none" }));
 }
 
 export function startRegisterFlow(event: RequestEvent): Response {
@@ -396,11 +405,8 @@ export function startRegisterFlow(event: RequestEvent): Response {
 
   const flow = createFlow(event.url, safeRedirectPath(event.url.searchParams.get("redirect")));
   addFlowCookie(event, flow);
-  const extraParams: Record<string, string> = { kc_action: "register" };
-  if (loginHint) {
-    extraParams.login_hint = loginHint;
-  }
-  return createRedirectResponse(buildAuthorizationUrl(flow, extraParams));
+  const extraParams = loginHint ? { login_hint: loginHint } : undefined;
+  return createRedirectResponse(buildOidcFlowUrl(registrationEndpoint(), flow, extraParams));
 }
 
 export function startForgotFlow(event: RequestEvent): Response {
@@ -416,7 +422,7 @@ export function startPasswordFlow(event: RequestEvent): Response {
   const redirectPath = safeRedirectPath(event.url.searchParams.get("redirect")) || "/profile";
   const flow = createFlow(event.url, redirectPath);
   addFlowCookie(event, flow);
-  return createRedirectResponse(buildAuthorizationUrl(flow, { kc_action: "UPDATE_PASSWORD" }));
+  return createRedirectResponse(buildOidcFlowUrl(authEndpoint(), flow, { kc_action: "UPDATE_PASSWORD" }));
 }
 
 export async function handleAuthCallback(event: RequestEvent): Promise<Response> {

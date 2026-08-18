@@ -93,7 +93,7 @@ async def test_worker_completes_text_submission(monkeypatch: pytest.MonkeyPatch)
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 4, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -165,7 +165,7 @@ async def test_worker_completes_text_submission(monkeypatch: pytest.MonkeyPatch)
     assert status == "completed"
     assert isinstance(text_body, str) and text_body.strip() == "# Draft text"
     assert isinstance(analysis_json, dict) and analysis_json.get("schema") == "criteria.v2"
-    assert feedback_md == "**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B."
+    assert feedback_md == "**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B."
 
 
 @pytest.mark.anyio

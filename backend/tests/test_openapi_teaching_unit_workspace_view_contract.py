@@ -95,3 +95,16 @@ def test_teacher_unit_node_editor_contract_exists() -> None:
     assert task["properties"]["visual"]["nullable"] is True
     assert task["properties"]["scratch"]["nullable"] is True
     assert task["properties"]["calliope"]["nullable"] is True
+
+
+def test_teacher_context_contract_covers_subject_context_and_feedback_instructions() -> None:
+    spec = _load_spec()
+    schemas = spec["components"]["schemas"]
+
+    for schema_name in ("TeacherUnitNodeEditorTask", "Task", "TaskCreate", "TaskUpdate"):
+        description = schemas[schema_name]["properties"]["teacher_context_md"]["description"]
+        assert "subject-specific background" in description
+        assert "common misconceptions" in description
+        assert "focus, length, and structure" in description
+        assert "must not alter criteria-based evaluation" in description
+        assert "must never be exposed to learners" in description

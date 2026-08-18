@@ -156,7 +156,7 @@ class _FeedbackCapturingAdapter:
             "teacher_context_md": teacher_context_md,
         }
         return FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 3, "criteria_results": []},
         )
 

@@ -211,6 +211,11 @@ describe("teacher node editor page", () => {
     expect(screen.getByLabelText("Anweisung & Beschreibung")).toBeInTheDocument();
     expect(screen.getAllByLabelText(/^Kriterium \d+$/i)).toHaveLength(1);
     expect(screen.getByLabelText("Lehrkraft-Kontext")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Interne fachliche Hinweise und verbindliche Vorgaben für Schwerpunkt, Länge oder Aufbau der Rückmeldung. Ohne abweichende Vorgabe verwendet GUSTAV die Standardstruktur. Der Kontext wird Lernenden nicht angezeigt."
+      )
+    ).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: /Untersuche das Filius-Netzwerk/i }));
 

@@ -216,7 +216,7 @@ class _UsageFeedbackAdapter:
 
     def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult:
         return FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             usage_events=[
                 TokenUsageEvent(
@@ -1180,7 +1180,7 @@ async def test_worker_logs_safe_feedback_context_and_persists_specific_feedback_
     processed = run_once(
         dsn=worker_dsn,
         vision_adapter=_StubVisionAdapter(text_md="## Answer\n\nContent."),
-        feedback_adapter=_PermanentFeedbackAdapter(message="invalid_feedback_format"),
+        feedback_adapter=_PermanentFeedbackAdapter(message="unexpected_feedback_error"),
         now=tick,
         test_run_id=current_test_run_id(),
     )
@@ -1222,10 +1222,10 @@ async def test_worker_logs_safe_feedback_context_and_persists_specific_feedback_
     assert job_error_code == "feedback_failed"
     assert submission_status == "failed"
     assert submission_error == "feedback_failed"
-    assert feedback_last_error == "invalid_feedback_format"
+    assert feedback_last_error == "unexpected_feedback_error"
 
     messages = "\n".join(record.getMessage() for record in caplog.records)
-    assert "invalid_feedback_format" in messages
+    assert "unexpected_feedback_error" in messages
     assert fixture.task["id"] in messages
     assert "intent=submit" in messages
     assert "criteria_count=2" in messages

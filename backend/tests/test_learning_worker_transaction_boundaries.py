@@ -168,14 +168,14 @@ async def test_worker_commits_before_entering_adapter(monkeypatch: pytest.Monkey
             entered.set()
             assert release.wait(timeout=10), "test timeout: visual feedback adapter never released"
             return FeedbackResult(
-                feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+                feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
                 analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
                 parse_status="parsed_structured",
             )
 
         def analyze(self, *, text_md: str, criteria, instruction_md=None, teacher_context_md=None) -> FeedbackResult:  # type: ignore[override]
             return FeedbackResult(
-                feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+                feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
                 analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
                 parse_status="parsed_structured",
             )

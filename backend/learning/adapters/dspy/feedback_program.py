@@ -9,8 +9,8 @@ Intent:
 Design principles:
     - Fail-fast: no deterministic fallback feedback text is generated in Python.
       Any model/config failure must surface so the worker can retry.
-    - Contract-first: normalize analysis output to `criteria.v2` and validate
-      the feedback format expected by the plan document.
+    - Contract-first: normalize analysis output to `criteria.v2` and require
+      non-empty feedback while allowing teacher-controlled Markdown structure.
 
 Security:
     - Never log student submissions or teacher-only context.
@@ -30,22 +30,14 @@ from backend.learning.adapters.ports import FeedbackResult, TokenUsageEvent
 
 LOG = logging.getLogger(__name__)
 
-_REQUIRED_FEEDBACK_HEADINGS = (
-    "**Das ist dir gut gelungen:**",
-    "**Das kannst du besser:**",
-)
-
 _REPAIRABLE_ANALYSIS_ERRORS = {"invalid_analysis_json", "invalid_criterion_idx"}
 
 
 def _validate_feedback_md(feedback_md: str) -> str:
-    """Validate the feedback contract and return trimmed Markdown."""
+    """Require content while leaving feedback structure to the prompt contract."""
     text = (feedback_md or "").strip()
     if not text:
         raise RuntimeError("empty_feedback_md")
-    for heading in _REQUIRED_FEEDBACK_HEADINGS:
-        if heading not in text:
-            raise RuntimeError("invalid_feedback_format")
     return text
 
 

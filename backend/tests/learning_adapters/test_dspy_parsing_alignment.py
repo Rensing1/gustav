@@ -39,7 +39,7 @@ def test_feedback_program_aligns_items_by_order(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(
         programs,
         "run_structured_feedback",
-        lambda **_: "**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+        lambda **_: "**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
         raising=False,
     )
 

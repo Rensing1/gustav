@@ -89,8 +89,8 @@ def test_visual_feedback_program_structured_pipeline(monkeypatch: pytest.MonkeyP
         assert image_data_uri.startswith("data:image/"), "visual feedback must receive an image data URI"
         assert analysis_json.get("schema") == "criteria.v2"
         return (
-            "**Das ist dir gut gelungen:** Deine Lösung ist gut nachvollziehbar.\n\n"
-            "**Das kannst du besser:** Begründe einzelne Schritte noch etwas genauer."
+            "**Das ist Ihnen gut gelungen:** Ihre Lösung ist gut nachvollziehbar.\n\n"
+            "**Das können Sie noch besser:** Begründen Sie einzelne Schritte noch etwas genauer."
         )
 
     monkeypatch.setattr(programs, "run_structured_visual_analysis", fake_run_structured_visual_analysis, raising=False)
@@ -109,8 +109,8 @@ def test_visual_feedback_program_structured_pipeline(monkeypatch: pytest.MonkeyP
     items = result.analysis_json.get("criteria_results")
     assert isinstance(items, list) and len(items) == 2
     assert items[0]["criterion"] == "Inhalt" and items[1]["criterion"] == "Struktur"
-    assert "**Das ist dir gut gelungen:**" in result.feedback_md
-    assert "**Das kannst du besser:**" in result.feedback_md
+    assert "**Das ist Ihnen gut gelungen:**" in result.feedback_md
+    assert "**Das können Sie noch besser:**" in result.feedback_md
 
 
 def test_visual_feedback_program_empty_criteria_uses_synthesis_context(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -142,8 +142,8 @@ def test_visual_feedback_program_empty_criteria_uses_synthesis_context(monkeypat
         programs,
         "run_visual_feedback_no_criteria",
         lambda **_kwargs: (
-            "**Das ist dir gut gelungen:** Deine Lösung ist gut nachvollziehbar.\n\n"
-            "**Das kannst du besser:** Begründe einzelne Schritte noch etwas genauer."
+            "**Das ist Ihnen gut gelungen:** Ihre Lösung ist gut nachvollziehbar.\n\n"
+            "**Das können Sie noch besser:** Begründen Sie einzelne Schritte noch etwas genauer."
         ),
         raising=False,
     )
@@ -159,6 +159,61 @@ def test_visual_feedback_program_empty_criteria_uses_synthesis_context(monkeypat
     assert result.parse_status == "skipped"
     assert len(observed) == 1
     assert observed[0]["lm"] is not None
+
+
+def test_visual_feedback_program_accepts_teacher_requested_free_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_dspy(monkeypatch)
+    programs = importlib.import_module("backend.learning.adapters.dspy.programs")
+    monkeypatch.setattr(
+        programs,
+        "run_structured_visual_analysis",
+        lambda **_kwargs: {
+            "schema": "criteria.v2",
+            "score": 4,
+            "criteria_results": [
+                {"criterion": "Darstellung", "max_score": 10, "score": 8, "explanation_md": "Sichtbar."},
+            ],
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        programs,
+        "run_structured_visual_feedback",
+        lambda **_kwargs: "Ihre Darstellung ist gut lesbar; kennzeichnen Sie noch die entscheidende Verbindung.",
+        raising=False,
+    )
+
+    mod = importlib.import_module("backend.learning.adapters.dspy.visual_feedback_program")
+    result = mod.analyze_visual_feedback(  # type: ignore[attr-defined]
+        image_data_uri="data:image/png;base64,AA==",
+        criteria=["Darstellung"],
+        teacher_context_md="Antworten Sie in einem Satz ohne Überschriften.",
+    )
+
+    assert result.feedback_md.startswith("Ihre Darstellung")
+
+
+def test_visual_feedback_without_criteria_accepts_teacher_requested_free_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_dspy(monkeypatch)
+    programs = importlib.import_module("backend.learning.adapters.dspy.programs")
+    monkeypatch.setattr(
+        programs,
+        "run_visual_feedback_no_criteria",
+        lambda **_kwargs: "Sie haben die zentralen Elemente sichtbar angeordnet.",
+        raising=False,
+    )
+
+    mod = importlib.import_module("backend.learning.adapters.dspy.visual_feedback_program")
+    result = mod.analyze_visual_feedback(  # type: ignore[attr-defined]
+        image_data_uri="data:image/png;base64,AA==",
+        criteria=[],
+    )
+
+    assert result.feedback_md == "Sie haben die zentralen Elemente sichtbar angeordnet."
 
 
 def test_visual_feedback_program_retries_analysis_once_after_invalid_shape(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -185,8 +240,8 @@ def test_visual_feedback_program_retries_analysis_once_after_invalid_shape(monke
     def fake_run_structured_visual_feedback(*, analysis_json: dict, **_kwargs):
         assert analysis_json.get("schema") == "criteria.v2"
         return (
-            "**Das ist dir gut gelungen:** Deine Lösung ist gut nachvollziehbar.\n\n"
-            "**Das kannst du besser:** Begründe einzelne Schritte noch etwas genauer."
+            "**Das ist Ihnen gut gelungen:** Ihre Lösung ist gut nachvollziehbar.\n\n"
+            "**Das können Sie noch besser:** Begründen Sie einzelne Schritte noch etwas genauer."
         )
 
     monkeypatch.setattr(programs, "run_structured_visual_analysis", fake_run_structured_visual_analysis, raising=False)
@@ -234,8 +289,8 @@ def test_visual_feedback_program_logs_stage_metadata(
         programs,
         "run_structured_visual_feedback",
         lambda **_kwargs: (
-            "**Das ist dir gut gelungen:** Deine Lösung ist gut nachvollziehbar.\n\n"
-            "**Das kannst du besser:** Begründe einzelne Schritte noch etwas genauer."
+            "**Das ist Ihnen gut gelungen:** Ihre Lösung ist gut nachvollziehbar.\n\n"
+            "**Das können Sie noch besser:** Begründen Sie einzelne Schritte noch etwas genauer."
         ),
         raising=False,
     )

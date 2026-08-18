@@ -33,7 +33,7 @@ def test_feedback_program_forwards_teacher_context(monkeypatch: pytest.MonkeyPat
     def fake_run_structured_feedback(*, analysis_json: dict, teacher_context_md=None, **_kwargs):
         assert analysis_json.get("schema") == "criteria.v2"
         assert teacher_context_md == "Kontext"
-        return "**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B."
+        return "**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B."
 
     monkeypatch.setattr(programs, "run_structured_analysis", fake_run_structured_analysis, raising=False)
     monkeypatch.setattr(programs, "run_structured_feedback", fake_run_structured_feedback, raising=False)
@@ -46,8 +46,8 @@ def test_feedback_program_forwards_teacher_context(monkeypatch: pytest.MonkeyPat
         teacher_context_md="Kontext",
     )
     assert result.analysis_json.get("schema") == "criteria.v2"
-    assert "**Das ist dir gut gelungen:**" in result.feedback_md
-    assert "**Das kannst du besser:**" in result.feedback_md
+    assert "**Das ist Ihnen gut gelungen:**" in result.feedback_md
+    assert "**Das können Sie noch besser:**" in result.feedback_md
 
 
 def test_feedback_program_empty_criteria_uses_no_criteria_signature(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -77,7 +77,7 @@ def test_feedback_program_empty_criteria_uses_no_criteria_signature(monkeypatch:
 
     def fake_no_criteria(*, teacher_context_md=None, **_kwargs):
         assert teacher_context_md == "Kontext"
-        return "**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B."
+        return "**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B."
 
     monkeypatch.setattr(programs, "run_feedback_no_criteria", fake_no_criteria, raising=False)
 
@@ -92,6 +92,60 @@ def test_feedback_program_empty_criteria_uses_no_criteria_signature(monkeypatch:
     assert result.parse_status == "skipped"
     assert len(observed) == 1
     assert observed[0]["lm"] is not None
+
+
+def test_feedback_program_accepts_teacher_requested_free_format(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "dspy", SimpleNamespace(__version__="3.0.3"))
+    programs = __import__("importlib").import_module("backend.learning.adapters.dspy.programs")
+    teacher_context = "Formulieren Sie genau einen kurzen Satz ohne Überschriften."
+
+    monkeypatch.setattr(
+        programs,
+        "run_structured_analysis",
+        lambda **_kwargs: {
+            "schema": "criteria.v2",
+            "score": 4,
+            "criteria_results": [
+                {"criterion": "Inhalt", "max_score": 10, "score": 8, "explanation_md": "Belegt."},
+            ],
+        },
+        raising=False,
+    )
+
+    def fake_feedback(*, teacher_context_md=None, **_kwargs):
+        assert teacher_context_md == teacher_context
+        return "Sie erklären den zentralen Zusammenhang klar und können den Fachbegriff noch präzisieren."
+
+    monkeypatch.setattr(programs, "run_structured_feedback", fake_feedback, raising=False)
+
+    mod = __import__("importlib").import_module("backend.learning.adapters.dspy.feedback_program")
+    result = mod.analyze_feedback(  # type: ignore[attr-defined]
+        text_md="Antwort",
+        criteria=["Inhalt"],
+        teacher_context_md=teacher_context,
+    )
+
+    assert result.feedback_md == (
+        "Sie erklären den zentralen Zusammenhang klar und können den Fachbegriff noch präzisieren."
+    )
+
+
+def test_feedback_program_without_criteria_accepts_teacher_requested_free_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "dspy", SimpleNamespace(__version__="3.0.3"))
+    programs = __import__("importlib").import_module("backend.learning.adapters.dspy.programs")
+    monkeypatch.setattr(
+        programs,
+        "run_feedback_no_criteria",
+        lambda **_kwargs: "Ihre Antwort ist nachvollziehbar; ergänzen Sie noch den entscheidenden Fachbegriff.",
+        raising=False,
+    )
+
+    mod = __import__("importlib").import_module("backend.learning.adapters.dspy.feedback_program")
+    result = mod.analyze_feedback(text_md="Antwort", criteria=[])  # type: ignore[attr-defined]
+
+    assert result.feedback_md.startswith("Ihre Antwort")
 
 
 def test_feedback_program_retries_analysis_once_after_invalid_shape(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,7 +170,7 @@ def test_feedback_program_retries_analysis_once_after_invalid_shape(monkeypatch:
 
     def fake_run_structured_feedback(*, analysis_json: dict, **_kwargs):
         assert analysis_json.get("schema") == "criteria.v2"
-        return "**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B."
+        return "**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B."
 
     monkeypatch.setattr(programs, "run_structured_analysis", fake_run_structured_analysis, raising=False)
     monkeypatch.setattr(programs, "run_structured_analysis_repair", fake_run_structured_analysis_repair, raising=False)
@@ -181,7 +235,7 @@ def test_feedback_program_logs_stage_metadata(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setattr(
         programs,
         "run_structured_feedback",
-        lambda **_kwargs: "**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+        lambda **_kwargs: "**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
         raising=False,
     )
 

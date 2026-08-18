@@ -13,7 +13,7 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
   - The endpoint may be local or remote; GUSTAV does not enforce host/path rules.
   - Privacy/GDPR responsibility is therefore shared: operators must ensure the endpoint is compliant for student data.
 - **Async-first**: Submissions with `kind=image|file` return `202` with `analysis_status=pending`. A worker processes either OCR + feedback or direct visual feedback and updates the submission to `completed` or `failed`.
-- **Teacher-only context**: Tasks can include `teacher_context_md` (KI-Kontext/Wissensbasis). It is used as model context but must never be exposed in student-facing DTOs.
+- **Teacher-only context**: Tasks can include `teacher_context_md` as confidential subject context and as binding instructions for feedback focus, length and structure. It is used as model context but must never be exposed in student-facing DTOs; pedagogical and security guardrails remain authoritative.
 
 ---
 
@@ -33,7 +33,7 @@ This document complements `docs/references/learning.md`. It focuses on the AI-sp
 | `SubmissionStoragePort` | ```python\nclass SubmissionStoragePort(Protocol):\n    def create_presign(self, *, course_id: UUID, task_id: UUID, student_sub: str,\n                       mime_type: str, size_bytes: int) -> PresignResult: ...\n    def verify_object(self, *, storage_key: str, sha256: str,\n                      size_bytes: int) -> StorageVerifyResult: ...\n    def stream_to_local_tmp(self, *, storage_key: str) -> Iterator[bytes]: ...\n``` | Presigned uploads, verification, optional streaming for local OCR. | Uses service credentials; enforces namespacing `submissions/{course}/{task}/{student}/...`. |
 | `LearningSubmissionQueuePort` | ```python\nclass LearningSubmissionQueuePort(Protocol):\n    def enqueue(self, job: SubmissionJobPayload) -> None: ...\n    def lease_next(self, *, now: datetime) -> Optional[QueuedJob]: ...\n    def ack(self, job_id: UUID) -> None: ...\n    def retry_later(self, job_id: UUID, *, visible_at: datetime) -> None: ...\n``` | Queue backed by `public.learning_submission_jobs`. | Only the dedicated worker login (`gustav_worker`) should lease/ack jobs. |
 | `VisionAdapterProtocol` | ```python\nclass VisionAdapterProtocol(Protocol):\n    def extract(self, *, submission: dict, job_payload: dict) -> VisionResult: ...\n``` | OCR via DSPy (`VisionOcrSignature` → `VisionResult.text_md`). | Must enforce MIME whitelist, size limits, and never log extracted text. |
-| `FeedbackAdapterProtocol` | ```python\nclass FeedbackAdapterProtocol(Protocol):\n    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult: ...\n``` | DSPy-only feedback for text submissions. | Must not log student text or teacher context; validates required feedback headings and may perform one internal analysis repair attempt before failing terminally. |
+| `FeedbackAdapterProtocol` | ```python\nclass FeedbackAdapterProtocol(Protocol):\n    def analyze(self, *, text_md: str, criteria: Sequence[str]) -> FeedbackResult: ...\n``` | DSPy-only feedback for text submissions. | Must not log student text or teacher context; requires non-empty feedback, permits teacher-controlled Markdown structure within the prompt contract and may perform one internal analysis repair attempt before failing terminally. |
 
 Production adapters:
 - OCR: `backend/learning/adapters/local_vision.py` (DSPy-only, OpenAI-compatible endpoint).

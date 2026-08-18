@@ -67,8 +67,8 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
     def fake_run_structured_feedback(*, text_md: str, criteria, analysis_json, **_kwargs):
         assert analysis_json["criteria_results"][0]["criterion"] == "Inhalt"
         return (
-            "**Das ist dir gut gelungen:** Du hast zentrale Punkte verständlich erklärt.\n\n"
-            "**Das kannst du besser:** Achte beim nächsten Mal stärker auf eine klare Gliederung."
+            "**Das ist Ihnen gut gelungen:** Sie haben zentrale Punkte verständlich erklärt.\n\n"
+            "**Das können Sie noch besser:** Achten Sie beim nächsten Mal stärker auf eine klare Gliederung."
         )
 
     monkeypatch.setattr(programs, "run_structured_analysis", fake_run_structured_analysis, raising=False)
@@ -91,8 +91,8 @@ def test_program_returns_v2_with_ranges_and_names(monkeypatch: pytest.MonkeyPatc
 
     overall = int(result.analysis_json.get("score", -1))
     assert 0 <= overall <= 5
-    assert "**Das ist dir gut gelungen:**" in result.feedback_md
-    assert "**Das kannst du besser:**" in result.feedback_md
+    assert "**Das ist Ihnen gut gelungen:**" in result.feedback_md
+    assert "**Das können Sie noch besser:**" in result.feedback_md
 
 
 def test_program_raises_when_structured_pipeline_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -118,8 +118,8 @@ def test_program_with_empty_criteria_generates_feedback(monkeypatch: pytest.Monk
 
     def fake_feedback_no_criteria(*, text_md: str, **_kwargs):
         return (
-            "**Das ist dir gut gelungen:** Du hast dich erkennbar mit dem Thema beschäftigt.\n\n"
-            "**Das kannst du besser:** Formuliere deine Antwort beim nächsten Mal noch genauer."
+            "**Das ist Ihnen gut gelungen:** Sie haben sich erkennbar mit dem Thema beschäftigt.\n\n"
+            "**Das können Sie noch besser:** Formulieren Sie Ihre Antwort beim nächsten Mal noch genauer."
         )
 
     monkeypatch.setattr(programs, "run_feedback_no_criteria", fake_feedback_no_criteria, raising=False)

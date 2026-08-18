@@ -910,6 +910,12 @@ components:
         teacher_context_md:
           type: string
           nullable: true
+          description: >
+            Optional teacher-only AI context (Markdown), for example subject-specific
+            background, expected reasoning, reference knowledge, common misconceptions,
+            or explicit instructions for the focus, length, and structure of formative
+            feedback. Feedback-format instructions must not alter criteria-based
+            evaluation. This content must never be exposed to learners.
         model_solution_md:
           type: string
           nullable: true
@@ -2722,7 +2728,12 @@ components:
         teacher_context_md:
           type: string
           nullable: true
-          description: Optional teacher-only AI context (Markdown). Must never be shown to students.
+          description: >
+            Optional teacher-only AI context (Markdown), for example subject-specific
+            background, expected reasoning, reference knowledge, common misconceptions,
+            or explicit instructions for the focus, length, and structure of formative
+            feedback. Feedback-format instructions must not alter criteria-based
+            evaluation. This content must never be exposed to learners.
         model_solution_md:
           type: string
           nullable: true
@@ -2790,7 +2801,12 @@ components:
         teacher_context_md:
           type: string
           nullable: true
-          description: Optional teacher-only AI context (Markdown). Must never be shown to students.
+          description: >
+            Optional teacher-only AI context (Markdown), for example subject-specific
+            background, expected reasoning, reference knowledge, common misconceptions,
+            or explicit instructions for the focus, length, and structure of formative
+            feedback. Feedback-format instructions must not alter criteria-based
+            evaluation. This content must never be exposed to learners.
         model_solution_md:
           type: string
           nullable: true
@@ -2843,7 +2859,12 @@ components:
         teacher_context_md:
           type: string
           nullable: true
-          description: Optional teacher-only AI context (Markdown). Must never be shown to students.
+          description: >
+            Optional teacher-only AI context (Markdown), for example subject-specific
+            background, expected reasoning, reference knowledge, common misconceptions,
+            or explicit instructions for the focus, length, and structure of formative
+            feedback. Feedback-format instructions must not alter criteria-based
+            evaluation. This content must never be exposed to learners.
         model_solution_md:
           type: string
           nullable: true

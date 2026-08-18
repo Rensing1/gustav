@@ -117,7 +117,7 @@ def test_capture_dspy_usage_attaches_events_to_parse_error(monkeypatch) -> None:
     assert events[0].output_tokens == 4
 
 
-def test_feedback_validation_error_keeps_captured_usage_events(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_empty_feedback_validation_error_keeps_captured_usage_events(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     class _Tracker:
         usage_data = {"openai/provider-model": [{"prompt_tokens": 15, "completion_tokens": 3, "total_tokens": 18}]}
 
@@ -133,12 +133,12 @@ def test_feedback_validation_error_keeps_captured_usage_events(monkeypatch) -> N
 
     from backend.learning.adapters.dspy import feedback_program
 
-    monkeypatch.setattr(feedback_program.dspy_programs, "run_feedback_no_criteria", lambda **_kwargs: "Ungültig")
+    monkeypatch.setattr(feedback_program.dspy_programs, "run_feedback_no_criteria", lambda **_kwargs: "   ")
 
     with pytest.raises(RuntimeError) as raised:
         feedback_program.analyze_feedback(text_md="Antwort", criteria=[])
 
-    assert str(raised.value) == "invalid_feedback_format"
+    assert str(raised.value) == "empty_feedback_md"
     events = getattr(raised.value, "usage_events", [])
     assert len(events) == 1
     assert events[0].input_tokens == 15

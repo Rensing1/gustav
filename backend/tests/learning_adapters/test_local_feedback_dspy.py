@@ -76,7 +76,7 @@ def test_prod_allows_http_openai_base_url_for_remote_hosts(monkeypatch: pytest.M
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -84,7 +84,7 @@ def test_prod_allows_http_openai_base_url_for_remote_hosts(monkeypatch: pytest.M
 
     adapter = local_feedback.build()
     res = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
-    assert res.feedback_md.startswith("**Das ist dir gut gelungen:**")
+    assert res.feedback_md.startswith("**Das ist Ihnen gut gelungen:**")
 
     lm_calls = observed.get("lm_calls") or []
     assert lm_calls, "Expected LM to be instantiated"
@@ -107,7 +107,7 @@ def test_prod_allows_http_openai_base_url_for_loopback(monkeypatch: pytest.Monke
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -115,7 +115,7 @@ def test_prod_allows_http_openai_base_url_for_loopback(monkeypatch: pytest.Monke
 
     adapter = local_feedback.build()
     res = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
-    assert res.feedback_md.startswith("**Das ist dir gut gelungen:**")
+    assert res.feedback_md.startswith("**Das ist Ihnen gut gelungen:**")
 
     lm_calls = observed.get("lm_calls") or []
     assert lm_calls, "Expected LM to be instantiated"
@@ -138,7 +138,7 @@ def test_prod_allows_http_openai_base_url_for_host_docker_internal(monkeypatch: 
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -146,7 +146,7 @@ def test_prod_allows_http_openai_base_url_for_host_docker_internal(monkeypatch: 
 
     adapter = local_feedback.build()
     res = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
-    assert res.feedback_md.startswith("**Das ist dir gut gelungen:**")
+    assert res.feedback_md.startswith("**Das ist Ihnen gut gelungen:**")
 
     lm_calls = observed.get("lm_calls") or []
     assert lm_calls, "Expected LM to be instantiated"
@@ -169,7 +169,7 @@ def test_prod_allows_http_openai_base_url_for_private_ip(monkeypatch: pytest.Mon
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -177,7 +177,7 @@ def test_prod_allows_http_openai_base_url_for_private_ip(monkeypatch: pytest.Mon
 
     adapter = local_feedback.build()
     res = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
-    assert res.feedback_md.startswith("**Das ist dir gut gelungen:**")
+    assert res.feedback_md.startswith("**Das ist Ihnen gut gelungen:**")
 
     lm_calls = observed.get("lm_calls") or []
     assert lm_calls, "Expected LM to be instantiated"
@@ -202,7 +202,7 @@ def test_adapter_builds_lm_with_base_url_as_is(monkeypatch: pytest.MonkeyPatch) 
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -210,7 +210,7 @@ def test_adapter_builds_lm_with_base_url_as_is(monkeypatch: pytest.MonkeyPatch) 
 
     adapter = local_feedback.build()
     res = adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
-    assert res.feedback_md.startswith("**Das ist dir gut gelungen:**")
+    assert res.feedback_md.startswith("**Das ist Ihnen gut gelungen:**")
 
     lm_calls = observed.get("lm_calls") or []
     assert lm_calls, "Expected LM to be instantiated"
@@ -238,7 +238,7 @@ def test_adapter_uses_analysis_and_synthesis_text_env_overrides(monkeypatch: pyt
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -359,10 +359,10 @@ def test_adapter_maps_invalid_analysis_json_to_permanent_invalid_analysis(
     assert str(exc.value) == "feedback_invalid_analysis"
 
 
-def test_adapter_maps_invalid_feedback_format_to_permanent_feedback_error(
+def test_adapter_treats_removed_feedback_format_error_as_transient(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Deterministic feedback-format violations must not be retried forever."""
+    """The removed heading contract must not remain a special permanent error."""
     from backend.learning.adapters import local_feedback
 
     observed: dict = {}
@@ -379,9 +379,9 @@ def test_adapter_maps_invalid_feedback_format_to_permanent_feedback_error(
     monkeypatch.setattr(feedback_program, "analyze_feedback", _boom)
 
     adapter = local_feedback.build()
-    with pytest.raises(FeedbackPermanentError) as exc:
+    with pytest.raises(FeedbackTransientError) as exc:
         adapter.analyze(text_md="Antwort", criteria=["K1"])  # type: ignore[arg-type]
-    assert str(exc.value) == "invalid_feedback_format"
+    assert str(exc.value) == "feedback_failed"
 
 
 def test_adapter_analyze_visual_requires_visual_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -427,7 +427,7 @@ def test_adapter_sets_text_think_level_low_for_gpt_oss_by_default(monkeypatch: p
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -461,7 +461,7 @@ def test_adapter_ignores_text_think_level_for_non_gpt_oss(monkeypatch: pytest.Mo
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -529,7 +529,7 @@ def test_adapter_uses_analysis_and_synthesis_visual_env_overrides(monkeypatch: p
         visual_feedback_program,
         "analyze_visual_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -658,7 +658,7 @@ def test_adapter_uses_magistral_reasoning_effort_overrides(monkeypatch: pytest.M
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -691,7 +691,7 @@ def test_adapter_ignores_reasoning_effort_for_non_magistral_mistral_models(monke
         feedback_program,
         "analyze_feedback",
         lambda **_: FeedbackResult(
-            feedback_md="**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+            feedback_md="**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
             analysis_json={"schema": "criteria.v2", "score": 0, "criteria_results": []},
             parse_status="parsed_structured",
         ),
@@ -734,7 +734,7 @@ def test_visual_feedback_program_uses_separate_lms_when_provided(monkeypatch: py
     monkeypatch.setattr(
         programs,
         "run_structured_visual_feedback",
-        lambda **_: "**Das ist dir gut gelungen:** A.\n\n**Das kannst du besser:** B.",
+        lambda **_: "**Das ist Ihnen gut gelungen:** A.\n\n**Das können Sie noch besser:** B.",
         raising=False,
     )
 

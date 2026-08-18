@@ -32,6 +32,6 @@ def test_complex_image_provider_admission_maps_to_feedback_failed() -> None:
 def test_unknown_feedback_permanent_error_maps_to_feedback_failed() -> None:
     """Unexpected permanent Feedback errors keep the established generic code."""
 
-    exc = worker.FeedbackPermanentError("invalid_feedback_format")
+    exc = worker.FeedbackPermanentError("unexpected_feedback_error")
 
     assert worker._feedback_permanent_error_code(exc) == "feedback_failed"  # type: ignore[attr-defined]

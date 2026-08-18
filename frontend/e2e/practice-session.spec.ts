@@ -7,6 +7,7 @@ import { login } from "./support/auth";
 import { apiHeaders } from "./support/api";
 import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
+import { countGermanSentences } from "./support/german-sentence-count";
 import { expectNoViewportOverflow, expectWorkspaceMeasure } from "./support/layout-sanity";
 import { seedLearnerPracticeCourse } from "./support/seed-data";
 
@@ -67,7 +68,7 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
     );
     await createForm.getByText("Weitere Einstellungen", { exact: true }).click();
     await createForm.getByLabel("Lehrkraft-Kontext").fill(
-      "Bewerte, ob die Rückmeldung den beobachtbaren TDD-Zyklus erklärt."
+      "Bewerten Sie, ob die Antwort den beobachtbaren TDD-Zyklus erklärt. Formulieren Sie die Rückmeldung als genau einen kurzen Satz ohne Überschriften."
     );
     await createForm.getByLabel("Musterlösung").fill(
       "Ein zunächst roter Test beweist, dass er die noch fehlende Funktion wirklich prüft."
@@ -194,11 +195,15 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
         );
         await learner.page.getByRole("button", { name: "Antwort prüfen" }).click();
         await expect(learner.page.getByRole("heading", { name: feedbackHeading })).toBeVisible({ timeout: 60_000 });
+        const feedbackBody = learner.page.locator(".practice-feedback__body");
+        await expect(feedbackBody).toBeVisible();
+        await expect(feedbackBody.locator("strong")).toHaveCount(0);
+        const feedbackText = (await feedbackBody.innerText()).trim();
+        expect(feedbackText.length).toBeGreaterThan(0);
+        expect(countGermanSentences(feedbackText)).toBe(1);
         if (nativePresentations === 1) {
-          const feedbackBody = learner.page.locator(".practice-feedback__body");
-          await expect(feedbackBody).toBeVisible();
           await feedbackBody.evaluate((element) => {
-            element.textContent = "Deine Antwort benennt den Zweck des roten Tests und kann noch genauer begründet werden.";
+            element.textContent = "Ihre Antwort benennt den Zweck des roten Tests und kann noch genauer begründet werden.";
           });
           const feedbackDue = learner.page.locator(".practice-feedback__due");
           if (await feedbackDue.count()) {

@@ -113,7 +113,7 @@ def _raise_feedback_error_for_exception(
         raise FeedbackTransientError("provider_rate_limited", usage_events=usage_events) from exc
     if ("invalid_criterion_idx" in normalized) or ("invalid_analysis_json" in normalized):
         raise FeedbackInvalidAnalysisError("feedback_invalid_analysis", usage_events=usage_events) from exc
-    if normalized in {"invalid_feedback_format", "empty_feedback_md"}:
+    if normalized == "empty_feedback_md":
         raise FeedbackPermanentError(normalized, usage_events=usage_events) from exc
     raise FeedbackTransientError(default_transient_code, usage_events=usage_events) from exc
 

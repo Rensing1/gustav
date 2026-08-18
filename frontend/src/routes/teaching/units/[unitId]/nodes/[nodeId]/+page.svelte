@@ -1653,7 +1653,8 @@
           <details class="teacher-module-advanced-settings" open={!isModuleEditor}>
             <summary>Weitere Einstellungen</summary>
             {#if createTaskKind !== "h5p"}
-              <label class="workspace-field"><span>Lehrkraft-Kontext</span><textarea name="teacher_context_md" rows="4">{createTaskValues().teacher_context_md ?? ""}</textarea></label>
+              <label class="workspace-field"><span>Lehrkraft-Kontext</span><textarea name="teacher_context_md" rows="4" aria-describedby="create-teacher-context-help">{createTaskValues().teacher_context_md ?? ""}</textarea></label>
+              <p id="create-teacher-context-help" class="workspace-note">Interne fachliche Hinweise und verbindliche Vorgaben für Schwerpunkt, Länge oder Aufbau der Rückmeldung. Ohne abweichende Vorgabe verwendet GUSTAV die Standardstruktur. Der Kontext wird Lernenden nicht angezeigt.</p>
               <label class="workspace-field"><span>Musterlösung</span><textarea name="model_solution_md" rows="5">{createTaskValues().model_solution_md ?? ""}</textarea></label>
             {/if}
             {#if !isPracticeModule}
@@ -1823,7 +1824,8 @@
                   <details class="teacher-module-advanced-settings" open={!isModuleEditor}>
                     <summary>Weitere Einstellungen</summary>
                     {#if task.kind !== "h5p"}
-                      <label class="workspace-field"><span>Lehrkraft-Kontext</span><textarea name="teacher_context_md" rows="4">{taskTeacherContextValue(task)}</textarea></label>
+                      <label class="workspace-field"><span>Lehrkraft-Kontext</span><textarea name="teacher_context_md" rows="4" aria-describedby={`edit-teacher-context-help-${task.id}`}>{taskTeacherContextValue(task)}</textarea></label>
+                      <p id={`edit-teacher-context-help-${task.id}`} class="workspace-note">Interne fachliche Hinweise und verbindliche Vorgaben für Schwerpunkt, Länge oder Aufbau der Rückmeldung. Ohne abweichende Vorgabe verwendet GUSTAV die Standardstruktur. Der Kontext wird Lernenden nicht angezeigt.</p>
                       <label class="workspace-field"><span>Musterlösung</span><textarea name="model_solution_md" rows="5">{taskModelSolutionValue(task)}</textarea></label>
                     {/if}
                     {#if !isPracticeModule}

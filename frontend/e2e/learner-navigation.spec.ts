@@ -3,6 +3,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from "@pla
 import { login } from "./support/auth";
 import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
+import { countGermanSentences } from "./support/german-sentence-count";
 import {
   expectLearnerMaterialContrast,
   expectLearnerTaskTheme,
@@ -12,6 +13,7 @@ import {
 import { seedLearnerNavigationCourse } from "./support/seed-data";
 
 const password = "Passw0rd!e2e";
+const confidentialFeedbackMarker = "GUSTAV-INTERN-NAVIGATION";
 
 async function pageFor(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true });
@@ -187,7 +189,15 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     );
     const responseGroup = workbench.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
     await expect(responseGroup).toBeVisible();
-    await expect(responseGroup.locator("details").filter({ hasText: "Rückmeldung" }).first()).toHaveAttribute("open", "");
+    const feedbackPanel = responseGroup.locator("details").filter({ hasText: "Rückmeldung" }).first();
+    await expect(feedbackPanel).toHaveAttribute("open", "");
+    const feedbackBody = feedbackPanel.locator(".learning-response-panel__body");
+    await expect(feedbackBody).toBeVisible();
+    await expect(feedbackBody.locator("strong")).toHaveCount(0);
+    const feedbackText = (await feedbackBody.innerText()).trim();
+    expect(feedbackText.length).toBeGreaterThan(0);
+    expect(countGermanSentences(feedbackText)).toBe(1);
+    expect(feedbackText).not.toContain(confidentialFeedbackMarker);
     await expect(textEditor).toHaveAttribute("contenteditable", "true");
 
     await textEditor.fill("Digitale Kommunikation braucht klare und überprüfbare Regeln.");

@@ -259,6 +259,7 @@ describe("LearnerContentWorkspace", () => {
 
   it("renders opened modules without a second source-management workflow", async () => {
     const onContextScroll = vi.fn();
+    const onWorkScroll = vi.fn();
     const onCloseModule = vi.fn();
     const onUndoCloseModule = vi.fn();
     const props = {
@@ -269,8 +270,10 @@ describe("LearnerContentWorkspace", () => {
       compactSurface: "materials" as const,
       expandedContextModuleIds: ["module-2"],
       contextScrollTop: 240,
+      workScrollTop: 80,
       closedContextModuleTitle: "Vertiefung",
       onContextScroll,
+      onWorkScroll,
       onCloseModule,
       onUndoCloseModule,
       contextModules: [
@@ -304,7 +307,7 @@ describe("LearnerContentWorkspace", () => {
         }
       ]
     };
-    const { container } = render(LearnerContentWorkspace, { props });
+    const { container, rerender } = render(LearnerContentWorkspace, { props });
 
     expect(screen.getByText("Text aus dem geöffneten Modul.")).toBeInTheDocument();
     expect(screen.queryByText("Angeheftet")).not.toBeInTheDocument();
@@ -322,6 +325,19 @@ describe("LearnerContentWorkspace", () => {
       fireEvent.scroll(scrollSurface);
     }
     expect(onContextScroll).toHaveBeenCalledWith(410);
+
+    await rerender({ ...props, contextScrollTop: 120 });
+    expect(scrollSurface?.scrollTop).toBe(410);
+
+    const workSurface = container.querySelector<HTMLElement>(".learner-task-workbench__main");
+    expect(workSurface?.scrollTop).toBe(80);
+    if (workSurface) {
+      workSurface.scrollTop = 290;
+      await fireEvent.scroll(workSurface);
+    }
+    expect(onWorkScroll).toHaveBeenCalledWith(290);
+    await rerender({ ...props, contextScrollTop: 120, workScrollTop: 20 });
+    expect(workSurface?.scrollTop).toBe(290);
   });
 
   it("opens a deliberately selected document across the workbench while keeping the desk mounted", async () => {
@@ -350,7 +366,7 @@ describe("LearnerContentWorkspace", () => {
         }
       ]
     };
-    const { container } = render(LearnerContentWorkspace, { props });
+    const { container, rerender } = render(LearnerContentWorkspace, { props });
 
     const reader = screen.getByRole("region", { name: "Dokument groß lesen" });
     await vi.waitFor(() => expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true }));
@@ -367,6 +383,8 @@ describe("LearnerContentWorkspace", () => {
       await fireEvent.scroll(readerScroll);
     }
     expect(onReaderScroll).toHaveBeenCalledWith(260);
+    await rerender({ ...props, readerScrollTop: 40 });
+    expect(readerScroll?.scrollTop).toBe(260);
     await fireEvent.click(within(reader).getByRole("button", { name: "Zurück zur Aufgabe" }));
     expect(onCloseContextReader).toHaveBeenCalledOnce();
   });

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
   import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
@@ -139,23 +139,27 @@
   let readerScrollSurface = $state<HTMLElement | null>(null);
   let deskSurface = $state<HTMLDivElement | null>(null);
   let focusedReaderKey = $state<string | null>(null);
+  const restoredScrollSurfaces = new WeakSet<HTMLElement>();
+
+  function restoreScrollPosition(surface: HTMLElement | null, scrollTop: number) {
+    if (!surface || restoredScrollSurfaces.has(surface)) {
+      return;
+    }
+    // Reapplying stored props while WebKit is momentum-scrolling cancels the user's touch movement.
+    restoredScrollSurfaces.add(surface);
+    surface.scrollTop = scrollTop;
+  }
 
   $effect(() => {
-    if (contextScrollSurface && contextScrollSurface.scrollTop !== contextScrollTop) {
-      contextScrollSurface.scrollTop = contextScrollTop;
-    }
+    restoreScrollPosition(contextScrollSurface, untrack(() => contextScrollTop));
   });
 
   $effect(() => {
-    if (workScrollSurface && workScrollSurface.scrollTop !== workScrollTop) {
-      workScrollSurface.scrollTop = workScrollTop;
-    }
+    restoreScrollPosition(workScrollSurface, untrack(() => workScrollTop));
   });
 
   $effect(() => {
-    if (readerScrollSurface && readerScrollSurface.scrollTop !== readerScrollTop) {
-      readerScrollSurface.scrollTop = readerScrollTop;
-    }
+    restoreScrollPosition(readerScrollSurface, untrack(() => readerScrollTop));
   });
 
   $effect(() => {

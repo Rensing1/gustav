@@ -9,7 +9,7 @@ import { seedLearnerNavigationCourse } from "./support/seed-data";
 const password = "Passw0rd!e2e";
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase });
+  const context = await browser.newContext({ baseURL: webBase, hasTouch: true });
   return { context, page: await context.newPage() };
 }
 
@@ -50,6 +50,42 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
     );
     expect(landscapeColumns).toBe(2);
     await expectNoViewportOverflow(learner.page);
+
+    await learner.page.addStyleTag({
+      content: `
+        .learner-task-context__scroll::after,
+        .learner-task-workbench__main::after {
+          content: "";
+          display: block;
+          height: 80rem;
+        }
+      `
+    });
+    const contextScroll = workbench.locator(".learner-task-context__scroll");
+    const workScroll = workbench.locator(".learner-task-workbench__main");
+    await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);
+    await expect.poll(() => workScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);
+
+    await contextScroll.evaluate((surface) => {
+      surface.scrollTop = surface.scrollHeight;
+      surface.dispatchEvent(new Event("scroll"));
+    });
+    await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight - surface.scrollTop)).toBeLessThan(2);
+    expect(await workScroll.evaluate((surface) => surface.scrollTop)).toBe(0);
+
+    const contextBottom = await contextScroll.evaluate((surface) => surface.scrollTop);
+    await workScroll.evaluate((surface) => {
+      surface.scrollTop = surface.scrollHeight;
+      surface.dispatchEvent(new Event("scroll"));
+    });
+    await expect.poll(() => workScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight - surface.scrollTop)).toBeLessThan(2);
+    expect(await contextScroll.evaluate((surface) => surface.scrollTop)).toBe(contextBottom);
+
+    await contextScroll.evaluate((surface) => {
+      surface.scrollTop = 0;
+      surface.dispatchEvent(new Event("scroll"));
+    });
+    await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollTop)).toBe(0);
 
     await learner.page.setViewportSize({ width: 1180, height: 820 });
     await expect(context).toBeVisible();

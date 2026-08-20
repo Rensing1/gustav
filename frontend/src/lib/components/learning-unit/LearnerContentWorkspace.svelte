@@ -131,7 +131,7 @@
     onWorkScroll?: ((scrollTop: number) => void) | null;
     onReaderScroll?: ((scrollTop: number) => void) | null;
     onDismissFeedbackStatus?: ((taskId: string) => void) | null;
-    onProgressPersisted?: ((submission?: LearningSubmission | null) => void | Promise<void>) | null;
+    onProgressPersisted?: ((taskId: string, submission?: LearningSubmission | null) => void | Promise<void>) | null;
   } = $props();
 
   let contextScrollSurface = $state<HTMLDivElement | null>(null);
@@ -364,7 +364,7 @@
                   onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
                   onEnterSubmissionWorkspace={() => onBeginTask(item.key, "text")}
                   onEnterUploadWorkspace={() => onBeginTask(item.key, preferredMode(task))}
-                  {onProgressPersisted}
+                  onProgressPersisted={(submission) => onProgressPersisted?.(task.id, submission)}
                 />
               {/if}
             {/each}
@@ -537,7 +537,7 @@
           onUndoCloseDialogContextModule={onUndoCloseModule}
           onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
           onSubmitUploadFeedback={onSubmitUploadFeedback}
-          {onProgressPersisted}
+          onProgressPersisted={(submission) => onProgressPersisted?.(task.id, submission)}
         />
       </main>
       </div>

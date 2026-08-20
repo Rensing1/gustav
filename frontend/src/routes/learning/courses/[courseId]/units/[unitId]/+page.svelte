@@ -1122,20 +1122,17 @@
     }
   }
 
-  async function handleProgressPersisted(submission?: LearningSubmission | null) {
-    const activeTaskId = learnerWorkspace.activeTask?.taskId ?? null;
-    if (activeTaskId && submission) {
-      setTaskHistory(activeTaskId, [
+  async function handleProgressPersisted(taskId: string, submission?: LearningSubmission | null) {
+    if (submission) {
+      setTaskHistory(taskId, [
         submission,
-        ...historyForTask(activeTaskId).filter((entry) => entry.id !== submission.id)
+        ...historyForTask(taskId).filter((entry) => entry.id !== submission.id)
       ]);
-      void pollFeedbackSubmission(activeTaskId, submission.id, "submit", "Rückmeldung ist bereit");
+      void pollFeedbackSubmission(taskId, submission.id, "submit", "Rückmeldung ist bereit");
       return;
     }
-    if (activeTaskId) {
-      await ensureSubmissionHistoryLoaded(activeTaskId);
-      markActiveTaskResult(activeTaskId);
-    }
+    await ensureSubmissionHistoryLoaded(taskId);
+    markActiveTaskResult(taskId);
     await refreshModularGraph().catch(() => undefined);
   }
 

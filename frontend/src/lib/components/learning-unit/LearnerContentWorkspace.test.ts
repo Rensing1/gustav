@@ -236,6 +236,12 @@ describe("LearnerContentWorkspace", () => {
     expect(within(statement).getByText("Untersuche die Quelle im Gespräch.")).toBeInTheDocument();
   });
 
+  it("binds persisted progress to the task that created the async callback", () => {
+    const source = readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "LearnerContentWorkspace.svelte"), "utf8");
+
+    expect(source).toContain("onProgressPersisted?.(task.id, submission)");
+  });
+
   it("keeps task and material surfaces mounted while changing the compact view", async () => {
     const props = {
       ...baseProps(),

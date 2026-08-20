@@ -145,9 +145,10 @@ describe("learning unit route contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
-    expect(routeSource).toContain("async function handleProgressPersisted(submission?: LearningSubmission | null)");
-    expect(routeSource).toContain("if (activeTaskId && submission)");
-    expect(routeSource).toContain('void pollFeedbackSubmission(activeTaskId, submission.id, "submit", "Rückmeldung ist bereit")');
+    expect(routeSource).toContain("async function handleProgressPersisted(taskId: string, submission?: LearningSubmission | null)");
+    expect(routeSource).toContain("if (submission)");
+    expect(routeSource).toContain('void pollFeedbackSubmission(taskId, submission.id, "submit", "Rückmeldung ist bereit")');
+    expect(routeSource).not.toContain("const activeTaskId = learnerWorkspace.activeTask?.taskId ?? null");
   });
 
   it("starts final submissions visibly and cancels duplicate form requests", () => {

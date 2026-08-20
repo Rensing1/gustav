@@ -173,6 +173,7 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) before preparing a larger contrib
 
 ## Documentation
 
+- User manual: [Deutsch](docs/manual/index.de.md) · [English](docs/manual/index.en.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Bounded contexts](docs/bounded_contexts.md)
 - [Domain glossary](docs/glossary.md)

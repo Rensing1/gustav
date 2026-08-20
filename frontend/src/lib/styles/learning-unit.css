@@ -3110,7 +3110,7 @@
 
   .dialog-layout {
     direction: ltr;
-    grid-template-columns: clamp(32rem, 44cqw, 38rem) minmax(0, 1fr);
+    grid-template-columns: var(--learner-task-column-ratio, clamp(32rem, 44cqw, 38rem)) 1px minmax(0, 1fr);
     align-items: stretch;
   }
 
@@ -3119,7 +3119,13 @@
   }
 
   .dialog-main {
+    grid-column: 3;
+  }
+
+  .dialog-layout > .learner-task-split-divider {
+    display: block;
     grid-column: 2;
+    grid-row: 1;
   }
 
   .dialog-layout[data-compact-surface] [data-dialog-surface="materials"] {
@@ -3138,7 +3144,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
-    border-inline-end: 1px solid var(--color-border);
+    border-inline-end: 0;
   }
 
   .dialog-main {
@@ -3407,6 +3413,10 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
+}
+
+.learner-task-split-divider {
+  display: none;
 }
 
 .learner-task-workbench[data-reader-active="true"] .learner-task-workbench__desk {
@@ -4126,8 +4136,14 @@ button.learner-material-context__module-toggle:focus-visible,
 
   .learner-task-workbench__desk {
     height: 100%;
-    grid-template-columns: clamp(32rem, 44cqw, 38rem) minmax(0, 1fr);
+    grid-template-columns: var(--learner-task-column-ratio, clamp(32rem, 44cqw, 38rem)) 1px minmax(0, 1fr);
     align-items: stretch;
+  }
+
+  .learner-task-split-divider {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .learner-task-workbench__switch {
@@ -4143,10 +4159,11 @@ button.learner-material-context__module-toggle:focus-visible,
   }
 
   .learner-task-context {
+    grid-column: 1;
     height: 100%;
     max-height: none;
     min-height: 0;
-    border-inline-end: 1px solid var(--color-border);
+    border-inline-end: 0;
   }
 
   .learner-task-context__scroll {
@@ -4159,6 +4176,7 @@ button.learner-material-context__module-toggle:focus-visible,
   }
 
   .learner-task-workbench__main {
+    grid-column: 3;
     height: 100%;
     min-height: 0;
     overflow-y: auto;
@@ -4262,7 +4280,13 @@ button.learner-material-context__module-toggle:focus-visible,
     }
 
     .learner-task-workbench__desk {
-      grid-template-columns: minmax(32rem, 38rem) minmax(0, 1fr);
+      grid-template-columns: var(--learner-task-column-ratio, minmax(32rem, 38rem)) 1px minmax(0, 1fr);
+    }
+
+    .learner-task-split-divider {
+      display: block;
+      grid-column: 2;
+      grid-row: 1;
     }
 
     .learner-task-workbench__switch {
@@ -4271,11 +4295,12 @@ button.learner-material-context__module-toggle:focus-visible,
 
     .learner-task-workbench[data-compact-surface] [data-work-surface="materials"] {
       display: flex;
-      border-inline-end: 1px solid var(--color-border);
+      border-inline-end: 0;
     }
 
     .learner-task-workbench[data-compact-surface] [data-work-surface="task"] {
       display: block;
+      grid-column: 3;
     }
   }
 }

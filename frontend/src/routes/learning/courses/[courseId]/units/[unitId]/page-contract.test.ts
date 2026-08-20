@@ -72,6 +72,18 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain('surface: "graph"');
   });
 
+  it("restores and shares one device-local task column ratio for the authenticated learner", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("readTaskColumnRatio(window.localStorage, data.user?.sub ?? null)");
+    expect(routeSource).toContain("writeTaskColumnRatio(window.localStorage, data.user?.sub ?? null, value)");
+    expect(routeSource).toContain("removeTaskColumnRatio(window.localStorage, data.user?.sub ?? null)");
+    expect(routeSource).toContain("taskColumnRatio={taskColumnRatio}");
+    expect(routeSource).toContain("onPreviewTaskColumnRatio={previewTaskColumnRatio}");
+    expect(routeSource).toContain("onCommitTaskColumnRatio={commitTaskColumnRatio}");
+  });
+
   it("never exposes a tab-local task return action in the graph", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

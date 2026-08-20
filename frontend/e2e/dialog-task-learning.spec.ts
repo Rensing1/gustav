@@ -125,7 +125,9 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     await expect(learner.page.getByText("Welche Textstelle belegt diese Beobachtung?")).toBeVisible();
     await expect(learner.page.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeHidden();
     const accountControl = learner.page.locator(".account-trigger");
+    const dialogSeparator = learner.page.getByRole("separator", { name: "Spaltenbreite anpassen" });
     await expectDialogLayout(learner.page, "desktop");
+    await expect(dialogSeparator).toBeVisible();
     await expect(learner.page).toHaveScreenshot("learner-dialog-light-desktop.png", {
       animations: "disabled",
       caret: "hide",
@@ -133,6 +135,7 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     });
     await learner.page.setViewportSize({ width: 1024, height: 768 });
     await expectDialogLayout(learner.page, "desktop");
+    await expect(dialogSeparator).toBeVisible();
     await expect(learner.page).toHaveScreenshot("learner-dialog-light-tablet.png", {
       animations: "disabled",
       caret: "hide",
@@ -140,6 +143,7 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     });
     await learner.page.setViewportSize({ width: 390, height: 844 });
     await expectDialogLayout(learner.page, "mobile");
+    await expect(dialogSeparator).toBeHidden();
     await expect(learner.page).toHaveScreenshot("learner-dialog-light-mobile.png", {
       animations: "disabled",
       caret: "hide",

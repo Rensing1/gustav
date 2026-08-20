@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
+  import LearnerTaskSplitDivider from "$lib/components/learning-unit/LearnerTaskSplitDivider.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -50,7 +51,10 @@
     historyStateByTask = {},
     focusedContextModuleId = null,
     closedContextModuleTitle = null,
+    taskColumnRatio = null,
     onSetCompactSurface = null,
+    onPreviewTaskColumnRatio = null,
+    onCommitTaskColumnRatio = null,
     onOpenContext = null,
     onToggleContextMaterial = null,
     onToggleContextModule = null,
@@ -77,7 +81,10 @@
     historyStateByTask?: Record<string, HistoryState>;
     focusedContextModuleId?: string | null;
     closedContextModuleTitle?: string | null;
+    taskColumnRatio?: number | null;
     onSetCompactSurface?: ((surface: "task" | "materials") => void) | null;
+    onPreviewTaskColumnRatio?: ((value: number) => void) | null;
+    onCommitTaskColumnRatio?: ((value: number) => void) | null;
     onOpenContext?: ((key: string) => void | Promise<void>) | null;
     onToggleContextMaterial?: ((moduleId: string, key: string) => void) | null;
     onToggleContextModule?: ((moduleId: string) => void | Promise<void>) | null;
@@ -339,7 +346,12 @@
         onclick={() => onSetCompactSurface?.("materials")}
       >Materialien</button>
     </nav>
-    <div class="dialog-layout" data-compact-surface={compactSurface} data-phase={closingPhase ? "closing" : "conversation"}>
+    <div
+      class="dialog-layout"
+      data-compact-surface={compactSurface}
+      data-phase={closingPhase ? "closing" : "conversation"}
+      style={taskColumnRatio === null ? undefined : `--learner-task-column-ratio: ${taskColumnRatio}%`}
+    >
       <aside class="dialog-sidebar" data-dialog-surface="materials" aria-label="Dialogpartner und Sitzungsaktionen">
           <header class="dialog-task-context">
             <p class="workspace-label">Aufgabe · KI-Dialog</p>
@@ -395,6 +407,12 @@
           </nav>
         {/if}
       </aside>
+
+      <LearnerTaskSplitDivider
+        value={taskColumnRatio}
+        onPreview={(value) => onPreviewTaskColumnRatio?.(value)}
+        onCommit={(value) => onCommitTaskColumnRatio?.(value)}
+      />
 
       <div class="dialog-main" data-dialog-surface="task">
         <div class="dialog-transcript" role="log" aria-label="Dialogverlauf" aria-live="polite">

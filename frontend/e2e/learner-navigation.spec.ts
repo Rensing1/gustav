@@ -114,7 +114,8 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
         taskDisplay: getComputedStyle(task).display
       };
     });
-    expect(landscapeIpadLayout.columns.split(" ")).toHaveLength(2);
+    // Two content panes now have a one-pixel separator track between them.
+    expect(landscapeIpadLayout.columns.split(" ")).toHaveLength(3);
     expect(landscapeIpadLayout.contextDisplay).not.toBe("none");
     expect(landscapeIpadLayout.taskDisplay).not.toBe("none");
     await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();

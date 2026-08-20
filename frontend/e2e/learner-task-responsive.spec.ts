@@ -43,19 +43,39 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
     const workbench = learner.page.getByRole("region", { name: "Aufgabe bearbeiten" });
     const context = workbench.getByRole("complementary", { name: "Aufgabe und Kontext" });
     const task = workbench.getByRole("main", { name: "Bearbeitung" });
+    const separator = workbench.getByRole("separator", { name: "Spaltenbreite anpassen" });
     const switcher = workbench.getByRole("navigation", { name: "Arbeitsbereich wählen" });
     const compactStatement = workbench.getByRole("region", { name: "Vollständige Aufgabenstellung" });
 
     await expect(context).toBeVisible();
     await expect(task).toBeVisible();
+    await expect(separator).toBeVisible();
     await expect(switcher).toBeHidden();
     await expect(compactStatement).toBeHidden();
     await expect(context.getByText("Begründe abschließend, welche Position dich überzeugt.")).toBeVisible();
-    const landscapeColumns = await workbench.locator(".learner-task-workbench__desk").evaluate(
+    const landscapeTracks = await workbench.locator(".learner-task-workbench__desk").evaluate(
       (desk) => getComputedStyle(desk).gridTemplateColumns.split(" ").length
     );
-    expect(landscapeColumns).toBe(2);
+    expect(landscapeTracks).toBe(3);
     await expectNoViewportOverflow(learner.page);
+
+    const deskBox = await workbench.locator(".learner-task-workbench__desk").boundingBox();
+    const separatorBox = await separator.boundingBox();
+    expect(deskBox).not.toBeNull();
+    expect(separatorBox).not.toBeNull();
+    if (deskBox && separatorBox) {
+      await learner.page.mouse.move(separatorBox.x + separatorBox.width / 2, separatorBox.y + 80);
+      await learner.page.mouse.down();
+      await learner.page.mouse.move(deskBox.x + deskBox.width * 0.6, separatorBox.y + 80);
+      await learner.page.mouse.up();
+    }
+    await expect(separator).toHaveAttribute("aria-valuenow", "60");
+
+    await learner.page.reload();
+    const restoredWorkbench = learner.page.getByRole("region", { name: "Aufgabe bearbeiten" });
+    const restoredSeparator = restoredWorkbench.getByRole("separator", { name: "Spaltenbreite anpassen" });
+    await expect(restoredSeparator).toBeVisible();
+    await expect(restoredSeparator).toHaveAttribute("aria-valuenow", "60");
 
     await learner.page.addStyleTag({
       content: `
@@ -88,15 +108,16 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
     await expect(context).toBeVisible();
     await expect(task).toBeVisible();
     await expect(switcher).toBeHidden();
-    const largeLandscapeColumns = await workbench.locator(".learner-task-workbench__desk").evaluate(
+    const largeLandscapeTracks = await restoredWorkbench.locator(".learner-task-workbench__desk").evaluate(
       (desk) => getComputedStyle(desk).gridTemplateColumns.split(" ").length
     );
-    expect(largeLandscapeColumns).toBe(2);
+    expect(largeLandscapeTracks).toBe(3);
     await expectNoViewportOverflow(learner.page);
 
     await learner.page.setViewportSize({ width: 820, height: 1180 });
     await expect(context).toBeHidden();
     await expect(task).toBeVisible();
+    await expect(restoredSeparator).toBeHidden();
     await expect(switcher).toBeVisible();
     await expect(compactStatement).toBeVisible();
     await expect(compactStatement.getByText("Begründe abschließend, welche Position dich überzeugt.")).toBeVisible();

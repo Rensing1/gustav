@@ -109,14 +109,20 @@ function jsonResponse(value: unknown): Response {
   });
 }
 
-function renderDialog(current: TestSession, task: LearningTask = dialogTask, learnerSub: string | null = "student-1") {
+function renderDialog(
+  current: TestSession,
+  task: LearningTask = dialogTask,
+  learnerSub: string | null = "student-1",
+  extraProps: Record<string, unknown> = {}
+) {
   const fetchMock = vi.fn(async () => jsonResponse({ session: current }));
   vi.stubGlobal("fetch", fetchMock);
   render(LearningDialogWorkspace, {
     props: {
       learnerSub,
       courseId: "course-1",
-      task
+      task,
+      ...extraProps
     }
   });
   return fetchMock;
@@ -142,6 +148,33 @@ describe("LearningDialogWorkspace", () => {
     expect(within(partnerContext).queryByRole("button", { name: "Antwort senden" })).toBeNull();
     expect(within(composer).getByRole("button", { name: "Antwort senden" })).toBeInTheDocument();
     expect(within(composer).queryByRole("link", { name: "Pausieren" })).toBeNull();
+  });
+
+  it("uses the shared adjustable column separator in wide dialog layouts", async () => {
+    const onPreviewTaskColumnRatio = vi.fn();
+    const onCommitTaskColumnRatio = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ session: session() })));
+    const { container } = render(
+      LearningDialogWorkspace,
+      {
+        props: {
+          learnerSub: "student-1",
+          courseId: "course-1",
+          task: dialogTask,
+          taskColumnRatio: 57,
+          onPreviewTaskColumnRatio,
+          onCommitTaskColumnRatio
+        }
+      }
+    );
+
+    const separator = await screen.findByRole("separator", { name: "Spaltenbreite anpassen" });
+    expect(separator).toHaveAttribute("aria-valuenow", "57");
+    expect(container.querySelector(".dialog-layout")).toHaveStyle("--learner-task-column-ratio: 57%");
+
+    await fireEvent.keyDown(separator, { key: "ArrowLeft" });
+    expect(onPreviewTaskColumnRatio).toHaveBeenLastCalledWith(56);
+    expect(onCommitTaskColumnRatio).toHaveBeenLastCalledWith(56);
   });
 
   it("offers a deliberate transition while keeping the closing prompt hidden", async () => {

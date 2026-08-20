@@ -197,6 +197,31 @@ describe("LearnerContentWorkspace", () => {
     expect(within(context).queryByRole("button", { name: "Pausieren" })).not.toBeInTheDocument();
   });
 
+  it("connects the adjustable column separator to normal task layout state", async () => {
+    const onPreviewTaskColumnRatio = vi.fn();
+    const onCommitTaskColumnRatio = vi.fn();
+    const props = {
+      ...baseProps(),
+      mode: "working" as const,
+      activeTaskKey: "task:task-1",
+      activeEditorMode: "text" as const,
+      taskColumnRatio: 52,
+      onPreviewTaskColumnRatio,
+      onCommitTaskColumnRatio
+    };
+    const { container } = render(LearnerContentWorkspace, { props });
+
+    const separator = screen.getByRole("separator", { name: "Spaltenbreite anpassen" });
+    expect(separator).toHaveAttribute("aria-valuenow", "52");
+    expect(container.querySelector(".learner-task-workbench__desk")).toHaveStyle(
+      "--learner-task-column-ratio: 52%"
+    );
+
+    await fireEvent.keyDown(separator, { key: "ArrowRight" });
+    expect(onPreviewTaskColumnRatio).toHaveBeenLastCalledWith(53);
+    expect(onCommitTaskColumnRatio).toHaveBeenLastCalledWith(53);
+  });
+
   it("renders dialog context once instead of nesting the generic task context", async () => {
     vi.stubGlobal(
       "fetch",
@@ -403,7 +428,7 @@ describe("LearnerContentWorkspace", () => {
     expect(css).toMatch(/\.learner-task-workbench-container\s*\{[^}]*grid-template-rows:\s*minmax\(3\.25rem,\s*auto\) auto;/s);
     expect(css).toMatch(/\.learner-task-workbench\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
     expect(css).toContain("@container (min-width: 60rem)");
-    expect(css).toMatch(/grid-template-columns:\s*clamp\(32rem,\s*44cqw,\s*38rem\) minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/grid-template-columns:\s*var\(--learner-task-column-ratio,\s*clamp\(32rem,\s*44cqw,\s*38rem\)\) 1px minmax\(0,\s*1fr\)/);
     expect(css).not.toContain("@container learning-dialog (min-width: 64rem)");
     expect(css).toMatch(/\.learner-task-context__scroll\s*\{[^}]*overflow-y:\s*auto;/s);
     expect(css).toMatch(/\.learner-reference-document__prose\s*\{[^}]*max-width:\s*68ch;/s);

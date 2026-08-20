@@ -57,6 +57,11 @@
     type LearnerWorkspaceState
   } from "$lib/learning-unit/learner-workspace-state";
   import { learnerNavigationHref } from "$lib/learning-unit/learner-navigation";
+  import {
+    readTaskColumnRatio,
+    removeTaskColumnRatio,
+    writeTaskColumnRatio
+  } from "$lib/learning-unit/task-column-preference";
   import { highlightedLearnerGraphModuleIds } from "$lib/learning-unit/graph-selection";
   import { beginSubmissionAttempt } from "$lib/learning-unit/submission-finalization";
   import { clearSubmissionDraft } from "$lib/learning-unit/submission-drafts";
@@ -107,6 +112,7 @@
   let historyRestored = $state(false);
   let modularSettingsMenuOpen = $state(false);
   let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences(currentViewportWidth()));
+  let taskColumnRatio = $state<number | null>(null);
   let workspaceRoot = $state<HTMLDivElement | null>(null);
   let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({});
   let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>({});
@@ -1458,13 +1464,26 @@
     });
   }
 
+  function previewTaskColumnRatio(value: number) {
+    taskColumnRatio = value;
+  }
+
+  function commitTaskColumnRatio(value: number) {
+    taskColumnRatio = value;
+    if (browser) {
+      writeTaskColumnRatio(window.localStorage, data.user?.sub ?? null, value);
+    }
+  }
+
   function resetLayoutPreferences() {
     const viewportWidth = currentViewportWidth();
     const layoutDefaults = defaultLayoutPreferences(viewportWidth);
     const chromeDefaults = defaultWorkspaceChrome(viewportWidth);
 
     layoutPreferences = layoutDefaults;
+    taskColumnRatio = null;
     applyFontScale(layoutDefaults.fontScale);
+    removeTaskColumnRatio(window.localStorage, data.user?.sub ?? null);
     setLearnerWorkspaceState({
       ...learnerWorkspace,
       preferences: {
@@ -1535,6 +1554,7 @@
   onMount(() => {
     const viewportWidth = currentViewportWidth();
     graphState = data.graph ? plainGraph(data.graph) : null;
+    taskColumnRatio = readTaskColumnRatio(window.localStorage, data.user?.sub ?? null);
 
     if (data.activeModule) {
       moduleCache = {
@@ -1795,6 +1815,7 @@
                 contextScrollTop={learnerWorkspace.context.bookScrollTop}
                 workScrollTop={learnerWorkspace.context.workScrollTop}
                 readerScrollTop={learnerWorkspace.context.readerScrollTop}
+                taskColumnRatio={taskColumnRatio}
                 historyByTask={submissionHistoryByTask}
                 historyStateByTask={submissionHistoryStateByTask}
                 submittedTaskId={data.submittedTaskId}
@@ -1822,6 +1843,8 @@
                 onContextScroll={rememberContextScroll}
                 onWorkScroll={rememberWorkScroll}
                 onReaderScroll={rememberReaderScroll}
+                onPreviewTaskColumnRatio={previewTaskColumnRatio}
+                onCommitTaskColumnRatio={commitTaskColumnRatio}
                 onDismissFeedbackStatus={dismissFeedbackStatus}
                 onProgressPersisted={handleProgressPersisted}
               />
@@ -1857,6 +1880,7 @@
             contextScrollTop={learnerWorkspace.context.bookScrollTop}
             workScrollTop={learnerWorkspace.context.workScrollTop}
             readerScrollTop={learnerWorkspace.context.readerScrollTop}
+            taskColumnRatio={taskColumnRatio}
             historyByTask={submissionHistoryByTask}
             historyStateByTask={submissionHistoryStateByTask}
             submittedTaskId={data.submittedTaskId}
@@ -1883,6 +1907,8 @@
             onContextScroll={rememberContextScroll}
             onWorkScroll={rememberWorkScroll}
             onReaderScroll={rememberReaderScroll}
+            onPreviewTaskColumnRatio={previewTaskColumnRatio}
+            onCommitTaskColumnRatio={commitTaskColumnRatio}
             onDismissFeedbackStatus={dismissFeedbackStatus}
             onProgressPersisted={handleProgressPersisted}
           />

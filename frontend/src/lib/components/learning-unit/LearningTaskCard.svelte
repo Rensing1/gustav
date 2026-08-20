@@ -52,6 +52,7 @@
     dialogHistoryStateByTask = {},
     dialogFocusedContextModuleId = null,
     dialogClosedContextModuleTitle = null,
+    dialogTaskColumnRatio = null,
     hideDialogPauseAction = false,
     enhanceSubmit = undefined,
     onToggle = null,
@@ -60,6 +61,8 @@
     onEnterUploadWorkspace = null,
     onExitSubmissionWorkspace = null,
     onSetDialogCompactSurface = null,
+    onPreviewDialogTaskColumnRatio = null,
+    onCommitDialogTaskColumnRatio = null,
     onOpenDialogContext = null,
     onToggleDialogMaterial = null,
     onToggleDialogContextModule = null,
@@ -101,6 +104,7 @@
     dialogHistoryStateByTask?: Record<string, SubmissionHistoryLoadState>;
     dialogFocusedContextModuleId?: string | null;
     dialogClosedContextModuleTitle?: string | null;
+    dialogTaskColumnRatio?: number | null;
     hideDialogPauseAction?: boolean;
     enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
@@ -109,6 +113,8 @@
     onEnterUploadWorkspace?: (() => void) | null;
     onExitSubmissionWorkspace?: (() => void) | null;
     onSetDialogCompactSurface?: ((surface: "task" | "materials") => void) | null;
+    onPreviewDialogTaskColumnRatio?: ((value: number) => void) | null;
+    onCommitDialogTaskColumnRatio?: ((value: number) => void) | null;
     onOpenDialogContext?: ((key: string) => void | Promise<void>) | null;
     onToggleDialogMaterial?: ((moduleId: string, key: string) => void) | null;
     onToggleDialogContextModule?: ((moduleId: string) => void | Promise<void>) | null;
@@ -824,7 +830,10 @@
                 historyStateByTask={dialogHistoryStateByTask}
                 focusedContextModuleId={dialogFocusedContextModuleId}
                 closedContextModuleTitle={dialogClosedContextModuleTitle}
+                taskColumnRatio={dialogTaskColumnRatio}
                 onSetCompactSurface={onSetDialogCompactSurface}
+                onPreviewTaskColumnRatio={onPreviewDialogTaskColumnRatio}
+                onCommitTaskColumnRatio={onCommitDialogTaskColumnRatio}
                 onOpenContext={onOpenDialogContext}
                 onToggleContextMaterial={onToggleDialogMaterial}
                 onToggleContextModule={onToggleDialogContextModule}

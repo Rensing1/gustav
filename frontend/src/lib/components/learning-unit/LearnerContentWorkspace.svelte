@@ -3,6 +3,7 @@
   import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
   import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
+  import LearnerTaskSplitDivider from "$lib/components/learning-unit/LearnerTaskSplitDivider.svelte";
   import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
   import WorkspaceOutline from "$lib/components/ui/WorkspaceOutline.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
@@ -45,6 +46,7 @@
     contextScrollTop = 0,
     workScrollTop = 0,
     readerScrollTop = 0,
+    taskColumnRatio = null,
     historyByTask,
     historyStateByTask = {},
     submittedTaskId = null,
@@ -72,6 +74,8 @@
     onContextScroll = null,
     onWorkScroll = null,
     onReaderScroll = null,
+    onPreviewTaskColumnRatio = null,
+    onCommitTaskColumnRatio = null,
     onDismissFeedbackStatus = null,
     onProgressPersisted = null
   }: {
@@ -98,6 +102,7 @@
     contextScrollTop?: number;
     workScrollTop?: number;
     readerScrollTop?: number;
+    taskColumnRatio?: number | null;
     historyByTask: Record<string, LearningSubmission[]>;
     historyStateByTask?: Record<string, HistoryState>;
     submittedTaskId?: string | null;
@@ -130,6 +135,8 @@
     onContextScroll?: ((scrollTop: number) => void) | null;
     onWorkScroll?: ((scrollTop: number) => void) | null;
     onReaderScroll?: ((scrollTop: number) => void) | null;
+    onPreviewTaskColumnRatio?: ((value: number) => void) | null;
+    onCommitTaskColumnRatio?: ((value: number) => void) | null;
     onDismissFeedbackStatus?: ((taskId: string) => void) | null;
     onProgressPersisted?: ((taskId: string, submission?: LearningSubmission | null) => void | Promise<void>) | null;
   } = $props();
@@ -428,6 +435,7 @@
       <div
         bind:this={deskSurface}
         class="learner-task-workbench__desk"
+        style={taskColumnRatio === null ? undefined : `--learner-task-column-ratio: ${taskColumnRatio}%`}
         aria-hidden={readerReference ? "true" : undefined}
       >
       {#if task.kind !== "dialog"}
@@ -483,6 +491,12 @@
         </div>
 
       </aside>
+
+      <LearnerTaskSplitDivider
+        value={taskColumnRatio}
+        onPreview={(value) => onPreviewTaskColumnRatio?.(value)}
+        onCommit={(value) => onCommitTaskColumnRatio?.(value)}
+      />
       {/if}
 
       <main
@@ -515,6 +529,7 @@
           dialogHistoryStateByTask={historyStateByTask}
           dialogFocusedContextModuleId={focusedContextModuleId}
           dialogClosedContextModuleTitle={closedContextModuleTitle}
+          dialogTaskColumnRatio={taskColumnRatio}
           submitted={submittedTaskId === task.id}
           message={submissionMessage}
           errorMessage={submissionErrorTaskId === task.id ? submissionErrorMessage : null}
@@ -528,6 +543,8 @@
           onExitSubmissionWorkspace={null}
           hideDialogPauseAction={true}
           onSetDialogCompactSurface={onSetCompactSurface}
+          onPreviewDialogTaskColumnRatio={onPreviewTaskColumnRatio}
+          onCommitDialogTaskColumnRatio={onCommitTaskColumnRatio}
           onOpenDialogContext={onOpenContextReference}
           onToggleDialogMaterial={onToggleContextModuleMaterial}
           onToggleDialogContextModule={onToggleContextModule}

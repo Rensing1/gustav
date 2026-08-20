@@ -48,6 +48,8 @@ def test_openapi_documents_cli_token_profile_endpoints() -> None:
     ):
         op = spec["paths"][path][method]
         assert op["security"] == [{"bearerAuth": []}]
+        assert op["x-permissions"] == {"requiredRole": "teacher"}
+        assert "403" in op["responses"]
         assert {"cliTokenAuth": []} not in op["security"]
         assert "CLI bearer tokens are rejected" in " ".join(op["x-security-notes"])
 

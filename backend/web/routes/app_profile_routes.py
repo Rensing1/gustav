@@ -78,6 +78,22 @@ def _serialize_cli_token(record: Any) -> dict[str, object]:
     return _app_module()._serialize_cli_token(record)
 
 
+def _require_cli_token_teacher(request: Request) -> tuple[dict | None, JSONResponse | None]:
+    """Authorize CLI-token management for an authenticated teacher.
+
+    The check runs before any token-store access so students cannot enumerate,
+    create, or revoke CLI credentials even when they call the API directly.
+    """
+
+    user = _current_user(request)
+    if user is None:
+        return None, JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    roles = user.get("roles") or []
+    if not isinstance(roles, list) or "teacher" not in roles:
+        return None, JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    return user, None
+
+
 @app_profile_router.get("/api/app/profile")
 async def get_app_profile(request: Request):
     """Return the authenticated user's profile read-model."""
@@ -143,22 +159,24 @@ async def patch_profile_name(request: Request, payload: ProfileNameUpdatePayload
 
 @app_profile_router.get("/api/app/profile/cli-tokens")
 async def list_profile_cli_tokens(request: Request):
-    """Return CLI token metadata for the current user without raw token values."""
+    """Return the current teacher's CLI-token metadata without raw values."""
 
-    user = _current_user(request)
-    if user is None:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    user, error = _require_cli_token_teacher(request)
+    if error is not None:
+        return error
+    assert user is not None
     records = _cli_token_store(request).list_tokens(str(user.get("sub") or ""))
     return JSONResponse([_serialize_cli_token(record) for record in records], headers=_private_headers())
 
 
 @app_profile_router.post("/api/app/profile/cli-tokens")
 async def create_profile_cli_token(request: Request, payload: CLITokenCreatePayload):
-    """Create a CLI token and return the raw token exactly once."""
+    """Create a CLI token for the current teacher and return it exactly once."""
 
-    user = _current_user(request)
-    if user is None:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    user, error = _require_cli_token_teacher(request)
+    if error is not None:
+        return error
+    assert user is not None
     label_value = payload.label
     label = label_value.strip() if isinstance(label_value, str) else ""
     if not label or len(label) > 80:
@@ -195,11 +213,12 @@ async def create_profile_cli_token(request: Request, payload: CLITokenCreatePayl
 
 @app_profile_router.delete("/api/app/profile/cli-tokens/{token_id}")
 async def revoke_profile_cli_token(request: Request, token_id: str):
-    """Revoke one CLI token owned by the current user."""
+    """Revoke one CLI token owned by the current teacher."""
 
-    user = _current_user(request)
-    if user is None:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
+    user, error = _require_cli_token_teacher(request)
+    if error is not None:
+        return error
+    assert user is not None
     ok = _cli_token_store(request).revoke_token(user_sub=str(user.get("sub") or ""), token_id=token_id)
     if not ok:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())

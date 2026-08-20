@@ -8010,9 +8010,11 @@ paths:
       operationId: listAppProfileCliTokens
       security:
         - bearerAuth: []
+      x-permissions:
+        requiredRole: teacher
       x-security-notes:
         - "CLI bearer tokens are rejected for token-management endpoints."
-        - "Auth: users can list only their own CLI token metadata."
+        - "Auth: teachers can list only their own CLI token metadata."
       responses:
         '200':
           description: CLI token metadata without raw token values
@@ -8023,12 +8025,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/CLIToken'
         '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden; teacher role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
       tags: [App]
       summary: Create a CLI token for the current user
       operationId: createAppProfileCliToken
       security:
         - bearerAuth: []
+      x-permissions:
+        requiredRole: teacher
       x-security-notes:
         - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
         - "CLI bearer tokens are rejected for token-management endpoints."
@@ -8053,6 +8058,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden; teacher role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /api/app/profile/cli-tokens/{token_id}:
     delete:
@@ -8061,6 +8067,8 @@ paths:
       operationId: revokeAppProfileCliToken
       security:
         - bearerAuth: []
+      x-permissions:
+        requiredRole: teacher
       x-security-notes:
         - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
         - "CLI bearer tokens are rejected for token-management endpoints."
@@ -8082,6 +8090,7 @@ paths:
                 type: string
                 example: private, no-store
         '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden; teacher role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404':
           description: Token not found for current user
           content:

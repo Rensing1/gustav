@@ -371,6 +371,38 @@ async def test_profile_cli_tokens_use_app_runtime_store(
 
 
 @pytest.mark.anyio
+async def test_student_cannot_list_create_or_revoke_cli_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = InMemoryCLITokenStore(now=lambda: 1_000)
+    teacher_token = store.create_token(
+        user_sub="teacher-cli-owner",
+        label="Laptop",
+        scopes=["read"],
+        ttl_seconds=30 * 24 * 60 * 60,
+    )
+    _install_cli_token_store(monkeypatch, store)
+    headers = _mock_bearer_auth(monkeypatch, sub="student-cli-profile", roles=["student"], name="Lena")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        listed = await client.get("/api/app/profile/cli-tokens", headers=headers)
+        created = await client.post(
+            "/api/app/profile/cli-tokens",
+            headers={**headers, "Origin": "http://test"},
+            json={"label": "Nicht erlaubt", "scopes": ["read"], "ttl_days": 30},
+        )
+        revoked = await client.delete(
+            f"/api/app/profile/cli-tokens/{teacher_token.record.id}",
+            headers={**headers, "Origin": "http://test"},
+        )
+
+    for response in (listed, created, revoked):
+        assert response.status_code == 403
+        assert response.json() == {"error": "forbidden"}
+        assert response.headers.get("Cache-Control") == "private, no-store"
+    assert store.list_tokens("student-cli-profile") == []
+    assert store.list_tokens("teacher-cli-owner")[0].revoked_at is None
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "payload",
     [

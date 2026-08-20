@@ -17,12 +17,15 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     "/api/app/profile",
     { authRedirectPath }
   );
-  const cliTokens = await requireBackendJson<AppProfileCliToken[]>(
-    fetch,
-    cookies,
-    "/api/app/profile/cli-tokens",
-    { authRedirectPath }
-  );
+  const canManageCliTokens = profile.user.roles.includes("teacher");
+  const cliTokens = canManageCliTokens
+    ? await requireBackendJson<AppProfileCliToken[]>(
+        fetch,
+        cookies,
+        "/api/app/profile/cli-tokens",
+        { authRedirectPath }
+      )
+    : [];
 
   const breadcrumbs: BreadcrumbItem[] = [{ label: "Profil" }];
 

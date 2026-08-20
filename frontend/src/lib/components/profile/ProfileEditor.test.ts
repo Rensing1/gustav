@@ -11,8 +11,8 @@ describe("ProfileEditor", () => {
           user: {
             sub: "student-1",
             name: "Lena",
-            role: "student",
-            roles: ["student"]
+            role: "teacher",
+            roles: ["teacher"]
           },
           display_name: "Lena",
           email: "lena.schmidt@example.com",
@@ -50,6 +50,33 @@ describe("ProfileEditor", () => {
     expect(screen.getByText("Laptop")).toBeInTheDocument();
     expect(screen.getAllByText("read").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "CLI-Token widerrufen" })).toBeInTheDocument();
+  });
+
+  it("does not expose CLI token controls to a student", () => {
+    render(ProfileEditor, {
+      props: {
+        profile: {
+          user: {
+            sub: "student-1",
+            name: "Lena",
+            role: "student",
+            roles: ["student"]
+          },
+          display_name: "Lena",
+          email: "lena.schmidt@example.com",
+          first_name: "Lena",
+          last_name: "Schmidt",
+          name_locked_until: null,
+          name_can_edit: true,
+          password_change_href: "/auth/password"
+        },
+        cliTokens: []
+      }
+    });
+
+    expect(screen.queryByText("CLI-Tokens")).toBeNull();
+    expect(screen.queryByLabelText("Tokenname")).toBeNull();
+    expect(screen.queryByRole("button", { name: "CLI-Token erstellen" })).toBeNull();
   });
 
   it("shows lock and validation messages", () => {

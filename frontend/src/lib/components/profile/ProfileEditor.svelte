@@ -135,69 +135,71 @@
     </div>
   </section>
 
-  <section class="profile-editor__section">
-    <p class="workspace-label">CLI-Tokens</p>
+  {#if profile.user.roles.includes("teacher")}
+    <section class="profile-editor__section">
+      <p class="workspace-label">CLI-Tokens</p>
 
-    {#if createdCliToken}
+      {#if createdCliToken}
+        <div class="workspace-form">
+          <StatusMessage tone="warning" title="Token jetzt sicher kopieren" description="Dieses Token wird nur jetzt angezeigt." announcement="off" dismissible={false} />
+          <code>{createdCliToken}</code>
+        </div>
+      {/if}
+
+      <form method="POST" action="?/createCliToken" class="workspace-form">
+        <label class="workspace-field">
+          <span>Tokenname</span>
+          <input name="label" type="text" maxlength="80" required />
+        </label>
+
+        <div class="profile-editor__grid">
+          <label class="workspace-field">
+            <span>read</span>
+            <input name="scopes" type="checkbox" value="read" checked />
+          </label>
+          <label class="workspace-field">
+            <span>write</span>
+            <input name="scopes" type="checkbox" value="write" />
+          </label>
+          <label class="workspace-field">
+            <span>delete</span>
+            <input name="scopes" type="checkbox" value="delete" />
+          </label>
+        </div>
+
+        {#if cliTokenError}
+          <StatusMessage tone="error" title="CLI-Token nicht geändert" description={cliTokenError} focusOnMount={true} />
+        {/if}
+
+        {#if saved === "cli-token-revoked"}
+          <StatusMessage tone="success" title="Das CLI-Token wurde widerrufen." />
+        {/if}
+
+        <div class="workspace-inline-actions">
+          <button class="workspace-button" type="submit">CLI-Token erstellen</button>
+        </div>
+      </form>
+
       <div class="workspace-form">
-        <StatusMessage tone="warning" title="Token jetzt sicher kopieren" description="Dieses Token wird nur jetzt angezeigt." announcement="off" dismissible={false} />
-        <code>{createdCliToken}</code>
+        {#if cliTokens.length === 0}
+          <p class="workspace-note">Es gibt noch keine CLI-Tokens.</p>
+        {:else}
+          {#each cliTokens as token}
+            <form method="POST" action="?/revokeCliToken" class="workspace-inline-actions">
+              <input type="hidden" name="token_id" value={token.id} />
+              <span>{token.label}</span>
+              <span>{token.scopes.join(", ")}</span>
+              <span>Ablauf: {formatDateTime(token.expires_at)}</span>
+              <span>Letzte Nutzung: {formatDateTime(token.last_used_at)}</span>
+              {#if token.revoked_at}
+                <span>Widerrufen: {formatDateTime(token.revoked_at)}</span>
+              {:else}
+                <button class="workspace-button" type="submit">CLI-Token widerrufen</button>
+              {/if}
+            </form>
+          {/each}
+        {/if}
       </div>
-    {/if}
-
-    <form method="POST" action="?/createCliToken" class="workspace-form">
-      <label class="workspace-field">
-        <span>Tokenname</span>
-        <input name="label" type="text" maxlength="80" required />
-      </label>
-
-      <div class="profile-editor__grid">
-        <label class="workspace-field">
-          <span>read</span>
-          <input name="scopes" type="checkbox" value="read" checked />
-        </label>
-        <label class="workspace-field">
-          <span>write</span>
-          <input name="scopes" type="checkbox" value="write" />
-        </label>
-        <label class="workspace-field">
-          <span>delete</span>
-          <input name="scopes" type="checkbox" value="delete" />
-        </label>
-      </div>
-
-      {#if cliTokenError}
-        <StatusMessage tone="error" title="CLI-Token nicht geändert" description={cliTokenError} focusOnMount={true} />
-      {/if}
-
-      {#if saved === "cli-token-revoked"}
-        <StatusMessage tone="success" title="Das CLI-Token wurde widerrufen." />
-      {/if}
-
-      <div class="workspace-inline-actions">
-        <button class="workspace-button" type="submit">CLI-Token erstellen</button>
-      </div>
-    </form>
-
-    <div class="workspace-form">
-      {#if cliTokens.length === 0}
-        <p class="workspace-note">Es gibt noch keine CLI-Tokens.</p>
-      {:else}
-        {#each cliTokens as token}
-          <form method="POST" action="?/revokeCliToken" class="workspace-inline-actions">
-            <input type="hidden" name="token_id" value={token.id} />
-            <span>{token.label}</span>
-            <span>{token.scopes.join(", ")}</span>
-            <span>Ablauf: {formatDateTime(token.expires_at)}</span>
-            <span>Letzte Nutzung: {formatDateTime(token.last_used_at)}</span>
-            {#if token.revoked_at}
-              <span>Widerrufen: {formatDateTime(token.revoked_at)}</span>
-            {:else}
-              <button class="workspace-button" type="submit">CLI-Token widerrufen</button>
-            {/if}
-          </form>
-        {/each}
-      {/if}
-    </div>
-  </section>
+    </section>
+  {/if}
 </section>

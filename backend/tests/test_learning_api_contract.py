@@ -913,16 +913,25 @@ async def test_finalize_latest_feedback_submission_creates_final_submission_with
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", fixture.student_session_id)
+
+        # A parallel tab may create a newer draft after the learner reviewed
+        # the first one. Finalization must stay bound to the selected draft.
+        newer_feedback_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions",
+            json={"intent": "feedback", "kind": "text", "text_body": "Neuer, noch ungeprüfter Entwurf."},
+        )
+        assert newer_feedback_response.status_code == 202
+
         finalize_response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
             headers={"Idempotency-Key": "finalize-key-1"},
-            json={},
+            json={"feedback_submission_id": feedback_submission_id},
         )
 
     assert finalize_response.status_code == 201, finalize_response.text
     body = finalize_response.json()
     assert body["intent"] == "submit"
-    assert body["attempt_nr"] == 2
+    assert body["attempt_nr"] == 3
     assert body["analysis_status"] == "completed"
     assert body["feedback_md"].startswith("## Rückmeldung")
 
@@ -995,7 +1004,7 @@ async def test_finalize_latest_feedback_file_submission_returns_decorated_files(
             finalize_response = await client.post(
                 f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
                 headers={"Idempotency-Key": "finalize-file-key-1"},
-                json={},
+                json={"feedback_submission_id": feedback_submission_id},
             )
 
         assert finalize_response.status_code == 201, finalize_response.text
@@ -1314,7 +1323,7 @@ async def test_finalize_requires_completed_feedback_draft(monkeypatch: pytest.Mo
 
         finalize_response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
-            json={},
+            json={"feedback_submission_id": feedback_response.json()["id"]},
         )
 
     assert finalize_response.status_code == 409

@@ -607,9 +607,10 @@ def finalize_latest_feedback_submission(
     student_sub: str,
     course_id: str,
     task_id: str,
+    feedback_submission_id: str,
     idempotency_key: str | None,
 ) -> dict:
-    """Persist a final submission by copying the newest completed draft.
+    """Persist a final submission by copying the selected completed draft.
 
     Why:
         The student-facing UX distinguishes between a feedback draft and a
@@ -618,6 +619,7 @@ def finalize_latest_feedback_submission(
     """
     course_uuid = str(UUID(course_id))
     task_uuid = str(UUID(task_id))
+    feedback_submission_uuid = str(UUID(feedback_submission_id))
 
     with psycopg_module.connect(repo._dsn) as conn:
         with conn.cursor() as cur:
@@ -736,19 +738,18 @@ def finalize_latest_feedback_submission(
                        feedback_last_error,
                        analysis_status
                   from public.learning_submissions
-                 where course_id = %s::uuid
+                 where id = %s::uuid
+                   and course_id = %s::uuid
                    and task_id = %s::uuid
                    and student_sub = %s
                    and intent = 'feedback'
-                 order by created_at desc, attempt_nr desc
-                 limit 1
                 """,
-                (course_uuid, task_uuid, student_sub),
+                (feedback_submission_uuid, course_uuid, task_uuid, student_sub),
             )
-            latest_draft = cur.fetchone()
-            if not latest_draft:
+            selected_draft = cur.fetchone()
+            if not selected_draft:
                 raise LookupError("draft_missing")
-            if str(latest_draft[14] or "") != "completed":
+            if str(selected_draft[14] or "") != "completed":
                 raise RuntimeError("draft_not_ready")
 
             cur.execute(
@@ -852,21 +853,21 @@ def finalize_latest_feedback_submission(
                     task_uuid,
                     section_uuid,
                     student_sub,
-                    latest_draft[0],
-                    latest_draft[1],
-                    latest_draft[2],
-                    latest_draft[3],
-                    latest_draft[6],
-                    latest_draft[4],
-                    latest_draft[5],
-                    latest_draft[7],
+                    selected_draft[0],
+                    selected_draft[1],
+                    selected_draft[2],
+                    selected_draft[3],
+                    selected_draft[6],
+                    selected_draft[4],
+                    selected_draft[5],
+                    selected_draft[7],
                     attempt_nr,
-                    json_adapter(latest_draft[8]) if json_adapter is not None else json_dumps(latest_draft[8]),
-                    latest_draft[9],
-                    latest_draft[10],
-                    latest_draft[11],
-                    latest_draft[12],
-                    latest_draft[13],
+                    json_adapter(selected_draft[8]) if json_adapter is not None else json_dumps(selected_draft[8]),
+                    selected_draft[9],
+                    selected_draft[10],
+                    selected_draft[11],
+                    selected_draft[12],
+                    selected_draft[13],
                     norm_key,
                 ),
             )

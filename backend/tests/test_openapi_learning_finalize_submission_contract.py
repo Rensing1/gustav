@@ -22,3 +22,15 @@ def test_openapi_finalize_learning_submission_returns_learning_submission() -> N
     success_schema = responses["201"]["content"]["application/json"]["schema"]
     assert success_schema["$ref"] == "#/components/schemas/LearningSubmission"
     assert "409" in responses
+
+
+def test_openapi_finalize_learning_submission_binds_the_reviewed_feedback_draft() -> None:
+    spec = _spec()
+    operation = spec["paths"]["/api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize"]["post"]
+    request_body = operation["requestBody"]
+    schema = request_body["content"]["application/json"]["schema"]
+
+    assert request_body["required"] is True
+    assert schema["required"] == ["feedback_submission_id"]
+    assert schema["properties"]["feedback_submission_id"] == {"type": "string", "format": "uuid"}
+    assert schema["additionalProperties"] is False

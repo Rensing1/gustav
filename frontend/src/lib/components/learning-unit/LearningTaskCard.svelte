@@ -830,6 +830,7 @@
                       <input type="hidden" name="module_id" value={moduleId} />
                     {/if}
                     {#if currentFinalizationIdempotencyKey()}
+                      <input type="hidden" name="feedback_submission_id" value={latestSubmission()?.id ?? ""} />
                       <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
                     {/if}
                     <section class="learning-submission-editor__field">
@@ -878,6 +879,7 @@
                     <input type="hidden" name="module_id" value={moduleId} />
                   {/if}
                   {#if currentFinalizationIdempotencyKey()}
+                    <input type="hidden" name="feedback_submission_id" value={latestSubmission()?.id ?? ""} />
                     <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
                   {/if}
                   <label class="learning-submission-upload__dropzone">

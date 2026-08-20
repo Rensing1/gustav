@@ -16,6 +16,7 @@ class LearningSubmissionRepoProtocol(Protocol):
         student_sub: str,
         course_id: str,
         task_id: str,
+        feedback_submission_id: str,
         idempotency_key: str | None,
     ) -> dict:
         ...
@@ -137,6 +138,7 @@ class FinalizeLatestDraftInput:
     course_id: str
     task_id: str
     student_sub: str
+    feedback_submission_id: str
     idempotency_key: Optional[str]
 
 
@@ -145,11 +147,19 @@ class FinalizeLatestDraftUseCase:
         self._repo = repo
 
     def execute(self, req: FinalizeLatestDraftInput) -> dict:
-        """Finalize the latest completed feedback draft without re-running analysis.
+        """Finalize one explicitly selected feedback draft without re-running analysis.
 
         Intent:
-            Promote the newest reviewed draft to a formal submission while
+            Promote the reviewed draft selected by the learner to a formal submission while
             preserving the draft history and avoiding a second worker/LLM run.
+
+        Parameters:
+            req: Course, task, learner, selected feedback submission and
+                 optional idempotency key for the finalization attempt.
+
+        Behavior:
+            The repository copies only the selected completed feedback draft.
+            Missing, unrelated or unfinished drafts are rejected there.
 
         Permissions:
             Caller must be the enrolled student and the task must be visible in
@@ -159,5 +169,6 @@ class FinalizeLatestDraftUseCase:
             student_sub=req.student_sub,
             course_id=req.course_id,
             task_id=req.task_id,
+            feedback_submission_id=req.feedback_submission_id,
             idempotency_key=req.idempotency_key,
         )

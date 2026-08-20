@@ -35,10 +35,12 @@ import { requireSpaceBootstrap } from "$lib/server/guards";
 const requireBackendJsonMock = vi.mocked(requireBackendJson);
 const backendRequestMock = vi.mocked(backendRequest);
 const requireSpaceBootstrapMock = vi.mocked(requireSpaceBootstrap);
-const finalizationIdempotencyKey = "finalize-123e4567-e89b-42d3-a456-426614174000";
+const feedbackSubmissionId = "123e4567-e89b-42d3-a456-426614174000";
+const finalizationIdempotencyKey = `finalize-${feedbackSubmissionId}`;
 
 function setFinalSubmissionIntent(form: FormData): void {
   form.set("submission_intent", "submit");
+  form.set("feedback_submission_id", feedbackSubmissionId);
   form.set("finalization_idempotency_key", finalizationIdempotencyKey);
 }
 
@@ -211,9 +213,11 @@ describe("learning unit route actions", () => {
         headers: {
           "content-type": "application/json",
           "idempotency-key": finalizationIdempotencyKey
-        }
+        },
+        body: JSON.stringify({ feedback_submission_id: feedbackSubmissionId })
       })
     );
+    expect(requireBackendJsonMock).not.toHaveBeenCalled();
     expect(result).toEqual({
       finalizedTaskId: "task-1",
       finalizedSubmission: {
@@ -236,6 +240,7 @@ describe("learning unit route actions", () => {
     form.set("unit_type", "modular");
     form.set("module_id", "module-7");
     form.set("submission_intent", "submit");
+    form.set("feedback_submission_id", feedbackSubmissionId);
 
     const result = await actions.default({
       fetch: vi.fn() as unknown as typeof fetch,
@@ -250,6 +255,34 @@ describe("learning unit route actions", () => {
       status: 400,
       data: {
         message: "Die endgültige Abgabe ist nicht mehr aktuell. Bitte lade die Aufgabe neu.",
+        taskId: "task-1"
+      }
+    });
+  });
+
+  it("rejects a final submission without the reviewed feedback submission id", async () => {
+    const form = new FormData();
+    form.set("task_id", "task-1");
+    form.set("task_kind", "native");
+    form.set("unit_type", "modular");
+    form.set("module_id", "module-7");
+    form.set("submission_intent", "submit");
+    form.set("finalization_idempotency_key", finalizationIdempotencyKey);
+
+    const result = await actions.default({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof actions.default>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      request: requestWithFormData(form),
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1")
+    } as Parameters<typeof actions.default>[0]);
+
+    expect(requireBackendJsonMock).not.toHaveBeenCalled();
+    expect(backendRequestMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        message: "Die rückgemeldete Fassung ist nicht mehr aktuell. Bitte lade die Aufgabe neu.",
         taskId: "task-1"
       }
     });
@@ -330,6 +363,8 @@ describe("learning unit route actions", () => {
 
     const form = new FormData();
     form.set("task_id", "task-1");
+    form.set("submission_intent", "feedback");
+    form.set("text_body", "Entwurf");
 
     try {
       await actions.default({

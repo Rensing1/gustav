@@ -7,6 +7,7 @@ import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/se
 import { currentPath, requireParentSpaceBootstrap, requireSpaceBootstrap } from "$lib/server/guards";
 import {
   finalSubmissionFailureMessage,
+  validatedFeedbackSubmissionId,
   validatedFinalSubmissionIdempotencyKey
 } from "$lib/learning-unit/submission-finalization";
 import type { SessionBootstrap } from "$lib/types/session-bootstrap";
@@ -215,32 +216,14 @@ export const actions: Actions = {
     const fileEntry = form.get("upload_file");
     const uploadFile = fileEntry instanceof File && fileEntry.size > 0 ? fileEntry : null;
 
-    let pageData: LearningUnitPageData;
-    try {
-      pageData = await loadPageData(fetch, cookies, params.courseId, params.unitId, url, moduleId);
-    } catch (caught) {
-      if (isRedirect(caught)) {
-        throw caught;
-      }
-      return fail(400, {
-        message: "Die Lerneinheit konnte fuer die Abgabe nicht geladen werden.",
-        taskId
-      });
-    }
-
-    const tasks =
-      unitType === "modular"
-        ? pageData.activeModule?.tasks || []
-        : pageData.sections.flatMap((section) => section.tasks);
-    const task = tasks.find((candidate) => candidate.id === taskId);
-    if (!task) {
-      return fail(400, {
-        message: "Die Aufgabe ist in diesem Lernraum nicht verfuegbar.",
-        taskId
-      });
-    }
-
     if (submissionIntent === "submit") {
+      const feedbackSubmissionId = validatedFeedbackSubmissionId(form.get("feedback_submission_id"));
+      if (!feedbackSubmissionId) {
+        return fail(400, {
+          message: "Die rückgemeldete Fassung ist nicht mehr aktuell. Bitte lade die Aufgabe neu.",
+          taskId
+        });
+      }
       const idempotencyKey = validatedFinalSubmissionIdempotencyKey(form.get("finalization_idempotency_key"));
       if (!idempotencyKey) {
         return fail(400, {
@@ -260,7 +243,7 @@ export const actions: Actions = {
             "content-type": "application/json",
             "idempotency-key": idempotencyKey
           },
-          body: JSON.stringify({})
+          body: JSON.stringify({ feedback_submission_id: feedbackSubmissionId })
         }
       );
 
@@ -278,6 +261,31 @@ export const actions: Actions = {
         finalizedSubmission: submission,
         message: "submitted"
       };
+    }
+
+    let pageData: LearningUnitPageData;
+    try {
+      pageData = await loadPageData(fetch, cookies, params.courseId, params.unitId, url, moduleId);
+    } catch (caught) {
+      if (isRedirect(caught)) {
+        throw caught;
+      }
+      return fail(400, {
+        message: "Die Lerneinheit konnte für die Abgabe nicht geladen werden.",
+        taskId
+      });
+    }
+
+    const tasks =
+      unitType === "modular"
+        ? pageData.activeModule?.tasks || []
+        : pageData.sections.flatMap((section) => section.tasks);
+    const task = tasks.find((candidate) => candidate.id === taskId);
+    if (!task) {
+      return fail(400, {
+        message: "Die Aufgabe ist in diesem Lernraum nicht verfügbar.",
+        taskId
+      });
     }
 
     const mode = submissionMode(task, uploadFile, textBody);

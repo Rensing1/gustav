@@ -7030,10 +7030,11 @@ paths:
   /api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize:
     post:
       tags: [Learning]
-      summary: Finalize the learner's latest reviewed draft for a task
+      summary: Finalize the learner's selected reviewed draft for a task
       description: >-
-        Creates a new `intent=submit` submission by copying the learner's newest
-        completed `intent=feedback` submission for the same task. This path does
+        Creates a new `intent=submit` submission by copying the learner's
+        completed `intent=feedback` submission selected by `feedback_submission_id`
+        for the same task. This path does
         not enqueue a new worker or trigger another feedback run.
       operationId: finalizeLearningSubmission
       security:
@@ -7062,15 +7063,20 @@ paths:
             maxLength: 64
             pattern: '^[A-Za-z0-9_-]{1,64}$'
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               type: object
+              required: [feedback_submission_id]
               additionalProperties: false
+              properties:
+                feedback_submission_id:
+                  type: string
+                  format: uuid
       responses:
         '201':
-          description: Final submission created synchronously from the latest reviewed draft.
+          description: Final submission created synchronously from the selected reviewed draft.
           content:
             application/json:
               schema:
@@ -7100,7 +7106,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: No finalizable draft exists yet (`draft_missing` or `draft_not_ready`)
+          description: The selected feedback draft is missing or not ready (`draft_missing` or `draft_not_ready`)
           content:
             application/json:
               schema:

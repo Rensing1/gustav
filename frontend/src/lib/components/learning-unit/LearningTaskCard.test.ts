@@ -799,8 +799,13 @@ describe("LearningTaskCard", () => {
     const finalizationKeys = Array.from(
       document.querySelectorAll<HTMLInputElement>('input[name="finalization_idempotency_key"]')
     );
+    const feedbackSubmissionIds = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input[name="feedback_submission_id"]')
+    );
     expect(finalizationKeys).toHaveLength(2);
     expect(finalizationKeys.every((input) => input.value === `finalize-${reviewedSubmissionId}`)).toBe(true);
+    expect(feedbackSubmissionIds).toHaveLength(2);
+    expect(feedbackSubmissionIds.every((input) => input.value === reviewedSubmissionId)).toBe(true);
   });
 
   it("shows and locks the editor while a final submission is being processed", async () => {

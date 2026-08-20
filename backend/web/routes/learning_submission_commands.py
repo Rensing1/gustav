@@ -334,7 +334,7 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
 
 @learning_submission_commands_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/submissions/finalize")
 async def finalize_submission(request: Request, course_id: str, task_id: str, payload: dict[str, Any] | None = None):
-    """Create a final submission from the latest completed feedback draft."""
+    """Create a final submission from the learner's selected completed feedback draft."""
     learning = _learning_facade()
     if not learning._require_strict_same_origin(request):
         return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403, headers=_cache_headers_error())
@@ -349,6 +349,12 @@ async def finalize_submission(request: Request, course_id: str, task_id: str, pa
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
 
+    feedback_submission_id = str((payload or {}).get("feedback_submission_id") or "").strip()
+    try:
+        feedback_submission_id = str(UUID(feedback_submission_id))
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
+
     idempotency_key = request.headers.get("Idempotency-Key")
     if idempotency_key is not None and len(idempotency_key) > 64:
         return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
@@ -359,6 +365,7 @@ async def finalize_submission(request: Request, course_id: str, task_id: str, pa
         course_id=course_id,
         task_id=task_id,
         student_sub=str(user.get("sub", "")),
+        feedback_submission_id=feedback_submission_id,
         idempotency_key=idempotency_key,
     )
 

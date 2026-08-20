@@ -46,6 +46,15 @@ export function finalSubmissionIdempotencyKey(submissionId: string | null | unde
   return `finalize-${normalizedSubmissionId}`;
 }
 
+/** Accepts a reviewed feedback submission id before it crosses the BFF boundary. */
+export function validatedFeedbackSubmissionId(value: FormDataEntryValue | null): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return submissionIdPattern.test(normalized) ? normalized : null;
+}
+
 /** Accepts only finalization keys produced from a valid feedback submission id. */
 export function validatedFinalSubmissionIdempotencyKey(value: FormDataEntryValue | null): string | null {
   if (typeof value !== "string" || !value.startsWith("finalize-")) {

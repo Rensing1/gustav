@@ -4,6 +4,7 @@ import {
   beginSubmissionAttempt,
   finalSubmissionIdempotencyKey,
   finalSubmissionFailureMessage,
+  validatedFeedbackSubmissionId,
   validatedFinalSubmissionIdempotencyKey
 } from "./submission-finalization";
 
@@ -39,6 +40,14 @@ describe("submission finalization", () => {
     expect(finalSubmissionIdempotencyKey("not-a-submission")).toBeNull();
     expect(validatedFinalSubmissionIdempotencyKey(`finalize-${submissionId}`)).toBe(`finalize-${submissionId}`);
     expect(validatedFinalSubmissionIdempotencyKey("finalize-not-a-submission")).toBeNull();
+  });
+
+  it("accepts only a UUID for the reviewed feedback submission", () => {
+    const submissionId = "123e4567-e89b-42d3-a456-426614174000";
+
+    expect(validatedFeedbackSubmissionId(submissionId)).toBe(submissionId);
+    expect(validatedFeedbackSubmissionId("submission-feedback")).toBeNull();
+    expect(validatedFeedbackSubmissionId(null)).toBeNull();
   });
 
   it.each([

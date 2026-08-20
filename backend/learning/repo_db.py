@@ -476,9 +476,10 @@ class DBLearningRepo:
         student_sub: str,
         course_id: str,
         task_id: str,
+        feedback_submission_id: str,
         idempotency_key: str | None,
     ) -> dict:
-        """Persist a final submission by copying the newest completed draft."""
+        """Persist a final submission by copying the selected completed draft."""
         return _repo_submission_command_queries.finalize_latest_feedback_submission(
             self,
             psycopg_module=psycopg,
@@ -487,6 +488,7 @@ class DBLearningRepo:
             student_sub=student_sub,
             course_id=course_id,
             task_id=task_id,
+            feedback_submission_id=feedback_submission_id,
             idempotency_key=idempotency_key,
         )
 

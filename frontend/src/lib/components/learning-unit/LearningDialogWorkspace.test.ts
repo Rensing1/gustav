@@ -83,6 +83,24 @@ function answeredSession(overrides: Partial<TestSession> = {}): TestSession {
   });
 }
 
+function failedSession(generationAttempts: number): TestSession {
+  return answeredSession({
+    turns: [
+      {
+        id: "turn-1",
+        round_nr: 1,
+        student_message_md: "Die Quelle wirkt einseitig.",
+        used_sentence_starter_md: null,
+        used_sentence_starter_source: null,
+        status: "failed",
+        assistant_reply_md: null,
+        sentence_starters: [],
+        generation_attempts: generationAttempts
+      }
+    ]
+  });
+}
+
 function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
     status: 200,
@@ -130,10 +148,10 @@ describe("LearningDialogWorkspace", () => {
 
     const partnerContext = await screen.findByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
     const composer = screen.getByRole("region", { name: "Dialog fortsetzen" });
-    expect(within(partnerContext).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(within(partnerContext).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
     expect(within(partnerContext).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
     expect(within(composer).getByRole("button", { name: "Antwort senden" })).toBeInTheDocument();
-    expect(within(composer).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(within(composer).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
     expect(screen.getByLabelText("Deine Antwort (1/3)")).toBeInTheDocument();
   });
@@ -221,6 +239,23 @@ describe("LearningDialogWorkspace", () => {
     expect(screen.queryByLabelText("Deine Antwort (3/3)")).toBeNull();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
     expect(screen.getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+  });
+
+  it("offers a failed AI response retry in the main action area", async () => {
+    renderDialog(failedSession(2));
+
+    const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
+    expect(within(composer).getByRole("button", { name: "KI-Antwort erneut versuchen" })).toBeInTheDocument();
+    expect(within(screen.getByRole("log", { name: "Dialogverlauf" })).queryByRole("button")).toBeNull();
+    expect(screen.queryByText("Die KI-Antwort kann nicht erneut erzeugt werden.")).toBeNull();
+  });
+
+  it("removes the retry action after the third failed generation attempt", async () => {
+    renderDialog(failedSession(3));
+
+    const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
+    expect(within(composer).queryByRole("button", { name: "KI-Antwort erneut versuchen" })).toBeNull();
+    expect(within(composer).getByText("Die KI-Antwort kann nicht erneut erzeugt werden.")).toBeInTheDocument();
   });
 
   it("clears the local closing draft after final submission", async () => {

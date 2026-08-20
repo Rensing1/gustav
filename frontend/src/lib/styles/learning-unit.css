@@ -2778,10 +2778,6 @@
   letter-spacing: 0.04em;
 }
 
-.dialog-retry {
-  justify-self: start;
-}
-
 .dialog-composer,
 .dialog-closing {
   display: grid;
@@ -2835,6 +2831,11 @@
 .dialog-closing__actions .workspace-top-action {
   width: 100%;
   text-align: center;
+}
+
+.dialog-retry-limit {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .dialog-completed-note {

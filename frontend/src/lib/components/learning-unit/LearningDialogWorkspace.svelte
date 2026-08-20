@@ -143,6 +143,33 @@
     closingPhase = true;
   }
 
+  function conversationReady(): boolean {
+    return Boolean(session && !session.turns.some((turn) => turn.status !== "completed"));
+  }
+
+  function canSendAnswer(): boolean {
+    return Boolean(
+      session &&
+      session.round_count < session.dialog.max_rounds &&
+      conversationReady() &&
+      (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")
+    );
+  }
+
+  function canEndDialog(): boolean {
+    return Boolean(session && session.round_count > 0 && conversationReady());
+  }
+
+  function latestFailedTurn(): DialogTurn | null {
+    const turn = session?.turns.at(-1) ?? null;
+    return turn?.status === "failed" ? turn : null;
+  }
+
+  function retryLatestFailedTurn() {
+    const turn = latestFailedTurn();
+    if (turn && turn.generation_attempts < 3) void retry(turn);
+  }
+
   function continueDialog() {
     closingPhase = false;
   }
@@ -353,12 +380,8 @@
             {:else if showPauseAction}
               <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
             {/if}
-            {#if !closingPhase}
-              {#if session.round_count > 0}
-                <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>Dialog beenden</button>
-              {:else}
-                <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
-              {/if}
+            {#if !closingPhase && session.round_count === 0}
+              <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
             {/if}
           </nav>
         {/if}
@@ -381,9 +404,6 @@
                 <p class="dialog-message__speaker">KI · {session.dialog.partner_name}</p>
                 <div class="markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div>
               </article>
-            {/if}
-            {#if turn.status === "failed"}
-              <button class="workspace-top-action workspace-top-action--quiet dialog-retry" type="button" disabled={pending || turn.generation_attempts >= 3} onclick={() => retry(turn)}>KI-Antwort erneut versuchen</button>
             {/if}
           {/each}
         </div>
@@ -418,14 +438,24 @@
                   {/each}
                 </div>
               {/if}
-              {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
+              {#if canSendAnswer()}
                 <label class="workspace-field"><span>Deine Antwort ({session.round_count}/{session.dialog.max_rounds})</span><textarea bind:value={message} maxlength="2000" rows="5"></textarea></label>
               {:else if session.round_count >= session.dialog.max_rounds}
                 <p class="workspace-note">Maximale Rundenzahl erreicht.</p>
               {/if}
-              {#if session.round_count < session.dialog.max_rounds && !session.turns.some((turn) => turn.status !== "completed") && (session.dialog.response_mode === "free_text" || session.initial_starters_status === "completed")}
+              {#if canSendAnswer() || canEndDialog() || latestFailedTurn()}
                 <div class="dialog-actions dialog-composer__actions">
-                  <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || !message.trim()} onclick={send}>Antwort senden</button>
+                  {#if latestFailedTurn() && (latestFailedTurn()?.generation_attempts ?? 3) < 3}
+                    <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={retryLatestFailedTurn}>KI-Antwort erneut versuchen</button>
+                  {:else if latestFailedTurn()}
+                    <p class="workspace-note dialog-retry-limit">Die KI-Antwort kann nicht erneut erzeugt werden.</p>
+                  {/if}
+                  {#if canSendAnswer()}
+                    <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || !message.trim()} onclick={send}>Antwort senden</button>
+                  {/if}
+                  {#if canEndDialog()}
+                    <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>Dialog beenden</button>
+                  {/if}
                 </div>
               {/if}
             </section>

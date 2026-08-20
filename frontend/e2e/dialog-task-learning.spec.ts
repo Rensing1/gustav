@@ -21,7 +21,7 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promi
   await expect(partnerContext.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
 
   if (mode === "desktop") {
-    await expect(partnerContext.getByRole("button", { name: "Dialog beenden" })).toBeVisible();
+    await expect(partnerContext.getByRole("button", { name: "Dialog beenden" })).toHaveCount(0);
     await expect(composer.getByRole("button", { name: "Antwort senden" })).toBeVisible();
   } else {
     await expect(partnerContext).toBeHidden();
@@ -33,7 +33,7 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promi
     await expect(composer).toBeVisible();
   }
   await expect(partnerContext.getByRole("button", { name: "Antwort senden" })).toHaveCount(0);
-  await expect(composer.getByRole("button", { name: "Dialog beenden" })).toHaveCount(0);
+  await expect(composer.getByRole("button", { name: "Dialog beenden" })).toBeVisible();
 
   const geometry = await workspace.locator(".dialog-layout").evaluate((layout) => {
     const sidebar = layout.querySelector(".dialog-sidebar");

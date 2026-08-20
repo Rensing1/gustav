@@ -18,7 +18,7 @@
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission, LearningTask } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
 
   let {
     learnerSub = null,
@@ -129,6 +129,7 @@
   type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
   type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
   type CompactTaskTone = "new" | "draft" | "pending" | "final" | "error";
+  const DRAFT_PERSIST_DELAY_MS = 200;
   let draftText = $state("");
   let editorMode = $state<SubmissionMode>("text");
   let selectedUploadFile = $state<File | null>(null);
@@ -141,6 +142,8 @@
   let feedbackDisclosureOpen = $state(false);
   let submissionDisclosureOpen = $state(untrack(() => reviewPanelOpen));
   let taskPreviewVisuallyClipped = $state(false);
+  let pendingDraftWrite: { key: string; value: string } | null = null;
+  let draftPersistTimer: ReturnType<typeof setTimeout> | null = null;
 
   function uploadOnly(): boolean {
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius";
@@ -272,10 +275,37 @@
     window.sessionStorage.removeItem(key);
   }
 
+  function persistPendingDraft() {
+    if (draftPersistTimer !== null) {
+      clearTimeout(draftPersistTimer);
+      draftPersistTimer = null;
+    }
+    if (!browser || !pendingDraftWrite) {
+      return;
+    }
+    const { key, value } = pendingDraftWrite;
+    pendingDraftWrite = null;
+    window.localStorage.removeItem(key);
+    window.sessionStorage.setItem(key, value);
+  }
+
+  /**
+   * Keep keystrokes off synchronous Web Storage while retaining the newest complete draft.
+   * The pending write is flushed before submit, navigation, task changes, and component teardown.
+   */
+  function scheduleDraftPersistence(key: string, value: string) {
+    pendingDraftWrite = { key, value };
+    if (draftPersistTimer !== null) {
+      clearTimeout(draftPersistTimer);
+    }
+    draftPersistTimer = setTimeout(persistPendingDraft, DRAFT_PERSIST_DELAY_MS);
+  }
+
   function restoreDraft(mode: SubmissionMode = editorMode) {
     if (!browser || uploadOnly() || mode !== "text") {
       return;
     }
+    persistPendingDraft();
     removeLegacyDraft(mode);
     const key = scopedDraftStorageKey(mode);
     if (key) {
@@ -493,14 +523,20 @@
     if (!browser || uploadOnly() || editorMode !== "text") {
       return;
     }
-    removeLegacyDraft("text");
     const key = scopedDraftStorageKey("text");
     if (!key) {
       return;
     }
-    window.localStorage.removeItem(key);
-    window.sessionStorage.setItem(key, value);
+    scheduleDraftPersistence(key, value);
   }
+
+  onMount(() => {
+    window.addEventListener("pagehide", persistPendingDraft);
+    return () => {
+      window.removeEventListener("pagehide", persistPendingDraft);
+      persistPendingDraft();
+    };
+  });
 
   function compactTaskTone(): CompactTaskTone {
     if (hasFinalSubmission()) {
@@ -822,7 +858,7 @@
 
               {#if !uploadOnly()}
                 <div class="learning-submission-mode-panel" hidden={editorMode !== "text"}>
-                  <form class="learning-submission-editor learning-submission-editor--immersive" method="POST" enctype="multipart/form-data" use:enhance={enhanceSubmit}>
+                  <form class="learning-submission-editor learning-submission-editor--immersive" method="POST" enctype="multipart/form-data" onsubmit={persistPendingDraft} use:enhance={enhanceSubmit}>
                     <input type="hidden" name="task_id" value={task.id} />
                     <input type="hidden" name="task_kind" value={task.kind} />
                     <input type="hidden" name="unit_type" value={unitType} />

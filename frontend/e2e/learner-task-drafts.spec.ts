@@ -8,7 +8,18 @@ import { seedLearnerNavigationCourse } from "./support/seed-data";
 const password = "Passw0rd!e2e";
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase });
+  const context = await browser.newContext({ baseURL: webBase, hasTouch: true });
+  await context.addInitScript(() => {
+    const originalSetItem = Storage.prototype.setItem;
+    const metrics = { draftWrites: 0 };
+    (window as Window & { __gustavDraftMetrics?: typeof metrics }).__gustavDraftMetrics = metrics;
+    Storage.prototype.setItem = function setItem(key: string, value: string) {
+      if (key.startsWith("gustav.learning.submission-draft:")) {
+        metrics.draftWrites += 1;
+      }
+      return originalSetItem.call(this, key, value);
+    };
+  });
   return { context, page: await context.newPage() };
 }
 
@@ -26,12 +37,27 @@ test("@feature-acceptance keeps text drafts separated by task", async ({ browser
     await login(learner.page, learnerEmail, password);
     const seeded = await seedLearnerNavigationCourse(teacher.page, learner.page, `Aufgabenentwürfe ${unique}`);
 
+    await learner.page.setViewportSize({ width: 1024, height: 768 });
     await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
     await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
     await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
 
     const editor = learner.page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
-    await editor.fill("Entwurf für Aufgabe 1");
+    const performanceDraft = "Eine flüssige Eingabe auf dem iPad bleibt vollständig erhalten. ".repeat(4).trim();
+    await learner.page.evaluate(() => {
+      const metrics = (window as Window & { __gustavDraftMetrics?: { draftWrites: number } }).__gustavDraftMetrics;
+      if (metrics) metrics.draftWrites = 0;
+    });
+    const typingStartedAt = Date.now();
+    await editor.pressSequentially(performanceDraft);
+    expect(Date.now() - typingStartedAt).toBeLessThan(4_000);
+    expect(await learner.page.evaluate(
+      () => (window as Window & { __gustavDraftMetrics?: { draftWrites: number } }).__gustavDraftMetrics?.draftWrites ?? 0
+    )).toBeLessThan(5);
+    await expect(editor).toContainText(performanceDraft);
+    await expect.poll(() => learner.page.evaluate(
+      () => (window as Window & { __gustavDraftMetrics?: { draftWrites: number } }).__gustavDraftMetrics?.draftWrites ?? 0
+    )).toBeGreaterThan(0);
     await learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" }).click();
 
     await learner.page.getByRole("button", { name: "Aufgabe 2 beginnen" }).click();
@@ -40,7 +66,7 @@ test("@feature-acceptance keeps text drafts separated by task", async ({ browser
     await learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" }).click();
 
     await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
-    await expect(editor).toContainText("Entwurf für Aufgabe 1");
+    await expect(editor).toContainText(performanceDraft);
     await learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" }).click();
 
     await learner.page.getByRole("button", { name: "Aufgabe 2 beginnen" }).click();

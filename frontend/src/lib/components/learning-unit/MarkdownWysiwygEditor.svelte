@@ -138,10 +138,12 @@
     if (propValueInitialized && nextValue === lastPropValue) {
       return;
     }
+    const editorValueAlreadyCurrent = nextValue === currentValue;
     propValueInitialized = true;
     lastPropValue = nextValue;
     currentValue = nextValue;
-    if (editor && editor.getMarkdown() !== nextValue) {
+    // Tiptap already owns values it emitted; serializing them again blocks touch keyboards on long drafts.
+    if (editor && !editorValueAlreadyCurrent && editor.getMarkdown() !== nextValue) {
       editor.setMarkdown(nextValue);
     }
   });

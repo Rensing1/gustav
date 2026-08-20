@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
@@ -22,6 +22,8 @@ const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 describe("LearningTaskCard", () => {
   afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
@@ -71,9 +73,40 @@ describe("LearningTaskCard", () => {
 
     await fireEvent.input(editor!, { target: { value: "Inline neu" } });
 
-    expect(window.sessionStorage.getItem(scopedKey)).toBe("Inline neu");
+    expect(window.sessionStorage.getItem(scopedKey)).toBe("Inline Sitzungsentwurf");
+    await waitFor(() => expect(window.sessionStorage.getItem(scopedKey)).toBe("Inline neu"));
     expect(window.sessionStorage.getItem(legacyKey)).toBeNull();
     expect(window.localStorage.getItem(legacyKey)).toBeNull();
+  });
+
+  it("coalesces rapid draft writes and flushes the newest value when the page is hidden", async () => {
+    const scopedKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";
+    render(LearningTaskCard, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task,
+        taskTitle: "Begriffe definieren",
+        unitType: "linear",
+        submissionFocused: true,
+        initialSubmissionMode: "text"
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    await waitFor(() => expect(editor).toBeInTheDocument());
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    await fireEvent.input(editor, { target: { value: "E" } });
+    await fireEvent.input(editor, { target: { value: "En" } });
+    await fireEvent.input(editor, { target: { value: "Entwurf" } });
+    expect(setItem).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event("pagehide"));
+    expect(setItem).toHaveBeenCalledTimes(1);
+    expect(setItem).toHaveBeenCalledWith(scopedKey, "Entwurf");
+    expect(window.sessionStorage.getItem(scopedKey)).toBe("Entwurf");
+    setItem.mockRestore();
   });
 
   it("restores only the draft belonging to the task after an in-place task switch", async () => {
@@ -116,7 +149,8 @@ describe("LearningTaskCard", () => {
     await waitFor(() => expect(editor.value).toBe(""));
     await fireEvent.input(editor, { target: { value: "Entwurf für Aufgabe 2" } });
     expect(window.sessionStorage.getItem(firstTaskKey)).toBe("Entwurf für Aufgabe 1");
-    expect(window.sessionStorage.getItem(secondTaskKey)).toBe("Entwurf für Aufgabe 2");
+    expect(window.sessionStorage.getItem(secondTaskKey)).toBeNull();
+    await waitFor(() => expect(window.sessionStorage.getItem(secondTaskKey)).toBe("Entwurf für Aufgabe 2"));
 
     await rerender({
       learnerSub: "student-2",
@@ -880,7 +914,7 @@ describe("LearningTaskCard", () => {
     await fireEvent.change(input, { target: { files: [file] } });
 
     await fireEvent.click(screen.getByRole("radio", { name: "Text schreiben" }));
-    expect(editor).toBeVisible();
+    expect(editor.closest(".learning-submission-mode-panel")).not.toHaveAttribute("hidden");
     expect(editor.value).toBe("Mein erhaltener Entwurf");
 
     await fireEvent.click(screen.getByRole("radio", { name: "Datei hochladen" }));

@@ -601,9 +601,16 @@ Verbindliche Regeln:
 - Der Abschlussauftrag wird erst nach der bewussten Aktion `Dialog beenden`
   sichtbar.
 - Partnerkontext und Sitzungsaktionen bilden eine gemeinsame Komponentenfamilie.
-  `Dialog ohne Abgabe abbrechen` und `Dialog beenden` stehen nur in diesem
-  Bereich. Eine zusätzliche Aktion `Pausieren` entfällt; der gemeinsame
-  Aufgabenkopf übernimmt den Rückweg.
+  `Dialog ohne Abgabe abbrechen` bleibt vor der ersten Antwort dort erreichbar.
+  `Dialog beenden` steht dagegen im Hauptbereich direkt bei den Aktionen zum
+  Fortsetzen oder Wiederholen des Gesprächs. Nach einem terminal fehlgeschlagenen
+  Turn steht auch der dann erlaubte Abbruch im Hauptbereich. Eine zusätzliche
+  Aktion `Pausieren` entfällt; der gemeinsame Aufgabenkopf übernimmt den Rückweg.
+- Ein fehlgeschlagener KI-Turn mit verbleibenden Generierungsversuchen zeigt
+  `KI-Antwort erneut versuchen` und, sofern bereits eine Runde abgeschlossen
+  wurde, weiterhin `Dialog beenden`. Nach dem dritten Fehlversuch entfällt die
+  Wiederholungsaktion vollständig; Abschluss beziehungsweise erlaubter Abbruch
+  bleiben als erreichbare Auswege sichtbar.
 - `Antwort senden` steht ausschließlich unmittelbar beim Eingabefeld. In der
   Abschlussphase stehen `Zurück zum Dialog` und `Endgültig abgeben` beim
   Abschlussfeld.

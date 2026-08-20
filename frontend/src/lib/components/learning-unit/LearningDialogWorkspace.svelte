@@ -139,7 +139,7 @@
   }
 
   function beginClosing() {
-    if (!session || session.round_count < 1 || session.turns.some((turn) => turn.status !== "completed")) return;
+    if (!canEndDialog()) return;
     closingPhase = true;
   }
 
@@ -157,7 +157,11 @@
   }
 
   function canEndDialog(): boolean {
-    return Boolean(session && session.round_count > 0 && conversationReady());
+    return Boolean(
+      session &&
+      session.round_count > 0 &&
+      !session.turns.some((turn) => turn.status === "generating")
+    );
   }
 
   function latestFailedTurn(): DialogTurn | null {
@@ -168,6 +172,11 @@
   function retryLatestFailedTurn() {
     const turn = latestFailedTurn();
     if (turn && turn.generation_attempts < 3) void retry(turn);
+  }
+
+  function hasTerminalDialogFailure(): boolean {
+    const turn = latestFailedTurn();
+    return Boolean(turn && turn.generation_attempts >= 3);
   }
 
   function continueDialog() {
@@ -380,7 +389,7 @@
             {:else if showPauseAction}
               <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
             {/if}
-            {#if !closingPhase && session.round_count === 0}
+            {#if !closingPhase && session.turns.length === 0}
               <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
             {/if}
           </nav>
@@ -443,7 +452,7 @@
               {:else if session.round_count >= session.dialog.max_rounds}
                 <p class="workspace-note">Maximale Rundenzahl erreicht.</p>
               {/if}
-              {#if canSendAnswer() || canEndDialog() || latestFailedTurn()}
+              {#if canSendAnswer() || canEndDialog() || latestFailedTurn() || hasTerminalDialogFailure()}
                 <div class="dialog-actions dialog-composer__actions">
                   {#if latestFailedTurn() && (latestFailedTurn()?.generation_attempts ?? 3) < 3}
                     <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={retryLatestFailedTurn}>KI-Antwort erneut versuchen</button>
@@ -455,6 +464,9 @@
                   {/if}
                   {#if canEndDialog()}
                     <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>Dialog beenden</button>
+                  {/if}
+                  {#if hasTerminalDialogFailure()}
+                    <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
                   {/if}
                 </div>
               {/if}

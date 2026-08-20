@@ -1,7 +1,7 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 import { currentUserSub, login } from "./support/auth";
-import { completeDialogFeedback, prepareCompletedDialogTurn } from "./support/dialog-session-fixture";
+import { appendTerminalDialogFailure, completeDialogFeedback, prepareCompletedDialogTurn } from "./support/dialog-session-fixture";
 import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerDialogCourse } from "./support/seed-data";
@@ -179,6 +179,13 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     await learner.page.getByRole("button", { name: "Zurück zum Dialog" }).click();
     await expect(learner.page.getByLabel("Deine Antwort (1/2)")).toBeVisible();
     await expect(learner.page.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeHidden();
+
+    await appendTerminalDialogFailure(sessionId);
+    await learner.page.reload();
+    await expect(learner.page.getByRole("button", { name: "KI-Antwort erneut versuchen" })).toHaveCount(0);
+    await expect(learner.page.getByText("Die KI-Antwort kann nicht erneut erzeugt werden.")).toBeVisible();
+    await expect(learner.page.getByRole("button", { name: "Dialog beenden" })).toBeVisible();
+    await expect(learner.page.getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeVisible();
 
     await learner.page.getByRole("button", { name: "Dialog beenden" }).click();
     await expect(learner.page.getByLabel("Fasse deine wichtigste Erkenntnis zusammen.")).toHaveValue(

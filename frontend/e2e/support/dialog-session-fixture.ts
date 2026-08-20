@@ -75,6 +75,29 @@ export async function prepareCompletedDialogTurn(input: {
   return sessionId;
 }
 
+/** Append a terminal provider failure after an already completed dialog round. */
+export async function appendTerminalDialogFailure(sessionIdInput: string): Promise<void> {
+  if (!e2eDatabaseUrl) {
+    throw new Error("E2E_DATABASE_URL or SESSION_DATABASE_URL is required for dialog feature acceptance");
+  }
+  const sessionId = validatedUuid(sessionIdInput, "session id");
+  const sql = `
+    insert into public.learning_dialog_turns (
+      session_id, round_nr, student_message_md, status,
+      sentence_starters, generation_attempts, error_code,
+      idempotency_key, generation_started_at
+    ) values (
+      '${sessionId}'::uuid, 2, 'Eine zweite Beobachtung.', 'failed',
+      '{}', 3, 'dialog_ai_unavailable',
+      'e2e-dialog-turn-2', now()
+    );
+  `;
+  await execFileAsync("psql", [e2eDatabaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-c", sql], {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024
+  });
+}
+
 /**
  * Complete the feedback for one isolated dialog submission deterministically.
  *

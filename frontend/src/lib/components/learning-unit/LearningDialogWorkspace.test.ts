@@ -86,10 +86,11 @@ function answeredSession(overrides: Partial<TestSession> = {}): TestSession {
 function failedSession(generationAttempts: number): TestSession {
   return answeredSession({
     turns: [
+      ...answeredSession().turns,
       {
-        id: "turn-1",
-        round_nr: 1,
-        student_message_md: "Die Quelle wirkt einseitig.",
+        id: "turn-2",
+        round_nr: 2,
+        student_message_md: "Eine zweite Beobachtung.",
         used_sentence_starter_md: null,
         used_sentence_starter_source: null,
         status: "failed",
@@ -246,6 +247,7 @@ describe("LearningDialogWorkspace", () => {
 
     const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
     expect(within(composer).getByRole("button", { name: "KI-Antwort erneut versuchen" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
     expect(within(screen.getByRole("log", { name: "Dialogverlauf" })).queryByRole("button")).toBeNull();
     expect(screen.queryByText("Die KI-Antwort kann nicht erneut erzeugt werden.")).toBeNull();
   });
@@ -256,6 +258,35 @@ describe("LearningDialogWorkspace", () => {
     const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
     expect(within(composer).queryByRole("button", { name: "KI-Antwort erneut versuchen" })).toBeNull();
     expect(within(composer).getByText("Die KI-Antwort kann nicht erneut erzeugt werden.")).toBeInTheDocument();
+    const endButton = within(composer).getByRole("button", { name: "Dialog beenden" });
+    expect(endButton).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeInTheDocument();
+
+    await fireEvent.click(endButton);
+
+    expect(screen.getByRole("region", { name: "Abschluss vorbereiten" })).toBeInTheDocument();
+  });
+
+  it("offers the allowed abort after a terminal first-turn failure", async () => {
+    renderDialog(session({
+      turns: [{
+        id: "turn-1",
+        round_nr: 1,
+        student_message_md: "Die Quelle wirkt einseitig.",
+        used_sentence_starter_md: null,
+        used_sentence_starter_source: null,
+        status: "failed",
+        assistant_reply_md: null,
+        sentence_starters: [],
+        generation_attempts: 3
+      }]
+    }));
+
+    const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
+    expect(within(composer).queryByRole("button", { name: "KI-Antwort erneut versuchen" })).toBeNull();
+    expect(within(composer).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(within(composer).getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toHaveLength(1);
   });
 
   it("clears the local closing draft after final submission", async () => {

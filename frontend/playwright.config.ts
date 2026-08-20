@@ -14,6 +14,11 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] }
+    },
+    {
+      name: "webkit-ipad",
+      testMatch: /learner-task-(drafts|responsive)\.spec\.ts/,
+      use: { ...devices["iPad Pro 11 landscape"] }
     }
   ]
 });

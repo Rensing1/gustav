@@ -6,19 +6,25 @@ import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerNavigationCourse } from "./support/seed-data";
 
 const password = "Passw0rd!e2e";
+type DraftMetrics = { draftWrites: number; longTasks: number[] };
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL: webBase, hasTouch: true });
   await context.addInitScript(() => {
     const originalSetItem = Storage.prototype.setItem;
-    const metrics = { draftWrites: 0 };
-    (window as Window & { __gustavDraftMetrics?: typeof metrics }).__gustavDraftMetrics = metrics;
+    const metrics: DraftMetrics = { draftWrites: 0, longTasks: [] };
+    (window as Window & { __gustavDraftMetrics?: DraftMetrics }).__gustavDraftMetrics = metrics;
     Storage.prototype.setItem = function setItem(key: string, value: string) {
       if (key.startsWith("gustav.learning.submission-draft:")) {
         metrics.draftWrites += 1;
       }
       return originalSetItem.call(this, key, value);
     };
+    if (PerformanceObserver.supportedEntryTypes.includes("longtask")) {
+      new PerformanceObserver((list) => {
+        metrics.longTasks.push(...list.getEntries().map((entry) => entry.duration));
+      }).observe({ type: "longtask", buffered: true });
+    }
   });
   return { context, page: await context.newPage() };
 }
@@ -45,18 +51,24 @@ test("@feature-acceptance keeps text drafts separated by task", async ({ browser
     const editor = learner.page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
     const performanceDraft = "Eine flüssige Eingabe auf dem iPad bleibt vollständig erhalten. ".repeat(4).trim();
     await learner.page.evaluate(() => {
-      const metrics = (window as Window & { __gustavDraftMetrics?: { draftWrites: number } }).__gustavDraftMetrics;
-      if (metrics) metrics.draftWrites = 0;
+      const metrics = (window as Window & { __gustavDraftMetrics?: DraftMetrics }).__gustavDraftMetrics;
+      if (metrics) {
+        metrics.draftWrites = 0;
+        metrics.longTasks = [];
+      }
     });
     const typingStartedAt = Date.now();
     await editor.pressSequentially(performanceDraft);
     expect(Date.now() - typingStartedAt).toBeLessThan(4_000);
     expect(await learner.page.evaluate(
-      () => (window as Window & { __gustavDraftMetrics?: { draftWrites: number } }).__gustavDraftMetrics?.draftWrites ?? 0
+      () => (window as Window & { __gustavDraftMetrics?: DraftMetrics }).__gustavDraftMetrics?.draftWrites ?? 0
     )).toBeLessThan(5);
+    expect(await learner.page.evaluate(
+      () => Math.max(0, ...((window as Window & { __gustavDraftMetrics?: DraftMetrics }).__gustavDraftMetrics?.longTasks ?? []))
+    )).toBeLessThan(1_000);
     await expect(editor).toContainText(performanceDraft);
     await expect.poll(() => learner.page.evaluate(
-      () => (window as Window & { __gustavDraftMetrics?: { draftWrites: number } }).__gustavDraftMetrics?.draftWrites ?? 0
+      () => (window as Window & { __gustavDraftMetrics?: DraftMetrics }).__gustavDraftMetrics?.draftWrites ?? 0
     )).toBeGreaterThan(0);
     await learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" }).click();
 

@@ -273,7 +273,7 @@ test-visual-smoke:
 
 .PHONY: test-feature-acceptance
 test-feature-acceptance:
-	@cd frontend && node tooling/check-playwright-browser.mjs
+	@cd frontend && node tooling/check-playwright-browser.mjs chromium webkit
 	@cd frontend && NODE_EXTRA_CA_CERTS=../.tmp/caddy-root.crt npm run test:e2e -- --grep @feature-acceptance
 
 .PHONY: test-dev-accounts
@@ -293,7 +293,7 @@ update-visual-baselines:
 
 .PHONY: playwright-bootstrap
 playwright-bootstrap:
-	@cd frontend && npx playwright install chromium
+	@cd frontend && npx playwright install chromium webkit
 
 .PHONY: test-full-prod-like
 test-full-prod-like:

@@ -1,4 +1,4 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
 import { login } from "./support/auth";
 import { emailDomain, webBase } from "./support/e2e-env";
@@ -7,6 +7,12 @@ import { expectNoViewportOverflow } from "./support/layout-sanity";
 import { seedLearnerNavigationCourse } from "./support/seed-data";
 
 const password = "Passw0rd!e2e";
+
+async function scrollSurfaceWithKeyboard(page: Page, surface: Locator, edge: "start" | "end"): Promise<void> {
+  await surface.evaluate((element) => element.setAttribute("tabindex", "-1"));
+  await surface.focus();
+  await page.keyboard.press(edge === "end" ? "End" : "Home");
+}
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL: webBase, hasTouch: true });
@@ -66,25 +72,16 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
     await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);
     await expect.poll(() => workScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);
 
-    await contextScroll.evaluate((surface) => {
-      surface.scrollTop = surface.scrollHeight;
-      surface.dispatchEvent(new Event("scroll"));
-    });
+    await scrollSurfaceWithKeyboard(learner.page, contextScroll, "end");
     await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight - surface.scrollTop)).toBeLessThan(2);
     expect(await workScroll.evaluate((surface) => surface.scrollTop)).toBe(0);
 
     const contextBottom = await contextScroll.evaluate((surface) => surface.scrollTop);
-    await workScroll.evaluate((surface) => {
-      surface.scrollTop = surface.scrollHeight;
-      surface.dispatchEvent(new Event("scroll"));
-    });
+    await scrollSurfaceWithKeyboard(learner.page, workScroll, "end");
     await expect.poll(() => workScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight - surface.scrollTop)).toBeLessThan(2);
     expect(await contextScroll.evaluate((surface) => surface.scrollTop)).toBe(contextBottom);
 
-    await contextScroll.evaluate((surface) => {
-      surface.scrollTop = 0;
-      surface.dispatchEvent(new Event("scroll"));
-    });
+    await scrollSurfaceWithKeyboard(learner.page, contextScroll, "start");
     await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollTop)).toBe(0);
 
     await learner.page.setViewportSize({ width: 1180, height: 820 });

@@ -316,9 +316,29 @@ async def test_cli_bearer_reaches_new_course_authoring_routes(
 
 
 @pytest.mark.anyio
+async def test_cli_read_token_can_bind_a_sync_mirror_to_its_owner(monkeypatch):
+    _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/me",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["sub"] == created.record.user_sub
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("method", "path", "json_body", "expected_status"),
     [
+        (
+            "GET",
+            "/api/teaching/units/not-a-uuid/materials/not-a-material/simulation",
+            None,
+            400,
+        ),
         (
             "POST",
             "/api/teaching/units/not-a-uuid/sections/not-a-section/materials/upload-intents",

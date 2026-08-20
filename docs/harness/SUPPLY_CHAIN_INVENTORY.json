@@ -86,6 +86,13 @@
     },
     {
       "ecosystem": "python",
+      "license": "MIT",
+      "name": "pyyaml",
+      "policy": "metadata-recorded",
+      "version": "6.0.3"
+    },
+    {
+      "ecosystem": "python",
       "license": "Apache-2.0",
       "name": "requests",
       "policy": "metadata-recorded",
@@ -4501,8 +4508,8 @@
   ],
   "summary": {
     "node_entries": 542,
-    "python_entries": 16,
+    "python_entries": 17,
     "review_required_entries": 0,
-    "total_entries": 558
+    "total_entries": 559
   }
 }

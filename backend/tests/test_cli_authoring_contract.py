@@ -31,6 +31,7 @@ def test_path_matches_template_requires_exact_shape(template: str, path: str, ex
 @pytest.mark.parametrize(
     ("method", "path", "expected_scope"),
     [
+        ("GET", "/api/me", "read"),
         ("GET", "/api/teaching/units", "read"),
         ("post", "/api/teaching/units", "write"),
         ("DELETE", "/api/teaching/units/unit-1", "delete"),
@@ -38,6 +39,11 @@ def test_path_matches_template_requires_exact_shape(template: str, path: str, ex
             "POST",
             "/api/teaching/units/unit-1/sections/section-1/tasks/task-1/h5p/import",
             "write",
+        ),
+        (
+            "GET",
+            "/api/teaching/units/unit-1/materials/material-1/simulation",
+            "read",
         ),
         ("GET", "/api/teaching/views/teacher-home", None),
     ],

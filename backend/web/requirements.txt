@@ -8,6 +8,7 @@ jinja2==3.1.4
 # Für spätere Erweiterungen (aber schon mal dabei)
 python-multipart==0.0.12  # Für File-Uploads
 python-dotenv==1.0.1       # Für Umgebungsvariablen
+PyYAML==6.0.3              # Safe, human-readable GUSTAV CLI sync manifests
 python-jose[cryptography]==3.3.0  # JWT handling (ID token verification)
 requests==2.32.3           # HTTP client for OIDC token exchange
 psycopg[binary]==3.2.3     # Postgres driver for DB-backed sessions

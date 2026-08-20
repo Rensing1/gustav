@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-20
+
+### Features
+- feat(cli): `gustav sync status|pull|push` spiegelt lineare und modulare Lerneinheiten einschließlich Markdown, Dateien, Simulationen und H5P gerichtet zwischen Teaching-API und einem lokalen YAML-/Markdown-Verzeichnis; einzelne Units können per Schlüssel oder UUID gewählt werden.
+
+### Security
+- security(cli): Drei-Stände-Konflikterkennung, explizite Prune-/Bestätigungsgrenzen, konto- und instanzgebundene private Zustandsdateien, sichere Manifestpfade und ein digestgebundener Wiederanlauf verhindern unbeabsichtigtes Überschreiben und Traversal.
+
+### Tests
+- test(cli): Contract-, Auth-, Manifest-, Vergleichs- und Remote-Orchestrierungstests decken Pagination, lineare und modulare Strukturen, Assets, Konflikte, Filter, Prune und Wiederanlauf ab.
+
 ## 2026-08-18
 
 ### Fixes

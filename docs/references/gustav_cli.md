@@ -78,6 +78,33 @@ gustav units list --json
 
 ## Befehle
 
+### Gerichtete Synchronisation
+
+Ein verwalteter Spiegel bündelt alle Lerneinheiten einer Lehrkraft in einem lokalen Verzeichnis:
+
+```bash
+gustav sync pull --root ./lerneinheiten
+gustav sync status --root ./lerneinheiten
+gustav sync push --root ./lerneinheiten
+```
+
+Der erste Befehl muss ein `pull` in ein leeres oder noch nicht vorhandenes Verzeichnis sein. Danach liegen die editierbaren Metadaten in YAML-Dateien, längere Texte in Markdown-Dateien und Datei-, Simulations- sowie H5P-Inhalte als binäre Assets vor. Kurse, Freischaltungen, Abgaben und Lernstände werden nicht gespiegelt. Mit einem wiederholbaren `--unit <schlüssel-oder-uuid>` lassen sich einzelne Lerneinheiten auswählen.
+
+`status` verändert weder lokale noch externe Daten. Exitcode `0` bedeutet Gleichstand, `2` erkannte Abweichungen und `1` einen Bedien-, Sicherheits- oder Netzwerkfehler. `--json` liefert dieselbe Einordnung maschinenlesbar als `clean`, `local`, `remote` oder `diverged`.
+
+Der Spiegel ist an die konfigurierte HTTPS-Instanz und die Lehrkraft gebunden. Ein gemeinsamer Basisstand pro Lerneinheit verhindert, dass `pull` lokale oder `push` externe Änderungen unbemerkt überschreibt. Die bewussten Konfliktauflösungen lauten:
+
+```bash
+gustav sync pull --root ./lerneinheiten --discard-local
+gustav sync push --root ./lerneinheiten --overwrite-remote
+```
+
+Entfernte Objekte und der Austausch binärer Materialien werden nur mit `--prune` ausgeführt. Ein Push benötigt zusätzlich `--yes`. Vor einem lokalen Pull-Prune verschiebt die CLI den bisherigen `units`-Baum nach `.gustav/trash/<zeitstempel>/units`. Ein unterbrochener Push hinterlässt ein privates `.gustav/journal.json`; solange Quelle und zuletzt beobachteter Remote-Digest unverändert sind, setzt der nächste identische Push mit den bereits ermittelten Remote-IDs fort.
+
+Für `status` und `pull` braucht das CLI-Token `read`. `push` braucht zusätzlich `write`; `push --prune` benötigt auch `delete`. Der Austausch eines Datei- oder Simulationsmaterials zählt als Prune, weil die Teaching-API dabei das alte Remote-Objekt durch ein neues ersetzt.
+
+Manifestdateien akzeptieren nur dokumentierte Felder und eindeutige YAML-Schlüssel. Pfade außerhalb des jeweiligen Unit-Verzeichnisses, Symlinks, übergroße Dateien sowie unsichere oder übergroße H5P-ZIP-Pakete werden vor einer Mutation abgewiesen. `.gustav/state.json` und das Journal enthalten keine Token und keine Unterrichtsinhalte, sondern nur Bindungsdaten, Digests und Remote-ID-Zuordnungen.
+
 ### Lerneinheiten
 
 ```bash

@@ -9420,6 +9420,9 @@ paths:
       security:
         - cookieAuth: []
         - bearerAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       responses:
         '200':
           description: User context
@@ -13300,6 +13303,9 @@ paths:
       operationId: streamTeachingMaterialSimulation
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes:
+        - read
       x-permissions: { requiredRole: teacher, authorOnly: true }
       parameters:
         - in: path

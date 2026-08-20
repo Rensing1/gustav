@@ -13,6 +13,7 @@ class CLIAuthoringCapability:
 
 
 CLI_AUTHORING_CAPABILITIES: tuple[CLIAuthoringCapability, ...] = (
+    CLIAuthoringCapability("GET", "/api/me", "read"),
     CLIAuthoringCapability("GET", "/api/teaching/units", "read"),
     CLIAuthoringCapability("POST", "/api/teaching/units", "write"),
     CLIAuthoringCapability("PATCH", "/api/teaching/units/{unit_id}", "write"),
@@ -82,6 +83,11 @@ CLI_AUTHORING_CAPABILITIES: tuple[CLIAuthoringCapability, ...] = (
     CLIAuthoringCapability(
         "GET",
         "/api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id}/download-url",
+        "read",
+    ),
+    CLIAuthoringCapability(
+        "GET",
+        "/api/teaching/units/{unit_id}/materials/{material_id}/simulation",
         "read",
     ),
     CLIAuthoringCapability("POST", "/api/teaching/units/{unit_id}/modules/{module_id}/materials", "write"),

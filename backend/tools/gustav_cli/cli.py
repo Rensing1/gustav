@@ -340,6 +340,20 @@ def _build_parser() -> argparse.ArgumentParser:
             h5p_cmd.add_argument("--force", action="store_true")
         if name == "reset":
             h5p_cmd.add_argument("--yes", action="store_true")
+    sync = sub.add_parser("sync")
+    sync_sub = sync.add_subparsers(dest="command", required=True)
+    for name in ("status", "pull", "push"):
+        sync_cmd = sync_sub.add_parser(name)
+        sync_cmd.add_argument("--root", required=True)
+        sync_cmd.add_argument("--unit", action="append", default=[])
+        sync_cmd.add_argument("--json", action="store_true")
+        if name in {"pull", "push"}:
+            sync_cmd.add_argument("--prune", action="store_true")
+        if name == "pull":
+            sync_cmd.add_argument("--discard-local", action="store_true")
+        if name == "push":
+            sync_cmd.add_argument("--overwrite-remote", action="store_true")
+            sync_cmd.add_argument("--yes", action="store_true")
     register_course_parsers(sub)
     return parser
 
@@ -1143,6 +1157,10 @@ def main(
         return _tasks(args, stdout=stdout, stderr=stderr)
     if args.group == "h5p":
         return _h5p(args, stdout=stdout, stderr=stderr)
+    if args.group == "sync":
+        from .sync import run_sync
+
+        return run_sync(args, stdout=stdout, stderr=stderr)
     if args.group in {
         "courses",
         "course-deletion-jobs",

@@ -7057,11 +7057,12 @@ paths:
             format: uuid
         - in: header
           name: Idempotency-Key
-          required: false
+          required: true
+          description: Must equal `finalize-{feedback_submission_id}` for the selected reviewed draft.
           schema:
             type: string
-            maxLength: 64
-            pattern: '^[A-Za-z0-9_-]{1,64}$'
+            maxLength: 45
+            pattern: '^finalize-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
       requestBody:
         required: true
         content:
@@ -7082,7 +7083,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LearningSubmission'
         '400':
-          description: Bad request (invalid_uuid | invalid_input | max_attempts_exceeded)
+          description: Bad request (invalid_uuid | invalid_input | idempotency_key_mismatch | max_attempts_exceeded)
           content:
             application/json:
               schema:

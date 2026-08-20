@@ -6,6 +6,7 @@ import type { Actions, PageServerLoad } from "./$types";
 import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap, requireSpaceBootstrap } from "$lib/server/guards";
 import {
+  finalSubmissionIdempotencyKey,
   finalSubmissionFailureMessage,
   validatedFeedbackSubmissionId,
   validatedFinalSubmissionIdempotencyKey
@@ -225,7 +226,7 @@ export const actions: Actions = {
         });
       }
       const idempotencyKey = validatedFinalSubmissionIdempotencyKey(form.get("finalization_idempotency_key"));
-      if (!idempotencyKey) {
+      if (!idempotencyKey || idempotencyKey !== finalSubmissionIdempotencyKey(feedbackSubmissionId)) {
         return fail(400, {
           message: "Die endgültige Abgabe ist nicht mehr aktuell. Bitte lade die Aufgabe neu.",
           taskId

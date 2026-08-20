@@ -1,3 +1,5 @@
+import pytest
+
 from backend.learning.usecases.submissions import FinalizeLatestDraftInput, FinalizeLatestDraftUseCase
 
 
@@ -46,3 +48,21 @@ def test_finalize_usecase_binds_the_selected_feedback_submission() -> None:
         "feedback_submission_id": "feedback-1",
         "idempotency_key": "finalize-feedback-1",
     }
+
+
+def test_finalize_usecase_rejects_a_key_for_another_feedback_submission() -> None:
+    repo = RecordingRepo()
+    usecase = FinalizeLatestDraftUseCase(repo)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="idempotency_key_mismatch"):
+        usecase.execute(
+            FinalizeLatestDraftInput(
+                course_id="course-1",
+                task_id="task-1",
+                student_sub="student-1",
+                feedback_submission_id="feedback-1",
+                idempotency_key="finalize-feedback-2",
+            )
+        )
+
+    assert repo.finalized is None

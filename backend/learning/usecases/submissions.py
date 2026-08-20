@@ -165,6 +165,10 @@ class FinalizeLatestDraftUseCase:
             Caller must be the enrolled student and the task must be visible in
             the course context. The repository enforces this via RLS-aware checks.
         """
+        expected_idempotency_key = f"finalize-{req.feedback_submission_id}"
+        if req.idempotency_key != expected_idempotency_key:
+            raise ValueError("idempotency_key_mismatch")
+
         return self._repo.finalize_latest_feedback_submission(
             student_sub=req.student_sub,
             course_id=req.course_id,

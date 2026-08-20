@@ -614,8 +614,9 @@ def finalize_latest_feedback_submission(
 
     Why:
         The student-facing UX distinguishes between a feedback draft and a
-        formal submission. Finalizing must therefore reuse the most recent
-        completed draft instead of enqueueing a second analysis run.
+        formal submission. Finalizing must therefore reuse the selected
+        completed draft for the same learner, course and task instead of
+        enqueueing a second analysis run.
     """
     course_uuid = str(UUID(course_id))
     task_uuid = str(UUID(task_id))

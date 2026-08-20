@@ -34,3 +34,11 @@ def test_openapi_finalize_learning_submission_binds_the_reviewed_feedback_draft(
     assert schema["required"] == ["feedback_submission_id"]
     assert schema["properties"]["feedback_submission_id"] == {"type": "string", "format": "uuid"}
     assert schema["additionalProperties"] is False
+
+    idempotency = next(parameter for parameter in operation["parameters"] if parameter["name"] == "Idempotency-Key")
+    assert idempotency["required"] is True
+    assert idempotency["schema"] == {
+        "type": "string",
+        "maxLength": 45,
+        "pattern": r"^finalize-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    }

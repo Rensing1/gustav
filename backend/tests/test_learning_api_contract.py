@@ -921,10 +921,19 @@ async def test_finalize_latest_feedback_submission_creates_final_submission_with
             json={"intent": "feedback", "kind": "text", "text_body": "Neuer, noch ungeprüfter Entwurf."},
         )
         assert newer_feedback_response.status_code == 202
+        newer_feedback_submission_id = newer_feedback_response.json()["id"]
+
+        mismatched_key_response = await client.post(
+            f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
+            headers={"Idempotency-Key": f"finalize-{newer_feedback_submission_id}"},
+            json={"feedback_submission_id": feedback_submission_id},
+        )
+        assert mismatched_key_response.status_code == 400
+        assert mismatched_key_response.json()["detail"] == "idempotency_key_mismatch"
 
         finalize_response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
-            headers={"Idempotency-Key": "finalize-key-1"},
+            headers={"Idempotency-Key": f"finalize-{feedback_submission_id}"},
             json={"feedback_submission_id": feedback_submission_id},
         )
 
@@ -1003,7 +1012,7 @@ async def test_finalize_latest_feedback_file_submission_returns_decorated_files(
             client.cookies.set("gustav_session", fixture.student_session_id)
             finalize_response = await client.post(
                 f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
-                headers={"Idempotency-Key": "finalize-file-key-1"},
+                headers={"Idempotency-Key": f"finalize-{feedback_submission_id}"},
                 json={"feedback_submission_id": feedback_submission_id},
             )
 
@@ -1323,6 +1332,7 @@ async def test_finalize_requires_completed_feedback_draft(monkeypatch: pytest.Mo
 
         finalize_response = await client.post(
             f"/api/learning/courses/{fixture.course_id}/tasks/{fixture.task['id']}/submissions/finalize",
+            headers={"Idempotency-Key": f"finalize-{feedback_response.json()['id']}"},
             json={"feedback_submission_id": feedback_response.json()["id"]},
         )
 

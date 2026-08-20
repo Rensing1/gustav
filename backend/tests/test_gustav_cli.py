@@ -6,6 +6,8 @@ import stat
 import hashlib
 from urllib.error import HTTPError
 
+import pytest
+
 from backend.tools.gustav_cli import cli, config
 
 
@@ -123,6 +125,26 @@ def test_http_json_returns_structured_body_for_non_json_http_error(monkeypatch) 
     assert body["detail"] == "Bad Gateway"
     assert body["body_preview"] == "<html>proxy error</html>"
     assert "gustav_cli_secret_token" not in str(body)
+
+
+def test_http_bytes_stops_after_configured_response_limit(monkeypatch) -> None:
+    reads: list[int | None] = []
+
+    class OversizedResponse(_HTTPResponse):
+        def read(self, size: int | None = None) -> bytes:
+            reads.append(size)
+            return b"12345"
+
+    monkeypatch.setattr(
+        cli.urllib_request,
+        "urlopen",
+        lambda req, timeout: OversizedResponse(b"ignored"),
+    )
+
+    with pytest.raises(ValueError, match="response_too_large"):
+        cli._http_bytes("GET", "https://gustav.example/content.h5p", max_bytes=4)
+
+    assert reads == [5]
 
 
 def test_http_multipart_sanitizes_content_disposition_parameters(monkeypatch) -> None:

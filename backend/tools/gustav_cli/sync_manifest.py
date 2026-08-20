@@ -17,6 +17,7 @@ SCHEMA_VERSION = 1
 KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_YAML_BYTES = 2 * 1024 * 1024
 MAX_ASSET_BYTES = 20 * 1024 * 1024
+MAX_H5P_PACKAGE_BYTES = 100 * 1024 * 1024
 MAX_H5P_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
 TEXT_FIELDS = (
     ("instruction_md", "instruction.md"),
@@ -138,6 +139,8 @@ def _safe_filename(value: object, *, fallback: str) -> str:
 def h5p_digest(content: bytes) -> str:
     """Hash H5P semantics while ignoring ZIP entry order and timestamps."""
 
+    if len(content) > MAX_H5P_PACKAGE_BYTES:
+        raise ValueError("h5p_package_too_large")
     digest = hashlib.sha256()
     total = 0
     try:
@@ -195,9 +198,105 @@ def _containers(unit: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
     return field, raw
 
 
+def _unique_items(items: object, *, kind: str) -> dict[str, dict[str, Any]]:
+    """Index keyed manifest items while rejecting ambiguous duplicates."""
+
+    if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+        raise ValueError(f"invalid_{kind}s")
+    indexed: dict[str, dict[str, Any]] = {}
+    for item in items:
+        key = _require_key(item.get("key"))
+        if key in indexed:
+            raise ValueError(f"duplicate_{kind}_key")
+        indexed[key] = item
+    return indexed
+
+
+def _validate_container_keys(containers: object, *, kind: str) -> dict[str, dict[str, Any]]:
+    indexed = _unique_items(containers, kind=kind)
+    for container in indexed.values():
+        _unique_items(container.get("materials", []), kind="material")
+        _unique_items(container.get("tasks", []), kind="task")
+    return indexed
+
+
+def _validate_modular_graph(unit: dict[str, Any]) -> None:
+    phases = _unique_items(unit.get("phases", []), kind="phase")
+    modules = _validate_container_keys(unit.get("modules", []), kind="module")
+    incoming = {key: 0 for key in modules}
+    adjacency = {key: set() for key in modules}
+    seen_edges: set[tuple[str, str]] = set()
+
+    for module in modules.values():
+        if str(module.get("phase") or "") not in phases:
+            raise ValueError("unknown_phase_key")
+
+    edges = unit.get("edges", [])
+    if not isinstance(edges, list) or any(not isinstance(edge, dict) for edge in edges):
+        raise ValueError("invalid_edges")
+    for edge in edges:
+        source = _require_key(edge.get("from"))
+        target = _require_key(edge.get("to"))
+        if source not in modules or target not in modules:
+            raise ValueError("unknown_edge_module")
+        if source == target:
+            raise ValueError("invalid_self_edge")
+        if modules[source].get("module_kind", "learning") == "practice":
+            raise ValueError("practice_module_outgoing_edge")
+        pair = (source, target)
+        if pair in seen_edges:
+            raise ValueError("duplicate_edge")
+        seen_edges.add(pair)
+        adjacency[source].add(target)
+        incoming[target] += 1
+
+    # A topological walk mirrors the API's acyclic prerequisite invariant.
+    remaining = dict(incoming)
+    ready = [key for key, count in remaining.items() if count == 0]
+    visited = 0
+    while ready:
+        source = ready.pop()
+        visited += 1
+        for target in adjacency[source]:
+            remaining[target] -= 1
+            if remaining[target] == 0:
+                ready.append(target)
+    if visited != len(modules):
+        raise ValueError("edge_cycle")
+
+    for key, module in modules.items():
+        required = module.get("required_prereq_count", 0)
+        if isinstance(required, bool) or not isinstance(required, int):
+            raise ValueError("invalid_required_prereq_count")
+        if required < 0 or required > incoming[key]:
+            raise ValueError("invalid_required_prereq_count")
+
+
+def validate_snapshot(snapshot: dict[str, Any]) -> None:
+    """Validate local authoring relationships before any filesystem or API mutation."""
+
+    if snapshot.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError("invalid_schema_version")
+    units = snapshot.get("units")
+    if not isinstance(units, dict):
+        raise ValueError("invalid_units")
+    for unit_key, unit in units.items():
+        key = _require_key(unit_key)
+        if not isinstance(unit, dict) or str(unit.get("key") or key) != key:
+            raise ValueError("invalid_unit")
+        unit_type = unit.get("unit_type")
+        if unit_type == "modular":
+            _validate_modular_graph(unit)
+        elif unit_type == "linear":
+            _validate_container_keys(unit.get("sections", []), kind="section")
+        else:
+            raise ValueError("invalid_unit_type")
+
+
 def write_local_snapshot(root: Path, snapshot: dict[str, Any], *, base_url: str) -> None:
     """Write a normalized snapshot as YAML plus separate authored content files."""
 
+    validate_snapshot(snapshot)
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     _write_yaml(
         root / "gustav.yaml",
@@ -252,13 +351,15 @@ def write_local_snapshot(root: Path, snapshot: dict[str, Any], *, base_url: str)
                     task[f"{name.removesuffix('_md')}_file"] = relative
                 if task.get("kind") == "h5p":
                     content = task.pop("_h5p_bytes", None)
+                    digest = task.pop("h5p_sha256", None)
+                    if content is None and digest is None:
+                        continue
                     if not isinstance(content, bytes):
                         raise ValueError("missing_h5p_bytes")
                     h5p_digest(content)
                     relative = f"content/{container_key}/tasks/{task_key}/content.h5p"
                     _write_bytes(unit_root / relative, content)
                     task["h5p_file"] = relative
-                    task.pop("h5p_sha256", None)
         unit["schema_version"] = SCHEMA_VERSION
         _write_yaml(unit_root / "unit.yaml", unit)
 
@@ -307,9 +408,16 @@ def _read_container_files(unit_root: Path, container: dict[str, Any]) -> None:
                 _safe_local_file(unit_root, relative).read_text(encoding="utf-8").rstrip("\n")
             )
         if task.get("kind") == "h5p":
-            content = _safe_local_file(unit_root, task.pop("h5p_file", None)).read_bytes()
-            task["_h5p_bytes"] = content
-            task["h5p_sha256"] = h5p_digest(content)
+            relative = task.pop("h5p_file", None)
+            if relative is None:
+                task["h5p_sha256"] = None
+            else:
+                path = _safe_local_file(unit_root, relative)
+                if path.stat().st_size > MAX_H5P_PACKAGE_BYTES:
+                    raise ValueError("h5p_package_too_large")
+                content = path.read_bytes()
+                task["_h5p_bytes"] = content
+                task["h5p_sha256"] = h5p_digest(content)
 
 
 def load_local_snapshot(root: Path, *, expected_base_url: str) -> dict[str, Any]:
@@ -352,4 +460,6 @@ def load_local_snapshot(root: Path, *, expected_base_url: str) -> dict[str, Any]
             for container in containers:
                 _read_container_files(unit_root, container)
             units[unit_key] = unit
-    return {"schema_version": SCHEMA_VERSION, "units": units}
+    snapshot = {"schema_version": SCHEMA_VERSION, "units": units}
+    validate_snapshot(snapshot)
+    return snapshot

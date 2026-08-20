@@ -71,13 +71,24 @@ def _http_bytes(
     *,
     headers: dict[str, str] | None = None,
     data: bytes | None = None,
+    max_bytes: int | None = None,
 ) -> tuple[int, bytes]:
+    """Perform a byte request and optionally stop one byte beyond a safe limit."""
+
+    def read_limited(response) -> bytes:  # noqa: ANN001 - urllib and HTTPError share read().
+        if max_bytes is None:
+            return response.read()
+        payload = response.read(max_bytes + 1)
+        if len(payload) > max_bytes:
+            raise ValueError("response_too_large")
+        return payload
+
     req = urllib_request.Request(url, data=data, method=method, headers=dict(headers or {}))
     try:
         with urllib_request.urlopen(req, timeout=60) as response:  # noqa: S310 - URL comes from API/config.
-            return response.status, response.read()
+            return response.status, read_limited(response)
     except HTTPError as exc:
-        return exc.code, exc.read()
+        return exc.code, read_limited(exc)
     except URLError as exc:
         return 0, str(exc.reason).encode("utf-8", errors="replace")
 

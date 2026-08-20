@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import tempfile
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,7 @@ MISSING_UNIT_DIGEST = snapshot_digest(None)
 
 
 def _load_state(root: Path) -> dict[str, Any]:
+    _require_private_directory(root / ".gustav")
     path = root / ".gustav" / "state.json"
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
@@ -32,6 +34,7 @@ def _load_state(root: Path) -> dict[str, Any]:
 def _load_push_journal(root: Path, *, source_digest: str) -> dict[str, Any] | None:
     """Load a resumable push journal and bind it to the unchanged local source."""
 
+    _require_private_directory(root / ".gustav")
     path = root / ".gustav" / "journal.json"
     if not path.exists():
         return None
@@ -55,7 +58,7 @@ def _load_push_journal(root: Path, *, source_digest: str) -> dict[str, Any] | No
 def _save_json(path: Path, payload: object) -> None:
     """Atomically persist private sync metadata with restrictive permissions."""
 
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _ensure_private_directory(path.parent)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
@@ -63,6 +66,33 @@ def _save_json(path: Path, payload: object) -> None:
     )
     os.chmod(temporary, 0o600)
     temporary.replace(path)
+
+
+def _ensure_private_directory(path: Path) -> None:
+    """Create a private directory without following an existing symlink ancestor."""
+
+    missing: list[Path] = []
+    current = path
+    while not current.exists():
+        if current.is_symlink():
+            raise ValueError("unsafe_private_sync_path")
+        missing.append(current)
+        if current == current.parent:
+            break
+        current = current.parent
+    if current.is_symlink() or not current.is_dir():
+        raise ValueError("unsafe_private_sync_path")
+    for directory in reversed(missing):
+        directory.mkdir(mode=0o700)
+        if directory.is_symlink() or not directory.is_dir():
+            raise ValueError("unsafe_private_sync_path")
+
+
+def _require_private_directory(path: Path) -> None:
+    """Reject missing, symlinked, or non-directory private sync metadata roots."""
+
+    if path.is_symlink() or not path.is_dir():
+        raise ValueError("unsafe_private_sync_path")
 
 
 def _save_state(
@@ -198,16 +228,76 @@ def _compare_sync_state(
     )
 
 
-def _backup_units_for_prune(root: Path) -> None:
-    """Move the previous unit tree to a recoverable private trash directory."""
+def _install_pull_snapshot(
+    root: Path,
+    snapshot: dict[str, Any],
+    *,
+    config: GustavCLIConfig,
+    owner_sub: str,
+    state_snapshot: dict[str, Any],
+    mapping: dict[str, Any],
+    previous_unit_digests: dict[str, str] | None = None,
+    selected_keys: set[str] | None = None,
+    keep_previous_units: bool = False,
+) -> None:
+    """Stage and validate a complete mirror before replacing the active directory."""
 
-    units = root / "units"
-    if not units.exists():
-        return
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = root / ".gustav" / "trash" / stamp / "units"
-    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    shutil.move(str(units), str(target))
+    root_parent = root.parent
+    root_parent.mkdir(parents=True, exist_ok=True)
+    if root.is_symlink() or (root.exists() and not root.is_dir()):
+        raise ValueError("unsafe_local_path")
+    staging = Path(tempfile.mkdtemp(prefix=f".{root.name}.gustav-staging-", dir=root_parent))
+    backup_container: Path | None = None
+    try:
+        if root.exists():
+            # Preserve user-added files and prior private trash, but replace the managed unit tree.
+            shutil.copytree(root, staging, dirs_exist_ok=True, symlinks=True)
+            staged_units = staging / "units"
+            if staged_units.is_symlink():
+                raise ValueError("unsafe_local_path")
+            if staged_units.exists():
+                shutil.rmtree(staged_units)
+            if keep_previous_units and (root / "units").is_dir():
+                stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+                trash_units = staging / ".gustav" / "trash" / stamp / "units"
+                _ensure_private_directory(trash_units.parent)
+                shutil.copytree(root / "units", trash_units, symlinks=True)
+
+        write_local_snapshot(staging, snapshot, base_url=config.base_url)
+        _save_state(
+            staging,
+            config=config,
+            owner_sub=owner_sub,
+            snapshot=state_snapshot,
+            mapping=mapping,
+            previous_unit_digests=previous_unit_digests,
+            selected_keys=selected_keys,
+        )
+        staged_snapshot = load_local_snapshot(staging, expected_base_url=config.base_url)
+        if snapshot_digest(staged_snapshot) != snapshot_digest(snapshot):
+            raise ValueError("staged_pull_verification_failed")
+
+        if not root.exists():
+            os.replace(staging, root)
+            return
+
+        backup_container = Path(
+            tempfile.mkdtemp(prefix=f".{root.name}.gustav-backup-", dir=root_parent)
+        )
+        backup_root = backup_container / "mirror"
+        os.replace(root, backup_root)
+        try:
+            os.replace(staging, root)
+        except Exception:
+            os.replace(backup_root, root)
+            raise
+        shutil.rmtree(backup_container)
+        backup_container = None
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+        if backup_container is not None and backup_container.exists():
+            shutil.rmtree(backup_container)
 
 
 def _write_report(report: dict[str, Any], *, as_json: bool, stdout: TextIO) -> None:
@@ -242,12 +332,12 @@ def run_sync(args, *, stdout: TextIO, stderr: TextIO) -> int:  # noqa: ANN001
             local_target = (
                 _scoped_snapshot(remote, selected_keys) if selected_keys is not None else remote
             )
-            write_local_snapshot(root, local_target, base_url=cfg.base_url)
-            _save_state(
+            _install_pull_snapshot(
                 root,
+                local_target,
                 config=cfg,
                 owner_sub=owner_sub,
-                snapshot=remote,
+                state_snapshot=remote,
                 mapping=mapping,
                 selected_keys=selected_keys,
             )
@@ -304,17 +394,16 @@ def run_sync(args, *, stdout: TextIO, stderr: TextIO) -> int:  # noqa: ANN001
                 if selected_keys is not None
                 else remote_with_assets
             )
-            if needs_prune:
-                _backup_units_for_prune(root)
-            write_local_snapshot(root, local_target, base_url=cfg.base_url)
-            _save_state(
+            _install_pull_snapshot(
                 root,
+                local_target,
                 config=cfg,
                 owner_sub=owner_sub,
-                snapshot=remote_with_assets,
+                state_snapshot=remote_with_assets,
                 mapping=refreshed_mapping,
                 previous_unit_digests=state.get("base_unit_digests"),
                 selected_keys=selected_keys,
+                keep_previous_units=needs_prune,
             )
         elif args.command == "push":
             if args.prune and not args.yes:
@@ -351,12 +440,32 @@ def run_sync(args, *, stdout: TextIO, stderr: TextIO) -> int:  # noqa: ANN001
                 )
 
             checkpoint(refreshed_mapping)
+
+            observed_units = remote_scope.get("units", {})
+            if not isinstance(observed_units, dict):
+                raise ValueError("invalid_remote_snapshot")
+
+            def verify_unit_unchanged(
+                unit_key: str, current_mapping: dict[str, Any]
+            ) -> None:
+                latest, latest_mapping = _snapshot_result(client.fetch_snapshot(current_mapping))
+                latest_units = latest.get("units", {})
+                if not isinstance(latest_units, dict):
+                    raise ValueError("invalid_remote_snapshot")
+                if snapshot_digest(latest_units.get(unit_key)) != snapshot_digest(
+                    observed_units.get(unit_key)
+                ):
+                    raise ValueError(f"remote_unit_changed_during_push:{unit_key}")
+                current_mapping.clear()
+                current_mapping.update(latest_mapping)
+
             refreshed_mapping = client.push_snapshot(
                 local_scope,
                 remote_scope,
                 refreshed_mapping,
                 prune=args.prune,
                 checkpoint=checkpoint,
+                before_unit=verify_unit_unchanged,
             )
             verified, refreshed_mapping = _snapshot_result(client.fetch_snapshot(refreshed_mapping))
             verified_scope = (

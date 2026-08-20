@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from .cli import _http_bytes, _http_json, _http_multipart
 from .config import GustavCLIConfig
-from .sync_manifest import h5p_digest
+from .sync_manifest import MAX_ASSET_BYTES, MAX_H5P_PACKAGE_BYTES, h5p_digest, validate_snapshot
 
 
 class SyncAPIError(RuntimeError):
@@ -68,7 +68,28 @@ class GustavSyncClient:
             raise SyncAPIError(f"api_request_failed:{method}:{path}:{status}")
         return payload
 
-    def _bytes(self, path_or_url: str, *, authenticated: bool = True) -> bytes:
+    def _mutate_json(
+        self,
+        method: str,
+        path: str,
+        body: object | None,
+        *,
+        checkpoint: Callable[[dict[str, Any]], None],
+        mapping: dict[str, Any],
+    ) -> Any:
+        """Persist the observed remote state after one successful authored mutation."""
+
+        payload = self._json(method, path, body)
+        checkpoint(mapping)
+        return payload
+
+    def _bytes(
+        self,
+        path_or_url: str,
+        *,
+        authenticated: bool = True,
+        max_bytes: int | None = None,
+    ) -> bytes:
         url = (
             path_or_url
             if path_or_url.startswith("https://")
@@ -78,6 +99,7 @@ class GustavSyncClient:
             "GET",
             url,
             headers=self.headers if authenticated else None,
+            max_bytes=max_bytes,
         )
         if status < 200 or status >= 300:
             raise SyncAPIError(f"byte_request_failed:{status}")
@@ -148,7 +170,8 @@ class GustavSyncClient:
         material_id = quote(str(raw.get("id") or ""), safe="")
         if kind == "simulation":
             material["_asset_bytes"] = self._bytes(
-                f"/api/teaching/units/{quote(unit_id, safe='')}/materials/{material_id}/simulation"
+                f"/api/teaching/units/{quote(unit_id, safe='')}/materials/{material_id}/simulation",
+                max_bytes=MAX_ASSET_BYTES,
             )
         else:
             response = self._json(
@@ -161,7 +184,11 @@ class GustavSyncClient:
                 "https://"
             ):
                 raise SyncAPIError("invalid_download_url")
-            material["_asset_bytes"] = self._bytes(str(response["url"]), authenticated=False)
+            material["_asset_bytes"] = self._bytes(
+                str(response["url"]),
+                authenticated=False,
+                max_bytes=MAX_ASSET_BYTES,
+            )
         return material
 
     def _task(
@@ -203,7 +230,8 @@ class GustavSyncClient:
                 content = self._bytes(
                     f"/api/teaching/units/{quote(unit_id, safe='')}/sections/"
                     f"{quote(section_id, safe='')}/tasks/"
-                    f"{quote(str(raw.get('id') or ''), safe='')}/h5p/export"
+                    f"{quote(str(raw.get('id') or ''), safe='')}/h5p/export",
+                    max_bytes=MAX_H5P_PACKAGE_BYTES,
                 )
                 digest = h5p_digest(content)
                 task["h5p_sha256"] = digest
@@ -598,7 +626,13 @@ class GustavSyncClient:
                 material_map[map_key] = material_id
                 checkpoint(complete_mapping)
                 if old_id:
-                    self._json("DELETE", f"{base}/materials/{quote(old_id, safe='')}")
+                    self._mutate_json(
+                        "DELETE",
+                        f"{base}/materials/{quote(old_id, safe='')}",
+                        None,
+                        checkpoint=checkpoint,
+                        mapping=complete_mapping,
+                    )
             else:
                 changes = {
                     field: material.get(field)
@@ -607,10 +641,12 @@ class GustavSyncClient:
                     and (field != "alt_text" or material.get("kind") == "file")
                 }
                 if changes:
-                    self._json(
+                    self._mutate_json(
                         "PATCH",
                         f"{base}/materials/{quote(material_id, safe='')}",
                         changes,
+                        checkpoint=checkpoint,
+                        mapping=complete_mapping,
                     )
             material_ids.append(material_id)
         if prune:
@@ -618,10 +654,22 @@ class GustavSyncClient:
                 map_key = f"{container_key}/{key}"
                 material_id = str(material_map.get(map_key) or "")
                 if material_id:
-                    self._json("DELETE", f"{base}/materials/{quote(material_id, safe='')}")
+                    self._mutate_json(
+                        "DELETE",
+                        f"{base}/materials/{quote(material_id, safe='')}",
+                        None,
+                        checkpoint=checkpoint,
+                        mapping=complete_mapping,
+                    )
                 material_map.pop(map_key, None)
         if material_ids:
-            self._json("POST", f"{base}/materials/reorder", {"material_ids": material_ids})
+            self._mutate_json(
+                "POST",
+                f"{base}/materials/reorder",
+                {"material_ids": material_ids},
+                checkpoint=checkpoint,
+                mapping=complete_mapping,
+            )
 
         task_map = unit_mapping.setdefault("tasks", {})
         remote_tasks = self._by_key(remote.get("tasks"))
@@ -654,8 +702,14 @@ class GustavSyncClient:
                     if value != remote_payload.get(field)
                 }
                 if changes:
-                    self._json("PATCH", f"{base}/tasks/{quote(task_id, safe='')}", changes)
-            if task.get("kind") == "h5p" and (
+                    self._mutate_json(
+                        "PATCH",
+                        f"{base}/tasks/{quote(task_id, safe='')}",
+                        changes,
+                        checkpoint=checkpoint,
+                        mapping=complete_mapping,
+                    )
+            if task.get("kind") == "h5p" and task.get("h5p_sha256") is not None and (
                 remote_task is None or task.get("h5p_sha256") != remote_task.get("h5p_sha256")
             ):
                 self._import_h5p(
@@ -665,6 +719,7 @@ class GustavSyncClient:
                     task=task,
                 )
                 entry["h5p"] = {"sha256": task.get("h5p_sha256")}
+                checkpoint(complete_mapping)
             task_ids.append(task_id)
         if prune:
             for key in remote_tasks.keys() - local_tasks.keys():
@@ -672,10 +727,22 @@ class GustavSyncClient:
                 entry = task_map.get(map_key)
                 task_id = str(entry.get("remote_id") if isinstance(entry, dict) else entry or "")
                 if task_id:
-                    self._json("DELETE", f"{base}/tasks/{quote(task_id, safe='')}")
+                    self._mutate_json(
+                        "DELETE",
+                        f"{base}/tasks/{quote(task_id, safe='')}",
+                        None,
+                        checkpoint=checkpoint,
+                        mapping=complete_mapping,
+                    )
                 task_map.pop(map_key, None)
         if task_ids:
-            self._json("POST", f"{base}/tasks/reorder", {"task_ids": task_ids})
+            self._mutate_json(
+                "POST",
+                f"{base}/tasks/reorder",
+                {"task_ids": task_ids},
+                checkpoint=checkpoint,
+                mapping=complete_mapping,
+            )
 
     def _push_linear(
         self,
@@ -707,11 +774,13 @@ class GustavSyncClient:
                 container_map[key] = section_id
                 checkpoint(mapping)
             elif section.get("title") != remote_section.get("title"):
-                self._json(
+                self._mutate_json(
                     "PATCH",
                     f"/api/teaching/units/{quote(unit_id, safe='')}/sections/"
                     f"{quote(section_id, safe='')}",
                     {"title": section.get("title")},
+                    checkpoint=checkpoint,
+                    mapping=mapping,
                 )
             self._push_content(
                 unit_id=unit_id,
@@ -729,17 +798,22 @@ class GustavSyncClient:
             for key in remote_sections.keys() - local_sections.keys():
                 section_id = str(container_map.get(key) or "")
                 if section_id:
-                    self._json(
+                    self._mutate_json(
                         "DELETE",
                         f"/api/teaching/units/{quote(unit_id, safe='')}/sections/"
                         f"{quote(section_id, safe='')}",
+                        None,
+                        checkpoint=checkpoint,
+                        mapping=mapping,
                     )
                 container_map.pop(key, None)
         if section_ids:
-            self._json(
+            self._mutate_json(
                 "POST",
                 f"/api/teaching/units/{quote(unit_id, safe='')}/sections/reorder",
                 {"section_ids": section_ids},
+                checkpoint=checkpoint,
+                mapping=mapping,
             )
 
     def push_snapshot(
@@ -750,9 +824,11 @@ class GustavSyncClient:
         *,
         prune: bool,
         checkpoint: Callable[[dict[str, Any]], None],
+        before_unit: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         """Reconcile the remote side in dependency order and checkpoint new ids."""
 
+        validate_snapshot(local)
         refreshed = deepcopy(mapping)
         unit_map = refreshed.setdefault("units", {})
         local_units = local.get("units", {})
@@ -760,6 +836,8 @@ class GustavSyncClient:
         if not isinstance(local_units, dict) or not isinstance(remote_units, dict):
             raise ValueError("invalid_units")
         for key, unit in local_units.items():
+            if before_unit is not None:
+                before_unit(str(key), refreshed)
             if not isinstance(unit, dict):
                 raise ValueError("invalid_unit")
             entry = unit_map.get(key)
@@ -797,10 +875,12 @@ class GustavSyncClient:
                 if unit.get(field) != remote_unit.get(field)
             }
             if changes:
-                self._json(
+                self._mutate_json(
                     "PATCH",
                     f"/api/teaching/units/{quote(unit_id, safe='')}",
                     changes,
+                    checkpoint=checkpoint,
+                    mapping=refreshed,
                 )
             if unit.get("unit_type") == "modular":
                 self._push_modular(
@@ -824,10 +904,18 @@ class GustavSyncClient:
                 )
         if prune:
             for key in remote_units.keys() - local_units.keys():
+                if before_unit is not None:
+                    before_unit(str(key), refreshed)
                 entry = unit_map.get(key)
                 unit_id = str(entry.get("remote_id") if isinstance(entry, dict) else "")
                 if unit_id:
-                    self._json("DELETE", f"/api/teaching/units/{quote(unit_id, safe='')}")
+                    self._mutate_json(
+                        "DELETE",
+                        f"/api/teaching/units/{quote(unit_id, safe='')}",
+                        None,
+                        checkpoint=checkpoint,
+                        mapping=refreshed,
+                    )
                 unit_map.pop(key, None)
         checkpoint(refreshed)
         return refreshed
@@ -861,24 +949,20 @@ class GustavSyncClient:
                 phase_map[key] = phase_id
                 checkpoint(mapping)
             elif phase.get("title") != remote_phases[key].get("title"):
-                self._json(
+                self._mutate_json(
                     "PATCH",
                     f"/api/teaching/units/{quote(unit_id, safe='')}/phases/"
                     f"{quote(phase_id, safe='')}",
                     {"title": phase.get("title")},
+                    checkpoint=checkpoint,
+                    mapping=mapping,
                 )
             phase_ids.append(phase_id)
-        if phase_ids:
-            self._json(
-                "POST",
-                f"/api/teaching/units/{quote(unit_id, safe='')}/phases/reorder",
-                {"phase_ids": phase_ids},
-            )
-
         container_map = unit_mapping.setdefault("containers", {})
         backing = unit_mapping.setdefault("backing_sections", {})
         remote_modules = self._by_key(remote.get("modules"))
         local_modules = self._by_key(local.get("modules"))
+        prerequisite_updates: list[tuple[str, int]] = []
         for key, module in local_modules.items():
             module_id = str(container_map.get(key) or "")
             remote_module = remote_modules.get(key)
@@ -908,20 +992,31 @@ class GustavSyncClient:
                     raise SyncAPIError("invalid_content_target")
                 backing[key] = str(target["section_id"])
                 checkpoint(mapping)
+                required = int(module.get("required_prereq_count") or 0)
+                if required:
+                    prerequisite_updates.append((module_id, required))
             else:
                 if module.get("module_kind") != remote_module.get("module_kind"):
                     raise ValueError("immutable_module_kind")
                 changes = {
                     field: module.get(field)
-                    for field in ("title", "required_prereq_count")
+                    for field in ("title",)
                     if module.get(field) != remote_module.get(field)
                 }
                 if changes:
-                    self._json(
+                    self._mutate_json(
                         "PATCH",
                         f"/api/teaching/units/{quote(unit_id, safe='')}/modules/"
                         f"{quote(module_id, safe='')}",
                         changes,
+                        checkpoint=checkpoint,
+                        mapping=mapping,
+                    )
+                if module.get("required_prereq_count") != remote_module.get(
+                    "required_prereq_count"
+                ):
+                    prerequisite_updates.append(
+                        (module_id, int(module.get("required_prereq_count") or 0))
                     )
             section_id = str(backing.get(key) or "")
             if not section_id:
@@ -947,42 +1042,71 @@ class GustavSyncClient:
             for edge in remote.get("edges", [])
             if isinstance(edge, dict)
         }
+        if prune:
+            for source, target in sorted(remote_edges - desired_edges):
+                self._mutate_json(
+                    "DELETE",
+                    f"/api/teaching/units/{quote(unit_id, safe='')}/modules/"
+                    f"{quote(str(container_map[source]), safe='')}/edges/"
+                    f"{quote(str(container_map[target]), safe='')}",
+                    None,
+                    checkpoint=checkpoint,
+                    mapping=mapping,
+                )
         for source, target in sorted(desired_edges - remote_edges):
-            self._json(
+            self._mutate_json(
                 "POST",
                 f"/api/teaching/units/{quote(unit_id, safe='')}/modules/edges",
                 {
                     "from_module_id": container_map[source],
                     "to_module_id": container_map[target],
                 },
+                checkpoint=checkpoint,
+                mapping=mapping,
+            )
+        for module_id, required in prerequisite_updates:
+            self._mutate_json(
+                "PATCH",
+                f"/api/teaching/units/{quote(unit_id, safe='')}/modules/"
+                f"{quote(module_id, safe='')}",
+                {"required_prereq_count": required},
+                checkpoint=checkpoint,
+                mapping=mapping,
             )
         if prune:
-            for source, target in sorted(remote_edges - desired_edges):
-                self._json(
-                    "DELETE",
-                    f"/api/teaching/units/{quote(unit_id, safe='')}/modules/"
-                    f"{quote(str(container_map[source]), safe='')}/edges/"
-                    f"{quote(str(container_map[target]), safe='')}",
-                )
             for key in remote_modules.keys() - local_modules.keys():
                 module_id = str(container_map.get(key) or "")
                 if module_id:
-                    self._json(
+                    self._mutate_json(
                         "DELETE",
                         f"/api/teaching/units/{quote(unit_id, safe='')}/modules/"
                         f"{quote(module_id, safe='')}",
+                        None,
+                        checkpoint=checkpoint,
+                        mapping=mapping,
                     )
                 container_map.pop(key, None)
                 backing.pop(key, None)
             for key in remote_phases.keys() - local_phases.keys():
                 phase_id = str(phase_map.get(key) or "")
                 if phase_id:
-                    self._json(
+                    self._mutate_json(
                         "DELETE",
                         f"/api/teaching/units/{quote(unit_id, safe='')}/phases/"
                         f"{quote(phase_id, safe='')}",
+                        None,
+                        checkpoint=checkpoint,
+                        mapping=mapping,
                     )
                 phase_map.pop(key, None)
+        if phase_ids:
+            self._mutate_json(
+                "POST",
+                f"/api/teaching/units/{quote(unit_id, safe='')}/phases/reorder",
+                {"phase_ids": phase_ids},
+                checkpoint=checkpoint,
+                mapping=mapping,
+            )
         for phase_key in local_phases:
             module_ids = [
                 str(container_map[module_key])
@@ -990,9 +1114,11 @@ class GustavSyncClient:
                 if module.get("phase") == phase_key
             ]
             if module_ids:
-                self._json(
+                self._mutate_json(
                     "POST",
                     f"/api/teaching/units/{quote(unit_id, safe='')}/phases/"
                     f"{quote(str(phase_map[phase_key]), safe='')}/modules/reorder",
                     {"module_ids": module_ids},
+                    checkpoint=checkpoint,
+                    mapping=mapping,
                 )

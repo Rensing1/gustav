@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.tools.gustav_cli import cli, config
+from backend.tools.gustav_cli import cli, config, sync, sync_manifest
 from backend.tools.gustav_cli.sync_engine import (
     ChangeOrigin,
     compare_snapshots,
@@ -67,6 +67,42 @@ def _snapshot_with_two_units() -> dict[str, object]:
     return {
         "schema_version": 1,
         "units": {"binaerzahlen": first, "logikgatter": second},
+    }
+
+
+def _modular_snapshot() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "units": {
+            "graph": {
+                "key": "graph",
+                "unit_type": "modular",
+                "title": "Graph",
+                "summary": None,
+                "phases": [{"key": "start", "title": "Start"}],
+                "modules": [
+                    {
+                        "key": "lernen",
+                        "phase": "start",
+                        "title": "Lernen",
+                        "module_kind": "learning",
+                        "required_prereq_count": 0,
+                        "materials": [],
+                        "tasks": [],
+                    },
+                    {
+                        "key": "ueben",
+                        "phase": "start",
+                        "title": "Üben",
+                        "module_kind": "practice",
+                        "required_prereq_count": 1,
+                        "materials": [],
+                        "tasks": [],
+                    },
+                ],
+                "edges": [{"from": "lernen", "to": "ueben"}],
+            }
+        },
     }
 
 
@@ -191,6 +227,131 @@ def test_manifest_roundtrip_preserves_file_simulation_and_h5p_assets(tmp_path: P
     quiz = loaded["units"]["binaerzahlen"]["sections"][0]["tasks"][1]
     assert quiz["h5p_sha256"]
     assert materials[1]["_asset_bytes"] == b"%PDF-demo"
+
+
+def test_manifest_roundtrip_preserves_h5p_draft_without_package(tmp_path: Path) -> None:
+    unit = _unit()
+    unit["sections"][0]["tasks"].append(
+        {
+            "key": "quiz-entwurf",
+            "kind": "h5p",
+            "instruction_md": "Konfiguriere das Quiz.",
+            "criteria": [],
+            "teacher_context_md": None,
+            "model_solution_md": None,
+            "due_at": None,
+            "max_attempts": None,
+            "display_options": {},
+            "h5p_sha256": None,
+        }
+    )
+    snapshot = {"schema_version": 1, "units": {"binaerzahlen": unit}}
+
+    write_local_snapshot(tmp_path / "mirror", snapshot, base_url=BASE_URL)
+    loaded = load_local_snapshot(tmp_path / "mirror", expected_base_url=BASE_URL)
+
+    draft = loaded["units"]["binaerzahlen"]["sections"][0]["tasks"][1]
+    assert draft["h5p_sha256"] is None
+    assert "_h5p_bytes" not in draft
+    assert not list((tmp_path / "mirror").glob("**/quiz-entwurf/content.h5p"))
+
+
+def test_manifest_rejects_oversized_h5p_before_reading_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    h5p_path = tmp_path / "source.h5p"
+    with zipfile.ZipFile(h5p_path, "w") as archive:
+        archive.writestr("h5p.json", '{"title":"Quiz"}')
+    unit = _unit()
+    unit["sections"][0]["tasks"].append(
+        {
+            "key": "quiz",
+            "kind": "h5p",
+            "instruction_md": "Quiz",
+            "criteria": [],
+            "teacher_context_md": None,
+            "model_solution_md": None,
+            "due_at": None,
+            "max_attempts": None,
+            "display_options": {},
+            "_h5p_bytes": h5p_path.read_bytes(),
+        }
+    )
+    mirror = tmp_path / "mirror"
+    write_local_snapshot(mirror, {"schema_version": 1, "units": {"binaerzahlen": unit}}, base_url=BASE_URL)
+    package = next(mirror.glob("**/content.h5p"))
+    with package.open("r+b") as handle:
+        handle.truncate(sync_manifest.MAX_H5P_PACKAGE_BYTES + 1)
+    original_read_bytes = Path.read_bytes
+
+    def guarded_read_bytes(path: Path) -> bytes:
+        if path == package:
+            raise AssertionError("oversized H5P package was read")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", guarded_read_bytes)
+
+    with pytest.raises(ValueError, match="h5p_package_too_large"):
+        load_local_snapshot(mirror, expected_base_url=BASE_URL)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "error"),
+    [
+        (
+            lambda unit: unit["modules"].append(deepcopy(unit["modules"][0])),
+            "duplicate_module_key",
+        ),
+        (
+            lambda unit: unit["modules"][0].update({"phase": "fehlt"}),
+            "unknown_phase_key",
+        ),
+        (
+            lambda unit: unit["edges"].append({"from": "fehlt", "to": "ueben"}),
+            "unknown_edge_module",
+        ),
+        (
+            lambda unit: unit["edges"].append({"from": "lernen", "to": "lernen"}),
+            "invalid_self_edge",
+        ),
+        (
+            lambda unit: unit["edges"].append({"from": "ueben", "to": "lernen"}),
+            "practice_module_outgoing_edge",
+        ),
+        (
+            lambda unit: unit["modules"][0].update({"required_prereq_count": 1}),
+            "invalid_required_prereq_count",
+        ),
+    ],
+)
+def test_snapshot_semantic_preflight_rejects_invalid_modular_graph(mutate, error: str) -> None:
+    snapshot = _modular_snapshot()
+    mutate(snapshot["units"]["graph"])
+
+    with pytest.raises(ValueError, match=error):
+        sync_manifest.validate_snapshot(snapshot)
+
+
+def test_snapshot_semantic_preflight_rejects_duplicate_nested_keys() -> None:
+    snapshot = _snapshot()
+    section = snapshot["units"]["binaerzahlen"]["sections"][0]
+    section["tasks"].append(deepcopy(section["tasks"][0]))
+
+    with pytest.raises(ValueError, match="duplicate_task_key"):
+        sync_manifest.validate_snapshot(snapshot)
+
+
+def test_private_sync_metadata_rejects_symlinked_gustav_directory(tmp_path: Path) -> None:
+    external = tmp_path / "external"
+    external.mkdir()
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    (mirror / ".gustav").symlink_to(external, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="unsafe_private_sync_path"):
+        sync._save_json(mirror / ".gustav" / "state.json", {"schema_version": 1})
+
+    assert not (external / "state.json").exists()
 
 
 def test_three_way_comparison_classifies_clean_local_remote_and_diverged() -> None:
@@ -394,6 +555,55 @@ def test_pull_refuses_local_drift_before_writing(
     assert load_local_snapshot(mirror, expected_base_url=BASE_URL) == _snapshot(title="Lokal")
 
 
+def test_pull_stages_complete_snapshot_before_replacing_active_mirror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(tmp_path, monkeypatch)
+    mirror = tmp_path / "mirror"
+    write_local_snapshot(mirror, _snapshot(), base_url=BASE_URL)
+    state_dir = mirror / ".gustav"
+    state_dir.mkdir()
+    original_state = {
+        "schema_version": 1,
+        "base_url": BASE_URL,
+        "owner_sub": "teacher-1",
+        "base_digest": snapshot_digest(_snapshot()),
+        "base_unit_digests": {
+            "binaerzahlen": snapshot_digest(_snapshot()["units"]["binaerzahlen"])
+        },
+        "mapping": {"units": {"binaerzahlen": {"remote_id": "unit-1"}}},
+    }
+    state_dir.joinpath("state.json").write_text(json.dumps(original_state), encoding="utf-8")
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def read_owner_sub(self) -> str:
+            return "teacher-1"
+
+        def fetch_snapshot(self, mapping, *, include_assets=False):
+            return _snapshot(title="Extern"), mapping
+
+    monkeypatch.setattr("backend.tools.gustav_cli.sync.GustavSyncClient", FakeClient)
+    real_writer = sync.write_local_snapshot
+
+    def interrupted_writer(root: Path, snapshot: dict, *, base_url: str) -> None:
+        real_writer(root, snapshot, base_url=base_url)
+        unit_file = root / "units" / "binaerzahlen" / "unit.yaml"
+        unit_file.write_text("broken: [", encoding="utf-8")
+        raise OSError("disk_full")
+
+    monkeypatch.setattr(sync, "write_local_snapshot", interrupted_writer)
+
+    code, _, stderr = _run(["sync", "pull", "--root", str(mirror)])
+
+    assert code == 1
+    assert "disk_full" in stderr
+    assert load_local_snapshot(mirror, expected_base_url=BASE_URL) == _snapshot()
+    assert json.loads((state_dir / "state.json").read_text(encoding="utf-8")) == original_state
+
+
 def test_push_refuses_remote_drift_and_pushes_local_change_when_remote_is_clean(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -424,7 +634,9 @@ def test_push_refuses_remote_drift_and_pushes_local_change_when_remote_is_clean(
         def fetch_snapshot(self, mapping, *, include_assets=False):
             return self.remote, mapping
 
-        def push_snapshot(self, local, remote, mapping, *, prune, checkpoint):
+        def push_snapshot(
+            self, local, remote, mapping, *, prune, checkpoint, before_unit=None
+        ):
             pushed.append(local)
             self.__class__.remote = local
             checkpoint(mapping)
@@ -517,7 +729,9 @@ def test_push_resumes_from_a_verified_journal_without_duplicate_creates(
         def fetch_snapshot(self, mapping, *, include_assets=False):
             return self.remote, mapping
 
-        def push_snapshot(self, local, remote, mapping, *, prune, checkpoint):
+        def push_snapshot(
+            self, local, remote, mapping, *, prune, checkpoint, before_unit=None
+        ):
             self.__class__.attempts += 1
             if self.attempts == 1:
                 self.__class__.creates += 1
@@ -540,3 +754,60 @@ def test_push_resumes_from_a_verified_journal_without_duplicate_creates(
     assert second == 0, second_error
     assert InterruptedClient.creates == 1
     assert not state_dir.joinpath("journal.json").exists()
+
+
+def test_push_rechecks_remote_unit_after_preflight_before_any_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(tmp_path, monkeypatch)
+    mirror = tmp_path / "mirror"
+    write_local_snapshot(mirror, _snapshot(title="Lokal"), base_url=BASE_URL)
+    state_dir = mirror / ".gustav"
+    state_dir.mkdir()
+    state_dir.joinpath("state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "base_url": BASE_URL,
+                "owner_sub": "teacher-1",
+                "base_digest": snapshot_digest(_snapshot()),
+                "base_unit_digests": {
+                    "binaerzahlen": snapshot_digest(_snapshot()["units"]["binaerzahlen"])
+                },
+                "mapping": {"units": {"binaerzahlen": {"remote_id": "unit-1"}}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class ConcurrentClient:
+        fetches = 0
+        writes = 0
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def read_owner_sub(self) -> str:
+            return "teacher-1"
+
+        def fetch_snapshot(self, mapping, *, include_assets=False):
+            self.__class__.fetches += 1
+            if self.fetches < 3:
+                return _snapshot(), mapping
+            return _snapshot(title="Parallel geändert"), mapping
+
+        def push_snapshot(
+            self, local, remote, mapping, *, prune, checkpoint, before_unit=None
+        ):
+            assert before_unit is not None
+            before_unit("binaerzahlen", mapping)
+            self.__class__.writes += 1
+            return mapping
+
+    monkeypatch.setattr("backend.tools.gustav_cli.sync.GustavSyncClient", ConcurrentClient)
+
+    code, _, stderr = _run(["sync", "push", "--root", str(mirror)])
+
+    assert code == 1
+    assert "remote_unit_changed_during_push:binaerzahlen" in stderr
+    assert ConcurrentClient.writes == 0

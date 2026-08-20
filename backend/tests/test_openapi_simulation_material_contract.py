@@ -42,19 +42,21 @@ def test_material_schemas_expose_simulations_without_breaking_file_uploads() -> 
 def test_simulation_player_paths_are_authenticated_html_streams() -> None:
     spec = _spec()
 
-    for path, operation_id in (
+    for path, operation_id, security in (
         (
             "/api/teaching/units/{unit_id}/materials/{material_id}/simulation",
             "streamTeachingMaterialSimulation",
+            [{"cookieAuth": []}, {"cliTokenAuth": []}],
         ),
         (
             "/api/learning/courses/{course_id}/materials/{material_id}/simulation",
             "streamLearningMaterialSimulation",
+            [{"cookieAuth": []}],
         ),
     ):
         operation = spec["paths"][path]["get"]
         assert operation["operationId"] == operation_id
-        assert operation["security"] == [{"cookieAuth": []}]
+        assert operation["security"] == security
         response = operation["responses"]["200"]
         assert "text/html" in response["content"]
         assert "Content-Security-Policy" in response["headers"]

@@ -1,7 +1,7 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 import { currentUserSub, login } from "./support/auth";
-import { prepareCompletedDialogTurn } from "./support/dialog-session-fixture";
+import { completeDialogFeedback, prepareCompletedDialogTurn } from "./support/dialog-session-fixture";
 import { emailDomain, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerDialogCourse } from "./support/seed-data";
@@ -187,6 +187,13 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     await learner.page.getByRole("button", { name: "Endgültig abgeben" }).click();
 
     await expect(learner.page.getByText("Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.")).toBeVisible();
+    await completeDialogFeedback({
+      sessionId,
+      feedbackMd: "Du belegst deine Einschätzung nachvollziehbar mit der Quelle."
+    });
+    await expect(learner.page.getByText("Rückmeldung ist bereit", { exact: true })).toBeVisible();
+    const feedback = learner.page.getByRole("region", { name: "Rückmeldung zum KI-Dialog" });
+    await expect(feedback).toContainText("Du belegst deine Einschätzung nachvollziehbar mit der Quelle.");
     expect(await learner.page.evaluate((key) => window.sessionStorage.getItem(key), storageKey)).toBeNull();
     const sessionResponse = await learner.page.request.get(
       `${webBase}/api/learning/courses/${seeded.courseId}/tasks/${seeded.taskId}/dialog-sessions/${sessionId}`

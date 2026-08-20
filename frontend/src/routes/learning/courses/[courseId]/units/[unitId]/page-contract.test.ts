@@ -141,6 +141,15 @@ describe("learning unit route contract", () => {
     expect(serverSource).not.toContain("throw redirect(303");
   });
 
+  it("tracks the exact final dialog submission until its feedback is ready", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+
+    expect(routeSource).toContain("async function handleProgressPersisted(submission?: LearningSubmission | null)");
+    expect(routeSource).toContain("if (activeTaskId && submission)");
+    expect(routeSource).toContain('void pollFeedbackSubmission(activeTaskId, submission.id, "submit", "Rückmeldung ist bereit")');
+  });
+
   it("starts final submissions visibly and cancels duplicate form requests", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

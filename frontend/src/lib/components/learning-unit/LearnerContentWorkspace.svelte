@@ -131,7 +131,7 @@
     onWorkScroll?: ((scrollTop: number) => void) | null;
     onReaderScroll?: ((scrollTop: number) => void) | null;
     onDismissFeedbackStatus?: ((taskId: string) => void) | null;
-    onProgressPersisted?: (() => void | Promise<void>) | null;
+    onProgressPersisted?: ((submission?: LearningSubmission | null) => void | Promise<void>) | null;
   } = $props();
 
   let contextScrollSurface = $state<HTMLDivElement | null>(null);

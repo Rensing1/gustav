@@ -979,7 +979,8 @@
   async function pollFeedbackSubmission(
     taskId: string,
     submissionId: string | null,
-    intent: "feedback" | "submit"
+    intent: "feedback" | "submit",
+    completedMessage?: string
   ) {
     const pollToken = ++feedbackPollToken;
     const fastPollAttempts = 30;
@@ -1005,7 +1006,7 @@
           submissionMessageState = intent === "submit" ? "submitted" : "feedback";
           feedbackPendingTaskId = null;
           feedbackStatusTaskId = taskId;
-          feedbackStatusMessage = intent === "submit" ? "Aufgabe abgegeben" : "Rückmeldung ist bereit";
+          feedbackStatusMessage = completedMessage ?? (intent === "submit" ? "Aufgabe abgegeben" : "Rückmeldung ist bereit");
           pendingSubmissionIntent = null;
           if (intent === "submit") {
             markActiveTaskResult(taskId);
@@ -1121,8 +1122,16 @@
     }
   }
 
-  async function handleProgressPersisted() {
+  async function handleProgressPersisted(submission?: LearningSubmission | null) {
     const activeTaskId = learnerWorkspace.activeTask?.taskId ?? null;
+    if (activeTaskId && submission) {
+      setTaskHistory(activeTaskId, [
+        submission,
+        ...historyForTask(activeTaskId).filter((entry) => entry.id !== submission.id)
+      ]);
+      void pollFeedbackSubmission(activeTaskId, submission.id, "submit", "Rückmeldung ist bereit");
+      return;
+    }
     if (activeTaskId) {
       await ensureSubmissionHistoryLoaded(activeTaskId);
       markActiveTaskResult(activeTaskId);

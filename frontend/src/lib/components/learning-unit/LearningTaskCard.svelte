@@ -122,7 +122,7 @@
       file: File;
       moduleId: string | null;
     }) => void | Promise<void>) | null;
-    onProgressPersisted?: (() => void | Promise<void>) | null;
+    onProgressPersisted?: ((submission?: LearningSubmission | null) => void | Promise<void>) | null;
   } = $props();
 
   type SubmissionMode = "text" | "upload";

@@ -74,3 +74,47 @@ export async function prepareCompletedDialogTurn(input: {
   }
   return sessionId;
 }
+
+/**
+ * Complete the feedback for one isolated dialog submission deterministically.
+ *
+ * The browser still creates the session, final submission and queue job through
+ * production endpoints. This fixture replaces only the external AI provider so
+ * the acceptance test can verify the pending-to-visible-feedback transition.
+ */
+export async function completeDialogFeedback(input: {
+  sessionId: string;
+  feedbackMd: string;
+}): Promise<string> {
+  if (!e2eDatabaseUrl) {
+    throw new Error("E2E_DATABASE_URL or SESSION_DATABASE_URL is required for dialog feature acceptance");
+  }
+  const sessionId = validatedUuid(input.sessionId, "session id");
+  const feedbackMd = input.feedbackMd.replaceAll("'", "''");
+  const sql = `
+    delete from public.learning_submission_jobs
+     where submission_id = (
+       select id from public.learning_submissions
+        where dialog_session_id = '${sessionId}'::uuid
+     );
+
+    update public.learning_submissions
+       set analysis_status = 'completed',
+           analysis_json = '{"schema":"criteria.v2","criteria_results":[]}'::jsonb,
+           feedback_md = '${feedbackMd}',
+           completed_at = now(),
+           error_code = null
+     where dialog_session_id = '${sessionId}'::uuid
+     returning id;
+  `;
+  const { stdout } = await execFileAsync(
+    "psql",
+    [e2eDatabaseUrl, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", sql],
+    { encoding: "utf8", maxBuffer: 1024 * 1024 }
+  );
+  const submissionId = stdout.split("\n").map((line) => line.trim()).find((line) => uuidPattern.test(line)) ?? "";
+  if (!uuidPattern.test(submissionId)) {
+    throw new Error("The final dialog submission was not available for deterministic feedback");
+  }
+  return submissionId;
+}

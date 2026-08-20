@@ -28,6 +28,10 @@
     initial_generation_attempts: number;
     turns: DialogTurn[];
   };
+  type DialogSessionCompletionResult = {
+    session: DialogSession;
+    submission: LearningSubmission;
+  };
   type HistoryState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
 
   let {
@@ -83,7 +87,7 @@
     onUndoCloseContextModule?: (() => void) | null;
     onPause?: (() => void | Promise<void>) | null;
     showPauseAction?: boolean;
-    onCompleted?: (() => void | Promise<void>) | null;
+    onCompleted?: ((submission: LearningSubmission) => void | Promise<void>) | null;
   } = $props();
   let session = $state<DialogSession | null>(null);
   let message = $state("");
@@ -158,11 +162,16 @@
     );
   });
 
-  async function request(path: string, options: RequestInit = {}): Promise<DialogSession> {
+  async function requestPayload<T>(path: string, options: RequestInit = {}): Promise<T> {
     const response = await fetch(`${baseUrl()}${path}`, { credentials: "include", cache: "no-store", ...options });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.detail || "Der KI-Dialog ist gerade nicht verfügbar.");
-    return (payload.session ?? payload) as DialogSession;
+    return payload as T;
+  }
+
+  async function request(path: string, options: RequestInit = {}): Promise<DialogSession> {
+    const payload = await requestPayload<DialogSession | { session: DialogSession }>(path, options);
+    return "session" in payload ? payload.session : payload;
   }
 
   async function start() {
@@ -180,6 +189,13 @@
   function availableStarters(): string[] {
     const last = session?.turns.at(-1);
     return last?.sentence_starters?.length ? last.sentence_starters : session?.round_count === 0 ? session?.initial_sentence_starters ?? [] : [];
+  }
+
+  function currentDialogSubmission(): LearningSubmission | null {
+    if (!session) return null;
+    return historyByTask[task.id]?.find(
+      (submission) => submission.kind === "dialog" && submission.dialog_session_id === session?.id
+    ) ?? null;
   }
 
   function chooseStarter(text: string) {
@@ -233,14 +249,14 @@
     pending = true;
     error = null;
     try {
-      const completed = await request(`/${session.id}/complete`, {
+      const result = await requestPayload<DialogSessionCompletionResult>(`/${session.id}/complete`, {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({ closing_answer_md: closingAnswer || null })
       });
-      clearClosingDraft(completed);
-      acceptSession(completed);
-      await onCompleted?.();
+      clearClosingDraft(result.session);
+      acceptSession(result.session);
+      await onCompleted?.(result.submission);
     } catch (caught) { error = caught instanceof Error ? caught.message : "Der Abschluss ist fehlgeschlagen."; }
     finally { pending = false; }
   }
@@ -415,7 +431,26 @@
             </section>
           {/if}
         {:else if session.status === "completed"}
-          <p class="workspace-note dialog-completed-note">Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.</p>
+          {@const submission = currentDialogSubmission()}
+          {#if submission?.analysis_status === "completed" && submission.feedback_md}
+            <section class="dialog-feedback" aria-label="Rückmeldung zum KI-Dialog">
+              <header>
+                <p class="workspace-label">Rückmeldung</p>
+                <h6>Dein Dialog ist ausgewertet</h6>
+              </header>
+              <div class="markdown-prose">{@html renderMarkdown(submission.feedback_md)}</div>
+            </section>
+          {:else if submission?.analysis_status === "failed"}
+            <div class="dialog-completed-note">
+              <StatusMessage
+                tone="error"
+                title="Rückmeldung konnte nicht erstellt werden"
+                description="Dein Dialog ist sicher gespeichert. Bitte versuche die Auswertung später erneut."
+              />
+            </div>
+          {:else}
+            <p class="workspace-note dialog-completed-note">Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.</p>
+          {/if}
         {/if}
       </div>
     </div>

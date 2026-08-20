@@ -6,7 +6,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/sve
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import LearningDialogWorkspace from "./LearningDialogWorkspace.svelte";
-import type { LearningTask } from "$lib/types/learning";
+import type { LearningSubmission, LearningTask } from "$lib/types/learning";
 import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -245,6 +245,71 @@ describe("LearningDialogWorkspace", () => {
 
     await waitFor(() => expect(window.sessionStorage.getItem(storageKey)).toBeNull());
     expect(fetchMock.mock.calls[1]?.[0]).toContain("/session-1/complete");
+  });
+
+  it("forwards the final dialog submission so its feedback can be tracked", async () => {
+    const active = answeredSession();
+    const completed = answeredSession({ status: "completed", closing_answer_md: "Fazit" });
+    const submission: LearningSubmission = {
+      id: "11111111-1111-4111-8111-111111111111",
+      attempt_nr: 1,
+      kind: "dialog",
+      dialog_session_id: completed.id,
+      intent: "submit",
+      analysis_status: "pending",
+      created_at: "2026-08-20T10:00:00Z"
+    };
+    const onCompleted = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ session: active }))
+        .mockResolvedValueOnce(jsonResponse({ session: completed, submission }))
+    );
+    render(LearningDialogWorkspace, {
+      props: {
+        learnerSub: "student-1",
+        courseId: "course-1",
+        task: dialogTask,
+        onCompleted
+      }
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Dialog beenden" }));
+    await fireEvent.input(screen.getByLabelText("Fasse deine wichtigste Erkenntnis zusammen."), {
+      target: { value: "Fazit" }
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Endgültig abgeben" }));
+
+    await waitFor(() => expect(onCompleted).toHaveBeenCalledWith(submission));
+  });
+
+  it("shows completed feedback for the finished dialog in the main workspace", async () => {
+    const completed = answeredSession({ status: "completed", closing_answer_md: "Fazit" });
+    const submission: LearningSubmission = {
+      id: "22222222-2222-4222-8222-222222222222",
+      attempt_nr: 1,
+      kind: "dialog",
+      dialog_session_id: completed.id,
+      intent: "submit",
+      analysis_status: "completed",
+      created_at: "2026-08-20T10:00:00Z",
+      feedback_md: "**Stark:** Du belegst deine Einschätzung mit der Quelle."
+    };
+
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ session: completed })));
+    render(LearningDialogWorkspace, {
+      props: {
+        learnerSub: "student-1",
+        courseId: "course-1",
+        task: dialogTask,
+        historyByTask: { [dialogTask.id]: [submission] }
+      }
+    });
+    await screen.findByText("Archivarin");
+    const feedback = screen.getByRole("region", { name: "Rückmeldung zum KI-Dialog" });
+    expect(within(feedback).getByText("Stark:")).toBeInTheDocument();
+    expect(within(feedback).getByText(/Du belegst deine Einschätzung/)).toBeInTheDocument();
   });
 
   it("implements pausing as navigation without a dialog mutation", async () => {

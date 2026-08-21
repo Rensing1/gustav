@@ -279,15 +279,20 @@ describe("learning unit route contract", () => {
       path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearnerContentWorkspace.svelte"),
       "utf8"
     );
+    const taskContextSource = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearnerTaskContext.svelte"),
+      "utf8"
+    );
 
     expect(routeSource).toContain("orderedOpenModulesForContent()");
     expect(routeSource).toContain("closable: module.id !== activeModuleId");
     expect(routeSource).not.toContain("manualReferences");
     expect(routeSource).not.toContain("ensureContextReferenceSourceLoaded");
     expect(routeSource).not.toContain("addContextReference");
-    expect(workspaceSource).toContain("<LearnerMaterialContext");
-    expect(workspaceSource).not.toContain("Material suchen");
-    expect(workspaceSource).not.toContain("Angeheftet");
+    expect(workspaceSource).toContain("<LearnerTaskContext");
+    expect(taskContextSource).toContain("<LearnerMaterialContext");
+    expect(taskContextSource).not.toContain("Material suchen");
+    expect(taskContextSource).not.toContain("Angeheftet");
   });
 
   it("keeps the active task mounted while selecting another module in the graph", () => {

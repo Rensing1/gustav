@@ -28,6 +28,7 @@ export async function prepareCompletedDialogTurn(input: {
   courseId: string;
   taskId: string;
   learnerSub: string;
+  longTranscript?: boolean;
 }): Promise<string> {
   if (!e2eDatabaseUrl) {
     throw new Error("E2E_DATABASE_URL or SESSION_DATABASE_URL is required for dialog feature acceptance");
@@ -35,6 +36,23 @@ export async function prepareCompletedDialogTurn(input: {
   const courseId = validatedUuid(input.courseId, "course id");
   const taskId = validatedUuid(input.taskId, "task id");
   const learnerSub = validatedSubject(input.learnerSub);
+  const studentMessage = input.longTranscript
+    ? [
+        "Die Quelle betont nur eine Perspektive.",
+        "Prüfe zunächst, wer die Aussage formuliert und welches Interesse damit verbunden sein könnte.",
+        "Unterscheide anschließend zwischen einer Beobachtung im Material und deiner eigenen Bewertung.",
+        "Achte außerdem darauf, welche Gegenposition oder welche zusätzlichen Daten für eine sichere Einordnung fehlen.",
+        "Notiere, welche Begriffe besonders wertend formuliert sind und welche Wirkung diese Wortwahl auf Leserinnen und Leser haben kann.",
+        "Vergleiche danach Überschrift, Einleitung und Schluss: Unterstützen alle drei Teile dieselbe Perspektive oder entstehen Widersprüche?",
+        "Prüfe auch, ob Zahlen oder Beispiele genannt werden und ob ihre Herkunft so beschrieben ist, dass du sie nachvollziehen kannst.",
+        "Eine zuverlässige Begründung trennt klar zwischen dem sichtbaren Beleg, deiner Schlussfolgerung und einer noch offenen Frage.",
+        "Überlege, welche Information deine Einschätzung widerlegen könnte. So vermeidest du, nur nach bestätigenden Hinweisen zu suchen.",
+        "Wenn eine Person oder Institution zitiert wird, prüfe, ob ihre Rolle und ihr möglicher Standpunkt im Material verständlich werden.",
+        "Formuliere deine Beobachtung anschließend in einem Satz, der ohne pauschale Behauptung auskommt und auf einen konkreten Beleg verweist.",
+        "Du kannst dabei benennen, was das Material zeigt, was es nicht zeigt und weshalb diese Lücke für die Einordnung wichtig ist.",
+        "Wähle nun den stärksten Beleg aus dem Material, statt mehrere nur lose passende Stellen aufzuzählen."
+      ].join("\n\n")
+    : "Die Quelle betont nur eine Perspektive.";
   const sql = `
     with target as (
       select id
@@ -51,7 +69,7 @@ export async function prepareCompletedDialogTurn(input: {
         assistant_reply_md, sentence_starters, generation_attempts,
         idempotency_key, generation_started_at, completed_at
       )
-      select id, 1, 'Die Quelle betont nur eine Perspektive.', 'completed',
+      select id, 1, '${studentMessage}', 'completed',
              'Welche Textstelle belegt diese Beobachtung?', '{}', 1,
              'e2e-dialog-turn-1', now(), now()
         from target

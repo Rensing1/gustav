@@ -592,20 +592,22 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
 ### 11.5 Dialogarbeitsbereich
 
 KI-Dialogaufgaben trennen das Gespräch sichtbar von der endgültigen Abgabe. Die
-Aufgabenstellung bleibt als kompakter Kopf der aktiven Aufgabe erhalten. Direkt
-darunter folgen Partnername, KI-Kennzeichnung, Beschreibung, Modus und
-Rundenzähler.
+linke Spalte verwendet dieselbe Aufgaben- und Materialstruktur wie alle anderen
+Aufgabenarten. Nur die Bearbeitungsfläche rechts erhält mit Fortschritt, Verlauf
+und Eingabe eine dialogspezifische Form.
 
 Verbindliche Regeln:
 
 - Der Abschlussauftrag wird erst nach der bewussten Aktion `Dialog beenden`
   sichtbar.
-- Partnerkontext und Sitzungsaktionen bilden eine gemeinsame Komponentenfamilie.
-  `Dialog ohne Abgabe abbrechen` bleibt vor der ersten Antwort dort erreichbar.
-  `Dialog beenden` steht dagegen im Hauptbereich direkt bei den Aktionen zum
-  Fortsetzen oder Wiederholen des Gesprächs. Nach einem terminal fehlgeschlagenen
-  Turn steht auch der dann erlaubte Abbruch im Hauptbereich. Eine zusätzliche
-  Aktion `Pausieren` entfällt; der gemeinsame Aufgabenkopf übernimmt den Rückweg.
+- Die linke Spalte zeigt wie bei anderen Aufgaben zuerst `Aufgabe N · KI-Dialog`
+  und die Aufgabenstellung, anschließend den unveränderten gemeinsamen
+  Materialbrowser. Dialogeigene Partnerkarten, Sonderrahmen und abweichende
+  Materialflächen sind dort nicht zulässig.
+- Partnername, Antwortmodus und Rundenstand stehen im Dialogkopf rechts.
+  `Dialog ohne Abgabe abbrechen`, `Pausieren` und `Dialog beenden` gehören zu den
+  Sitzungsaktionen im Hauptbereich und werden nicht in der Materialspalte
+  dargestellt.
 - Ein fehlgeschlagener KI-Turn mit verbleibenden Generierungsversuchen zeigt
   `KI-Antwort erneut versuchen` und, sofern bereits eine Runde abgeschlossen
   wurde, weiterhin `Dialog beenden`. Nach dem dritten Fehlversuch entfällt die
@@ -614,31 +616,45 @@ Verbindliche Regeln:
 - `Antwort senden` steht ausschließlich unmittelbar beim Eingabefeld. In der
   Abschlussphase stehen `Zurück zum Dialog` und `Endgültig abgeben` beim
   Abschlussfeld.
-- Der Gesprächsverlauf besitzt keinen schweren Außenrahmen. Der Eingabe- und der
-  Abschlussbereich bleiben dagegen klar und kantig gerahmt.
-- KI-Beiträge stehen links und verwenden den Erfolgsakzent; Schülerbeiträge
-  stehen rechts und verwenden den Produktakzent.
+- Der Hauptbereich beginnt mit Partnername, Modus, dem sichtbaren Text `Runde X
+  von N` und einem zugänglichen Fortschrittsbalken. Er zeigt ausschließlich den
+  tatsächlichen Rundenstand und erfindet keine fachlichen Dialogphasen.
+- Auf breiten Flächen besteht der Hauptbereich aus drei Zeilen: Fortschritt,
+  intern scrollbarer Verlauf und Eingabe beziehungsweise Abschluss. Nach dem
+  Laden, einer neuen KI-Antwort und einer Größenänderung bleibt die aktuelle
+  Frage vollständig sichtbar; der Tastaturfokus wird dabei nicht verschoben.
+- KI-Beiträge stehen links in einer ruhig grün getönten Gesprächsfläche;
+  Schülerbeiträge stehen rechts in einer zurückhaltend akzentgetönten Fläche.
+  Dekorative Seitenleisten und zusätzliche Innenrahmen sind im Dialog verboten.
+- Genau die jüngste beantwortbare KI-Nachricht trägt die sichtbare Kennzeichnung
+  `Aktuelle Frage` und eine stärkere Kontur. Frühere Beiträge bleiben vollständig
+  verfügbar, erhalten aber keine konkurrierende Hervorhebung.
 - Sprecher werden technisch und eindeutig bezeichnet. Verwendete Satzanfänge
   bleiben als Hilfestellung sichtbar.
-- Satzanfänge sind rechteckige Sekundäraktionen, keine Chatblasen oder Pills.
+- Satzanfänge stehen ausschließlich im Hybridmodus direkt am Eingabebereich als
+  optionale Hilfestellungen. Im Freitextmodus werden keine Ersatzfragen
+  erfunden.
 - Die Arbeitsfläche folgt demselben Kontextvertrag wie alle Aufgaben. Ab `60rem`
   steht der Partner- und Kontextbereich mit `clamp(32rem, 44cqw, 38rem)` links
   neben dem Gespräch. Darunter wechseln `Aufgabe` und `Materialien` als
   Vollbreitenansichten; beide bleiben dabei montiert. Damit bleibt auch hier ein
   übliches iPad im Querformat zweispaltig.
-- Aktuelle und angeheftete Materialien sowie eigene frühere Abgaben stehen auch
-  während des Dialogs als fortlaufender Dokumentstapel im Partnerbereich. Der
-  bewusst geöffnete Vollbreiten-Lesemodus verwendet dieselbe Komponente wie
-  andere Aufgaben und lässt Gespräch und Eingabe montiert.
+- Aktuelle und geöffnete Materialien sowie eigene frühere Abgaben bleiben auch
+  während des Dialogs im einen Materialbereich verfügbar. Der bewusst geöffnete
+  Vollbreiten-Lesemodus verwendet dieselbe Komponente wie andere Aufgaben und
+  lässt Gespräch und Eingabe montiert.
 - Auf Smartphonebreite nutzen Nachrichten und `Antwort senden` die volle
   verfügbare Breite. Sitzungsaktionen stehen nebeneinander und werden erst unter
   `22rem` Containerbreite gestapelt.
 - Ohne Container-Query-Unterstützung bleibt der einspaltige Grundaufbau nutzbar;
   große, nicht geteilte Lernansichten erhalten einen Viewport-Fallback.
-- Der Sicherheitshinweis bleibt eine schmale, klar konturierte Hinweiszeile.
+- Der Sicherheitshinweis steht als schmale Zeile im Eingabebereich, also direkt
+  dort, wo Text an die KI übermittelt wird. Er wird im Partner- oder
+  Materialkontext nicht dupliziert.
 - Alle produktiven `.dialog-*`-Regeln liegen in der Cascade-Layer `learning` in
-  `frontend/src/lib/styles/learning-unit.css` und verwenden ausschließlich die
-  zentralen Design-Tokens.
+  `frontend/src/lib/styles/learning-unit.css`. Lokal begrenzte Dialogvariablen
+  für Rundungen und Mischflächen werden aus den zentralen Farb- und
+  Typografietokens abgeleitet und verändern keine andere Aufgabenart.
 - Das UI-Labor zeigt Gespräch und Abschluss jeweils als vollwertige
   Referenzfläche in Light und Dark sowie auf Desktop, Tablet und Smartphone.
 

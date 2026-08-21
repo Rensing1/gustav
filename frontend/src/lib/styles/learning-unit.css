@@ -2593,6 +2593,10 @@
 
 /* Dialog layout is container-driven because learner panes may be narrower than the viewport. */
 .dialog-workspace {
+  --dialog-border-soft: color-mix(in srgb, var(--color-border) 38%, transparent 62%);
+  --dialog-surface-soft: color-mix(in srgb, var(--color-bg-muted) 62%, var(--color-bg-surface) 38%);
+  --dialog-ai-surface: color-mix(in srgb, var(--color-success) 9%, var(--color-bg-surface) 91%);
+  --dialog-student-surface: color-mix(in srgb, var(--color-accent) 9%, var(--color-bg-surface) 91%);
   container-name: learning-dialog;
   container-type: inline-size;
   display: grid;
@@ -2608,20 +2612,19 @@
 }
 
 .dialog-layout {
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .dialog-sidebar {
   grid-template-areas:
     "context"
-    "meta"
-    "notice"
     "actions";
   gap: var(--space-4);
   padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-s);
-  background: var(--color-bg-surface);
+  border: 1px solid var(--dialog-border-soft);
+  border-radius: var(--dialog-radius-panel);
+  background: var(--dialog-surface-soft);
+  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--color-border) 10%, transparent 90%);
 }
 
 .dialog-context {
@@ -2629,6 +2632,10 @@
   display: grid;
   gap: var(--space-2);
   min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--dialog-border-soft);
+  border-radius: var(--dialog-radius-message);
+  background: var(--color-bg-surface);
 }
 
 .dialog-context h5,
@@ -2641,6 +2648,7 @@
 
 .dialog-context h5 {
   color: var(--color-link);
+  font-size: calc(1.2rem * var(--learning-unit-headline-scale));
 }
 
 .dialog-context__meta {
@@ -2665,8 +2673,7 @@
 }
 
 .dialog-context__description {
-  padding-inline-start: var(--space-3);
-  border-inline-start: 3px solid var(--color-accent);
+  color: var(--color-text-muted);
 }
 
 .dialog-context__description :first-child,
@@ -2680,14 +2687,13 @@
 }
 
 .dialog-notice {
-  grid-area: notice;
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-warning);
-  border-radius: var(--radius-s);
-  background: var(--color-bg-muted);
-  color: var(--color-text);
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
   font-size: 0.78rem;
   line-height: 1.35;
 }
@@ -2719,13 +2725,80 @@
 .dialog-main {
   align-content: start;
   gap: var(--space-5);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dialog-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-4);
+  align-items: end;
+  padding-block-end: var(--space-4);
+  border-block-end: 1px solid var(--dialog-border-soft);
+}
+
+.dialog-progress__context {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.dialog-progress__context strong {
+  font-family: var(--font-display);
+  font-size: calc(1.15rem * var(--learning-unit-headline-scale));
+  overflow-wrap: break-word;
+}
+
+.dialog-progress__mode,
+.dialog-progress__round {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: calc(0.68rem * var(--learning-unit-label-scale));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dialog-progress__mode {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.dialog-progress__round {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(5rem, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.dialog-progress__track {
+  height: 0.25rem;
+  overflow: hidden;
+  border-radius: 0;
+  background: var(--color-line);
+}
+
+.dialog-progress__track > span {
+  display: block;
+  width: var(--dialog-progress-value);
+  height: 100%;
+  background: var(--color-accent);
 }
 
 .dialog-transcript {
   display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
   gap: var(--space-5);
   min-width: 0;
-  padding: var(--space-2) 0;
+  padding: var(--space-2);
   border: 0;
   border-radius: var(--radius-s);
   background: transparent;
@@ -2733,32 +2806,67 @@
 
 .dialog-message {
   width: 100%;
-  padding: var(--space-2) var(--space-4);
-  border: 0;
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--dialog-border-soft);
   border-radius: var(--radius-s);
-  background: transparent;
+  background: var(--color-bg-surface);
   color: var(--color-text);
+  box-shadow: none;
 }
 
 .dialog-message--ai {
   justify-self: start;
-  border-inline-start: 4px solid var(--color-success);
+  border-inline-start: 3px solid var(--color-success);
+  background: var(--dialog-ai-surface);
 }
 
 .dialog-message--student {
   justify-self: end;
-  border-inline-end: 4px solid var(--color-accent);
+  border-inline-end: 3px solid var(--color-accent);
+  background: var(--dialog-student-surface);
+}
+
+.dialog-message--current {
+  border-color: color-mix(in srgb, var(--color-success) 58%, var(--dialog-border-soft) 42%);
+  border-inline-start-color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 13%, var(--color-bg-surface) 87%);
+  box-shadow: none;
+}
+
+.dialog-message__current {
+  width: fit-content;
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-success);
+  font-family: var(--font-mono);
+  font-size: calc(0.66rem * var(--learning-unit-label-scale));
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .dialog-message__speaker,
 .dialog-starters__label {
-  margin: 0 0 var(--space-2);
+  margin: 0 0 var(--space-1);
   color: var(--color-text-muted);
   font-family: var(--font-mono);
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.dialog-message__speaker::before {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-inline-end: var(--space-2);
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
 }
 
 .dialog-message--ai .dialog-message__speaker {
@@ -2783,14 +2891,18 @@
   display: grid;
   gap: var(--space-4);
   padding: var(--space-4);
-  border: 2px solid var(--color-border);
   border-radius: var(--radius-s);
-  background: var(--color-bg-surface);
+  background: var(--dialog-surface-soft);
+}
+
+.dialog-composer {
+  border: 1px solid var(--dialog-border-soft);
+  border-radius: var(--radius-s);
 }
 
 .dialog-closing {
-  border-color: var(--color-accent);
-  box-shadow: var(--color-shadow);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, var(--dialog-border-soft) 45%);
+  box-shadow: none;
 }
 
 .dialog-starters {
@@ -2863,9 +2975,7 @@
 
 @container learning-dialog (min-width: 42.5rem) {
   .dialog-sidebar {
-    grid-template-areas:
-      "context meta actions"
-      "notice notice notice";
+    grid-template-areas: "context context actions";
     grid-template-columns: minmax(12rem, 1fr) auto minmax(15rem, auto);
     align-items: start;
   }
@@ -2881,7 +2991,8 @@
   }
 
   .dialog-message {
-    width: min(88%, 46rem);
+    width: fit-content;
+    max-width: min(82%, 48rem);
   }
 
   .dialog-composer__actions,
@@ -2927,7 +3038,7 @@
 }
 
 .dialog-layout {
-  gap: 0;
+  gap: var(--space-4);
 }
 
 .dialog-layout[data-compact-surface="task"] [data-dialog-surface="materials"],
@@ -2939,24 +3050,24 @@
   grid-template-areas:
     "task"
     "context"
-    "meta"
-    "notice"
     "materials"
     "actions";
   gap: var(--space-4);
   min-height: 0;
   padding: var(--space-5);
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  border: 1px solid var(--dialog-border-soft);
+  border-radius: var(--radius-s);
+  background: var(--dialog-surface-soft);
 }
 
 .dialog-task-context {
   grid-area: task;
   display: grid;
   gap: var(--space-2);
-  padding-block-end: var(--space-4);
-  border-block-end: 1px solid var(--color-border);
+  padding: var(--space-4);
+  border: 1px solid var(--dialog-border-soft);
+  border-radius: var(--radius-s);
+  background: var(--color-bg-surface);
 }
 
 .dialog-task-context__instruction {
@@ -3084,8 +3195,6 @@
     grid-template-areas:
       "task"
       "context"
-      "meta"
-      "notice"
       "materials"
       "actions";
     grid-template-columns: minmax(0, 1fr);
@@ -3141,19 +3250,43 @@
     height: 100%;
     max-height: none;
     min-height: 0;
-    overflow-y: auto;
+    overflow: hidden;
     overscroll-behavior: contain;
-    scrollbar-gutter: stable;
+    scrollbar-gutter: auto;
     border-inline-end: 0;
   }
 
   .dialog-main {
     height: 100%;
     min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    align-content: stretch;
+    gap: var(--space-3);
+    overflow: hidden;
+    padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+  }
+
+  .dialog-progress {
+    padding-block-end: var(--space-3);
+  }
+
+  .dialog-transcript {
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
-    padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+  }
+
+  .dialog-composer,
+  .dialog-closing {
+    gap: var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .dialog-composer .workspace-field textarea,
+  .dialog-closing .workspace-field textarea {
+    height: 4.5rem;
+    min-height: 4.5rem;
   }
 
   .dialog-session-actions {
@@ -3182,6 +3315,10 @@
 
   .dialog-message {
     width: 100%;
+  }
+
+  .dialog-transcript {
+    padding-inline: 0;
   }
 }
 
@@ -4323,4 +4460,447 @@ button.learner-material-context__module-toggle:focus-visible,
 
 .learner-task-workbench--dialog[data-reader-active="true"] > .learner-task-workbench__desk {
   display: none;
+}
+
+/* Keep the dialog controls in view while only the conversation history scrolls. */
+@container (min-width: 60rem) {
+  .learner-task-workbench--dialog {
+    height: calc(100svh - 14rem);
+    min-height: min(36rem, calc(100svh - 14rem));
+  }
+
+  .learner-task-workbench--dialog .learner-task-workbench__main {
+    overflow: hidden;
+  }
+
+  .learner-task-workbench--dialog .learning-work-item--workspace-only,
+  .learner-task-workbench--dialog .learning-work-item--workspace-only > .learning-work-item__body,
+  .learner-task-workbench--dialog .learning-task-inline-editor,
+  .learner-task-workbench--dialog .dialog-workspace {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+/* The dialog transcript keeps the same restrained scrollbar as the shared context column. */
+.dialog-transcript {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-text-muted) 45%, transparent 55%) transparent;
+}
+
+.dialog-main .dialog-message .markdown-prose {
+  padding: 0;
+  border: 0;
+  border-inline-start: 0;
+  background: transparent;
+}
+
+.dialog-composer .workspace-field textarea,
+.dialog-closing .workspace-field textarea {
+  padding: var(--space-4);
+  border: 1px solid var(--dialog-border-soft);
+  border-radius: var(--radius-s);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-border) 8%, transparent 92%);
+}
+
+/* Dialog tasks reuse the same context column as every other task type. */
+.dialog-sidebar.learner-task-context {
+  grid-template-areas: none;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  box-shadow: none;
+}
+
+.dialog-sidebar .learner-task-context__scroll {
+  width: 100%;
+}
+
+/* The shared task context starts with the active task instead of the whole course tree. */
+.learner-task-context {
+  padding: 0;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+}
+
+.learner-task-context__scroll {
+  gap: 0;
+  grid-auto-rows: max-content;
+  align-content: start;
+  padding-inline-end: 0;
+}
+
+.learner-task-context__header {
+  gap: 0;
+  padding-block-end: 0;
+  border-block-end: 0;
+}
+
+.learner-task-context__headline {
+  min-height: 5rem;
+  display: grid;
+  gap: var(--space-3);
+  align-content: center;
+  padding: var(--space-4) var(--space-5);
+  border-block-end: 1px solid var(--color-line);
+}
+
+.learner-task-context__title {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-5);
+}
+
+.learner-task-context__headline h2,
+.learner-task-context__assignment h3,
+.learner-focused-materials h3 {
+  margin: 0;
+}
+
+.learner-task-context__headline h2 {
+  font-size: calc(1.35rem * var(--learning-unit-headline-scale));
+}
+
+.learner-task-context__title span {
+  color: var(--color-text-muted);
+  font-size: calc(0.95rem * var(--learning-unit-font-scale));
+}
+
+.learner-task-context__assignment {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+.learner-task-context__assignment h3,
+.learner-focused-materials h3 {
+  color: var(--color-text);
+  font-size: calc(1rem * var(--learning-unit-headline-scale));
+}
+
+.learner-task-context__progress {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: calc(0.88rem * var(--learning-unit-font-scale));
+}
+
+.learner-task-context__progress-ring {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+  border: 3px solid color-mix(in srgb, var(--color-success) 38%, var(--color-line) 62%);
+  border-radius: 50%;
+}
+
+.learner-focused-materials {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+}
+
+.learner-focused-materials__list {
+  display: grid;
+  gap: 0;
+}
+
+.learner-reference-document--compact {
+  border-block-end: 1px solid var(--color-line);
+}
+
+.learner-reference-document--compact .learner-reference-document__header {
+  gap: var(--space-2);
+}
+
+.learner-reference-document--compact .learner-reference-document__toggle {
+  grid-template-columns: 1rem 1.75rem minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-3) 0;
+}
+
+.learner-reference-document--compact .learner-reference-document__toggle:hover {
+  background: color-mix(in srgb, var(--color-success) 5%, transparent 95%);
+}
+
+.learner-reference-document--compact .learner-reference-document__toggle:focus-visible {
+  background: color-mix(in srgb, var(--color-success) 5%, transparent 95%);
+  outline: 2px solid color-mix(in srgb, var(--color-success) 42%, transparent 58%);
+  outline-offset: -2px;
+}
+
+.learner-reference-document__type-icon {
+  width: 1.75rem;
+  height: 2rem;
+  margin-block-start: 0.05rem;
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 1.6;
+}
+
+.learner-reference-document--compact .learner-tree-chevron {
+  margin-block-start: 0.38rem;
+}
+
+.learner-reference-document--compact .learner-reference-document__toggle strong {
+  font-size: calc(0.98rem * var(--learning-unit-font-scale));
+}
+
+.learner-reference-document__summary {
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.learner-reference-document--compact .learner-reference-document__icon-action {
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-block-start: var(--space-2);
+  border-color: transparent;
+}
+
+.learner-reference-document--compact .learner-reference-document__icon-action:hover,
+.learner-reference-document--compact .learner-reference-document__icon-action:focus-visible {
+  border-color: var(--color-border);
+}
+
+.learner-reference-document--compact .learner-reference-document__body {
+  padding-inline-start: calc(1rem + 1.75rem + (2 * var(--space-2)));
+  padding-inline-end: 2.5rem;
+  padding-block-end: var(--space-4);
+}
+
+.learner-task-context__all-materials {
+  margin: 0 var(--space-5) var(--space-4);
+  border-block-start: 1px solid var(--color-line);
+}
+
+.learner-task-context__all-materials > summary {
+  padding: var(--space-3) 0;
+  color: var(--color-text-muted);
+  font-size: calc(0.82rem * var(--learning-unit-font-scale));
+  cursor: pointer;
+}
+
+.learner-task-context__all-materials[open] > summary {
+  margin-block-end: var(--space-2);
+}
+
+.learner-task-context__all-materials .learner-material-context--compact {
+  gap: 0;
+}
+
+.learner-task-context__all-materials .learner-material-context--compact .learner-material-context__modules {
+  gap: 0;
+}
+
+.learner-task-context__all-materials .learner-material-context--compact .learner-material-context__module {
+  padding: 0;
+}
+
+.learner-task-context__all-materials .learner-material-context--compact .learner-material-context__module-toggle {
+  min-height: 2.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  padding: var(--space-2) 0;
+}
+
+.learner-task-context__all-materials .learner-material-context--compact .learner-material-context__module-toggle h4 {
+  font-size: calc(0.9rem * var(--learning-unit-font-scale));
+}
+
+.learner-task-context__all-materials .learner-material-context--compact .learner-material-context__module-body {
+  gap: 0;
+  margin-inline-start: 0;
+  padding-block-end: var(--space-2);
+}
+
+.learner-task-context__all-materials .learner-material-context--compact .learner-material-context__tree-item::before {
+  display: none;
+}
+
+/* Keep the approved dialogue workspace calm while reusing existing GUSTAV content. */
+.dialog-layout {
+  gap: var(--space-4);
+}
+
+.dialog-main {
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-content: stretch;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  box-shadow: none;
+}
+
+.dialog-transcript {
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: var(--space-5);
+  padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+  border-radius: 0;
+}
+
+.dialog-message {
+  width: min(88%, 44rem);
+  max-width: min(88%, 44rem);
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dialog-message--ai,
+.dialog-message--student,
+.dialog-message--current {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dialog-message--student {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  justify-self: end;
+  width: min(72%, 36rem);
+  max-width: min(72%, 36rem);
+}
+
+.dialog-message__speaker {
+  margin: 0;
+  color: var(--color-success);
+  font-family: var(--font-body);
+  font-size: calc(0.95rem * var(--learning-unit-font-scale));
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.dialog-message__speaker::before {
+  display: none;
+}
+
+.dialog-main .dialog-message .dialog-message__bubble {
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid color-mix(in srgb, var(--color-success) 32%, var(--color-line) 68%);
+  border-radius: var(--radius-xl);
+  background: var(--dialog-ai-surface);
+}
+
+.dialog-main .dialog-message--student .dialog-message__bubble {
+  border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-line) 66%);
+  background: var(--dialog-student-surface);
+}
+
+.dialog-main .dialog-message--current .dialog-message__bubble {
+  border-color: color-mix(in srgb, var(--color-success) 48%, var(--color-line) 52%);
+}
+
+.dialog-message__avatar {
+  width: 2.75rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg-surface) 84%);
+  color: var(--color-accent);
+  font-weight: 750;
+}
+
+.dialog-composer,
+.dialog-closing {
+  gap: var(--space-3);
+  padding: var(--space-4) clamp(var(--space-5), 4cqw, var(--space-8));
+  border: 0;
+  border-block-start: 1px solid var(--color-line);
+  border-radius: 0;
+  background: var(--color-bg-surface);
+  box-shadow: none;
+}
+
+.dialog-actions .workspace-top-action--accent {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.dialog-actions .workspace-top-action--quiet {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.dialog-actions .workspace-top-action {
+  border-radius: var(--radius-xl);
+  box-shadow: none;
+}
+
+.dialog-composer {
+  border: 0;
+  border-block-start: 1px solid var(--color-line);
+  border-radius: 0;
+}
+
+.dialog-composer .workspace-field textarea,
+.dialog-closing .workspace-field textarea {
+  border-color: color-mix(in srgb, var(--color-success) 58%, var(--color-border) 42%);
+  border-radius: var(--radius-xl);
+  box-shadow: none;
+}
+
+.dialog-notice {
+  font-size: 0.7rem;
+}
+
+@container learning-dialog (min-width: 60rem) {
+  .dialog-layout {
+    grid-template-columns: var(--learner-task-column-ratio, 40%) 1px minmax(0, 1fr);
+  }
+
+  .dialog-sidebar,
+  .dialog-main {
+    height: 100%;
+  }
+
+  .dialog-main {
+    grid-template-rows: minmax(0, 1fr) auto;
+    padding: 0;
+  }
+
+  .dialog-sidebar {
+    overflow: hidden;
+  }
+}
+
+@container learning-dialog (max-width: 47.99rem) {
+  .dialog-main {
+    padding: 0;
+  }
+
+  .learner-task-context__headline {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .learner-task-context__progress {
+    grid-column: 1 / -1;
+    justify-items: start;
+  }
+
+  .dialog-message,
+  .dialog-message--student {
+    width: 100%;
+    max-width: 100%;
+  }
 }

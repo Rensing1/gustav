@@ -46,19 +46,20 @@ test("@feature-acceptance reads a document stack without losing the active task"
     await book.getByRole("button", { name: `${seeded.pdfMaterialTitle} ein- oder ausklappen` }).click();
     await expect(book.getByTitle(`Material ${seeded.pdfMaterialTitle}`)).toBeVisible();
 
-    const ownSubmissions = book.getByRole("button", { name: /Eigene Abgaben in Start/ });
+    await book.getByText("Weitere Materialien und eigene Abgaben", { exact: true }).click();
+    const additionalContext = book.locator(".learner-material-context--compact");
+    await expect(additionalContext).toBeVisible();
+    await expect(additionalContext.locator(".learner-material-context__tree-children")).toHaveCount(0);
+    const ownSubmissions = additionalContext.getByRole("button", { name: /Eigene Abgaben in Start/ });
     await expect(ownSubmissions).toHaveAttribute("aria-expanded", "false");
     await ownSubmissions.click();
     const previousSubmission = book.getByRole("button", {
       name: `${seeded.previousTaskLabel} ein- oder ausklappen`
     });
     await expect(previousSubmission).toBeVisible();
-    const hierarchy = await book.evaluate((context) => {
+    const hierarchy = await additionalContext.evaluate((context) => {
       const moduleTitle = context.querySelector<HTMLElement>(
         ".learner-material-context__module--current > .learner-material-context__module-header h4"
-      );
-      const materialTitle = context.querySelector<HTMLElement>(
-        ".learner-material-context__tree-item--document .learner-reference-document__toggle strong"
       );
       const submissionGroup = context.querySelector<HTMLElement>(
         ".learner-material-context__submissions-toggle span"
@@ -66,22 +67,17 @@ test("@feature-acceptance reads a document stack without losing the active task"
       const submissionTitle = context.querySelector<HTMLElement>(
         ".learner-material-context__tree-item--submission .learner-reference-document__toggle strong"
       );
-      const branch = context.querySelector<HTMLElement>(".learner-material-context__tree-children");
-      if (!moduleTitle || !materialTitle || !submissionGroup || !submissionTitle || !branch) {
+      if (!moduleTitle || !submissionGroup || !submissionTitle) {
         throw new Error("Material tree hierarchy is incomplete");
       }
       return {
         moduleX: moduleTitle.getBoundingClientRect().left,
-        materialX: materialTitle.getBoundingClientRect().left,
         submissionGroupX: submissionGroup.getBoundingClientRect().left,
-        submissionX: submissionTitle.getBoundingClientRect().left,
-        branchBorder: getComputedStyle(branch).borderInlineStartWidth
+        submissionX: submissionTitle.getBoundingClientRect().left
       };
     });
-    expect(hierarchy.materialX).toBeGreaterThan(hierarchy.moduleX);
-    expect(Math.abs(hierarchy.submissionGroupX - hierarchy.materialX)).toBeLessThanOrEqual(4);
+    expect(hierarchy.submissionGroupX).toBeGreaterThanOrEqual(hierarchy.moduleX);
     expect(hierarchy.submissionX).toBeGreaterThan(hierarchy.submissionGroupX);
-    expect(hierarchy.branchBorder).toBe("1px");
     await previousSubmission.click();
     await expect(book.getByText(seeded.previousSubmissionText)).toBeVisible();
     await expect(workbench.getByRole("region", { name: "Dokument groß lesen" })).toHaveCount(0);

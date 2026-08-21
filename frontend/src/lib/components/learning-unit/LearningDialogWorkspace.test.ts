@@ -134,20 +134,158 @@ describe("LearningDialogWorkspace", () => {
     vi.unstubAllGlobals();
   });
 
+  it("presents the opening message with real round progress in the shared task header", async () => {
+    renderDialog(session(), dialogTask, "student-1", { taskTitle: "Aufgabe 2" });
+
+    const context = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
+    expect(within(context).getByRole("heading", { name: "Aufgabe 2" })).toBeInTheDocument();
+    expect(within(context).getByText("Untersuche die Quelle im Gespräch.")).toBeInTheDocument();
+    expect(within(context).getByRole("region", { name: "Materialien zur Aufgabe" })).toBeInTheDocument();
+    expect(within(context).queryByText("Dein Dialogpartner")).not.toBeInTheDocument();
+    expect(within(context).queryByText("Eine sachkundige Gesprächspartnerin.")).not.toBeInTheDocument();
+
+    const progress = within(context).getByRole("region", { name: "Gesprächsfortschritt" });
+    expect(within(progress).getByText("Runde 0 von 3")).toBeInTheDocument();
+    expect(within(progress).getByRole("progressbar", { name: "Runde 0 von 3" })).toHaveAttribute("aria-valuenow", "0");
+    expect(within(progress).getByRole("progressbar", { name: "Runde 0 von 3" })).toHaveAttribute("aria-valuemax", "3");
+
+    const currentQuestion = screen.getByRole("article", { name: "Aktuelle Frage" });
+    expect(within(currentQuestion).getByText("Was fällt dir an der Quelle auf?")).toBeInTheDocument();
+    expect(screen.queryByText("Aktuelle Frage")).toBeNull();
+  });
+
+  it("marks only the latest answerable AI message as the current question", async () => {
+    renderDialog(answeredSession({
+      round_count: 2,
+      turns: [
+        ...answeredSession().turns,
+        {
+          id: "turn-2",
+          round_nr: 2,
+          student_message_md: "Die Gegenseite fehlt.",
+          used_sentence_starter_md: null,
+          used_sentence_starter_source: null,
+          status: "completed",
+          assistant_reply_md: "Welche zusätzliche Perspektive wäre hilfreich?",
+          sentence_starters: [],
+          generation_attempts: 1
+        }
+      ]
+    }));
+
+    const context = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
+    const progress = within(context).getByRole("region", { name: "Gesprächsfortschritt" });
+    expect(within(progress).getByText("Runde 2 von 3")).toBeInTheDocument();
+    const currentQuestion = screen.getByRole("article", { name: "Aktuelle Frage" });
+    expect(within(currentQuestion).getByText("Welche zusätzliche Perspektive wäre hilfreich?")).toBeInTheDocument();
+    expect(within(currentQuestion).queryByText("Woran erkennst du diese Einseitigkeit?")).toBeNull();
+    for (const avatar of screen.getAllByLabelText("Du")) {
+      expect(avatar).toHaveTextContent("D");
+    }
+    expect(screen.queryByText("Aktuelle Frage")).toBeNull();
+  });
+
+  it("keeps configured sentence starters beside the composer", async () => {
+    const hybridTask: LearningTask = {
+      ...dialogTask,
+      dialog: { ...dialogTask.dialog!, response_mode: "hybrid" }
+    };
+    renderDialog(
+      session({
+        dialog: hybridTask.dialog!,
+        initial_sentence_starters: ["Mir fällt auf, dass …"],
+        initial_starters_status: "completed"
+      }),
+      hybridTask
+    );
+
+    const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
+    const helpers = within(composer).getByRole("group", { name: "Hilfestellungen" });
+    await fireEvent.click(within(helpers).getByRole("button", { name: "Mir fällt auf, dass …" }));
+    expect(screen.getByLabelText("Deine Antwort (0/3)")).toHaveValue("Mir fällt auf, dass …");
+  });
+
+  it("does not invent helper prompts for free-text dialogs", async () => {
+    renderDialog(session());
+
+    const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
+    expect(within(composer).queryByRole("group", { name: "Hilfestellungen" })).toBeNull();
+  });
+
+  it("does not inject material actions into the conversation", async () => {
+    renderDialog(answeredSession(), dialogTask, "student-1", {
+      contextModules: [
+        {
+          id: "module-1",
+          title: "Quellenanalyse",
+          current: true,
+          closable: false,
+          loaded: true,
+          loading: false,
+          error: null,
+          items: [
+            {
+              key: "material:rules",
+              kind: "material",
+              title: "Gesprächsregeln",
+              position: 1,
+              contextLabel: "Quellenanalyse",
+              moduleId: "module-1",
+              material: {
+                id: "rules",
+                title: "Gesprächsregeln",
+                kind: "markdown",
+                body_md: "Begründe Beobachtungen und frage nach Belegen."
+              }
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(await screen.findByRole("article", { name: "Aktuelle Frage" })).toBeInTheDocument();
+    const transcript = screen.getByRole("log", { name: "Dialogverlauf" });
+    expect(within(transcript).queryByRole("button", { name: "Gesprächsregeln" })).toBeNull();
+  });
+
+  it("places the AI safety notice where the learner writes", async () => {
+    renderDialog(session());
+
+    const taskContext = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
+    const composer = screen.getByRole("region", { name: "Dialog fortsetzen" });
+    expect(within(taskContext).queryByRole("note")).toBeNull();
+    expect(within(composer).getByRole("note")).toHaveTextContent(
+      "Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein."
+    );
+  });
+
+  it("uses the shared task context instead of a dialog-specific briefing", async () => {
+    renderDialog(session(), dialogTask, "student-1", { taskTitle: "Aufgabe 2" });
+
+    const context = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
+    expect(within(context).getByRole("heading", { name: "Aufgabe 2" })).toBeInTheDocument();
+    expect(within(context).getByText("KI-Dialog")).toBeInTheDocument();
+    expect(within(context).getByText("Untersuche die Quelle im Gespräch.")).toBeInTheDocument();
+    expect(within(context).getByRole("region", { name: "Materialien zur Aufgabe" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Gesprächsbriefing" })).toBeNull();
+    expect(within(context).queryByText("Archivarin")).toBeNull();
+  });
+
   it("hides completion controls before the first answered turn", async () => {
     renderDialog(session());
 
-    expect(await screen.findByText("Archivarin")).toBeInTheDocument();
-    const partnerContext = screen.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    expect(await screen.findByRole("article", { name: "Aktuelle Frage" })).toBeInTheDocument();
+    const taskContext = screen.getByRole("complementary", { name: "Aufgabe und Kontext" });
     const composer = screen.getByRole("region", { name: "Dialog fortsetzen" });
     expect(screen.getByLabelText("Deine Antwort (0/3)")).toBeInTheDocument();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Dialog beenden" })).toBeNull();
-    expect(within(partnerContext).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
-    expect(within(partnerContext).getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeInTheDocument();
-    expect(within(partnerContext).queryByRole("button", { name: "Antwort senden" })).toBeNull();
+    expect(within(taskContext).queryByRole("link", { name: "Pausieren" })).toBeNull();
+    expect(within(taskContext).queryByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeNull();
+    expect(within(taskContext).queryByRole("button", { name: "Antwort senden" })).toBeNull();
     expect(within(composer).getByRole("button", { name: "Antwort senden" })).toBeInTheDocument();
-    expect(within(composer).queryByRole("link", { name: "Pausieren" })).toBeNull();
+    expect(within(composer).getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeInTheDocument();
+    expect(within(composer).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
   });
 
   it("uses the shared adjustable column separator in wide dialog layouts", async () => {
@@ -180,12 +318,13 @@ describe("LearningDialogWorkspace", () => {
   it("offers a deliberate transition while keeping the closing prompt hidden", async () => {
     renderDialog(answeredSession());
 
-    const partnerContext = await screen.findByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    const taskContext = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
     const composer = screen.getByRole("region", { name: "Dialog fortsetzen" });
-    expect(within(partnerContext).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
-    expect(within(partnerContext).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
+    expect(within(taskContext).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(within(taskContext).queryByRole("link", { name: "Pausieren" })).toBeNull();
     expect(within(composer).getByRole("button", { name: "Antwort senden" })).toBeInTheDocument();
     expect(within(composer).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(within(composer).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
     expect(screen.getByLabelText("Deine Antwort (1/3)")).toBeInTheDocument();
   });
@@ -196,14 +335,14 @@ describe("LearningDialogWorkspace", () => {
 
     await fireEvent.click(endButton);
 
-    const partnerContext = screen.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    const taskContext = screen.getByRole("complementary", { name: "Aufgabe und Kontext" });
     const closing = screen.getByRole("region", { name: "Abschluss vorbereiten" });
     expect(screen.getByLabelText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeInTheDocument();
-    expect(within(partnerContext).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
-    expect(within(partnerContext).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(within(taskContext).queryByRole("link", { name: "Pausieren" })).toBeNull();
+    expect(within(taskContext).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
     expect(within(closing).getByRole("button", { name: "Endgültig abgeben" })).toBeInTheDocument();
     expect(within(closing).getByRole("button", { name: "Zurück zum Dialog" })).toBeInTheDocument();
-    expect(within(closing).queryByRole("link", { name: "Pausieren" })).toBeNull();
+    expect(within(closing).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Deine Antwort (1/3)")).toBeNull();
 
     await fireEvent.click(screen.getByRole("button", { name: "Zurück zum Dialog" }));
@@ -405,8 +544,7 @@ describe("LearningDialogWorkspace", () => {
         historyByTask: { [dialogTask.id]: [submission] }
       }
     });
-    await screen.findByText("Archivarin");
-    const feedback = screen.getByRole("region", { name: "Rückmeldung zum KI-Dialog" });
+    const feedback = await screen.findByRole("region", { name: "Rückmeldung zum KI-Dialog" });
     expect(within(feedback).getByText("Stark:")).toBeInTheDocument();
     expect(within(feedback).getByText(/Du belegst deine Einschätzung/)).toBeInTheDocument();
   });
@@ -418,7 +556,7 @@ describe("LearningDialogWorkspace", () => {
     expect(pause).toHaveAttribute("href", "/learning/courses/course-1");
   });
 
-  it("shows materials from opened modules in the partner context without pinning", async () => {
+  it("shows materials from opened modules in the shared task context without pinning", async () => {
     const onOpenContext = vi.fn();
     const onCloseContextModule = vi.fn();
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ session: answeredSession() })));
@@ -468,12 +606,15 @@ describe("LearningDialogWorkspace", () => {
       }
     });
 
-    const context = await screen.findByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
-    expect(within(context).getByRole("heading", { name: /Grundlagen/, level: 4 })).toBeInTheDocument();
-    expect(within(context).getByText("Lange Quelle")).toBeInTheDocument();
-    expect(within(context).getByText("Ein langer Quellentext.")).toBeInTheDocument();
+    const context = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
+    const focusedMaterials = within(context).getByRole("region", { name: "Materialien zur Aufgabe" });
+    expect(within(focusedMaterials).getByText("Lange Quelle")).toBeInTheDocument();
+    expect(within(focusedMaterials).getByText("Ein langer Quellentext.")).toBeInTheDocument();
     expect(within(context).queryByText("Angeheftet")).not.toBeInTheDocument();
     expect(within(context).queryByText("Material suchen")).not.toBeInTheDocument();
+    await fireEvent.click(within(context).getByText("Weitere Materialien und eigene Abgaben"));
+    expect(within(context).getByRole("heading", { name: "Vertiefung", level: 4 })).toBeInTheDocument();
+    expect(within(context).getAllByText("Lange Quelle")).toHaveLength(1);
     await fireEvent.click(within(context).getByRole("button", { name: "Modul Vertiefung schließen" }));
     expect(onCloseContextModule).toHaveBeenCalledWith("module-extra");
   });
@@ -489,7 +630,7 @@ describe("LearningDialogWorkspace", () => {
       }
     });
 
-    await screen.findByText("Archivarin");
+    await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
     expect(screen.queryByText("Material suchen")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /anheften|lösen/i })).not.toBeInTheDocument();
   });
@@ -536,5 +677,79 @@ describe("LearningDialogWorkspace", () => {
     expect(dialogBlocks).not.toContain("var(--color-success-soft)");
     expect(dialogBlocks).not.toContain("var(--color-accent-soft)");
     expect(dialogBlocks).not.toMatch(/#[0-9a-f]{3,8}/i);
+  });
+
+  it("keeps the integrated composer beside an internally scrolling transcript", () => {
+    const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
+    const mainRules = Array.from(css.matchAll(/\.dialog-main\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+    const transcriptRules = Array.from(css.matchAll(/\.dialog-transcript\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+    const composerRules = Array.from(css.matchAll(/\.dialog-composer[^,{]*\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+
+    expect(mainRules).toContain("grid-template-rows: minmax(0, 1fr) auto");
+    expect(mainRules).toContain("overflow: hidden");
+    expect(transcriptRules).toContain("overflow-y: auto");
+    expect(transcriptRules).toContain("align-content: start");
+    expect(composerRules).toContain("border-block-start: 1px solid");
+  });
+
+  it("uses the shared context and established GUSTAV surfaces instead of a separate dialog theme", () => {
+    const source = readFileSync(path.resolve(currentDir, "LearningDialogWorkspace.svelte"), "utf8");
+    const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
+    const workspaceRules = Array.from(css.matchAll(/\.dialog-workspace\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+    const layoutRules = Array.from(css.matchAll(/\.dialog-layout\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+    const sharedSidebarRules = Array.from(
+      css.matchAll(/\.dialog-sidebar\.learner-task-context\s*\{[^{}]*\}/g),
+      (match) => match[0]
+    ).join("\n");
+    const mainRules = Array.from(css.matchAll(/\.dialog-main\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+    const transcriptRules = Array.from(css.matchAll(/\.dialog-transcript\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+    const messageRules = Array.from(css.matchAll(/\.dialog-message\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+    const bubbleRules = Array.from(css.matchAll(/\.dialog-message__bubble\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+    const composerRules = Array.from(css.matchAll(/\.dialog-composer[^,{]*\s*\{[^{}]*\}/g), (match) => match[0]).join("\n");
+    const actionRules = Array.from(
+      css.matchAll(/\.dialog-workspace \.workspace-top-action\s*\{[^{}]*\}/g),
+      (match) => match[0]
+    ).join("\n");
+    const workbenchRules = Array.from(
+      css.matchAll(/\.learner-task-workbench--dialog\s*\{[^{}]*\}/g),
+      (match) => match[0]
+    ).join("\n");
+    const nestedProseRules = Array.from(
+      css.matchAll(/\.dialog-(?:main|sidebar)[^,{]*\.markdown-prose\s*\{[^{}]*\}/g),
+      (match) => match[0]
+    ).join("\n");
+
+    expect(workspaceRules).not.toContain("--dialog-radius-panel");
+    expect(workspaceRules).not.toContain("--dialog-radius-message");
+    expect(layoutRules).toContain("gap: var(--space-4)");
+    expect(source).toContain("<LearnerTaskContext");
+    expect(source).toContain("roundCurrent={session.round_count}");
+    expect(source).toContain("roundMaximum={session.dialog.max_rounds}");
+    expect(source).not.toContain('class="dialog-progress"');
+    expect(source).toContain("dialog-message__bubble");
+    expect(source).not.toContain('class="dialog-reference-chip"');
+    expect(source).not.toContain('class="learner-task-context dialog-sidebar"');
+    expect(source).not.toContain("dialog-briefing");
+    expect(source).not.toContain("dialog-materials-panel");
+    expect(sharedSidebarRules).toContain("border: 1px solid");
+    expect(sharedSidebarRules).toContain("background: var(--color-bg-surface)");
+    expect(mainRules).toContain("border: 1px solid");
+    expect(mainRules).not.toContain("border-inline-start: 3px solid");
+    expect(mainRules).toContain("border-radius: var(--radius-xl)");
+    expect(mainRules).toContain("background: var(--color-bg-surface)");
+    expect(mainRules).toContain("box-shadow: none");
+    expect(transcriptRules).toContain("align-content: start");
+    expect(transcriptRules).toContain("grid-auto-rows: max-content");
+    expect(messageRules).toContain("box-shadow: none");
+    expect(messageRules).toContain("max-width:");
+    expect(bubbleRules).toContain("border-radius: var(--radius-xl)");
+    expect(composerRules).toContain("border: 0");
+    expect(composerRules).toContain("border-block-start: 1px solid");
+    expect(composerRules).not.toContain("border: 2px solid");
+    expect(actionRules).not.toContain("border-radius: 999px");
+    expect(layoutRules).toContain("40%");
+    expect(workbenchRules).toContain("height: calc(100svh - 14rem)");
+    expect(nestedProseRules).toContain("border: 0");
+    expect(nestedProseRules).toContain("border-inline-start: 0");
   });
 });

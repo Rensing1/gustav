@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
+  import { onMount, tick } from "svelte";
+  import LearnerTaskContext from "$lib/components/learning-unit/LearnerTaskContext.svelte";
   import LearnerTaskSplitDivider from "$lib/components/learning-unit/LearnerTaskSplitDivider.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
@@ -39,6 +39,7 @@
     learnerSub = null,
     courseId,
     task,
+    taskTitle = "Aufgabe",
     existingSessionId = null,
     readOnly = false,
     compactSurface = "task",
@@ -69,6 +70,7 @@
     learnerSub?: string | null;
     courseId: string;
     task: LearningTask;
+    taskTitle?: string;
     existingSessionId?: string | null;
     readOnly?: boolean;
     compactSurface?: "task" | "materials";
@@ -104,6 +106,8 @@
   let selectedStarter = $state<{ text: string; source: string } | null>(null);
   let pending = $state(false);
   let error = $state<string | null>(null);
+  let transcriptElement = $state<HTMLDivElement | null>(null);
+  let lastScrolledAssistantMessageId = $state<string | null>(null);
 
   function baseUrl(): string {
     return `/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(task.id)}/dialog-sessions`;
@@ -152,6 +156,28 @@
 
   function conversationReady(): boolean {
     return Boolean(session && !session.turns.some((turn) => turn.status !== "completed"));
+  }
+
+  /**
+   * Identifies the one AI message that the learner can answer now.
+   * Failed, completed, read-only, and closing states deliberately have no
+   * current question because they require a different next action.
+   */
+  function currentAssistantMessageId(): string | null {
+    if (
+      !session ||
+      session.status !== "active" ||
+      readOnly ||
+      closingPhase ||
+      session.round_count >= session.dialog.max_rounds ||
+      !conversationReady()
+    ) return null;
+
+    for (let index = session.turns.length - 1; index >= 0; index -= 1) {
+      const turn = session.turns[index];
+      if (turn.assistant_reply_md) return turn.id;
+    }
+    return "opening";
   }
 
   function canSendAnswer(): boolean {
@@ -203,6 +229,29 @@
       key,
       JSON.stringify({ phase: closingPhase ? "closing" : "conversation", closingAnswer })
     );
+  });
+
+  $effect(() => {
+    const messageId = currentAssistantMessageId();
+    const transcript = transcriptElement;
+    if (!messageId || !transcript || messageId === lastScrolledAssistantMessageId) return;
+    lastScrolledAssistantMessageId = messageId;
+    void tick().then(() => {
+      if (transcriptElement) transcriptElement.scrollTop = transcriptElement.scrollHeight;
+    });
+  });
+
+  $effect(() => {
+    const transcript = transcriptElement;
+    if (!transcript || typeof ResizeObserver === "undefined") return;
+
+    // A responsive layout can shorten the transcript without changing its
+    // messages. Keep the current question in view after that reflow.
+    const observer = new ResizeObserver(() => {
+      if (currentAssistantMessageId()) transcript.scrollTop = transcript.scrollHeight;
+    });
+    observer.observe(transcript);
+    return () => observer.disconnect();
   });
 
   async function requestPayload<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -352,61 +401,31 @@
       data-phase={closingPhase ? "closing" : "conversation"}
       style={taskColumnRatio === null ? undefined : `--learner-task-column-ratio: ${taskColumnRatio}%`}
     >
-      <aside class="dialog-sidebar" data-dialog-surface="materials" aria-label="Dialogpartner und Sitzungsaktionen">
-          <header class="dialog-task-context">
-            <p class="workspace-label">Aufgabe · KI-Dialog</p>
-            <div class="dialog-task-context__instruction">{@html renderMarkdown(task.instruction_md)}</div>
-          </header>
-          <header class="dialog-context">
-            <p class="workspace-label">KI-Dialogpartner</p>
-            <h5>{session.dialog.partner_name}</h5>
-            <div class="dialog-context__description markdown-prose">{@html renderMarkdown(session.dialog.partner_description_md)}</div>
-          </header>
-
-          <p class="dialog-context__meta" aria-label="Dialogstatus">
-            <span>KI</span>
-            <span>{session.dialog.response_mode === "hybrid" ? "Mit Satzanfängen" : "Freitext"}</span>
-            <span>Runde {session.round_count}/{session.dialog.max_rounds}</span>
-          </p>
-
-          <div class="dialog-notice" role="note">
-            <strong>Hinweis zur KI</strong>
-            <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
-          </div>
-
-        <LearnerMaterialContext
-          {courseId}
-          modules={contextModules}
-          expandedModuleIds={expandedContextModuleIds}
-          {expandedModuleMaterialKeys}
-          {expandedSubmissionModuleIds}
-          {expandedSubmissionKeys}
-          {historyByTask}
-          {historyStateByTask}
-          focusedModuleId={focusedContextModuleId}
-          closedModuleTitle={closedContextModuleTitle}
-          onToggleModule={onToggleContextModule}
-          onToggleMaterial={onToggleContextMaterial}
-          onToggleSubmissionGroup={onToggleSubmissionGroup}
-          onToggleSubmission={onToggleSubmission}
-          onOpenReference={onOpenContext}
-          onCloseModule={onCloseContextModule}
-          onUndoCloseModule={onUndoCloseContextModule}
-        />
-
-        {#if session.status === "active" && !readOnly}
-          <nav class="dialog-session-actions" aria-label="Sitzungsaktionen">
-            {#if showPauseAction && onPause}
-              <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={() => onPause?.()}>Pausieren</button>
-            {:else if showPauseAction}
-              <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
-            {/if}
-            {#if !closingPhase && session.turns.length === 0}
-              <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
-            {/if}
-          </nav>
-        {/if}
-      </aside>
+      <LearnerTaskContext
+        {courseId}
+        {taskTitle}
+        taskKind="KI-Dialog"
+        instructionMd={task.instruction_md}
+        roundCurrent={session.round_count}
+        roundMaximum={session.dialog.max_rounds}
+        variant="dialog"
+        modules={contextModules}
+        expandedModuleIds={expandedContextModuleIds}
+        {expandedModuleMaterialKeys}
+        {expandedSubmissionModuleIds}
+        {expandedSubmissionKeys}
+        {historyByTask}
+        {historyStateByTask}
+        focusedModuleId={focusedContextModuleId}
+        closedModuleTitle={closedContextModuleTitle}
+        onToggleModule={onToggleContextModule}
+        onToggleMaterial={onToggleContextMaterial}
+        onToggleSubmissionGroup={onToggleSubmissionGroup}
+        onToggleSubmission={onToggleSubmission}
+        onOpenReference={onOpenContext}
+        onCloseModule={onCloseContextModule}
+        onUndoCloseModule={onUndoCloseContextModule}
+      />
 
       <LearnerTaskSplitDivider
         value={taskColumnRatio}
@@ -415,21 +434,32 @@
       />
 
       <div class="dialog-main" data-dialog-surface="task">
-        <div class="dialog-transcript" role="log" aria-label="Dialogverlauf" aria-live="polite">
-          <article class="dialog-message dialog-message--ai">
-            <p class="dialog-message__speaker">KI · {session.dialog.partner_name}</p>
-            <div class="markdown-prose">{@html renderMarkdown(session.dialog.opening_message_md)}</div>
+        <div bind:this={transcriptElement} class="dialog-transcript" role="log" aria-label="Dialogverlauf" aria-live="polite">
+          <article
+            class="dialog-message dialog-message--ai"
+            class:dialog-message--current={currentAssistantMessageId() === "opening"}
+            aria-label={currentAssistantMessageId() === "opening" ? "Aktuelle Frage" : undefined}
+          >
+            <p class="dialog-message__speaker">{session.dialog.partner_name}</p>
+            <div class="dialog-message__bubble markdown-prose">{@html renderMarkdown(session.dialog.opening_message_md)}</div>
           </article>
           {#each session.turns as turn}
             <article class="dialog-message dialog-message--student">
-              <p class="dialog-message__speaker">Schüler · Du</p>
-              <div class="markdown-prose">{@html renderMarkdown(turn.student_message_md)}</div>
-              {#if turn.used_sentence_starter_md}<small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>{/if}
+              <div class="dialog-message__bubble markdown-prose">
+                {@html renderMarkdown(turn.student_message_md)}
+                {#if turn.used_sentence_starter_md}<small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>{/if}
+              </div>
+              <!-- The technical learner subject can be a UUID and must never leak into the interface. -->
+              <span class="dialog-message__avatar" aria-label="Du">D</span>
             </article>
             {#if turn.assistant_reply_md}
-              <article class="dialog-message dialog-message--ai">
-                <p class="dialog-message__speaker">KI · {session.dialog.partner_name}</p>
-                <div class="markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div>
+              <article
+                class="dialog-message dialog-message--ai"
+                class:dialog-message--current={currentAssistantMessageId() === turn.id}
+                aria-label={currentAssistantMessageId() === turn.id ? "Aktuelle Frage" : undefined}
+              >
+                <p class="dialog-message__speaker">{session.dialog.partner_name}</p>
+                <div class="dialog-message__bubble markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div>
               </article>
             {/if}
           {/each}
@@ -449,6 +479,11 @@
               {/if}
               <div class="dialog-actions dialog-closing__actions">
                 <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={continueDialog}>Zurück zum Dialog</button>
+                {#if showPauseAction && onPause}
+                  <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={() => onPause?.()}>Pausieren</button>
+                {:else if showPauseAction}
+                  <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
+                {/if}
                 <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || Boolean(session.dialog.closing_prompt_md && !closingAnswer.trim())} onclick={complete}>Endgültig abgeben</button>
               </div>
             </section>
@@ -458,8 +493,8 @@
                 <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={start}>Erste Satzanfänge erneut erzeugen</button>
               {/if}
               {#if availableStarters().length}
-                <div class="dialog-starters" aria-label="Satzanfang-Hilfen">
-                  <p class="dialog-starters__label">Hilfestellung · Satzanfänge</p>
+                <div class="dialog-starters" role="group" aria-label="Hilfestellungen">
+                  <p class="dialog-starters__label">Hilfestellungen · Satzanfänge</p>
                   {#each availableStarters() as starter}
                     <button class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle dialog-starter" type="button" onclick={() => chooseStarter(starter)}>{starter}</button>
                   {/each}
@@ -470,7 +505,11 @@
               {:else if session.round_count >= session.dialog.max_rounds}
                 <p class="workspace-note">Maximale Rundenzahl erreicht.</p>
               {/if}
-              {#if canSendAnswer() || canEndDialog() || latestFailedTurn() || hasTerminalDialogFailure()}
+              <div class="dialog-notice" role="note">
+                <strong>Hinweis zur KI</strong>
+                <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
+              </div>
+              {#if canSendAnswer() || canEndDialog() || latestFailedTurn() || hasTerminalDialogFailure() || showPauseAction}
                 <div class="dialog-actions dialog-composer__actions">
                   {#if latestFailedTurn() && (latestFailedTurn()?.generation_attempts ?? 3) < 3}
                     <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={retryLatestFailedTurn}>KI-Antwort erneut versuchen</button>
@@ -483,8 +522,13 @@
                   {#if canEndDialog()}
                     <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>Dialog beenden</button>
                   {/if}
-                  {#if hasTerminalDialogFailure()}
+                  {#if session.turns.length === 0 || hasTerminalDialogFailure()}
                     <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
+                  {/if}
+                  {#if showPauseAction && onPause}
+                    <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={() => onPause?.()}>Pausieren</button>
+                  {:else if showPauseAction}
+                    <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
                   {/if}
                 </div>
               {/if}

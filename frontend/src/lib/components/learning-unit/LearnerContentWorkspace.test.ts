@@ -130,6 +130,7 @@ function baseProps() {
       }
     ],
     expandedContextModuleIds: [],
+    expandedModuleMaterialKeys: {},
     expandedSubmissionModuleIds: [],
     expandedSubmissionKeys: [],
     historyByTask: {},
@@ -139,6 +140,8 @@ function baseProps() {
     onCloseModule: vi.fn(),
     onSetCompactSurface: vi.fn(),
     onToggleMaterial: vi.fn(),
+    onToggleContextModuleMaterial: vi.fn(),
+    onOpenContextReference: vi.fn(),
     onProgressPersisted: vi.fn()
   };
 }
@@ -165,13 +168,29 @@ describe("LearnerContentWorkspace", () => {
     expect(props.onBeginTask).toHaveBeenCalledWith("task:task-1", "text");
   });
 
-  it("renders only the active task outside the module list in work mode", () => {
+  it("renders only the active task outside the module list in work mode", async () => {
     const props = {
       ...baseProps(),
       mode: "working" as const,
       activeTaskKey: "task:task-1",
       activeEditorMode: "text" as const
     };
+    props.contextModules[1].items = [
+      {
+        key: "material:material-3",
+        kind: "material",
+        title: "Perspektiven aus Argumente",
+        position: 1,
+        contextLabel: "Argumente",
+        moduleId: "module-2",
+        material: {
+          id: "material-3",
+          title: "Perspektiven aus Argumente",
+          kind: "markdown",
+          body_md: "Ein ergänzender Materialtext."
+        }
+      }
+    ];
     const { container } = render(LearnerContentWorkspace, { props });
 
     expect(screen.queryByRole("region", { name: "Orientieren" })).not.toBeInTheDocument();
@@ -184,14 +203,38 @@ describe("LearnerContentWorkspace", () => {
     expect(within(context).getByText("Begründe deine Position zur Chatkontrolle.")).toBeInTheDocument();
     const compactStatement = within(work).getByRole("region", { name: "Vollständige Aufgabenstellung" });
     expect(within(compactStatement).getByText("Begründe deine Position zur Chatkontrolle.")).toBeInTheDocument();
-    expect(within(context).getByRole("heading", { name: /Grundlagen/, level: 4 })).toBeInTheDocument();
-    expect(within(context).getByText("Aktuell")).toBeInTheDocument();
-    expect(within(context).getByText("Grundrechte und Privatsphäre")).toBeInTheDocument();
-    expect(within(context).getByText("Ein längerer Materialtext.")).toBeInTheDocument();
-    expect(within(context).queryByText("Ein zweiter vollständiger Materialtext.")).not.toBeInTheDocument();
+    const focusedMaterials = within(context).getByRole("region", { name: "Materialien zur Aufgabe" });
+    expect(within(focusedMaterials).getByText("Grundrechte und Privatsphäre")).toBeInTheDocument();
+    expect(within(focusedMaterials).getByText("Ein längerer Materialtext.")).toBeInTheDocument();
+    expect(within(focusedMaterials).getByText("Ein zweiter vollständiger Materialtext.")).toBeInTheDocument();
+    expect(container.querySelector(".learner-focused-material-card__visual")).toBeNull();
+    const firstMaterialToggle = within(focusedMaterials).getByRole("button", {
+      name: "Grundrechte und Privatsphäre ein- oder ausklappen"
+    });
+    expect(firstMaterialToggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(focusedMaterials).getByRole("button", {
+      name: "Grenzen digitaler Überwachung ein- oder ausklappen"
+    })).toHaveAttribute("aria-expanded", "false");
+    expect(within(focusedMaterials).getByRole("button", {
+      name: "Grundrechte und Privatsphäre groß lesen"
+    })).toBeInTheDocument();
+    await fireEvent.click(firstMaterialToggle);
+    expect(props.onToggleContextModuleMaterial).toHaveBeenCalledWith("module-1", "material:material-1");
+    await fireEvent.click(within(focusedMaterials).getByRole("button", {
+      name: "Grundrechte und Privatsphäre groß lesen"
+    }));
+    expect(props.onOpenContextReference).toHaveBeenCalledWith("material:material-1");
     expect(within(context).queryByText("Material · Aktuelles Modul")).not.toBeInTheDocument();
     expect(within(context).queryByRole("button", { name: /anheften|lösen/i })).not.toBeInTheDocument();
     expect(within(context).queryByText("Material suchen")).not.toBeInTheDocument();
+    await fireEvent.click(within(context).getByText("Weitere Materialien und eigene Abgaben"));
+    expect(within(context).getByRole("button", {
+      name: "Perspektiven aus Argumente ein- oder ausklappen"
+    })).toHaveAttribute("aria-expanded", "true");
+    expect(within(context).getByRole("button", { name: "Perspektiven aus Argumente groß lesen" })).toBeInTheDocument();
+    expect(within(context).getAllByText("Grundrechte und Privatsphäre")).toHaveLength(1);
+    expect(within(context).getByRole("heading", { name: "Argumente", level: 4 })).toBeInTheDocument();
+    expect(within(context).queryByText("Aktuell")).toBeNull();
     expect(within(context).getByRole("button", { name: "Modul Argumente schließen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Zurück zu Modul Grundlagen/ })).toBeInTheDocument();
     expect(within(context).queryByRole("button", { name: "Pausieren" })).not.toBeInTheDocument();
@@ -222,7 +265,7 @@ describe("LearnerContentWorkspace", () => {
     expect(onCommitTaskColumnRatio).toHaveBeenLastCalledWith(53);
   });
 
-  it("renders dialog context once instead of nesting the generic task context", async () => {
+  it("renders the shared task context exactly once for dialogs", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -253,8 +296,8 @@ describe("LearnerContentWorkspace", () => {
     };
     const { container } = render(LearnerContentWorkspace, { props });
 
-    expect(await screen.findByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" })).toBeInTheDocument();
-    expect(container.querySelector(".learner-task-context")).toBeNull();
+    expect(await screen.findByRole("complementary", { name: "Aufgabe und Kontext" })).toBeInTheDocument();
+    expect(container.querySelectorAll(".learner-task-context")).toHaveLength(1);
     expect(container.querySelectorAll(".dialog-sidebar")).toHaveLength(1);
     expect(screen.getAllByRole("navigation", { name: "Arbeitsbereich wählen" })).toHaveLength(1);
     const statement = screen.getByRole("region", { name: "Vollständige Aufgabenstellung" });
@@ -340,6 +383,7 @@ describe("LearnerContentWorkspace", () => {
     };
     const { container, rerender } = render(LearnerContentWorkspace, { props });
 
+    await fireEvent.click(screen.getByText("Weitere Materialien und eigene Abgaben"));
     expect(screen.getByText("Text aus dem geöffneten Modul.")).toBeInTheDocument();
     expect(screen.queryByText("Angeheftet")).not.toBeInTheDocument();
     expect(screen.queryByText("Material suchen")).not.toBeInTheDocument();
@@ -439,8 +483,12 @@ describe("LearnerContentWorkspace", () => {
     const css = readFileSync(path.resolve(currentDir, "../../styles/learning-unit.css"), "utf8");
     const component = readFileSync(path.resolve(currentDir, "LearnerContentWorkspace.svelte"), "utf8");
     const materialContext = readFileSync(path.resolve(currentDir, "LearnerMaterialContext.svelte"), "utf8");
+    const taskContext = readFileSync(path.resolve(currentDir, "LearnerTaskContext.svelte"), "utf8");
 
-    expect(component).toContain("<LearnerMaterialContext");
+    expect(component).toContain("<LearnerTaskContext");
+    expect(taskContext).toContain("<LearnerFocusedMaterialContext");
+    expect(taskContext).toContain('class="learner-task-context__all-materials"');
+    expect(taskContext).toContain("Weitere Materialien und eigene Abgaben");
     expect(materialContext).not.toContain("Angeheftet");
     expect(materialContext).not.toContain("Material suchen");
     expect(materialContext).not.toContain("aria-pressed");

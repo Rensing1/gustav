@@ -15,24 +15,24 @@ async function authenticatedPage(browser: Browser): Promise<{ context: BrowserCo
 
 async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promise<void> {
   const workspace = page.getByRole("region", { name: "KI-Dialog" });
-  const partnerContext = workspace.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+  const taskContext = workspace.getByRole("complementary", { name: "Aufgabe und Kontext" });
   const composer = workspace.getByRole("region", { name: "Dialog fortsetzen" });
   await expect(page.locator("#learner-task-back")).toBeVisible();
-  await expect(partnerContext.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
+  await expect(taskContext.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
 
   if (mode === "desktop") {
-    await expect(partnerContext.getByRole("button", { name: "Dialog beenden" })).toHaveCount(0);
+    await expect(taskContext.getByRole("button", { name: "Dialog beenden" })).toHaveCount(0);
     await expect(composer.getByRole("button", { name: "Antwort senden" })).toBeVisible();
   } else {
-    await expect(partnerContext).toBeHidden();
+    await expect(taskContext).toBeHidden();
     await expect(composer).toBeVisible();
     await workspace.getByRole("button", { name: "Materialien" }).click();
-    await expect(partnerContext).toBeVisible();
+    await expect(taskContext).toBeVisible();
     await expect(composer).toBeHidden();
     await workspace.getByRole("button", { name: "Aufgabe" }).click();
     await expect(composer).toBeVisible();
   }
-  await expect(partnerContext.getByRole("button", { name: "Antwort senden" })).toHaveCount(0);
+  await expect(taskContext.getByRole("button", { name: "Antwort senden" })).toHaveCount(0);
   await expect(composer.getByRole("button", { name: "Dialog beenden" })).toBeVisible();
 
   const geometry = await workspace.locator(".dialog-layout").evaluate((layout) => {
@@ -52,6 +52,10 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promi
     const mainBox = main.getBoundingClientRect();
     const transcriptBox = transcript.getBoundingClientRect();
     const messageBox = message.getBoundingClientRect();
+    const transcriptStyle = getComputedStyle(transcript);
+    const transcriptContentWidth = transcriptBox.width
+      - Number.parseFloat(transcriptStyle.paddingLeft)
+      - Number.parseFloat(transcriptStyle.paddingRight);
     return {
       width: layout.getBoundingClientRect().width,
       columns: getComputedStyle(layout).gridTemplateColumns,
@@ -59,7 +63,8 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promi
       sidebar: { x: sidebarBox.x, y: sidebarBox.y, width: sidebarBox.width, height: sidebarBox.height },
       main: { x: mainBox.x, y: mainBox.y, width: mainBox.width, height: mainBox.height },
       messageWidth: messageBox.width,
-      transcriptWidth: transcriptBox.width
+      transcriptWidth: transcriptBox.width,
+      transcriptContentWidth
     };
   });
 
@@ -72,7 +77,7 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promi
   }
   if (mode === "mobile") {
     expect(geometry.width).toBeLessThan(680);
-    expect(Math.abs(geometry.messageWidth - geometry.transcriptWidth)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.messageWidth - geometry.transcriptContentWidth)).toBeLessThanOrEqual(1);
   }
 }
 
@@ -99,7 +104,8 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     await expect(learner.page.getByText("Welche Beobachtung möchtest du zuerst untersuchen?")).toBeVisible();
     await expect(learner.page.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeHidden();
     await expect(learner.page.getByRole("button", { name: "Dialog beenden" })).toBeHidden();
-    const initialPartnerContext = learner.page.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    const initialTaskContext = learner.page.getByRole("complementary", { name: "Aufgabe und Kontext" });
+    const initialComposer = learner.page.getByRole("region", { name: "Dialog fortsetzen" });
     const initialDialogGeometry = await learner.page.getByRole("region", { name: "KI-Dialog" }).evaluate((workspace) => {
       const sidebar = workspace.querySelector(".dialog-sidebar");
       return {
@@ -109,7 +115,8 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     });
     expect(initialDialogGeometry.width).toBeGreaterThanOrEqual(1152);
     expect(initialDialogGeometry.sidebarDisplay).toBe("grid");
-    await expect(initialPartnerContext.getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeVisible();
+    await expect(initialTaskContext.getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toHaveCount(0);
+    await expect(initialComposer.getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeVisible();
     await expect(
       learner.page.getByRole("region", { name: "Dialog fortsetzen" }).getByRole("button", { name: "Antwort senden" })
     ).toBeVisible();
@@ -117,17 +124,57 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     const sessionId = await prepareCompletedDialogTurn({
       courseId: seeded.courseId,
       taskId: seeded.taskId,
-      learnerSub
+      learnerSub,
+      longTranscript: true
     });
     const storageKey = `gustav.learning.dialog-closing-draft:${encodeURIComponent(learnerSub)}:${seeded.courseId}:${seeded.taskId}:${sessionId}`;
 
     await learner.page.reload();
     await expect(learner.page.getByText("Welche Textstelle belegt diese Beobachtung?")).toBeVisible();
+    await expect(learner.page.getByRole("article", { name: "Aktuelle Frage" })).toContainText(
+      "Welche Textstelle belegt diese Beobachtung?"
+    );
+    await expect(learner.page.getByRole("region", { name: "Gesprächsfortschritt" })).toContainText("Runde 1 von 2");
     await expect(learner.page.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeHidden();
     const accountControl = learner.page.locator(".account-trigger");
     const dialogSeparator = learner.page.getByRole("separator", { name: "Spaltenbreite anpassen" });
     await expectDialogLayout(learner.page, "desktop");
     await expect(dialogSeparator).toBeVisible();
+    const dialogCoachGeometry = await learner.page.getByRole("region", { name: "KI-Dialog" }).evaluate((workspace) => {
+      const main = workspace.querySelector(".dialog-main");
+      const transcript = workspace.querySelector(".dialog-transcript");
+      const composer = workspace.querySelector(".dialog-composer");
+      if (!(main instanceof HTMLElement) || !(transcript instanceof HTMLElement) || !(composer instanceof HTMLElement)) {
+        throw new Error("Dialogcoach layout is incomplete");
+      }
+      const mainBox = main.getBoundingClientRect();
+      const transcriptBox = transcript.getBoundingClientRect();
+      const composerBox = composer.getBoundingClientRect();
+      return {
+        viewportHeight: window.innerHeight,
+        main: { top: mainBox.top, bottom: mainBox.bottom },
+        transcript: {
+          top: transcriptBox.top,
+          bottom: transcriptBox.bottom,
+          clientHeight: transcript.clientHeight,
+          scrollHeight: transcript.scrollHeight,
+          scrollTop: transcript.scrollTop
+        },
+        composer: { top: composerBox.top, bottom: composerBox.bottom }
+      };
+    });
+    expect(dialogCoachGeometry.transcript.scrollHeight).toBeGreaterThan(dialogCoachGeometry.transcript.clientHeight);
+    expect(
+      Math.abs(
+        dialogCoachGeometry.transcript.scrollHeight -
+        dialogCoachGeometry.transcript.clientHeight -
+        dialogCoachGeometry.transcript.scrollTop
+      )
+    ).toBeLessThanOrEqual(2);
+    expect(dialogCoachGeometry.transcript.top).toBeGreaterThanOrEqual(dialogCoachGeometry.main.top);
+    expect(dialogCoachGeometry.composer.top).toBeGreaterThanOrEqual(dialogCoachGeometry.transcript.bottom);
+    expect(dialogCoachGeometry.composer.bottom).toBeLessThanOrEqual(dialogCoachGeometry.main.bottom + 1);
+    expect(dialogCoachGeometry.composer.bottom).toBeLessThanOrEqual(dialogCoachGeometry.viewportHeight + 1);
     await expect(learner.page).toHaveScreenshot("learner-dialog-light-desktop.png", {
       animations: "disabled",
       caret: "hide",
@@ -136,6 +183,30 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     await learner.page.setViewportSize({ width: 1024, height: 768 });
     await expectDialogLayout(learner.page, "desktop");
     await expect(dialogSeparator).toBeVisible();
+    await expect(learner.page.getByRole("article", { name: "Aktuelle Frage" })).toBeVisible();
+    const tabletTranscript = await learner.page.locator(".dialog-transcript").evaluate((transcript) => ({
+      clientHeight: transcript.clientHeight,
+      scrollHeight: transcript.scrollHeight,
+      scrollTop: transcript.scrollTop
+    }));
+    expect(tabletTranscript.scrollHeight).toBeGreaterThan(tabletTranscript.clientHeight);
+    expect(
+      Math.abs(tabletTranscript.scrollHeight - tabletTranscript.clientHeight - tabletTranscript.scrollTop)
+    ).toBeLessThanOrEqual(2);
+    const tabletCurrentQuestion = await learner.page.getByRole("article", { name: "Aktuelle Frage" }).evaluate((article) => {
+      const transcript = article.closest(".dialog-transcript");
+      if (!(transcript instanceof HTMLElement)) throw new Error("Current question is outside the transcript");
+      const articleBox = article.getBoundingClientRect();
+      const transcriptBox = transcript.getBoundingClientRect();
+      return {
+        articleTop: articleBox.top,
+        articleBottom: articleBox.bottom,
+        transcriptTop: transcriptBox.top,
+        transcriptBottom: transcriptBox.bottom
+      };
+    });
+    expect(tabletCurrentQuestion.articleTop).toBeGreaterThanOrEqual(tabletCurrentQuestion.transcriptTop - 1);
+    expect(tabletCurrentQuestion.articleBottom).toBeLessThanOrEqual(tabletCurrentQuestion.transcriptBottom + 1);
     await expect(learner.page).toHaveScreenshot("learner-dialog-light-tablet.png", {
       animations: "disabled",
       caret: "hide",
@@ -163,10 +234,10 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
 
     const closingField = learner.page.getByLabel("Fasse deine wichtigste Erkenntnis zusammen.");
     await expect(closingField).toBeVisible();
-    const closingPartnerContext = learner.page.getByRole("complementary", { name: "Dialogpartner und Sitzungsaktionen" });
+    const closingTaskContext = learner.page.getByRole("complementary", { name: "Aufgabe und Kontext" });
     const closingRegion = learner.page.getByRole("region", { name: "Abschluss vorbereiten" });
-    await expect(closingPartnerContext.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
-    await expect(closingPartnerContext.getByRole("button", { name: "Dialog beenden" })).toHaveCount(0);
+    await expect(closingTaskContext.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
+    await expect(closingTaskContext.getByRole("button", { name: "Dialog beenden" })).toHaveCount(0);
     await expect(closingRegion.getByRole("button", { name: "Zurück zum Dialog" })).toBeVisible();
     await expect(closingRegion.getByRole("button", { name: "Endgültig abgeben" })).toBeVisible();
     await expect(closingRegion.getByRole("button", { name: "Pausieren" })).toHaveCount(0);

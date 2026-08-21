@@ -12,6 +12,7 @@
     submissions = [],
     expanded = true,
     readerMode = false,
+    compact = false,
     courseId = null,
     taskId = null,
     onToggle = null,
@@ -24,6 +25,7 @@
     submissions?: LearningSubmission[];
     expanded?: boolean;
     readerMode?: boolean;
+    compact?: boolean;
     courseId?: string | null;
     taskId?: string | null;
     onToggle?: ((referenceKey: string) => void) | null;
@@ -80,12 +82,30 @@
     return Boolean(url && failedImageUrls.includes(url));
   }
 
+  function materialSummary(): string {
+    if (!material?.body_md) return "Material zur Bearbeitung dieser Aufgabe.";
+    const plain = material.body_md
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/^#{1,6}\s+(.+)$/gm, "$1 —")
+      .replace(/[>*_`~|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/\s+—\s*$/, "")
+      .trim();
+    return plain.length > 155 ? `${plain.slice(0, 152).trimEnd()} …` : plain;
+  }
+
   function submissionDate(submission: LearningSubmission): string {
     return new Date(submission.created_at).toLocaleDateString("de-DE");
   }
 </script>
 
-<article class:learner-reference-document--reader={readerMode} class="learner-reference-document" aria-label={title}>
+<article
+  class:learner-reference-document--reader={readerMode}
+  class:learner-reference-document--compact={compact}
+  class="learner-reference-document"
+  aria-label={title}
+>
   {#if readerMode}
     <header class="learner-reference-document__reader-header">
       {#if label}<p class="workspace-label">{label}</p>{/if}
@@ -109,9 +129,17 @@
         >
           <path d="m6 3.5 4.5 4.5L6 12.5" />
         </svg>
+        {#if compact}
+          <svg class="learner-reference-document__type-icon" viewBox="0 0 24 28" aria-hidden="true">
+            <path d="M5 2.5h9l5 5V25.5H5zM14 2.5v6h5M8.5 14h7M8.5 18h7" />
+          </svg>
+        {/if}
         <span>
           {#if label}<small>{label}</small>{/if}
           <strong>{title}</strong>
+          {#if compact && !expanded}
+            <span class="learner-reference-document__summary">{materialSummary()}</span>
+          {/if}
         </span>
       </button>
       <div class="learner-reference-document__actions">

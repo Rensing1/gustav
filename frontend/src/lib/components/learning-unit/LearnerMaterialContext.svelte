@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
 
+  import LearnerMaterialRow from "$lib/components/learning-unit/LearnerMaterialRow.svelte";
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
@@ -19,6 +20,7 @@
     historyStateByTask = {},
     focusedModuleId = null,
     closedModuleTitle = null,
+    compactRows = false,
     onToggleModule = null,
     onToggleMaterial = null,
     onToggleSubmissionGroup = null,
@@ -37,6 +39,7 @@
     historyStateByTask?: Record<string, HistoryState>;
     focusedModuleId?: string | null;
     closedModuleTitle?: string | null;
+    compactRows?: boolean;
     onToggleModule?: ((moduleId: string) => void | Promise<void>) | null;
     onToggleMaterial?: ((moduleId: string, referenceKey: string) => void) | null;
     onToggleSubmissionGroup?: ((moduleId: string) => void | Promise<void>) | null;
@@ -61,7 +64,7 @@
   }
 
   function moduleExpanded(module: LearnerMaterialContextModule): boolean {
-    return module.current || expandedModuleIds.includes(module.id);
+    return compactRows || module.current || expandedModuleIds.includes(module.id);
   }
 
   function materialItems(module: LearnerMaterialContextModule) {
@@ -82,8 +85,8 @@
   }
 </script>
 
-<section class="learner-material-context" aria-label="Materialien">
-  <h3>Materialien</h3>
+<section class:learner-material-context--compact={compactRows} class="learner-material-context" aria-label="Materialien">
+  {#if !compactRows}<h3>Materialien</h3>{/if}
 
   <div class="learner-material-context__modules">
     {#each modules as module (module.id)}
@@ -96,16 +99,18 @@
         data-context-module-id={module.id}
       >
         <header class="learner-material-context__module-header">
-          {#if module.current}
+          {#if module.current || compactRows}
             <div
               id={`learner-context-module-${safeId(module.id)}`}
               class="learner-material-context__module-toggle learner-material-context__module-toggle--fixed"
               tabindex="-1"
             >
-              <svg class="learner-tree-chevron learner-tree-chevron--expanded" aria-hidden="true" viewBox="0 0 16 16">
-                <path d="m6 3.5 4.5 4.5L6 12.5" />
-              </svg>
-              <h4><span>{module.title}</span><small>Aktuell</small></h4>
+              {#if !compactRows}
+                <svg class="learner-tree-chevron learner-tree-chevron--expanded" aria-hidden="true" viewBox="0 0 16 16">
+                  <path d="m6 3.5 4.5 4.5L6 12.5" />
+                </svg>
+              {/if}
+              <h4><span>{module.title}</span>{#if module.current}<small>Aktuell</small>{/if}</h4>
             </div>
           {:else}
             <button
@@ -141,7 +146,7 @@
         </header>
 
         {#if expanded}
-          <div class="learner-material-context__module-body learner-material-context__tree-children">
+          <div class:learner-material-context__tree-children={!compactRows} class="learner-material-context__module-body">
             {#if module.loading}
               <div class="learner-material-context__tree-item learner-material-context__tree-item--status">
                 <p class="workspace-note">Inhalte werden geladen …</p>
@@ -155,15 +160,24 @@
                 <div class="learner-task-context__list">
                   {#each materials as item, index (item.key)}
                     <div class="learner-material-context__tree-item learner-material-context__tree-item--document">
-                      <LearningReferenceDocument
-                        referenceKey={item.key}
-                        label={null}
-                        title={item.title}
-                        material={item.material}
-                        expanded={materialExpanded(module.id, item.key, index)}
-                        onToggle={(referenceKey) => onToggleMaterial?.(module.id, referenceKey)}
-                        onOpenReader={onOpenReference}
-                      />
+                      {#if compactRows}
+                        <LearnerMaterialRow
+                          {item}
+                          expanded={materialExpanded(module.id, item.key, index)}
+                          onToggle={(referenceKey) => onToggleMaterial?.(module.id, referenceKey)}
+                          {onOpenReference}
+                        />
+                      {:else}
+                        <LearningReferenceDocument
+                          referenceKey={item.key}
+                          label={null}
+                          title={item.title}
+                          material={item.material}
+                          expanded={materialExpanded(module.id, item.key, index)}
+                          onToggle={(referenceKey) => onToggleMaterial?.(module.id, referenceKey)}
+                          onOpenReader={onOpenReference}
+                        />
+                      {/if}
                     </div>
                   {/each}
                 </div>

@@ -820,6 +820,7 @@
                 {learnerSub}
                 {courseId}
                 {task}
+                {taskTitle}
                 compactSurface={dialogCompactSurface}
                 expandedModuleMaterialKeys={dialogExpandedModuleMaterialKeys}
                 expandedContextModuleIds={dialogExpandedContextModuleIds}

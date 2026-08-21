@@ -156,7 +156,8 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     const materialsSwitch = workbench.getByRole("button", { name: "Materialien", exact: true });
     await materialsSwitch.click();
     await expect(materialsSwitch).toHaveAttribute("aria-pressed", "true");
-    await book.getByRole("button", { name: "Modul Quellen ein- oder ausklappen" }).click();
+    await book.getByText("Weitere Materialien und eigene Abgaben", { exact: true }).click();
+    await expect(book.getByRole("heading", { name: "Quellen" })).toBeVisible();
     const contextImage = book.getByRole("img", { name: seeded.contextImageAltText });
     await expect(contextImage).toBeVisible();
     await expect.poll(() => contextImage.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);

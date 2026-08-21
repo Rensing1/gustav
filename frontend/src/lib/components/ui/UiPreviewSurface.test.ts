@@ -31,29 +31,38 @@ describe("UiPreviewSurface", () => {
     expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "KI-Dialog · Gespräch" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "KI-Dialog · Abschluss" })).toBeInTheDocument();
-    expect(screen.getAllByText("Archivarin Ada").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Gespräch mit Archivarin Ada").length).toBeGreaterThan(0);
     expect(screen.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Erfolgreich abgemeldet" })).toBeInTheDocument();
 
     const conversation = screen.getByTestId("preview-dialog-conversation");
-    const conversationPartner = within(conversation).getByRole("complementary", {
-      name: "Dialogpartner und Sitzungsaktionen"
+    const conversationContext = within(conversation).getByRole("complementary", {
+      name: "Aufgabe und Kontext"
     });
     const conversationComposer = within(conversation).getByRole("region", { name: "Beispielhafte Dialogeingabe" });
-    expect(within(conversationPartner).getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
-    expect(within(conversationPartner).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(within(conversationContext).getByText("Aufgabe 2 · KI-Dialog")).toBeInTheDocument();
+    expect(within(conversationContext).getByRole("region", { name: "Materialien" })).toBeInTheDocument();
+    expect(within(conversation).getByRole("region", { name: "Gesprächsfortschritt" })).toHaveTextContent("Runde 1 von 3");
+    expect(within(conversation).getByRole("article", { name: "Aktuelle Frage" })).toHaveTextContent(
+      "Woran machst du diese Perspektive sprachlich fest?"
+    );
+    expect(within(conversationContext).queryByRole("button", { name: "Pausieren" })).toBeNull();
+    expect(within(conversationContext).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
     expect(within(conversationComposer).getByRole("button", { name: "Antwort senden" })).toBeInTheDocument();
-    expect(within(conversationComposer).queryByRole("button", { name: "Pausieren" })).toBeNull();
+    expect(within(conversationComposer).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(within(conversationComposer).getByRole("note")).toHaveTextContent("keine persönlichen oder vertraulichen Informationen");
+    expect(within(conversationContext).queryByRole("note")).toBeNull();
+    expect(within(conversationComposer).getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
 
     const completion = screen.getByTestId("preview-dialog-completion");
-    const completionPartner = within(completion).getByRole("complementary", {
-      name: "Dialogpartner und Sitzungsaktionen"
+    const completionContext = within(completion).getByRole("complementary", {
+      name: "Aufgabe und Kontext"
     });
     const completionField = within(completion).getByRole("region", { name: "Abschluss vorbereiten" });
-    expect(within(completionPartner).getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
+    expect(within(completionContext).queryByRole("button", { name: "Pausieren" })).toBeNull();
     expect(within(completionField).getByRole("button", { name: "Zurück zum Dialog" })).toBeInTheDocument();
     expect(within(completionField).getByRole("button", { name: "Endgültig abgeben" })).toBeInTheDocument();
-    expect(within(completionField).queryByRole("button", { name: "Pausieren" })).toBeNull();
+    expect(within(completionField).getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
 
     const learnerGraphCard = screen.getByText("Übersicht", { selector: ".preview-card__eyebrow" }).closest(".preview-card");
     expect(learnerGraphCard).not.toBeNull();

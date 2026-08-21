@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
-  import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
+  import LearnerTaskContext from "$lib/components/learning-unit/LearnerTaskContext.svelte";
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
   import LearnerTaskSplitDivider from "$lib/components/learning-unit/LearnerTaskSplitDivider.svelte";
   import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
@@ -456,41 +456,30 @@
         >Materialien</button>
       </nav>
 
-      <aside class="learner-task-context" data-work-surface="materials" aria-label="Aufgabe und Kontext">
-        <div
-          bind:this={contextScrollSurface}
-          class="learner-task-context__scroll"
-          onscroll={(event) => onContextScroll?.(event.currentTarget.scrollTop)}
-        >
-            <header class="learner-task-context__header">
-              <p class="workspace-label">{activeItem.title} · {taskKindLabel(task)}</p>
-              <div class="learner-task-context__instruction">
-                {@html renderMarkdown(task.instruction_md)}
-              </div>
-            </header>
-
-            <LearnerMaterialContext
-              {courseId}
-              modules={contextModules}
-              expandedModuleIds={expandedContextModuleIds}
-              {expandedModuleMaterialKeys}
-              {expandedSubmissionModuleIds}
-              {expandedSubmissionKeys}
-              {historyByTask}
-              {historyStateByTask}
-              focusedModuleId={focusedContextModuleId}
-              closedModuleTitle={closedContextModuleTitle}
-              onToggleModule={onToggleContextModule}
-              onToggleMaterial={onToggleContextModuleMaterial}
-              onToggleSubmissionGroup={onToggleContextSubmissions}
-              onToggleSubmission={onToggleContextSubmission}
-              onOpenReference={onOpenContextReference}
-              onCloseModule={onCloseModule}
-              {onUndoCloseModule}
-            />
-        </div>
-
-      </aside>
+      <LearnerTaskContext
+        bind:scrollSurface={contextScrollSurface}
+        {courseId}
+        taskTitle={activeItem.title}
+        taskKind={taskKindLabel(task)}
+        instructionMd={task.instruction_md}
+        modules={contextModules}
+        expandedModuleIds={expandedContextModuleIds}
+        {expandedModuleMaterialKeys}
+        {expandedSubmissionModuleIds}
+        {expandedSubmissionKeys}
+        {historyByTask}
+        {historyStateByTask}
+        focusedModuleId={focusedContextModuleId}
+        closedModuleTitle={closedContextModuleTitle}
+        onScroll={onContextScroll}
+        onToggleModule={onToggleContextModule}
+        onToggleMaterial={onToggleContextModuleMaterial}
+        onToggleSubmissionGroup={onToggleContextSubmissions}
+        onToggleSubmission={onToggleContextSubmission}
+        onOpenReference={onOpenContextReference}
+        onCloseModule={onCloseModule}
+        {onUndoCloseModule}
+      />
 
       <LearnerTaskSplitDivider
         value={taskColumnRatio}

@@ -361,29 +361,30 @@
               <button class="dialog-workspace__switch-button" type="button">Materialien</button>
             </nav>
             <div class="dialog-layout" data-compact-surface="task" data-phase="conversation">
-              <aside class="dialog-sidebar" data-dialog-surface="materials" aria-label="Dialogpartner und Sitzungsaktionen">
-                <header class="dialog-context">
-                  <p class="workspace-label">KI-Dialogpartner</p>
-                  <h5>Archivarin Ada</h5>
-                  <div class="dialog-context__description markdown-prose">
-                    <p>Eine sachkundige Gesprächspartnerin, die historische Quellen mit dir untersucht.</p>
-                  </div>
-                </header>
-                <p class="dialog-context__meta" aria-label="Dialogstatus">
-                  <span>KI</span>
-                  <span>Mit Satzanfängen</span>
-                  <span>Runde 1/3</span>
-                </p>
-                <div class="dialog-notice" role="note">
-                  <strong>Hinweis zur KI</strong>
-                  <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
+              <aside class="learner-task-context dialog-sidebar" data-dialog-surface="materials" aria-label="Aufgabe und Kontext">
+                <div class="learner-task-context__scroll">
+                  <header class="learner-task-context__header">
+                    <p class="workspace-label">Aufgabe 2 · KI-Dialog</p>
+                    <div class="learner-task-context__instruction"><p>Untersuche die Perspektive der Quelle im Gespräch.</p></div>
+                  </header>
+                  <section class="learner-material-context" aria-label="Materialien">
+                    <h3>Materialien</h3>
+                    <p class="workspace-note">Quelle: Protokollauszug von 1961</p>
+                  </section>
                 </div>
-                <nav class="dialog-session-actions" aria-label="Sitzungsaktionen">
-                  <button class="workspace-top-action workspace-top-action--quiet" type="button">Pausieren</button>
-                  <button class="workspace-top-action workspace-top-action--quiet" type="button">Dialog beenden</button>
-                </nav>
               </aside>
               <div class="dialog-main" data-dialog-surface="task">
+                <section class="dialog-progress" aria-label="Gesprächsfortschritt">
+                  <div class="dialog-progress__context">
+                    <p class="workspace-label">KI-Dialog</p>
+                    <strong>Gespräch mit Archivarin Ada</strong>
+                  </div>
+                  <p class="dialog-progress__mode">Mit Hilfestellungen</p>
+                  <div class="dialog-progress__round">
+                    <span>Runde 1 von 3</span>
+                    <div class="dialog-progress__track" role="progressbar" aria-label="Runde 1 von 3" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" style="--dialog-progress-value: 33%"><span></span></div>
+                  </div>
+                </section>
                 <div class="dialog-transcript" role="log" aria-label="Beispielhafter Dialogverlauf">
                   <article class="dialog-message dialog-message--ai">
                     <p class="dialog-message__speaker">KI · Archivarin Ada</p>
@@ -394,7 +395,8 @@
                     <div class="markdown-prose"><p>Die Quelle stellt vor allem die Sicht der Regierung dar.</p></div>
                     <small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>
                   </article>
-                  <article class="dialog-message dialog-message--ai">
+                  <article class="dialog-message dialog-message--ai dialog-message--current" aria-label="Aktuelle Frage">
+                    <p class="dialog-message__current">Aktuelle Frage</p>
                     <p class="dialog-message__speaker">KI · Archivarin Ada</p>
                     <div class="markdown-prose"><p>Woran machst du diese Perspektive sprachlich fest?</p></div>
                   </article>
@@ -409,8 +411,14 @@
                     <span>Deine Antwort (1/3)</span>
                     <textarea rows="3"></textarea>
                   </label>
+                  <div class="dialog-notice" role="note">
+                    <strong>Hinweis zur KI</strong>
+                    <span>Antworten können Fehler enthalten. Gib keine persönlichen oder vertraulichen Informationen ein.</span>
+                  </div>
                   <div class="dialog-actions dialog-composer__actions">
                     <button class="workspace-top-action workspace-top-action--accent" type="button">Antwort senden</button>
+                    <button class="workspace-top-action workspace-top-action--quiet" type="button">Dialog beenden</button>
+                    <button class="workspace-top-action workspace-top-action--quiet" type="button">Pausieren</button>
                   </div>
                 </section>
               </div>
@@ -426,28 +434,30 @@
               <button class="dialog-workspace__switch-button" type="button">Materialien</button>
             </nav>
             <div class="dialog-layout" data-compact-surface="task" data-phase="closing">
-              <aside class="dialog-sidebar" data-dialog-surface="materials" aria-label="Dialogpartner und Sitzungsaktionen">
-                <header class="dialog-context">
-                  <p class="workspace-label">KI-Dialogpartner</p>
-                  <h5>Archivarin Ada</h5>
-                  <div class="dialog-context__description markdown-prose">
-                    <p>Der Verlauf bleibt sichtbar, während du deine Abgabe vorbereitest.</p>
-                  </div>
-                </header>
-                <p class="dialog-context__meta" aria-label="Dialogstatus">
-                  <span>KI</span>
-                  <span>Mit Satzanfängen</span>
-                  <span>Runde 1/3</span>
-                </p>
-                <div class="dialog-notice" role="note">
-                  <strong>Hinweis zur KI</strong>
-                  <span>Antworten können Fehler enthalten. Prüfe deine Schlussfolgerung selbst.</span>
+              <aside class="learner-task-context dialog-sidebar" data-dialog-surface="materials" aria-label="Aufgabe und Kontext">
+                <div class="learner-task-context__scroll">
+                  <header class="learner-task-context__header">
+                    <p class="workspace-label">Aufgabe 2 · KI-Dialog</p>
+                    <div class="learner-task-context__instruction"><p>Untersuche die Perspektive der Quelle im Gespräch.</p></div>
+                  </header>
+                  <section class="learner-material-context" aria-label="Materialien">
+                    <h3>Materialien</h3>
+                    <p class="workspace-note">Quelle: Protokollauszug von 1961</p>
+                  </section>
                 </div>
-                <nav class="dialog-session-actions" aria-label="Sitzungsaktionen">
-                  <button class="workspace-top-action workspace-top-action--quiet" type="button">Pausieren</button>
-                </nav>
               </aside>
               <div class="dialog-main" data-dialog-surface="task">
+                <section class="dialog-progress" aria-label="Gesprächsfortschritt">
+                  <div class="dialog-progress__context">
+                    <p class="workspace-label">KI-Dialog</p>
+                    <strong>Gespräch mit Archivarin Ada</strong>
+                  </div>
+                  <p class="dialog-progress__mode">Mit Hilfestellungen</p>
+                  <div class="dialog-progress__round">
+                    <span>Runde 1 von 3</span>
+                    <div class="dialog-progress__track" role="progressbar" aria-label="Runde 1 von 3" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" style="--dialog-progress-value: 33%"><span></span></div>
+                  </div>
+                </section>
                 <div class="dialog-transcript" role="log" aria-label="Dialogverlauf vor dem Abschluss">
                   <article class="dialog-message dialog-message--ai">
                     <p class="dialog-message__speaker">KI · Archivarin Ada</p>
@@ -469,6 +479,7 @@
                   </label>
                   <div class="dialog-actions dialog-closing__actions">
                     <button class="workspace-top-action workspace-top-action--quiet" type="button">Zurück zum Dialog</button>
+                    <button class="workspace-top-action workspace-top-action--quiet" type="button">Pausieren</button>
                     <button class="workspace-top-action workspace-top-action--accent" type="button">Endgültig abgeben</button>
                   </div>
                 </section>

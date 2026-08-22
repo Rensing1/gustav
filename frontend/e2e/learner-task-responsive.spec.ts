@@ -19,7 +19,52 @@ async function authenticatedPage(browser: Browser): Promise<{ context: BrowserCo
   return { context, page: await context.newPage() };
 }
 
-test("@feature-acceptance keeps the learner task desk split on landscape iPads", async ({ browser }) => {
+async function verifyIndependentWheelScrolling(browser: Browser, taskUrl: string, learnerEmail: string): Promise<void> {
+  const context = await browser.newContext({ baseURL: webBase });
+  const page = await context.newPage();
+  try {
+    await login(page, learnerEmail, password);
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto(taskUrl);
+    const workbench = page.getByRole("region", { name: "Aufgabe bearbeiten" });
+    const contextScroll = workbench.locator(".learner-task-context__scroll");
+    const workScroll = workbench.locator(".learner-task-workbench__main");
+    await page.addStyleTag({
+      content: `
+        .learner-task-context__scroll::after,
+        .learner-task-workbench__main::after {
+          content: "";
+          display: block;
+          height: 80rem;
+        }
+      `
+    });
+    await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);
+    await expect.poll(() => workScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);
+
+    const contextBox = await contextScroll.boundingBox();
+    const workBox = await workScroll.boundingBox();
+    expect(contextBox).not.toBeNull();
+    expect(workBox).not.toBeNull();
+    if (!contextBox || !workBox) return;
+
+    const interactionY = Math.min(contextBox.y + contextBox.height, workBox.y + workBox.height, 768) - 80;
+    await page.mouse.move(contextBox.x + contextBox.width - 8, interactionY);
+    await page.mouse.wheel(0, 500);
+    await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollTop)).toBeGreaterThan(0);
+    expect(await workScroll.evaluate((surface) => surface.scrollTop)).toBe(0);
+
+    const leftScrollTop = await contextScroll.evaluate((surface) => surface.scrollTop);
+    await page.mouse.move(workBox.x + 8, interactionY);
+    await page.mouse.wheel(0, 500);
+    await expect.poll(() => workScroll.evaluate((surface) => surface.scrollTop)).toBeGreaterThan(0);
+    expect(await contextScroll.evaluate((surface) => surface.scrollTop)).toBe(leftScrollTop);
+  } finally {
+    await context.close();
+  }
+}
+
+test("@feature-acceptance keeps the learner task desk split on landscape iPads", async ({ browser, browserName }) => {
   const unique = Date.now();
   const teacherEmail = `responsive_task_teacher_${unique}@${emailDomain}`;
   const learnerEmail = `responsive_task_learner_${unique}@${emailDomain}`;
@@ -39,6 +84,7 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
     const taskRow = learner.page.locator(".learning-task-row").first();
     await expect(taskRow.getByText("Weitere Angaben in der Aufgabe")).toBeVisible();
     await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+    const taskUrl = learner.page.url();
 
     const workbench = learner.page.getByRole("region", { name: "Aufgabe bearbeiten" });
     const context = workbench.getByRole("complementary", { name: "Aufgabe und Kontext" });
@@ -92,6 +138,45 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
     await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);
     await expect.poll(() => workScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);
 
+    const contextScrollBox = await contextScroll.boundingBox();
+    const workScrollBox = await workScroll.boundingBox();
+    expect(contextScrollBox).not.toBeNull();
+    expect(workScrollBox).not.toBeNull();
+    if (contextScrollBox && workScrollBox) {
+      const viewportHeight = await learner.page.evaluate(() => window.innerHeight);
+      const interactionY = Math.max(
+        Math.max(contextScrollBox.y, workScrollBox.y) + 60,
+        Math.min(contextScrollBox.y + contextScrollBox.height, workScrollBox.y + workScrollBox.height, viewportHeight) - 80
+      );
+      const leftInteractionX = contextScrollBox.x + contextScrollBox.width - 8;
+      const rightInteractionX = workScrollBox.x + 8;
+      const targets = await learner.page.evaluate(
+        ({ leftX, rightX, y }) => ({
+          left: document.elementFromPoint(leftX, y)?.closest(".learner-task-context__scroll") !== null,
+          right: document.elementFromPoint(rightX, y)?.closest(".learner-task-workbench__main") !== null
+        }),
+        { leftX: leftInteractionX, rightX: rightInteractionX, y: interactionY }
+      );
+      expect(targets).toEqual({ left: true, right: true });
+
+      const verticalTouchGesture = await restoredSeparator.evaluate((separator) => {
+        const bounds = separator.getBoundingClientRect();
+        const init = {
+          bubbles: true,
+          cancelable: true,
+          pointerId: 23,
+          pointerType: "touch",
+          clientX: bounds.x + bounds.width / 2
+        };
+        const downAllowed = separator.dispatchEvent(new PointerEvent("pointerdown", { ...init, clientY: bounds.y + 80 }));
+        const moveAllowed = separator.dispatchEvent(new PointerEvent("pointermove", { ...init, clientY: bounds.y + 120 }));
+        separator.dispatchEvent(new PointerEvent("pointerup", { ...init, clientY: bounds.y + 120 }));
+        return { downAllowed, moveAllowed };
+      });
+      expect(verticalTouchGesture).toEqual({ downAllowed: true, moveAllowed: true });
+      await expect(restoredSeparator).toHaveAttribute("aria-valuenow", "60");
+    }
+
     await scrollSurfaceWithKeyboard(learner.page, contextScroll, "end");
     await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight - surface.scrollTop)).toBeLessThan(2);
     expect(await workScroll.evaluate((surface) => surface.scrollTop)).toBe(0);
@@ -103,6 +188,10 @@ test("@feature-acceptance keeps the learner task desk split on landscape iPads",
 
     await scrollSurfaceWithKeyboard(learner.page, contextScroll, "start");
     await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollTop)).toBe(0);
+
+    if (browserName === "chromium") {
+      await verifyIndependentWheelScrolling(browser, taskUrl, learnerEmail);
+    }
 
     await learner.page.setViewportSize({ width: 1180, height: 820 });
     await expect(context).toBeVisible();

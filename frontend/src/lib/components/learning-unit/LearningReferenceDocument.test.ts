@@ -88,7 +88,7 @@ describe("LearningReferenceDocument", () => {
             feedback_md: "Die Auswertung ist nachvollziehbar.",
             analysis_json: {
               schema: "criteria.v2",
-              criteria_results: [{ criterion: "Begründung", explanation_md: "Gut belegt." }]
+              criteria_results: [{ criterion: "Begründung", score: 9, max_score: 10, explanation_md: "Gut belegt." }]
             }
           },
           {
@@ -109,7 +109,9 @@ describe("LearningReferenceDocument", () => {
     expect(within(document).getByRole("img", { name: "Eigene Bildabgabe zu Frühere Bildanalyse" })).toBeInTheDocument();
     expect(within(document).getByText(/Versuch 2/)).toBeInTheDocument();
     expect(within(document).getByText("Rückmeldung").closest("details")).not.toHaveAttribute("open");
-    expect(within(document).getByText("Auswertung").closest("details")).not.toHaveAttribute("open");
+    expect(within(document).getByText("Kriterien im Detail").closest("details")).not.toHaveAttribute("open");
+    expect(within(document).getByText("Hervorragend")).toBeInTheDocument();
+    expect(document.textContent).not.toContain("9/10");
     expect(within(document).getByText("Frühere Versuche").closest("details")).not.toHaveAttribute("open");
   });
 });

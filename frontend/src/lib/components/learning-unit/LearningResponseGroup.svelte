@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LearningCriteriaDetails from "$lib/components/learning-unit/LearningCriteriaDetails.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission } from "$lib/types/learning";
 
@@ -24,34 +25,21 @@
 </script>
 
 <section class="learning-response-group" aria-label="Rückmeldung zu deiner Abgabe">
-  {#if submission.feedback_md}
-    <details class="learning-response-panel" open={openPanel === "feedback"}>
+  {#if submission.feedback_md || hasEvaluation()}
+    <details class="learning-response-panel" open={openPanel === "feedback" || openPanel === "evaluation"}>
       <summary>Rückmeldung</summary>
-      <div class="learning-response-panel__body markdown-prose">
-        {@html renderMarkdown(submission.feedback_md)}
-      </div>
-    </details>
-  {/if}
-
-  {#if hasEvaluation()}
-    <details class="learning-response-panel" open={openPanel === "evaluation"}>
-      <summary>Auswertung</summary>
-      <div class="learning-response-panel__body">
-        <ul class="learning-unit-criteria">
-          {#each submission.analysis_json?.criteria_results ?? [] as criterion}
-            <li>
-              <strong>{criterion.criterion}</strong>
-              {#if criterion.score !== undefined && criterion.score !== null}
-                : {criterion.score}/{criterion.max_score ?? 10}
-              {/if}
-              {#if criterion.explanation_md}
-                <div class="markdown-prose">
-                  {@html renderMarkdown(criterion.explanation_md)}
-                </div>
-              {/if}
-            </li>
-          {/each}
-        </ul>
+      <div class="learning-response-panel__body learning-feedback-response">
+        {#if submission.feedback_md}
+          <div class="learning-feedback-response__copy markdown-prose">
+            {@html renderMarkdown(submission.feedback_md)}
+          </div>
+        {/if}
+        {#if hasEvaluation()}
+          <LearningCriteriaDetails
+            criteria={submission.analysis_json?.criteria_results ?? []}
+            open={openPanel === "evaluation"}
+          />
+        {/if}
       </div>
     </details>
   {/if}

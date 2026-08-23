@@ -1,7 +1,7 @@
 # Submissions and feedback
 
 GUSTAV-Version: 0.0.4
-Last verified: 2026-08-20
+Last verified: 2026-08-23
 [Deutsche Version](submissions-and-feedback.de.md)
 
 ![Formative feedback in the learning workspace](../assets/readme/formative-feedback.jpg)
@@ -21,14 +21,14 @@ GUSTAV separates formative feedback from final submission. Learners can have a v
 
 1. The learner writes an answer or selects a suitable file.
 2. **„Rückmeldung einholen“** (“Request feedback”) saves the current version as an immutable attempt and queues it for evaluation.
-3. While processing is underway, GUSTAV displays an in-progress state. When processing is complete, **„Auswertung“** (“Evaluation”) and **„Rückmeldung“** (“Feedback”) appear.
-4. The learner reads the feedback and continues editing the draft. A changed version requires feedback again.
-5. **„Endgültig abgeben“** (“Submit as final”) becomes available only when the current draft exactly matches the most recently reviewed version.
-6. The saved attempt remains available after final submission. Depending on the task, further editing may then be possible or an attempt limit may apply.
+3. While processing is underway, GUSTAV displays an in-progress state. When processing is complete, **„Rückmeldung“** (“Feedback”) opens. Its criterion judgements are available inside **„Kriterien im Detail“** (“Criteria in detail”).
+4. Under **„Dein nächster Schritt“** (“Your next step”), the learner can return directly to the text editor or file field, submit the unchanged version as final, or return to the learning path.
+5. A changed version requires feedback again. **„Endgültig abgeben“** (“Submit as final”) is enabled only when the current draft exactly matches the most recently reviewed version.
+6. After final submission, **„Aufgabe abgeschlossen“** (“Task completed”) replaces the editing actions. If a later task in the same module is still open, it can be opened directly; otherwise the learner returns to the learning path.
 
 ## Learner view
 
-The interface distinguishes the editable draft from saved attempts. Previous submissions can be opened together with their evaluation and feedback. For file tasks, the file name, type, and available preview are displayed. In AI dialogues, final submission ends the dialogue and triggers the final evaluation.
+The interface distinguishes the editable draft from saved attempts. Previous submissions can be opened together with their feedback and criterion details. **„Kriterien im Detail“** (“Criteria in detail”) contains a numbered list; all individual criteria start closed, and each explanation can be expanded deliberately. Criteria are described without point values as **„Mangelhaft“** (“Poor”), **„Ansatzweise“** (“Partial”), **„Gelungen“** (“Successful”), or **„Hervorragend“** (“Excellent”) and additionally distinguished by a subtle colour marker. The written level remains authoritative; colour is only a visual aid. These terms apply only to the individual criterion, not to the learner. The action area deliberately stays flat: spacing and fine horizontal rules separate feedback, decisions, and criterion details instead of nested boxes. For file tasks, the file name, type, and available preview are displayed. In AI dialogues, final submission ends the dialogue and triggers the final evaluation.
 
 ## How it works
 
@@ -50,7 +50,7 @@ AI feedback is formative. It is intended to encourage revision and is neither a 
 ## Common problems
 
 - **„Für diese Fassung zuerst Rückmeldung einholen“** (“Request feedback for this version first”): The draft was changed after the last feedback request.
-- **Evaluation does not appear:** First wait while the in-progress state is displayed. If a persistent error occurs, the version can be submitted for feedback again.
+- **Feedback does not appear:** First wait while the in-progress state is displayed. If a persistent error occurs, the version can be submitted for feedback again.
 - **File is rejected:** Use the original format expected for the task type and select the file again.
 - **Double-clicking does not create a second submission:** This is intentional protection against duplicate attempts.
 - **Session has expired:** Sign in again. GUSTAV attempts to restore the secure working context; nevertheless, check the draft before sending it again.

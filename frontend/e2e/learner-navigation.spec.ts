@@ -193,13 +193,20 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     await expect(responseGroup).toBeVisible();
     const feedbackPanel = responseGroup.locator("details").filter({ hasText: "Rückmeldung" }).first();
     await expect(feedbackPanel).toHaveAttribute("open", "");
-    const feedbackBody = feedbackPanel.locator(".learning-response-panel__body");
+    const feedbackBody = feedbackPanel.locator(".learning-feedback-response__copy");
     await expect(feedbackBody).toBeVisible();
     await expect(feedbackBody.locator("strong")).toHaveCount(0);
     const feedbackText = (await feedbackBody.innerText()).trim();
     expect(feedbackText.length).toBeGreaterThan(0);
     expect(countGermanSentences(feedbackText)).toBe(1);
     expect(feedbackText).not.toContain(confidentialFeedbackMarker);
+    const criteriaDisclosure = feedbackPanel.locator(".learning-criteria-details");
+    await criteriaDisclosure.locator(":scope > summary").click();
+    await expect(criteriaDisclosure).toHaveAttribute("open", "");
+    await expect(criteriaDisclosure.getByText(/Mangelhaft|Ansatzweise|Gelungen|Hervorragend|Ohne Einstufung/).first()).toBeVisible();
+    await expect(responseGroup).not.toContainText(/\/10/);
+    await learner.page.getByRole("button", { name: "Im Entwurf weiterarbeiten" }).click();
+    await expect(textEditor).toBeFocused();
     await expect(textEditor).toHaveAttribute("contenteditable", "true");
 
     await textEditor.fill("Digitale Kommunikation braucht klare und überprüfbare Regeln.");
@@ -216,7 +223,8 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     );
     const directResponseGroup = learner.page.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
     await expect(directResponseGroup).toBeVisible();
-    await expect(directResponseGroup.locator("details").last()).toHaveAttribute("open", "");
+    await expect(directResponseGroup.locator(".learning-response-panel").filter({ hasText: "Rückmeldung" }).first()).toHaveAttribute("open", "");
+    await expect(directResponseGroup.locator(".learning-response-panel").filter({ hasText: "Meine Abgabe" })).not.toHaveAttribute("open", "");
     await expect(learner.page.getByRole("button", { name: "Meine Abgabe" })).toHaveCount(0);
 
     const directAnswerFormat = learner.page.getByRole("group", { name: "Antwortform" });
@@ -237,6 +245,11 @@ test("@feature-acceptance follows graph, reading, task and feedback as one authe
     await expect(feedbackStatus.getByRole("status")).toContainText("Rückmeldung ist bereit", { timeout: 120_000 });
     await expect(learner.page.getByRole("region", { name: "Bisherige Datei" })).toContainText("Aktuelle Datei");
     await expect(uploadInput).toHaveValue("");
+    await directResponseGroup
+      .locator(".learning-response-panel")
+      .filter({ hasText: "Meine Abgabe" })
+      .locator(":scope > summary")
+      .click();
     await expect(directResponseGroup.getByRole("img", { name: "Abgabevorschau" })).toBeVisible();
 
     await expect(learner.page.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();

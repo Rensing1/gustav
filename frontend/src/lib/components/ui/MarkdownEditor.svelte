@@ -7,6 +7,7 @@
     placeholder = "Text eingeben …",
     ariaLabel = name,
     disabled = false,
+    focusRequest = 0,
     onInput = null
   }: {
     name?: string;
@@ -14,9 +15,10 @@
     placeholder?: string;
     ariaLabel?: string;
     disabled?: boolean;
+    focusRequest?: number;
     onInput?: ((nextValue: string) => void) | null;
   } = $props();
 </script>
 
 <!-- This shared entry point keeps authoring and learning forms on one editor contract. -->
-<MarkdownWysiwygEditor {name} {value} {placeholder} {ariaLabel} {disabled} {onInput} />
+<MarkdownWysiwygEditor {name} {value} {placeholder} {ariaLabel} {disabled} {focusRequest} {onInput} />

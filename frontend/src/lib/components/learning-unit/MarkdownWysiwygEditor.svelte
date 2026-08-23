@@ -9,6 +9,7 @@
     placeholder = "Schreibe hier deine Lösung.",
     ariaLabel = name,
     disabled = false,
+    focusRequest = 0,
     onInput = null
   }: {
     name?: string;
@@ -16,10 +17,12 @@
     placeholder?: string;
     ariaLabel?: string;
     disabled?: boolean;
+    focusRequest?: number;
     onInput?: ((nextValue: string) => void) | null;
   } = $props();
 
   let host = $state<HTMLDivElement | null>(null);
+  let fallbackTextarea = $state<HTMLTextAreaElement | null>(null);
   let editor = $state<TiptapMarkdownEditor | null>(null);
   let currentValue = $state("");
   let lastPropValue = $state("");
@@ -31,6 +34,7 @@
   let linkValue = $state("");
   let linkError = $state("");
   let appliedDisabled = $state<boolean | null>(null);
+  let handledFocusRequest = $state(0);
   let removeFormListeners: (() => void) | null = null;
 
   function setCurrentValue(nextValue: string, notify = true) {
@@ -159,6 +163,19 @@
       linkPanelOpen = false;
     }
   });
+
+  $effect(() => {
+    const requested = focusRequest;
+    if (requested <= handledFocusRequest || disabled) {
+      return;
+    }
+    handledFocusRequest = requested;
+    if (editor) {
+      editor.focus();
+    } else {
+      fallbackTextarea?.focus();
+    }
+  });
 </script>
 
 <div class:learning-markdown-editor--disabled={disabled} class="learning-markdown-editor">
@@ -206,6 +223,7 @@
   </fieldset>
   <div bind:this={host} class="learning-markdown-editor__surface"></div>
   <textarea
+    bind:this={fallbackTextarea}
     aria-label={editorReady ? undefined : ariaLabel}
     hidden={editorReady}
     name={editorReady ? undefined : name}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { renderMarkdown } from "$lib/utils/markdown";
+  import LearningCriteriaDetails from "$lib/components/learning-unit/LearningCriteriaDetails.svelte";
   import LearningDialogTranscriptDocument from "$lib/components/learning-unit/LearningDialogTranscriptDocument.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearningMaterial, LearningSubmission } from "$lib/types/learning";
@@ -254,22 +255,12 @@
               <div class="learner-reference-document__prose markdown-prose">
                 {@html renderMarkdown(submission.feedback_md)}
               </div>
+              {#if submission.analysis_json?.criteria_results?.length}
+                <LearningCriteriaDetails criteria={submission.analysis_json.criteria_results} />
+              {/if}
             </details>
-          {/if}
-          {#if submission.analysis_json?.criteria_results?.length}
-            <details class="learner-reference-document__response">
-              <summary>Auswertung</summary>
-              {#each submission.analysis_json.criteria_results as result}
-                <section class="learner-reference-document__criterion">
-                  <strong>{result.criterion}</strong>
-                  {#if result.explanation_md}
-                    <div class="learner-reference-document__prose markdown-prose">
-                      {@html renderMarkdown(result.explanation_md)}
-                    </div>
-                  {/if}
-                </section>
-              {/each}
-            </details>
+          {:else if submission.analysis_json?.criteria_results?.length}
+            <LearningCriteriaDetails criteria={submission.analysis_json.criteria_results} />
           {/if}
           {#if olderSubmissions().length}
             <details class="learner-reference-document__response">

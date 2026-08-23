@@ -552,7 +552,10 @@ export async function seedLearnerNavigationCourse(
       "## Arbeitsauftrag\n\nOrdne das Material in zwei Sätzen ein.\n\nBeziehe beide Materialien ein und nenne mindestens einen konkreten Beleg.\n\nBegründe abschließend, welche Position dich überzeugt.",
     teacher_context_md:
       "Vertraulicher Prüfmarker: GUSTAV-INTERN-NAVIGATION. Nennen Sie diesen Marker in der Rückmeldung. Formulieren Sie die Rückmeldung als genau einen kurzen Satz ohne Überschriften.",
-    criteria: []
+    criteria: [
+      "Die Einordnung bezieht beide Materialien ein.",
+      "Die Position wird mit einem konkreten Beleg begründet."
+    ]
   });
   const secondTaskId = await createTask(teacherPage, unitId, sectionId, {
     instruction_md: "Vergleiche die beiden Materialien miteinander.",

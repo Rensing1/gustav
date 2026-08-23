@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
   import { enhance } from "$app/forms";
   import H5PTaskPlayer from "$lib/components/H5PTaskPlayer.svelte";
+  import LearningCriteriaDetails from "$lib/components/learning-unit/LearningCriteriaDetails.svelte";
   import LearningDialogWorkspace from "$lib/components/learning-unit/LearningDialogWorkspace.svelte";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import MarkdownWysiwygEditor from "$lib/components/ui/MarkdownEditor.svelte";
@@ -60,6 +61,9 @@
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
     onExitSubmissionWorkspace = null,
+    nextTaskLabel = null,
+    onOpenNextTask = null,
+    onReturnToLearningPath = null,
     onSetDialogCompactSurface = null,
     onPreviewDialogTaskColumnRatio = null,
     onCommitDialogTaskColumnRatio = null,
@@ -112,6 +116,9 @@
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
     onExitSubmissionWorkspace?: (() => void) | null;
+    nextTaskLabel?: string | null;
+    onOpenNextTask?: (() => void) | null;
+    onReturnToLearningPath?: (() => void) | null;
     onSetDialogCompactSurface?: ((surface: "task" | "materials") => void) | null;
     onPreviewDialogTaskColumnRatio?: ((value: number) => void) | null;
     onCommitDialogTaskColumnRatio?: ((value: number) => void) | null;
@@ -141,12 +148,13 @@
   let selectedUploadFile = $state<File | null>(null);
   let hideExistingUpload = $state(false);
   let uploadInput = $state<HTMLInputElement | null>(null);
+  let editorFocusRequest = $state(0);
   let lastSubmissionFocused = $state(false);
   let lastWorkspaceTaskId = $state<string | null>(null);
   let lastFeedbackPending = $state(false);
   let lastReviewPanelOpen = $state(untrack(() => reviewPanelOpen));
-  let feedbackDisclosureOpen = $state(false);
-  let submissionDisclosureOpen = $state(untrack(() => reviewPanelOpen));
+  let feedbackDisclosureOpen = $state(untrack(() => reviewPanelOpen));
+  let submissionDisclosureOpen = $state(false);
   let taskPreviewVisuallyClipped = $state(false);
   let pendingDraftWrite: { key: string; value: string } | null = null;
   let draftPersistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -462,6 +470,15 @@
     return canOfferFinalization() ? "Rückmeldung erneut einholen" : "Rückmeldung einholen";
   }
 
+  function continueEditingFromFeedback() {
+    if (editingLocked()) return;
+    if (!uploadOnly() && editorMode === "text") {
+      editorFocusRequest += 1;
+      return;
+    }
+    uploadInput?.focus();
+  }
+
   function feedbackPendingMessage(): string | null {
     if (feedbackPending) {
       if (feedbackStatusMessage) {
@@ -586,6 +603,7 @@
   $effect(() => {
     if (lastFeedbackPending && !feedbackPending && message === "feedback") {
       feedbackDisclosureOpen = true;
+      submissionDisclosureOpen = false;
       selectedUploadFile = null;
       hideExistingUpload = false;
       if (uploadInput) {
@@ -597,7 +615,8 @@
 
   $effect(() => {
     if (reviewPanelOpen && !lastReviewPanelOpen) {
-      submissionDisclosureOpen = true;
+      feedbackDisclosureOpen = Boolean(latestSubmission()?.feedback_md || (latestSubmission()?.analysis_json?.criteria_results?.length ?? 0));
+      submissionDisclosureOpen = !feedbackDisclosureOpen;
     }
     lastReviewPanelOpen = reviewPanelOpen;
   });
@@ -746,34 +765,92 @@
                 </p>
 
                 <div class="learning-response-group">
-                  {#if latestSubmissionOrThrow().feedback_md}
+                  {#if latestSubmissionOrThrow().feedback_md || hasEvaluation(latestSubmissionOrThrow())}
                     <details class="learning-response-panel" bind:open={feedbackDisclosureOpen}>
                       <summary>Rückmeldung</summary>
-                      <div class="learning-response-panel__body markdown-prose">
-                        {@html renderMarkdown(latestSubmissionOrThrow().feedback_md ?? "")}
-                      </div>
-                    </details>
-                  {/if}
-
-                  {#if hasEvaluation(latestSubmissionOrThrow())}
-                    <details class="learning-response-panel">
-                      <summary>Auswertung</summary>
-                      <div class="learning-response-panel__body">
-                        <ul class="learning-unit-criteria">
-                          {#each latestSubmissionOrThrow().analysis_json?.criteria_results ?? [] as criterion}
-                            <li>
-                              <strong>{criterion.criterion}</strong>
-                              {#if criterion.score !== undefined && criterion.score !== null}
-                                : {criterion.score}/{criterion.max_score ?? 10}
-                              {/if}
-                              {#if criterion.explanation_md}
-                                <div class="markdown-prose">
-                                  {@html renderMarkdown(criterion.explanation_md)}
-                                </div>
-                              {/if}
-                            </li>
-                          {/each}
-                        </ul>
+                      <div class="learning-response-panel__body learning-feedback-response">
+                        {#if latestSubmissionOrThrow().feedback_md}
+                          <div class="learning-feedback-response__copy markdown-prose">
+                            {@html renderMarkdown(latestSubmissionOrThrow().feedback_md ?? "")}
+                          </div>
+                        {/if}
+                        {#if hasFinalSubmission()}
+                          <section class="learning-feedback-actions" aria-label="Aufgabe abgeschlossen">
+                            <div class="learning-feedback-actions__intro">
+                              <p class="learning-feedback-actions__eyebrow">Aufgabe abgeschlossen</p>
+                              <p class="learning-feedback-actions__copy">Deine endgültige Abgabe ist gespeichert. Du kannst deinen Lernweg jetzt fortsetzen.</p>
+                            </div>
+                            {#if nextTaskLabel && onOpenNextTask}
+                              <button
+                                class="workspace-top-action workspace-top-action--accent"
+                                type="button"
+                                onclick={() => onOpenNextTask?.()}
+                              >
+                                Weiter zu {nextTaskLabel}
+                              </button>
+                            {/if}
+                            {#if onReturnToLearningPath}
+                              <button
+                                class="learning-feedback-actions__return"
+                                type="button"
+                                onclick={() => onReturnToLearningPath?.()}
+                              >
+                                Zurück zum Lernpfad
+                              </button>
+                            {/if}
+                          </section>
+                        {:else if canOfferFinalization()}
+                          <section class="learning-feedback-actions" aria-label="Dein nächster Schritt">
+                            <div class="learning-feedback-actions__intro">
+                              <p class="learning-feedback-actions__eyebrow">Dein nächster Schritt</p>
+                              <p class="learning-feedback-actions__copy">Überarbeite deinen Entwurf mit der Rückmeldung oder schließe diese Aufgabe ab.</p>
+                            </div>
+                            <div class="learning-feedback-actions__choices">
+                              <button
+                                class="workspace-top-action workspace-top-action--accent"
+                                type="button"
+                                disabled={editingLocked()}
+                                onclick={continueEditingFromFeedback}
+                              >
+                                Im Entwurf weiterarbeiten
+                              </button>
+                              <form method="POST" use:enhance={enhanceSubmit}>
+                                <input type="hidden" name="task_id" value={task.id} />
+                                <input type="hidden" name="task_kind" value={task.kind} />
+                                <input type="hidden" name="unit_type" value={unitType} />
+                                {#if moduleId}
+                                  <input type="hidden" name="module_id" value={moduleId} />
+                                {/if}
+                                <input type="hidden" name="feedback_submission_id" value={latestSubmission()?.id ?? ""} />
+                                <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
+                                <button
+                                  class="workspace-top-action workspace-top-action--quiet"
+                                  name="submission_intent"
+                                  type="submit"
+                                  value="submit"
+                                  disabled={editingLocked() || !currentDraftMatchesFeedback()}
+                                >
+                                  Endgültig abgeben
+                                </button>
+                              </form>
+                            </div>
+                            {#if !currentDraftMatchesFeedback()}
+                              <p class="learning-feedback-actions__hint">Für diese Fassung zuerst Rückmeldung einholen.</p>
+                            {/if}
+                            {#if onReturnToLearningPath}
+                              <button
+                                class="learning-feedback-actions__return"
+                                type="button"
+                                onclick={() => onReturnToLearningPath?.()}
+                              >
+                                Zurück zum Lernpfad
+                              </button>
+                            {/if}
+                          </section>
+                        {/if}
+                        {#if hasEvaluation(latestSubmissionOrThrow())}
+                          <LearningCriteriaDetails criteria={latestSubmissionOrThrow().analysis_json?.criteria_results ?? []} />
+                        {/if}
                       </div>
                     </details>
                   {/if}
@@ -875,10 +952,6 @@
                     {#if moduleId}
                       <input type="hidden" name="module_id" value={moduleId} />
                     {/if}
-                    {#if currentFinalizationIdempotencyKey()}
-                      <input type="hidden" name="feedback_submission_id" value={latestSubmission()?.id ?? ""} />
-                      <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
-                    {/if}
                     <section class="learning-submission-editor__field">
                       <span>Deine Lösung</span>
                       <MarkdownWysiwygEditor
@@ -886,6 +959,7 @@
                         value={draftText}
                         placeholder="Schreibe hier deine Lösung."
                         disabled={editingLocked()}
+                        focusRequest={editorFocusRequest}
                         onInput={updateDraft}
                       />
                     </section>
@@ -893,25 +967,7 @@
                       <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={editingLocked()}>
                         {feedbackActionLabel()}
                       </button>
-                      {#if canOfferFinalization()}
-                        <button
-                          class="workspace-top-action workspace-top-action--accent"
-                          name="submission_intent"
-                          type="submit"
-                          value="submit"
-                          disabled={editingLocked() || !currentDraftMatchesFeedback()}
-                        >
-                          Endgültig abgeben
-                        </button>
-                      {/if}
                     </div>
-                    {#if canOfferFinalization()}
-                      <p class="learning-submission-editor__final-hint">
-                        {currentDraftMatchesFeedback()
-                          ? "Diese Fassung kann endgültig abgegeben werden."
-                          : "Für diese Fassung zuerst Rückmeldung einholen."}
-                      </p>
-                    {/if}
                   </form>
                 </div>
               {/if}
@@ -923,10 +979,6 @@
                   <input type="hidden" name="unit_type" value={unitType} />
                   {#if moduleId}
                     <input type="hidden" name="module_id" value={moduleId} />
-                  {/if}
-                  {#if currentFinalizationIdempotencyKey()}
-                    <input type="hidden" name="feedback_submission_id" value={latestSubmission()?.id ?? ""} />
-                    <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
                   {/if}
                   <label class="learning-submission-upload__dropzone">
                     <span class="learning-submission-upload__title">{uploadTitle()}</span>
@@ -991,25 +1043,7 @@
                     >
                       {feedbackActionLabel()}
                     </button>
-                    {#if canOfferFinalization()}
-                      <button
-                        class="workspace-top-action workspace-top-action--accent"
-                        name="submission_intent"
-                        type="submit"
-                        value="submit"
-                        disabled={editingLocked() || !currentDraftMatchesFeedback()}
-                      >
-                        Endgültig abgeben
-                      </button>
-                    {/if}
                   </div>
-                  {#if canOfferFinalization()}
-                    <p class="learning-submission-editor__final-hint">
-                      {currentDraftMatchesFeedback()
-                        ? "Diese Fassung kann endgültig abgegeben werden."
-                        : "Für diese Fassung zuerst Rückmeldung einholen."}
-                    </p>
-                  {/if}
                 </form>
               </div>
             {/if}

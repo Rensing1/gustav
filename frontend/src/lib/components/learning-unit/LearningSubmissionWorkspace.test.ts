@@ -287,6 +287,8 @@ describe("LearningSubmissionWorkspace", () => {
     expect(screen.getByText("Datei")).toBeInTheDocument();
     expect(screen.getByText(/Die Grafik ist gut lesbar/i)).toBeInTheDocument();
     expect(screen.getByText(/Anschaulichkeit/)).toBeInTheDocument();
+    expect(screen.getByText("Gelungen")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("8/10");
   });
 
   it("explains complex image feedback failures with a concrete retry hint", () => {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-23
+
+### Features
+- feat(learning): Lernende sehen Kriterienbewertungen als `Mangelhaft`, `Ansatzweise`, `Gelungen` oder `Hervorragend` innerhalb der zuerst geöffneten Rückmeldung; numerische Einzelwerte bleiben ausschließlich intern und in der Lehrkraftdiagnostik erhalten.
+- feat(learning): „Im Entwurf weiterarbeiten“ führt aus der Rückmeldung direkt zum Texteditor beziehungsweise Dateifeld, während „Meine Abgabe“ als getrennte Offenlegung erhalten bleibt.
+- feat(learning): Ein flacher Aktionsbereich bündelt nach der Rückmeldung Überarbeiten, endgültige Abgabe und Rückkehr zum Lernpfad; nach dem Abschluss führt er zur nächsten offenen Aufgabe im selben Modul oder zurück zum Lernpfad.
+- ui(learning): `Kriterien im Detail` zeigt eine nummerierte, zweistufig aufklappbare Liste mit dezent getönten qualitativen Statusmarken.
+
+### Tests
+- test(learning): Unit-, Komponenten- und authentifizierte Browserprüfungen sichern Schwellenwerte, normalisierte Maxima, ungültige Werte, Offenlegungshierarchie und Fokusführung ab.
+- test(learning): Komponentenprüfungen sichern den Aktionswechsel nach der endgültigen Abgabe sowie das Überspringen bereits abgeschlossener Aufgaben ab.
+
 ## 2026-08-20
 
 ### Features

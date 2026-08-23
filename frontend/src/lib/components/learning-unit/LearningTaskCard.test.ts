@@ -204,7 +204,7 @@ describe("LearningTaskCard", () => {
     const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
     expect(responseGroup.compareDocumentPosition(answerFormat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(responseGroup).getByText("Rückmeldung").closest("details")).not.toHaveAttribute("open");
-    expect(within(responseGroup).getByText("Auswertung").closest("details")).not.toHaveAttribute("open");
+    expect(within(responseGroup).getByText("Kriterien im Detail").closest("details")).not.toHaveAttribute("open");
     expect(within(responseGroup).getByText("Meine Abgabe").closest("details")).not.toHaveAttribute("open");
     expect(screen.queryByRole("tab")).toBeNull();
   });
@@ -271,9 +271,8 @@ describe("LearningTaskCard", () => {
     await fireEvent.input(editor, { target: { value: "Mein überarbeiteter Entwurf" } });
 
     expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
-    const textForm = editor.closest("form");
-    expect(textForm).not.toBeNull();
-    expect(within(textForm!).getByText("Für diese Fassung zuerst Rückmeldung einholen.")).toBeInTheDocument();
+    const actions = screen.getByRole("region", { name: "Dein nächster Schritt" });
+    expect(within(actions).getByText("Für diese Fassung zuerst Rückmeldung einholen.")).toBeInTheDocument();
   });
 
   it("locks text and file inputs while feedback is being generated", () => {
@@ -529,7 +528,8 @@ describe("LearningTaskCard", () => {
 
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
     const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
-    expect(within(responseGroup).getByText("Meine Abgabe").closest("details")).toHaveAttribute("open");
+    expect(responseGroup.querySelector(".learning-response-panel")).toHaveAttribute("open");
+    expect(within(responseGroup).getByText("Meine Abgabe").closest("details")).not.toHaveAttribute("open");
     const editor = container.querySelector(".learning-task-inline-editor");
     expect(editor).not.toBeNull();
     expect(within(editor as HTMLElement).getByText(/Erkläre/i, { exact: false })).toBeInTheDocument();
@@ -644,7 +644,7 @@ describe("LearningTaskCard", () => {
     expect(responseGroup.querySelector("details:first-child .markdown-prose em")).not.toBeNull();
     expect(responseGroup.querySelector("details:first-child .markdown-prose ul")).not.toBeNull();
     expect(screen.getByRole("link", { name: "Hinweis" })).toHaveAttribute("href", "https://example.com");
-    expect(responseGroup.querySelector(".learning-unit-criteria .markdown-prose table")).not.toBeNull();
+    expect(responseGroup.querySelector(".learning-criterion__explanation.markdown-prose table")).not.toBeNull();
   });
 
   it("does not render empty response disclosures while submission history is still unavailable", () => {
@@ -836,9 +836,9 @@ describe("LearningTaskCard", () => {
     const feedbackSubmissionIds = Array.from(
       document.querySelectorAll<HTMLInputElement>('input[name="feedback_submission_id"]')
     );
-    expect(finalizationKeys).toHaveLength(2);
+    expect(finalizationKeys).toHaveLength(1);
     expect(finalizationKeys.every((input) => input.value === `finalize-${reviewedSubmissionId}`)).toBe(true);
-    expect(feedbackSubmissionIds).toHaveLength(2);
+    expect(feedbackSubmissionIds).toHaveLength(1);
     expect(feedbackSubmissionIds.every((input) => input.value === reviewedSubmissionId)).toBe(true);
   });
 
@@ -1022,7 +1022,7 @@ describe("LearningTaskCard", () => {
     });
   });
 
-  it("opens submission, feedback and evaluation as ordered disclosures in the editor", async () => {
+  it("opens feedback first and nests qualitative criteria inside it", async () => {
     const { rerender } = render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -1094,18 +1094,182 @@ describe("LearningTaskCard", () => {
     });
 
     const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
-    const disclosures = Array.from(responseGroup.querySelectorAll("summary"));
-    expect(disclosures.map((item) => item.textContent?.trim())).toEqual(["Rückmeldung", "Auswertung", "Meine Abgabe"]);
-    expect(within(responseGroup).getByText("Meine Abgabe").closest("details")).toHaveAttribute("open");
-    expect(within(responseGroup).getByText("Meine Lösung")).toBeInTheDocument();
-    await fireEvent.click(disclosures[0]);
+    const topLevelDisclosures = Array.from(
+      responseGroup.querySelectorAll(".learning-response-group > .learning-response-panel > summary")
+    );
+    expect(topLevelDisclosures.map((item) => item.textContent?.trim())).toEqual(["Rückmeldung", "Meine Abgabe"]);
+    expect(topLevelDisclosures[0]?.closest("details")).toHaveAttribute("open");
+    expect(within(responseGroup).getByText("Meine Abgabe").closest("details")).not.toHaveAttribute("open");
     expect(within(responseGroup).getByText("Gut gemacht.")).toBeInTheDocument();
 
-    await fireEvent.click(disclosures[1]);
+    await fireEvent.click(within(responseGroup).getByText("Kriterien im Detail"));
     expect(within(responseGroup).getByText("Klarheit")).toBeInTheDocument();
-    const criteriaItem = within(responseGroup).getByText("Klarheit").closest("li");
-    expect(criteriaItem?.textContent).toContain("8/10");
+    const criteriaItem = within(responseGroup).getByText("Klarheit").closest("details");
+    expect(criteriaItem?.textContent).toContain("Gelungen");
+    expect(criteriaItem?.textContent).not.toContain("8/10");
     expect(within(responseGroup).getByText("Gut strukturiert.")).toBeInTheDocument();
+  });
+
+  it("focuses the active text editor when the learner continues from feedback", async () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 5",
+        unitType: "linear",
+        expanded: true,
+        reviewPanelOpen: true,
+        initialSubmissionMode: "text",
+        history: [
+          {
+            id: "submission-feedback",
+            attempt_nr: 1,
+            kind: "text",
+            intent: "feedback",
+            created_at: "2026-04-05 10:00",
+            analysis_status: "completed",
+            text_body: "Mein Entwurf",
+            feedback_md: "Gut begonnen."
+          }
+        ]
+      }
+    });
+
+    const editor = await screen.findByRole("textbox", { name: "text_body" });
+    await fireEvent.click(screen.getByRole("button", { name: "Im Entwurf weiterarbeiten" }));
+    expect(editor).toHaveFocus();
+  });
+
+  it("offers revision, final submission and the learning path after feedback", () => {
+    const onReturnToLearningPath = vi.fn();
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        workspaceOnly: true,
+        reviewPanelOpen: true,
+        initialSubmissionMode: "text",
+        onReturnToLearningPath,
+        history: [
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            attempt_nr: 1,
+            kind: "text",
+            intent: "feedback",
+            created_at: "2026-08-23T10:00:00Z",
+            analysis_status: "completed",
+            text_body: "Mein Entwurf",
+            feedback_md: "Gut begonnen."
+          }
+        ]
+      }
+    });
+
+    const actions = screen.getByRole("region", { name: "Dein nächster Schritt" });
+    expect(within(actions).getByRole("button", { name: "Im Entwurf weiterarbeiten" })).toBeEnabled();
+    expect(within(actions).getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(within(actions).getByRole("button", { name: "Zurück zum Lernpfad" })).toBeEnabled();
+    expect(screen.getAllByRole("button", { name: "Endgültig abgeben" })).toHaveLength(1);
+  });
+
+  it("replaces editing actions with onward navigation after final submission", async () => {
+    const onOpenNextTask = vi.fn();
+    const onReturnToLearningPath = vi.fn();
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        workspaceOnly: true,
+        reviewPanelOpen: true,
+        nextTaskLabel: "Aufgabe 2",
+        onOpenNextTask,
+        onReturnToLearningPath,
+        history: [
+          {
+            id: "22222222-2222-4222-8222-222222222222",
+            attempt_nr: 2,
+            kind: "text",
+            intent: "submit",
+            created_at: "2026-08-23T10:05:00Z",
+            analysis_status: "completed",
+            text_body: "Meine endgültige Fassung",
+            feedback_md: "Gut abgeschlossen."
+          }
+        ]
+      }
+    });
+
+    const actions = screen.getByRole("region", { name: "Aufgabe abgeschlossen" });
+    expect(within(actions).queryByRole("button", { name: "Im Entwurf weiterarbeiten" })).toBeNull();
+    expect(within(actions).queryByRole("button", { name: "Endgültig abgeben" })).toBeNull();
+
+    await fireEvent.click(within(actions).getByRole("button", { name: "Weiter zu Aufgabe 2" }));
+    expect(onOpenNextTask).toHaveBeenCalledOnce();
+    await fireEvent.click(within(actions).getByRole("button", { name: "Zurück zum Lernpfad" }));
+    expect(onReturnToLearningPath).toHaveBeenCalledOnce();
+  });
+
+  it("returns to the learning path when no later task is available", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Letzte Aufgabe",
+        unitType: "linear",
+        workspaceOnly: true,
+        reviewPanelOpen: true,
+        onReturnToLearningPath: vi.fn(),
+        history: [
+          {
+            id: "33333333-3333-4333-8333-333333333333",
+            attempt_nr: 2,
+            kind: "text",
+            intent: "submit",
+            created_at: "2026-08-23T10:10:00Z",
+            analysis_status: "completed",
+            text_body: "Meine endgültige Fassung",
+            feedback_md: "Gut abgeschlossen."
+          }
+        ]
+      }
+    });
+
+    const actions = screen.getByRole("region", { name: "Aufgabe abgeschlossen" });
+    expect(within(actions).queryByRole("button", { name: /^Weiter zu / })).toBeNull();
+    expect(within(actions).getByRole("button", { name: "Zurück zum Lernpfad" })).toBeEnabled();
+  });
+
+  it("focuses the file field when the learner continues an upload from feedback", async () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task,
+        taskTitle: "Aufgabe 5",
+        unitType: "linear",
+        expanded: true,
+        reviewPanelOpen: true,
+        initialSubmissionMode: "upload",
+        history: [
+          {
+            id: "submission-feedback",
+            attempt_nr: 1,
+            kind: "image",
+            intent: "feedback",
+            created_at: "2026-04-05 10:00",
+            analysis_status: "completed",
+            feedback_md: "Gut begonnen."
+          }
+        ]
+      }
+    });
+
+    const input = screen.getByLabelText("Datei auswählen");
+    await fireEvent.click(screen.getByRole("button", { name: "Im Entwurf weiterarbeiten" }));
+    expect(input).toHaveFocus();
   });
 
   it("places the response disclosures directly above the answer controls", () => {

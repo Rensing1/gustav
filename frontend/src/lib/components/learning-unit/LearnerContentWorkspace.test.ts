@@ -240,6 +240,80 @@ describe("LearnerContentWorkspace", () => {
     expect(within(context).queryByRole("button", { name: "Pausieren" })).not.toBeInTheDocument();
   });
 
+  it("continues with the next non-final task in the same module", async () => {
+    const onBeginTask = vi.fn();
+    const taskTwo = {
+      key: "task:task-2",
+      kind: "task" as const,
+      title: "Aufgabe 2",
+      position: 4,
+      contextLabel: "Grundlagen",
+      moduleId: "module-1",
+      task: {
+        id: "task-2",
+        instruction_md: "Diese Aufgabe ist bereits abgeschlossen.",
+        criteria: [],
+        kind: "native" as const,
+        latest_final_submission_at: "2026-08-22T10:00:00Z"
+      }
+    };
+    const taskThree = {
+      key: "task:task-3",
+      kind: "task" as const,
+      title: "Aufgabe 3",
+      position: 5,
+      contextLabel: "Grundlagen",
+      moduleId: "module-1",
+      task: {
+        id: "task-3",
+        instruction_md: "Diese Aufgabe ist noch offen.",
+        criteria: [],
+        kind: "native" as const
+      }
+    };
+    const contentGroups: ContentGroup[] = [
+      {
+        ...groups[0],
+        items: [...groups[0].items, taskTwo, taskThree]
+      },
+      groups[1]
+    ];
+    const props = {
+      ...baseProps(),
+      contentGroups,
+      contextModules: [
+        {
+          ...baseProps().contextModules[0],
+          items: contentGroups[0].items
+        }
+      ],
+      mode: "working" as const,
+      workStatus: "result" as const,
+      activeTaskKey: "task:task-1",
+      activeEditorMode: "text" as const,
+      onBeginTask,
+      historyByTask: {
+        "task-1": [
+          {
+            id: "33333333-3333-4333-8333-333333333333",
+            attempt_nr: 2,
+            kind: "text" as const,
+            intent: "submit" as const,
+            created_at: "2026-08-23T10:00:00Z",
+            analysis_status: "completed" as const,
+            text_body: "Meine endgültige Fassung",
+            feedback_md: "Gut abgeschlossen."
+          }
+        ]
+      }
+    };
+
+    render(LearnerContentWorkspace, { props });
+    await fireEvent.click(screen.getByRole("button", { name: "Weiter zu Aufgabe 3" }));
+
+    expect(onBeginTask).toHaveBeenCalledWith("task:task-3", "text");
+  });
+
   it("connects the adjustable column separator to normal task layout state", async () => {
     const onPreviewTaskColumnRatio = vi.fn();
     const onCommitTaskColumnRatio = vi.fn();

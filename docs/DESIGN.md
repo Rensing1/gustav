@@ -511,26 +511,45 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
   Abgabe geladen. Eine vorhandene Datei erscheint als Vorschau mit Metadaten
   und der Aktion `Andere Datei auswählen`; ein natives Dateifeld wird niemals
   vorbefüllt.
-- Oberhalb der Bearbeitung steht in fester Reihenfolge die bedingte
-  Disclosure-Familie `Rückmeldung`, `Auswertung`, `Meine Abgabe`.
-  `Rückmeldung` setzt `feedback_md`, `Auswertung` mindestens ein tatsächliches
-  Kriterienergebnis voraus. Leere Bereiche und Platzhalter werden nicht
-  gerendert. `Meine Abgabe` zeigt unverändert den Snapshot, auf den sich die
-  Hinweise beziehen.
+- Oberhalb der Bearbeitung steht `Rückmeldung` als inhaltliches Dach. Das
+  formative `feedback_md` steht zuerst; tatsächliche Kriterienergebnisse folgen
+  darin als verschachtelte Offenlegung `Kriterien im Detail`. `Meine Abgabe`
+  bleibt eine getrennte Offenlegung und zeigt unverändert den Snapshot, auf den
+  sich die Hinweise beziehen. Leere Bereiche und Platzhalter werden nicht
+  gerendert.
+- Lernende sehen Kriterienwerte qualitativ als `Mangelhaft` (0–2),
+  `Ansatzweise` (3–6), `Gelungen` (7–8) oder `Hervorragend` (9–10). Bei einem
+  anderen Maximum wird der Wert ohne Rundung auf die Zehnerskala normalisiert;
+  ungültige Werte erscheinen als `Ohne Einstufung`. Die numerischen Scores
+  bleiben in der Lehrkraftdiagnostik erhalten. `Kriterien im Detail` öffnet
+  eine nummerierte Liste; jede Zeile lässt sich für ihre Begründung einzeln
+  öffnen. Kleine entsättigte Statusmarken unterscheiden die Stufen zusätzlich,
+  ohne die ausgeschriebene Bezeichnung durch eine Ampellogik zu ersetzen. Beim
+  Öffnen der Liste sind alle einzelnen Kriterien zunächst geschlossen.
 - `Rückmeldung einholen` wechselt nicht auf eine andere Seite. Während der
   Verarbeitung sind Editor, Antwortform, Dateiauswahl und Abgabeaktionen
   gesperrt. Sowohl `Rückmeldung einholen` als auch `Endgültig abgeben` zeigen
   unmittelbar einen sichtbaren Verarbeitungsstatus und verhindern weitere
   Abgabeversuche. Erfolg bleibt in der Aufgabenfläche erkennbar; bereinigte
   Fehler erscheinen dort mit einer möglichen nächsten Aktion. Nach
-  erfolgreicher Verarbeitung öffnet sich `Rückmeldung` inline, ohne den
-  Tastaturfokus ungefragt zu verschieben. Beim späteren Wiedereinstieg bleiben
-  alle Offenlegungen zunächst geschlossen.
+  erfolgreicher Verarbeitung und beim direkten Öffnen der Ergebnisansicht
+  öffnet sich `Rückmeldung` inline, ohne den Tastaturfokus ungefragt zu
+  verschieben. Manuelles Schließen wird durch Polling nicht rückgängig gemacht.
+  Der flache Abschnitt `Dein nächster Schritt` bündelt danach die eigentliche
+  Entscheidung: `Im Entwurf weiterarbeiten` ist die formative Hauptaktion,
+  `Endgültig abgeben` die bewusste Abschlussaktion und `Zurück zum Lernpfad`
+  eine zurückhaltende Navigation. `Im Entwurf weiterarbeiten` verschiebt den
+  Fokus erst nach einer ausdrücklichen Aktivierung zum Texteditor beziehungsweise
+  Dateifeld. Die Abschlussaktion wird nicht zusätzlich unter dem Editor wiederholt.
 - Weicht die sichtbare Fassung vom zuletzt rückgemeldeten Snapshot ab, bleibt
   die bisherige Rückmeldung lesbar, aber `Endgültig abgeben` ist mit dem Hinweis
   `Für diese Fassung zuerst Rückmeldung einholen.` deaktiviert. Nach der
-  Finalisierung bleibt der Aufgabenraum sichtbar und wird schreibgeschützt; ein
-  erlaubter weiterer Versuch öffnet ihn erneut zur Bearbeitung.
+  Finalisierung bleibt der Aufgabenraum sichtbar und wird schreibgeschützt.
+  `Aufgabe abgeschlossen` führt entweder zur nächsten noch offenen Aufgabe, die
+  im selben Modul nach der aktuellen Aufgabe liegt, oder zurück zum Lernpfad.
+  Bereits endgültig abgegebene Aufgaben werden übersprungen; es gibt keinen
+  automatischen Sprung in ein anderes Modul. Ein erlaubter weiterer Versuch
+  öffnet die Aufgabe erneut zur Bearbeitung.
 
 - Die linke Fläche funktioniert als fortlaufende Buchseite. Sie zeigt bei
   modularen Lerneinheiten ausschließlich Module, die der Schüler zuvor im

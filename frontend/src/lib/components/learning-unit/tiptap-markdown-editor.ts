@@ -24,6 +24,7 @@ export type TiptapMarkdownEditor = {
   deleteTable: () => void;
   isActive: (name: string, attributes?: Record<string, unknown>) => boolean;
   hasNode: (name: string) => boolean;
+  focus: () => void;
   destroy: () => void;
 };
 
@@ -120,6 +121,7 @@ export function createTiptapMarkdownEditor(options: CreateEditorOptions): Tiptap
     deleteTable: () => void focus().deleteTable().run(),
     isActive: (name, attributes) => editor.isActive(name, attributes),
     hasNode: (name) => Boolean(editor.schema.nodes[name]),
+    focus: () => void focus().run(),
     destroy: () => editor.destroy()
   };
 }

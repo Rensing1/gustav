@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
 
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
+  import LearningCriteriaDetails from "$lib/components/learning-unit/LearningCriteriaDetails.svelte";
   import MarkdownWysiwygEditor from "$lib/components/ui/MarkdownEditor.svelte";
   import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
@@ -391,12 +392,17 @@
                 </section>
               {/if}
 
-              {#if submission.feedback_md}
+              {#if submission.feedback_md || submission.analysis_json?.criteria_results?.length}
                 <section class="learning-submission-history__section">
-                  <p class="workspace-label">Rückmeldung</p>
-                  <div class="markdown-prose">
-                    {@html renderMarkdown(submission.feedback_md)}
-                  </div>
+                  <p class="workspace-label">{submission.feedback_md ? "Rückmeldung" : "Kriterien im Detail"}</p>
+                  {#if submission.feedback_md}
+                    <div class="markdown-prose">
+                      {@html renderMarkdown(submission.feedback_md)}
+                    </div>
+                  {/if}
+                  {#if submission.analysis_json?.criteria_results?.length}
+                    <LearningCriteriaDetails criteria={submission.analysis_json.criteria_results} open={true} />
+                  {/if}
                 </section>
               {/if}
 
@@ -407,26 +413,6 @@
                 </section>
               {/if}
 
-              {#if submission.analysis_json?.criteria_results?.length}
-                <section class="learning-submission-history__section">
-                  <p class="workspace-label">Auswertung</p>
-                  <ul class="learning-unit-criteria">
-                    {#each submission.analysis_json.criteria_results as criterion}
-                      <li>
-                        <strong>{criterion.criterion}</strong>
-                        {#if criterion.score !== undefined && criterion.score !== null}
-                          : {criterion.score}/{criterion.max_score ?? 10}
-                        {/if}
-                        {#if criterion.explanation_md}
-                          <div class="markdown-prose">
-                            {@html renderMarkdown(criterion.explanation_md)}
-                          </div>
-                        {/if}
-                      </li>
-                    {/each}
-                  </ul>
-                </section>
-              {/if}
             </article>
           {/each}
         </div>

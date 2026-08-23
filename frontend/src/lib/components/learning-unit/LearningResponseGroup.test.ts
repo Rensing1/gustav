@@ -22,25 +22,27 @@ const submission: LearningSubmission = {
 };
 
 describe("LearningResponseGroup", () => {
-  it("renders feedback, evaluation and submission as ordered disclosure blocks", () => {
+  it("nests qualitative criteria below feedback and keeps the submission separate", () => {
     render(LearningResponseGroup, {
       props: {
         submission: {
           ...submission,
           analysis_json: {
             schema: "learning.v1",
-            criteria_results: [{ criterion: "Klarheit", score: 8, max_score: 10 }]
+            criteria_results: [{ criterion: "Klarheit", score: 8, max_score: 10, explanation_md: "Gut erklärt." }]
           }
         }
       }
     });
 
     const group = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
-    expect(Array.from(group.querySelectorAll("summary"), (summary) => summary.textContent?.trim())).toEqual([
+    expect(Array.from(group.querySelectorAll(".learning-response-panel > summary"), (summary) => summary.textContent?.trim())).toEqual([
       "Rückmeldung",
-      "Auswertung",
       "Meine Abgabe"
     ]);
+    expect(screen.getByText("Kriterien im Detail")).toBeInTheDocument();
+    expect(screen.getByText("Gelungen")).toBeInTheDocument();
+    expect(group.textContent).not.toContain("8/10");
   });
 
   it("omits empty feedback and evaluation disclosures", () => {

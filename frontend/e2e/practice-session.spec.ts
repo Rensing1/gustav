@@ -225,8 +225,10 @@ test("@feature-acceptance teacher authors and learner completes native and H5P p
         }
       } else {
         h5pPresentations += 1;
-        const player = learner.page.locator("h5p-player");
+        const playerShell = learner.page.locator(".h5p-task-player");
+        const player = playerShell.locator("h5p-player");
         await expect(player).toBeVisible({ timeout: 30_000 });
+        await expect(playerShell.getByText("Bereit.", { exact: true })).toBeVisible({ timeout: 30_000 });
         const contextId = await player.getAttribute("context-id");
         expect(contextId).toBeTruthy();
         h5pContexts.add(contextId!);

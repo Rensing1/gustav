@@ -1,7 +1,7 @@
 # Abgaben und Rückmeldung
 
 GUSTAV-Version: 0.0.4
-Zuletzt geprüft: 2026-08-20
+Zuletzt geprüft: 2026-08-23
 [English version](submissions-and-feedback.en.md)
 
 ![Formative Rückmeldung im Lernraum](../assets/readme/formative-feedback.jpg)
@@ -21,14 +21,14 @@ GUSTAV trennt formative Rückmeldung von der endgültigen Abgabe. Lernende könn
 
 1. Die lernende Person verfasst eine Antwort oder wählt eine passende Datei aus.
 2. Mit **„Rückmeldung einholen“** wird die aktuelle Fassung als unveränderlicher Versuch gespeichert und zur Auswertung vorgemerkt.
-3. Während der Verarbeitung zeigt GUSTAV einen laufenden Zustand. Nach Abschluss erscheinen **„Auswertung“** und **„Rückmeldung“**.
-4. Die lernende Person liest die Rückmeldung und bearbeitet ihren Entwurf weiter. Eine geänderte Fassung benötigt erneut Rückmeldung.
-5. Nur wenn der aktuelle Entwurf genau der zuletzt geprüften Fassung entspricht, wird **„Endgültig abgeben“** ermöglicht.
-6. Nach der endgültigen Abgabe bleibt der gespeicherte Versuch erhalten. Abhängig von der Aufgabe kann anschließend eine weitere Bearbeitung möglich sein oder ein Versuchslimit greifen.
+3. Während der Verarbeitung zeigt GUSTAV einen laufenden Zustand. Nach Abschluss öffnet sich **„Rückmeldung“**. Die zugehörigen Bewertungen lassen sich darin über **„Kriterien im Detail“** nachvollziehen.
+4. Unter **„Dein nächster Schritt“** kann die lernende Person mit **„Im Entwurf weiterarbeiten“** direkt zum Texteditor oder Dateifeld zurückkehren, die unveränderte Fassung **„Endgültig abgeben“** oder zum Lernpfad zurückkehren.
+5. Eine geänderte Fassung benötigt erneut Rückmeldung. Nur wenn der aktuelle Entwurf genau der zuletzt geprüften Fassung entspricht, wird **„Endgültig abgeben“** ermöglicht.
+6. Nach der endgültigen Abgabe ersetzt **„Aufgabe abgeschlossen“** die Bearbeitungsaktionen. Liegt im selben Modul später noch eine offene Aufgabe, kann sie direkt geöffnet werden; andernfalls führt die Oberfläche zurück zum Lernpfad.
 
 ## Lernendensicht
 
-Die Oberfläche unterscheidet den bearbeitbaren Entwurf von gespeicherten Versuchen. Frühere Abgaben lassen sich mit ihrer Auswertung und Rückmeldung öffnen. Bei Dateiaufgaben werden Dateiname, Typ und verfügbare Vorschau angezeigt. Bei KI-Dialogen beendet die endgültige Abgabe den Dialog und löst die Abschlussauswertung aus.
+Die Oberfläche unterscheidet den bearbeitbaren Entwurf von gespeicherten Versuchen. Frühere Abgaben lassen sich mit ihrer Rückmeldung und den Kriterien im Detail öffnen. `Kriterien im Detail` enthält eine nummerierte Liste; zunächst sind alle einzelnen Kriterien geschlossen und die jeweilige Begründung lässt sich bewusst aufklappen. Kriterien werden ohne Punktwerte als **„Mangelhaft“**, **„Ansatzweise“**, **„Gelungen“** oder **„Hervorragend“** beschrieben und zusätzlich durch eine dezente Farbmarke unterschieden. Die ausgeschriebene Stufe bleibt maßgeblich; Farbe ist nur eine visuelle Hilfe. Diese Begriffe beziehen sich ausschließlich auf das jeweilige Kriterium, nicht auf die lernende Person. Der Aktionsbereich ist bewusst flach gestaltet: Er trennt Rückmeldung, Entscheidung und Kriterien durch Abstand und feine horizontale Linien statt durch verschachtelte Kästen. Bei Dateiaufgaben werden Dateiname, Typ und verfügbare Vorschau angezeigt. Bei KI-Dialogen beendet die endgültige Abgabe den Dialog und löst die Abschlussauswertung aus.
 
 ## So funktioniert es
 
@@ -50,7 +50,7 @@ KI-Rückmeldung ist formativ. Sie soll zur Überarbeitung anregen und ist weder 
 ## Typische Probleme
 
 - **„Für diese Fassung zuerst Rückmeldung einholen“:** Der Entwurf wurde nach der letzten Rückmeldung verändert.
-- **Auswertung bleibt aus:** Warte zunächst auf den laufenden Zustand. Bei einem stabilen Fehler kann die Fassung erneut zur Rückmeldung eingereicht werden.
+- **Rückmeldung bleibt aus:** Warte zunächst auf den laufenden Zustand. Bei einem stabilen Fehler kann die Fassung erneut zur Rückmeldung eingereicht werden.
 - **Datei wird abgelehnt:** Verwende das für den Aufgabentyp erwartete Originalformat und wähle die Datei erneut aus.
 - **Doppelklick erzeugt keine zweite Abgabe:** Das ist beabsichtigter Schutz vor doppelten Versuchen.
 - **Sitzung ist abgelaufen:** Melde dich erneut an. GUSTAV versucht, den sicheren Arbeitskontext wiederherzustellen; prüfe den Entwurf trotzdem vor dem erneuten Senden.

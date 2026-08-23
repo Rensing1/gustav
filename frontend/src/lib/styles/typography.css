@@ -34,6 +34,6 @@ h6,
 .teacher-flow-phase-band__kicker,
 .teacher-flow-unit-node__copy span,
 .teacher-flow-unit-node__copy small,
-.learning-response-panel summary {
+.learning-response-panel > summary {
   font-family: var(--font-mono);
 }

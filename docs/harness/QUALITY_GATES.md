@@ -199,18 +199,18 @@ Bewusst opt-in:
 Zweck: Den vollständigen authentifizierten Browser-Rundlauf neuer nutzerseitiger Features verbindlich prüfen.
 
 Initialer lokaler Befehl:
-- `make verify-feature`
+- `make verify-feature FEATURE=<spec-stem>`
 
 Harter Inhalt:
 - Zuerst alle deterministischen Prüfungen aus `make verify`.
-- Danach alle mit `@feature-acceptance` markierten Playwright-Kernreisen gegen das produktionsnahe Setup.
+- Danach ausschließlich die im Implementierungsplan zugeordnete, mit `@feature-acceptance` markierte Playwright-Spec.
 - Mindestens ein Test durchläuft echte Anmeldung, Oberfläche, Server und Datenhaltung.
 - BDD-Szenarien und konkrete Testnachweise werden im jeweiligen Implementierungsplan einander zugeordnet.
 
 Regel:
-- Nutzerseitige Features dürfen erst nach erfolgreichem `make verify-feature` als abgeschlossen gelten und committed werden.
+- Nutzerseitige Features dürfen erst nach erfolgreichem gezieltem `make verify-feature FEATURE=<spec-stem>` als abgeschlossen gelten und committed werden.
 - Änderungen ohne nutzerseitigen Ablauf dürfen beim schnelleren `make verify` bleiben, wenn der Implementierungsplan den Verzicht auf eine Browser-Feature-Abnahme begründet.
-- `make test-full-prod-like` enthält dieses Gate ebenfalls.
+- `make test-feature-regression` und `make test-full-prod-like` führen die historische Gesamtheit nur opt-in aus.
 
 ### visual-smoke
 Zweck: zentrale UI-Flächen sichtbar prüfen, ohne die schnelle Verify-Suite durch breite Browser-/Screenshot-Tests zu belasten.

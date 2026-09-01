@@ -128,7 +128,10 @@ Regeln:
 - Die User Story und ihre BDD-Szenarien werden im Implementierungsplan konkreten Tests zugeordnet.
 - Mindestens ein Playwright-Test trägt den Marker `@feature-acceptance` und enthält einen authentifizierten Browser-Rundlauf.
 - Ein Verzicht ist nur bei Änderungen ohne nutzerseitigen Ablauf zulässig und muss im Plan begründet werden.
-- `make verify-feature` ist das verbindliche Abschlussprofil: Es führt zuerst die deterministischen Prüfungen und anschließend die Browser-Feature-Abnahme aus.
+- `make verify-feature FEATURE=<spec-stem>` ist das verbindliche Abschlussprofil: Es führt zuerst die deterministischen Prüfungen und anschließend ausschließlich die zugeordnete Browser-Feature-Abnahme aus.
+- `make test-feature-regression` führt alle historischen Feature-Abnahmen opt-in aus. Es ist kein Standardabschluss für eine einzelne Änderung.
+- `make test-feature-detail FEATURE=<spec-stem>` und `make test-feature-details` halten umfangreiche, mit `@feature-detail` markierte Browservarianten gezielt beziehungsweise gesammelt ausführbar, ohne sie dem Pflicht-Gate zuzuordnen.
+- Generative Providerausgaben werden im Pflichtprofil deterministisch vorbereitet; echte Provider-Smokes bleiben `make test-openai` vorbehalten.
 
 ## Testprofile
 - `fast`: In-Process-, Domain-, Adapter- und Contract-Tests ohne externe Dienste.
@@ -138,11 +141,12 @@ Regeln:
 - `import-boundaries`: AST-basierter Baseline-Scan für flache Web-Imports, gemischte `backend.web.routes.*`-Imports und verstreute `sys.path`-Manipulationen.
 - `db-inventory`: generierte Übersicht in `docs/harness/DB_TEST_INVENTORY.md` für echte DB/RLS-Kandidaten, statische Migrationstests und Supabase-Storage-/Konfigurationsverträge; Bestandteil von `make verify` als Synchronitätscheck.
 - `frontend-h5p`: `npm run check`, Vitest einschließlich CSS-Syntaxvertrag, produktiver SvelteKit-Build und H5P-Node-Tests; Bestandteil von `make verify`.
-- `feature-acceptance`: `make verify-feature` kombiniert `make verify` mit den durch `@feature-acceptance` markierten authentifizierten Browser-Kernreisen; verbindlich für nutzerseitige Features.
-- `full-prod-like`: Feature-Abnahme, Supabase, OpenAI-kompatibler Endpunkt, Docker/Compose und weitere E2E-Smokes.
+- `feature-acceptance`: `make verify-feature FEATURE=<spec-stem>` kombiniert `make verify` mit genau einer zugeordneten authentifizierten Browser-Spec; verbindlich für nutzerseitige Features.
+- `feature-regression`: `make test-feature-regression` führt alle markierten Browserreisen ausschließlich lokal und opt-in aus.
+- `full-prod-like`: deterministische Verifikation, lokale Feature-Vollregression, Supabase, OpenAI-kompatibler Endpunkt, Docker/Compose und weitere E2E-Smokes.
 
 ## Marker-Regeln
-- `e2e`, `supabase_integration`, `openai_integration` und `legacy_migration` bleiben im schnellen Standardprofil opt-in. Die mit `@feature-acceptance` markierten Playwright-Tests sind für nutzerseitige Features über `make verify-feature` verpflichtend.
+- `e2e`, `supabase_integration`, `openai_integration` und `legacy_migration` bleiben im schnellen Standardprofil opt-in. Für nutzerseitige Features ist nur die konkret zugeordnete Spec über `make verify-feature FEATURE=<spec-stem>` verpflichtend.
 - `db_read` und `db_write` werden erst dann als Strategie-Marker akzeptiert, wenn die `missing-db-marker`-Einträge aus `docs/harness/DB_TEST_INVENTORY.md` geprüft und bereinigt wurden.
 - Tests mit echten externen Diensten dürfen nicht durch zufällig gesetzte ENV-Variablen in der Standardsuite landen.
 - Tests mit globalen DB-Mutationen brauchen ein eigenes Gate oder bleiben aus der Standardsuite ausgeschlossen.

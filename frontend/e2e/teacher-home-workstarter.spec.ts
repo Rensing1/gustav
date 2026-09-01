@@ -1,14 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain } from "./support/e2e-env";
+import { e2eEmail, e2ePassword } from "./support/e2e-env";
 import { ensureTeacherUser } from "./support/keycloak";
 import { seedTeacherHomeWorkStarter } from "./support/seed-data";
 
 test("@feature-acceptance teacher starts live work and resumes authoring from home", async ({ page }) => {
   const unique = Date.now();
-  const email = `e2e_teacher_home_${unique}@${emailDomain}`;
-  const password = "Passw0rd!e2e";
+  const email = e2eEmail("teacher");
+  const password = e2ePassword;
   await ensureTeacherUser(email, password);
   await login(page, email, password);
   const seeded = await seedTeacherHomeWorkStarter(page, `E2E Arbeitsstart ${unique}`);

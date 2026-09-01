@@ -1,6 +1,11 @@
 import { expect, request, type APIRequestContext } from "@playwright/test";
 
 import { adminClientId, adminClientSecret, adminPassword, adminRealm, adminUser, kcBase, realm } from "./e2e-env";
+import {
+  clearE2ESmtpRestore,
+  registerE2ESmtpRestore,
+  registerE2EUser
+} from "./e2e-run-state";
 
 type KeycloakUser = {
   id?: string;
@@ -97,6 +102,7 @@ async function ensureUserWithRole(
   roleName: "teacher" | "student",
   profile?: LearnerProfile
 ): Promise<string> {
+  registerE2EUser({ email, role: roleName });
   const kc = await keycloakAdminContext();
   try {
     const token = await adminToken(kc);
@@ -119,6 +125,7 @@ async function ensureUserWithRole(
       userId = await findUserId(kc, token, email);
     }
     expect(userId).toBeTruthy();
+    registerE2EUser({ email, role: roleName, keycloak_id: userId as string });
 
     if (profile) {
       const update = await kc.put(`/admin/realms/${realm}/users/${userId}`, {
@@ -191,6 +198,7 @@ export async function useTemporaryRealmSmtp(
     original = current.smtpServer?.host === "gustav-frontend" || current.smtpServer?.port === "2526"
       ? configuredRealmSmtp()
       : current.smtpServer;
+    registerE2ESmtpRestore(original ?? {});
     const update = await kc.put(`/admin/realms/${realm}`, {
       headers: adminHeaders(token),
       data: { ...current, smtpServer }
@@ -214,6 +222,7 @@ export async function useTemporaryRealmSmtp(
         data: { ...current, smtpServer: original ?? {} }
       });
       expect([200, 204]).toContain(update.status());
+      clearE2ESmtpRestore();
     } finally {
       await restoreContext.dispose();
     }

@@ -1,12 +1,12 @@
-import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain, webBase } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { expectNoViewportOverflow } from "./support/layout-sanity";
 import { seedLearnerNavigationCourse } from "./support/seed-data";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 async function scrollSurfaceWithKeyboard(page: Page, surface: Locator, edge: "start" | "end"): Promise<void> {
   await surface.evaluate((element) => element.setAttribute("tabindex", "-1"));
@@ -64,10 +64,10 @@ async function verifyIndependentWheelScrolling(browser: Browser, taskUrl: string
   }
 }
 
-test("@feature-acceptance keeps the learner task desk split on landscape iPads", async ({ browser, browserName }) => {
+test("@feature-detail keeps the learner task desk split on landscape iPads", async ({ browser, browserName }) => {
   const unique = Date.now();
-  const teacherEmail = `responsive_task_teacher_${unique}@${emailDomain}`;
-  const learnerEmail = `responsive_task_learner_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
 

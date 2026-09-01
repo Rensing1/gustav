@@ -1,12 +1,12 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain, webBase } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedSimulationMaterialCourse } from "./support/seed-data";
 
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 async function pageFor(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true });
@@ -17,8 +17,8 @@ async function pageFor(browser: Browser): Promise<{ context: BrowserContext; pag
 test("@feature-acceptance teacher publishes and learner resets a sandboxed simulation", async ({ browser }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
-  const teacherEmail = `simulation_teacher_${unique}@${emailDomain}`;
-  const learnerEmail = `simulation_learner_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
 

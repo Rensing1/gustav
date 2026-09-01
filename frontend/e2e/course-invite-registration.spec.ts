@@ -1,20 +1,22 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "./support/feature-test";
 
 import { apiHeaders, expectApiOk } from "./support/api";
 import { login } from "./support/auth";
-import { emailDomain, webBase } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, emailDomain, webBase } from "./support/e2e-env";
+import { registerE2EUser } from "./support/e2e-run-state";
 import { ensureTeacherUser, useTemporaryRealmSmtp } from "./support/keycloak";
 import { startSmtpCapture } from "./support/smtp-capture";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 test("@feature-acceptance a new learner registers from the fullscreen QR link and joins the course", async ({ browser }) => {
   test.setTimeout(120_000);
   const unique = Date.now();
-  const teacherEmail = `e2e_invite_teacher_${unique}@${emailDomain}`;
-  const learnerEmail = `e2e_invite_learner_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("invite.learner");
   const courseTitle = `E2E QR-Klasse ${unique}`;
   await ensureTeacherUser(teacherEmail, password);
+  registerE2EUser({ email: learnerEmail, role: "student" });
 
   const smtp = await startSmtpCapture();
   const restoreSmtp = await useTemporaryRealmSmtp({

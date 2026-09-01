@@ -95,7 +95,11 @@ def test_visual_smoke_has_reproducible_browser_bootstrap_and_preflight() -> None
     visual_body = makefile.split("test-visual-smoke:", 1)[1].split(".PHONY:", 1)[0]
     assert "tooling/check-playwright-browser.mjs" in visual_body
     feature_body = makefile.split("test-feature-acceptance:", 1)[1].split(".PHONY:", 1)[0]
-    assert "tooling/check-playwright-browser.mjs chromium webkit" in feature_body
+    assert "backend.tools.feature_acceptance" in feature_body
+    orchestrator = (REPO_ROOT / "backend" / "tools" / "feature_acceptance.py").read_text(
+        encoding="utf-8"
+    )
+    assert '["node", "tooling/check-playwright-browser.mjs", "chromium", "webkit"]' in orchestrator
     assert preflight.exists()
     source = preflight.read_text(encoding="utf-8")
     assert "const availableBrowsers = { chromium, webkit }" in source
@@ -103,8 +107,10 @@ def test_visual_smoke_has_reproducible_browser_bootstrap_and_preflight() -> None
     assert "make playwright-bootstrap" in source
 
 
-def test_practice_feedback_snapshot_keeps_the_main_learning_surface_visible() -> None:
+def test_practice_acceptance_uses_deterministic_h5p_instead_of_visual_feedback_details() -> None:
     source = (REPO_ROOT / "frontend" / "e2e" / "practice-session.spec.ts").read_text(encoding="utf-8")
 
     assert 'learner.page.locator(".practice-session__main")' not in source
-    assert 'learner.page.locator(".practice-feedback__body")' in source
+    assert 'learner.page.locator(".practice-feedback__body")' not in source
+    assert 'learner.page.locator("h5p-player")' in source
+    assert "practice-h5p-deterministic" in source

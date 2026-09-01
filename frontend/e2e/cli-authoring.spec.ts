@@ -3,15 +3,16 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/feature-test";
 
 import { login } from "./support/auth";
 import { apiHeaders } from "./support/api";
-import { emailDomain, webBase } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
+import { registerE2EH5PContent } from "./support/e2e-run-state";
 import { seedH5pVisualSmokeUnit } from "./support/seed-data";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 const projectRoot = resolve(process.cwd(), "..");
 const python = resolve(projectRoot, ".venv/bin/python");
 
@@ -63,7 +64,7 @@ function writeMinimalH5p(target: string): void {
 test("@feature-acceptance CLI authors a modular dialog unit and releases it in a course", async ({ page }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
-  const email = `e2e_teacher_cli_${unique}@${emailDomain}`;
+  const email = e2eEmail("cli.teacher");
   const tokenLabel = `CLI E2E ${unique}`;
   const unitTitle = `CLI Dialogeinheit ${unique}`;
   const courseTitle = `CLI Kurs ${unique}`;
@@ -250,7 +251,11 @@ test("@feature-acceptance CLI authors a modular dialog unit and releases it in a
       teacher_context_md: "Achte auf Rot, Grün und Refactoring.",
       model_solution_md: "Rot zeigt die Lücke, Grün schließt sie und Refactoring verbessert den Entwurf."
     });
-    expect(practiceTasks.find((task) => task.id === h5pTaskId)?.h5p?.content_id).toBeTruthy();
+    const importedContentId = String(
+      practiceTasks.find((task) => task.id === h5pTaskId)?.h5p?.content_id ?? ""
+    );
+    expect(importedContentId).toMatch(/^[1-9][0-9]*$/);
+    registerE2EH5PContent(importedContentId, email);
     const readableModules = runCli(configRoot, ["modules", "list", "--unit-id", unit.id]);
     expect(readableModules).toContain("practice");
     const course = JSON.parse(
@@ -318,11 +323,11 @@ test("@feature-acceptance CLI authors a modular dialog unit and releases it in a
   }
 });
 
-test("@feature-acceptance browser cookie flow persists H5P editor JSON", async ({ page, browser }) => {
+test("@feature-detail browser cookie flow persists H5P editor JSON", async ({ page, browser }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
-  const teacherEmail = `e2e_teacher_h5p_editor_${unique}@${emailDomain}`;
-  const learnerEmail = `e2e_learner_h5p_editor_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
   await login(page, teacherEmail, password);
@@ -350,6 +355,7 @@ test("@feature-acceptance browser cookie flow persists H5P editor JSON", async (
     expect(saveResponse.status(), await saveResponse.text()).toBe(200);
     const saved = await saveResponse.json() as { content_id: string };
     expect(saved.content_id).toBeTruthy();
+    registerE2EH5PContent(String(saved.content_id), teacherEmail);
 
     const modelResponse = await page.request.get(`${webBase}${endpoint}/editor-model`);
     expect(modelResponse.status()).toBe(200);

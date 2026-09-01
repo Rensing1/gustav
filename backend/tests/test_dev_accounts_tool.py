@@ -556,7 +556,12 @@ def test_make_targets_keep_provision_reset_and_browser_smoke_explicit() -> None:
     assert "@dev-accounts" in smoke
     assert "NODE_EXTRA_CA_CERTS=../.tmp/caddy-root.crt" in smoke
     acceptance = body("test-feature-acceptance")
-    assert "NODE_EXTRA_CA_CERTS=../.tmp/caddy-root.crt" in acceptance
+    assert "backend.tools.feature_acceptance" in acceptance
+    orchestrator = (PROJECT_ROOT / "backend/tools/feature_acceptance.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"NODE_EXTRA_CA_CERTS"' in orchestrator
+    assert '".tmp" / "caddy-root.crt"' in orchestrator
     assert "test-dev-accounts" not in body("verify")
 
 

@@ -153,4 +153,4 @@ Einige einfache Teaching-Routen orchestrieren Repository-Aufrufe direkt. Neue od
 - SvelteKit: Tests unter `frontend/src/routes/teaching/`;
 - vollständiger Browserablauf: `@feature-acceptance`-Tests unter `frontend/e2e/`.
 
-Für nutzerseitige Teaching-Änderungen ist `make verify-feature` der Abschlussnachweis.
+Für nutzerseitige Teaching-Änderungen ist `make verify-feature FEATURE=<spec-stem>` mit der im Implementierungsplan zugeordneten Spec der Abschlussnachweis.

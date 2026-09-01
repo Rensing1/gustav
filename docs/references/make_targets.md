@@ -20,6 +20,11 @@ Status: Stable
 - `make test-openai` – OpenAI-kompatibler Endpoint Smoke-Tests (`-m openai_integration`)
 - `make test-e2e` – E2E (`-m e2e`, startet Dienste)
 - `make verify` – deterministische harte Gates (DB-Preflight, Import/API/Architektur/Route/Docker-Smokes, Python-Tests, Frontend und H5P), ohne echte externe OpenAI-/Browser-E2E-Smokes
+- `make test-feature-acceptance FEATURE=<spec-stem>` – führt ausschließlich die markierte authentifizierte Browserreise der genannten Spec aus; verweigert entfernte Ziele und bereinigt die synthetischen Konten und Fachdaten
+- `make verify-feature FEATURE=<spec-stem>` – `make verify` plus die gezielte Feature-Abnahme
+- `make test-feature-regression` – führt alle markierten Feature-Abnahmen ausdrücklich opt-in gegen den lokalen Stack aus
+- `make test-feature-detail FEATURE=<spec-stem>` – führt eine mit `@feature-detail` markierte, aus dem Pflicht-Gate entfernte Detailreise gezielt aus
+- `make test-feature-details` – führt alle `@feature-detail`-Reisen ausdrücklich opt-in gegen den lokalen Stack aus
 - `make dependency-audit` – Online-Prüfung der aktuellen npm-Advisories für Frontend und H5P; jeder Befund ab `low` schlägt fehl
 - `make playwright-bootstrap` – installiert die von Playwright unterstützten Chromium- und WebKit-Browser; visuelle Smokes bleiben auf Chromium begrenzt, iPad-nahe Feature-Acceptance-Fälle laufen zusätzlich in WebKit
 - `make test-visual-smoke` – prüft zuerst die Browserinstallation und führt danach die markierten produktnahen Chromium-Smokes aus
@@ -40,6 +45,8 @@ Status: Stable
 - `KC_ADMIN_CLIENT_ID`/`KC_ADMIN_CLIENT_SECRET`/`KC_ADMIN_REALM` – Confidential Client für Admin-API-Sync
 - `DEV_TEACHER_EMAIL`/`DEV_TEACHER_PASSWORD` und `DEV_STUDENT_EMAIL`/`DEV_STUDENT_PASSWORD` – ignorierte lokale Zugangsdaten für wiederholbare Browserprüfungen; fehlende Werte erzeugt `make dev-accounts`
 - `OPENAI_BASE_URL`/`AI_TEXT_MODEL` – für Dev-Accounts ist ein erreichbarer Loopback-Endpunkt oder ein entfernter HTTPS-KI-Provider wie Mistral mit öffentlichem CA-Bundle zulässig; die Produktdienste selbst bleiben strikt lokal
+- `E2E_LOCAL_MUTATION_ALLOWED=1` – ausdrückliche lokale Freigabe für schreibende Playwright-Läufe; entfernte Ziele bleiben auch damit verboten
+- `E2E_TEST_PASSWORD` – starkes Passwort für ausschließlich synthetische, nach dem Lauf gelöschte Feature-Acceptance-Konten
 
 ## Hinweis (KISS)
 - `make up` installiert keine Zertifikate. Die automatischen 72-Stunden-Leaf-Erneuerungen benötigen keinen neuen Vertrauensimport. Nur nach einer Root-CA-Rotation, etwa durch Neuerstellung des Volumes `caddy_data`, Firefox und Codex vollständig schließen, `make trust-local-ca` ausführen und beide Browser neu starten.

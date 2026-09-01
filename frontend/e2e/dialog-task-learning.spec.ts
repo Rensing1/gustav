@@ -1,12 +1,12 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { currentUserSub, login } from "./support/auth";
 import { appendTerminalDialogFailure, completeDialogFeedback, prepareCompletedDialogTurn } from "./support/dialog-session-fixture";
-import { emailDomain, webBase } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerDialogCourse } from "./support/seed-data";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true });
@@ -81,10 +81,10 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promi
   }
 }
 
-test("@feature-acceptance @design-system learner deliberately enters and resumes dialog completion", async ({ browser }) => {
+test("@feature-acceptance learner deliberately enters and resumes dialog completion", async ({ browser }) => {
   const unique = Date.now();
-  const teacherEmail = `e2e_teacher_dialog_learning_${unique}@${emailDomain}`;
-  const learnerEmail = `e2e_learner_dialog_learning_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
 
@@ -136,7 +136,6 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     );
     await expect(learner.page.getByRole("region", { name: "Gesprächsfortschritt" })).toContainText("Runde 1 von 2");
     await expect(learner.page.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeHidden();
-    const accountControl = learner.page.locator(".account-trigger");
     const dialogSeparator = learner.page.getByRole("separator", { name: "Spaltenbreite anpassen" });
     await expectDialogLayout(learner.page, "desktop");
     await expect(dialogSeparator).toBeVisible();
@@ -175,11 +174,6 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     expect(dialogCoachGeometry.composer.top).toBeGreaterThanOrEqual(dialogCoachGeometry.transcript.bottom);
     expect(dialogCoachGeometry.composer.bottom).toBeLessThanOrEqual(dialogCoachGeometry.main.bottom + 1);
     expect(dialogCoachGeometry.composer.bottom).toBeLessThanOrEqual(dialogCoachGeometry.viewportHeight + 1);
-    await expect(learner.page).toHaveScreenshot("learner-dialog-light-desktop.png", {
-      animations: "disabled",
-      caret: "hide",
-      mask: [accountControl]
-    });
     await learner.page.setViewportSize({ width: 1024, height: 768 });
     await expectDialogLayout(learner.page, "desktop");
     await expect(dialogSeparator).toBeVisible();
@@ -207,26 +201,11 @@ test("@feature-acceptance @design-system learner deliberately enters and resumes
     });
     expect(tabletCurrentQuestion.articleTop).toBeGreaterThanOrEqual(tabletCurrentQuestion.transcriptTop - 1);
     expect(tabletCurrentQuestion.articleBottom).toBeLessThanOrEqual(tabletCurrentQuestion.transcriptBottom + 1);
-    await expect(learner.page).toHaveScreenshot("learner-dialog-light-tablet.png", {
-      animations: "disabled",
-      caret: "hide",
-      mask: [accountControl]
-    });
     await learner.page.setViewportSize({ width: 390, height: 844 });
     await expectDialogLayout(learner.page, "mobile");
     await expect(dialogSeparator).toBeHidden();
-    await expect(learner.page).toHaveScreenshot("learner-dialog-light-mobile.png", {
-      animations: "disabled",
-      caret: "hide",
-      mask: [accountControl]
-    });
     await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
     await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
-    await expect(learner.page).toHaveScreenshot("learner-dialog-dark-mobile.png", {
-      animations: "disabled",
-      caret: "hide",
-      mask: [accountControl]
-    });
     await learner.page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
     await learner.page.setViewportSize({ width: 1600, height: 1000 });
     await expectDialogLayout(learner.page, "desktop");

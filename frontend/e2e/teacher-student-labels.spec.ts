@@ -1,19 +1,19 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain } from "./support/e2e-env";
+import { e2eEmail, e2ePassword } from "./support/e2e-env";
 import { ensureLearnerUserProfile, ensureTeacherUser } from "./support/keycloak";
 import { seedTeacherStudentLabelCourse } from "./support/seed-data";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 test("@feature-acceptance teacher surfaces use one learner label and hide diagnostics navigation", async ({ page }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
-  const teacherEmail = `e2e_teacher_labels_${unique}@${emailDomain}`;
-  const namedEmail = `e2e_named_learner_${unique}@${emailDomain}`;
-  const fallbackLocalpart = `fallback.mixed-10-${unique}`;
-  const fallbackEmail = `${fallbackLocalpart}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const namedEmail = e2eEmail("named.learner");
+  const fallbackEmail = e2eEmail("fallback.mixed-10");
+  const fallbackLocalpart = fallbackEmail.split("@", 1)[0];
 
   await ensureTeacherUser(teacherEmail, password);
   const namedSub = await ensureLearnerUserProfile(namedEmail, password, {

@@ -1,7 +1,7 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain } from "./support/e2e-env";
+import { e2eEmail, e2ePassword } from "./support/e2e-env";
 import { ensureTeacherUser } from "./support/keycloak";
 import { seedTeacherVisualSmokeUnit } from "./support/seed-data";
 
@@ -51,8 +51,8 @@ async function freePanePoint(page: Page): Promise<{ x: number; y: number } | nul
 test("@feature-acceptance phase and module workflows keep the graph context and confirm deletion", async ({ page }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
-  const email = `e2e_teacher_graph_${unique}@${emailDomain}`;
-  const password = "Passw0rd!e2e";
+  const email = e2eEmail("teacher");
+  const password = e2ePassword;
   await ensureTeacherUser(email, password);
   await login(page, email, password);
 

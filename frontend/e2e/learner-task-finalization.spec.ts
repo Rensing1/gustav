@@ -1,12 +1,12 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { currentUserSub, login } from "./support/auth";
-import { emailDomain, webBase } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerNavigationCourse } from "./support/seed-data";
 import { prepareCompletedFeedbackDraft } from "./support/submission-finalization-fixture";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL: webBase });
@@ -15,8 +15,8 @@ async function authenticatedPage(browser: Browser): Promise<{ context: BrowserCo
 
 test("@feature-acceptance finalizes a reviewed task with immediate visible progress", async ({ browser }) => {
   const unique = Date.now();
-  const teacherEmail = `task_final_teacher_${unique}@${emailDomain}`;
-  const learnerEmail = `task_final_learner_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
 
@@ -87,10 +87,10 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
   }
 });
 
-test("@feature-acceptance finalizes the reviewed uploaded file", async ({ browser }) => {
+test("@feature-detail finalizes the reviewed uploaded file", async ({ browser }) => {
   const unique = Date.now();
-  const teacherEmail = `task_file_final_teacher_${unique}@${emailDomain}`;
-  const learnerEmail = `task_file_final_learner_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
 

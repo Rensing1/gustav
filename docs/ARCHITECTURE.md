@@ -165,7 +165,7 @@ Der H5P-Service ist ein isolierter Driver. Browserzugriff erhält kurzlebige, zw
 ## Qualitätsgrenzen
 
 - `make verify` prüft Backend, Frontend, H5P, OpenAPI, Importgrenzen, Repository-Sicherheit und Dokumentationsverträge.
-- `make verify-feature` ergänzt für nutzerseitige Änderungen den authentifizierten Browser-Rundlauf.
+- `make verify-feature FEATURE=<spec-stem>` ergänzt für nutzerseitige Änderungen genau den zugeordneten authentifizierten Browser-Rundlauf und verweigert schreibende entfernte Ziele; die vollständige Browserregression bleibt mit `make test-feature-regression` opt-in.
 - `make test-architecture-boundaries` schützt Clean-Architecture-Grenzen mit `architecture-boundary-scan`.
 - `make test-route-map` hält die technische Route Map synchron und bestätigt, dass es keine aktiven Legacy-Produktseiten gibt.
 - `make docker-validate` prüft Compose-, Proxy- und Image-Verträge bei Infrastrukturänderungen.

@@ -1,14 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain } from "./support/e2e-env";
+import { e2eEmail, e2ePassword } from "./support/e2e-env";
 import { ensureTeacherUser } from "./support/keycloak";
 import { seedTeacherDialogAuthoringUnit } from "./support/seed-data";
 
 test("@feature-acceptance saves and reloads every dialog authoring field", async ({ page }) => {
   const unique = Date.now();
-  const email = `e2e_teacher_dialog_${unique}@${emailDomain}`;
-  const password = "Passw0rd!e2e";
+  const email = e2eEmail("teacher");
+  const password = e2ePassword;
   await ensureTeacherUser(email, password);
   await login(page, email, password);
 
@@ -30,7 +30,9 @@ test("@feature-acceptance saves and reloads every dialog authoring field", async
 
   const createForm = page.getByTestId("teacher-node-editor-create-slot");
   await createForm.getByLabel("Aufgabentyp").selectOption("dialog");
-  await createForm.getByLabel("Anweisung & Beschreibung").fill(values.instruction);
+  await createForm.locator(
+    '[contenteditable="true"][aria-label="Anweisung & Beschreibung"]'
+  ).fill(values.instruction);
   await createForm.getByLabel("Kriterium 1", { exact: true }).fill(values.criterion);
   await createForm.getByText("Weitere Einstellungen", { exact: true }).click();
   await createForm.getByLabel("Lehrkraft-Kontext").fill(values.teacherContext);
@@ -52,7 +54,9 @@ test("@feature-acceptance saves and reloads every dialog authoring field", async
   await page.getByRole("button", { name: new RegExp(values.instruction) }).click();
   await page.getByText("Weitere Einstellungen", { exact: true }).click();
 
-  await expect(page.getByLabel("Anweisung & Beschreibung")).toHaveText(values.instruction);
+  await expect(page.locator(
+    '[contenteditable="true"][aria-label="Anweisung & Beschreibung"]'
+  )).toContainText(values.instruction);
   await expect(page.getByLabel("Kriterium 1", { exact: true })).toHaveValue(values.criterion);
   await expect(page.getByLabel("Lehrkraft-Kontext")).toHaveValue(values.teacherContext);
   await expect(page.getByLabel("Name des KI-Partners")).toHaveValue(values.partnerName);

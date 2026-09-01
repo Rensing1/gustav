@@ -38,6 +38,20 @@ export const e2eDatabaseUrl = hostAccessibleDatabaseUrl(
   (process.env.E2E_DATABASE_URL ?? process.env.SESSION_DATABASE_URL ?? "").trim()
 );
 export const emailDomain = deriveEmailDomain();
+export const e2ePassword = (process.env.E2E_TEST_PASSWORD ?? "").trim();
+
+export function e2eEmail(label: string): string {
+  const runId = (process.env.E2E_RUN_ID ?? "").trim();
+  if (!/^[0-9a-f]{12}$/.test(runId)) {
+    throw new Error("E2E_RUN_ID is required; use make test-feature-acceptance FEATURE=<spec>");
+  }
+  if (!e2ePassword) {
+    throw new Error("E2E_TEST_PASSWORD is required in the ignored local .env");
+  }
+  const localPart = label.toLowerCase().replace(/[^a-z0-9.-]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!localPart) throw new Error("E2E identity label is invalid");
+  return `${localPart}.e2e-${runId}@${emailDomain}`;
+}
 
 function hostAccessibleDatabaseUrl(value: string): string {
   if (!value) return "";

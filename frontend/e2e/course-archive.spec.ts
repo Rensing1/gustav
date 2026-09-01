@@ -1,12 +1,12 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain, webBase } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { expectNoViewportOverflow, expectWorkspaceMeasure } from "./support/layout-sanity";
 import { seedLearnerVisualSmokeCourse } from "./support/seed-data";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true, acceptDownloads: true });
@@ -16,8 +16,8 @@ async function authenticatedPage(browser: Browser): Promise<{ context: BrowserCo
 test("@feature-acceptance teacher archives a course and learner exports only personal work", async ({ browser }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
-  const teacherEmail = `e2e_teacher_archive_${unique}@${emailDomain}`;
-  const learnerEmail = `e2e_learner_archive_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
 
@@ -98,12 +98,12 @@ test("@feature-acceptance teacher archives a course and learner exports only per
   }
 });
 
-test("@feature-acceptance teacher permanently deletes only an isolated test course after strong confirmation", async ({ browser }) => {
+test("@feature-detail teacher permanently deletes only an isolated test course after strong confirmation", async ({ browser }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
-  const teacherEmail = `e2e_teacher_delete_${unique}@${emailDomain}`;
-  const learnerEmail = `e2e_learner_delete_${unique}@${emailDomain}`;
-  const foreignTeacherEmail = `e2e_teacher_delete_foreign_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
+  const foreignTeacherEmail = e2eEmail("foreign.teacher");
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
   await ensureTeacherUser(foreignTeacherEmail, password);

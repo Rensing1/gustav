@@ -1,11 +1,11 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain, webBase } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { addUnitToCourse, seedLearnerVisualSmokeCourse } from "./support/seed-data";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true });
@@ -15,8 +15,8 @@ async function authenticatedPage(browser: Browser): Promise<{ context: BrowserCo
 test("@feature-acceptance teacher manages a course in the flat detail workspace", async ({ browser }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
-  const teacherEmail = `e2e_teacher_course_detail_${unique}@${emailDomain}`;
-  const learnerEmail = `e2e_learner_course_detail_${unique}@${emailDomain}`;
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
   await ensureTeacherUser(teacherEmail, password);
   await ensureLearnerUser(learnerEmail, password);
 

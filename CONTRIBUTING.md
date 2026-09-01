@@ -49,11 +49,13 @@ For a change without a new user-facing workflow, run at least:
 make verify
 ```
 
-A user-facing feature additionally requires:
+A user-facing feature additionally requires its assigned Playwright spec:
 
 ```bash
-make verify-feature
+make verify-feature FEATURE=learner-navigation
 ```
+
+Mutating browser tests are local-only and require `E2E_LOCAL_MUTATION_ALLOWED=1` plus `E2E_TEST_PASSWORD` in the ignored `.env`. Run the historical suite only when explicitly needed with `make test-feature-regression`.
 
 When Compose, Keycloak, or the proxy has changed, also run `make docker-validate`. The [Make target reference](docs/references/make_targets.md) documents further checks and their prerequisites.
 

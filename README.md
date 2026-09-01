@@ -159,7 +159,7 @@ make test
 make verify
 ```
 
-Changes with a user-facing workflow additionally require the authenticated feature-acceptance suite through `make verify-feature`. See the [Make target reference](docs/references/make_targets.md) for prerequisites and narrower checks.
+Changes with a user-facing workflow additionally require their assigned authenticated browser journey through `make verify-feature FEATURE=<spec-stem>`. The command refuses non-local targets and cleans its synthetic data. The full historical browser regression remains an explicit `make test-feature-regression`. See the [Make target reference](docs/references/make_targets.md) for prerequisites.
 
 ## A personal project, open to collaboration
 

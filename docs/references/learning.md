@@ -157,4 +157,4 @@ Use Cases kennen FastAPI nicht. Repositories kapseln RLS, Transaktionen und Date
 - SvelteKit-Tests: `frontend/src/routes/learning/`;
 - authentifizierte Rundläufe: `frontend/e2e/` und `backend/tests_e2e/`.
 
-Für nutzerseitige Learning-Änderungen ist `make verify-feature` der Abschlussnachweis.
+Für nutzerseitige Learning-Änderungen ist `make verify-feature FEATURE=<spec-stem>` mit der im Implementierungsplan zugeordneten Spec der Abschlussnachweis.

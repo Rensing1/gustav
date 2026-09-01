@@ -38,8 +38,11 @@ help:
 	@echo "  supply-chain-check - Check offline dependency/license inventory"
 	@echo "  dependency-audit   - Check current npm advisories (requires network)"
 	@echo "  test-frontend-h5p  - Run frontend and H5P checks"
-	@echo "  test-feature-acceptance - Run authenticated Playwright feature journeys"
-	@echo "  verify-feature     - Run deterministic checks and mandatory feature acceptance"
+	@echo "  test-feature-acceptance FEATURE=<spec> - Run one authenticated Playwright feature journey"
+	@echo "  test-feature-regression - Run all authenticated Playwright feature journeys (opt-in)"
+	@echo "  test-feature-detail FEATURE=<spec> - Run one demoted browser detail journey (opt-in)"
+	@echo "  test-feature-details - Run all demoted browser detail journeys (opt-in)"
+	@echo "  verify-feature FEATURE=<spec> - Run deterministic checks and one feature acceptance"
 	@echo "  test-visual-smoke  - Run deterministic Playwright visual smoke checks"
 	@echo "  update-visual-baselines - Review and update approved screenshot baselines"
 	@echo "  playwright-bootstrap - Install the supported Playwright Chromium browser"
@@ -273,8 +276,19 @@ test-visual-smoke:
 
 .PHONY: test-feature-acceptance
 test-feature-acceptance:
-	@cd frontend && node tooling/check-playwright-browser.mjs chromium webkit
-	@cd frontend && NODE_EXTRA_CA_CERTS=../.tmp/caddy-root.crt npm run test:e2e -- --grep @feature-acceptance
+	@.venv/bin/python -m backend.tools.feature_acceptance run --feature "$(FEATURE)"
+
+.PHONY: test-feature-regression
+test-feature-regression:
+	@.venv/bin/python -m backend.tools.feature_acceptance run --all
+
+.PHONY: test-feature-detail
+test-feature-detail:
+	@.venv/bin/python -m backend.tools.feature_acceptance run --profile detail --feature "$(FEATURE)"
+
+.PHONY: test-feature-details
+test-feature-details:
+	@.venv/bin/python -m backend.tools.feature_acceptance run --profile detail --all
 
 .PHONY: test-dev-accounts
 test-dev-accounts:
@@ -283,6 +297,7 @@ test-dev-accounts:
 
 .PHONY: verify-feature
 verify-feature:
+	@.venv/bin/python -m backend.tools.feature_acceptance validate --feature "$(FEATURE)"
 	@$(MAKE) verify
 	@$(MAKE) test-feature-acceptance
 
@@ -297,7 +312,8 @@ playwright-bootstrap:
 
 .PHONY: test-full-prod-like
 test-full-prod-like:
-	@$(MAKE) verify-feature
+	@$(MAKE) verify
+	@$(MAKE) test-feature-regression
 	@$(MAKE) dependency-audit
 	@$(MAKE) test-supabase
 	@$(MAKE) test-openai

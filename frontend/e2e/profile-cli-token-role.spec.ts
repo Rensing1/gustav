@@ -1,13 +1,13 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain } from "./support/e2e-env";
+import { e2eEmail, e2ePassword } from "./support/e2e-env";
 import { ensureLearnerUser } from "./support/keycloak";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 test("@feature-acceptance student profile does not expose CLI token management", async ({ page }) => {
-  const learnerEmail = `e2e_learner_profile_cli_${Date.now()}@${emailDomain}`;
+  const learnerEmail = e2eEmail("learner");
   await ensureLearnerUser(learnerEmail, password);
   await login(page, learnerEmail, password);
 

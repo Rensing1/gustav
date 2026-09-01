@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { e2eDatabaseUrl } from "./e2e-env";
@@ -7,6 +8,8 @@ import { e2eDatabaseUrl } from "./e2e-env";
 const execFileAsync = promisify(execFile);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const subjectPattern = /^[A-Za-z0-9_-]{1,128}$/;
+const projectRoot = resolve(process.cwd(), "..");
+const featureAcceptancePython = `${projectRoot}/.venv/bin/python`;
 
 function validatedUuid(value: string, label: string): string {
   if (!uuidPattern.test(value)) throw new Error(`Invalid ${label} for finalization fixture`);
@@ -16,6 +19,41 @@ function validatedUuid(value: string, label: string): string {
 function validatedSubject(value: string): string {
   if (!subjectPattern.test(value)) throw new Error("Invalid learner subject for finalization fixture");
   return value;
+}
+
+async function runFeatureAcceptanceTool(args: string[]): Promise<void> {
+  await execFileAsync(
+    featureAcceptancePython,
+    ["-m", "backend.tools.feature_acceptance", ...args],
+    { cwd: projectRoot, env: process.env, maxBuffer: 1024 * 1024 }
+  );
+}
+
+/** Pause only the local provider worker; the browser and application stay live. */
+export async function holdProviderWorker(): Promise<void> {
+  await runFeatureAcceptanceTool(["worker", "hold"]);
+}
+
+/** Resume the worker and clear the recovery intent from the private manifest. */
+export async function releaseProviderWorker(): Promise<void> {
+  await runFeatureAcceptanceTool(["worker", "release"]);
+}
+
+/** Complete one submission that the real browser/API path has already queued. */
+export async function completeQueuedFeedbackDeterministically(input: {
+  courseId: string;
+  taskId: string;
+  learnerSub: string;
+}): Promise<void> {
+  await runFeatureAcceptanceTool([
+    "complete-feedback",
+    "--course-id",
+    validatedUuid(input.courseId, "course id"),
+    "--task-id",
+    validatedUuid(input.taskId, "task id"),
+    "--student-sub",
+    validatedSubject(input.learnerSub)
+  ]);
 }
 
 /**

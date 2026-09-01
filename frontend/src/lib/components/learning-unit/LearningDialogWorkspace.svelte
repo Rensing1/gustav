@@ -5,7 +5,7 @@
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { renderMarkdown } from "$lib/utils/markdown";
-  import type { LearningSubmission, LearningTask } from "$lib/types/learning";
+  import type { LearningSubmission, LearningTask, SubmissionHistoryLoadState } from "$lib/types/learning";
 
   type DialogTurn = {
     id: string;
@@ -33,7 +33,6 @@
     session: DialogSession;
     submission: LearningSubmission;
   };
-  type HistoryState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
 
   let {
     learnerSub = null,
@@ -80,7 +79,7 @@
     expandedSubmissionKeys?: string[];
     contextModules?: LearnerMaterialContextModule[];
     historyByTask?: Record<string, LearningSubmission[]>;
-    historyStateByTask?: Record<string, HistoryState>;
+    historyStateByTask?: Record<string, SubmissionHistoryLoadState>;
     focusedContextModuleId?: string | null;
     closedContextModuleTitle?: string | null;
     taskColumnRatio?: number | null;

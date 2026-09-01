@@ -29,7 +29,7 @@ vi.mock("$lib/server/guards", () => ({
 }));
 
 import { actions, load } from "./+page.server";
-import { backendRequest, requireBackendJson } from "$lib/server/api";
+import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
 import { requireSpaceBootstrap } from "$lib/server/guards";
 
 const requireBackendJsonMock = vi.mocked(requireBackendJson);
@@ -67,7 +67,7 @@ function redirectError(status: Parameters<typeof redirect>[0], location: string)
   throw new Error("expected redirect");
 }
 
-function mockModularLoad() {
+function mockModularLoad(options: { historyFailure?: unknown } = {}) {
   requireBackendJsonMock.mockImplementation(async (_fetch, _cookies, path) => {
     if (path === "/api/learning/courses/course-1/units") {
       return [
@@ -116,6 +116,9 @@ function mockModularLoad() {
       };
     }
     if (path === "/api/learning/courses/course-1/tasks/task-1/submissions?limit=10&offset=0") {
+      if (options.historyFailure !== undefined) {
+        throw options.historyFailure;
+      }
       return [{ id: "submission-1", intent: "submit", attempt_nr: 1 }];
     }
     throw new Error(`unexpected_path:${path}`);
@@ -527,6 +530,51 @@ describe("learning unit route load", () => {
     expect(result.initialPanel).toBe("result");
     expect(result.historyTaskId).toBe("task-1");
     expect(result.history).toHaveLength(1);
+  });
+
+  it("returns a failed initial history state when a direct result load receives a retryable backend error", async () => {
+    mockModularLoad({
+      historyFailure: new BackendRequestError(jsonResponse({ error: "temporarily_unavailable" }, 503))
+    });
+
+    const result = (await load({
+      fetch: vi.fn() as unknown as typeof fetch,
+      cookies: {} as Parameters<typeof load>[0]["cookies"],
+      params: { courseId: "course-1", unitId: "unit-1" },
+      parent: vi.fn(async () => ({ bootstrap: null, appSessionActive: false, theme: "light", workspaceLayout: "standard" })) as Parameters<typeof load>[0]["parent"],
+      url: new URL("http://test.local/learning/courses/course-1/units/unit-1?module=module-7&task=task-1&panel=result")
+    } as Parameters<typeof load>[0])) as Exclude<Awaited<ReturnType<typeof load>>, void>;
+
+    expect(result.initialPanel).toBe("result");
+    expect(result.historyTaskId).toBe("task-1");
+    expect(result.history).toEqual([]);
+    expect(result.historyLoadState).toBe("failed");
+  });
+
+  it("rethrows an auth continuation redirect raised while loading direct result history", async () => {
+    mockModularLoad({
+      historyFailure: redirectError(
+        302,
+        "/auth/continue?redirect=%2Flearning%2Fcourses%2Fcourse-1%2Funits%2Funit-1"
+      )
+    });
+
+    try {
+      await load({
+        fetch: vi.fn() as unknown as typeof fetch,
+        cookies: {} as Parameters<typeof load>[0]["cookies"],
+        params: { courseId: "course-1", unitId: "unit-1" },
+        parent: vi.fn(async () => ({ bootstrap: null, appSessionActive: false, theme: "light", workspaceLayout: "standard" })) as Parameters<typeof load>[0]["parent"],
+        url: new URL("http://test.local/learning/courses/course-1/units/unit-1?module=module-7&task=task-1&panel=result")
+      } as Parameters<typeof load>[0]);
+      throw new Error("expected redirect");
+    } catch (caught) {
+      expect(isRedirect(caught)).toBe(true);
+      expect(caught).toMatchObject({
+        status: 302,
+        location: "/auth/continue?redirect=%2Flearning%2Fcourses%2Fcourse-1%2Funits%2Funit-1"
+      });
+    }
   });
 
   it("passes the current page path to protected read-model calls for silent auth continuation", async () => {

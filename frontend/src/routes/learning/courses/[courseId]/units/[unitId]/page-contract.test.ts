@@ -195,7 +195,7 @@ describe("learning unit route contract", () => {
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
     expect(routeSource).toContain('import { onMount, tick, untrack } from "svelte";');
-    expect(routeSource).toMatch(/\$effect\(\(\) => \{\s*const historyTaskId = data\.historyTaskId;[\s\S]*?untrack\(\(\) => \{[\s\S]*?setTaskHistory\(historyTaskId, history\)/);
+    expect(routeSource).toMatch(/\$effect\(\(\) => \{\s*const historyTaskId = data\.historyTaskId;[\s\S]*?untrack\(\(\) => \{[\s\S]*?setTaskHistory\(historyTaskId, history, historyLoadState\)/);
   });
 
   it("shows a clear message when uploaded bytes do not match the expected content type", () => {
@@ -218,7 +218,7 @@ describe("learning unit route contract", () => {
       "utf8"
     );
 
-    expect(routeSource).toContain("let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({})");
+    expect(routeSource).toContain("let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>(");
     expect(routeSource).toContain("function historyForTask(taskId: string): LearningSubmission[]");
     expect(routeSource).not.toContain("let historyState = $state<LearningSubmission[]>(data.history)");
     expect(workspaceSource).toContain("historyByTask");
@@ -246,8 +246,9 @@ describe("learning unit route contract", () => {
       "utf8"
     );
 
-    expect(routeSource).toContain('type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable"');
-    expect(routeSource).toContain("let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>({})");
+    expect(routeSource).toContain("SubmissionHistoryLoadState");
+    expect(routeSource).not.toContain('type SubmissionHistoryLoadState = "not_loaded"');
+    expect(routeSource).toContain("let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>(");
     expect(routeSource).toContain("function setTaskHistoryState(taskId: string, state: SubmissionHistoryLoadState)");
     expect(routeSource).toContain("async function ensureSubmissionHistoryLoaded(taskId: string)");
     expect(routeSource).toContain("handleRecoverableAuthResponse(response)");
@@ -258,6 +259,24 @@ describe("learning unit route contract", () => {
     expect(navigationSource).toContain('"history"');
     expect(navigationSource).toContain("next.searchParams.delete(key)");
     expect(routeSource).not.toContain("const currentHistoryTaskId = next.searchParams.get(\"history\")");
+  });
+
+  it("seeds server history before restoring a directly linked task and exposes a retry", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const workspaceSource = readFileSync(
+      path.resolve(currentDir, "../../../../../../lib/components/learning-unit/LearnerContentWorkspace.svelte"),
+      "utf8"
+    );
+
+    expect(routeSource).toContain("untrack(() => initialSubmissionHistoryByTask(data.historyTaskId, data.history))");
+    expect(routeSource).toContain("untrack(() => initialSubmissionHistoryStateByTask(data.historyTaskId, data.historyLoadState))");
+    expect(routeSource).toMatch(
+      /if \(requestedItem\?\.task && \(requestedItem\.task\.has_submission \|\| resultRequested\)\) \{\s*await ensureSubmissionHistoryLoaded\(requestedItem\.task\.id\);/
+    );
+    expect(routeSource).toContain("onRetryTaskHistory={ensureSubmissionHistoryLoaded}");
+    expect(workspaceSource).toContain("historyState={taskHistoryState(task.id)}");
+    expect(workspaceSource).toContain("onRetryHistory={() => onRetryTaskHistory?.(task.id)}");
   });
 
   it("guards submission-history requests before building course and task URLs", () => {

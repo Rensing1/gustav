@@ -9,10 +9,14 @@
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { ContentGroup, LearnerMaterialContextModule, LearningContentItem } from "$lib/learning-unit/workspace";
-  import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
+  import type {
+    LearningMaterial,
+    LearningSubmission,
+    LearningTask,
+    SubmissionHistoryLoadState
+  } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
 
-  type HistoryState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
   type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
   type ReaderReference = {
     key: string;
@@ -77,6 +81,7 @@
     onPreviewTaskColumnRatio = null,
     onCommitTaskColumnRatio = null,
     onDismissFeedbackStatus = null,
+    onRetryTaskHistory = null,
     onProgressPersisted = null
   }: {
     learnerSub?: string | null;
@@ -104,7 +109,7 @@
     readerScrollTop?: number;
     taskColumnRatio?: number | null;
     historyByTask: Record<string, LearningSubmission[]>;
-    historyStateByTask?: Record<string, HistoryState>;
+    historyStateByTask?: Record<string, SubmissionHistoryLoadState>;
     submittedTaskId?: string | null;
     submissionMessage?: string | null;
     submissionErrorTaskId?: string | null;
@@ -138,6 +143,7 @@
     onPreviewTaskColumnRatio?: ((value: number) => void) | null;
     onCommitTaskColumnRatio?: ((value: number) => void) | null;
     onDismissFeedbackStatus?: ((taskId: string) => void) | null;
+    onRetryTaskHistory?: ((taskId: string) => void | Promise<unknown>) | null;
     onProgressPersisted?: ((taskId: string, submission?: LearningSubmission | null) => void | Promise<void>) | null;
   } = $props();
 
@@ -223,6 +229,10 @@
 
   function taskHistory(taskId: string): LearningSubmission[] {
     return historyByTask[taskId] ?? [];
+  }
+
+  function taskHistoryState(taskId: string): SubmissionHistoryLoadState {
+    return historyStateByTask[taskId] ?? "not_loaded";
   }
 
   function taskIsFinal(task: LearningTask): boolean {
@@ -380,6 +390,7 @@
                   {unitType}
                   moduleId={item.moduleId ?? null}
                   history={taskHistory(task.id)}
+                  historyState={taskHistoryState(task.id)}
                   domId={`task-row-${task.id}`}
                   expanded={true}
                   compactLayout={true}
@@ -395,6 +406,7 @@
                   reviewPanelOpen={false}
                   enhanceSubmit={enhanceTaskForm?.(task.id)}
                   onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
+                  onRetryHistory={() => onRetryTaskHistory?.(task.id)}
                   onEnterSubmissionWorkspace={() => onBeginTask(item.key, "text")}
                   onEnterUploadWorkspace={() => onBeginTask(item.key, preferredMode(task))}
                   onProgressPersisted={(submission) => onProgressPersisted?.(task.id, submission)}
@@ -531,6 +543,7 @@
           {unitType}
           moduleId={activeItem.moduleId ?? null}
           history={taskHistory(task.id)}
+          historyState={taskHistoryState(task.id)}
           domId={`task-workspace-${task.id}`}
           expanded={true}
           compactLayout={true}
@@ -572,6 +585,7 @@
           onCloseDialogContextModule={onCloseModule}
           onUndoCloseDialogContextModule={onUndoCloseModule}
           onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
+          onRetryHistory={() => onRetryTaskHistory?.(task.id)}
           onSubmitUploadFeedback={onSubmitUploadFeedback}
           onProgressPersisted={(submission) => onProgressPersisted?.(task.id, submission)}
         />

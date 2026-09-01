@@ -5,9 +5,8 @@
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
-  import type { LearningSubmission } from "$lib/types/learning";
+  import type { LearningSubmission, SubmissionHistoryLoadState } from "$lib/types/learning";
 
-  type HistoryState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
 
   let {
     courseId,
@@ -36,7 +35,7 @@
     expandedSubmissionModuleIds?: string[];
     expandedSubmissionKeys?: string[];
     historyByTask?: Record<string, LearningSubmission[]>;
-    historyStateByTask?: Record<string, HistoryState>;
+    historyStateByTask?: Record<string, SubmissionHistoryLoadState>;
     focusedModuleId?: string | null;
     closedModuleTitle?: string | null;
     compactRows?: boolean;

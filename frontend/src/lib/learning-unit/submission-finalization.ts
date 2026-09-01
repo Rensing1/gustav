@@ -1,4 +1,13 @@
+import type { LearningSubmission } from "$lib/types/learning";
+
 export type SubmissionIntent = "feedback" | "submit";
+
+export type ReviewedSubmissionBaseline = {
+  submissionId: string;
+  kind: LearningSubmission["kind"];
+  textBody: string | null;
+  normalizedText: string;
+};
 
 export type SubmissionAttempt =
   | { accepted: false; statusMessage: string }
@@ -36,6 +45,32 @@ export function beginSubmissionAttempt(
 }
 
 const submissionIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Normalizes reviewed and local text with the equality semantics used by finalization. */
+export function normalizeReviewedSubmissionText(value: string | null | undefined): string {
+  return (value ?? "").trim();
+}
+
+/** Captures the exact completed feedback submission that may be finalized. */
+export function reviewedSubmissionBaseline(
+  submission: LearningSubmission | null | undefined
+): ReviewedSubmissionBaseline | null {
+  const submissionId = validatedFeedbackSubmissionId(submission?.id ?? null);
+  if (
+    !submission ||
+    !submissionId ||
+    submission.intent !== "feedback" ||
+    submission.analysis_status !== "completed"
+  ) {
+    return null;
+  }
+  return {
+    submissionId,
+    kind: submission.kind,
+    textBody: submission.text_body ?? null,
+    normalizedText: normalizeReviewedSubmissionText(submission.text_body)
+  };
+}
 
 /** Derives a retry-safe finalization key from the reviewed feedback submission. */
 export function finalSubmissionIdempotencyKey(submissionId: string | null | undefined): string | null {

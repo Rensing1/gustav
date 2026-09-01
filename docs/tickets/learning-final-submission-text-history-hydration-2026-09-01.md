@@ -2,7 +2,28 @@
 
 ## Status
 
-Open
+Implementiert am 2026-09-01; die ticketspezifischen Komponenten-, Routen- und authentifizierten Browserregressionen bestehen. Das repositoryweite Gate `make verify-feature` bleibt durch zwei bestehende KI-Ausgabeprüfungen außerhalb dieses Tickets blockiert: Eine generierte Rückmeldung wiederholt einen vertraulichen synthetischen Marker, eine Übungsrückmeldung enthält zwei statt genau eines Satzes. Das Ticket bleibt offen, bis dieses unabhängige Gate grün ist.
+
+## Umsetzung
+
+- Eine reine, submissiongebundene Baseline hält ID, Abgabeart und den mit der bisherigen `trim()`-Semantik normalisierten Text atomar zusammen.
+- Die Aufgabenkarte übernimmt eine nachträglich geladene geprüfte Textfassung nur in einen unberührten Editor. Vorhandene, normalisiert abweichende Sitzungsentwürfe – auch ein bewusst leerer Wert – und lokale Änderungen bleiben geschützt.
+- Serverseitig geladene History steht im initialen Clientzustand bereit. Direkte Aufgaben- und Ergebnislinks warten bei bekannten Abgaben vor der Aktivierung auf den deduplizierten History-Loader und verwerfen ein veraltetes Ergebnis nach einer zwischenzeitlichen URL-Änderung.
+- Der zentrale History-Ladezustand reicht bis zur Aufgabenkarte. Ein Fehler zeigt „Erneut versuchen“ und ruft denselben Loader erneut auf.
+- Der SSR-Loader reicht retryfähige History-Fehler als initialen Fehlerzustand bis zur Seite durch, während Auth-Redirects fail-closed bleiben.
+- Eine vertragswidrige Submission-ID erzeugt keine Finalisierungsbaseline und kann daher weder Button noch Request-Felder freigeben.
+- Der ungenutzte `LearningSubmissionWorkspace` einschließlich seiner isolierten Tests und exklusiven CSS-Regeln wurde entfernt.
+- OpenAPI, Finalisierungsendpunkt, Datenbank, RLS und Worker blieben unverändert.
+
+## Verifikation am 2026-09-01
+
+- Red-Nachweis: Vier neue Regressionen schlugen vor der Implementierung für asynchrone Hydration, `pending → completed`, Retry und Route-Restore fehl.
+- Gezielte Vitest-Suiten: Der abschließende Satz aus Serverroute, Seitenvertrag, Finalisierungshelper und Aufgabenkarte bestand mit 120 Tests.
+- Vollständige Frontend-Suite: 140 Testdateien mit 638 Tests bestanden.
+- Svelte-Prüfung: 0 Fehler und 0 Warnungen.
+- Authentifizierter Direktlink-/Reload-/Finalisierungsablauf: bestanden; genau eine finale Submission wurde nachgewiesen.
+- Deterministischer Anteil von `make verify-feature`: bestanden, darunter 2477 Backendtests (78 übersprungen), 638 Frontendtests, Frontendprüfung und -build sowie 62 H5P-Tests.
+- Vollständige Feature-Acceptance: 22 von 24 Szenarien bestanden. Die zwei oben im Status genannten bestehenden KI-Ausgabeverträge sind isoliert reproduzierbar und betreffen weder die geänderten Dateien noch den Finalisierungsablauf.
 
 ## Kurzbeschreibung
 

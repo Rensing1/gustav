@@ -20,7 +20,8 @@ import type {
   LearningSubmission,
   LearningTask,
   LearningUnitGraph,
-  LearningUnitPageData
+  LearningUnitPageData,
+  SubmissionHistoryLoadState
 } from "$lib/types/learning";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 
@@ -140,6 +141,7 @@ async function loadPageData(
   const historyTaskId = legacyHistoryTaskId ?? (initialPanel === "result" ? requestedTaskId : null);
 
   let history: LearningSubmission[] = [];
+  let historyLoadState: SubmissionHistoryLoadState = historyTaskId ? "unavailable" : "not_loaded";
   if (historyTaskId) {
     try {
       history = await requireBackendJson<LearningSubmission[]>(
@@ -148,8 +150,17 @@ async function loadPageData(
         `/api/learning/courses/${encodeURIComponent(courseId)}/tasks/${encodeURIComponent(historyTaskId)}/submissions?limit=10&offset=0`,
         { authRedirectPath }
       );
+      historyLoadState = history.length ? "loaded" : "unavailable";
     } catch (caught) {
-      if (!(caught instanceof BackendRequestError) || caught.response.status !== 404) {
+      if (!(caught instanceof BackendRequestError)) {
+        throw caught;
+      }
+      const status = caught.response.status;
+      if (status === 404) {
+        historyLoadState = "unavailable";
+      } else if (status === 408 || status === 429 || status >= 500) {
+        historyLoadState = "failed";
+      } else {
         throw caught;
       }
     }
@@ -170,6 +181,7 @@ async function loadPageData(
     initialPanel,
     historyTaskId,
     history,
+    historyLoadState,
     submittedTaskId: url.searchParams.get("submitted"),
     message: url.searchParams.get("message"),
     submissionMode:

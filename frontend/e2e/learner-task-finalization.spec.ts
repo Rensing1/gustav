@@ -35,18 +35,15 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
       textBody: reviewedText
     });
 
-    const draftKey = `gustav.learning.submission-draft:${encodeURIComponent(learnerSub)}:${seeded.courseId}:${seeded.taskId}:text`;
-    await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
-    await learner.page.evaluate(({ key, value }) => window.sessionStorage.setItem(key, value), {
-      key: draftKey,
-      value: reviewedText
-    });
     await learner.page.goto(
       `/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}&task=${seeded.taskId}&panel=result`
     );
 
     const editor = learner.page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
     const finalButton = learner.page.getByRole("button", { name: "Endgültig abgeben" });
+    await expect(editor).toContainText(reviewedText);
+    await expect(finalButton).toBeEnabled();
+    await learner.page.reload();
     await expect(editor).toContainText(reviewedText);
     await expect(finalButton).toBeEnabled();
 
@@ -72,9 +69,15 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     await expect(learner.page.getByRole("button", { name: "Rückmeldung erneut einholen" })).toBeDisabled();
     await expect(status).toContainText("Aufgabe abgegeben");
     expect(finalizationRequests).toBe(1);
-    await expect.poll(() => learner.page.evaluate((key) => window.sessionStorage.getItem(key), draftKey)).toBeNull();
 
-    await learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" }).click();
+    const historyResponse = await learner.page.request.get(
+      `${webBase}/api/learning/courses/${seeded.courseId}/tasks/${seeded.taskId}/submissions?limit=10&offset=0`
+    );
+    expect(historyResponse.ok(), await historyResponse.text()).toBe(true);
+    const history = await historyResponse.json() as Array<{ intent: string }>;
+    expect(history.filter((submission) => submission.intent === "submit")).toHaveLength(1);
+
+    await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
     await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
     await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
     await expect(learner.page.getByRole("button", { name: "Erneut bearbeiten" })).toBeVisible();

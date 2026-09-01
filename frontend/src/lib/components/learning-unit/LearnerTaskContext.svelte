@@ -2,10 +2,9 @@
   import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
   import LearnerFocusedMaterialContext from "$lib/components/learning-unit/LearnerFocusedMaterialContext.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
-  import type { LearningSubmission } from "$lib/types/learning";
+  import type { LearningSubmission, SubmissionHistoryLoadState } from "$lib/types/learning";
   import { renderMarkdown } from "$lib/utils/markdown";
 
-  type HistoryState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
 
   let {
     courseId,
@@ -48,7 +47,7 @@
     expandedSubmissionModuleIds?: string[];
     expandedSubmissionKeys?: string[];
     historyByTask?: Record<string, LearningSubmission[]>;
-    historyStateByTask?: Record<string, HistoryState>;
+    historyStateByTask?: Record<string, SubmissionHistoryLoadState>;
     focusedModuleId?: string | null;
     closedModuleTitle?: string | null;
     onScroll?: ((scrollTop: number) => void) | null;

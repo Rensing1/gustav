@@ -13,11 +13,16 @@
     submissionDraftStorageKey
   } from "$lib/learning-unit/submission-drafts";
   import { taskInstructionPreview, taskPreviewIsVisuallyClipped } from "$lib/learning-unit/task-preview";
-  import { finalSubmissionIdempotencyKey } from "$lib/learning-unit/submission-finalization";
+  import {
+    finalSubmissionIdempotencyKey,
+    normalizeReviewedSubmissionText,
+    reviewedSubmissionBaseline,
+    type ReviewedSubmissionBaseline
+  } from "$lib/learning-unit/submission-finalization";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
-  import type { LearningSubmission, LearningTask } from "$lib/types/learning";
+  import type { LearningSubmission, LearningTask, SubmissionHistoryLoadState } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
   import { onMount, untrack } from "svelte";
 
@@ -30,6 +35,7 @@
     unitType,
     moduleId = null,
     history = [],
+    historyState = "loaded",
     domId = undefined,
     expanded = true,
     submitted = false,
@@ -58,6 +64,7 @@
     enhanceSubmit = undefined,
     onToggle = null,
     onDismissFeedbackStatus = null,
+    onRetryHistory = null,
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
     onExitSubmissionWorkspace = null,
@@ -85,6 +92,7 @@
     unitType: "linear" | "modular";
     moduleId?: string | null;
     history?: LearningSubmission[];
+    historyState?: SubmissionHistoryLoadState;
     domId?: string;
     expanded?: boolean;
     submitted?: boolean;
@@ -113,6 +121,7 @@
     enhanceSubmit?: SubmitFunction;
     onToggle?: (() => void) | null;
     onDismissFeedbackStatus?: (() => void) | null;
+    onRetryHistory?: (() => void | Promise<unknown>) | null;
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
     onExitSubmissionWorkspace?: (() => void) | null;
@@ -139,7 +148,6 @@
   } = $props();
 
   type SubmissionMode = "text" | "upload";
-  type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
   type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
   type CompactTaskTone = "new" | "draft" | "pending" | "final" | "error";
   const DRAFT_PERSIST_DELAY_MS = 200;
@@ -158,6 +166,9 @@
   let taskPreviewVisuallyClipped = $state(false);
   let pendingDraftWrite: { key: string; value: string } | null = null;
   let draftPersistTimer: ReturnType<typeof setTimeout> | null = null;
+  let protectedSessionDraft = $state<{ taskId: string; value: string } | null>(null);
+  let draftEditedSinceRestore = $state(false);
+  let reconciledFeedbackSubmissionId = $state<string | null>(null);
 
   function uploadOnly(): boolean {
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius";
@@ -326,7 +337,20 @@
       window.localStorage.removeItem(key);
     }
     const storedDraft = key ? window.sessionStorage.getItem(key) : null;
-    draftText = storedDraft ?? (latestSubmission()?.kind === "text" ? latestSubmission()?.text_body ?? "" : "");
+    const baseline = currentReviewedBaseline();
+    const storedDraftMatchesBaseline = Boolean(
+      storedDraft !== null &&
+      baseline?.kind === "text" &&
+      normalizeReviewedSubmissionText(storedDraft) === baseline.normalizedText
+    );
+    protectedSessionDraft = storedDraft !== null && !storedDraftMatchesBaseline
+      ? { taskId: task.id, value: storedDraft }
+      : null;
+    draftEditedSinceRestore = false;
+    reconciledFeedbackSubmissionId = baseline?.submissionId ?? null;
+    draftText = storedDraftMatchesBaseline
+      ? baseline?.textBody ?? ""
+      : storedDraft ?? (baseline?.kind === "text" ? baseline.textBody ?? "" : "");
   }
 
   function setEditorMode(next: SubmissionMode) {
@@ -433,33 +457,32 @@
     return Boolean(submission.analysis_json?.criteria_results?.length);
   }
 
+  function currentReviewedBaseline(): ReviewedSubmissionBaseline | null {
+    return reviewedSubmissionBaseline(latestSubmission());
+  }
+
   function hasInlineResponse(): boolean {
     const submission = latestSubmission();
     return Boolean(submission && task.kind !== "dialog" && task.kind !== "h5p");
   }
 
   function canOfferFinalization(): boolean {
-    const submission = latestSubmission();
-    return Boolean(
-      submission &&
-      submission.intent === "feedback" &&
-      submission.analysis_status === "completed"
-    );
+    return currentReviewedBaseline() !== null;
   }
 
   function currentFinalizationIdempotencyKey(): string | null {
-    return canOfferFinalization() ? finalSubmissionIdempotencyKey(latestSubmission()?.id) : null;
+    return finalSubmissionIdempotencyKey(currentReviewedBaseline()?.submissionId);
   }
 
   function currentDraftMatchesFeedback(): boolean {
-    const submission = latestSubmission();
-    if (!submission || !canOfferFinalization()) {
+    const baseline = currentReviewedBaseline();
+    if (!baseline) {
       return false;
     }
     if (editorMode === "text") {
-      return submission.kind === "text" && draftText.trim() === (submission.text_body ?? "").trim();
+      return baseline.kind === "text" && normalizeReviewedSubmissionText(draftText) === baseline.normalizedText;
     }
-    return isUploadSubmission(submission) && !selectedUploadFile && !hideExistingUpload;
+    return (baseline.kind === "image" || baseline.kind === "file") && !selectedUploadFile && !hideExistingUpload;
   }
 
   function editingLocked(): boolean {
@@ -543,6 +566,7 @@
 
   function updateDraft(value: string) {
     draftText = value;
+    draftEditedSinceRestore = true;
     if (!browser || uploadOnly() || editorMode !== "text") {
       return;
     }
@@ -598,6 +622,31 @@
     }
     lastSubmissionFocused = workspaceActive;
     lastWorkspaceTaskId = workspaceActive ? task.id : null;
+  });
+
+  $effect(() => {
+    const workspaceActive = submissionFocused || reviewPanelOpen;
+    const baseline = currentReviewedBaseline();
+    if (
+      !workspaceActive ||
+      editorMode !== "text" ||
+      baseline?.kind !== "text" ||
+      reconciledFeedbackSubmissionId === baseline.submissionId
+    ) {
+      return;
+    }
+
+    const storedDraft = protectedSessionDraft?.taskId === task.id ? protectedSessionDraft.value : null;
+    const storedDraftMatchesBaseline = storedDraft !== null &&
+      normalizeReviewedSubmissionText(storedDraft) === baseline.normalizedText;
+    const mayHydrate = !draftEditedSinceRestore && (storedDraft === null || storedDraftMatchesBaseline);
+
+    // Record the submission before changing draft state so this effect reconciles each reviewed version once.
+    reconciledFeedbackSubmissionId = baseline.submissionId;
+    if (mayHydrate) {
+      protectedSessionDraft = null;
+      draftText = baseline.textBody ?? "";
+    }
   });
 
   $effect(() => {
@@ -710,6 +759,8 @@
               tone={feedbackMessageTone()}
               title={feedbackPendingMessage()!}
               description={feedbackMessageDescription()}
+              actionLabel={historyState === "failed" && onRetryHistory ? "Erneut versuchen" : null}
+              onAction={historyState === "failed" ? onRetryHistory : null}
               onDismiss={onDismissFeedbackStatus}
               dismissible={feedbackMessageTone() === "error"}
             />
@@ -821,7 +872,7 @@
                                 {#if moduleId}
                                   <input type="hidden" name="module_id" value={moduleId} />
                                 {/if}
-                                <input type="hidden" name="feedback_submission_id" value={latestSubmission()?.id ?? ""} />
+                                <input type="hidden" name="feedback_submission_id" value={currentReviewedBaseline()?.submissionId ?? ""} />
                                 <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
                                 <button
                                   class="workspace-top-action workspace-top-action--quiet"

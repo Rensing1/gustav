@@ -17,6 +17,7 @@ const task: LearningTask = {
   criteria: ["Klarheit"],
   kind: "native"
 };
+const validReviewedSubmissionId = "123e4567-e89b-42d3-a456-426614174099";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -179,7 +180,7 @@ describe("LearningTaskCard", () => {
         initialSubmissionMode: "text",
         history: [
           {
-            id: "submission-feedback",
+            id: validReviewedSubmissionId,
             attempt_nr: 1,
             kind: "text",
             intent: "feedback",
@@ -209,6 +210,150 @@ describe("LearningTaskCard", () => {
     expect(screen.queryByRole("tab")).toBeNull();
   });
 
+  it("hydrates an untouched editor when completed text feedback arrives after mount", async () => {
+    const reviewedSubmissionId = "123e4567-e89b-42d3-a456-426614174010";
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task: { ...task, has_submission: true },
+        taskTitle: "Begriffe definieren",
+        unitType: "linear",
+        workspaceOnly: true,
+        submissionFocused: true,
+        initialSubmissionMode: "text",
+        history: []
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    await waitFor(() => expect(editor.value).toBe(""));
+
+    await rerender({
+      learnerSub: "student-2",
+      courseId: "course-1",
+      task: { ...task, has_submission: true },
+      taskTitle: "Begriffe definieren",
+      unitType: "linear",
+      workspaceOnly: true,
+      submissionFocused: true,
+      initialSubmissionMode: "text",
+      history: [
+        {
+          id: reviewedSubmissionId,
+          attempt_nr: 1,
+          kind: "text",
+          intent: "feedback",
+          created_at: "2026-09-01T08:00:00+00:00",
+          analysis_status: "completed",
+          text_body: "Später geladener geprüfter Entwurf",
+          feedback_md: "Gut erklärt."
+        }
+      ]
+    });
+
+    await waitFor(() => expect(editor.value).toBe("Später geladener geprüfter Entwurf"));
+    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(document.querySelector<HTMLInputElement>('input[name="feedback_submission_id"]')?.value).toBe(
+      reviewedSubmissionId
+    );
+  });
+
+  it.each([
+    ["divergent", "Mein lokaler Entwurf"],
+    ["intentionally empty", ""]
+  ])("protects a %s session draft when completed feedback arrives", async (_label, storedDraft) => {
+    const scopedKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";
+    window.sessionStorage.setItem(scopedKey, storedDraft);
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task: { ...task, has_submission: true },
+        taskTitle: "Begriffe definieren",
+        unitType: "linear",
+        workspaceOnly: true,
+        submissionFocused: true,
+        initialSubmissionMode: "text",
+        history: []
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    await waitFor(() => expect(editor.value).toBe(storedDraft));
+
+    await rerender({
+      learnerSub: "student-2",
+      courseId: "course-1",
+      task: { ...task, has_submission: true },
+      taskTitle: "Begriffe definieren",
+      unitType: "linear",
+      workspaceOnly: true,
+      submissionFocused: true,
+      initialSubmissionMode: "text",
+      history: [
+        {
+          id: "123e4567-e89b-42d3-a456-426614174011",
+          attempt_nr: 1,
+          kind: "text",
+          intent: "feedback",
+          created_at: "2026-09-01T08:00:00+00:00",
+          analysis_status: "completed",
+          text_body: "Geprüfter Entwurf",
+          feedback_md: "Gut erklärt."
+        }
+      ]
+    });
+
+    await waitFor(() => expect(editor.value).toBe(storedDraft));
+    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
+  });
+
+  it("protects a local edit when completed feedback arrives after mount", async () => {
+    const { rerender } = render(LearningTaskCard, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task: { ...task, has_submission: true },
+        taskTitle: "Begriffe definieren",
+        unitType: "linear",
+        workspaceOnly: true,
+        submissionFocused: true,
+        initialSubmissionMode: "text",
+        history: []
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    await fireEvent.input(editor, { target: { value: "Gerade bearbeiteter Entwurf" } });
+
+    await rerender({
+      learnerSub: "student-2",
+      courseId: "course-1",
+      task: { ...task, has_submission: true },
+      taskTitle: "Begriffe definieren",
+      unitType: "linear",
+      workspaceOnly: true,
+      submissionFocused: true,
+      initialSubmissionMode: "text",
+      history: [
+        {
+          id: "123e4567-e89b-42d3-a456-426614174013",
+          attempt_nr: 1,
+          kind: "text",
+          intent: "feedback",
+          created_at: "2026-09-01T08:00:00+00:00",
+          analysis_status: "completed",
+          text_body: "Geprüfter Entwurf",
+          feedback_md: "Gut erklärt."
+        }
+      ]
+    });
+
+    await waitFor(() => expect(editor.value).toBe("Gerade bearbeiteter Entwurf"));
+    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
+  });
+
   it("omits the evaluation disclosure when the latest submission has no criteria results", () => {
     render(LearningTaskCard, {
       props: {
@@ -220,7 +365,7 @@ describe("LearningTaskCard", () => {
         submissionFocused: true,
         history: [
           {
-            id: "submission-feedback",
+            id: validReviewedSubmissionId,
             attempt_nr: 1,
             kind: "text",
             intent: "feedback",
@@ -251,7 +396,7 @@ describe("LearningTaskCard", () => {
         submissionFocused: true,
         history: [
           {
-            id: "submission-feedback",
+            id: validReviewedSubmissionId,
             attempt_nr: 1,
             kind: "text",
             intent: "feedback",
@@ -273,6 +418,62 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
     const actions = screen.getByRole("region", { name: "Dein nächster Schritt" });
     expect(within(actions).getByText("Für diese Fassung zuerst Rückmeldung einholen.")).toBeInTheDocument();
+
+    await fireEvent.input(editor, { target: { value: "  Mein Entwurf  " } });
+
+    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(within(actions).queryByText("Für diese Fassung zuerst Rückmeldung einholen.")).toBeNull();
+  });
+
+  it("offers a retry when submission history failed to load", async () => {
+    const onRetryHistory = vi.fn();
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: { ...task, has_submission: true },
+        taskTitle: "Begriffe definieren",
+        unitType: "linear",
+        workspaceOnly: true,
+        submissionFocused: true,
+        history: [],
+        historyState: "failed",
+        feedbackStatusMessage: "Der Verlauf konnte nicht geladen werden. Bitte versuche es erneut.",
+        onRetryHistory
+      }
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Der Verlauf konnte nicht geladen werden");
+    expect(screen.queryByText("Für diese Fassung zuerst Rückmeldung einholen.")).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
+    expect(onRetryHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not offer finalization for a reviewed submission with an invalid id", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: { ...task, has_submission: true },
+        taskTitle: "Begriffe definieren",
+        unitType: "linear",
+        workspaceOnly: true,
+        submissionFocused: true,
+        history: [
+          {
+            id: "submission-feedback",
+            attempt_nr: 1,
+            kind: "text",
+            intent: "feedback",
+            created_at: "2026-09-01T08:00:00+00:00",
+            analysis_status: "completed",
+            text_body: "Geprüfter Entwurf",
+            feedback_md: "Gut erklärt."
+          }
+        ]
+      }
+    });
+
+    expect(screen.queryByRole("button", { name: "Endgültig abgeben" })).toBeNull();
+    expect(document.querySelector('input[name="finalization_idempotency_key"]')).toBeNull();
   });
 
   it("locks text and file inputs while feedback is being generated", () => {
@@ -785,7 +986,7 @@ describe("LearningTaskCard", () => {
         submissionFocused: true,
         history: [
           {
-            id: "submission-feedback",
+            id: validReviewedSubmissionId,
             attempt_nr: 1,
             kind: "text",
             intent: "feedback",
@@ -855,7 +1056,7 @@ describe("LearningTaskCard", () => {
         pendingIntent: "submit",
         history: [
           {
-            id: "submission-feedback",
+            id: validReviewedSubmissionId,
             attempt_nr: 1,
             kind: "text",
             intent: "feedback",
@@ -1122,7 +1323,7 @@ describe("LearningTaskCard", () => {
         initialSubmissionMode: "text",
         history: [
           {
-            id: "submission-feedback",
+            id: validReviewedSubmissionId,
             attempt_nr: 1,
             kind: "text",
             intent: "feedback",
@@ -1255,7 +1456,7 @@ describe("LearningTaskCard", () => {
         initialSubmissionMode: "upload",
         history: [
           {
-            id: "submission-feedback",
+            id: validReviewedSubmissionId,
             attempt_nr: 1,
             kind: "image",
             intent: "feedback",
@@ -1401,6 +1602,7 @@ describe("LearningTaskCard", () => {
   });
 
   it("opens completed feedback inline after the pending state finishes", async () => {
+    const reviewedSubmissionId = "123e4567-e89b-42d3-a456-426614174012";
     const onDismissFeedbackStatus = vi.fn();
     const { rerender } = render(LearningTaskCard, {
       props: {
@@ -1414,7 +1616,7 @@ describe("LearningTaskCard", () => {
         feedbackStatusMessage: "Rückmeldung wird erstellt ...",
         history: [
           {
-            id: "submission-ready",
+            id: reviewedSubmissionId,
             attempt_nr: 1,
             kind: "text",
             intent: "feedback",
@@ -1438,7 +1640,7 @@ describe("LearningTaskCard", () => {
       feedbackStatusMessage: "Rückmeldung ist bereit",
       history: [
         {
-          id: "submission-ready",
+          id: reviewedSubmissionId,
           attempt_nr: 1,
           kind: "text",
           intent: "feedback",
@@ -1454,6 +1656,15 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("status")).toHaveClass("status-message--success");
     expect(screen.queryByRole("button", { name: "Rückmeldung ansehen" })).toBeNull();
     expect(screen.getByText("Rückmeldung").closest("details")).toHaveAttribute("open");
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    await waitFor(() => expect(editor.value).toBe("Mein Entwurf"));
+    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(document.querySelector<HTMLInputElement>('input[name="feedback_submission_id"]')?.value).toBe(
+      reviewedSubmissionId
+    );
+    expect(document.querySelector<HTMLInputElement>('input[name="finalization_idempotency_key"]')?.value).toBe(
+      `finalize-${reviewedSubmissionId}`
+    );
   });
 
   it("keeps a processing failure visible as an alert", () => {
@@ -1512,7 +1723,7 @@ describe("LearningTaskCard", () => {
         initialSubmissionMode: "upload",
         history: [
           {
-            id: "submission-image",
+            id: validReviewedSubmissionId,
             attempt_nr: 1,
             kind: "image",
             intent: "feedback",

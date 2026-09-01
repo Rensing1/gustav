@@ -148,6 +148,8 @@ export type LearningCoursePageData = {
   units: LearningCourseUnit[];
 };
 
+export type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
+
 export type LearningUnitPageData = {
   user: SessionBootstrapUser | null;
   courseId: string;
@@ -163,6 +165,7 @@ export type LearningUnitPageData = {
   initialPanel: "result" | null;
   historyTaskId: string | null;
   history: LearningSubmission[];
+  historyLoadState: SubmissionHistoryLoadState;
   submittedTaskId: string | null;
   message: string | null;
   submissionMode: "text" | "upload" | null;

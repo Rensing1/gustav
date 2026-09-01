@@ -71,7 +71,8 @@
     LearningModuleContent,
     LearningTask,
     LearningUnitGraph,
-    LearningUnitGraphModule
+    LearningUnitGraphModule,
+    SubmissionHistoryLoadState
   } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { ActionData, PageData } from "./$types";
@@ -83,7 +84,6 @@
     url: string;
     headers?: Record<string, string>;
   };
-  type SubmissionHistoryLoadState = "not_loaded" | "loading" | "loaded" | "failed" | "unavailable";
   type ClosedModuleSnapshot = {
     moduleId: string;
     title: string;
@@ -114,8 +114,26 @@
   let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences(currentViewportWidth()));
   let taskColumnRatio = $state<number | null>(null);
   let workspaceRoot = $state<HTMLDivElement | null>(null);
-  let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>({});
-  let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>({});
+  function initialSubmissionHistoryByTask(
+    taskId: string | null,
+    entries: LearningSubmission[]
+  ): Record<string, LearningSubmission[]> {
+    return taskId ? { [taskId]: entries } : {};
+  }
+
+  function initialSubmissionHistoryStateByTask(
+    taskId: string | null,
+    state: SubmissionHistoryLoadState
+  ): Record<string, SubmissionHistoryLoadState> {
+    return taskId ? { [taskId]: state } : {};
+  }
+
+  let submissionHistoryByTask = $state.raw<Record<string, LearningSubmission[]>>(
+    untrack(() => initialSubmissionHistoryByTask(data.historyTaskId, data.history))
+  );
+  let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>(
+    untrack(() => initialSubmissionHistoryStateByTask(data.historyTaskId, data.historyLoadState))
+  );
   const pendingSubmissionHistoryLoads = new Map<string, Promise<LearningSubmission[]>>();
   let submissionMessageState = $state<string | null>(null);
   let clientSubmissionErrorTaskId = $state<string | null>(null);
@@ -397,6 +415,15 @@
       return;
     }
 
+    if (requestedItem?.task && (requestedItem.task.has_submission || resultRequested)) {
+      await ensureSubmissionHistoryLoaded(requestedItem.task.id);
+      const currentUrl = new URL(window.location.href);
+      const currentTaskId = currentUrl.searchParams.get("task") ?? currentUrl.searchParams.get("history");
+      if (currentTaskId !== requestedItem.task.id) {
+        return;
+      }
+    }
+
     const returnPosition = learnerWorkspace.returnPosition;
     setLearnerWorkspaceState({
       ...learnerWorkspace,
@@ -609,12 +636,16 @@
     return submissionHistoryByTask[taskId] ?? [];
   }
 
-  function setTaskHistory(taskId: string, entries: LearningSubmission[]) {
+  function setTaskHistory(
+    taskId: string,
+    entries: LearningSubmission[],
+    state: SubmissionHistoryLoadState = entries.length ? "loaded" : "unavailable"
+  ) {
     submissionHistoryByTask = {
       ...submissionHistoryByTask,
       [taskId]: entries
     };
-    setTaskHistoryState(taskId, entries.length ? "loaded" : "unavailable");
+    setTaskHistoryState(taskId, state);
   }
 
   function setTaskHistoryState(taskId: string, state: SubmissionHistoryLoadState) {
@@ -1638,10 +1669,11 @@
   $effect(() => {
     const historyTaskId = data.historyTaskId;
     const history = data.history;
+    const historyLoadState = data.historyLoadState;
     const message = data.message;
     untrack(() => {
       if (historyTaskId) {
-        setTaskHistory(historyTaskId, history);
+        setTaskHistory(historyTaskId, history, historyLoadState);
       }
       submissionMessageState = message;
     });
@@ -1846,6 +1878,7 @@
                 onPreviewTaskColumnRatio={previewTaskColumnRatio}
                 onCommitTaskColumnRatio={commitTaskColumnRatio}
                 onDismissFeedbackStatus={dismissFeedbackStatus}
+                onRetryTaskHistory={ensureSubmissionHistoryLoaded}
                 onProgressPersisted={handleProgressPersisted}
               />
             {/if}
@@ -1910,6 +1943,7 @@
             onPreviewTaskColumnRatio={previewTaskColumnRatio}
             onCommitTaskColumnRatio={commitTaskColumnRatio}
             onDismissFeedbackStatus={dismissFeedbackStatus}
+            onRetryTaskHistory={ensureSubmissionHistoryLoaded}
             onProgressPersisted={handleProgressPersisted}
           />
         </section>

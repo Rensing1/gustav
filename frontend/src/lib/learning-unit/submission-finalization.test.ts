@@ -4,6 +4,8 @@ import {
   beginSubmissionAttempt,
   finalSubmissionIdempotencyKey,
   finalSubmissionFailureMessage,
+  normalizeReviewedSubmissionText,
+  reviewedSubmissionBaseline,
   validatedFeedbackSubmissionId,
   validatedFinalSubmissionIdempotencyKey
 } from "./submission-finalization";
@@ -48,6 +50,43 @@ describe("submission finalization", () => {
     expect(validatedFeedbackSubmissionId(submissionId)).toBe(submissionId);
     expect(validatedFeedbackSubmissionId("submission-feedback")).toBeNull();
     expect(validatedFeedbackSubmissionId(null)).toBeNull();
+  });
+
+  it("creates one normalized baseline only for completed feedback", () => {
+    const baseline = reviewedSubmissionBaseline({
+      id: "123e4567-e89b-42d3-a456-426614174000",
+      attempt_nr: 1,
+      intent: "feedback",
+      kind: "text",
+      analysis_status: "completed",
+      created_at: "2026-09-01T08:00:00+00:00",
+      text_body: "  Geprüfter Entwurf  "
+    });
+
+    expect(baseline).toEqual({
+      submissionId: "123e4567-e89b-42d3-a456-426614174000",
+      kind: "text",
+      textBody: "  Geprüfter Entwurf  ",
+      normalizedText: "Geprüfter Entwurf"
+    });
+    expect(normalizeReviewedSubmissionText(null)).toBe("");
+    expect(reviewedSubmissionBaseline({
+      id: "123e4567-e89b-42d3-a456-426614174001",
+      attempt_nr: 2,
+      intent: "feedback",
+      kind: "text",
+      analysis_status: "pending",
+      created_at: "2026-09-01T08:01:00+00:00"
+    })).toBeNull();
+    expect(reviewedSubmissionBaseline({
+      id: "submission-feedback",
+      attempt_nr: 3,
+      intent: "feedback",
+      kind: "text",
+      analysis_status: "completed",
+      created_at: "2026-09-01T08:02:00+00:00",
+      text_body: "Geprüfter Entwurf"
+    })).toBeNull();
   });
 
   it.each([

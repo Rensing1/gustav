@@ -6,6 +6,14 @@ import { describe, expect, it } from "vitest";
 import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
 
 describe("learning unit route contract", () => {
+  it("makes disabled workspace actions visibly inactive", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const appCss = readWorkspaceCssBundle(path.resolve(currentDir, "../../../../../../lib/styles"));
+
+    expect(appCss).toMatch(/\.workspace-top-action:disabled\s*\{[^}]*cursor:\s*not-allowed;[^}]*opacity:\s*0\.55;/s);
+    expect(appCss).toMatch(/\.workspace-top-action:disabled:hover\s*\{[^}]*transform:\s*none;/s);
+  });
+
   it("uses the shared workspace settings menu instead of the local legacy layout menu", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

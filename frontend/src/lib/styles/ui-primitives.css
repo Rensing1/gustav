@@ -249,6 +249,18 @@
   text-decoration: none;
 }
 
+.workspace-top-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.workspace-top-action:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 .theme-toggle {
   width: 2.3rem;
   height: 2.3rem;

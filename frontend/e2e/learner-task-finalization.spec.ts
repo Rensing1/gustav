@@ -4,7 +4,12 @@ import { currentUserSub, login } from "./support/auth";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerNavigationCourse } from "./support/seed-data";
-import { prepareCompletedFeedbackDraft } from "./support/submission-finalization-fixture";
+import {
+  completeQueuedFeedbackDeterministically,
+  holdProviderWorker,
+  prepareCompletedFeedbackDraft,
+  releaseProviderWorker
+} from "./support/submission-finalization-fixture";
 
 const password = e2ePassword;
 
@@ -14,6 +19,7 @@ async function authenticatedPage(browser: Browser): Promise<{ context: BrowserCo
 }
 
 test("@feature-acceptance finalizes a reviewed task with immediate visible progress", async ({ browser }) => {
+  test.setTimeout(120_000);
   const unique = Date.now();
   const teacherEmail = e2eEmail("teacher");
   const learnerEmail = e2eEmail("learner");
@@ -28,23 +34,40 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     const learnerSub = await currentUserSub(learner.page);
     const seeded = await seedLearnerNavigationCourse(teacher.page, learner.page, `Endgültige Abgabe ${unique}`);
     const reviewedText = "Diese geprüfte Fassung wird endgültig abgegeben.";
-    await prepareCompletedFeedbackDraft({
-      courseId: seeded.courseId,
-      taskId: seeded.taskId,
-      learnerSub,
-      textBody: reviewedText
-    });
-
-    await learner.page.goto(
-      `/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}&task=${seeded.taskId}&panel=result`
-    );
+    await learner.page.goto(`/learning/courses/${seeded.courseId}`);
+    await learner.page.getByRole("link", { name: seeded.unitTitle }).click();
+    await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
+    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
 
     const editor = learner.page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
-    const finalButton = learner.page.getByRole("button", { name: "Endgültig abgeben" });
+    await editor.fill(reviewedText);
+
+    await holdProviderWorker();
+    try {
+      await learner.page.getByRole("button", { name: "Rückmeldung einholen" }).click();
+      await expect(
+        learner.page
+          .locator(".learning-task-feedback-status:visible")
+          .getByText("Rückmeldung wird erstellt ...")
+      ).toBeVisible();
+      await completeQueuedFeedbackDeterministically({
+        courseId: seeded.courseId,
+        taskId: seeded.taskId,
+        learnerSub
+      });
+    } finally {
+      await releaseProviderWorker();
+    }
+
+    const finalButton = learner.page.getByRole("button", {
+      name: "Diese geprüfte Fassung endgültig abgeben"
+    });
     await expect(editor).toContainText(reviewedText);
     await expect(finalButton).toBeEnabled();
-    await learner.page.reload();
-    await expect(editor).toContainText(reviewedText);
+
+    const localDraft = "Diese lokale Weiterarbeit besitzt noch keine neue Rückmeldung.";
+    await editor.fill(localDraft);
+    await expect(editor).toContainText(localDraft);
     await expect(finalButton).toBeEnabled();
 
     let finalizationRequests = 0;
@@ -74,8 +97,9 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
       `${webBase}/api/learning/courses/${seeded.courseId}/tasks/${seeded.taskId}/submissions?limit=10&offset=0`
     );
     expect(historyResponse.ok(), await historyResponse.text()).toBe(true);
-    const history = await historyResponse.json() as Array<{ intent: string }>;
+    const history = await historyResponse.json() as Array<{ intent: string; text_body?: string | null }>;
     expect(history.filter((submission) => submission.intent === "submit")).toHaveLength(1);
+    expect(history.find((submission) => submission.intent === "submit")?.text_body).toBe(reviewedText);
 
     await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
     await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
@@ -113,7 +137,7 @@ test("@feature-detail finalizes the reviewed uploaded file", async ({ browser })
       `/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}&task=${seeded.taskId}&panel=result`
     );
 
-    const finalButton = learner.page.getByRole("button", { name: "Endgültig abgeben" });
+    const finalButton = learner.page.getByRole("button", { name: "Diese geprüfte Fassung endgültig abgeben" });
     await expect(learner.page.getByRole("region", { name: "Bisherige Datei" })).toContainText("Aktuelle Datei");
     await expect(finalButton).toBeEnabled();
     await finalButton.click();

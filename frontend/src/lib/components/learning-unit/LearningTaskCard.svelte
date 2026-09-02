@@ -474,15 +474,8 @@
     return finalSubmissionIdempotencyKey(currentReviewedBaseline()?.submissionId);
   }
 
-  function currentDraftMatchesFeedback(): boolean {
-    const baseline = currentReviewedBaseline();
-    if (!baseline) {
-      return false;
-    }
-    if (editorMode === "text") {
-      return baseline.kind === "text" && normalizeReviewedSubmissionText(draftText) === baseline.normalizedText;
-    }
-    return (baseline.kind === "image" || baseline.kind === "file") && !selectedUploadFile && !hideExistingUpload;
+  function hasUnreviewedUploadReplacement(): boolean {
+    return editorMode === "upload" && Boolean(selectedUploadFile || hideExistingUpload);
   }
 
   function editingLocked(): boolean {
@@ -879,15 +872,17 @@
                                   name="submission_intent"
                                   type="submit"
                                   value="submit"
-                                  disabled={editingLocked() || !currentDraftMatchesFeedback()}
+                                  disabled={editingLocked() || hasUnreviewedUploadReplacement()}
                                 >
-                                  Endgültig abgeben
+                                  Diese geprüfte Fassung endgültig abgeben
                                 </button>
                               </form>
                             </div>
-                            {#if !currentDraftMatchesFeedback()}
-                              <p class="learning-feedback-actions__hint">Für diese Fassung zuerst Rückmeldung einholen.</p>
-                            {/if}
+                            <p class="learning-feedback-actions__hint">
+                              {hasUnreviewedUploadReplacement()
+                                ? "Für die ausgewählte neue Datei zuerst Rückmeldung einholen."
+                                : "Abgegeben wird die oben angezeigte geprüfte Fassung."}
+                            </p>
                             {#if onReturnToLearningPath}
                               <button
                                 class="learning-feedback-actions__return"

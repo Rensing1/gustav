@@ -61,7 +61,9 @@ describe("UiPreviewSurface", () => {
     const completionField = within(completion).getByRole("region", { name: "Abschluss vorbereiten" });
     expect(within(completionContext).queryByRole("button", { name: "Pausieren" })).toBeNull();
     expect(within(completionField).getByRole("button", { name: "Zurück zum Dialog" })).toBeInTheDocument();
-    expect(within(completionField).getByRole("button", { name: "Endgültig abgeben" })).toBeInTheDocument();
+    expect(
+      within(completionField).getByRole("button", { name: "Diese geprüfte Fassung endgültig abgeben" })
+    ).toBeInTheDocument();
     expect(within(completionField).getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
 
     const learnerGraphCard = screen.getByText("Übersicht", { selector: ".preview-card__eyebrow" }).closest(".preview-card");

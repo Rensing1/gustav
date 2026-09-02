@@ -3,6 +3,7 @@
 ## 2026-09-02
 
 ### Fixes
+- fix(learning): Eine geprüfte Textfassung lässt sich unabhängig von abweichenden lokalen Editorentwürfen zuverlässig endgültig abgeben; die Aktion benennt den gespeicherten Snapshot eindeutig und deaktivierte Aktionen sind sichtbar als solche gekennzeichnet.
 - fix(cli): Slash-haltige, URL-kodierte Schülerkennungen passieren die read-only Capability-Prüfung und erreichen auch den geschützten Dialogtranskript-Endpunkt.
 - fix(diagnostics): Lernendenprofile paginieren die Schnittmenge aus owner-eigenen aktiven Kursen und aktiver Mitgliedschaft in einer gebündelten Repository-Abfrage; leere Folgeseiten sind eindeutige erfolgreiche Seiten statt mehrdeutiger `404`-Antworten.
 - fix(cli): Die kursbezogene Schüleransicht zeigt die H5P-Punkte der neuesten Abgabe zusätzlich zum Abschlussstatus.
@@ -12,6 +13,7 @@
 - security(api): Nichtnumerische Diagnostik-Paginierung liefert ein privates `400 invalid_pagination` statt eines frameworkgenerierten `422`.
 
 ### Tests
+- test(learning): Komponenten-, Routen- und authentifizierte Browserregressionen sichern die Snapshot-Finalisierung nach echter Rückmeldung, lokale Weiterarbeit, Doppelklickschutz und den Datei-Sonderfall ab.
 - test(cli): Echte ASGI-Aufrufe sichern URL-kodierte Slash-Subjects ab; API- und CLI-Regressionen decken eindeutige Folgeseiten, Mehrseitenprofile, Terminalsteuerzeichen, H5P-Punkte und fehlende Teilausgaben ab.
 
 ## 2026-09-01

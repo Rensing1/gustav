@@ -320,20 +320,20 @@ async def test_cli_bearer_reaches_new_course_authoring_routes(
     "path",
     [
         "/api/diagnostics/views/courses/not-a-course/matrix",
-        "/api/diagnostics/views/learners/student-1/profile",
+        "/api/diagnostics/views/learners/school%2Fstudent/profile",
         "/api/teaching/courses/not-a-course/units/not-a-unit/submissions/summary",
-        "/api/teaching/courses/not-a-course/students/student-1/submissions/overview",
+        "/api/teaching/courses/not-a-course/students/school%2Fstudent/submissions/overview",
         (
             "/api/teaching/courses/not-a-course/units/not-a-unit/tasks/not-a-task/"
-            "students/student-1/submissions/latest"
+            "students/school%2Fstudent/submissions/latest"
         ),
         (
             "/api/teaching/courses/not-a-course/units/not-a-unit/tasks/not-a-task/"
-            "students/student-1/submissions/latest/file"
+            "students/school%2Fstudent/submissions/latest/file"
         ),
         (
             "/api/teaching/courses/not-a-course/units/not-a-unit/tasks/not-a-task/"
-            "students/student-1/submissions/not-a-submission/dialog"
+            "students/school%2Fstudent/submissions/not-a-submission/dialog"
         ),
     ],
 )
@@ -347,6 +347,21 @@ async def test_cli_read_bearer_reaches_diagnostics_routes(monkeypatch, path: str
         )
 
     assert response.status_code != 401
+
+
+@pytest.mark.anyio
+async def test_cli_read_bearer_routes_encoded_slash_subject_to_dialog_handler(monkeypatch) -> None:
+    _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/teaching/courses/not-a-course/units/not-a-unit/tasks/not-a-task/"
+            "students/school%2Fstudent/submissions/not-a-submission/dialog",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "bad_request", "detail": "invalid_uuid"}
 
 
 @pytest.mark.anyio

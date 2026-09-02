@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-02
+
+### Fixes
+- fix(cli): Slash-haltige, URL-kodierte Schülerkennungen passieren die read-only Capability-Prüfung und erreichen auch den geschützten Dialogtranskript-Endpunkt.
+- fix(diagnostics): Lernendenprofile paginieren die Schnittmenge aus owner-eigenen aktiven Kursen und aktiver Mitgliedschaft in einer gebündelten Repository-Abfrage; leere Folgeseiten sind eindeutige erfolgreiche Seiten statt mehrdeutiger `404`-Antworten.
+- fix(cli): Die kursbezogene Schüleransicht zeigt die H5P-Punkte der neuesten Abgabe zusätzlich zum Abschlussstatus.
+
+### Security
+- security(cli): Menschenlesbare Diagnostikausgaben neutralisieren Terminal-Steuerzeichen zentral; beliebige API-Details werden nicht mehr auf stderr gespiegelt. JSON-Daten bleiben unverändert.
+- security(api): Nichtnumerische Diagnostik-Paginierung liefert ein privates `400 invalid_pagination` statt eines frameworkgenerierten `422`.
+
+### Tests
+- test(cli): Echte ASGI-Aufrufe sichern URL-kodierte Slash-Subjects ab; API- und CLI-Regressionen decken eindeutige Folgeseiten, Mehrseitenprofile, Terminalsteuerzeichen, H5P-Punkte und fehlende Teilausgaben ab.
+
 ## 2026-09-01
 
 ### Features

@@ -182,3 +182,20 @@ async def test_diagnostics_course_matrix_rejects_invalid_pagination(
 
     assert response.status_code == 400
     assert response.json() == {"error": "bad_request", "detail": "invalid_pagination"}
+
+
+@pytest.mark.anyio
+async def test_diagnostics_course_matrix_rejects_non_integer_pagination_privately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-diagnostics", roles=["teacher"], name="Ada")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/diagnostics/views/courses/course-1/matrix?limit=abc",
+            headers=headers,
+        )
+
+    assert response.status_code == 400
+    assert response.headers.get("Cache-Control") == "private, no-store"
+    assert response.json() == {"error": "bad_request", "detail": "invalid_pagination"}

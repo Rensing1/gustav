@@ -13,6 +13,7 @@ import sys as _sys
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from backend.web.query_validation import parse_bounded_pagination
 from backend.web.security.guards import has_any_role
 from backend.web.routes import teaching as teaching_routes
 from backend.web.routes import teaching_guards
@@ -29,7 +30,6 @@ from backend.web.routes.app_teacher_unit_routes import (
     _field_value,
     _list_submission_pairs_for_students,
     _list_teacher_course_units,
-    _list_teacher_courses,
     _list_unit_task_ids,
 )
 
@@ -111,17 +111,10 @@ def _build_diagnostics_course_matrix_rows(
 
 
 def _teacher_course_has_member(course_id: str, owner_sub: str, student_sub: str) -> bool:
+    """Compatibility facade for legacy tests; profile pages use the bulk query."""
+
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
-    try:
-        return bool(repo.course_has_member(course_id, owner_sub, student_sub))
-    except Exception:
-        members = _app_helper("_list_teacher_course_members", _list_teacher_course_members)(
-            course_id,
-            owner_sub,
-            limit=200,
-            offset=0,
-        )
-        return any(str(member.get("sub") or "") == student_sub for member in members)
+    return bool(repo.course_has_member(course_id, owner_sub, student_sub))
 
 
 def _build_diagnostics_learner_profile_courses(
@@ -131,27 +124,15 @@ def _build_diagnostics_learner_profile_courses(
     offset: int,
 ) -> list[dict[str, object]]:
     courses: list[dict[str, object]] = []
-    visible_courses: list[dict[str, str]] = []
-    source_offset = 0
-    source_page_size = 200
-    required_visible_count = offset + limit
-    while len(visible_courses) < required_visible_count:
-        source_page = _app_helper("_list_teacher_courses", _list_teacher_courses)(
-            owner_sub,
-            limit=source_page_size,
-            offset=source_offset,
-        )
-        if not source_page:
-            break
-        for course in source_page:
-            course_id = str(course.get("id") or "")
-            if course_id and _teacher_course_has_member(course_id, owner_sub, student_sub):
-                visible_courses.append(course)
-        if len(source_page) < source_page_size:
-            break
-        source_offset += len(source_page)
+    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
+    visible_courses = repo.list_active_courses_for_owner_member(
+        owner_sub=owner_sub,
+        student_sub=student_sub,
+        limit=limit,
+        offset=offset,
+    )
 
-    for course in visible_courses[offset:required_visible_count]:
+    for course in visible_courses:
         course_id = str(course.get("id") or "")
         if not course_id:
             continue
@@ -217,19 +198,26 @@ def _build_diagnostics_learner_profile_courses(
 
 
 @app_diagnostics_router.get("/api/diagnostics/views/courses/{course_id}/matrix")
-async def get_diagnostics_course_matrix(request: Request, course_id: str, limit: int = 25, offset: int = 0):
+async def get_diagnostics_course_matrix(request: Request, course_id: str, limit: str = "25", offset: str = "0"):
     """Return the first course-scoped diagnostics matrix for SvelteKit."""
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-    if limit < 1 or limit > 50 or offset < 0:
+    pagination = parse_bounded_pagination(
+        limit,
+        offset,
+        default_limit=25,
+        maximum_limit=50,
+    )
+    if pagination is None:
         return JSONResponse(
             {"error": "bad_request", "detail": "invalid_pagination"},
             status_code=400,
             headers=_private_headers(),
         )
+    page_limit, page_offset = pagination
 
     owner_sub = str(user.get("sub") or "")
     guard = teaching_guards._guard_course_owner(
@@ -265,8 +253,8 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
         "rows": _app_helper("_build_diagnostics_course_matrix_rows", _build_diagnostics_course_matrix_rows)(
             course_id,
             owner_sub,
-            limit=limit,
-            offset=offset,
+            limit=page_limit,
+            offset=page_offset,
             units=units,
         ),
     }
@@ -275,19 +263,26 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
 
 
 @app_diagnostics_router.get("/api/diagnostics/views/learners/{student_sub:path}/profile")
-async def get_diagnostics_learner_profile(request: Request, student_sub: str, limit: int = 50, offset: int = 0):
+async def get_diagnostics_learner_profile(request: Request, student_sub: str, limit: str = "50", offset: str = "0"):
     """Return the first learner-scoped diagnostics profile for SvelteKit."""
     user = _current_user(request)
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-    if limit < 1 or limit > 50 or offset < 0:
+    pagination = parse_bounded_pagination(
+        limit,
+        offset,
+        default_limit=50,
+        maximum_limit=50,
+    )
+    if pagination is None:
         return JSONResponse(
             {"error": "bad_request", "detail": "invalid_pagination"},
             status_code=400,
             headers=_private_headers(),
         )
+    page_limit, page_offset = pagination
 
     owner_sub = str(user.get("sub") or "")
     courses = _app_helper(
@@ -296,11 +291,23 @@ async def get_diagnostics_learner_profile(request: Request, student_sub: str, li
     )(
         student_sub,
         owner_sub,
-        limit=limit,
-        offset=offset,
+        limit=page_limit,
+        offset=page_offset,
     )
     if not courses:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+        if page_offset == 0:
+            return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
+        first_visible_page = _app_helper(
+            "_build_diagnostics_learner_profile_courses",
+            _build_diagnostics_learner_profile_courses,
+        )(
+            student_sub,
+            owner_sub,
+            limit=1,
+            offset=0,
+        )
+        if not first_visible_page:
+            return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())
 
     learner_names = teaching_routes.resolve_student_names([student_sub])
     learner_name = str(learner_names.get(student_sub, student_sub))

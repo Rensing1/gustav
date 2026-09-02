@@ -50,6 +50,7 @@ from backend.web.routes.teaching_shared import (
     _require_teacher,
 )
 from backend.web.routes.teaching_validation import canonical_uuid as _canonical_uuid
+from backend.web.query_validation import parse_bounded_pagination
 
 
 teaching_live_router = APIRouter(tags=["Teaching"])
@@ -90,8 +91,8 @@ async def get_unit_live_summary(
     course_id: str,
     unit_id: str,
     updated_since: str | None = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: str = "100",
+    offset: str = "0",
     include_students: bool = True,
 ):
     """
@@ -124,12 +125,19 @@ async def get_unit_live_summary(
         return forbidden
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
         return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
-    if limit < 1 or limit > 200 or offset < 0:
+    pagination = parse_bounded_pagination(
+        limit,
+        offset,
+        default_limit=100,
+        maximum_limit=200,
+    )
+    if pagination is None:
         return _private_error(
             {"error": "bad_request", "detail": "invalid_pagination"},
             status_code=400,
             vary_origin=True,
         )
+    page_limit, page_offset = pagination
     sub = _current_sub(user)
 
     updated_since_dt: datetime | None = None
@@ -215,11 +223,16 @@ async def get_unit_live_summary(
         try:
             from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
             if isinstance(repo, DBTeachingRepo):
-                roster = repo.list_members_for_owner(course_id, sub, limit=limit, offset=offset)
+                roster = repo.list_members_for_owner(
+                    course_id,
+                    sub,
+                    limit=page_limit,
+                    offset=page_offset,
+                )
             else:
                 members = repo.members.get(course_id, {})
                 roster = sorted([(k, v) for k, v in members.items()], key=lambda kv: kv[1])
-                roster = roster[offset: offset + limit]
+                roster = roster[page_offset: page_offset + page_limit]
         except TeachingRepositoryUnavailable:
             raise
         except Exception:
@@ -287,8 +300,8 @@ async def get_unit_live_summary(
                             course_id=course_id,
                             unit_id=unit_id,
                             updated_since_dt=updated_since_dt,
-                            limit=int(limit),
-                            offset=int(offset),
+                            limit=page_limit,
+                            offset=page_offset,
                         )
                         has_map = {(str(row["student_sub"]), str(row["task_id"])) for row in helper_rows}
                         task_ids_by_student: dict[str, list[str]] = {}

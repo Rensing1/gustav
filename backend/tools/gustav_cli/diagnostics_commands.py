@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable, TextIO
 from urllib.parse import quote, urlencode
@@ -27,6 +28,22 @@ _UNIT_PAGE_SIZE = 100
 _PROFILE_PAGE_SIZE = 50
 _MAX_SUBMISSION_DOWNLOAD_BYTES = 10 * 1024 * 1024
 _DIALOG_INTERNAL_FIELDS = {"role_md", "learning_goal_md", "teacher_context_md"}
+_PUBLIC_API_ERRORS = {
+    "api_error",
+    "bad_request",
+    "forbidden",
+    "internal_error",
+    "not_found",
+    "service_unavailable",
+    "unauthenticated",
+}
+_PUBLIC_API_DETAILS = {
+    "invalid_disposition",
+    "invalid_pagination",
+    "invalid_uuid",
+    "summary_cursor_unavailable",
+    "too_many_unit_ids",
+}
 
 
 def register_diagnostics_parsers(sub: Any) -> None:
@@ -82,10 +99,35 @@ def _safe_api_error(status: int, body: object, *, stderr: TextIO) -> None:
     error = "api_error"
     detail = ""
     if isinstance(body, dict):
-        error = str(body.get("error") or error)
-        detail = str(body.get("detail") or "")
+        candidate_error = str(body.get("error") or "")
+        candidate_detail = str(body.get("detail") or "")
+        if candidate_error in _PUBLIC_API_ERRORS:
+            error = candidate_error
+        if candidate_detail in _PUBLIC_API_DETAILS:
+            detail = candidate_detail
     suffix = f" ({detail})" if detail else ""
     stderr.write(f"API-Fehler ({status}): {error}{suffix}\n")
+
+
+def _terminal_text(value: object, *, multiline: bool = False) -> str:
+    """Render untrusted text without terminal controls or forged table cells."""
+
+    normalized = str("" if value is None else value).replace("\r\n", "\n").replace("\r", "\n")
+    rendered: list[str] = []
+    for character in normalized:
+        if character == "\n" and multiline:
+            rendered.append(character)
+        elif character in {"\n", "\t"} or unicodedata.category(character) in {"Cc", "Cf", "Cs"}:
+            rendered.append(" ")
+        else:
+            rendered.append(character)
+    return "".join(rendered)
+
+
+def _write_table_row(values: list[object], *, stdout: TextIO) -> None:
+    """Write one tabular row after reducing every value to one safe line."""
+
+    stdout.write("\t".join(_terminal_text(value) for value in values) + "\n")
 
 
 def _get_json(
@@ -115,7 +157,6 @@ def _load_all_pages(
     page_size: int,
     http_json: JsonRequest,
     stderr: TextIO,
-    allow_terminal_404: bool = False,
 ) -> dict[str, Any] | None:
     operation = diagnostics_operation(operation_name, **path_parameters)
     offset = 0
@@ -130,8 +171,6 @@ def _load_all_pages(
             f"{operation.path_template}?{query}",
             http_json=http_json,
         )
-        if status == 404 and allow_terminal_404 and merged is not None:
-            break
         if status != 200:
             _safe_api_error(status, body, stderr=stderr)
             return None
@@ -187,24 +226,22 @@ def _render_course(body: dict[str, Any], *, stdout: TextIO) -> None:
             unit_id = str(cell.get("unit_id") or "")
             submitted = int(cell.get("submitted_tasks") or 0)
             total = int(cell.get("total_tasks") or 0)
-            stdout.write(
-                "\t".join(
-                    [
-                        str(student.get("sub") or ""),
-                        str(student.get("name") or ""),
-                        unit_id,
-                        units.get(unit_id, ""),
-                        _progress_status(submitted, total),
-                        str(submitted),
-                        str(total),
-                    ]
-                )
-                + "\n"
+            _write_table_row(
+                [
+                    student.get("sub"),
+                    student.get("name"),
+                    unit_id,
+                    units.get(unit_id, ""),
+                    _progress_status(submitted, total),
+                    submitted,
+                    total,
+                ],
+                stdout=stdout,
             )
 
 
 def _score_text(value: object) -> str:
-    return "" if value is None else str(value)
+    return "" if value is None else _terminal_text(value)
 
 
 def _progress_status(submitted: int, total: int) -> str:
@@ -242,26 +279,24 @@ def _render_unit(body: dict[str, Any], *, stdout: TextIO) -> None:
                 else ""
             )
             h5p_completed = cell.get("h5p_completed")
-            stdout.write(
-                "\t".join(
-                    [
-                        str(student.get("sub") or ""),
-                        str(student.get("name") or ""),
-                        task_id,
-                        str(task.get("position") or ""),
-                        str(task.get("kind") or ""),
-                        "abgegeben" if bool(cell.get("has_submission")) else "offen",
-                        _score_text(cell.get("average_score")),
-                        h5p_points,
-                        (
-                            "ja"
-                            if h5p_completed is True
-                            else ("nein" if h5p_completed is False else "")
-                        ),
-                        str(cell.get("created_at") or ""),
-                    ]
-                )
-                + "\n"
+            _write_table_row(
+                [
+                    student.get("sub"),
+                    student.get("name"),
+                    task_id,
+                    task.get("position"),
+                    task.get("kind"),
+                    "abgegeben" if bool(cell.get("has_submission")) else "offen",
+                    _score_text(cell.get("average_score")),
+                    h5p_points,
+                    (
+                        "ja"
+                        if h5p_completed is True
+                        else ("nein" if h5p_completed is False else "")
+                    ),
+                    cell.get("created_at"),
+                ],
+                stdout=stdout,
             )
 
 
@@ -279,21 +314,19 @@ def _render_student_profile(body: dict[str, Any], *, stdout: TextIO) -> None:
                 continue
             submitted = int(unit.get("submitted_tasks") or 0)
             total = int(unit.get("total_tasks") or 0)
-            stdout.write(
-                "\t".join(
-                    [
-                        str(learner.get("sub") or ""),
-                        str(learner.get("name") or ""),
-                        str(course.get("id") or ""),
-                        str(course.get("title") or ""),
-                        str(unit.get("id") or ""),
-                        str(unit.get("title") or ""),
-                        _progress_status(submitted, total),
-                        str(submitted),
-                        str(total),
-                    ]
-                )
-                + "\n"
+            _write_table_row(
+                [
+                    learner.get("sub"),
+                    learner.get("name"),
+                    course.get("id"),
+                    course.get("title"),
+                    unit.get("id"),
+                    unit.get("title"),
+                    _progress_status(submitted, total),
+                    submitted,
+                    total,
+                ],
+                stdout=stdout,
             )
 
 
@@ -301,7 +334,8 @@ def _render_student_course(body: dict[str, Any], course_id: str, *, stdout: Text
     student = body.get("student") if isinstance(body.get("student"), dict) else {}
     stdout.write(
         "student_sub\tstudent_name\tcourse_id\tunit_id\tunit_name\ttask_id\t"
-        "task_position\ttask_type\tstatus\tformativer_kriterienwert\th5p_abschluss\n"
+        "task_position\ttask_type\tstatus\tformativer_kriterienwert\th5p_punkte\t"
+        "h5p_abschluss\n"
     )
     for unit in body.get("units", []):
         if not isinstance(unit, dict):
@@ -309,27 +343,33 @@ def _render_student_course(body: dict[str, Any], course_id: str, *, stdout: Text
         for task in unit.get("tasks", []):
             if not isinstance(task, dict):
                 continue
-            stdout.write(
-                "\t".join(
-                    [
-                        str(student.get("sub") or ""),
-                        str(student.get("name") or ""),
-                        course_id,
-                        str(unit.get("id") or ""),
-                        str(unit.get("title") or ""),
-                        str(task.get("id") or ""),
-                        str(task.get("position") or ""),
-                        str(task.get("kind") or ""),
-                        "abgegeben" if bool(task.get("has_submission")) else "offen",
-                        _score_text(task.get("average_score")),
-                        (
-                            "ja"
-                            if task.get("h5p_completed") is True
-                            else ("nein" if task.get("h5p_completed") is False else "")
-                        ),
-                    ]
-                )
-                + "\n"
+            score_raw = task.get("score_raw")
+            score_max = task.get("score_max")
+            h5p_points = (
+                f"{_score_text(score_raw)}/{_score_text(score_max)}"
+                if score_raw is not None and score_max is not None
+                else ""
+            )
+            _write_table_row(
+                [
+                    student.get("sub"),
+                    student.get("name"),
+                    course_id,
+                    unit.get("id"),
+                    unit.get("title"),
+                    task.get("id"),
+                    task.get("position"),
+                    task.get("kind"),
+                    "abgegeben" if bool(task.get("has_submission")) else "offen",
+                    _score_text(task.get("average_score")),
+                    h5p_points,
+                    (
+                        "ja"
+                        if task.get("h5p_completed") is True
+                        else ("nein" if task.get("h5p_completed") is False else "")
+                    ),
+                ],
+                stdout=stdout,
             )
 
 
@@ -377,16 +417,16 @@ def _render_submission(
     *,
     stdout: TextIO,
 ) -> None:
-    stdout.write(f"Abgabe: {submission.get('id', '')}\n")
-    stdout.write(f"Zeitpunkt: {submission.get('created_at', '')}\n")
-    stdout.write(f"Typ: {submission.get('kind', '')}\n\n")
+    stdout.write(f"Abgabe: {_terminal_text(submission.get('id'))}\n")
+    stdout.write(f"Zeitpunkt: {_terminal_text(submission.get('created_at'))}\n")
+    stdout.write(f"Typ: {_terminal_text(submission.get('kind'))}\n\n")
     stdout.write("Aufgabenstellung\n")
-    stdout.write(f"{submission.get('instruction_md') or ''}\n")
+    stdout.write(f"{_terminal_text(submission.get('instruction_md'), multiline=True)}\n")
 
     text_body = submission.get("text_body")
     if isinstance(text_body, str) and text_body:
         stdout.write("\nAbgabeinhalt\n")
-        stdout.write(f"{text_body}\n")
+        stdout.write(f"{_terminal_text(text_body, multiline=True)}\n")
 
     if str(submission.get("kind") or "") == "h5p":
         raw = submission.get("score_raw")
@@ -399,36 +439,37 @@ def _render_submission(
     if isinstance(analysis, dict):
         stdout.write("\nAuswertung\n")
         if analysis.get("score") is not None:
-            stdout.write(f"Formativer Gesamtscore: {analysis['score']}/5\n")
+            stdout.write(f"Formativer Gesamtscore: {_score_text(analysis['score'])}/5\n")
         for result in analysis.get("criteria_results", []):
             if not isinstance(result, dict):
                 continue
             maximum = result.get("max_score") or 10
             stdout.write(
-                f"{result.get('criterion') or 'Kriterium'}: "
+                f"{_terminal_text(result.get('criterion') or 'Kriterium')}: "
                 f"{_score_text(result.get('score'))}/{maximum}\n"
             )
             explanation = result.get("explanation_md")
             if isinstance(explanation, str) and explanation:
-                stdout.write(f"{explanation}\n")
+                stdout.write(f"{_terminal_text(explanation, multiline=True)}\n")
 
     feedback = submission.get("feedback_md")
     if isinstance(feedback, str) and feedback:
         stdout.write("\nRückmeldung\n")
-        stdout.write(f"{feedback}\n")
+        stdout.write(f"{_terminal_text(feedback, multiline=True)}\n")
 
     if isinstance(dialog, dict):
         stdout.write("\nDialogtranskript\n")
         for turn in dialog.get("turns", []):
             if not isinstance(turn, dict):
                 continue
-            stdout.write(f"Schüler: {turn.get('student_message_md') or ''}\n")
+            student_message = _terminal_text(turn.get("student_message_md"), multiline=True)
+            stdout.write(f"Schüler: {student_message}\n")
             reply = turn.get("assistant_reply_md")
             if isinstance(reply, str) and reply:
-                stdout.write(f"Lernpartner: {reply}\n")
+                stdout.write(f"Lernpartner: {_terminal_text(reply, multiline=True)}\n")
         closing = dialog.get("closing_answer_md")
         if isinstance(closing, str) and closing:
-            stdout.write(f"Abschluss: {closing}\n")
+            stdout.write(f"Abschluss: {_terminal_text(closing, multiline=True)}\n")
 
 
 def _run_course(
@@ -541,7 +582,6 @@ def _run_student(
         page_size=_PROFILE_PAGE_SIZE,
         http_json=http_json,
         stderr=stderr,
-        allow_terminal_404=True,
     )
     if body is None:
         return 1
@@ -687,7 +727,7 @@ def _run_download(
     except OSError as exc:
         stderr.write(f"Datei konnte nicht sicher gespeichert werden ({exc.__class__.__name__}).\n")
         return 1
-    stdout.write(f"Gespeichert: {target} ({len(payload)} Bytes)\n")
+    stdout.write(f"Gespeichert: {_terminal_text(target)} ({len(payload)} Bytes)\n")
     return 0
 
 

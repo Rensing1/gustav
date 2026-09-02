@@ -66,6 +66,8 @@ class FakeStudentLiveOverviewRepo:
                 "has_submission": True,
                 "average_score": 8.0,
                 "h5p_completed": None,
+                "score_raw": 2,
+                "score_max": 3,
             }
         ]
 
@@ -85,3 +87,5 @@ def test_student_live_overview_normalizes_uuid_filters_and_batches_tasks() -> No
     assert repo.batch_calls == [("course-1", (LOWER_UNIT_ID,), "teacher-1")]
     assert overview.units[0].tasks[0].has_submission is True
     assert overview.units[0].tasks[0].average_score == 8.0
+    assert overview.units[0].tasks[0].score_raw == 2
+    assert overview.units[0].tasks[0].score_max == 3

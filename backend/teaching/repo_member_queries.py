@@ -44,6 +44,52 @@ def list_courses_for_student(*, dsn: str, psycopg_module, student_id: str, limit
     ]
 
 
+def list_active_courses_for_owner_member(
+    *,
+    dsn: str,
+    psycopg_module,
+    owner_sub: str,
+    student_sub: str,
+    limit: int,
+    offset: int,
+) -> List[dict]:
+    """Page active courses where the caller is owner and the learner is enrolled.
+
+    Why:
+        Learner diagnostics paginate the intersection of course ownership and
+        active membership. Doing that intersection in one query avoids scanning
+        every teacher course and issuing a membership query for each result.
+
+    Permissions:
+        `owner_sub` must own every returned course. RLS remains active and the
+        explicit predicates keep this repository boundary fail-closed.
+    """
+
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+            cur.execute(
+                """
+                select c.id::text, c.title
+                  from public.courses c
+                 where c.teacher_id = %s
+                   and c.status = 'active'
+                   and exists (
+                       select 1
+                         from public.course_memberships m
+                        where m.course_id = c.id
+                          and m.student_id = %s
+                          and m.ended_at is null
+                   )
+                 order by c.created_at desc, c.id
+                 limit %s offset %s
+                """,
+                (owner_sub, student_sub, int(limit), int(offset)),
+            )
+            rows = cur.fetchall() or []
+    return [{"id": row[0], "title": row[1]} for row in rows]
+
+
 def course_has_member(*, dsn: str, psycopg_module, course_id: str, owner_sub: str, student_sub: str) -> bool:
     """Check membership using the existing owner-scoped roster helper."""
     page_size = 50

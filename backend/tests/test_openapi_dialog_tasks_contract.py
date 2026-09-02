@@ -138,6 +138,10 @@ def test_teacher_dialog_preview_and_transcript_paths_are_documented() -> None:
         "requiredRole": "teacher",
         "ownerOnly": True,
     }
+    parameters = {
+        item["name"]: item for item in paths[transcript]["get"]["parameters"]
+    }
+    assert "slash-containing" in parameters["student_sub"]["description"]
 
 
 def test_dialog_submission_kind_and_reference_are_public() -> None:

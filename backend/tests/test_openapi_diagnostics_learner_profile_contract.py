@@ -20,3 +20,6 @@ def test_openapi_documents_diagnostics_learner_profile_view() -> None:
     parameters = {item["name"]: item for item in operation["parameters"]}
     assert parameters["limit"]["schema"]["maximum"] == 50
     assert parameters["offset"]["schema"]["minimum"] == 0
+    assert "slash-containing" in parameters["student_sub"]["description"]
+    assert "non-integer" in operation["responses"]["400"]["description"]
+    assert "empty `courses` array" in operation["responses"]["200"]["description"]

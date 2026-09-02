@@ -40,6 +40,7 @@ def test_openapi_has_unit_live_summary_path_and_cache_header():
     resp503 = op["responses"]["503"]
     assert "summary_cursor_unavailable" in resp503["description"]
     assert "Cache-Control" in resp503.get("headers", {})
+    assert "non-integer" in op["responses"]["400"]["description"]
 
 
 def test_openapi_has_unit_live_delta_path():

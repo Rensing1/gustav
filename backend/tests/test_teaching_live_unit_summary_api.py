@@ -156,6 +156,21 @@ async def test_summary_rejects_pagination_outside_the_documented_bounds():
 
 
 @pytest.mark.anyio
+async def test_summary_rejects_non_integer_pagination_privately():
+    teacher = _session_store().create(sub="t-live-pagination-text", name="Owner", roles=["teacher"])  # type: ignore
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        response = await client.get(
+            f"/api/teaching/courses/{uuid.uuid4()}/units/{uuid.uuid4()}/submissions/summary",
+            params={"limit": "abc"},
+        )
+
+    assert response.status_code == 400
+    assert response.headers.get("Cache-Control") == "private, no-store"
+    assert response.json() == {"error": "bad_request", "detail": "invalid_pagination"}
+
+
+@pytest.mark.anyio
 async def test_summary_happy_path_minimal_status_matrix_and_headers():
     _require_db_or_skip()
     teaching = importlib.import_module("backend.web.routes.teaching")

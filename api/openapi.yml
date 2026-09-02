@@ -3947,6 +3947,15 @@ components:
         h5p_completed:
           type: boolean
           nullable: true
+          description: Completion status derived from H5P points; null for non-H5P tasks.
+        score_raw:
+          type: integer
+          nullable: true
+          description: Raw points of the latest H5P submission; formative points, not a grade.
+        score_max:
+          type: integer
+          nullable: true
+          description: Maximum points of the latest H5P submission; null for non-H5P tasks.
         average_score:
           type: number
           format: float
@@ -6526,7 +6535,13 @@ paths:
         - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
         - { in: path, name: unit_id, required: true, schema: { type: string, format: uuid } }
         - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
-        - { in: path, name: student_sub, required: true, schema: { type: string } }
+        - in: path
+          name: student_sub
+          required: true
+          schema: { type: string }
+          description: >
+            Student subject identifier. Clients must URL-encode reserved path
+            characters; the server accepts encoded slash-containing values.
         - { in: path, name: submission_id, required: true, schema: { type: string, format: uuid } }
       responses:
         '200':
@@ -9041,7 +9056,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DiagnosticsCourseMatrixView'
         '400':
-          description: Invalid pagination
+          description: Pagination is non-integer or outside the documented bounds (`invalid_pagination`)
           content:
             application/json:
               schema:
@@ -9098,6 +9113,9 @@ paths:
           required: true
           schema:
             type: string
+          description: >
+            Student subject identifier. Clients must URL-encode reserved path
+            characters; the server accepts encoded slash-containing values.
         - in: query
           name: limit
           required: false
@@ -9111,7 +9129,9 @@ paths:
       responses:
         '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
-          description: Diagnostics learner profile payload
+          description: >-
+            Diagnostics learner profile payload. A valid page beyond the last
+            visible course returns an empty `courses` array.
           headers:
             Cache-Control:
               description: Security — responses are private and not cacheable by shared caches.
@@ -9122,7 +9142,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DiagnosticsLearnerProfileView'
         '400':
-          description: Invalid pagination
+          description: Pagination is non-integer or outside the documented bounds (`invalid_pagination`)
           content:
             application/json:
               schema:
@@ -14451,7 +14471,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/TeachingUnitLiveRow'
         '400':
-          description: Invalid identifiers or timestamp
+          description: Invalid identifiers, timestamp, or non-integer/out-of-bounds pagination (`invalid_pagination`)
           headers:
             Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
             Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }
@@ -14768,6 +14788,9 @@ paths:
           name: student_sub
           required: true
           schema: { type: string }
+          description: >
+            Student subject identifier. Clients must URL-encode reserved path
+            characters; the server accepts encoded slash-containing values.
         - in: query
           name: disposition
           required: false

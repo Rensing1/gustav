@@ -25,3 +25,4 @@ def test_openapi_documents_diagnostics_course_matrix_view() -> None:
         "default": 25,
     }
     assert parameters["offset"]["schema"]["minimum"] == 0
+    assert "non-integer" in operation["responses"]["400"]["description"]

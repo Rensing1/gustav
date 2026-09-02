@@ -298,6 +298,8 @@ gustav diagnostics download \
 
 `course` gibt die vollständige Kursmatrix aus. `unit` gibt die Schüler-Aufgaben-Matrix einer Lerneinheit aus; `--task-id` behält alle Kursmitglieder bei und reduziert lediglich die Aufgabenspalten. `student` zeigt ohne Kurs ein kursübergreifendes Profil. Mit `--course-id` zeigt der Befehl die Aufgaben dieses Kurses; wiederholtes `--unit-id` grenzt die Lerneinheiten ein und ist ohne Kurs nicht zulässig.
 
+Die kursbezogene Schüleransicht nennt bei H5P-Aufgaben die Punkte der neuesten Abgabe als `h5p_punkte` im Format `erreicht/maximal` sowie den daraus abgeleiteten Abschlussstatus. Diese Punkte sind formative Lernstandsdaten und keine Note.
+
 `submission` liest nur die neueste Abgabe. Die menschenlesbare Ausgabe enthält Aufgabenstellung, verfügbare Textrepräsentation, Kriterienauswertung, formativen Gesamtscore, Rückmeldung und bei Dialogaufgaben das sichere Transkript. Numerische Werte heißen ausdrücklich `formativer_kriterienwert`, `Formativer Gesamtscore` oder `H5P-Punkte`; die CLI deutet sie nicht als Note. Die stabile JSON-Hülle lautet:
 
 ```json
@@ -307,6 +309,8 @@ gustav diagnostics download \
 Bei einer vorhandenen Abgabe enthält `submission` ein `TeachingLatestSubmission`; für Dialoge enthält `dialog` zusätzlich eine `LearningDialogSession`. Interne Rollen-, Lernziel- und Lehrkrafttexte werden nicht ausgegeben. H5P-CLI-Aufrufe erzeugen und liefern kein browsergebundenes Review-Credential.
 
 Die Übersichten laden alle API-Seiten vollständig, bevor die erste Zeile ausgegeben wird. Wiederholte Seiten, ausbleibender Fortschritt oder ein Fehler auf einer Folgeseite brechen ohne Teilausgabe ab. Es gibt keine öffentlichen CLI-Optionen für Teilmengen-Paginierung.
+
+Menschenlesbare Tabellen und Detailblöcke neutralisieren Terminal-Steuerzeichen aus Namen, Abgaben und Rückmeldungen. Sinnvolle Zeilenumbrüche bleiben nur in Detailtexten erhalten. `--json` verändert die fachlichen Zeichenketten dagegen nicht und bleibt für maschinelle Weiterverarbeitung stabil.
 
 `download` lädt die Originaldatei der neuesten Datei-, Bild- oder PDF-Abgabe. Die CLI begrenzt Downloads auf 10 MiB, schreibt im Zielverzeichnis zunächst eine private temporäre Datei und veröffentlicht sie atomar mit Rechten `0600`. Bestehende Dateien werden nur mit `--force` ersetzt; Fehler hinterlassen keine Teildatei. Die CLI legt weder Diagnosecaches an noch schreibt sie Abgabeinhalte, Tokens oder Personenkennungen in Logs.
 

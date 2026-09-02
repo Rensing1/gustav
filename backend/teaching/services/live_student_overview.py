@@ -92,6 +92,8 @@ class StudentLiveOverviewTask:
     has_submission: bool
     average_score: float | None
     h5p_completed: bool | None
+    score_raw: int | None
+    score_max: int | None
 
 
 @dataclass(frozen=True)
@@ -184,6 +186,8 @@ class StudentLiveOverviewService:
                         has_submission=bool(aggregate.get("has_submission")),
                         average_score=_to_float_or_none(aggregate.get("average_score")),
                         h5p_completed=_to_bool_or_none(aggregate.get("h5p_completed")),
+                        score_raw=_to_int_or_none(aggregate.get("score_raw")),
+                        score_max=_to_int_or_none(aggregate.get("score_max")),
                     )
                 )
             units_out.append(
@@ -238,6 +242,15 @@ def _to_bool_or_none(value: object) -> bool | None:
     if value is None:
         return None
     return bool(value)
+
+
+def _to_int_or_none(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 __all__ = [

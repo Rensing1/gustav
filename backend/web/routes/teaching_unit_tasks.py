@@ -295,7 +295,7 @@ async def preview_dialog_task(request: Request, unit_id: str, task_id: str, payl
 
 
 @teaching_unit_tasks_router.get(
-    "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/{submission_id}/dialog"
+    "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub:path}/submissions/{submission_id}/dialog"
 )
 async def get_dialog_submission_transcript(
     request: Request,

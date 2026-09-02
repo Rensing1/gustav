@@ -41,3 +41,6 @@ def test_task_query_implementations_live_outside_repo_hotspot() -> None:
     assert "from public.unit_tasks" not in repo_source
     assert "join public.unit_tasks" not in repo_source
     assert "_TASK_COLUMNS_SQL" in task_source
+    aggregate_source = task_source.split("def list_latest_submission_aggregates_for_owner(", 1)[1]
+    assert "ls.score_raw" in aggregate_source
+    assert "ls.score_max" in aggregate_source

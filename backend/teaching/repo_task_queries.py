@@ -557,7 +557,9 @@ def list_latest_submission_aggregates_for_owner(
                        ls.id::text,
                        ls.task_id::text,
                        ls.analysis_status::text,
-                       ls.analysis_json
+                       ls.analysis_json,
+                       ls.score_raw,
+                       ls.score_max
                   from public.learning_submissions ls
                 where ls.course_id = %s
                   and ls.student_sub = %s
@@ -589,7 +591,7 @@ def list_latest_submission_aggregates_for_owner(
             cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
 
     aggregates: list[dict] = []
-    for _submission_id, task_id, analysis_status, analysis_json in latest_rows:
+    for _submission_id, task_id, analysis_status, analysis_json, score_raw, score_max in latest_rows:
         avg_score = None
         if str(analysis_status or "") == "completed":
             avg_score = _compute_average_score_from_analysis(analysis_json)
@@ -600,6 +602,8 @@ def list_latest_submission_aggregates_for_owner(
                 "has_submission": True,
                 "average_score": avg_score,
                 "h5p_completed": h5p_completed_by_task.get(str(task_id)),
+                "score_raw": score_raw,
+                "score_max": score_max,
             }
         )
     return aggregates

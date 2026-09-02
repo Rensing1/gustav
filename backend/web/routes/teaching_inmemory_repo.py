@@ -188,6 +188,28 @@ class InMemoryTeachingRepo:
         items = [c for c in self.courses.values() if c.teacher_id == teacher_id and c.status == "active"]
         return items[offset: offset + limit]
 
+    def list_active_courses_for_owner_member(
+        self,
+        *,
+        owner_sub: str,
+        student_sub: str,
+        limit: int,
+        offset: int,
+    ) -> List[dict[str, str]]:
+        """Return one owner- and active-membership-scoped diagnostics page."""
+
+        items = [
+            course
+            for course in self.courses.values()
+            if course.teacher_id == owner_sub
+            and course.status == "active"
+            and student_sub in self.members.get(course.id, {})
+        ]
+        return [
+            {"id": course.id, "title": course.title}
+            for course in items[offset: offset + limit]
+        ]
+
     def list_course_catalog_for_owner(self, *, owner_sub: str, status: str, query: str, school_year_start: int | None, subject: str, limit: int, offset: int) -> List[dict]:
         items = [
             c for c in self.courses.values()

@@ -145,6 +145,85 @@ def test_diagnostics_course_human_output_is_labelled_and_preserves_unicode(
     assert "Ömer Şahin" in stdout
 
 
+def test_diagnostics_course_human_output_neutralizes_terminal_controls(
+    tmp_path, monkeypatch
+) -> None:
+    _configure(tmp_path, monkeypatch)
+    body = _course_page(
+        [
+            {
+                "student": {
+                    "sub": "student-1\x1b]52;c;secret\x07",
+                    "name": "Lena\nforged\tcolumn\x9b31m",
+                    "href": "/",
+                },
+                "cells": [
+                    {
+                        "unit_id": "unit-1",
+                        "submitted_tasks": 1,
+                        "total_tasks": 2,
+                        "href": "/live/unit-1",
+                    }
+                ],
+            }
+        ]
+    )
+    body["units"][0]["title"] = "Netzwerke\r\ngefälscht"
+    monkeypatch.setattr(cli, "_http_json", lambda *args, **kwargs: (200, body))
+
+    code, stdout, stderr = _run(
+        ["diagnostics", "course", "--course-id", "course-1"]
+    )
+
+    assert code == 0, stderr
+    assert len(stdout.splitlines()) == 2
+    assert "\x1b" not in stdout
+    assert "\x07" not in stdout
+    assert "\x9b" not in stdout
+    assert all(character in "\n\t" or ord(character) >= 32 for character in stdout)
+
+
+def test_diagnostics_json_preserves_content_controls_as_json_data(tmp_path, monkeypatch) -> None:
+    _configure(tmp_path, monkeypatch)
+    name = "Lena\n\x1b[31m"
+    body = _course_page(
+        [{"student": {"sub": "student-1", "name": name, "href": "/"}, "cells": []}]
+    )
+    monkeypatch.setattr(cli, "_http_json", lambda *args, **kwargs: (200, body))
+
+    code, stdout, stderr = _run(
+        ["diagnostics", "course", "--course-id", "course-1", "--json"]
+    )
+
+    assert code == 0, stderr
+    assert json.loads(stdout)["rows"][0]["student"]["name"] == name
+
+
+def test_diagnostics_api_error_hides_untrusted_error_details(tmp_path, monkeypatch) -> None:
+    _configure(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        cli,
+        "_http_json",
+        lambda *args, **kwargs: (
+            503,
+            {
+                "error": "service_unavailable",
+                "detail": "student-secret\x1b]52;c;clipboard\x07",
+            },
+        ),
+    )
+
+    code, stdout, stderr = _run(
+        ["diagnostics", "course", "--course-id", "course-1"]
+    )
+
+    assert code == 1
+    assert stdout == ""
+    assert "service_unavailable" in stderr
+    assert "student-secret" not in stderr
+    assert "\x1b" not in stderr
+
+
 def test_diagnostics_unit_task_filter_keeps_students_without_submission(
     tmp_path, monkeypatch
 ) -> None:
@@ -231,6 +310,119 @@ def test_diagnostics_student_encodes_subject_and_rejects_units_without_course(
     assert parse_qs(urlparse(calls[0]).query) == {"unit_ids": ["unit-1"]}
     assert invalid == 2
     assert "--course-id" in invalid_stderr
+
+
+def test_diagnostics_student_profile_loads_more_than_one_page(tmp_path, monkeypatch) -> None:
+    _configure(tmp_path, monkeypatch)
+    courses = [
+        {
+            "id": f"course-{index}",
+            "title": f"Kurs {index}",
+            "submitted_tasks": 0,
+            "total_tasks": 0,
+            "units": [],
+        }
+        for index in range(51)
+    ]
+    calls: list[int] = []
+
+    def fake_request(method: str, url: str, **kwargs):
+        offset = int(parse_qs(urlparse(url).query)["offset"][0])
+        calls.append(offset)
+        return 200, {
+            "learner": {"sub": "student-1", "name": "Lena"},
+            "summary": {},
+            "courses": courses[offset : offset + 50],
+        }
+
+    monkeypatch.setattr(cli, "_http_json", fake_request)
+
+    code, stdout, stderr = _run(
+        ["diagnostics", "student", "--student-sub", "student-1", "--json"]
+    )
+
+    assert code == 0, stderr
+    assert calls == [0, 50]
+    assert len(json.loads(stdout)["courses"]) == 51
+
+
+def test_diagnostics_student_profile_treats_later_404_as_error_without_partial_output(
+    tmp_path, monkeypatch
+) -> None:
+    _configure(tmp_path, monkeypatch)
+    first_page = [
+        {
+            "id": f"course-{index}",
+            "title": f"Kurs {index}",
+            "submitted_tasks": 0,
+            "total_tasks": 0,
+            "units": [],
+        }
+        for index in range(50)
+    ]
+    responses = iter(
+        [
+            (
+                200,
+                {
+                    "learner": {"sub": "student-1", "name": "Lena"},
+                    "summary": {},
+                    "courses": first_page,
+                },
+            ),
+            (404, {"error": "not_found"}),
+        ]
+    )
+    monkeypatch.setattr(cli, "_http_json", lambda *args, **kwargs: next(responses))
+
+    code, stdout, stderr = _run(
+        ["diagnostics", "student", "--student-sub", "student-1"]
+    )
+
+    assert code == 1
+    assert stdout == ""
+    assert "404" in stderr
+
+
+def test_diagnostics_student_course_labels_latest_h5p_points(tmp_path, monkeypatch) -> None:
+    _configure(tmp_path, monkeypatch)
+    body = {
+        "student": {"sub": "student-1", "name": "Lena"},
+        "units": [
+            {
+                "id": "unit-1",
+                "title": "Quiz",
+                "tasks": [
+                    {
+                        "id": "task-1",
+                        "position": 1,
+                        "kind": "h5p",
+                        "has_submission": True,
+                        "average_score": None,
+                        "score_raw": 0,
+                        "score_max": 0,
+                        "h5p_completed": True,
+                    }
+                ],
+            }
+        ],
+    }
+    monkeypatch.setattr(cli, "_http_json", lambda *args, **kwargs: (200, body))
+
+    code, stdout, stderr = _run(
+        [
+            "diagnostics",
+            "student",
+            "--student-sub",
+            "student-1",
+            "--course-id",
+            "course-1",
+        ]
+    )
+
+    assert code == 0, stderr
+    assert "h5p_punkte" in stdout.splitlines()[0]
+    assert "\t0/0\tja" in stdout
 
 
 def test_diagnostics_submission_json_combines_latest_dialog_transcript(
@@ -378,6 +570,56 @@ def test_diagnostics_submission_human_output_labels_formative_values(tmp_path, m
     assert "Funktion: 8/10" in stdout
     assert "Rückmeldung" in stdout
     assert "Note" not in stdout
+
+
+def test_diagnostics_submission_human_output_neutralizes_content_controls(
+    tmp_path, monkeypatch
+) -> None:
+    _configure(tmp_path, monkeypatch)
+    body = {
+        "id": "submission-1\x1b[31m",
+        "task_id": "task-1",
+        "student_sub": "student-1",
+        "created_at": "2026-09-01T08:00:00+00:00",
+        "kind": "text",
+        "instruction_md": "Zeile 1\nZeile 2\x1b]0;Titel\x07",
+        "text_body": "Antwort\tmit Tab\nzweite Zeile",
+        "analysis_json": {
+            "schema": "criteria.v2",
+            "criteria_results": [
+                {
+                    "criterion": "Kriterium\ngefälscht",
+                    "score": 2,
+                    "max_score": 3,
+                    "explanation_md": "Erklärung\x9b31m",
+                }
+            ],
+        },
+        "feedback_md": "Weiter so\x1b[2J",
+    }
+    monkeypatch.setattr(cli, "_http_json", lambda *args, **kwargs: (200, body))
+
+    code, stdout, stderr = _run(
+        [
+            "diagnostics",
+            "submission",
+            "--course-id",
+            "course-1",
+            "--unit-id",
+            "unit-1",
+            "--task-id",
+            "task-1",
+            "--student-sub",
+            "student-1",
+        ]
+    )
+
+    assert code == 0, stderr
+    assert "Zeile 1\nZeile 2" in stdout
+    assert "Antwort mit Tab\nzweite Zeile" in stdout
+    assert "\x1b" not in stdout
+    assert "\x07" not in stdout
+    assert "\x9b" not in stdout
 
 
 def test_diagnostics_submission_human_output_labels_h5p_points(tmp_path, monkeypatch) -> None:

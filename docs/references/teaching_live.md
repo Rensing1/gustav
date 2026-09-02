@@ -38,7 +38,8 @@ OpenAPI: siehe `api/openapi.yml` (Schemas `TeachingUnitLiveRow`, `TeachingUnitTa
 
 - GET `/api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview`
   - Liefert eine Lehrkraft-Read-Projection für genau einen Schüler über alle oder gefilterte Lerneinheiten des Kurses:
-    `{ student, units: [{ id, title, tasks: [{ id, instruction_md, position, kind, has_submission, average_score, h5p_completed }] }] }`.
+    `{ student, units: [{ id, title, tasks: [{ id, instruction_md, position, kind, has_submission, average_score, h5p_completed, score_raw, score_max }] }] }`.
+  - `score_raw` und `score_max` enthalten ausschließlich die H5P-Punkte der neuesten Abgabe. Sie sind nullable, werden nicht in eine Note umgedeutet und ergänzen den aus allen Versuchen abgeleiteten Abschlussstatus.
   - Query:
     - `unit_ids` (0..50 Wiederholungen): optionaler Filter; ohne Query-Key werden alle Kurs-Lerneinheiten geladen.
     - `unit_ids=` ohne Werte bedeutet explizit: keine Lerneinheiten ausgewählt.

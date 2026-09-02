@@ -330,6 +330,23 @@ class DBTeachingRepo:
             offset=offset,
         )
 
+    def list_active_courses_for_owner_member(
+        self,
+        *,
+        owner_sub: str,
+        student_sub: str,
+        limit: int,
+        offset: int,
+    ) -> List[dict]:
+        return _repo_member_queries.list_active_courses_for_owner_member(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            owner_sub=owner_sub,
+            student_sub=student_sub,
+            limit=limit,
+            offset=offset,
+        )
+
     def list_course_catalog_for_owner(self, *, owner_sub: str, status: str, query: str, school_year_start: int | None, subject: str, limit: int, offset: int) -> List[dict]:
         return _repo_course_lifecycle_queries.list_teacher_courses(
             dsn=self._dsn, psycopg_module=psycopg, owner_sub=owner_sub, status=status,

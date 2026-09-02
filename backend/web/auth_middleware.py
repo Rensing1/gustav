@@ -147,7 +147,12 @@ def create_auth_context_resolver(
         if not token:
             return False, None
         if token.startswith("gustav_cli_"):
-            capability = cli_capability_for_request(request.method, request.url.path)
+            raw_path = request.scope.get("raw_path")
+            try:
+                capability_path = bytes(raw_path).decode("ascii") if raw_path is not None else request.url.path
+            except (TypeError, UnicodeDecodeError):
+                capability_path = request.url.path
+            capability = cli_capability_for_request(request.method, capability_path)
             if capability is None:
                 return True, None
             return True, _cli_bearer_auth_context_from_token(

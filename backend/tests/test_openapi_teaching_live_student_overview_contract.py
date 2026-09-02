@@ -46,3 +46,8 @@ def test_openapi_has_student_live_overview_schemas() -> None:
     assert set(unit.get("required", [])) >= {"id", "title", "tasks"}
     task = schemas["TeachingStudentLiveOverviewTask"]
     assert set(task.get("required", [])) >= {"id", "instruction_md", "position", "kind", "has_submission"}
+    assert task["properties"]["score_raw"]["type"] == "integer"
+    assert task["properties"]["score_raw"]["nullable"] is True
+    assert task["properties"]["score_max"]["type"] == "integer"
+    assert task["properties"]["score_max"]["nullable"] is True
+    assert "not a grade" in task["properties"]["score_raw"]["description"]

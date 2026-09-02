@@ -1123,7 +1123,8 @@
   max-width: calc(60ch * var(--learning-unit-measure-scale));
   padding: calc(1rem * var(--learning-unit-copy-padding-scale)) calc(1.05rem * var(--learning-unit-copy-padding-scale));
   background: var(--color-bg-muted);
-  border-left: 3px solid var(--color-accent);
+  border-left: 0;
+  border-radius: var(--radius-s);
 }
 
 .markdown-prose {
@@ -1341,8 +1342,9 @@
   font-size: calc(0.98rem * var(--learning-unit-font-scale));
   line-height: 1.62;
   padding: calc(1rem * var(--learning-unit-copy-padding-scale)) calc(1.05rem * var(--learning-unit-copy-padding-scale));
-  background: #f8f5ee;
-  border-left: 3px solid color-mix(in srgb, var(--color-link) 62%, white 38%);
+  border-left: 0;
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--color-bg-muted) 82%, var(--color-bg-surface) 18%);
 }
 
 .learning-task-workspace__statement :global(p),
@@ -2089,6 +2091,13 @@
 
 .learning-task-inline-response .learning-response-panel__body {
   padding: 0 var(--space-4) var(--space-4);
+}
+
+.learning-task-inline-response .learning-response-panel__reviewed-draft {
+  max-width: calc(68ch * var(--learning-unit-measure-scale));
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .learning-task-inline-response .learning-criteria-details__list {

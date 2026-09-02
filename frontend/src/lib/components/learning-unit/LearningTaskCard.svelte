@@ -1172,7 +1172,7 @@
                           <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
                         </div>
                       {:else if latestSubmissionOrThrow().text_body}
-                        <div class="markdown-prose">
+                        <div class="learning-response-panel__reviewed-draft markdown-prose">
                           {@html renderMarkdown(latestSubmissionOrThrow().text_body ?? "")}
                         </div>
                       {/if}

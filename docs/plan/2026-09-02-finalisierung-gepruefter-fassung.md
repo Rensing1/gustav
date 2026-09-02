@@ -266,3 +266,26 @@ Die vorhandene globale Buttonregel überschreibt die Akzentfläche der primären
 - **Green:** Die Aufgabenkarte unterscheidet nun den letzten abgeschlossenen Zustand von einem danach begonnenen Rückmeldungszyklus. Bereits finalisierte Rückmeldungen können nicht erneut als Grundlage dienen; die neue Finalisierung wird während der Verarbeitung sichtbar gesperrt und nach deren Abschluss auf den neuen Snapshot gebunden.
 - **Browser:** Die manuelle Prüfung mit dem lokalen Schülerkonto bestätigte zwei aufeinanderfolgende Endabgaben, erneute Rückmeldung, den gesperrten Übergangszustand, die anschließende Freigabe, Warnung und Entwurfserhalt einschließlich bewusst leerem Entwurf, Neuladen und schmaler Ansicht. Der automatisierte `@feature-acceptance`-Lauf sowie der `@feature-detail`-Uploadlauf bestanden ebenfalls.
 - **Abschluss-Gate:** `make verify-feature FEATURE=learner-task-finalization` ist erfolgreich: 2.556 Backendtests bestanden, 78 wurden erwartungsgemäß übersprungen; 652 Frontendtests, drei Build-Richtlinienprüfungen, 62 H5P-Tests, Typprüfung, Produktions-Build und der zugeordnete authentifizierte Browserlauf bestanden ebenfalls.
+
+## Visuelles Follow-up: ruhige Lesetextdarstellung
+
+### User Story und BDD-Szenario
+
+Als lernende Person möchte ich Aufgabenstellungen und geprüfte Entwürfe ohne dekorative vertikale Akzentlinie lesen, damit normaler Inhalt nicht fälschlich wie ein Zitat, Status oder Warnhinweis wirkt.
+
+**Given** eine Aufgabenstellung oder ein anderer Markdown-Lesetext wird in einer Aufgabenfläche dargestellt
+**When** die lernende Person den Inhalt liest
+**Then** erscheint er auf einer ruhigen, symmetrisch gepolsterten Fläche ohne vertikale Akzentlinie.
+
+**Given** der Bereich „Entwurf“ ist geöffnet
+**When** ein Textentwurf innerhalb der bereits vorhandenen Rückmeldungsfläche dargestellt wird
+**Then** verwendet der Text diese Fläche ohne zusätzliche Hintergrundfläche oder doppelte Einrückung; Markdown-Struktur wie Absätze, Listen und Tabellen bleibt erhalten.
+
+Die bisherige Akzentschiene entfällt allgemein für Lesetexte in Aufgaben. Semantische Zustandsmarkierungen an kompakten Aufgabenzeilen sowie echte Status- und Warnmeldungen bleiben erhalten. OpenAPI, Datenbank, RLS und Anwendungslogik bleiben unverändert.
+
+### Umsetzungs- und Prüfnachweis
+
+- **Red:** Der neue CSS-Vertrag scheiterte an der dreipixeligen Akzentschiene der allgemeinen Aufgaben-Markdownfläche und der großen Aufgabenstellung; der geprüfte Entwurf erbte zusätzlich Hintergrund und Innenabstand der allgemeinen Lesefläche.
+- **Green:** Aufgabenlesetexte verwenden nun eine neutrale Fläche ohne linke Akzentschiene. Der geprüfte Entwurf besitzt eine eigene, eng begrenzte Variante und nutzt dadurch die vorhandene Rückmeldungsfläche bündig und transparent.
+- **Browser:** Die lokale Schüleransicht bestätigt Aufgabenstellung und aufgeklappten Entwurf ohne vertikale Linie. Heller und dunkler Modus sowie die schmale Ansicht bleiben lesbar und laufen nicht horizontal über. Der authentifizierte `@feature-acceptance`-Ablauf bestand anschließend unverändert.
+- **Abschluss-Gate:** `make verify-feature FEATURE=learner-task-finalization` ist erfolgreich: 2.556 Backendtests bestanden, 78 wurden erwartungsgemäß übersprungen; 653 Frontendtests, drei Build-Richtlinienprüfungen, 62 H5P-Tests, Typprüfung, Produktions-Build und der zugeordnete authentifizierte Browserlauf bestanden ebenfalls.

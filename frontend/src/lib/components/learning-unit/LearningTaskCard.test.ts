@@ -2490,7 +2490,7 @@ describe("LearningTaskCard", () => {
     );
   });
 
-  it("uses theme tokens for the task prompt and summary areas instead of legacy intro panels", () => {
+  it("uses a neutral theme surface for task prose instead of legacy intro panels", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
     const blockMatch = css.match(/\.learning-work-item--task \.markdown-prose\s*\{([^}]*)\}/);
@@ -2499,7 +2499,8 @@ describe("LearningTaskCard", () => {
     const block = blockMatch?.[1] ?? "";
 
     expect(block).toMatch(/background:\s*var\(--color-bg-muted\);/);
-    expect(block).toMatch(/border-left:\s*3px solid var\(--color-accent\);/);
+    expect(block).toMatch(/border-left:\s*0;/);
+    expect(block).toMatch(/border-radius:\s*var\(--radius-s\);/);
     expect(block).not.toMatch(/background:\s*#f8f5ee;/);
     expect(css).toMatch(/\.learning-task-inline-response\s*\{/);
     expect(css).not.toMatch(/\.learning-work-item__start-card\s*\{/);
@@ -2546,5 +2547,22 @@ describe("LearningTaskCard", () => {
     expect(css).not.toMatch(/\.learning-finalization-warning__actions \.workspace-top-action\s*\{[^}]*font-family:/);
     expect(accentMatch?.[1] ?? "").toMatch(/background:\s*var\(--color-accent\);/);
     expect(accentMatch?.[1] ?? "").toMatch(/color:\s*#ffffff;/);
+  });
+
+  it("renders task reading surfaces without decorative accent rails or a nested draft surface", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));
+    const taskMarkdownMatch = css.match(/\.learning-work-item--task \.markdown-prose\s*\{([^}]*)\}/);
+    const workspaceStatementMatch = css.match(/\.learning-task-workspace__statement\s*\{([^}]*)\}/);
+    const reviewedDraftMatch = css.match(
+      /\.learning-task-inline-response \.learning-response-panel__reviewed-draft\s*\{([^}]*)\}/
+    );
+
+    expect(taskMarkdownMatch?.[1] ?? "").toMatch(/border-left:\s*0;/);
+    expect(workspaceStatementMatch?.[1] ?? "").toMatch(/border-left:\s*0;/);
+    expect(reviewedDraftMatch).not.toBeNull();
+    expect(reviewedDraftMatch?.[1] ?? "").toMatch(/padding:\s*0;/);
+    expect(reviewedDraftMatch?.[1] ?? "").toMatch(/border:\s*0;/);
+    expect(reviewedDraftMatch?.[1] ?? "").toMatch(/background:\s*transparent;/);
   });
 });

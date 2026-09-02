@@ -9057,6 +9057,11 @@ paths:
                 $ref: '#/components/schemas/DiagnosticsCourseMatrixView'
         '400':
           description: Pagination is non-integer or outside the documented bounds (`invalid_pagination`)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -9143,6 +9148,11 @@ paths:
                 $ref: '#/components/schemas/DiagnosticsLearnerProfileView'
         '400':
           description: Pagination is non-integer or outside the documented bounds (`invalid_pagination`)
+          headers:
+            Cache-Control:
+              description: Security — responses are private and not cacheable by shared caches.
+              schema:
+                type: string
           content:
             application/json:
               schema:

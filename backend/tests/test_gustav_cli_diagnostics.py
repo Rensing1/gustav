@@ -590,7 +590,7 @@ def test_diagnostics_submission_human_output_neutralizes_content_controls(
                 {
                     "criterion": "Kriterium\ngefälscht",
                     "score": 2,
-                    "max_score": 3,
+                    "max_score": "3\x1b]0;Maximalwert\x07",
                     "explanation_md": "Erklärung\x9b31m",
                 }
             ],

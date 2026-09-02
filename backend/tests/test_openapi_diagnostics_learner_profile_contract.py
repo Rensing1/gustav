@@ -22,4 +22,7 @@ def test_openapi_documents_diagnostics_learner_profile_view() -> None:
     assert parameters["offset"]["schema"]["minimum"] == 0
     assert "slash-containing" in parameters["student_sub"]["description"]
     assert "non-integer" in operation["responses"]["400"]["description"]
+    assert operation["responses"]["400"]["headers"]["Cache-Control"]["schema"] == {
+        "type": "string"
+    }
     assert "empty `courses` array" in operation["responses"]["200"]["description"]

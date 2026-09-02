@@ -446,7 +446,7 @@ def _render_submission(
             maximum = result.get("max_score") or 10
             stdout.write(
                 f"{_terminal_text(result.get('criterion') or 'Kriterium')}: "
-                f"{_score_text(result.get('score'))}/{maximum}\n"
+                f"{_score_text(result.get('score'))}/{_score_text(maximum)}\n"
             )
             explanation = result.get("explanation_md")
             if isinstance(explanation, str) and explanation:

@@ -8,11 +8,8 @@ Why:
 
 from __future__ import annotations
 
-from backend.web.cli_authoring import (
-    CLI_AUTHORING_CAPABILITIES,
-    CLICapability,
-    path_matches_template,
-)
+from backend.web.cli_authoring import CLI_AUTHORING_CAPABILITIES
+from backend.web.cli_capability import CLICapability, path_matches_template
 
 CLI_DIAGNOSTICS_CAPABILITIES: tuple[CLICapability, ...] = (
     CLICapability("GET", "/api/diagnostics/views/courses/{course_id}/matrix", "read"),

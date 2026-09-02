@@ -26,3 +26,6 @@ def test_openapi_documents_diagnostics_course_matrix_view() -> None:
     }
     assert parameters["offset"]["schema"]["minimum"] == 0
     assert "non-integer" in operation["responses"]["400"]["description"]
+    assert operation["responses"]["400"]["headers"]["Cache-Control"]["schema"] == {
+        "type": "string"
+    }

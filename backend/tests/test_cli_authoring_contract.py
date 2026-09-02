@@ -10,6 +10,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAIN_SOURCE = PROJECT_ROOT / "backend" / "web" / "main.py"
+CLI_CAPABILITY_SOURCE = PROJECT_ROOT / "backend" / "web" / "cli_capability.py"
 
 
 @pytest.mark.parametrize(
@@ -81,11 +82,20 @@ def test_cli_authoring_capability_table_matches_openapi_cli_surface() -> None:
     assert runtime == documented
 
 
-def test_main_delegates_cli_authoring_capabilities_to_dedicated_module() -> None:
+def test_cli_capability_core_is_general_and_main_delegates_to_it() -> None:
     source = MAIN_SOURCE.read_text(encoding="utf-8")
     auth_middleware_source = (PROJECT_ROOT / "backend/web/auth_middleware.py").read_text(encoding="utf-8")
+    authoring_source = (PROJECT_ROOT / "backend/web/cli_authoring.py").read_text(encoding="utf-8")
+    capabilities_source = (PROJECT_ROOT / "backend/web/cli_capabilities.py").read_text(encoding="utf-8")
+    capability_core_source = CLI_CAPABILITY_SOURCE.read_text(encoding="utf-8")
 
     assert "from backend.web.cli_capabilities import cli_capability_for_request" in auth_middleware_source
+    assert "class CLICapability" in capability_core_source
+    assert "def path_matches_template" in capability_core_source
+    assert "from backend.web.cli_capability import" in authoring_source
+    assert "class CLICapability" not in authoring_source
+    assert "def path_matches_template" not in authoring_source
+    assert "from backend.web.cli_capability import" in capabilities_source
     assert "class CLIAuthoringCapability" not in source
     assert "CLI_AUTHORING_CAPABILITIES" not in source
     assert "def _path_matches_template" not in source

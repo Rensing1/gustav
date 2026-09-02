@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from backend.web.cli_authoring import CLI_AUTHORING_CAPABILITIES
+from backend.web.cli_capabilities import CLI_CAPABILITIES
 
 importlib.import_module("backend.web.main")
 
@@ -262,7 +262,7 @@ def test_openapi_cli_surface_matches_runtime_capability_table() -> None:
 
     runtime = {
         (capability.method, capability.path_template, (capability.required_scope,))
-        for capability in CLI_AUTHORING_CAPABILITIES
+        for capability in CLI_CAPABILITIES
     }
 
     assert runtime == documented

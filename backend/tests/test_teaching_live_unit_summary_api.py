@@ -142,6 +142,20 @@ async def test_summary_requires_auth_and_owner_role():
 
 
 @pytest.mark.anyio
+async def test_summary_rejects_pagination_outside_the_documented_bounds():
+    teacher = _session_store().create(sub="t-live-pagination", name="Owner", roles=["teacher"])  # type: ignore
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
+        response = await client.get(
+            f"/api/teaching/courses/{uuid.uuid4()}/units/{uuid.uuid4()}/submissions/summary",
+            params={"limit": 0, "offset": -1},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "bad_request", "detail": "invalid_pagination"}
+
+
+@pytest.mark.anyio
 async def test_summary_happy_path_minimal_status_matrix_and_headers():
     _require_db_or_skip()
     teaching = importlib.import_module("backend.web.routes.teaching")

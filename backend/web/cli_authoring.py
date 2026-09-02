@@ -6,10 +6,14 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class CLIAuthoringCapability:
+class CLICapability:
     method: str
     path_template: str
     required_scope: str
+
+
+# Compatibility name for integrations that still import the former type.
+CLIAuthoringCapability = CLICapability
 
 
 CLI_AUTHORING_CAPABILITIES: tuple[CLIAuthoringCapability, ...] = (

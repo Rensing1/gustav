@@ -131,13 +131,29 @@ def _build_diagnostics_learner_profile_courses(
     offset: int,
 ) -> list[dict[str, object]]:
     courses: list[dict[str, object]] = []
-    for course in _app_helper("_list_teacher_courses", _list_teacher_courses)(
-        owner_sub,
-        limit=limit,
-        offset=offset,
-    ):
+    visible_courses: list[dict[str, str]] = []
+    source_offset = 0
+    source_page_size = 200
+    required_visible_count = offset + limit
+    while len(visible_courses) < required_visible_count:
+        source_page = _app_helper("_list_teacher_courses", _list_teacher_courses)(
+            owner_sub,
+            limit=source_page_size,
+            offset=source_offset,
+        )
+        if not source_page:
+            break
+        for course in source_page:
+            course_id = str(course.get("id") or "")
+            if course_id and _teacher_course_has_member(course_id, owner_sub, student_sub):
+                visible_courses.append(course)
+        if len(source_page) < source_page_size:
+            break
+        source_offset += len(source_page)
+
+    for course in visible_courses[offset:required_visible_count]:
         course_id = str(course.get("id") or "")
-        if not course_id or not _teacher_course_has_member(course_id, owner_sub, student_sub):
+        if not course_id:
             continue
 
         units = [
@@ -208,6 +224,12 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    if limit < 1 or limit > 50 or offset < 0:
+        return JSONResponse(
+            {"error": "bad_request", "detail": "invalid_pagination"},
+            status_code=400,
+            headers=_private_headers(),
+        )
 
     owner_sub = str(user.get("sub") or "")
     guard = teaching_guards._guard_course_owner(
@@ -243,8 +265,8 @@ async def get_diagnostics_course_matrix(request: Request, course_id: str, limit:
         "rows": _app_helper("_build_diagnostics_course_matrix_rows", _build_diagnostics_course_matrix_rows)(
             course_id,
             owner_sub,
-            limit=int(limit or 25),
-            offset=int(offset or 0),
+            limit=limit,
+            offset=offset,
             units=units,
         ),
     }
@@ -260,6 +282,12 @@ async def get_diagnostics_learner_profile(request: Request, student_sub: str, li
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
     if not has_any_role(user, {"teacher", "admin"}):
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
+    if limit < 1 or limit > 50 or offset < 0:
+        return JSONResponse(
+            {"error": "bad_request", "detail": "invalid_pagination"},
+            status_code=400,
+            headers=_private_headers(),
+        )
 
     owner_sub = str(user.get("sub") or "")
     courses = _app_helper(
@@ -268,8 +296,8 @@ async def get_diagnostics_learner_profile(request: Request, student_sub: str, li
     )(
         student_sub,
         owner_sub,
-        limit=int(limit or 50),
-        offset=int(offset or 0),
+        limit=limit,
+        offset=offset,
     )
     if not courses:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_private_headers())

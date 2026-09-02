@@ -316,6 +316,53 @@ async def test_cli_bearer_reaches_new_course_authoring_routes(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/diagnostics/views/courses/not-a-course/matrix",
+        "/api/diagnostics/views/learners/student-1/profile",
+        "/api/teaching/courses/not-a-course/units/not-a-unit/submissions/summary",
+        "/api/teaching/courses/not-a-course/students/student-1/submissions/overview",
+        (
+            "/api/teaching/courses/not-a-course/units/not-a-unit/tasks/not-a-task/"
+            "students/student-1/submissions/latest"
+        ),
+        (
+            "/api/teaching/courses/not-a-course/units/not-a-unit/tasks/not-a-task/"
+            "students/student-1/submissions/latest/file"
+        ),
+        (
+            "/api/teaching/courses/not-a-course/units/not-a-unit/tasks/not-a-task/"
+            "students/student-1/submissions/not-a-submission/dialog"
+        ),
+    ],
+)
+async def test_cli_read_bearer_reaches_diagnostics_routes(monkeypatch, path: str) -> None:
+    _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            path,
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code != 401
+
+
+@pytest.mark.anyio
+async def test_cli_write_only_bearer_cannot_read_diagnostics(monkeypatch) -> None:
+    _, created = _install_cli_token(monkeypatch, scopes=["write"], roles=["teacher"])
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/diagnostics/views/courses/course-1/matrix",
+            headers={"Authorization": f"Bearer {created.raw_token}"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
 async def test_cli_read_token_can_bind_a_sync_mirror_to_its_owner(monkeypatch):
     _, created = _install_cli_token(monkeypatch, scopes=["read"], roles=["teacher"])
 

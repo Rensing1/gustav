@@ -51,10 +51,56 @@ COURSE_AUTHORING_OPERATIONS: dict[str, CLIOperation] = {
 }
 
 
+DIAGNOSTICS_OPERATIONS: dict[str, CLIOperation] = {
+    "course": CLIOperation("GET", "/api/diagnostics/views/courses/{course_id}/matrix"),
+    "student_profile": CLIOperation(
+        "GET", "/api/diagnostics/views/learners/{student_sub}/profile"
+    ),
+    "unit": CLIOperation(
+        "GET", "/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary"
+    ),
+    "student_course": CLIOperation(
+        "GET",
+        "/api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview",
+    ),
+    "submission": CLIOperation(
+        "GET",
+        (
+            "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/"
+            "students/{student_sub}/submissions/latest"
+        ),
+    ),
+    "download": CLIOperation(
+        "GET",
+        (
+            "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/"
+            "students/{student_sub}/submissions/latest/file"
+        ),
+    ),
+    "dialog": CLIOperation(
+        "GET",
+        (
+            "/api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/"
+            "students/{student_sub}/submissions/{submission_id}/dialog"
+        ),
+    ),
+}
+
+
 def course_operation(name: str, **path_parameters: str) -> CLIOperation:
     """Resolve a registered operation and substitute already-escaped path values."""
 
     operation = COURSE_AUTHORING_OPERATIONS[name]
+    return CLIOperation(
+        method=operation.method,
+        path_template=operation.path_template.format(**path_parameters),
+    )
+
+
+def diagnostics_operation(name: str, **path_parameters: str) -> CLIOperation:
+    """Resolve one diagnostics operation with already escaped path values."""
+
+    operation = DIAGNOSTICS_OPERATIONS[name]
     return CLIOperation(
         method=operation.method,
         path_template=operation.path_template.format(**path_parameters),

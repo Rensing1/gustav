@@ -1,8 +1,8 @@
-# GUSTAV CLI für Teaching Authoring
+# GUSTAV CLI für Teaching Authoring und Diagnostik
 
-Die GUSTAV CLI ist ein Terminal-Werkzeug für Lehrkräfte, um wiederkehrende Authoring-Aufgaben ohne Browser auszuführen. Sie nutzt ausschließlich die bestehende Teaching-API und enthält keine eigene Geschäftslogik.
+Die GUSTAV CLI ist ein Terminal-Werkzeug für Lehrkräfte, um wiederkehrende Authoring-Aufgaben und lesende Diagnostikabfragen ohne Browser auszuführen. Sie nutzt ausschließlich bestehende owner-geschützte APIs und enthält keine eigene Geschäftslogik.
 
-Die CLI deckt das Teaching-Authoring für Lerneinheiten, Inhalte und Kurse ab. Sie ist noch nicht als globales `gustav`-Binary paketiert.
+Die CLI deckt das Teaching-Authoring für Lerneinheiten, Inhalte und Kurse sowie Kurs-, Aufgaben-, Lernenden- und Abgabediagnostik ab. Sie ist noch nicht als globales `gustav`-Binary paketiert.
 
 ## Aufruf
 
@@ -62,9 +62,7 @@ Sicherheitsregeln:
 - Scopes sind `read`, `write` und `delete`.
 - Ein Token kann keine neuen CLI-Tokens erstellen oder widerrufen.
 - Fachliche Rollen und Besitzrechte werden bei jedem API-Aufruf aktuell geprüft.
-- Die Runtime erlaubt CLI-Tokens nur für explizit dokumentierte Authoring-
-  Capabilities. Neue CLI-Endpunkte brauchen deshalb OpenAPI-`cliTokenAuth`,
-  einen Scope und einen Regressionstest.
+- Die Runtime erlaubt CLI-Tokens nur für explizit dokumentierte Capabilities. Neue CLI-Endpunkte brauchen deshalb OpenAPI-`cliTokenAuth`, einen Scope und einen Regressionstest.
 - Roh-Tokens sollten nicht als Shell-Argument übergeben werden.
 
 ## Ausgabeformat
@@ -263,6 +261,54 @@ gustav course-sections hide --course-id <course-id> --module-id <course-module-i
 ```
 
 `students search` sucht ausschließlich gezielt nach Schülern und gibt nur `sub` und Anzeigename zurück. Die vollständige Benutzerliste ist nicht für CLI-Tokens freigegeben. Lesen benötigt `read`, normale Änderungen `write`; Mitglieder/Kursmodule entfernen und permanente Löschaufträge benötigen `delete`.
+
+### Diagnostik
+
+Alle Diagnostikbefehle benötigen ausschließlich den `read`-Scope. IDs bleiben der eindeutige Vertrag; eine Person kann vorher mit `gustav students search` gesucht werden.
+
+```bash
+gustav diagnostics course --course-id <uuid> [--json]
+
+gustav diagnostics unit \
+  --course-id <uuid> \
+  --unit-id <uuid> \
+  [--task-id <uuid>] \
+  [--json]
+
+gustav diagnostics student \
+  --student-sub <sub> \
+  [--course-id <uuid> [--unit-id <uuid>]...] \
+  [--json]
+
+gustav diagnostics submission \
+  --course-id <uuid> \
+  --unit-id <uuid> \
+  --task-id <uuid> \
+  --student-sub <sub> \
+  [--json]
+
+gustav diagnostics download \
+  --course-id <uuid> \
+  --unit-id <uuid> \
+  --task-id <uuid> \
+  --student-sub <sub> \
+  --output <pfad> \
+  [--force]
+```
+
+`course` gibt die vollständige Kursmatrix aus. `unit` gibt die Schüler-Aufgaben-Matrix einer Lerneinheit aus; `--task-id` behält alle Kursmitglieder bei und reduziert lediglich die Aufgabenspalten. `student` zeigt ohne Kurs ein kursübergreifendes Profil. Mit `--course-id` zeigt der Befehl die Aufgaben dieses Kurses; wiederholtes `--unit-id` grenzt die Lerneinheiten ein und ist ohne Kurs nicht zulässig.
+
+`submission` liest nur die neueste Abgabe. Die menschenlesbare Ausgabe enthält Aufgabenstellung, verfügbare Textrepräsentation, Kriterienauswertung, formativen Gesamtscore, Rückmeldung und bei Dialogaufgaben das sichere Transkript. Numerische Werte heißen ausdrücklich `formativer_kriterienwert`, `Formativer Gesamtscore` oder `H5P-Punkte`; die CLI deutet sie nicht als Note. Die stabile JSON-Hülle lautet:
+
+```json
+{"submission": null, "dialog": null}
+```
+
+Bei einer vorhandenen Abgabe enthält `submission` ein `TeachingLatestSubmission`; für Dialoge enthält `dialog` zusätzlich eine `LearningDialogSession`. Interne Rollen-, Lernziel- und Lehrkrafttexte werden nicht ausgegeben. H5P-CLI-Aufrufe erzeugen und liefern kein browsergebundenes Review-Credential.
+
+Die Übersichten laden alle API-Seiten vollständig, bevor die erste Zeile ausgegeben wird. Wiederholte Seiten, ausbleibender Fortschritt oder ein Fehler auf einer Folgeseite brechen ohne Teilausgabe ab. Es gibt keine öffentlichen CLI-Optionen für Teilmengen-Paginierung.
+
+`download` lädt die Originaldatei der neuesten Datei-, Bild- oder PDF-Abgabe. Die CLI begrenzt Downloads auf 10 MiB, schreibt im Zielverzeichnis zunächst eine private temporäre Datei und veröffentlicht sie atomar mit Rechten `0600`. Bestehende Dateien werden nur mit `--force` ersetzt; Fehler hinterlassen keine Teildatei. Die CLI legt weder Diagnosecaches an noch schreibt sie Abgabeinhalte, Tokens oder Personenkennungen in Logs.
 
 ## Beispiel-Workflow
 

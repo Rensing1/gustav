@@ -118,9 +118,9 @@ Ein `Course Module` ordnet eine wiederverwendbare Lerneinheit einem Kurs zu. Fre
 
 Die Live- und Diagnostikräume greifen lesend auf eigene Projektionen zu. Details stehen in `docs/references/teaching_live.md` und `docs/bounded_contexts.md`.
 
-## Teaching Authoring CLI
+## Teaching-CLI
 
-Die GUSTAV CLI verwendet dieselben Teaching-Endpunkte wie die Weboberfläche. CLI-Tokens besitzen explizite `read`-, `write`- und `delete`-Capabilities. Cookiegebundene Browserfunktionen wie vollständige Benutzerlisten, H5P-Editor-JSON oder Dialogvorschau werden nicht durch breitere CLI-Rechte ersetzt.
+Die GUSTAV CLI verwendet dieselben owner-geschützten Teaching- und Diagnostik-Endpunkte wie die Weboberfläche. CLI-Tokens besitzen explizite `read`-, `write`- und `delete`-Capabilities. Die lesende `diagnostics`-Befehlsgruppe erschließt Kursmatrix, Lerneinheits- und Lernendenübersicht, neueste Abgabe, sicheren Dialogverlauf und Originaldatei. Cookiegebundene Browserfunktionen wie vollständige Benutzerlisten, H5P-Editor-JSON, H5P-Review und Dialogvorschau werden nicht durch breitere CLI-Rechte ersetzt.
 
 Aufruf- und Sicherheitsdetails: `docs/references/gustav_cli.md`.
 

@@ -17,6 +17,7 @@ from backend.teaching.services.tasks import normalize_dialog_config
 
 from .config import GustavCLIConfig, load_config, save_config
 from .course_commands import register_course_parsers, run_course_command
+from .diagnostics_commands import register_diagnostics_parsers, run_diagnostics_command
 
 
 def _parse_json_response(raw: str, *, non_json_body: dict[str, object]) -> Any:
@@ -366,6 +367,7 @@ def _build_parser() -> argparse.ArgumentParser:
             sync_cmd.add_argument("--overwrite-remote", action="store_true")
             sync_cmd.add_argument("--yes", action="store_true")
     register_course_parsers(sub)
+    register_diagnostics_parsers(sub)
     return parser
 
 
@@ -1172,6 +1174,14 @@ def main(
         from .sync import run_sync
 
         return run_sync(args, stdout=stdout, stderr=stderr)
+    if args.group == "diagnostics":
+        return run_diagnostics_command(
+            args,
+            http_json=_http_json,
+            http_bytes=_http_bytes,
+            stdout=stdout,
+            stderr=stderr,
+        )
     if args.group in {
         "courses",
         "course-deletion-jobs",

@@ -37,6 +37,10 @@ def test_openapi_documents_bearer_auth_for_bff_endpoints() -> None:
         ("/api/live/views/courses/{course_id}/units/{unit_id}/matrix", "get"),
         ("/api/live/views/courses/{course_id}/units/{unit_id}/detail-sheet", "get"),
         ("/api/live/views/courses/{course_id}/units/{unit_id}/dashboard", "get"),
-    ):
-        security = spec["paths"][path][verb]["security"]
-        assert security == [{"bearerAuth": []}]
+        ):
+            security = spec["paths"][path][verb]["security"]
+            expected = [{"bearerAuth": []}]
+            if path.startswith("/api/diagnostics/views/"):
+                expected.append({"cliTokenAuth": []})
+                assert spec["paths"][path][verb]["x-required-cli-scopes"] == ["read"]
+            assert security == expected

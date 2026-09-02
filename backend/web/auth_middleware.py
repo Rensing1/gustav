@@ -16,7 +16,7 @@ from backend.identity_access.domain import ALLOWED_ROLES
 from backend.web.auth_claims import primary_role, user_context_from_claims
 from backend.web.auth_flow import auth_failure_path_class, auth_failure_reason, requires_bff_bearer_auth
 from backend.web.auth_session import SESSION_COOKIE_NAME
-from backend.web.cli_authoring import cli_capability_for_request
+from backend.web.cli_capabilities import cli_capability_for_request
 from backend.web.legacy_retirement import retired_legacy_product_response
 from backend.web.routes.redirects import safe_inapp_path
 

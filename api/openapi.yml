@@ -6519,7 +6519,8 @@ paths:
       tags: [Teaching]
       summary: Return a completed dialog transcript for the course owner
       operationId: getTeachingDialogSubmission
-      security: [{ cookieAuth: [] }]
+      security: [{ cookieAuth: [] }, { cliTokenAuth: [] }]
+      x-required-cli-scopes: [read]
       x-permissions: { requiredRole: teacher, ownerOnly: true }
       parameters:
         - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
@@ -6531,6 +6532,7 @@ paths:
         '200':
           description: Completed dialog transcript without internal instructions
           content: { application/json: { schema: { $ref: '#/components/schemas/LearningDialogSession' } } }
+        '400': { description: Invalid identifier, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Dialog submission not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -9007,12 +9009,24 @@ paths:
       operationId: getDiagnosticsCourseMatrix
       security:
         - bearerAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       parameters:
         - in: path
           name: course_id
           required: true
           schema:
             type: string
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
+          description: Maximum number of student rows returned in this page.
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: Offset into the owner-visible course members.
       responses:
         '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
@@ -9026,6 +9040,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiagnosticsCourseMatrixView'
+        '400':
+          description: Invalid pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthenticated
           headers:
@@ -9070,12 +9090,24 @@ paths:
       operationId: getDiagnosticsLearnerProfile
       security:
         - bearerAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       parameters:
         - in: path
           name: student_sub
           required: true
           schema:
             type: string
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 50, default: 50 }
+          description: Maximum number of owner-visible active courses returned in this page.
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: Offset into the owner-visible active courses.
       responses:
         '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '200':
@@ -9089,6 +9121,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiagnosticsLearnerProfileView'
+        '400':
+          description: Invalid pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthenticated
           headers:
@@ -14333,6 +14371,8 @@ paths:
       operationId: getTeachingUnitLiveSummary
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -14545,6 +14585,8 @@ paths:
       operationId: getTeachingStudentLiveOverview
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       x-permissions:
         requiredRole: teacher
         ownerOnly: true
@@ -14639,6 +14681,8 @@ paths:
       tags: [Teaching]
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       parameters:
         - in: path
           name: course_id
@@ -14705,6 +14749,8 @@ paths:
       tags: [Teaching]
       security:
         - cookieAuth: []
+        - cliTokenAuth: []
+      x-required-cli-scopes: [read]
       parameters:
         - in: path
           name: course_id

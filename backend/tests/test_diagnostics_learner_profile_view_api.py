@@ -11,6 +11,7 @@ import pytest
 
 main = importlib.import_module("backend.web.main")
 app_routes = importlib.import_module("backend.web.routes.app")
+diagnostics_routes = importlib.import_module("backend.web.routes.app_diagnostics_routes")
 
 
 pytestmark = pytest.mark.anyio("asyncio")
@@ -154,3 +155,56 @@ async def test_diagnostics_learner_profile_returns_not_found_when_owner_sees_no_
 
     assert response.status_code == 404
     assert response.json() == {"error": "not_found"}
+
+
+@pytest.mark.anyio
+async def test_diagnostics_learner_profile_rejects_invalid_pagination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-diagnostics", roles=["teacher"], name="Ada")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/diagnostics/views/learners/student-1/profile?limit=0",
+            headers=headers,
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "bad_request", "detail": "invalid_pagination"}
+
+
+def test_learner_profile_paginates_visible_courses_after_membership_filter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner_courses = [
+        {"id": f"course-{index:03d}", "title": f"Kurs {index:03d}"}
+        for index in range(80)
+    ]
+
+    monkeypatch.setattr(
+        app_routes,
+        "_list_teacher_courses",
+        lambda owner_sub, limit, offset: owner_courses[offset : offset + limit],
+    )
+    monkeypatch.setattr(
+        diagnostics_routes,
+        "_teacher_course_has_member",
+        lambda course_id, owner_sub, student_sub: int(course_id.rsplit("-", 1)[1]) % 2 == 0,
+    )
+    monkeypatch.setattr(app_routes, "_list_teacher_course_units", lambda course_id, owner_sub: [])
+    monkeypatch.setattr(
+        app_routes,
+        "_list_submission_pairs_for_students",
+        lambda course_id, owner_sub, student_subs, task_ids: set(),
+    )
+
+    courses = diagnostics_routes._build_diagnostics_learner_profile_courses(
+        "student-1",
+        "teacher-1",
+        limit=20,
+        offset=10,
+    )
+
+    assert [course["id"] for course in courses] == [
+        f"course-{index:03d}" for index in range(20, 60, 2)
+    ]

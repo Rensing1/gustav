@@ -166,3 +166,19 @@ async def test_diagnostics_course_matrix_returns_not_found_for_missing_course(
 
     assert response.status_code == 404
     assert response.json() == {"error": "not_found"}
+
+
+@pytest.mark.anyio
+async def test_diagnostics_course_matrix_rejects_invalid_pagination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = _mock_bearer_auth(monkeypatch, sub="teacher-diagnostics", roles=["teacher"], name="Ada")
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/diagnostics/views/courses/course-1/matrix?limit=51&offset=-1",
+            headers=headers,
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "bad_request", "detail": "invalid_pagination"}

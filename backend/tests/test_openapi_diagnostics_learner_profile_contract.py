@@ -8,7 +8,15 @@ import yaml
 def test_openapi_documents_diagnostics_learner_profile_view() -> None:
     spec = yaml.safe_load(Path("api/openapi.yml").read_text(encoding="utf-8"))
 
-    assert "/api/diagnostics/views/learners/{student_sub}/profile" in spec["paths"]
+    path = "/api/diagnostics/views/learners/{student_sub}/profile"
+    assert path in spec["paths"]
 
     schema = spec["components"]["schemas"]["DiagnosticsLearnerProfileView"]
     assert schema["required"] == ["user", "learner", "summary", "courses"]
+
+    operation = spec["paths"][path]["get"]
+    assert {"cliTokenAuth": []} in operation["security"]
+    assert operation["x-required-cli-scopes"] == ["read"]
+    parameters = {item["name"]: item for item in operation["parameters"]}
+    assert parameters["limit"]["schema"]["maximum"] == 50
+    assert parameters["offset"]["schema"]["minimum"] == 0

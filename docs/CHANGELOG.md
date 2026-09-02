@@ -2,13 +2,24 @@
 
 ## 2026-09-01
 
+### Features
+- feat(cli): Die neue read-only Befehlsgruppe `gustav diagnostics` liest vollständige Kurs-, Lerneinheits- und Lernendenübersichten, die neueste Abgabe samt formativer Auswertung und sicherem Dialogtranskript sowie Originaldateien.
+
+### Security
+- security(cli): Diagnostikzugriffe verwenden ein allgemeines OpenAPI-gebundenes Capability-Register, prüfen Rolle und Ownership bei jedem Aufruf neu und geben bei H5P-Abgaben kein browsergebundenes Review-Credential aus.
+- security(cli): Diagnosedateien werden bis 10 MiB atomar mit `0600` gespeichert; bestehende Ziele erfordern `--force`, Fehler hinterlassen keine Teildatei.
+
 ### Fixes
 - fix(learning): Eine nach direktem Aufruf oder Reload geladene fertige Text-Rückmeldung hydriert einen unberührten Editor wieder mit genau der geprüften Fassung. Abweichende Sitzungsentwürfe und lokale Änderungen bleiben geschützt und können nicht ungeprüft finalisiert werden.
 - fix(learning): Der Aufgaben-Restore lädt bekannte Abgabeverläufe vor der Aktivierung und bietet nach einem Ladefehler eine verständliche Wiederholung an.
 - refactor(learning): Der nicht mehr verwendete alternative Abgabe-Arbeitsbereich samt isolierten Tests und exklusivem CSS wurde entfernt.
 
 ### Tests
+- test(cli): Contract-, CLI-, API-, DB-/RLS- und authentifizierte Feature-Acceptance-Tests sichern Paginierung, Unicode, Aufgabenfilter, neueste Abgabe, formative Kriterien, H5P, Dialogschutz und binärtreue Downloads ab.
 - test(learning): Komponenten-, Routen- und authentifizierte Browserregressionen sichern asynchrone History-Hydration, atomare Submission-Bindung, geschützte lokale Entwürfe, Retry, Direktlink, Reload und genau eine finale Submission ab.
+
+### Docs
+- docs(cli): CLI-, Teaching- und Diagnostikreferenzen dokumentieren die neuen Einstiege, Ausgabeformate, Browsergrenzen und den sicheren Dateidownload.
 
 ## 2026-08-23
 

@@ -16,7 +16,7 @@ Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
   - Query:
     - `include_students` (bool, default true): Wenn `false`, werden nur `tasks[]` geliefert (Startoptimierung in der UI).
     - `limit`/`offset`: Paginierung der Schülerliste.
-  - Sicherheit: Nur Owner (Lehrer) des Kurses; Einheit muss zum Kurs gehören. `Cache-Control: private, no-store`, `Vary: Origin`.
+  - Sicherheit: Nur Owner (Lehrer) des Kurses; Einheit muss zum Kurs gehören. Browser-Cookies und CLI-Tokens mit `read`-Scope sind zulässig. `Cache-Control: private, no-store`, `Vary: Origin`.
 
 - GET `/api/teaching/courses/{course_id}/units/{unit_id}/submissions/delta`
   - Liefert nur geänderte Zellen seit `updated_since`.
@@ -37,12 +37,12 @@ Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
 OpenAPI: siehe `api/openapi.yml` (Schemas `TeachingUnitLiveRow`, `TeachingUnitTaskCell`, `TeachingUnitDeltaCell`, `TeachingLatestSubmission`).
 
 - GET `/api/teaching/courses/{course_id}/students/{student_sub}/submissions/overview`
-  - Liefert eine teacher-facing Read-Projection fuer genau einen Schueler ueber alle oder gefilterte Lerneinheiten des Kurses:
+  - Liefert eine Lehrkraft-Read-Projection für genau einen Schüler über alle oder gefilterte Lerneinheiten des Kurses:
     `{ student, units: [{ id, title, tasks: [{ id, instruction_md, position, kind, has_submission, average_score, h5p_completed }] }] }`.
   - Query:
     - `unit_ids` (0..50 Wiederholungen): optionaler Filter; ohne Query-Key werden alle Kurs-Lerneinheiten geladen.
-    - `unit_ids=` ohne Werte bedeutet explizit: keine Lerneinheiten ausgewaehlt.
-  - Sicherheit: Nur Owner (Lehrer) des Kurses; Schueler muss Kursmitglied sein; jede angefragte Unit muss zum Kurs gehoeren. `Cache-Control: private, no-store`, `Vary: Origin`.
+    - `unit_ids=` ohne Werte bedeutet explizit: keine Lerneinheiten ausgewählt.
+  - Sicherheit: Nur Owner (Lehrer) des Kurses; der Schüler muss Kursmitglied sein und jede angefragte Unit zum Kurs gehören. Browser-Cookies und CLI-Tokens mit `read`-Scope sind zulässig. `Cache-Control: private, no-store`, `Vary: Origin`.
 
 ## Zeit/Cursor‑Semantik (Clock‑Skew‑robust)
 
@@ -81,8 +81,9 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
 
 - Endpoint: `GET /api/teaching/courses/{course_id}/units/{unit_id}/tasks/{task_id}/students/{student_sub}/submissions/latest`
 - Antworten: `200` (Schema `TeachingLatestSubmission`), `204` (keine Abgabe), `404` (Relation ungültig), `403/401` (Auth), `503` (erforderliche Teaching-Infrastruktur nicht verfügbar) und `500` (unerwarteter interner Fehler).
-- Sicherheit: Kurs‑Ownership erforderlich; die Einheit muss am Kurs hängen; die Aufgabe muss zur Einheit gehören. `Cache-Control: private, no-store`, `Vary: Origin`.
+- Sicherheit: Kurs‑Ownership erforderlich; die Einheit muss am Kurs hängen und die Aufgabe zur Einheit gehören. Browser-Cookies und CLI-Tokens mit `read`-Scope sind zulässig. `Cache-Control: private, no-store`, `Vary: Origin`.
 - H5P-Review: `h5p.review_token` ist ein kurzlebiges AES-GCM-verschlüsseltes Credential mit minimalen Claims. Der Browser übermittelt es nur als `Authorization: Bearer` an `/h5p/player/review`; danach hält ein auf `/h5p` begrenztes `HttpOnly; Secure; SameSite=Strict`-Cookie pro Review den read-only User-State-Zugriff aufrecht. Die User-State-URL führt lediglich eine opake `review_id`, die aus dem zufälligen AES-GCM-Nonce abgeleitet wird und den passenden Cookie auswählt. Dadurch überschreiben sich parallele Reviews nicht. Credential und Personenkennungen werden nie in H5P-URLs geschrieben; fehlende, ungültige oder nicht zum Cookie passende Handles liefern fail-closed `403`. Review-Antworten setzen zusätzlich `Referrer-Policy: no-referrer`.
+- CLI-Grenze: Bei CLI-authentifizierten Detailaufrufen wird kein H5P-Review-Credential erzeugt oder ausgegeben. Die CLI zeigt ausschließlich Punkte und den daraus abgeleiteten Abschlussstatus; die interaktive Prüfung bleibt browsergebunden.
 - UI (Detail-Tab unter der Matrix):
   - Oberhalb der Einreichung wird immer die Aufgabenstellung (`instruction_md`) angezeigt.
   - Tabs für „Text“ (Auszug aus `text_body`) und bei Datei-Abgaben zusätzlich „Datei“ mit Inline-Vorschau.

@@ -124,6 +124,12 @@ async def get_unit_live_summary(
         return forbidden
     if not (_is_uuid_like(course_id) and _is_uuid_like(unit_id)):
         return _private_error({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, vary_origin=True)
+    if limit < 1 or limit > 200 or offset < 0:
+        return _private_error(
+            {"error": "bad_request", "detail": "invalid_pagination"},
+            status_code=400,
+            vary_origin=True,
+        )
     sub = _current_sub(user)
 
     updated_since_dt: datetime | None = None
@@ -768,7 +774,12 @@ async def get_latest_submission_detail(
             task_instruction_md = projection["instruction_md"]
             task_h5p_content_id = projection["h5p_content_id"]
             review_token = None
-            if str(kind or "") == "h5p" and isinstance(task_h5p_content_id, str) and task_h5p_content_id:
+            if (
+                str(kind or "") == "h5p"
+                and isinstance(task_h5p_content_id, str)
+                and task_h5p_content_id
+                and not getattr(request.state, "cli_token_id", None)
+            ):
                 review_token = issue_h5p_review_token(
                     owner_sub=str(sub),
                     task_id=str(task_id),
@@ -798,6 +809,10 @@ async def get_latest_submission_detail(
                 analysis_json=analysis_json,
                 include_files=True,
             )
+            if getattr(request.state, "cli_token_id", None):
+                h5p = payload.get("h5p")
+                if isinstance(h5p, dict):
+                    h5p.pop("review_token", None)
             return _json_private(payload, status_code=200, vary_origin=True)
     except TeachingRepositoryUnavailable:
         raise

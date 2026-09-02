@@ -77,7 +77,7 @@ test("@feature-acceptance follows graph, reading, task and deterministic feedbac
       "Die Antwort erklärt den Gedanken nachvollziehbar und kann jetzt weiterverwendet werden."
     );
     await expect(
-      learner.page.getByRole("button", { name: "Diese geprüfte Fassung endgültig abgeben" })
+      learner.page.getByRole("button", { name: "Diesen Entwurf endgültig abgeben" })
     ).toBeEnabled();
 
     await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();

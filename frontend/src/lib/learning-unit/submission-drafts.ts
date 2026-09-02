@@ -7,8 +7,6 @@ export type SubmissionDraftScope = {
   mode: SubmissionDraftMode;
 };
 
-export type SubmissionDraftStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">;
-
 /**
  * Builds the browser-storage key for one learner's answer to one task.
  *
@@ -24,13 +22,4 @@ export function submissionDraftStorageKey(scope: SubmissionDraftScope): string |
 
 export function legacySubmissionDraftStorageKey(scope: Omit<SubmissionDraftScope, "learnerSub">): string {
   return `gustav.learning.submission-draft:${scope.courseId}:${scope.taskId}:${scope.mode}`;
-}
-
-/** Removes only the draft keys that belong to the supplied course and task. */
-export function clearSubmissionDraft(storage: SubmissionDraftStorage, scope: SubmissionDraftScope): void {
-  const scopedKey = submissionDraftStorageKey(scope);
-  if (scopedKey) {
-    storage.removeItem(scopedKey);
-  }
-  storage.removeItem(legacySubmissionDraftStorageKey(scope));
 }

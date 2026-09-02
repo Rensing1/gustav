@@ -107,3 +107,40 @@ Dieser Arbeitsauftrag endet mit der lokalen Verifikation. Ein späterer Rollout 
 - **Green:** Die Textgleichheitsprüfung wurde aus der Finalisierungsfreigabe entfernt. Der Request bleibt an die ID der abgeschlossenen Feedback-Submission gebunden. Nur eine neu ausgewählte oder zum Ersetzen vorgemerkte Upload-Datei sperrt die Finalisierung weiterhin, bis auch diese Fassung geprüft wurde.
 - **Gezielte Regressionen:** 93 Komponenten- und Routenprüfungen, der authentifizierte `@feature-acceptance`-Textablauf sowie der `@feature-detail`-Dateiablauf sind erfolgreich.
 - **Abschluss-Gate:** `make verify-feature FEATURE=learner-task-finalization` ist erfolgreich: 2.556 Backendtests bestanden, 78 wurden erwartungsgemäß übersprungen; 643 Frontendtests, drei Build-Warnrichtlinien-Tests, 62 H5P-Tests, Typprüfung, Produktions-Build und der zugeordnete authentifizierte Browserlauf bestanden ebenfalls.
+
+## Review-Follow-up: Entwurf erhalten und Oberfläche vereinfachen
+
+Das Read-only-Review von Commit `1b5f9a70` hat gezeigt, dass der neu erlaubte Ablauf „lokalen Text weiterbearbeiten und anschließend den älteren Entwurf mit Rückmeldung finalisieren“ noch mit der bisherigen Entwurfsbereinigung kollidiert. Der Erfolgsweg löscht den neueren Text; ein noch ausstehender 200-ms-Schreibvorgang kann ihn abhängig von der Antwortzeit anschließend wiederherstellen. Zusätzlich weicht die Dialogvorschau vom echten Dialogtext ab.
+
+### Ergänzende BDD-Szenarien
+
+**Given** ein Entwurf mit abgeschlossener Rückmeldung und eine neuere lokale Überarbeitung sind vorhanden
+**When** die lernende Person die Rückmeldung ein- oder ausklappt oder den älteren Entwurf endgültig abgibt
+**Then** bleibt die lokale Überarbeitung im aktuellen Tab gespeichert und wird über „Erneut bearbeiten“ wiederhergestellt; endgültig gespeichert wird weiterhin ausschließlich die referenzierte Feedback-Submission.
+
+**Given** ein Text wurde gerade verändert und der verzögerte Browser-Schreibvorgang ist noch offen
+**When** unmittelbar eine Rückmeldung oder die endgültige Abgabe ausgelöst, die Aufgabe gewechselt oder die Seite verlassen wird
+**Then** wird zuerst der vollständige aktuelle Text synchron in den auf lernende Person, Kurs und Aufgabe begrenzten Sitzungsspeicher geschrieben.
+
+**Given** eine frühere Datei besitzt Rückmeldung und eine neue Datei wurde ausgewählt
+**When** die endgültige Abgabe angeboten wird
+**Then** bleibt sie bis zur Rückmeldung für die neue Datei sichtbar deaktiviert und erklärt „Für die neue Datei zuerst Rückmeldung einholen.“
+
+### Verbindliche UI-Entscheidung
+
+- Die bestehende Zweispaltenstruktur bleibt unverändert; Rückmeldung und Überarbeitung stehen in der Bearbeitungsspalte untereinander.
+- Der offene Rückmeldungsbereich heißt „Letzte Rückmeldung“, der zugehörige Inhalt „Entwurf mit Rückmeldung“ beziehungsweise „Datei mit Rückmeldung“.
+- Der Texteditor heißt bei vorhandener Rückmeldung „Überarbeitung“; die Aktion lautet zunächst „Rückmeldung einholen“, danach „Neue Rückmeldung einholen“.
+- Die Finalisierung heißt „Diesen Entwurf endgültig abgeben“ beziehungsweise „Diese Datei endgültig abgeben“.
+- „Im Entwurf weiterarbeiten“ und der zusätzliche Erklärblock entfallen, weil der Editor unmittelbar unter der Rückmeldung verfügbar bleibt.
+- Die Dialogvorschau verwendet wie die echte Dialogoberfläche weiterhin „Endgültig abgeben“.
+
+### Technische Grenze
+
+Textentwürfe bleiben im bisherigen `sessionStorage`; serverseitige Entwürfe, Gerätewechsel und eine persistierbare Browser-Dateiauswahl sind nicht Teil dieses Fixes. OpenAPI-Vertrag, Datenbank und RLS bleiben unverändert. Die Umsetzung folgt erneut Red–Green–Refactor und endet mit `make verify-feature FEATURE=learner-task-finalization` gegen den lokalen Stack.
+
+### Umsetzungsnachweis des Follow-ups
+
+- **Red:** Die ergänzten Komponenten- und Routenregressionen schlugen mit dem bisherigen Erklärblock, der bisherigen Entwurfsbereinigung und den alten UI-Texten erwartungsgemäß fehl. Der erste authentifizierte Browserlauf erreichte die neue Finalisierungsaktion im alten lokalen Build nicht.
+- **Green:** 106 gezielte Komponenten- und Routenprüfungen bestehen. Der `@feature-acceptance`-Textablauf bewahrt die neuere Überarbeitung beim Ein-/Ausklappen und nach genau einer serverseitigen Finalisierung und stellt sie über „Erneut bearbeiten“ wieder her. Der `@feature-detail`-Dateiablauf bestätigt die sichtbare Sperre einer neu ausgewählten Datei.
+- **Abschluss-Gate:** `make verify-feature FEATURE=learner-task-finalization` ist erfolgreich: 2.556 Backendtests bestanden, 78 wurden erwartungsgemäß übersprungen; 644 Frontendtests, drei Build-Warnrichtlinien-Tests, 62 H5P-Tests, Typprüfung, Produktions-Build und der zugeordnete authentifizierte Browserlauf bestanden ebenfalls.

@@ -15,7 +15,6 @@
   import { taskInstructionPreview, taskPreviewIsVisuallyClipped } from "$lib/learning-unit/task-preview";
   import {
     finalSubmissionIdempotencyKey,
-    normalizeReviewedSubmissionText,
     reviewedSubmissionBaseline,
     type ReviewedSubmissionBaseline
   } from "$lib/learning-unit/submission-finalization";
@@ -156,7 +155,6 @@
   let selectedUploadFile = $state<File | null>(null);
   let hideExistingUpload = $state(false);
   let uploadInput = $state<HTMLInputElement | null>(null);
-  let editorFocusRequest = $state(0);
   let lastSubmissionFocused = $state(false);
   let lastWorkspaceTaskId = $state<string | null>(null);
   let lastFeedbackPending = $state(false);
@@ -166,7 +164,7 @@
   let taskPreviewVisuallyClipped = $state(false);
   let pendingDraftWrite: { key: string; value: string } | null = null;
   let draftPersistTimer: ReturnType<typeof setTimeout> | null = null;
-  let protectedSessionDraft = $state<{ taskId: string; value: string } | null>(null);
+  let restoredSessionDraft = $state(false);
   let draftEditedSinceRestore = $state(false);
   let reconciledFeedbackSubmissionId = $state<string | null>(null);
 
@@ -338,19 +336,10 @@
     }
     const storedDraft = key ? window.sessionStorage.getItem(key) : null;
     const baseline = currentReviewedBaseline();
-    const storedDraftMatchesBaseline = Boolean(
-      storedDraft !== null &&
-      baseline?.kind === "text" &&
-      normalizeReviewedSubmissionText(storedDraft) === baseline.normalizedText
-    );
-    protectedSessionDraft = storedDraft !== null && !storedDraftMatchesBaseline
-      ? { taskId: task.id, value: storedDraft }
-      : null;
+    restoredSessionDraft = storedDraft !== null;
     draftEditedSinceRestore = false;
     reconciledFeedbackSubmissionId = baseline?.submissionId ?? null;
-    draftText = storedDraftMatchesBaseline
-      ? baseline?.textBody ?? ""
-      : storedDraft ?? (baseline?.kind === "text" ? baseline.textBody ?? "" : "");
+    draftText = storedDraft ?? (baseline?.kind === "text" ? baseline.textBody ?? "" : "");
   }
 
   function setEditorMode(next: SubmissionMode) {
@@ -474,6 +463,20 @@
     return finalSubmissionIdempotencyKey(currentReviewedBaseline()?.submissionId);
   }
 
+  function reviewedContentLabel(): string {
+    return latestSubmission()?.kind === "text" ? "Entwurf mit Rückmeldung" : "Datei mit Rückmeldung";
+  }
+
+  function finalizationLabel(): string {
+    return currentReviewedBaseline()?.kind === "text"
+      ? "Diesen Entwurf endgültig abgeben"
+      : "Diese Datei endgültig abgeben";
+  }
+
+  function editorFieldLabel(): string {
+    return canOfferFinalization() ? "Überarbeitung" : "Deine Lösung";
+  }
+
   function hasUnreviewedUploadReplacement(): boolean {
     return editorMode === "upload" && Boolean(selectedUploadFile || hideExistingUpload);
   }
@@ -483,16 +486,29 @@
   }
 
   function feedbackActionLabel(): string {
-    return canOfferFinalization() ? "Rückmeldung erneut einholen" : "Rückmeldung einholen";
+    return canOfferFinalization() ? "Neue Rückmeldung einholen" : "Rückmeldung einholen";
   }
 
-  function continueEditingFromFeedback() {
-    if (editingLocked()) return;
-    if (!uploadOnly() && editorMode === "text") {
-      editorFocusRequest += 1;
+  function persistCurrentTextDraft() {
+    if (draftPersistTimer !== null) {
+      clearTimeout(draftPersistTimer);
+      draftPersistTimer = null;
+    }
+    pendingDraftWrite = null;
+    if (!browser || uploadOnly() || editorMode !== "text") {
       return;
     }
-    uploadInput?.focus();
+    const key = scopedDraftStorageKey("text");
+    if (!key) {
+      return;
+    }
+    window.localStorage.removeItem(key);
+    window.sessionStorage.setItem(key, draftText);
+  }
+
+  function pauseEditing() {
+    persistCurrentTextDraft();
+    onExitSubmissionWorkspace?.();
   }
 
   function feedbackPendingMessage(): string | null {
@@ -571,10 +587,10 @@
   }
 
   onMount(() => {
-    window.addEventListener("pagehide", persistPendingDraft);
+    window.addEventListener("pagehide", persistCurrentTextDraft);
     return () => {
-      window.removeEventListener("pagehide", persistPendingDraft);
-      persistPendingDraft();
+      window.removeEventListener("pagehide", persistCurrentTextDraft);
+      persistCurrentTextDraft();
     };
   });
 
@@ -629,15 +645,11 @@
       return;
     }
 
-    const storedDraft = protectedSessionDraft?.taskId === task.id ? protectedSessionDraft.value : null;
-    const storedDraftMatchesBaseline = storedDraft !== null &&
-      normalizeReviewedSubmissionText(storedDraft) === baseline.normalizedText;
-    const mayHydrate = !draftEditedSinceRestore && (storedDraft === null || storedDraftMatchesBaseline);
+    const mayHydrate = !restoredSessionDraft && !draftEditedSinceRestore && pendingDraftWrite === null;
 
     // Record the submission before changing draft state so this effect reconciles each reviewed version once.
     reconciledFeedbackSubmissionId = baseline.submissionId;
     if (mayHydrate) {
-      protectedSessionDraft = null;
       draftText = baseline.textBody ?? "";
     }
   });
@@ -794,7 +806,7 @@
                 <button
                   class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
                   type="button"
-                  onclick={() => onExitSubmissionWorkspace?.()}
+                  onclick={pauseEditing}
                 >
                   Pausieren
                 </button>
@@ -811,7 +823,7 @@
                 <div class="learning-response-group">
                   {#if latestSubmissionOrThrow().feedback_md || hasEvaluation(latestSubmissionOrThrow())}
                     <details class="learning-response-panel" bind:open={feedbackDisclosureOpen}>
-                      <summary>Rückmeldung</summary>
+                      <summary>Letzte Rückmeldung</summary>
                       <div class="learning-response-panel__body learning-feedback-response">
                         {#if latestSubmissionOrThrow().feedback_md}
                           <div class="learning-feedback-response__copy markdown-prose">
@@ -844,21 +856,9 @@
                             {/if}
                           </section>
                         {:else if canOfferFinalization()}
-                          <section class="learning-feedback-actions" aria-label="Dein nächster Schritt">
-                            <div class="learning-feedback-actions__intro">
-                              <p class="learning-feedback-actions__eyebrow">Dein nächster Schritt</p>
-                              <p class="learning-feedback-actions__copy">Überarbeite deinen Entwurf mit der Rückmeldung oder schließe diese Aufgabe ab.</p>
-                            </div>
+                          <section class="learning-feedback-actions" aria-label="Endgültige Abgabe">
                             <div class="learning-feedback-actions__choices">
-                              <button
-                                class="workspace-top-action workspace-top-action--accent"
-                                type="button"
-                                disabled={editingLocked()}
-                                onclick={continueEditingFromFeedback}
-                              >
-                                Im Entwurf weiterarbeiten
-                              </button>
-                              <form method="POST" use:enhance={enhanceSubmit}>
+                              <form method="POST" onsubmit={persistCurrentTextDraft} use:enhance={enhanceSubmit}>
                                 <input type="hidden" name="task_id" value={task.id} />
                                 <input type="hidden" name="task_kind" value={task.kind} />
                                 <input type="hidden" name="unit_type" value={unitType} />
@@ -874,15 +874,13 @@
                                   value="submit"
                                   disabled={editingLocked() || hasUnreviewedUploadReplacement()}
                                 >
-                                  Diese geprüfte Fassung endgültig abgeben
+                                  {finalizationLabel()}
                                 </button>
                               </form>
                             </div>
-                            <p class="learning-feedback-actions__hint">
-                              {hasUnreviewedUploadReplacement()
-                                ? "Für die ausgewählte neue Datei zuerst Rückmeldung einholen."
-                                : "Abgegeben wird die oben angezeigte geprüfte Fassung."}
-                            </p>
+                            {#if hasUnreviewedUploadReplacement()}
+                              <p class="learning-feedback-actions__hint">Für die neue Datei zuerst Rückmeldung einholen.</p>
+                            {/if}
                             {#if onReturnToLearningPath}
                               <button
                                 class="learning-feedback-actions__return"
@@ -902,7 +900,7 @@
                   {/if}
 
                   <details class="learning-response-panel" bind:open={submissionDisclosureOpen}>
-                    <summary>Meine Abgabe</summary>
+                    <summary>{reviewedContentLabel()}</summary>
                     <div class="learning-response-panel__body">
                       {#if submittedFile()?.mime.startsWith("image/")}
                         <div class="learning-task-submission-summary__asset">
@@ -991,7 +989,7 @@
 
               {#if !uploadOnly()}
                 <div class="learning-submission-mode-panel" hidden={editorMode !== "text"}>
-                  <form class="learning-submission-editor learning-submission-editor--immersive" method="POST" enctype="multipart/form-data" onsubmit={persistPendingDraft} use:enhance={enhanceSubmit}>
+                  <form class="learning-submission-editor learning-submission-editor--immersive" method="POST" enctype="multipart/form-data" onsubmit={persistCurrentTextDraft} use:enhance={enhanceSubmit}>
                     <input type="hidden" name="task_id" value={task.id} />
                     <input type="hidden" name="task_kind" value={task.kind} />
                     <input type="hidden" name="unit_type" value={unitType} />
@@ -999,13 +997,12 @@
                       <input type="hidden" name="module_id" value={moduleId} />
                     {/if}
                     <section class="learning-submission-editor__field">
-                      <span>Deine Lösung</span>
+                      <span>{editorFieldLabel()}</span>
                       <MarkdownWysiwygEditor
                         name="text_body"
                         value={draftText}
                         placeholder="Schreibe hier deine Lösung."
                         disabled={editingLocked()}
-                        focusRequest={editorFocusRequest}
                         onInput={updateDraft}
                       />
                     </section>

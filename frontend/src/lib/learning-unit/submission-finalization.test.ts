@@ -4,7 +4,6 @@ import {
   beginSubmissionAttempt,
   finalSubmissionIdempotencyKey,
   finalSubmissionFailureMessage,
-  normalizeReviewedSubmissionText,
   reviewedSubmissionBaseline,
   validatedFeedbackSubmissionId,
   validatedFinalSubmissionIdempotencyKey
@@ -52,7 +51,7 @@ describe("submission finalization", () => {
     expect(validatedFeedbackSubmissionId(null)).toBeNull();
   });
 
-  it("creates one normalized baseline only for completed feedback", () => {
+  it("creates one baseline only for completed feedback", () => {
     const baseline = reviewedSubmissionBaseline({
       id: "123e4567-e89b-42d3-a456-426614174000",
       attempt_nr: 1,
@@ -66,10 +65,8 @@ describe("submission finalization", () => {
     expect(baseline).toEqual({
       submissionId: "123e4567-e89b-42d3-a456-426614174000",
       kind: "text",
-      textBody: "  Geprüfter Entwurf  ",
-      normalizedText: "Geprüfter Entwurf"
+      textBody: "  Geprüfter Entwurf  "
     });
-    expect(normalizeReviewedSubmissionText(null)).toBe("");
     expect(reviewedSubmissionBaseline({
       id: "123e4567-e89b-42d3-a456-426614174001",
       attempt_nr: 2,

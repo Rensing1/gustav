@@ -6,7 +6,6 @@ export type ReviewedSubmissionBaseline = {
   submissionId: string;
   kind: LearningSubmission["kind"];
   textBody: string | null;
-  normalizedText: string;
 };
 
 export type SubmissionAttempt =
@@ -46,11 +45,6 @@ export function beginSubmissionAttempt(
 
 const submissionIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** Normalizes reviewed and local text with the equality semantics used by finalization. */
-export function normalizeReviewedSubmissionText(value: string | null | undefined): string {
-  return (value ?? "").trim();
-}
-
 /** Captures the exact completed feedback submission that may be finalized. */
 export function reviewedSubmissionBaseline(
   submission: LearningSubmission | null | undefined
@@ -67,8 +61,7 @@ export function reviewedSubmissionBaseline(
   return {
     submissionId,
     kind: submission.kind,
-    textBody: submission.text_body ?? null,
-    normalizedText: normalizeReviewedSubmissionText(submission.text_body)
+    textBody: submission.text_body ?? null
   };
 }
 

@@ -60,7 +60,7 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     }
 
     const finalButton = learner.page.getByRole("button", {
-      name: "Diese geprüfte Fassung endgültig abgeben"
+      name: "Diesen Entwurf endgültig abgeben"
     });
     await expect(editor).toContainText(reviewedText);
     await expect(finalButton).toBeEnabled();
@@ -69,6 +69,15 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     await editor.fill(localDraft);
     await expect(editor).toContainText(localDraft);
     await expect(finalButton).toBeEnabled();
+
+    const feedbackSummary = learner.page.getByText("Letzte Rückmeldung", { exact: true });
+    const feedbackDisclosure = feedbackSummary.locator("..");
+    await feedbackSummary.click();
+    await expect(feedbackDisclosure).not.toHaveAttribute("open");
+    await expect(editor).toContainText(localDraft);
+    await feedbackSummary.click();
+    await expect(feedbackDisclosure).toHaveAttribute("open");
+    await expect(editor).toContainText(localDraft);
 
     let finalizationRequests = 0;
     await learner.page.route(`**/learning/courses/${seeded.courseId}/units/${seeded.unitId}**`, async (route) => {
@@ -89,7 +98,7 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     const status = learner.page.locator(".learning-task-feedback-status").getByRole("status");
     await expect(status).toContainText("Abgabe wird verarbeitet ...");
     await expect(finalButton).toBeDisabled();
-    await expect(learner.page.getByRole("button", { name: "Rückmeldung erneut einholen" })).toBeDisabled();
+    await expect(learner.page.getByRole("button", { name: "Neue Rückmeldung einholen" })).toBeDisabled();
     await expect(status).toContainText("Aufgabe abgegeben");
     expect(finalizationRequests).toBe(1);
 
@@ -104,7 +113,10 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
     await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
     await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
-    await expect(learner.page.getByRole("button", { name: "Erneut bearbeiten" })).toBeVisible();
+    const editAgainButton = learner.page.getByRole("button", { name: "Erneut bearbeiten" });
+    await expect(editAgainButton).toBeVisible();
+    await editAgainButton.click();
+    await expect(editor).toContainText(localDraft);
   } finally {
     await learner.context.close();
     await teacher.context.close();
@@ -137,7 +149,23 @@ test("@feature-detail finalizes the reviewed uploaded file", async ({ browser })
       `/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}&task=${seeded.taskId}&panel=result`
     );
 
-    const finalButton = learner.page.getByRole("button", { name: "Diese geprüfte Fassung endgültig abgeben" });
+    const finalButton = learner.page.getByRole("button", { name: "Diese Datei endgültig abgeben" });
+    await expect(learner.page.getByText("Datei mit Rückmeldung", { exact: true })).toBeVisible();
+    await expect(learner.page.getByRole("region", { name: "Bisherige Datei" })).toContainText("Aktuelle Datei");
+    await expect(finalButton).toBeEnabled();
+
+    await learner.page.getByLabel("Datei auswählen").setInputFiles({
+      name: "neue-ausarbeitung.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n% Browserprüfung der neuen Dateiauswahl\n", "utf-8")
+    });
+    await expect(learner.page.getByRole("region", { name: "Ausgewählte Datei" })).toContainText(
+      "neue-ausarbeitung.pdf"
+    );
+    await expect(finalButton).toBeDisabled();
+    await expect(learner.page.getByText("Für die neue Datei zuerst Rückmeldung einholen.")).toBeVisible();
+
+    await learner.page.reload();
     await expect(learner.page.getByRole("region", { name: "Bisherige Datei" })).toContainText("Aktuelle Datei");
     await expect(finalButton).toBeEnabled();
     await finalButton.click();

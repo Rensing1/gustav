@@ -480,7 +480,7 @@
                   <div class="dialog-actions dialog-closing__actions">
                     <button class="workspace-top-action workspace-top-action--quiet" type="button">Zurück zum Dialog</button>
                     <button class="workspace-top-action workspace-top-action--quiet" type="button">Pausieren</button>
-                    <button class="workspace-top-action workspace-top-action--accent" type="button">Diese geprüfte Fassung endgültig abgeben</button>
+                    <button class="workspace-top-action workspace-top-action--accent" type="button">Endgültig abgeben</button>
                   </div>
                 </section>
               </div>

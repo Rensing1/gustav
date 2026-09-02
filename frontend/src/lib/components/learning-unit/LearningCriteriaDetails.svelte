@@ -8,9 +8,11 @@
 
   let {
     criteria,
+    label = "Kriterien im Detail",
     open = false
   }: {
     criteria: LearningCriterionResult[];
+    label?: string;
     open?: boolean;
   } = $props();
 
@@ -26,7 +28,7 @@
 <details class="learning-criteria-details" {open}>
   <summary>
     <span class="learning-criteria-details__summary-copy">
-      <span>Kriterien im Detail</span>
+      <span>{label}</span>
       <span class="learning-criteria-details__count">{criteria.length} {criteria.length === 1 ? "Kriterium" : "Kriterien"}</span>
     </span>
   </summary>

@@ -23,7 +23,7 @@
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningSubmission, LearningTask, SubmissionHistoryLoadState } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
 
   let {
     learnerSub = null,
@@ -67,8 +67,6 @@
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
     onExitSubmissionWorkspace = null,
-    nextTaskLabel = null,
-    onOpenNextTask = null,
     onReturnToLearningPath = null,
     onSetDialogCompactSurface = null,
     onPreviewDialogTaskColumnRatio = null,
@@ -124,8 +122,6 @@
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
     onExitSubmissionWorkspace?: (() => void) | null;
-    nextTaskLabel?: string | null;
-    onOpenNextTask?: (() => void) | null;
     onReturnToLearningPath?: (() => void) | null;
     onSetDialogCompactSurface?: ((surface: "task" | "materials") => void) | null;
     onPreviewDialogTaskColumnRatio?: ((value: number) => void) | null;
@@ -155,6 +151,13 @@
   let selectedUploadFile = $state<File | null>(null);
   let hideExistingUpload = $state(false);
   let uploadInput = $state<HTMLInputElement | null>(null);
+  let editorControlsAnchor = $state<HTMLElement | null>(null);
+  let feedbackAnchor = $state<HTMLElement | null>(null);
+  let finalizationForm = $state<HTMLFormElement | null>(null);
+  let finalizationSubmitButton = $state<HTMLButtonElement | null>(null);
+  let finalizationWarningDialog = $state<HTMLDialogElement | null>(null);
+  let finalizationConfirmationPending = $state(false);
+  let editorFocusRequest = $state(0);
   let lastSubmissionFocused = $state(false);
   let lastWorkspaceTaskId = $state<string | null>(null);
   let lastFeedbackPending = $state(false);
@@ -189,8 +192,55 @@
     return fromHistory ?? task.latest_final_submission_at ?? null;
   }
 
+  function formatSubmissionTimestamp(value: string): string {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+    const formatted = new Intl.DateTimeFormat("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "Europe/Berlin"
+    }).format(parsed);
+    return `${formatted} Uhr`;
+  }
+
   function hasFinalSubmission(): boolean {
     return Boolean(latestFinalSubmissionAt());
+  }
+
+  function submissionsAfterLatestFinalization(): LearningSubmission[] {
+    const finalSubmissionIndex = history.findIndex((entry) => entry.intent === "submit");
+    if (finalSubmissionIndex >= 0) {
+      return history.slice(0, finalSubmissionIndex);
+    }
+
+    const finalSubmissionAt = latestFinalSubmissionAt();
+    if (!finalSubmissionAt) {
+      return history;
+    }
+    const finalSubmissionTime = Date.parse(finalSubmissionAt);
+    if (Number.isNaN(finalSubmissionTime)) {
+      return [];
+    }
+    return history.filter((entry) => {
+      const entryTime = Date.parse(entry.created_at);
+      return !Number.isNaN(entryTime) && entryTime > finalSubmissionTime;
+    });
+  }
+
+  function hasFeedbackCycleAfterFinalization(): boolean {
+    if (!hasFinalSubmission()) {
+      return false;
+    }
+    return (
+      (feedbackPending && pendingIntent === "feedback") ||
+      submissionsAfterLatestFinalization().some((entry) => entry.intent === "feedback")
+    );
   }
 
   function latestSubmission(): LearningSubmission | null {
@@ -447,7 +497,14 @@
   }
 
   function currentReviewedBaseline(): ReviewedSubmissionBaseline | null {
-    return reviewedSubmissionBaseline(latestSubmission());
+    const candidates = hasFinalSubmission() ? submissionsAfterLatestFinalization() : history;
+    for (const submission of candidates) {
+      const baseline = reviewedSubmissionBaseline(submission);
+      if (baseline) {
+        return baseline;
+      }
+    }
+    return null;
   }
 
   function hasInlineResponse(): boolean {
@@ -464,29 +521,30 @@
   }
 
   function reviewedContentLabel(): string {
-    return latestSubmission()?.kind === "text" ? "Entwurf mit Rückmeldung" : "Datei mit Rückmeldung";
-  }
-
-  function finalizationLabel(): string {
-    return currentReviewedBaseline()?.kind === "text"
-      ? "Diesen Entwurf endgültig abgeben"
-      : "Diese Datei endgültig abgeben";
+    return latestSubmission()?.kind === "text" ? "Entwurf" : "Datei";
   }
 
   function editorFieldLabel(): string {
-    return canOfferFinalization() ? "Überarbeitung" : "Deine Lösung";
+    return hasSubmission() ? "Überarbeitung" : "Deine Lösung";
   }
 
   function hasUnreviewedUploadReplacement(): boolean {
     return editorMode === "upload" && Boolean(selectedUploadFile || hideExistingUpload);
   }
 
+  function hasUnreviewedTextChanges(): boolean {
+    const baseline = currentReviewedBaseline();
+    return editorMode === "text" && baseline?.kind === "text" && draftText !== (baseline.textBody ?? "");
+  }
+
   function editingLocked(): boolean {
-    return feedbackPending || (reviewPanelOpen && hasFinalSubmission());
+    return feedbackPending || (reviewPanelOpen && hasFinalSubmission() && !hasFeedbackCycleAfterFinalization());
   }
 
   function feedbackActionLabel(): string {
-    return canOfferFinalization() ? "Neue Rückmeldung einholen" : "Rückmeldung einholen";
+    return canOfferFinalization() || hasFinalSubmission()
+      ? "Neue Rückmeldung einholen"
+      : "Rückmeldung einholen";
   }
 
   function persistCurrentTextDraft() {
@@ -509,6 +567,86 @@
   function pauseEditing() {
     persistCurrentTextDraft();
     onExitSubmissionWorkspace?.();
+  }
+
+  function scrollBehavior(): ScrollBehavior {
+    return browser && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  }
+
+  function scrollToFeedback() {
+    feedbackAnchor?.scrollIntoView?.({ behavior: scrollBehavior(), block: "start" });
+  }
+
+  function scrollToEditor() {
+    if (editorMode === "text") {
+      editorFocusRequest += 1;
+    } else {
+      uploadInput?.focus({ preventScroll: true });
+    }
+    // Focus first, then restore the complete control group below the sticky page navigation.
+    void tick().then(() => {
+      if (!editorControlsAnchor) {
+        return;
+      }
+      const scrollContainer = editorControlsAnchor.closest<HTMLElement>(".learner-task-workbench__main");
+      if (scrollContainer) {
+        const containerTop = scrollContainer.getBoundingClientRect().top;
+        const anchorTop = editorControlsAnchor.getBoundingClientRect().top;
+        const stickyStatus = scrollContainer.querySelector<HTMLElement>(".learning-task-feedback-status--active");
+        const visibleTop = stickyStatus?.getBoundingClientRect().bottom ?? containerTop;
+        scrollContainer.scrollTo({
+          top: Math.max(0, scrollContainer.scrollTop + anchorTop - visibleTop - 8),
+          // Nested smooth scrolling can race the editor focus and leave controls behind the sticky status.
+          behavior: "auto"
+        });
+        return;
+      }
+      editorControlsAnchor.scrollIntoView?.({ behavior: scrollBehavior(), block: "start" });
+    });
+  }
+
+  function openFinalizationWarning(event: MouseEvent) {
+    if (!hasUnreviewedTextChanges()) {
+      return;
+    }
+    event.preventDefault();
+    persistCurrentTextDraft();
+    if (!finalizationWarningDialog?.open) {
+      if (typeof finalizationWarningDialog?.showModal === "function") {
+        finalizationWarningDialog.showModal();
+      } else {
+        finalizationWarningDialog?.setAttribute("open", "");
+      }
+    }
+  }
+
+  function closeFinalizationWarning() {
+    if (typeof finalizationWarningDialog?.close === "function") {
+      finalizationWarningDialog.close();
+    } else {
+      finalizationWarningDialog?.removeAttribute("open");
+    }
+  }
+
+  function continueEditingFromWarning() {
+    closeFinalizationWarning();
+    scrollToEditor();
+  }
+
+  function confirmReviewedFinalization() {
+    if (finalizationConfirmationPending) {
+      return;
+    }
+    finalizationConfirmationPending = true;
+    closeFinalizationWarning();
+    persistCurrentTextDraft();
+    if (finalizationForm && finalizationSubmitButton) {
+      finalizationForm.requestSubmit(finalizationSubmitButton);
+    }
+  }
+
+  function completionReturnLabel(): string {
+    return unitType === "modular" && moduleId ? "Zurück zum Modul" : "Zurück zum Lernpfad";
   }
 
   function feedbackPendingMessage(): string | null {
@@ -547,10 +685,10 @@
 
   function statusHeadline(): string {
     if (hasFinalSubmission()) {
-      return `Final abgegeben am ${latestFinalSubmissionAt()}`;
+      return `Final abgegeben am ${formatSubmissionTimestamp(latestFinalSubmissionAt() ?? "")}`;
     }
     if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "completed") {
-      return "Entwurf mit Rückmeldung vorhanden";
+      return "Entwurf vorhanden";
     }
     if (latestSubmissionIntent() === "feedback" && latestSubmissionStatus() === "failed") {
       return "Entwurf vorhanden, Rückmeldung fehlgeschlagen";
@@ -564,7 +702,7 @@
   function statusDetail(): string | null {
     if (hasFinalSubmission() && latestSubmissionIntent() === "feedback") {
       if (latestSubmissionStatus() === "completed") {
-        return "Ein neuer Entwurf mit Rückmeldung liegt bereits vor.";
+        return "Ein neuer Entwurf liegt bereits vor.";
       }
       if (latestSubmissionStatus() === "pending" || latestSubmissionStatus() === "extracted") {
         return "Ein neuer Entwurf wird gerade ausgewertet.";
@@ -588,6 +726,9 @@
 
   onMount(() => {
     window.addEventListener("pagehide", persistCurrentTextDraft);
+    if (reviewPanelOpen) {
+      void tick().then(scrollToFeedback);
+    }
     return () => {
       window.removeEventListener("pagehide", persistCurrentTextDraft);
       persistCurrentTextDraft();
@@ -615,6 +756,12 @@
   }
 
   $effect(() => {
+    if (!feedbackPending && pendingIntent !== "submit") {
+      finalizationConfirmationPending = false;
+    }
+  });
+
+  $effect(() => {
     const workspaceActive = submissionFocused || reviewPanelOpen;
     const workspaceTaskChanged = workspaceActive && lastWorkspaceTaskId !== null && lastWorkspaceTaskId !== task.id;
     if (workspaceActive && (!lastSubmissionFocused || workspaceTaskChanged)) {
@@ -628,6 +775,7 @@
       if (uploadInput) {
         uploadInput.value = "";
       }
+      void tick().then(scrollToFeedback);
     }
     lastSubmissionFocused = workspaceActive;
     lastWorkspaceTaskId = workspaceActive ? task.id : null;
@@ -663,6 +811,7 @@
       if (uploadInput) {
         uploadInput.value = "";
       }
+      void tick().then(scrollToFeedback);
     }
     lastFeedbackPending = feedbackPending;
   });
@@ -814,128 +963,6 @@
               </header>
             {/if}
 
-            {#if hasInlineResponse()}
-              <section class="learning-task-inline-response" aria-label="Rückmeldung zu deiner Abgabe">
-                <p class="learning-task-inline-response__meta">
-                  Zu deiner Abgabe · {latestSubmissionOrThrow().created_at}
-                </p>
-
-                <div class="learning-response-group">
-                  {#if latestSubmissionOrThrow().feedback_md || hasEvaluation(latestSubmissionOrThrow())}
-                    <details class="learning-response-panel" bind:open={feedbackDisclosureOpen}>
-                      <summary>Letzte Rückmeldung</summary>
-                      <div class="learning-response-panel__body learning-feedback-response">
-                        {#if latestSubmissionOrThrow().feedback_md}
-                          <div class="learning-feedback-response__copy markdown-prose">
-                            {@html renderMarkdown(latestSubmissionOrThrow().feedback_md ?? "")}
-                          </div>
-                        {/if}
-                        {#if hasFinalSubmission()}
-                          <section class="learning-feedback-actions" aria-label="Aufgabe abgeschlossen">
-                            <div class="learning-feedback-actions__intro">
-                              <p class="learning-feedback-actions__eyebrow">Aufgabe abgeschlossen</p>
-                              <p class="learning-feedback-actions__copy">Deine endgültige Abgabe ist gespeichert. Du kannst deinen Lernweg jetzt fortsetzen.</p>
-                            </div>
-                            {#if nextTaskLabel && onOpenNextTask}
-                              <button
-                                class="workspace-top-action workspace-top-action--accent"
-                                type="button"
-                                onclick={() => onOpenNextTask?.()}
-                              >
-                                Weiter zu {nextTaskLabel}
-                              </button>
-                            {/if}
-                            {#if onReturnToLearningPath}
-                              <button
-                                class="learning-feedback-actions__return"
-                                type="button"
-                                onclick={() => onReturnToLearningPath?.()}
-                              >
-                                Zurück zum Lernpfad
-                              </button>
-                            {/if}
-                          </section>
-                        {:else if canOfferFinalization()}
-                          <section class="learning-feedback-actions" aria-label="Endgültige Abgabe">
-                            <div class="learning-feedback-actions__choices">
-                              <form method="POST" onsubmit={persistCurrentTextDraft} use:enhance={enhanceSubmit}>
-                                <input type="hidden" name="task_id" value={task.id} />
-                                <input type="hidden" name="task_kind" value={task.kind} />
-                                <input type="hidden" name="unit_type" value={unitType} />
-                                {#if moduleId}
-                                  <input type="hidden" name="module_id" value={moduleId} />
-                                {/if}
-                                <input type="hidden" name="feedback_submission_id" value={currentReviewedBaseline()?.submissionId ?? ""} />
-                                <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
-                                <button
-                                  class="workspace-top-action workspace-top-action--quiet"
-                                  name="submission_intent"
-                                  type="submit"
-                                  value="submit"
-                                  disabled={editingLocked() || hasUnreviewedUploadReplacement()}
-                                >
-                                  {finalizationLabel()}
-                                </button>
-                              </form>
-                            </div>
-                            {#if hasUnreviewedUploadReplacement()}
-                              <p class="learning-feedback-actions__hint">Für die neue Datei zuerst Rückmeldung einholen.</p>
-                            {/if}
-                            {#if onReturnToLearningPath}
-                              <button
-                                class="learning-feedback-actions__return"
-                                type="button"
-                                onclick={() => onReturnToLearningPath?.()}
-                              >
-                                Zurück zum Lernpfad
-                              </button>
-                            {/if}
-                          </section>
-                        {/if}
-                        {#if hasEvaluation(latestSubmissionOrThrow())}
-                          <LearningCriteriaDetails criteria={latestSubmissionOrThrow().analysis_json?.criteria_results ?? []} />
-                        {/if}
-                      </div>
-                    </details>
-                  {/if}
-
-                  <details class="learning-response-panel" bind:open={submissionDisclosureOpen}>
-                    <summary>{reviewedContentLabel()}</summary>
-                    <div class="learning-response-panel__body">
-                      {#if submittedFile()?.mime.startsWith("image/")}
-                        <div class="learning-task-submission-summary__asset">
-                          <img alt="Abgabevorschau" class="learning-task-submission-summary__image" src={submittedFile()?.url} />
-                          <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
-                          <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
-                        </div>
-                      {:else if submittedFile()?.mime === "application/pdf"}
-                        <div class="learning-task-submission-summary__asset">
-                          <iframe
-                            class="learning-task-submission-summary__frame"
-                            src={submittedFile()?.url}
-                            title={`Abgabe ${latestSubmissionOrThrow().created_at}`}
-                          ></iframe>
-                          <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
-                          <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
-                        </div>
-                      {:else if submittedArtifact()}
-                        <LearningSubmissionArtifactView submission={latestSubmissionOrThrow()} />
-                      {:else if submittedFile()}
-                        <div class="learning-task-submission-summary__asset">
-                          <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
-                          <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
-                        </div>
-                      {:else if latestSubmissionOrThrow().text_body}
-                        <div class="markdown-prose">
-                          {@html renderMarkdown(latestSubmissionOrThrow().text_body ?? "")}
-                        </div>
-                      {/if}
-                    </div>
-                  </details>
-                </div>
-              </section>
-            {/if}
-
             {#if task.kind === "dialog"}
               <LearningDialogWorkspace
                 {learnerSub}
@@ -974,6 +1001,7 @@
                 <p class="workspace-note">Diese H5P-Aufgabe ist noch nicht bereit.</p>
               {/if}
             {:else}
+              <div bind:this={editorControlsAnchor} class="learning-submission-controls-anchor" aria-hidden="true"></div>
               {#if !uploadOnly()}
                 <ChoiceSwitch
                   legend="Antwortform"
@@ -1003,6 +1031,7 @@
                         value={draftText}
                         placeholder="Schreibe hier deine Lösung."
                         disabled={editingLocked()}
+                        focusRequest={editorFocusRequest}
                         onInput={updateDraft}
                       />
                     </section>
@@ -1089,6 +1118,152 @@
                   </div>
                 </form>
               </div>
+            {/if}
+
+            {#if hasInlineResponse()}
+              <section bind:this={feedbackAnchor} class="learning-task-inline-response" aria-label="Rückmeldung zu deiner Abgabe">
+                <p class="learning-task-inline-response__meta">
+                  Zu deiner Abgabe · {formatSubmissionTimestamp(latestSubmissionOrThrow().created_at)}
+                </p>
+
+                <div class="learning-response-group">
+                  {#if latestSubmissionOrThrow().feedback_md}
+                    <details class="learning-response-panel" bind:open={feedbackDisclosureOpen}>
+                      <summary>Rückmeldung</summary>
+                      <div class="learning-response-panel__body learning-feedback-response">
+                        <div class="learning-feedback-response__copy markdown-prose">
+                          {@html renderMarkdown(latestSubmissionOrThrow().feedback_md ?? "")}
+                        </div>
+                      </div>
+                    </details>
+                  {/if}
+
+                  {#if hasEvaluation(latestSubmissionOrThrow())}
+                    <LearningCriteriaDetails
+                      label="Auswertung"
+                      criteria={latestSubmissionOrThrow().analysis_json?.criteria_results ?? []}
+                    />
+                  {/if}
+
+                  <details class="learning-response-panel" bind:open={submissionDisclosureOpen}>
+                    <summary>{reviewedContentLabel()}</summary>
+                    <div class="learning-response-panel__body">
+                      {#if submittedFile()?.mime.startsWith("image/")}
+                        <div class="learning-task-submission-summary__asset">
+                          <img alt="Abgabevorschau" class="learning-task-submission-summary__image" src={submittedFile()?.url} />
+                          <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
+                          <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
+                        </div>
+                      {:else if submittedFile()?.mime === "application/pdf"}
+                        <div class="learning-task-submission-summary__asset">
+                          <iframe
+                            class="learning-task-submission-summary__frame"
+                            src={submittedFile()?.url}
+                            title={`Abgabe ${latestSubmissionOrThrow().created_at}`}
+                          ></iframe>
+                          <p class="learning-task-submission-summary__asset-meta">{fileSummary(latestSubmissionOrThrow())}</p>
+                          <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
+                        </div>
+                      {:else if submittedArtifact()}
+                        <LearningSubmissionArtifactView submission={latestSubmissionOrThrow()} />
+                      {:else if submittedFile()}
+                        <div class="learning-task-submission-summary__asset">
+                          <p class="learning-task-submission-summary__plain">{fileSummary(latestSubmissionOrThrow())}</p>
+                          <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
+                        </div>
+                      {:else if latestSubmissionOrThrow().text_body}
+                        <div class="markdown-prose">
+                          {@html renderMarkdown(latestSubmissionOrThrow().text_body ?? "")}
+                        </div>
+                      {/if}
+                    </div>
+                  </details>
+                </div>
+
+                {#if hasFinalSubmission() && !hasFeedbackCycleAfterFinalization()}
+                  <section class="learning-feedback-actions" aria-label="Aufgabe abgeschlossen">
+                    <p class="learning-feedback-actions__eyebrow">Aufgabe abgegeben.</p>
+                    {#if onReturnToLearningPath}
+                      <button
+                        class="workspace-top-action workspace-top-action--quiet"
+                        type="button"
+                        onclick={() => onReturnToLearningPath?.()}
+                      >
+                        {completionReturnLabel()}
+                      </button>
+                    {/if}
+                  </section>
+                {:else if canOfferFinalization() || hasFeedbackCycleAfterFinalization()}
+                  <section class="learning-feedback-actions" aria-label="Endgültige Abgabe">
+                    <div class="learning-feedback-actions__choices">
+                      <button
+                        class="workspace-top-action workspace-top-action--accent"
+                        type="button"
+                        disabled={editingLocked()}
+                        onclick={scrollToEditor}
+                      >
+                        Überarbeiten
+                      </button>
+                      <form bind:this={finalizationForm} method="POST" onsubmit={persistCurrentTextDraft} use:enhance={enhanceSubmit}>
+                        <input type="hidden" name="task_id" value={task.id} />
+                        <input type="hidden" name="task_kind" value={task.kind} />
+                        <input type="hidden" name="unit_type" value={unitType} />
+                        {#if moduleId}
+                          <input type="hidden" name="module_id" value={moduleId} />
+                        {/if}
+                        <input type="hidden" name="feedback_submission_id" value={currentReviewedBaseline()?.submissionId ?? ""} />
+                        <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
+                        <button
+                          bind:this={finalizationSubmitButton}
+                          class="workspace-top-action workspace-top-action--quiet"
+                          name="submission_intent"
+                          type="submit"
+                          value="submit"
+                          disabled={!canOfferFinalization() || editingLocked() || hasUnreviewedUploadReplacement()}
+                          onclick={openFinalizationWarning}
+                        >
+                          Endgültig abgeben
+                        </button>
+                      </form>
+                    </div>
+                    {#if hasUnreviewedUploadReplacement()}
+                      <p class="learning-feedback-actions__hint">Für die neue Datei zuerst Rückmeldung einholen.</p>
+                    {/if}
+                  </section>
+                {/if}
+              </section>
+
+              <dialog
+                bind:this={finalizationWarningDialog}
+                class="learning-finalization-warning"
+                aria-labelledby={`learning-finalization-warning-title-${task.id}`}
+              >
+                <div class="learning-finalization-warning__content">
+                  <p class="learning-finalization-warning__eyebrow">Endgültige Abgabe</p>
+                  <h2 id={`learning-finalization-warning-title-${task.id}`}>Überarbeitung noch nicht geprüft</h2>
+                  <p>
+                    Du hast den Entwurf seit der letzten Rückmeldung verändert. Endgültig abgegeben wird der Entwurf,
+                    zu dem du die Rückmeldung erhalten hast – nicht deine aktuelle Überarbeitung.
+                  </p>
+                  <div class="learning-finalization-warning__actions">
+                    <button
+                      class="workspace-top-action workspace-top-action--accent"
+                      type="button"
+                      onclick={continueEditingFromWarning}
+                    >
+                      Weiter überarbeiten
+                    </button>
+                    <button
+                      class="workspace-top-action workspace-top-action--quiet"
+                      type="button"
+                      disabled={finalizationConfirmationPending}
+                      onclick={confirmReviewedFinalization}
+                    >
+                      Trotzdem abgeben
+                    </button>
+                  </div>
+                </div>
+              </dialog>
             {/if}
 
             {#if errorMessage}

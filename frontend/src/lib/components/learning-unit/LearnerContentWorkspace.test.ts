@@ -240,7 +240,7 @@ describe("LearnerContentWorkspace", () => {
     expect(within(context).queryByRole("button", { name: "Pausieren" })).not.toBeInTheDocument();
   });
 
-  it("continues with the next non-final task in the same module", async () => {
+  it("returns to the module after completion even when another task is open", async () => {
     const onBeginTask = vi.fn();
     const taskTwo = {
       key: "task:task-2",
@@ -309,9 +309,11 @@ describe("LearnerContentWorkspace", () => {
     };
 
     render(LearnerContentWorkspace, { props });
-    await fireEvent.click(screen.getByRole("button", { name: "Weiter zu Aufgabe 3" }));
+    expect(screen.queryByRole("button", { name: "Weiter zu Aufgabe 3" })).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "Zurück zum Modul" }));
 
-    expect(onBeginTask).toHaveBeenCalledWith("task:task-3", "text");
+    expect(props.onPauseTask).toHaveBeenCalledOnce();
+    expect(onBeginTask).not.toHaveBeenCalled();
   });
 
   it("connects the adjustable column separator to normal task layout state", async () => {

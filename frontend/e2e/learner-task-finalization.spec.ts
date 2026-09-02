@@ -59,25 +59,69 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
       await releaseProviderWorker();
     }
 
-    const finalButton = learner.page.getByRole("button", {
-      name: "Diesen Entwurf endgültig abgeben"
-    });
+    const finalButton = learner.page.getByRole("button", { name: "Endgültig abgeben" });
+    const responseGroup = learner.page.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
     await expect(editor).toContainText(reviewedText);
+    await expect(responseGroup.getByText("Rückmeldung", { exact: true })).toBeVisible();
+    await expect(responseGroup.getByText("Rückmeldung", { exact: true })).toBeInViewport();
+    await expect(responseGroup.getByText("Auswertung", { exact: true })).toBeVisible();
+    await expect(responseGroup.getByText("Entwurf", { exact: true })).toBeVisible();
     await expect(finalButton).toBeEnabled();
+
+    const editorBox = await editor.boundingBox();
+    const responseBox = await responseGroup.boundingBox();
+    expect(editorBox).not.toBeNull();
+    expect(responseBox).not.toBeNull();
+    expect(editorBox!.y).toBeLessThan(responseBox!.y);
+
+    const reviseButton = responseGroup.getByRole("button", { name: "Überarbeiten" });
+    await reviseButton.click();
+    await expect(editor).toBeFocused();
+    const answerFormat = learner.page.getByRole("group", { name: "Antwortform" });
+    await expect(answerFormat).toBeInViewport();
+    await expect(editor).toBeInViewport();
+    const readyStatusBox = await learner.page
+      .locator(".learning-task-feedback-status--active")
+      .boundingBox();
+    const answerFormatBox = await answerFormat.boundingBox();
+    expect(readyStatusBox).not.toBeNull();
+    expect(answerFormatBox).not.toBeNull();
+    expect(answerFormatBox!.y).toBeGreaterThanOrEqual(readyStatusBox!.y + readyStatusBox!.height);
 
     const localDraft = "Diese lokale Weiterarbeit besitzt noch keine neue Rückmeldung.";
     await editor.fill(localDraft);
     await expect(editor).toContainText(localDraft);
     await expect(finalButton).toBeEnabled();
 
-    const feedbackSummary = learner.page.getByText("Letzte Rückmeldung", { exact: true });
+    await holdProviderWorker();
+    try {
+      await learner.page.getByRole("button", { name: "Neue Rückmeldung einholen" }).click();
+      await expect(finalButton).toBeVisible();
+      await expect(finalButton).toBeDisabled();
+      await completeQueuedFeedbackDeterministically({
+        courseId: seeded.courseId,
+        taskId: seeded.taskId,
+        learnerSub
+      });
+    } finally {
+      await releaseProviderWorker();
+    }
+
+    await expect(finalButton).toBeEnabled();
+    await expect(editor).toContainText(localDraft);
+
+    const newerLocalDraft = "Diese noch neuere Überarbeitung besitzt keine Rückmeldung.";
+    await editor.fill(newerLocalDraft);
+    await expect(editor).toContainText(newerLocalDraft);
+
+    const feedbackSummary = learner.page.getByText("Rückmeldung", { exact: true });
     const feedbackDisclosure = feedbackSummary.locator("..");
     await feedbackSummary.click();
     await expect(feedbackDisclosure).not.toHaveAttribute("open");
-    await expect(editor).toContainText(localDraft);
+    await expect(editor).toContainText(newerLocalDraft);
     await feedbackSummary.click();
     await expect(feedbackDisclosure).toHaveAttribute("open");
-    await expect(editor).toContainText(localDraft);
+    await expect(editor).toContainText(newerLocalDraft);
 
     let finalizationRequests = 0;
     await learner.page.route(`**/learning/courses/${seeded.courseId}/units/${seeded.unitId}**`, async (route) => {
@@ -85,12 +129,29 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
         await route.continue();
         return;
       }
-      finalizationRequests += 1;
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      const form = new URLSearchParams(route.request().postData() ?? "");
+      if (form.get("submission_intent") === "submit") {
+        finalizationRequests += 1;
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
       await route.continue();
     });
 
-    await finalButton.evaluate((button: HTMLButtonElement) => {
+    await finalButton.click();
+    const warning = learner.page.getByRole("dialog", { name: "Überarbeitung noch nicht geprüft" });
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText(
+      "Endgültig abgegeben wird der Entwurf, zu dem du die Rückmeldung erhalten hast – nicht deine aktuelle Überarbeitung."
+    );
+    expect(finalizationRequests).toBe(0);
+
+    await warning.getByRole("button", { name: "Weiter überarbeiten" }).click();
+    await expect(warning).toBeHidden();
+    await expect(editor).toBeFocused();
+    await expect(editor).toContainText(newerLocalDraft);
+    await finalButton.click();
+    const confirmFinalization = warning.getByRole("button", { name: "Trotzdem abgeben" });
+    await confirmFinalization.evaluate((button: HTMLButtonElement) => {
       button.click();
       button.click();
     });
@@ -102,21 +163,42 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     await expect(status).toContainText("Aufgabe abgegeben");
     expect(finalizationRequests).toBe(1);
 
+    const completion = learner.page.getByRole("region", { name: "Aufgabe abgeschlossen" });
+    await expect(completion.getByText("Aufgabe abgegeben.", { exact: true })).toBeVisible();
+    await expect(completion.getByRole("button", { name: "Zurück zum Modul" })).toBeVisible();
+    await expect(completion.getByRole("button")).toHaveCount(1);
+
     const historyResponse = await learner.page.request.get(
       `${webBase}/api/learning/courses/${seeded.courseId}/tasks/${seeded.taskId}/submissions?limit=10&offset=0`
     );
     expect(historyResponse.ok(), await historyResponse.text()).toBe(true);
     const history = await historyResponse.json() as Array<{ intent: string; text_body?: string | null }>;
     expect(history.filter((submission) => submission.intent === "submit")).toHaveLength(1);
-    expect(history.find((submission) => submission.intent === "submit")?.text_body).toBe(reviewedText);
+    expect(history.find((submission) => submission.intent === "submit")?.text_body).toBe(localDraft);
 
-    await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
-    await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
-    await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
+    await completion.getByRole("button", { name: "Zurück zum Modul" }).click();
     const editAgainButton = learner.page.getByRole("button", { name: "Erneut bearbeiten" });
     await expect(editAgainButton).toBeVisible();
     await editAgainButton.click();
-    await expect(editor).toContainText(localDraft);
+    await expect(editor).toContainText(newerLocalDraft);
+
+    await holdProviderWorker();
+    try {
+      await learner.page.getByRole("button", { name: "Neue Rückmeldung einholen" }).click();
+      await expect(finalButton).toBeVisible();
+      await expect(finalButton).toBeDisabled();
+      await completeQueuedFeedbackDeterministically({
+        courseId: seeded.courseId,
+        taskId: seeded.taskId,
+        learnerSub
+      });
+    } finally {
+      await releaseProviderWorker();
+    }
+
+    await expect(finalButton).toBeEnabled();
+    await expect(editor).toContainText(newerLocalDraft);
+    await expect(learner.page.getByRole("region", { name: "Aufgabe abgeschlossen" })).toHaveCount(0);
   } finally {
     await learner.context.close();
     await teacher.context.close();
@@ -149,8 +231,8 @@ test("@feature-detail finalizes the reviewed uploaded file", async ({ browser })
       `/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}&task=${seeded.taskId}&panel=result`
     );
 
-    const finalButton = learner.page.getByRole("button", { name: "Diese Datei endgültig abgeben" });
-    await expect(learner.page.getByText("Datei mit Rückmeldung", { exact: true })).toBeVisible();
+    const finalButton = learner.page.getByRole("button", { name: "Endgültig abgeben" });
+    await expect(learner.page.getByText("Datei", { exact: true })).toBeVisible();
     await expect(learner.page.getByRole("region", { name: "Bisherige Datei" })).toContainText("Aktuelle Datei");
     await expect(finalButton).toBeEnabled();
 

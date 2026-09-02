@@ -3,6 +3,9 @@
 ## 2026-09-02
 
 ### Fixes
+- fix(learning): Nach einer bereits endgültigen Abgabe bleibt ein neuer Rückmeldungszyklus erkennbar: Während der Verarbeitung ist „Endgültig abgeben“ sichtbar gesperrt, danach wird genau der neue geprüfte Entwurf erneut finalisierbar.
+- fix(learning): Eine noch nicht rückgemeldete Textüberarbeitung löst vor der endgültigen Abgabe einen verständlichen Bestätigungsdialog aus; die geprüfte Fassung bleibt dabei eindeutig, und die Rückmeldungsbereiche erscheinen ohne gemeinsamen Rahmen oder innere Trennlinien.
+- fix(learning): Bei rückgemeldeten Aufgaben steht die Überarbeitung jetzt vor den kompakten Bereichen „Rückmeldung“, „Auswertung“ und „Entwurf“. „Überarbeiten“ führt mit Fokus zum Editor, „Endgültig abgeben“ bleibt die einzige Abschlussaktion und erst danach erscheint genau ein Rückweg zum Modul oder Lernpfad.
 - fix(learning): Ein Entwurf mit Rückmeldung lässt sich unabhängig von einer neueren lokalen Überarbeitung zuverlässig endgültig abgeben; die Überarbeitung bleibt dabei im aktuellen Tab erhalten und wird über „Erneut bearbeiten“ wiederhergestellt. Eine neu ausgewählte Datei bleibt bis zu ihrer eigenen Rückmeldung sichtbar von der Finalisierung ausgeschlossen.
 - fix(cli): Slash-haltige, URL-kodierte Schülerkennungen passieren die read-only Capability-Prüfung und erreichen auch den geschützten Dialogtranskript-Endpunkt.
 - fix(diagnostics): Lernendenprofile paginieren die Schnittmenge aus owner-eigenen aktiven Kursen und aktiver Mitgliedschaft in einer gebündelten Repository-Abfrage; leere Folgeseiten sind eindeutige erfolgreiche Seiten statt mehrdeutiger `404`-Antworten.
@@ -13,7 +16,7 @@
 - security(api): Nichtnumerische Diagnostik-Paginierung liefert ein privates `400 invalid_pagination` statt eines frameworkgenerierten `422`.
 
 ### Tests
-- test(learning): Komponenten-, Routen- und authentifizierte Browserregressionen sichern die gebundene Finalisierung nach echter Rückmeldung, sofortige Entwurfsspeicherung, Ein-/Ausklappen, Wiederherstellung, Doppelklickschutz und die Sperre einer neu ausgewählten Datei ab.
+- test(learning): Komponenten-, Routen- und authentifizierte Browserregressionen sichern die Editor-zuerst-Reihenfolge, die kompakte Abschlussnavigation im bestehenden Plattformdesign, Fokusführung, die Warnung bei einer noch nicht geprüften Überarbeitung, erneute Rückmeldung und Finalisierung nach vorheriger Endabgabe, sofortige Entwurfsspeicherung, Ein-/Ausklappen, Wiederherstellung, Doppelklickschutz und die Sperre einer neu ausgewählten Datei ab.
 - test(cli): Echte ASGI-Aufrufe sichern URL-kodierte Slash-Subjects ab; API- und CLI-Regressionen decken eindeutige Folgeseiten, Mehrseitenprofile, Terminalsteuerzeichen, H5P-Punkte und fehlende Teilausgaben ab.
 
 ## 2026-09-01

@@ -7,6 +7,7 @@ describe("LearningCriteriaDetails", () => {
   it("renders a nested criterion list with lightly marked qualitative levels", async () => {
     render(LearningCriteriaDetails, {
       props: {
+        label: "Auswertung",
         criteria: [
           { criterion: "Argumentkern", score: 2, max_score: 10, explanation_md: "Noch nicht belegt." },
           { criterion: "Begründung", score: 3, max_score: 10 },
@@ -17,7 +18,7 @@ describe("LearningCriteriaDetails", () => {
       }
     });
 
-    const disclosureSummary = screen.getByText("Kriterien im Detail").closest("summary");
+    const disclosureSummary = screen.getByText("Auswertung").closest("summary");
     expect(disclosureSummary).not.toBeNull();
     await fireEvent.click(disclosureSummary!);
 

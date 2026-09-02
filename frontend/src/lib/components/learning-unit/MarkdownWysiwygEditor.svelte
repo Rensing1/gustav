@@ -171,9 +171,9 @@
     }
     handledFocusRequest = requested;
     if (editor) {
-      editor.focus();
+      host?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus({ preventScroll: true });
     } else {
-      fallbackTextarea?.focus();
+      fallbackTextarea?.focus({ preventScroll: true });
     }
   });
 </script>

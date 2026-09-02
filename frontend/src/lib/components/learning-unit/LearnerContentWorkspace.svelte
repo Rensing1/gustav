@@ -235,32 +235,6 @@
     return historyStateByTask[taskId] ?? "not_loaded";
   }
 
-  function taskIsFinal(task: LearningTask): boolean {
-    return Boolean(
-      task.latest_final_submission_at ||
-      taskHistory(task.id).some((submission) => submission.intent === "submit")
-    );
-  }
-
-  function nextOpenTaskItem(): LearningContentItem | null {
-    const activeItem = activeTaskItem();
-    const activeGroup = groupForItem(activeItem);
-    if (!activeItem || !activeGroup) return null;
-
-    const activeIndex = activeGroup.items.findIndex((item) => item.key === activeItem.key);
-    if (activeIndex < 0) return null;
-
-    return activeGroup.items
-      .slice(activeIndex + 1)
-      .find((item) => item.kind === "task" && item.task && !taskIsFinal(item.task)) ?? null;
-  }
-
-  function openNextTask() {
-    const nextItem = nextOpenTaskItem();
-    if (!nextItem?.task) return;
-    onBeginTask(nextItem.key, preferredMode(nextItem.task));
-  }
-
   function referenceByKey(referenceKey: string | null): ReaderReference | null {
     if (!referenceKey) return null;
     for (const item of contextModules.flatMap((module) => module.items)) {
@@ -423,7 +397,6 @@
 <div class:learner-surface--inactive={mode !== "working"} aria-hidden={mode !== "working"}>
   {#if activeItem?.task}
     {@const task = activeItem.task}
-    {@const nextTaskItem = nextOpenTaskItem()}
     <div class="learner-task-workbench-container">
       <header class="learner-task-header">
         <button id="learner-task-back" class="learner-task-header__back" type="button" onclick={onPauseTask}>
@@ -570,8 +543,6 @@
           reviewPanelOpen={workStatus === "result"}
           enhanceSubmit={enhanceTaskForm?.(task.id)}
           onExitSubmissionWorkspace={null}
-          nextTaskLabel={nextTaskItem?.title ?? null}
-          onOpenNextTask={nextTaskItem ? openNextTask : null}
           onReturnToLearningPath={onPauseTask}
           hideDialogPauseAction={true}
           onSetDialogCompactSurface={onSetCompactSurface}

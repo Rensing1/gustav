@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-03
+
+### Fixes
+- fix(frontend): Der globale CSS-Einstieg verwendet geordnete Standardimporte ohne Cascade Layers, sodass Safari unter iPadOS 15.3 die reguläre GUSTAV-Oberfläche gestaltet statt nahezu alle globalen Regeln zu verwerfen.
+
+### Tests
+- test(frontend): Ein parserbasiertes Build-Gate, Unit-Tests und ein authentifizierter Chromium-/iPad-WebKit-Rundlauf sichern ab, dass ausgelieferte Stylesheets keine Cascade Layers enthalten und zentrale Layoutregeln wirksam sind.
+
+### Docs
+- docs(design): Das Designsystem dokumentiert die verbindliche Importreihenfolge und die iPadOS-15.3-kompatible CSS-Grenze.
+
 ## 2026-09-02
 
 ### Fixes

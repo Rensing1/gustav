@@ -17,7 +17,7 @@ export default defineConfig({
     },
     {
       name: "webkit-ipad",
-      testMatch: /learner-task-(drafts|responsive)\.spec\.ts/,
+      testMatch: /(?:learner-task-(?:drafts|responsive)|ios-15-3-css-compatibility)\.spec\.ts/,
       use: { ...devices["iPad Pro 11 landscape"] }
     }
   ]

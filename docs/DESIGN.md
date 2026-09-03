@@ -670,7 +670,7 @@ Verbindliche Regeln:
 - Der Sicherheitshinweis steht als schmale Zeile im Eingabebereich, also direkt
   dort, wo Text an die KI übermittelt wird. Er wird im Partner- oder
   Materialkontext nicht dupliziert.
-- Alle produktiven `.dialog-*`-Regeln liegen in der Cascade-Layer `learning` in
+- Alle produktiven `.dialog-*`-Regeln liegen im fachlichen Stylesheet
   `frontend/src/lib/styles/learning-unit.css`. Lokal begrenzte Dialogvariablen
   für Rundungen und Mischflächen werden aus den zentralen Farb- und
   Typografietokens abgeleitet und verändern keine andere Aufgabenart.
@@ -694,7 +694,7 @@ Verbindliche Regeln:
 
 ## 14. Technische Pflege des Designsystems
 
-`frontend/src/lib/styles/index.css` ist der einzige globale CSS-Einstiegspunkt. Er ordnet die Stylesheets mit CSS Cascade Layers in folgender Reihenfolge:
+`frontend/src/lib/styles/index.css` ist der einzige globale CSS-Einstiegspunkt. Er importiert die Stylesheets in folgender Reihenfolge:
 
 1. `reset`
 2. `tokens`
@@ -702,9 +702,12 @@ Verbindliche Regeln:
 4. `typography`
 5. `primitives`
 6. `learning`
-7. `teaching`
-8. `auth`
-9. `overrides`
+7. `practice`
+8. `teaching`
+9. `auth`
+10. `overrides`
+
+Die Importreihenfolge ist die lesbare Ordnungs- und Prioritätsregel für den Quellcode. GUSTAV verwendet hier bewusst keine CSS Cascade Layers: Safari auf iPadOS 15.3 versteht sie noch nicht und würde sonst fast das gesamte globale Stylesheet verwerfen. Ein Build-Gate parst alle erzeugten Client-Stylesheets und bricht ab, falls dort trotzdem eine `@layer`-Regel vorkommt. Dadurch erhalten alte und aktuelle Browser dasselbe einfache CSS ohne browserspezifischen Sonderpfad.
 
 Verbindliche Regeln:
 
@@ -712,6 +715,7 @@ Verbindliche Regeln:
 - Fachliche Stylesheets dürfen globale Tokens verwenden, aber nicht neu definieren.
 - Eindeutig fachlich benannte, komponentenlokale Variablen bleiben erlaubt.
 - Neue globale Stylesheets werden nicht direkt in `+layout.svelte` importiert, sondern einer Schicht in `index.css` zugeordnet.
+- `@layer` wird im globalen CSS nicht verwendet und darf auch nicht im erzeugten Client-CSS vorkommen.
 - Benachbarte Bedienelemente mit derselben Funktionsebene teilen gemeinsame Chrom-Regeln; Theme- und Account-Schalter der Top-Bar sind die Referenz dafür.
 - Die ehemalige warme Papier-/Petrolpalette darf nicht lokal über hart codierte Werte zurückkehren.
 

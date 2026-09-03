@@ -8,7 +8,7 @@
     "build": "svelte-kit sync && bash tooling/build-with-warning-gate.sh",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test": "vitest run && node --test tooling/build-output-policy.test.mjs",
+    "test": "vitest run && node --test tooling/build-output-policy.test.mjs tooling/css-compatibility.test.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

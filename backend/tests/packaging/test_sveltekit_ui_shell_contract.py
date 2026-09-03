@@ -128,7 +128,7 @@ def test_learner_unit_workspace_styles_are_split_from_app_shell() -> None:
     entrypoint_src = entrypoint_path.read_text(encoding="utf-8")
     app_src = app_style_path.read_text(encoding="utf-8")
 
-    assert '@import "./learning-unit.css" layer(learning);' in entrypoint_src
+    assert '@import "./learning-unit.css";' in entrypoint_src
     assert learner_style_path.is_file(), f"Missing learner-unit stylesheet: {learner_style_path}"
     assert ".learning-unit-space" not in app_src
     assert ".learning-task-workspace" not in app_src
@@ -143,7 +143,7 @@ def test_teacher_workspace_styles_are_split_from_app_shell() -> None:
     entrypoint_src = entrypoint_path.read_text(encoding="utf-8")
     app_src = app_style_path.read_text(encoding="utf-8")
 
-    assert '@import "./teaching-workspace.css" layer(teaching);' in entrypoint_src
+    assert '@import "./teaching-workspace.css";' in entrypoint_src
     assert teacher_style_path.is_file(), f"Missing teacher workspace stylesheet: {teacher_style_path}"
     assert ".teacher-flow-unit-node" not in app_src
     assert ".workspace-node-editor" not in app_src
@@ -151,7 +151,7 @@ def test_teacher_workspace_styles_are_split_from_app_shell() -> None:
 
 
 def test_design_system_styles_are_split_into_ordered_responsibility_bundles() -> None:
-    """The layout must load one explicit, layered design-system entrypoint."""
+    """The layout must load one ordered, iPadOS-15.3-compatible entrypoint."""
 
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
     styles_dir = REPO_ROOT / "frontend" / "src" / "lib" / "styles"
@@ -173,19 +173,19 @@ def test_design_system_styles_are_split_into_ordered_responsibility_bundles() ->
     assert entrypoint_path.is_file(), f"Missing design-system entrypoint: {entrypoint_path}"
     entrypoint_src = entrypoint_path.read_text(encoding="utf-8")
     expected_lines = [
-        "@layer reset, tokens, base, typography, primitives, learning, practice, teaching, auth, overrides;",
-        '@import "./theme-tokens.css" layer(tokens);',
-        '@import "./app.css" layer(base);',
-        '@import "./typography.css" layer(typography);',
-        '@import "./ui-primitives.css" layer(primitives);',
-        '@import "./learning-unit.css" layer(learning);',
-        '@import "./practice.css" layer(practice);',
-        '@import "./teaching-workspace.css" layer(teaching);',
-        '@import "./auth-theme.css" layer(auth);',
-        '@import "./overrides.css" layer(overrides);',
+        '@import "./theme-tokens.css";',
+        '@import "./app.css";',
+        '@import "./typography.css";',
+        '@import "./ui-primitives.css";',
+        '@import "./learning-unit.css";',
+        '@import "./practice.css";',
+        '@import "./teaching-workspace.css";',
+        '@import "./auth-theme.css";',
+        '@import "./overrides.css";',
     ]
     positions = [entrypoint_src.index(line) for line in expected_lines]
     assert positions == sorted(positions)
+    assert "@layer" not in entrypoint_src
     assert 'import "$lib/styles/design-system.css";' not in layout_src
 
     token_css = (styles_dir / "theme-tokens.css").read_text(encoding="utf-8")

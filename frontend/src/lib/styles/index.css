@@ -1,18 +1,17 @@
 /*
  * This is the only global stylesheet entrypoint.
  *
- * The declared order makes ownership visible: product tokens are defined once,
+ * The import order makes ownership visible: product tokens are defined once,
  * foundations come before reusable primitives, and bounded-context styles may
- * refine those primitives without depending on Svelte import order.
+ * refine those primitives without depending on Svelte import order. Plain CSS
+ * imports keep the complete stylesheet usable in WebKit on iPadOS 15.3.
  */
-@layer reset, tokens, base, typography, primitives, learning, practice, teaching, auth, overrides;
-
-@import "./theme-tokens.css" layer(tokens);
-@import "./app.css" layer(base);
-@import "./typography.css" layer(typography);
-@import "./ui-primitives.css" layer(primitives);
-@import "./learning-unit.css" layer(learning);
-@import "./practice.css" layer(practice);
-@import "./teaching-workspace.css" layer(teaching);
-@import "./auth-theme.css" layer(auth);
-@import "./overrides.css" layer(overrides);
+@import "./theme-tokens.css";
+@import "./app.css";
+@import "./typography.css";
+@import "./ui-primitives.css";
+@import "./learning-unit.css";
+@import "./practice.css";
+@import "./teaching-workspace.css";
+@import "./auth-theme.css";
+@import "./overrides.css";

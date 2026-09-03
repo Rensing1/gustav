@@ -312,7 +312,7 @@
         navigationVisible={true}
         historyByTask={{ [previewTask.id]: [sampleSubmission] }}
         onBeginTask={() => {}}
-        onPauseTask={() => {}}
+        onReturn={() => {}}
         onCloseModule={() => {}}
         onSetCompactSurface={() => {}}
         onToggleMaterial={() => {}}
@@ -343,7 +343,7 @@
         }))}
         historyByTask={{ [previewTask.id]: [sampleSubmission] }}
         onBeginTask={() => {}}
-        onPauseTask={() => {}}
+        onReturn={() => {}}
         onCloseModule={() => {}}
         onSetCompactSurface={() => {}}
         onToggleMaterial={() => {}}

@@ -1423,7 +1423,7 @@ describe("LearningTaskCard", () => {
   });
 
   it("offers revision and final submission without a premature return action", async () => {
-    const onReturnToLearningPath = vi.fn();
+    const onCompletionReturn = vi.fn();
     render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -1433,7 +1433,8 @@ describe("LearningTaskCard", () => {
         workspaceOnly: true,
         reviewPanelOpen: true,
         initialSubmissionMode: "text",
-        onReturnToLearningPath,
+        completionReturnDestination: "module",
+        onCompletionReturn,
         history: [
           {
             id: "11111111-1111-4111-8111-111111111111",
@@ -1594,7 +1595,7 @@ describe("LearningTaskCard", () => {
   });
 
   it("replaces editing actions with one return to the module after final submission", async () => {
-    const onReturnToLearningPath = vi.fn();
+    const onCompletionReturn = vi.fn();
     render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -1604,7 +1605,8 @@ describe("LearningTaskCard", () => {
         moduleId: "module-1",
         workspaceOnly: true,
         reviewPanelOpen: true,
-        onReturnToLearningPath,
+        completionReturnDestination: "module",
+        onCompletionReturn,
         history: [
           {
             id: "22222222-2222-4222-8222-222222222222",
@@ -1631,7 +1633,7 @@ describe("LearningTaskCard", () => {
     expect(returnButton).not.toHaveClass("workspace-top-action--accent");
 
     await fireEvent.click(returnButton);
-    expect(onReturnToLearningPath).toHaveBeenCalledOnce();
+    expect(onCompletionReturn).toHaveBeenCalledOnce();
   });
 
   it("returns to the learning path when no later task is available", () => {
@@ -1643,7 +1645,8 @@ describe("LearningTaskCard", () => {
         unitType: "linear",
         workspaceOnly: true,
         reviewPanelOpen: true,
-        onReturnToLearningPath: vi.fn(),
+        completionReturnDestination: "contents",
+        onCompletionReturn: vi.fn(),
         history: [
           {
             id: "33333333-3333-4333-8333-333333333333",
@@ -1661,7 +1664,7 @@ describe("LearningTaskCard", () => {
 
     const actions = screen.getByRole("region", { name: "Aufgabe abgeschlossen" });
     expect(within(actions).queryByRole("button", { name: /^Weiter zu / })).toBeNull();
-    expect(within(actions).getByRole("button", { name: "Zurück zum Lernpfad" })).toBeEnabled();
+    expect(within(actions).getByRole("button", { name: "Zurück zu den Inhalten" })).toBeEnabled();
   });
 
   it("shows the upload field above feedback", async () => {

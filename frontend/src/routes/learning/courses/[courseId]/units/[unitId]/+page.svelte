@@ -56,7 +56,13 @@
     serializeLearnerWorkspaceTabState,
     type LearnerWorkspaceState
   } from "$lib/learning-unit/learner-workspace-state";
-  import { learnerNavigationHref } from "$lib/learning-unit/learner-navigation";
+  import {
+    canUseLearnerHistoryParent,
+    learnerHistoryEntryState,
+    learnerNavigationHref,
+    type LearnerNavigationTarget
+  } from "$lib/learning-unit/learner-navigation";
+  import type { LearnerReturnDestination } from "$lib/learning-unit/learner-return-navigation";
   import {
     readTaskColumnRatio,
     removeTaskColumnRatio,
@@ -319,12 +325,39 @@
     document.getElementById("learner-task-back")?.focus({ preventScroll: true });
   }
 
-  async function leaveTaskWorkspace() {
+  async function leaveTaskWorkspace(destination: LearnerReturnDestination) {
+    await returnToLearnerDestination(destination);
+  }
+
+  async function returnToLearnerDestination(destination: LearnerReturnDestination) {
     const position = learnerWorkspace.returnPosition;
-    if (browser && window.history.state?.gustavLearnerSurface === "task") {
-      window.history.back();
+    const requestedModuleId = position?.moduleId ?? learnerWorkspace.activeTask?.moduleId ?? null;
+    const target: LearnerNavigationTarget = destination === "learningPath" ||
+      (destination === "module" && !requestedModuleId)
+      ? { surface: "graph", moduleId: null, taskId: null, panel: null }
+      : {
+          surface: "reading",
+          moduleId: destination === "module" ? requestedModuleId : null,
+          taskId: null,
+          panel: null
+        };
+
+    if (browser) {
+      const currentUrl = new URL(window.location.href);
+      const currentHref = `${currentUrl.pathname}${currentUrl.search}`;
+      const targetHref = learnerNavigationHref(currentUrl, target);
+      if (canUseLearnerHistoryParent(window.history.state, currentHref, targetHref)) {
+        window.history.back();
+        return;
+      }
+    }
+
+    if (target.surface === "graph") {
+      setLearnerWorkspaceState(learningPathState(learnerWorkspace));
+      syncLearnerNavigation(target, "replace");
       return;
     }
+
     setLearnerWorkspaceState({
       ...learnerWorkspace,
       surface: "reading",
@@ -334,13 +367,7 @@
         readingReferenceKey: null
       }
     });
-
-    syncLearnerNavigation({
-      surface: "reading",
-      moduleId: position?.moduleId ?? learnerWorkspace.activeTask?.moduleId ?? null,
-      taskId: null,
-      panel: null
-    }, "replace");
+    syncLearnerNavigation(target, "replace");
 
     await tick();
     if (!browser || !position) {
@@ -352,31 +379,48 @@
     }
   }
 
+  function currentLearnerHref(): string {
+    if (!browser) {
+      return "";
+    }
+    return `${window.location.pathname}${window.location.search}`;
+  }
+
+  function existingLearnerParentHref(target: LearnerNavigationTarget): string | undefined {
+    if (!browser || target.surface !== window.history.state?.gustavLearnerSurface) {
+      return undefined;
+    }
+    const parent = window.history.state?.gustavLearnerParentHref;
+    return typeof parent === "string" ? parent : undefined;
+  }
+
   function syncLearnerNavigation(
-    target: { surface: "graph" | "reading" | "task"; moduleId: string | null; taskId: string | null; panel: "result" | null },
+    target: LearnerNavigationTarget,
     historyMode: "push" | "replace"
   ) {
     if (!browser) return;
     const href = learnerNavigationHref(new URL(window.location.href), target);
-    const state = { ...window.history.state, gustavLearnerSurface: target.surface };
+    const parentHref = historyMode === "push"
+      ? currentLearnerHref()
+      : existingLearnerParentHref(target);
+    const state = learnerHistoryEntryState(
+      window.history.state,
+      target.surface,
+      href,
+      parentHref
+    );
     if (historyMode === "push") window.history.pushState(state, "", href);
     else window.history.replaceState(state, "", href);
   }
 
   function showLearningPath() {
-    if (learnerWorkspace.surface === "task" && learnerWorkspace.activeTask) {
-      setLearnerWorkspaceState(learningPathState(learnerWorkspace));
-      syncLearnerNavigation({ surface: "graph", moduleId: null, taskId: null, panel: null }, "push");
-      return;
-    }
-    if (browser && window.history.state?.gustavLearnerSurface === "reading") {
-      window.history.back();
-      return;
-    }
-    setLearnerWorkspaceState({ ...learnerWorkspace, surface: "graph", activeTask: null });
-    syncLearnerNavigation({ surface: "graph", moduleId: null, taskId: null, panel: null }, "replace");
+    void returnToLearnerDestination("learningPath");
   }
 
+  /*
+   * The URL remains the source of truth for browser Back and Forward. Visible
+   * return actions above only use Back for a verified GUSTAV parent entry.
+   */
   async function restoreSurfaceFromUrl() {
     if (!browser) return;
     const url = new URL(window.location.href);
@@ -1850,7 +1894,7 @@
                 enhanceTaskForm={enhanceTaskForm}
                 onSubmitUploadFeedback={submitUploadFeedback}
                 onBeginTask={beginTaskWorkspace}
-                onPauseTask={leaveTaskWorkspace}
+                onReturn={leaveTaskWorkspace}
                 onCloseModule={removeOpenModule}
                 onSetCompactSurface={setCompactSurface}
                 onToggleMaterial={toggleReadingMaterial}
@@ -1916,7 +1960,7 @@
             enhanceTaskForm={enhanceTaskForm}
             onSubmitUploadFeedback={submitUploadFeedback}
             onBeginTask={beginTaskWorkspace}
-            onPauseTask={leaveTaskWorkspace}
+            onReturn={leaveTaskWorkspace}
             onCloseModule={() => {}}
             onSetCompactSurface={setCompactSurface}
             onToggleMaterial={toggleReadingMaterial}

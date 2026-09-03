@@ -414,8 +414,11 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
 - Die kanonische URL verwendet `module` und `task`. Ein bestehender Link mit
   `panel=result` bleibt kompatibel, öffnet aber denselben Aufgabenraum und dort
   die Offenlegung `Meine Abgabe`. Browser-Zurück und sichtbare Rückwege
-  durchlaufen dieselben Stufen. Alte `view`- und `history`-Links werden sicher
-  normalisiert.
+  durchlaufen dieselben Stufen. Ein sichtbarer Rückweg verwendet den nativen
+  Browser-Verlauf nur dann, wenn GUSTAV das bezeichnete Ziel als exakte
+  Elternstufe dieses Eintrags angelegt hat; nach Direktaufruf oder Neuladen wird
+  stattdessen die kanonische Ziel-URL hergestellt. Alte `view`- und
+  `history`-Links werden sicher normalisiert.
 - Die URL bestimmt nach einem Neuladen die sichtbare Stufe. Schülerbezogene
   lokale Speicherung ergänzt nur geöffnete Module, Lesepositionen, Kontext und
   Entwürfe.
@@ -536,20 +539,22 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
   öffnet sich `Rückmeldung` inline, ohne den Tastaturfokus ungefragt zu
   verschieben. Manuelles Schließen wird durch Polling nicht rückgängig gemacht.
   Der flache Abschnitt `Dein nächster Schritt` bündelt danach die eigentliche
-  Entscheidung: `Im Entwurf weiterarbeiten` ist die formative Hauptaktion,
-  `Endgültig abgeben` die bewusste Abschlussaktion und `Zurück zum Lernpfad`
-  eine zurückhaltende Navigation. `Im Entwurf weiterarbeiten` verschiebt den
-  Fokus erst nach einer ausdrücklichen Aktivierung zum Texteditor beziehungsweise
-  Dateifeld. Die Abschlussaktion wird nicht zusätzlich unter dem Editor wiederholt.
+  Entscheidung: `Überarbeiten` ist die formative Hauptaktion und
+  `Endgültig abgeben` die bewusste Abschlussaktion. `Überarbeiten` verschiebt
+  den Fokus erst nach einer ausdrücklichen Aktivierung zum Texteditor
+  beziehungsweise Dateifeld. Die Abschlussaktion wird nicht zusätzlich unter
+  dem Editor wiederholt.
 - Weicht die sichtbare Fassung vom zuletzt rückgemeldeten Snapshot ab, bleibt
   die bisherige Rückmeldung lesbar, aber `Endgültig abgeben` ist mit dem Hinweis
   `Für diese Fassung zuerst Rückmeldung einholen.` deaktiviert. Nach der
   Finalisierung bleibt der Aufgabenraum sichtbar und wird schreibgeschützt.
-  `Aufgabe abgeschlossen` führt entweder zur nächsten noch offenen Aufgabe, die
-  im selben Modul nach der aktuellen Aufgabe liegt, oder zurück zum Lernpfad.
-  Bereits endgültig abgegebene Aufgaben werden übersprungen; es gibt keinen
-  automatischen Sprung in ein anderes Modul. Ein erlaubter weiterer Versuch
-  öffnet die Aufgabe erneut zur Bearbeitung.
+  `Aufgabe abgeschlossen` führt bei einer anderen noch offenen Aufgabe im selben
+  Modul zurück zur Modulansicht, andernfalls zum Lernpfad. Eine Aufgabe mit
+  formativer Rückmeldung, aber ohne endgültige Abgabe, gilt weiterhin als offen;
+  bereits endgültig abgegebene Aufgaben werden nicht berücksichtigt. Es gibt
+  keinen automatischen Sprung in eine Aufgabe oder ein anderes Modul. In linearen
+  Lerneinheiten führt der Abschluss zurück zu den Inhalten. Ein erlaubter weiterer
+  Versuch öffnet die Aufgabe erneut zur Bearbeitung.
 
 - Die linke Fläche funktioniert als fortlaufende Buchseite. Sie zeigt bei
   modularen Lerneinheiten ausschließlich Module, die der Schüler zuvor im

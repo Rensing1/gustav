@@ -12,6 +12,12 @@ export type LearnerNavigationState = LearnerNavigationTarget & {
   needsNormalization: boolean;
 };
 
+export type LearnerHistoryEntry = Record<string, unknown> & {
+  gustavLearnerSurface: LearnerSurface;
+  gustavLearnerHref: string;
+  gustavLearnerParentHref?: string;
+};
+
 type LearnerNavigationAccess = {
   unitType: "linear" | "modular";
   openableModuleIds: Set<string>;
@@ -82,4 +88,41 @@ export function learnerNavigationHref(url: URL, target: LearnerNavigationTarget)
 
   const query = next.searchParams.toString();
   return query ? `${next.pathname}?${query}` : next.pathname;
+}
+
+/** Preserve framework state while recording the exact in-app parent of a new entry. */
+export function learnerHistoryEntryState(
+  currentState: unknown,
+  surface: LearnerSurface,
+  href: string,
+  parentHref?: string
+): LearnerHistoryEntry {
+  const base = currentState && typeof currentState === "object"
+    ? currentState as Record<string, unknown>
+    : {};
+  const next: LearnerHistoryEntry = {
+    ...base,
+    gustavLearnerSurface: surface,
+    gustavLearnerHref: href
+  };
+  if (parentHref) {
+    next.gustavLearnerParentHref = parentHref;
+  } else {
+    delete next.gustavLearnerParentHref;
+  }
+  return next;
+}
+
+/** Browser Back is safe only when GUSTAV recorded this exact current/parent pair. */
+export function canUseLearnerHistoryParent(
+  state: unknown,
+  currentHref: string,
+  targetHref: string
+): boolean {
+  if (!state || typeof state !== "object") {
+    return false;
+  }
+  const candidate = state as Partial<LearnerHistoryEntry>;
+  return candidate.gustavLearnerHref === currentHref &&
+    candidate.gustavLearnerParentHref === targetHref;
 }

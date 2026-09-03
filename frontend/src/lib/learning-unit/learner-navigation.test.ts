@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canUseLearnerHistoryParent,
+  learnerHistoryEntryState,
   learnerNavigationHref,
   resolveLearnerNavigation,
   type LearnerNavigationTarget
@@ -101,5 +103,27 @@ describe("learner navigation", () => {
     for (const [target, expected] of targets) {
       expect(learnerNavigationHref(base, target)).toBe(expected);
     }
+  });
+
+  it("uses browser back only for the exact app-created parent", () => {
+    const readingHref = "/unit?module=module-a";
+    const taskHref = "/unit?module=module-a&task=task-a";
+    const state = learnerHistoryEntryState(
+      { svelteKitState: true },
+      "task",
+      taskHref,
+      readingHref
+    );
+
+    expect(state).toMatchObject({
+      svelteKitState: true,
+      gustavLearnerSurface: "task",
+      gustavLearnerHref: taskHref,
+      gustavLearnerParentHref: readingHref
+    });
+    expect(canUseLearnerHistoryParent(state, taskHref, readingHref)).toBe(true);
+    expect(canUseLearnerHistoryParent(state, taskHref, "/unit")).toBe(false);
+    expect(canUseLearnerHistoryParent(state, "/another-unit", readingHref)).toBe(false);
+    expect(canUseLearnerHistoryParent({}, taskHref, readingHref)).toBe(false);
   });
 });

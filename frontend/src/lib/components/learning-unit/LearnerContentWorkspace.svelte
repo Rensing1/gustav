@@ -8,6 +8,10 @@
   import WorkspaceOutline from "$lib/components/ui/WorkspaceOutline.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
+  import {
+    completionReturnDestination,
+    type LearnerReturnDestination
+  } from "$lib/learning-unit/learner-return-navigation";
   import type { ContentGroup, LearnerMaterialContextModule, LearningContentItem } from "$lib/learning-unit/workspace";
   import type {
     LearningMaterial,
@@ -64,7 +68,7 @@
     enhanceTaskForm = null,
     onSubmitUploadFeedback = null,
     onBeginTask,
-    onPauseTask,
+    onReturn,
     onCloseModule,
     onSetCompactSurface,
     onToggleMaterial,
@@ -126,7 +130,7 @@
       moduleId: string | null;
     }) => void | Promise<void>) | null;
     onBeginTask: (itemKey: string, mode: "text" | "upload") => void;
-    onPauseTask: () => void;
+    onReturn: (destination: LearnerReturnDestination) => void;
     onCloseModule: (moduleId: string) => void;
     onSetCompactSurface: (surface: "task" | "materials") => void;
     onToggleMaterial: (itemKey: string) => void;
@@ -161,6 +165,28 @@
     // Reapplying stored props while WebKit is momentum-scrolling cancels the user's touch movement.
     restoredScrollSurfaces.add(surface);
     surface.scrollTop = scrollTop;
+  }
+
+  function taskReturnDestination(): LearnerReturnDestination {
+    return unitType === "modular" ? "module" : "contents";
+  }
+
+  function completedTaskReturnDestination(): LearnerReturnDestination {
+    const activeTaskId = activeItem?.task?.id;
+    if (!activeTaskId) {
+      return taskReturnDestination();
+    }
+    const activeGroup = contentGroups.find((group) =>
+      group.items.some((item) => item.key === activeTaskKey)
+    );
+    return completionReturnDestination({
+      unitType,
+      currentTaskId: activeTaskId,
+      moduleTasks: (activeGroup?.items ?? [])
+        .map((item) => item.task)
+        .filter((task): task is LearningTask => Boolean(task)),
+      historyByTask
+    });
   }
 
   $effect(() => {
@@ -399,8 +425,15 @@
     {@const task = activeItem.task}
     <div class="learner-task-workbench-container">
       <header class="learner-task-header">
-        <button id="learner-task-back" class="learner-task-header__back" type="button" onclick={onPauseTask}>
-          ← Zurück zu Modul {groupForItem(activeItem)?.title ?? "Inhalte"}
+        <button
+          id="learner-task-back"
+          class="learner-task-header__back"
+          type="button"
+          onclick={() => onReturn(taskReturnDestination())}
+        >
+          {unitType === "modular"
+            ? `← Zurück zu Modul ${groupForItem(activeItem)?.title ?? "Inhalte"}`
+            : "← Zurück zu den Inhalten"}
         </button>
         <div class="learner-task-header__identity">
           <strong>{activeItem.title}</strong>
@@ -543,7 +576,8 @@
           reviewPanelOpen={workStatus === "result"}
           enhanceSubmit={enhanceTaskForm?.(task.id)}
           onExitSubmissionWorkspace={null}
-          onReturnToLearningPath={onPauseTask}
+          completionReturnDestination={completedTaskReturnDestination()}
+          onCompletionReturn={() => onReturn(completedTaskReturnDestination())}
           hideDialogPauseAction={true}
           onSetDialogCompactSurface={onSetCompactSurface}
           onPreviewDialogTaskColumnRatio={onPreviewTaskColumnRatio}
@@ -567,7 +601,11 @@
   {:else}
     <section class="learning-unit-empty-state" aria-label="Aufgabe nicht verfügbar">
       <StatusMessage tone="error" title="Aufgabe nicht verfügbar" description="Diese Aufgabe ist nicht mehr verfügbar." />
-      <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={onPauseTask}>Zurück zu den Inhalten</button>
+      <button
+        class="workspace-top-action workspace-top-action--quiet"
+        type="button"
+        onclick={() => onReturn(taskReturnDestination())}
+      >Zurück zu den Inhalten</button>
     </section>
   {/if}
 </div>

@@ -136,7 +136,7 @@ function baseProps() {
     historyByTask: {},
     historyStateByTask: {},
     onBeginTask: vi.fn(),
-    onPauseTask: vi.fn(),
+    onReturn: vi.fn(),
     onCloseModule: vi.fn(),
     onSetCompactSurface: vi.fn(),
     onToggleMaterial: vi.fn(),
@@ -312,8 +312,68 @@ describe("LearnerContentWorkspace", () => {
     expect(screen.queryByRole("button", { name: "Weiter zu Aufgabe 3" })).toBeNull();
     await fireEvent.click(screen.getByRole("button", { name: "Zurück zum Modul" }));
 
-    expect(props.onPauseTask).toHaveBeenCalledOnce();
+    expect(props.onReturn).toHaveBeenCalledWith("module");
     expect(onBeginTask).not.toHaveBeenCalled();
+  });
+
+  it("returns to the learning path when every other module task is complete", async () => {
+    const completedTask = {
+      key: "task:task-2",
+      kind: "task" as const,
+      title: "Aufgabe 2",
+      position: 4,
+      contextLabel: "Grundlagen",
+      moduleId: "module-1",
+      task: {
+        id: "task-2",
+        instruction_md: "Diese Aufgabe ist abgeschlossen.",
+        criteria: [],
+        kind: "native" as const,
+        latest_final_submission_at: "2026-09-02T10:00:00Z"
+      }
+    };
+    const contentGroups: ContentGroup[] = [{
+      ...groups[0],
+      items: [...groups[0].items, completedTask]
+    }];
+    const props = {
+      ...baseProps(),
+      contentGroups,
+      mode: "working" as const,
+      workStatus: "result" as const,
+      activeTaskKey: "task:task-1",
+      activeEditorMode: "text" as const,
+      historyByTask: {
+        "task-1": [{
+          id: "44444444-4444-4444-8444-444444444444",
+          attempt_nr: 1,
+          kind: "text" as const,
+          intent: "submit" as const,
+          created_at: "2026-09-03T10:00:00Z",
+          analysis_status: "completed" as const
+        }]
+      }
+    };
+
+    render(LearnerContentWorkspace, { props });
+    await fireEvent.click(screen.getByRole("button", { name: "Zurück zum Lernpfad" }));
+
+    expect(props.onReturn).toHaveBeenCalledWith("learningPath");
+  });
+
+  it("labels the task return as contents in a linear unit", async () => {
+    const props = {
+      ...baseProps(),
+      unitType: "linear" as const,
+      mode: "working" as const,
+      activeTaskKey: "task:task-1",
+      activeEditorMode: "text" as const
+    };
+
+    render(LearnerContentWorkspace, { props });
+    await fireEvent.click(screen.getByRole("button", { name: "← Zurück zu den Inhalten" }));
+
+    expect(props.onReturn).toHaveBeenCalledWith("contents");
   });
 
   it("connects the adjustable column separator to normal task layout state", async () => {

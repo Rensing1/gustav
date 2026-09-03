@@ -22,9 +22,9 @@ GUSTAV trennt formative Rückmeldung von der endgültigen Abgabe. Lernende könn
 1. Die lernende Person verfasst eine Antwort oder wählt eine passende Datei aus.
 2. Mit **„Rückmeldung einholen“** wird die aktuelle Fassung als unveränderlicher Versuch gespeichert und zur Auswertung vorgemerkt.
 3. Während der Verarbeitung zeigt GUSTAV einen laufenden Zustand. Nach Abschluss öffnet sich **„Rückmeldung“**. Die zugehörigen Bewertungen lassen sich darin über **„Kriterien im Detail“** nachvollziehen.
-4. Unter **„Dein nächster Schritt“** kann die lernende Person mit **„Im Entwurf weiterarbeiten“** direkt zum Texteditor oder Dateifeld zurückkehren, die unveränderte Fassung **„Endgültig abgeben“** oder zum Lernpfad zurückkehren.
+4. Unter **„Dein nächster Schritt“** kann die lernende Person mit **„Überarbeiten“** direkt zum Texteditor oder Dateifeld zurückkehren oder die unveränderte Fassung **„Endgültig abgeben“**.
 5. Eine geänderte Fassung benötigt erneut Rückmeldung. Nur wenn der aktuelle Entwurf genau der zuletzt geprüften Fassung entspricht, wird **„Endgültig abgeben“** ermöglicht.
-6. Nach der endgültigen Abgabe ersetzt **„Aufgabe abgeschlossen“** die Bearbeitungsaktionen. Liegt im selben Modul später noch eine offene Aufgabe, kann sie direkt geöffnet werden; andernfalls führt die Oberfläche zurück zum Lernpfad.
+6. Nach der endgültigen Abgabe ersetzt **„Aufgabe abgeschlossen“** die Bearbeitungsaktionen. Liegt im selben Modul noch eine andere offene Aufgabe, führt der Rückknopf zur Modulansicht; andernfalls führt er zum Lernpfad. In linearen Lerneinheiten führt er zurück zu den Inhalten.
 
 ## Lernendensicht
 

@@ -177,6 +177,9 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     expect(history.find((submission) => submission.intent === "submit")?.text_body).toBe(localDraft);
 
     await completion.getByRole("button", { name: "Zurück zum Modul" }).click();
+    await expect(learner.page).toHaveURL(
+      new RegExp(`\\?module=${seeded.graphModuleId}$`)
+    );
     const editAgainButton = learner.page.getByRole("button", { name: "Erneut bearbeiten" });
     await expect(editAgainButton).toBeVisible();
     await editAgainButton.click();

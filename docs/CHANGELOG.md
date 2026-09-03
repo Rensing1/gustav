@@ -5,13 +5,17 @@
 ### Fixes
 - fix(frontend): Der globale CSS-Einstieg verwendet geordnete Standardimporte ohne Cascade Layers, sodass Safari unter iPadOS 15.3 die reguläre GUSTAV-Oberfläche gestaltet statt nahezu alle globalen Regeln zu verwerfen.
 - fix(frontend): Die fachliche Graphdarstellung behält ohne Cascade Layers ihre bisherige Mindesthöhe und ihren transparenten Hintergrund auch in aktuellen Browsern.
+- fix(learning): Sichtbare Rückwege im Lernraum verwenden nur noch einen nachgewiesenen GUSTAV-Elterneintrag aus dem Browser-Verlauf und stellen nach Direktaufruf oder Neuladen ihr bezeichnetes Ziel ausdrücklich her.
+- fix(learning): Nach einer endgültigen modularen Abgabe führt der einzige Rückknopf bei weiteren offenen Aufgaben zur Modulansicht, sonst zum Lernpfad; lineare Aufgaben führen verständlich „Zurück zu den Inhalten“.
 
 ### Tests
 - test(frontend): Ein parserbasiertes Build-Gate, Unit-Tests und ein authentifizierter Chromium-/iPad-WebKit-Rundlauf sichern ab, dass ausgelieferte Stylesheets keine Cascade Layers enthalten und zentrale Layoutregeln wirksam sind.
 - test(frontend): Das CSS-Gate erkennt zusätzlich Layer-Zusätze an `@import`, auch mit kommentargetrennten oder direkt anschließenden Folgetokens; der Browser-Rundlauf verwendet dieselbe Parserlogik und prüft die erhaltene Graphdarstellung anhand berechneter Styles.
+- test(learning): Unit-, Komponenten-, Routen- und authentifizierte Browserprüfungen sichern semantische Rückziele, Direktlinks, Neuladen, Browser-Zurück/-Vorwärts und beide Abschlussfälle ab.
 
 ### Docs
 - docs(design): Das Designsystem dokumentiert die verbindliche Importreihenfolge und die iPadOS-15.3-kompatible CSS-Grenze.
+- docs(learning): Design und Nutzerhandbuch beschreiben einheitlich die zielgebundene Rücknavigation und die Abschlussregel für modulare und lineare Lerneinheiten.
 
 ## 2026-09-02
 

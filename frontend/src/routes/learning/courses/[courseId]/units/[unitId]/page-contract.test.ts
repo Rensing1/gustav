@@ -69,6 +69,10 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain("let learnerWorkspace = $state<LearnerWorkspaceState>");
     expect(routeSource).toContain("async function beginTaskWorkspace");
     expect(routeSource).toContain("function leaveTaskWorkspace");
+    expect(routeSource).toContain("function returnToLearnerDestination");
+    expect(routeSource).toContain("canUseLearnerHistoryParent");
+    expect(routeSource).not.toContain('window.history.state?.gustavLearnerSurface === "task"');
+    expect(routeSource).not.toContain('window.history.state?.gustavLearnerSurface === "reading"');
     expect(routeSource).toContain('window.scrollTo({ top: 0, behavior: "auto" })');
     expect(routeSource).toContain('document.getElementById("learner-task-back")?.focus');
     expect(routeSource).toContain("learnerWorkspaceStorageKeys(data.user?.sub ?? null");

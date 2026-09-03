@@ -22,9 +22,9 @@ GUSTAV separates formative feedback from final submission. Learners can have a v
 1. The learner writes an answer or selects a suitable file.
 2. **„Rückmeldung einholen“** (“Request feedback”) saves the current version as an immutable attempt and queues it for evaluation.
 3. While processing is underway, GUSTAV displays an in-progress state. When processing is complete, **„Rückmeldung“** (“Feedback”) opens. Its criterion judgements are available inside **„Kriterien im Detail“** (“Criteria in detail”).
-4. Under **„Dein nächster Schritt“** (“Your next step”), the learner can return directly to the text editor or file field, submit the unchanged version as final, or return to the learning path.
+4. Under **„Dein nächster Schritt“** (“Your next step”), the learner can use **„Überarbeiten“** (“Revise”) to return directly to the text editor or file field, or submit the unchanged version as final.
 5. A changed version requires feedback again. **„Endgültig abgeben“** (“Submit as final”) is enabled only when the current draft exactly matches the most recently reviewed version.
-6. After final submission, **„Aufgabe abgeschlossen“** (“Task completed”) replaces the editing actions. If a later task in the same module is still open, it can be opened directly; otherwise the learner returns to the learning path.
+6. After final submission, **„Aufgabe abgeschlossen“** (“Task completed”) replaces the editing actions. If another task in the same module is still open, the return button opens the module view; otherwise it opens the learning path. In a linear unit, it returns to the contents.
 
 ## Learner view
 

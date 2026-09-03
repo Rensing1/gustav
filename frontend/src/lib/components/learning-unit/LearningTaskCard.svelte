@@ -18,6 +18,10 @@
     reviewedSubmissionBaseline,
     type ReviewedSubmissionBaseline
   } from "$lib/learning-unit/submission-finalization";
+  import {
+    learnerReturnLabel,
+    type LearnerReturnDestination
+  } from "$lib/learning-unit/learner-return-navigation";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -67,7 +71,8 @@
     onEnterSubmissionWorkspace = null,
     onEnterUploadWorkspace = null,
     onExitSubmissionWorkspace = null,
-    onReturnToLearningPath = null,
+    completionReturnDestination = null,
+    onCompletionReturn = null,
     onSetDialogCompactSurface = null,
     onPreviewDialogTaskColumnRatio = null,
     onCommitDialogTaskColumnRatio = null,
@@ -122,7 +127,8 @@
     onEnterSubmissionWorkspace?: (() => void) | null;
     onEnterUploadWorkspace?: (() => void) | null;
     onExitSubmissionWorkspace?: (() => void) | null;
-    onReturnToLearningPath?: (() => void) | null;
+    completionReturnDestination?: LearnerReturnDestination | null;
+    onCompletionReturn?: (() => void) | null;
     onSetDialogCompactSurface?: ((surface: "task" | "materials") => void) | null;
     onPreviewDialogTaskColumnRatio?: ((value: number) => void) | null;
     onCommitDialogTaskColumnRatio?: ((value: number) => void) | null;
@@ -643,10 +649,6 @@
     if (finalizationForm && finalizationSubmitButton) {
       finalizationForm.requestSubmit(finalizationSubmitButton);
     }
-  }
-
-  function completionReturnLabel(): string {
-    return unitType === "modular" && moduleId ? "Zurück zum Modul" : "Zurück zum Lernpfad";
   }
 
   function feedbackPendingMessage(): string | null {
@@ -1183,13 +1185,13 @@
                 {#if hasFinalSubmission() && !hasFeedbackCycleAfterFinalization()}
                   <section class="learning-feedback-actions" aria-label="Aufgabe abgeschlossen">
                     <p class="learning-feedback-actions__eyebrow">Aufgabe abgegeben.</p>
-                    {#if onReturnToLearningPath}
+                    {#if completionReturnDestination && onCompletionReturn}
                       <button
                         class="workspace-top-action workspace-top-action--quiet"
                         type="button"
-                        onclick={() => onReturnToLearningPath?.()}
+                        onclick={() => onCompletionReturn?.()}
                       >
-                        {completionReturnLabel()}
+                        {learnerReturnLabel(completionReturnDestination)}
                       </button>
                     {/if}
                   </section>

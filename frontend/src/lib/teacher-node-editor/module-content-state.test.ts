@@ -5,7 +5,9 @@ import {
   draftStorageKey,
   formatPrerequisiteSummary,
   hasMeaningfulDraftChanges,
-  parseContentSelection
+  hasMeaningfulTaskDraftChanges,
+  parseContentSelection,
+  taskDraftSnapshot,
 } from "./module-content-state";
 
 const content = {
@@ -78,5 +80,158 @@ describe("module content state", () => {
     expect(hasMeaningfulDraftChanges({ ...baseline, title: "Merkblatt überarbeitet" }, baseline)).toBe(true);
     expect(hasMeaningfulDraftChanges({ ...baseline, title: "Merkblatt" }, baseline)).toBe(false);
     expect(hasMeaningfulDraftChanges({ kind: "markdown", title: "Merkblatt", body_md: "Gespeicherter Inhalt" }, baseline)).toBe(false);
+  });
+
+  it("builds the persisted form snapshot for a normal learning task", () => {
+    expect(taskDraftSnapshot({
+      id: "task-1",
+      kind: "native",
+      instruction_md: "Begründe deine Antwort.",
+      criteria: ["Klarheit", "Fachlichkeit"],
+      teacher_context_md: "Interner Kontext",
+      model_solution_md: "Eine Musterlösung",
+      due_at: "2026-09-04T10:30:00+02:00",
+      max_attempts: 3,
+      position: 1
+    }, "learning")).toEqual({
+      module_kind: "learning",
+      task_kind: "native",
+      instruction_md: "Begründe deine Antwort.",
+      "criteria[]": ["Klarheit", "Fachlichkeit"],
+      teacher_context_md: "Interner Kontext",
+      model_solution_md: "Eine Musterlösung",
+      due_at: "2026-09-04T10:30",
+      max_attempts: "3"
+    });
+  });
+
+  it("includes only the fields rendered for H5P and practice tasks", () => {
+    expect(taskDraftSnapshot({
+      id: "task-h5p",
+      kind: "h5p",
+      instruction_md: "H5P-Aufgabe",
+      criteria: [],
+      teacher_context_md: "Nicht gerendert",
+      model_solution_md: "Nicht gerendert",
+      due_at: "2026-09-04T10:30:00+02:00",
+      max_attempts: 2,
+      position: 1,
+      h5p: { content_id: "42" }
+    }, "learning")).toEqual({
+      module_kind: "learning",
+      task_kind: "h5p",
+      instruction_md: "H5P-Aufgabe",
+      h5p_content_id: "42"
+    });
+
+    expect(taskDraftSnapshot({
+      id: "task-practice",
+      kind: "native",
+      instruction_md: "Übe die Begründung.",
+      criteria: ["Klarheit"],
+      teacher_context_md: "Kontext",
+      model_solution_md: "Lösung",
+      due_at: "2026-09-04T10:30:00+02:00",
+      max_attempts: 2,
+      position: 1
+    }, "practice")).toEqual({
+      module_kind: "practice",
+      task_kind: "native",
+      instruction_md: "Übe die Begründung.",
+      "criteria[]": ["Klarheit"],
+      teacher_context_md: "Kontext",
+      model_solution_md: "Lösung"
+    });
+  });
+
+  it("captures every dialog field in the task baseline", () => {
+    const snapshot = taskDraftSnapshot({
+      id: "task-dialog",
+      kind: "dialog",
+      instruction_md: "Diskutiere die These.",
+      criteria: ["Begründung"],
+      teacher_context_md: null,
+      model_solution_md: null,
+      due_at: null,
+      max_attempts: null,
+      position: 1,
+      dialog: {
+        partner_name: "Dr. Dialog",
+        partner_description_md: "Kurzbeschreibung",
+        role_md: "Stelle Rückfragen.",
+        learning_goal_md: "Argumente prüfen",
+        opening_message_md: "Wie lautet deine Position?",
+        response_mode: "hybrid",
+        max_rounds: 7,
+        closing_prompt_md: "Fasse zusammen."
+      }
+    }, "learning");
+
+    expect(snapshot).toMatchObject({
+      dialog_partner_name: "Dr. Dialog",
+      dialog_partner_description_md: "Kurzbeschreibung",
+      dialog_role_md: "Stelle Rückfragen.",
+      dialog_learning_goal_md: "Argumente prüfen",
+      dialog_opening_message_md: "Wie lautet deine Position?",
+      dialog_response_mode: "hybrid",
+      dialog_max_rounds: "7",
+      dialog_closing_prompt_md: "Fasse zusammen."
+    });
+  });
+
+  it.each(["visual", "scratch", "calliope", "filius"] as const)(
+    "uses the shared editable fields for a %s task",
+    (kind) => {
+      const snapshot = taskDraftSnapshot({
+        id: `task-${kind}`,
+        kind,
+        instruction_md: "Untersuche das Ergebnis.",
+        criteria: [],
+        teacher_context_md: null,
+        model_solution_md: null,
+        due_at: null,
+        max_attempts: null,
+        position: 1
+      }, "learning");
+
+      expect(snapshot.task_kind).toBe(kind);
+      expect(snapshot).toHaveProperty("instruction_md", "Untersuche das Ergebnis.");
+      expect(snapshot).toHaveProperty("criteria[]", []);
+      expect(snapshot).not.toHaveProperty("h5p_content_id");
+      expect(snapshot).not.toHaveProperty("dialog_partner_name");
+    }
+  );
+
+  it("compares task snapshots with the same normalization as task persistence", () => {
+    const baseline = {
+      module_kind: "learning",
+      task_kind: "native",
+      instruction_md: "Begründe deine Antwort.",
+      "criteria[]": ["Klarheit", "Fachlichkeit"],
+      teacher_context_md: "",
+      model_solution_md: "",
+      due_at: "",
+      max_attempts: ""
+    };
+
+    expect(hasMeaningfulTaskDraftChanges({
+      ...baseline,
+      instruction_md: "  Begründe deine Antwort.\n",
+      "criteria[]": [" Klarheit ", "", "Fachlichkeit"]
+    }, baseline)).toBe(false);
+    expect(hasMeaningfulTaskDraftChanges({
+      ...baseline,
+      instruction_md: "Begründe deine Antwort ausführlich."
+    }, baseline)).toBe(true);
+    expect(hasMeaningfulTaskDraftChanges({
+      ...baseline,
+      "criteria[]": ["Fachlichkeit", "Klarheit"]
+    }, baseline)).toBe(true);
+    expect(hasMeaningfulTaskDraftChanges({
+      module_kind: "learning",
+      task_kind: "native",
+      instruction_md: "Begründe deine Antwort.",
+      "criteria[]": ["Klarheit", "Fachlichkeit"]
+    }, baseline)).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import {
   beginSubmissionAttempt,
   finalSubmissionIdempotencyKey,
   finalSubmissionFailureMessage,
+  normalizeReviewedSubmissionText,
   reviewedSubmissionBaseline,
   validatedFeedbackSubmissionId,
   validatedFinalSubmissionIdempotencyKey
@@ -84,6 +85,12 @@ describe("submission finalization", () => {
       created_at: "2026-09-01T08:02:00+00:00",
       text_body: "Geprüfter Entwurf"
     })).toBeNull();
+  });
+
+  it("normalizes reviewed text exactly like the persistence boundary", () => {
+    expect(normalizeReviewedSubmissionText(null)).toBe("");
+    expect(normalizeReviewedSubmissionText("  Geprüfter Entwurf\n\n")).toBe("Geprüfter Entwurf");
+    expect(normalizeReviewedSubmissionText("Absatz eins\n\nAbsatz zwei")).toBe("Absatz eins\n\nAbsatz zwei");
   });
 
   it.each([

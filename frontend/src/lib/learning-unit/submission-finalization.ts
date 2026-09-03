@@ -45,6 +45,11 @@ export function beginSubmissionAttempt(
 
 const submissionIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** Mirrors the trimming applied before a learner text crosses the persistence boundary. */
+export function normalizeReviewedSubmissionText(value: string | null | undefined): string {
+  return (value ?? "").trim();
+}
+
 /** Captures the exact completed feedback submission that may be finalized. */
 export function reviewedSubmissionBaseline(
   submission: LearningSubmission | null | undefined

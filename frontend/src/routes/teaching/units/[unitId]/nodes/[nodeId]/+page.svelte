@@ -22,6 +22,9 @@
     draftStorageKey,
     formatPrerequisiteSummary,
     hasMeaningfulDraftChanges,
+    hasMeaningfulTaskDraftChanges,
+    materialDraftSnapshot,
+    taskDraftSnapshot,
     type ModuleDraftSnapshot,
     type ModuleContentSelection
   } from "$lib/teacher-node-editor/module-content-state";
@@ -283,26 +286,30 @@
     return values;
   }
 
-  function materialDraftBaseline(target: string): ModuleDraftSnapshot | null {
-    if (!target.startsWith("material:")) return null;
-    const materialId = target.slice("material:".length);
-    const material = editorState.materials.find((candidate) => candidate.id === materialId);
-    if (!material) return null;
-    const baseline: ModuleDraftSnapshot = {
-      kind: material.kind,
-      title: material.title
-    };
-    if (material.kind === "markdown" || material.kind === "simulation") {
-      baseline.body_md = material.body_md ?? "";
-    } else if (material.kind === "file") {
-      baseline.alt_text = material.alt_text ?? "";
+  function moduleDraftBaseline(target: string): { kind: "material" | "task"; values: ModuleDraftSnapshot } | null {
+    if (target.startsWith("material:")) {
+      const materialId = target.slice("material:".length);
+      const material = editorState.materials.find((candidate) => candidate.id === materialId);
+      return material ? { kind: "material", values: materialDraftSnapshot(material) } : null;
     }
-    return baseline;
+    if (target.startsWith("task:")) {
+      const taskId = target.slice("task:".length);
+      const task = editorState.tasks.find((candidate) => candidate.id === taskId);
+      return task
+        ? { kind: "task", values: taskDraftSnapshot(task, isPracticeModule ? "practice" : "learning") }
+        : null;
+    }
+    return null;
   }
 
   function persistModuleDraft(target: string, values: ModuleDraftSnapshot) {
-    const baseline = materialDraftBaseline(target);
-    if (baseline && !hasMeaningfulDraftChanges(values, baseline)) {
+    const baseline = moduleDraftBaseline(target);
+    const changed = baseline?.kind === "task"
+      ? hasMeaningfulTaskDraftChanges(values, baseline.values)
+      : baseline?.kind === "material"
+        ? hasMeaningfulDraftChanges(values, baseline.values)
+        : true;
+    if (!changed) {
       clearModuleDraft(target);
       return;
     }
@@ -324,7 +331,7 @@
       .find((formItem) => formItem.dataset.draftTarget === target);
     const values = formElement
       ? collectDraftValues(formElement)
-      : { ...(materialDraftBaseline(target) ?? {}), ...(readDraft(target) ?? {}) };
+      : { ...(moduleDraftBaseline(target)?.values ?? {}), ...(readDraft(target) ?? {}) };
     values[name] = value;
     persistModuleDraft(target, values);
   }

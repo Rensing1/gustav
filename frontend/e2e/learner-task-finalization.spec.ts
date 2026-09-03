@@ -206,7 +206,68 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     await learner.context.close();
     await teacher.context.close();
   }
+
+  await verifyPersistenceEquivalentTextDraft(browser);
 });
+
+async function verifyPersistenceEquivalentTextDraft(browser: Browser): Promise<void> {
+  test.setTimeout(120_000);
+  const unique = Date.now();
+  const teacherEmail = e2eEmail("teacher");
+  const learnerEmail = e2eEmail("learner");
+  await ensureTeacherUser(teacherEmail, password);
+  await ensureLearnerUser(learnerEmail, password);
+
+  const teacher = await authenticatedPage(browser);
+  const learner = await authenticatedPage(browser);
+  try {
+    await login(teacher.page, teacherEmail, password);
+    await login(learner.page, learnerEmail, password);
+    const learnerSub = await currentUserSub(learner.page);
+    const seeded = await seedLearnerNavigationCourse(teacher.page, learner.page, `Getrimmte Abgabe ${unique}`);
+    const reviewedText = "Diese Fassung endet lokal mit einer Leerzeile.";
+
+    await learner.page.goto(`/learning/courses/${seeded.courseId}`);
+    await learner.page.getByRole("link", { name: seeded.unitTitle }).click();
+    await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
+    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+
+    const editor = learner.page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
+    await editor.fill(reviewedText);
+    await editor.press("End");
+    await editor.press("Enter");
+
+    await holdProviderWorker();
+    try {
+      await learner.page.getByRole("button", { name: "Rückmeldung einholen" }).click();
+      await completeQueuedFeedbackDeterministically({
+        courseId: seeded.courseId,
+        taskId: seeded.taskId,
+        learnerSub
+      });
+    } finally {
+      await releaseProviderWorker();
+    }
+
+    const finalButton = learner.page.getByRole("button", { name: "Endgültig abgeben" });
+    await expect(finalButton).toBeEnabled();
+    await finalButton.click();
+    await expect(learner.page.getByRole("dialog", { name: "Überarbeitung noch nicht geprüft" })).toBeHidden();
+
+    const status = learner.page.locator(".learning-task-feedback-status").getByRole("status");
+    await expect(status).toContainText("Aufgabe abgegeben");
+    const historyResponse = await learner.page.request.get(
+      `${webBase}/api/learning/courses/${seeded.courseId}/tasks/${seeded.taskId}/submissions?limit=10&offset=0`
+    );
+    expect(historyResponse.ok(), await historyResponse.text()).toBe(true);
+    const history = await historyResponse.json() as Array<{ intent: string; text_body?: string | null }>;
+    expect(history.filter((submission) => submission.intent === "submit")).toHaveLength(1);
+    expect(history.find((submission) => submission.intent === "submit")?.text_body).toBe(reviewedText);
+  } finally {
+    await learner.context.close();
+    await teacher.context.close();
+  }
+}
 
 test("@feature-detail finalizes the reviewed uploaded file", async ({ browser }) => {
   const unique = Date.now();

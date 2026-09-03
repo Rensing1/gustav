@@ -209,6 +209,27 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
   await editorPane.getByRole("button", { name: "Aufgabe hinzufügen" }).click();
   await expect(page.getByText("Aufgabe angelegt.")).toBeVisible();
 
+  const taskOutlineEntry = page.getByRole("button", { name: /Begründe deine Antwort/ }).first();
+  await taskOutlineEntry.click();
+  const taskInstruction = editorPane.locator('[contenteditable="true"][aria-label="Anweisung & Beschreibung"]');
+  await expect(taskInstruction).toBeVisible();
+  await taskInstruction.evaluate((element) => {
+    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await editorPane.getByRole("button", { name: "← Inhalte" }).click();
+  await expect(taskOutlineEntry).not.toContainText("Entwurf");
+  await page.setViewportSize({ width: 1920, height: 1080 });
+
+  await taskOutlineEntry.click();
+  const savedCriterion = "Die Antwort ist nachvollziehbar begründet.";
+  const criterionInput = editorPane.getByRole("textbox", { name: "Kriterium 1", exact: true });
+  await criterionInput.fill("Die Begründung ist fachlich nachvollziehbar.");
+  await expect(taskOutlineEntry).toContainText("Entwurf");
+  await criterionInput.fill(savedCriterion);
+  await expect(taskOutlineEntry).not.toContainText("Entwurf");
+  await expect(editorPane.getByRole("button", { name: "Verwerfen" })).toHaveCount(0);
+
   await page.getByRole("button", { name: /E2E Merkblatt/ }).click();
   await editorPane.getByLabel("Titel").fill("E2E Merkblatt Entwurf");
   await expect(materialOutlineEntry).toContainText("Entwurf");

@@ -5,12 +5,15 @@
 ### Fixes
 - fix(frontend): Der globale CSS-Einstieg verwendet geordnete Standardimporte ohne Cascade Layers, sodass Safari unter iPadOS 15.3 die reguläre GUSTAV-Oberfläche gestaltet statt nahezu alle globalen Regeln zu verwerfen.
 - fix(frontend): Die fachliche Graphdarstellung behält ohne Cascade Layers ihre bisherige Mindesthöhe und ihren transparenten Hintergrund auch in aktuellen Browsern.
+- fix(learning): Die Warnung vor einer ungeprüften Überarbeitung vergleicht lokale und geprüfte Textfassungen jetzt mit derselben Rand-Weißraum-Normalisierung wie der Speicherpfad; echte Inhaltsänderungen bleiben warnpflichtig und die endgültige Abgabe bleibt an den geprüften Snapshot gebunden.
+- fix(teaching): Bestehende Aufgaben erhalten im Moduleditor eine vollständige typabhängige Ausgangs-Baseline, sodass technische Editorereignisse keinen falschen Entwurf mehr erzeugen und vollständig zurückgenommene Änderungen den lokalen Entwurf wieder entfernen.
 - fix(learning): Sichtbare Rückwege im Lernraum verwenden nur noch einen nachgewiesenen GUSTAV-Elterneintrag aus dem Browser-Verlauf und stellen nach Direktaufruf oder Neuladen ihr bezeichnetes Ziel ausdrücklich her; das Modul der aktuell geöffneten Aufgabe hat dabei Vorrang vor einer älteren, im Tab gespeicherten Rückposition.
 - fix(learning): Nach einer endgültigen modularen Abgabe führt der einzige Rückknopf bei weiteren offenen Aufgaben zur Modulansicht, sonst zum Lernpfad; lineare Aufgaben führen verständlich „Zurück zu den Inhalten“.
 
 ### Tests
 - test(frontend): Ein parserbasiertes Build-Gate, Unit-Tests und ein authentifizierter Chromium-/iPad-WebKit-Rundlauf sichern ab, dass ausgelieferte Stylesheets keine Cascade Layers enthalten und zentrale Layoutregeln wirksam sind.
 - test(frontend): Das CSS-Gate erkennt zusätzlich Layer-Zusätze an `@import`, auch mit kommentargetrennten oder direkt anschließenden Folgetokens; der Browser-Rundlauf verwendet dieselbe Parserlogik und prüft die erhaltene Graphdarstellung anhand berechneter Styles.
+- test(editors): Unit-, Komponenten-, Seiteninteraktions- und authentifizierte Chromium-Tests sichern die speicheräquivalente Lernenden-Normalisierung sowie Aufgaben-Baselines für native, H5P-, Datei-/Projekt- und Dialogaufgaben in Lern- und Übungsmodulen ab.
 - test(learning): Unit-, Komponenten-, Routen- und authentifizierte Browserprüfungen sichern semantische Rückziele, Direktlinks, Neuladen, Browser-Zurück/-Vorwärts und beide Abschlussfälle ab.
 
 ### Docs

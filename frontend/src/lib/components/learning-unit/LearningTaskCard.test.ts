@@ -1562,6 +1562,47 @@ describe("LearningTaskCard", () => {
     expect(screen.queryByRole("dialog", { name: "Überarbeitung noch nicht geprüft" })).toBeNull();
   });
 
+  it("submits a restored draft that differs only by persistence whitespace without warning", async () => {
+    const scopedKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";
+    window.sessionStorage.setItem(scopedKey, "  Geprüfter Entwurf\n\n");
+    render(LearningTaskCard, {
+      props: {
+        learnerSub: "student-2",
+        courseId: "course-1",
+        task: { ...task, has_submission: true },
+        taskTitle: "Aufgabe 1",
+        unitType: "linear",
+        workspaceOnly: true,
+        reviewPanelOpen: true,
+        initialSubmissionMode: "text",
+        history: [
+          {
+            id: validReviewedSubmissionId,
+            attempt_nr: 1,
+            kind: "text",
+            intent: "feedback",
+            created_at: "2026-08-23T10:00:00Z",
+            analysis_status: "completed",
+            text_body: "Geprüfter Entwurf",
+            feedback_md: "Gut begonnen."
+          }
+        ]
+      }
+    });
+
+    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    await waitFor(() => expect(editor.value).toBe("  Geprüfter Entwurf\n\n"));
+    const finalButton = screen.getByRole("button", { name: "Endgültig abgeben" });
+    const submit = vi.fn((event: Event) => event.preventDefault());
+    finalButton.closest("form")!.addEventListener("submit", submit);
+
+    await fireEvent.click(finalButton);
+
+    expect(submit).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog", { name: "Überarbeitung noch nicht geprüft" })).toBeNull();
+    expect(window.sessionStorage.getItem(scopedKey)).toBe("  Geprüfter Entwurf\n\n");
+  });
+
   it("also warns when a reviewed text draft was deliberately emptied", async () => {
     render(LearningTaskCard, {
       props: {

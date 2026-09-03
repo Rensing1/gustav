@@ -15,6 +15,7 @@
   import { taskInstructionPreview, taskPreviewIsVisuallyClipped } from "$lib/learning-unit/task-preview";
   import {
     finalSubmissionIdempotencyKey,
+    normalizeReviewedSubmissionText,
     reviewedSubmissionBaseline,
     type ReviewedSubmissionBaseline
   } from "$lib/learning-unit/submission-finalization";
@@ -540,7 +541,9 @@
 
   function hasUnreviewedTextChanges(): boolean {
     const baseline = currentReviewedBaseline();
-    return editorMode === "text" && baseline?.kind === "text" && draftText !== (baseline.textBody ?? "");
+    return editorMode === "text"
+      && baseline?.kind === "text"
+      && normalizeReviewedSubmissionText(draftText) !== normalizeReviewedSubmissionText(baseline.textBody);
   }
 
   function editingLocked(): boolean {

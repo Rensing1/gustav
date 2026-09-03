@@ -114,6 +114,47 @@ describe("teacher node editor page", () => {
     expect(within(outline).queryByText("Entwurf", { exact: true })).toBeNull();
   });
 
+  it("marks an existing task only for meaningful changes and removes the marker after reverting", async () => {
+    const data = {
+      ...sampleData,
+      editor: {
+        ...sampleData.editor,
+        tasks: [
+          {
+            id: "task-1",
+            kind: "native" as const,
+            instruction_md: "Gespeicherte Aufgabe",
+            criteria: ["Klarheit"],
+            teacher_context_md: null,
+            model_solution_md: null,
+            due_at: null,
+            max_attempts: null,
+            position: 1
+          }
+        ]
+      }
+    } satisfies PageData;
+    render(Page, { props: { data, form: {} as never } });
+
+    const taskEntry = screen.getByRole("button", { name: /Gespeicherte Aufgabe/ });
+    await fireEvent.click(taskEntry);
+    await screen.findByRole("toolbar", { name: "Text formatieren" });
+    await fireEvent.input(screen.getByLabelText("Anweisung & Beschreibung"));
+    await fireEvent.click(screen.getByRole("button", { name: "← Inhalte" }));
+
+    expect(within(taskEntry).queryByText("Entwurf", { exact: true })).toBeNull();
+
+    await fireEvent.click(taskEntry);
+    const teacherContext = screen.getByLabelText("Lehrkraft-Kontext");
+    await fireEvent.input(teacherContext, { target: { value: "Neuer Kontext" } });
+    await waitFor(() => expect(within(taskEntry).getByText("Entwurf", { exact: true })).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Verwerfen" })).toBeInTheDocument();
+
+    await fireEvent.input(teacherContext, { target: { value: "" } });
+    await waitFor(() => expect(within(taskEntry).queryByText("Entwurf", { exact: true })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Verwerfen" })).toBeNull();
+  });
+
   it("removes the material draft marker after every field matches the saved material again", async () => {
     const data = {
       ...sampleData,

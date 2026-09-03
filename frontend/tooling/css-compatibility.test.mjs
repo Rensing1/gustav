@@ -16,9 +16,19 @@ test("finds named and anonymous cascade layers", () => {
   assert.deepEqual(findCascadeLayers(css), ["reset, components", "components", "<anonymous>"]);
 });
 
+test("finds named and anonymous cascade layers on imports", () => {
+  const css = `
+    @import url("./tokens.css") layer(tokens);
+    @import "./defaults.css" /* valid CSS whitespace */ layer;
+  `;
+
+  assert.deepEqual(findCascadeLayers(css), ["tokens", "<anonymous import>"]);
+});
+
 test("accepts compatible at-rules and ignores layer text in comments", () => {
   const css = `
     /* @layer is documentation here. */
+    @import url("./layer(theme).css") screen;
     @media (min-width: 40rem) { .workspace { display: grid; } }
     @supports (display: grid) { .workspace { gap: 1rem; } }
   `;

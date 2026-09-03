@@ -53,12 +53,20 @@ test("@feature-acceptance delivers the authenticated learning view without casca
     const layout = await learner.page.evaluate(() => ({
       shellDisplay: getComputedStyle(document.querySelector(".app-shell")!).display,
       topbarPosition: getComputedStyle(document.querySelector(".app-topbar")!).position,
-      workspaceDisplay: getComputedStyle(document.querySelector(".workspace-page")!).display
+      workspaceDisplay: getComputedStyle(document.querySelector(".workspace-page")!).display,
+      graphMinHeightRem:
+        parseFloat(getComputedStyle(document.querySelector(".graph-stage-frame .teacher-flow-shell")!).minHeight) /
+        parseFloat(getComputedStyle(document.documentElement).fontSize),
+      graphBackgroundImage: getComputedStyle(
+        document.querySelector(".graph-stage-frame .teacher-flow-shell")!
+      ).backgroundImage
     }));
     expect(layout).toEqual({
       shellDisplay: "block",
       topbarPosition: "sticky",
-      workspaceDisplay: "grid"
+      workspaceDisplay: "grid",
+      graphMinHeightRem: 44,
+      graphBackgroundImage: "none"
     });
   } finally {
     await learner.context.close();

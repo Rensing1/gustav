@@ -70,3 +70,34 @@ Der Fix verändert ausschließlich den Frontend-Build. Es gibt keine neue oder g
 - `make verify-feature FEATURE=ios-15-3-css-compatibility`: erfolgreich. Darin bestanden 2.556 Backendtests, 653 Frontendtests, sieben Tooling-Tests sowie der authentifizierte Feature-Acceptance-Lauf in Chromium und iPad-WebKit. Die erzeugten Testdaten wurden vollständig bereinigt.
 - `make test-visual-smoke`: Der aktuelle Stand besitzt zehn bereits unabhängige visuelle Altfehler. Die gespeicherten Referenzen vom 8. August enthalten den am 9. August ergänzten Kummerkasten-Link noch nicht, ältere Graph-Referenzen bilden spätere Layoutänderungen nicht ab, und das UI-Labor stellt das vom Test erwartete Dialogelement nicht mehr bereit. Die Pixelabweichungen waren vor und nach dem abschließenden Vereinfachungsrefactor identisch; die fremden Baselines wurden in diesem Fix bewusst nicht verändert.
 - Ausstehender externer Nachweis: vollständiges Neuladen beziehungsweise Löschen der Website-Daten auf dem konkret betroffenen iPadOS-15.3.1-Gerät.
+
+## Reparaturplan nach Review
+
+Der Review hat zwei Lücken im ersten Stand gefunden. Die Reparatur bleibt bewusst auf diese nachgewiesenen Fälle begrenzt:
+
+1. **Aktuelle Browser behalten die bisherige Graphdarstellung**
+
+   Given der Lernpfad liegt in einem `GraphStageFrame`, when die Styles ohne Cascade Layers angewendet werden, then setzen die fachlichen Graphregeln weiterhin die transparente Fläche und eine Mindesthöhe von 44 rem durch.
+
+   Automatisierter Nachweis: Der bestehende authentifizierte Feature-Acceptance-Test prüft zusätzlich die berechnete Mindesthöhe und den Hintergrund der echten Lernpfadfläche.
+
+2. **Alle Formen von Cascade Layers werden abgelehnt**
+
+   Given ein erzeugtes Stylesheet verwendet `layer(...)` als Zusatz eines `@import`, when der CSS-Kompatibilitätschecker läuft, then lehnt er den Build ebenso wie bei einer `@layer`-Regel ab.
+
+   Automatisierter Nachweis: Ein Node-Unit-Test verwendet einen Layer-Import als fehlschlagendes Fixture.
+
+Umsetzung im Red–Green–Refactor-Ablauf:
+
+1. Die beiden Tests zuerst ergänzen und ihr bisheriges Fehlverhalten nachweisen.
+2. Im fachlichen Teaching-Stylesheet die Selektorstärke nur innerhalb des `GraphStageFrame` an die Primitive angleichen. So gewinnt weiterhin die später importierte Fachregel, ohne globale Sonderregeln oder `!important` einzuführen.
+3. Den parserbasierten Checker um Layer-Zusätze in `@import`-Regeln erweitern und beide Schreibweisen gemeinsam melden.
+4. Unit-Tests, Produktionsbuild und `make verify-feature FEATURE=ios-15-3-css-compatibility` ausführen.
+
+### Reparaturnachweis
+
+- Red: Der neue Node-Test meldete für zwei Layer-Imports zunächst statt der erwarteten Treffer eine leere Liste.
+- Green: Der Checker erkennt benannte und anonyme Layer-Imports; alle fünf gezielten Node-Tests bestehen.
+- Der Produktionsbuild besteht und prüft dabei das erzeugte Client-CSS erfolgreich auf beide Layer-Schreibweisen.
+- Der authentifizierte Feature-Acceptance-Test besteht in Chromium und im iPad-WebKit-Profil. Er bestätigt zusätzlich 44 rem Mindesthöhe und den transparenten Hintergrund der echten Lernpfadfläche.
+- `make verify-feature FEATURE=ios-15-3-css-compatibility`: erfolgreich. Darin bestanden 2.556 Backendtests, 653 Frontendtests, 62 H5P-Tests, acht Tooling-Tests, der Produktionsbuild sowie beide authentifizierten Browserläufe. Die erzeugten Testdaten wurden vollständig bereinigt.

@@ -707,15 +707,15 @@ Verbindliche Regeln:
 9. `auth`
 10. `overrides`
 
-Die Importreihenfolge ist die lesbare Ordnungs- und Prioritätsregel für den Quellcode. GUSTAV verwendet hier bewusst keine CSS Cascade Layers: Safari auf iPadOS 15.3 versteht sie noch nicht und würde sonst fast das gesamte globale Stylesheet verwerfen. Ein Build-Gate parst alle erzeugten Client-Stylesheets und bricht ab, falls dort trotzdem eine `@layer`-Regel vorkommt. Dadurch erhalten alte und aktuelle Browser dasselbe einfache CSS ohne browserspezifischen Sonderpfad.
+Die Importreihenfolge ist die lesbare Ordnungs- und Prioritätsregel für den Quellcode. GUSTAV verwendet hier bewusst keine CSS Cascade Layers: Safari auf iPadOS 15.3 versteht sie noch nicht und würde sonst fast das gesamte globale Stylesheet verwerfen. Ein Build-Gate parst alle erzeugten Client-Stylesheets und bricht ab, falls dort trotzdem eine `@layer`-Regel oder ein mit `layer(...)` qualifizierter `@import` vorkommt. Dadurch erhalten alte und aktuelle Browser dasselbe einfache CSS ohne browserspezifischen Sonderpfad.
 
 Verbindliche Regeln:
 
 - `theme-tokens.css` ist die einzige Quelle für globale `--color-*`, `--font-*`, `--space-*` und `--radius-*`-Variablen.
 - Fachliche Stylesheets dürfen globale Tokens verwenden, aber nicht neu definieren.
 - Eindeutig fachlich benannte, komponentenlokale Variablen bleiben erlaubt.
-- Neue globale Stylesheets werden nicht direkt in `+layout.svelte` importiert, sondern einer Schicht in `index.css` zugeordnet.
-- `@layer` wird im globalen CSS nicht verwendet und darf auch nicht im erzeugten Client-CSS vorkommen.
+- Neue globale Stylesheets werden nicht direkt in `+layout.svelte` importiert, sondern an der fachlich passenden Position in `index.css` eingebunden.
+- `@layer` und Layer-Zusätze an `@import` werden im globalen CSS nicht verwendet und dürfen auch nicht im erzeugten Client-CSS vorkommen.
 - Benachbarte Bedienelemente mit derselben Funktionsebene teilen gemeinsame Chrom-Regeln; Theme- und Account-Schalter der Top-Bar sind die Referenz dafür.
 - Die ehemalige warme Papier-/Petrolpalette darf nicht lokal über hart codierte Werte zurückkehren.
 

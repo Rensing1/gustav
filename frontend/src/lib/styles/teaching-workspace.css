@@ -1820,7 +1820,9 @@
   margin-inline: 0;
 }
 
-.teacher-flow-shell {
+/* Match the frame primitive's specificity so this later context rule keeps priority. */
+.teacher-flow-shell,
+.graph-stage-frame .teacher-flow-shell {
   height: min(80vh, 56rem);
   min-height: 44rem;
   --background-color: transparent;

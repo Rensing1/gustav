@@ -8,7 +8,7 @@
 
 ### Tests
 - test(frontend): Ein parserbasiertes Build-Gate, Unit-Tests und ein authentifizierter Chromium-/iPad-WebKit-Rundlauf sichern ab, dass ausgelieferte Stylesheets keine Cascade Layers enthalten und zentrale Layoutregeln wirksam sind.
-- test(frontend): Das CSS-Gate erkennt zusätzlich Layer-Zusätze an `@import`; der Browser-Rundlauf prüft die erhaltene Graphdarstellung anhand berechneter Styles.
+- test(frontend): Das CSS-Gate erkennt zusätzlich Layer-Zusätze an `@import`, auch mit kommentargetrennten oder direkt anschließenden Folgetokens; der Browser-Rundlauf verwendet dieselbe Parserlogik und prüft die erhaltene Graphdarstellung anhand berechneter Styles.
 
 ### Docs
 - docs(design): Das Designsystem dokumentiert die verbindliche Importreihenfolge und die iPadOS-15.3-kompatible CSS-Grenze.

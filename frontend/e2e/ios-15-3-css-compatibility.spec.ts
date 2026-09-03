@@ -4,6 +4,7 @@ import { login } from "./support/auth";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerNavigationCourse } from "./support/seed-data";
+import { findCascadeLayers } from "../tooling/css-compatibility.mjs";
 
 const password = e2ePassword;
 
@@ -21,9 +22,8 @@ async function expectCompatibleStylesheets(page: Page): Promise<void> {
   for (const stylesheetUrl of stylesheetUrls) {
     const response = await page.request.get(stylesheetUrl);
     expect(response.ok(), `Stylesheet could not be loaded: ${stylesheetUrl}`).toBe(true);
-    expect(await response.text(), `Cascade layer remained in: ${stylesheetUrl}`).not.toMatch(
-      /@layer(?:\s|\{|;)/i
-    );
+    const layers = findCascadeLayers(await response.text(), stylesheetUrl);
+    expect(layers, `Cascade layer remained in: ${stylesheetUrl}`).toEqual([]);
   }
 }
 

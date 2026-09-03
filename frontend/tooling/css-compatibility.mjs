@@ -12,8 +12,18 @@ import postcss from "postcss";
  */
 function findImportedLayer(params) {
   let cursor = 0;
-  const skipWhitespace = () => {
-    while (/\s/.test(params[cursor] ?? "")) cursor += 1;
+  // CSS comments may separate tokens wherever whitespace is allowed.
+  const skipTrivia = () => {
+    while (cursor < params.length) {
+      if (/\s/.test(params[cursor])) {
+        cursor += 1;
+      } else if (params.startsWith("/*", cursor)) {
+        const commentEnd = params.indexOf("*/", cursor + 2);
+        cursor = commentEnd === -1 ? params.length : commentEnd + 2;
+      } else {
+        return;
+      }
+    }
   };
   const consumeString = (quote) => {
     cursor += 1;
@@ -29,7 +39,7 @@ function findImportedLayer(params) {
     }
   };
 
-  skipWhitespace();
+  skipTrivia();
   if (params[cursor] === '"' || params[cursor] === "'") {
     consumeString(params[cursor]);
   } else if (params.slice(cursor, cursor + 4).toLowerCase() === "url(") {
@@ -50,10 +60,13 @@ function findImportedLayer(params) {
     return null;
   }
 
-  skipWhitespace();
-  const match = /^layer(?:\(\s*([^)]*?)\s*\))?(?=\s|$)/i.exec(params.slice(cursor));
-  if (!match) return null;
-  return match[1]?.trim() || "<anonymous import>";
+  skipTrivia();
+  const remainder = params.slice(cursor);
+  const namedLayer = /^layer\(\s*([^)]*?)\s*\)/i.exec(remainder);
+  if (namedLayer) return namedLayer[1]?.trim() || "<anonymous import>";
+
+  const anonymousLayer = /^layer(?=\s|\/\*|$)/i.exec(remainder);
+  return anonymousLayer ? "<anonymous import>" : null;
 }
 
 /**

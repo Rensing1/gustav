@@ -1,7 +1,7 @@
 /*
- * Cross-layer composition belongs here only when a shell element embeds a
- * reusable primitive. Keeping these rules explicit avoids specificity races
- * between the base shell and later component layers.
+ * Cross-file composition belongs here only when a shell element embeds a
+ * reusable primitive. Keeping these rules explicit makes normal selector
+ * specificity and the final import position easy to understand.
  */
 
 .app-topbar-tools :is(.theme-toggle, .account-trigger) {

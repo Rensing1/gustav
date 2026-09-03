@@ -20,9 +20,16 @@ test("finds named and anonymous cascade layers on imports", () => {
   const css = `
     @import url("./tokens.css") layer(tokens);
     @import "./defaults.css" /* valid CSS whitespace */ layer;
+    @import "./commented.css"/**/layer(commented);
+    @import url("./screen.css")/**/layer(screen)screen;
   `;
 
-  assert.deepEqual(findCascadeLayers(css), ["tokens", "<anonymous import>"]);
+  assert.deepEqual(findCascadeLayers(css), [
+    "tokens",
+    "<anonymous import>",
+    "commented",
+    "screen"
+  ]);
 });
 
 test("accepts compatible at-rules and ignores layer text in comments", () => {

@@ -62,7 +62,10 @@
     learnerNavigationHref,
     type LearnerNavigationTarget
   } from "$lib/learning-unit/learner-navigation";
-  import type { LearnerReturnDestination } from "$lib/learning-unit/learner-return-navigation";
+  import {
+    resolveLearnerReturnNavigation,
+    type LearnerReturnDestination
+  } from "$lib/learning-unit/learner-return-navigation";
   import {
     readTaskColumnRatio,
     removeTaskColumnRatio,
@@ -330,17 +333,11 @@
   }
 
   async function returnToLearnerDestination(destination: LearnerReturnDestination) {
-    const position = learnerWorkspace.returnPosition;
-    const requestedModuleId = position?.moduleId ?? learnerWorkspace.activeTask?.moduleId ?? null;
-    const target: LearnerNavigationTarget = destination === "learningPath" ||
-      (destination === "module" && !requestedModuleId)
-      ? { surface: "graph", moduleId: null, taskId: null, panel: null }
-      : {
-          surface: "reading",
-          moduleId: destination === "module" ? requestedModuleId : null,
-          taskId: null,
-          panel: null
-        };
+    const { target, restorablePosition: position } = resolveLearnerReturnNavigation({
+      destination,
+      activeTaskModuleId: learnerWorkspace.activeTask?.moduleId ?? null,
+      returnPosition: learnerWorkspace.returnPosition
+    });
 
     if (browser) {
       const currentUrl = new URL(window.location.href);

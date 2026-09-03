@@ -69,7 +69,7 @@ test("@feature-acceptance follows graph, reading, task and deterministic feedbac
     await expect(learner.page.getByRole("heading", { name: seeded.unitTitle })).toBeVisible();
     await expect(learner.page.getByTitle(seeded.secondMaterialTitle)).toBeVisible();
 
-    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+    await learner.page.locator(`#task-row-${seeded.taskId}`).getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
     const editor = learner.page.locator(
       '.learning-markdown-editor__surface [contenteditable="true"]'
     );
@@ -79,6 +79,8 @@ test("@feature-acceptance follows graph, reading, task and deterministic feedbac
     const unitPath = `/learning/courses/${seeded.courseId}/units/${seeded.unitId}`;
     const modulePath = `${unitPath}?module=${seeded.graphModuleId}`;
     const taskPath = `${modulePath}&task=${seeded.taskId}`;
+    const contextModulePath = `${unitPath}?module=${seeded.contextGraphModuleId}`;
+    const contextTaskPath = `${contextModulePath}&task=${seeded.contextTaskId}`;
 
     await learner.page.goBack();
     await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.graphModuleId}$`));
@@ -93,16 +95,16 @@ test("@feature-acceptance follows graph, reading, task and deterministic feedbac
     await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
 
     await learner.page.goto(`/learning/courses/${seeded.courseId}`);
-    await learner.page.goto(taskPath);
-    await learner.page.getByRole("button", { name: /← Zurück zu Modul Grundlagen/ }).click();
-    await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.graphModuleId}$`));
+    await learner.page.goto(contextTaskPath);
+    await learner.page.getByRole("button", { name: /← Zurück zu Modul Quellen/ }).click();
+    await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.contextGraphModuleId}$`));
 
     await learner.page.goto(taskPath);
     await learner.page.reload();
     await learner.page.getByRole("button", { name: /← Zurück zu Modul Grundlagen/ }).click();
     await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.graphModuleId}$`));
 
-    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+    await learner.page.locator(`#task-row-${seeded.taskId}`).getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
     await editor.fill("Digitale Kommunikation braucht klare und überprüfbare Regeln.");
     await expect(editor).toContainText("klare und überprüfbare Regeln");
     await requestDeterministicFeedback({

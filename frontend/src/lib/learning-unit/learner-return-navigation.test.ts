@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { LearningSubmission, LearningTask } from "$lib/types/learning";
 import {
   completionReturnDestination,
-  learnerReturnLabel
+  learnerReturnLabel,
+  resolveLearnerReturnNavigation
 } from "./learner-return-navigation";
 
 function task(id: string, latestFinalSubmissionAt: string | null = null): LearningTask {
@@ -63,5 +64,47 @@ describe("learner return navigation", () => {
       historyByTask: {}
     })).toBe("contents");
     expect(learnerReturnLabel("contents")).toBe("Zurück zu den Inhalten");
+  });
+
+  it("prefers the active task module over a stale stored return position", () => {
+    expect(resolveLearnerReturnNavigation({
+      destination: "module",
+      activeTaskModuleId: "module-current",
+      returnPosition: {
+        moduleId: "module-stale",
+        scrollY: 640,
+        focusId: "task-row-stale"
+      }
+    })).toEqual({
+      target: {
+        surface: "reading",
+        moduleId: "module-current",
+        taskId: null,
+        panel: null
+      },
+      restorablePosition: null
+    });
+  });
+
+  it("keeps a stored return position when it belongs to the active module", () => {
+    const returnPosition = {
+      moduleId: "module-current",
+      scrollY: 320,
+      focusId: "task-row-current"
+    };
+
+    expect(resolveLearnerReturnNavigation({
+      destination: "module",
+      activeTaskModuleId: "module-current",
+      returnPosition
+    })).toEqual({
+      target: {
+        surface: "reading",
+        moduleId: "module-current",
+        taskId: null,
+        panel: null
+      },
+      restorablePosition: returnPosition
+    });
   });
 });

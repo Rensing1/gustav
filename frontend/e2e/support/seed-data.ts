@@ -53,6 +53,7 @@ export type TeacherAiUsageCourse = {
 export type LearnerNavigationCourse = LearnerVisualSmokeCourse & {
   graphModuleId: string;
   contextGraphModuleId: string;
+  contextTaskId: string;
   secondMaterialTitle: string;
   secondTaskId: string;
   contextImageAltText: string;
@@ -579,6 +580,10 @@ export async function seedLearnerNavigationCourse(
       "base64"
     )
   });
+  const contextTaskId = await createTask(teacherPage, unitId, contextSectionId, {
+    instruction_md: "Ordne die historische Übersicht in den Lernpfad ein.",
+    criteria: []
+  });
 
   const courseModuleId = await attachUnitToCourse(teacherPage, courseId, unitId);
   await releaseSection(teacherPage, courseId, courseModuleId, sectionId);
@@ -592,6 +597,7 @@ export async function seedLearnerNavigationCourse(
     secondTaskId,
     graphModuleId,
     contextGraphModuleId,
+    contextTaskId,
     secondMaterialTitle,
     contextImageAltText,
     contextImageTitle,

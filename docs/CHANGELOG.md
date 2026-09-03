@@ -5,7 +5,7 @@
 ### Fixes
 - fix(frontend): Der globale CSS-Einstieg verwendet geordnete Standardimporte ohne Cascade Layers, sodass Safari unter iPadOS 15.3 die reguläre GUSTAV-Oberfläche gestaltet statt nahezu alle globalen Regeln zu verwerfen.
 - fix(frontend): Die fachliche Graphdarstellung behält ohne Cascade Layers ihre bisherige Mindesthöhe und ihren transparenten Hintergrund auch in aktuellen Browsern.
-- fix(learning): Sichtbare Rückwege im Lernraum verwenden nur noch einen nachgewiesenen GUSTAV-Elterneintrag aus dem Browser-Verlauf und stellen nach Direktaufruf oder Neuladen ihr bezeichnetes Ziel ausdrücklich her.
+- fix(learning): Sichtbare Rückwege im Lernraum verwenden nur noch einen nachgewiesenen GUSTAV-Elterneintrag aus dem Browser-Verlauf und stellen nach Direktaufruf oder Neuladen ihr bezeichnetes Ziel ausdrücklich her; das Modul der aktuell geöffneten Aufgabe hat dabei Vorrang vor einer älteren, im Tab gespeicherten Rückposition.
 - fix(learning): Nach einer endgültigen modularen Abgabe führt der einzige Rückknopf bei weiteren offenen Aufgaben zur Modulansicht, sonst zum Lernpfad; lineare Aufgaben führen verständlich „Zurück zu den Inhalten“.
 
 ### Tests

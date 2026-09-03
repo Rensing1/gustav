@@ -39,3 +39,18 @@ Als lernende Person möchte ich, dass jeder sichtbare Rückweg genau zu dem beze
 - Die betroffenen Vitest-Tests laufen zuerst rot und nach der Implementierung grün.
 - Der authentifizierte Browserlauf prüft Ziel-URLs und sichtbare Zielansichten, nicht nur die erneute Erreichbarkeit einer Aufgabe.
 - Vor der Fertigmeldung läuft `make verify-feature FEATURE=learner-navigation` erfolgreich.
+
+## Review-Fix: Veraltete Rückposition nach einem Direktlink
+
+### Ergänzende Produktregel
+
+- Bei einem sichtbaren Rückweg zum Modul bestimmt die aktuell geöffnete Aufgabe das Zielmodul.
+- Eine im Tab gespeicherte Rückposition darf das Zielmodul nur ersetzen, wenn keine aktive Aufgabe mehr verfügbar ist.
+- Scrollposition und Fokus aus einer gespeicherten Rückposition werden nur wiederhergestellt, wenn deren Modul zum tatsächlichen Zielmodul passt.
+
+### Ergänzende BDD-Szenarien und Testzuordnung
+
+| Szenario | Given | When | Then | Automatisierter Test |
+|---|---|---|---|---|
+| Direktlink nach Arbeit in einem anderen Modul | Im Tab ist eine Rückposition für Modul A gespeichert und eine Aufgabe aus Modul B wird direkt geöffnet | „Zurück zu Modul B“ wird betätigt | Modul B wird geöffnet; Scrollposition und Fokus aus Modul A werden nicht übernommen | Unit-Test für die Zielentscheidung und `learner-navigation.spec.ts` (`@feature-acceptance`) |
+| Passende Rückposition | Die gespeicherte Rückposition und die aktive Aufgabe gehören zum selben Modul | Der Modulrückweg wird betätigt | Das Modul wird geöffnet und die passende Scrollposition beziehungsweise der Fokus wird wiederhergestellt | Unit-Test für die Zielentscheidung |

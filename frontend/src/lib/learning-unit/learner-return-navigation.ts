@@ -1,6 +1,18 @@
 import type { LearningSubmission, LearningTask } from "$lib/types/learning";
+import type { LearnerNavigationTarget } from "$lib/learning-unit/learner-navigation";
 
 export type LearnerReturnDestination = "module" | "learningPath" | "contents";
+
+type LearnerReturnPosition = {
+  moduleId: string | null;
+  scrollY: number;
+  focusId: string | null;
+};
+
+type LearnerReturnNavigation = {
+  target: LearnerNavigationTarget;
+  restorablePosition: LearnerReturnPosition | null;
+};
 
 type CompletionReturnInput = {
   unitType: "linear" | "modular";
@@ -49,4 +61,38 @@ export function learnerReturnLabel(destination: LearnerReturnDestination): strin
     return "Zurück zu den Inhalten";
   }
   return "Zurück zum Lernpfad";
+}
+
+/**
+ * Resolve the visible return target and any position that safely belongs to it.
+ *
+ * The active task is the source of truth for its module. A stored position is
+ * only navigation fallback when no task is active, and is never restored in a
+ * different module.
+ */
+export function resolveLearnerReturnNavigation({
+  destination,
+  activeTaskModuleId,
+  returnPosition
+}: {
+  destination: LearnerReturnDestination;
+  activeTaskModuleId: string | null;
+  returnPosition: LearnerReturnPosition | null;
+}): LearnerReturnNavigation {
+  const moduleId = activeTaskModuleId ?? returnPosition?.moduleId ?? null;
+  const target: LearnerNavigationTarget = destination === "learningPath" ||
+    (destination === "module" && !moduleId)
+    ? { surface: "graph", moduleId: null, taskId: null, panel: null }
+    : {
+        surface: "reading",
+        moduleId: destination === "module" ? moduleId : null,
+        taskId: null,
+        panel: null
+      };
+  const restorablePosition = target.surface === "reading" &&
+    returnPosition?.moduleId === target.moduleId
+    ? returnPosition
+    : null;
+
+  return { target, restorablePosition };
 }

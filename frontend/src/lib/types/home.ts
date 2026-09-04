@@ -254,6 +254,47 @@ export type TeacherUnitNodeEditorTask = {
   } | null;
 };
 
+export type TeacherUnitPrintableItem = {
+  id: string;
+  content_type: "material" | "task";
+  kind: string;
+  label: string;
+  position: number;
+  mime_type: string | null;
+  filename_original: string | null;
+  size_bytes: number | null;
+};
+
+export type TeacherUnitPrintableNode = {
+  id: string;
+  kind: "section" | "module";
+  title: string;
+  position: number;
+  materials: TeacherUnitPrintableItem[];
+  tasks: TeacherUnitPrintableItem[];
+};
+
+export type TeacherUnitPrintableContent = {
+  unit: {
+    id: string;
+    title: string;
+    unit_type: "linear" | "modular";
+  };
+  linear_sections: TeacherUnitPrintableNode[];
+  modular_phases: Array<{
+    id: string;
+    title: string;
+    position: number;
+    modules: TeacherUnitPrintableNode[];
+  }>;
+  limits: {
+    max_selected_items: number;
+    max_source_bytes: number;
+    max_output_bytes: number;
+    max_pages: number;
+  };
+};
+
 export type TeacherUnitWorkspaceSelectionSection = {
   id: string;
   title: string;

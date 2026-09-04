@@ -1,6 +1,6 @@
 # Unterrichten (Teaching) – Referenz
 
-Stand: Version 0.0.4, zuletzt geprüft am 2026-08-16.
+Stand: Version 0.0.4, zuletzt geprüft am 2026-09-04.
 
 Diese Referenz beschreibt die fachlichen Fähigkeiten und technischen Grenzen des Teaching-Kontexts. `api/openapi.yml` ist die Quelle der Wahrheit für Endpunkte und Payloads; `supabase/migrations/` ist die Quelle der Wahrheit für das Schema.
 
@@ -13,6 +13,7 @@ Die Lehrkraftoberfläche liegt vollständig in SvelteKit:
 - `/teaching/courses/{courseId}` – Kurskontext, Mitglieder, Lerneinheiten und Kurseinladung;
 - `/teaching/units` – wiederverwendbare Lerneinheiten;
 - `/teaching/units/{unitId}` – Modulgraph und Struktur;
+- `/teaching/units/{unitId}/print` – Auswahl und Download einer PDF-Schülerfassung;
 - `/teaching/units/{unitId}/nodes/{nodeId}` – Inhalte und Einstellungen eines Graphknotens.
 
 SvelteKit komponiert Seiten und Form Actions als Browser-BFF. Fachliche Mutationen laufen über die Teaching-API; es gibt keine produktiven FastAPI-SSR-/HTMX-Seiten und keinen Repository-Bypass aus dem Frontend.
@@ -86,6 +87,14 @@ Modulare Lerneinheiten bestehen aus:
 
 Die Teaching-API bietet objektorientierte Endpunkte für Units, Phasen, Module, Kanten und Inhalte sowie eigene Read Models für den SvelteKit-Arbeitsraum. Reihenfolgen werden serverseitig als vollständige ID-Mengen validiert, damit Duplikate und verlorene Elemente nicht unbemerkt übernommen werden.
 
+## Druckfassung
+
+Aus der Arbeitsfläche einer eigenen Lerneinheit öffnet die Lehrkraft eine zunächst leere Auswahl. Einzelne Materialien und Aufgaben lassen sich direkt oder gesammelt über Abschnitt beziehungsweise Modul wählen. Die Reihenfolge bestimmt immer der aktuelle serverseitige Lernweg; Materialien stehen innerhalb eines Knotens vor Aufgaben.
+
+Die erzeugte PDF-Datei ist eine Schülerfassung. Sie enthält Titel, freie Felder für Name, Kurs und Datum sowie Seitenzahlen, jedoch keine Kriterien, Musterlösung, Lehrkraftnotizen, Abgabefrist oder Versuchslimits. Links werden mit Zieladresse gedruckt. Interaktive Aufgaben und Simulationen geben ihre schriftliche Orientierung mit einem Hinweis auf das benötigte digitale Gerät wieder. Bilder behalten ihre Farben; PDF-Materialien werden proportional in Hoch- oder Querformat auf A4 eingefügt.
+
+Auswahl und PDF bleiben flüchtig. GUSTAV speichert keine Exporthistorie und liest keine handschriftlichen Ergebnisse zurück. Pro Export gelten höchstens 200 Inhalte, 50 MiB Quelldaten, 200 Seiten und 50 MiB Ausgabe. Eine fehlende, beschädigte, verschlüsselte oder nicht druckbare Datei bricht den vollständigen Export ab.
+
 ## Materialien
 
 Materialien gehören zu einem Abschnitt oder Modul. Unterstützte Arten:
@@ -143,6 +152,7 @@ Einige einfache Teaching-Routen orchestrieren Repository-Aufrufe direkt. Neue od
 - RLS und owner-gebundene `SECURITY DEFINER`-Helper schützen Datenbankzugriffe.
 - Personen werden fachlich über `sub`, nicht über E-Mail-Adressen, referenziert.
 - Capability-Tokens, SMTP-Adressen und Inhaltsdaten erscheinen nicht in Logs.
+- Der PDF-Satz darf keine externen Ressourcen laden und läuft in einem kurzlebigen Prozess mit Zeit-, Speicher- und Dateigrenze.
 - Fehlende sicherheitskritische DB-Helper führen zu `503`, nicht zu einem weniger geschützten Tabellen-Fallback.
 
 ## Verifikation

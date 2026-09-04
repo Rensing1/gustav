@@ -397,6 +397,13 @@ class TaskReorderPayload(BaseModel):
     task_ids: object | None = None
 
 
+class TeachingUnitPrintPayload(BaseModel):
+    """Loose transport shape so malformed selections receive stable HTTP 400 errors."""
+
+    material_ids: object | None = None
+    task_ids: object | None = None
+
+
 class AddMember(BaseModel):
     # Keep optional to return 400 (not FastAPI 422) when missing/empty.
     # Accept both contract key `student_sub` (preferred) and legacy/test key `sub`.
@@ -435,6 +442,7 @@ __all__ = [
     "TaskCreatePayload",
     "TaskReorderPayload",
     "TaskUpdatePayload",
+    "TeachingUnitPrintPayload",
     "UnitCreatePayload",
     "UnitModuleCreatePayload",
     "UnitModuleEdgePayload",

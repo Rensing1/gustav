@@ -58,6 +58,13 @@
     },
     {
       "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "pypdf",
+      "policy": "metadata-recorded",
+      "version": "6.16.2"
+    },
+    {
+      "ecosystem": "python",
       "license": "(Apache-2.0 OR BSD-3-Clause) AND LicenseRef-PdfiumThirdParty",
       "name": "pypdfium2",
       "policy": "metadata-recorded",
@@ -118,6 +125,13 @@
       "name": "uvicorn",
       "policy": "metadata-recorded",
       "version": "0.32.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "weasyprint",
+      "policy": "metadata-recorded",
+      "version": "69.0"
     },
     {
       "ecosystem": "node",
@@ -4508,8 +4522,8 @@
   ],
   "summary": {
     "node_entries": 542,
-    "python_entries": 17,
+    "python_entries": 19,
     "review_required_entries": 0,
-    "total_entries": 559
+    "total_entries": 561
   }
 }

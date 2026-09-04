@@ -7,6 +7,11 @@ WORKDIR /app
 # System build dependencies (kept minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    fonts-dejavu-core \
+    libharfbuzz-subset0 \
+    libharfbuzz0b \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
   && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies

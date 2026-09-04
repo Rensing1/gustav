@@ -714,6 +714,14 @@ class DBTeachingRepo:
             author_id=author_id,
         )
 
+    def list_materials_for_unit_owned(self, unit_id: str, author_id: str) -> List[dict]:
+        return _repo_material_queries.list_materials_for_unit_owned(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            unit_id=unit_id,
+            author_id=author_id,
+        )
+
     def create_markdown_material(self, unit_id: str, section_id: str, author_id: str, *, title: str, body_md: str) -> dict:
         return _repo_material_queries.create_markdown_material(
             dsn=self._dsn,
@@ -875,6 +883,14 @@ class DBTeachingRepo:
             psycopg_module=psycopg,
             unit_id=unit_id,
             section_id=section_id,
+            author_id=author_id,
+        )
+
+    def list_tasks_for_unit_owned(self, unit_id: str, author_id: str) -> List[dict]:
+        return _repo_task_queries.list_tasks_for_unit_owned(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            unit_id=unit_id,
             author_id=author_id,
         )
 

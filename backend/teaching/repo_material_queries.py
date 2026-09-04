@@ -52,6 +52,24 @@ def list_materials_for_section_owned(*, dsn: str, psycopg_module, unit_id: str, 
             rows = cur.fetchall() or []
     return [_material_row_to_dict(r) for r in rows]
 
+
+def list_materials_for_unit_owned(*, dsn: str, psycopg_module, unit_id: str, author_id: str) -> List[dict]:
+    """Return all materials for one authored unit in a single RLS-scoped read."""
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+            cur.execute(
+                f"""
+                select {_MATERIAL_COLUMNS_SQL}
+                from public.unit_materials
+                where unit_id = %s
+                order by section_id asc, position asc, id asc
+                """,
+                (unit_id,),
+            )
+            rows = cur.fetchall() or []
+    return [_material_row_to_dict(row) for row in rows]
+
 def create_markdown_material(*, dsn: str, psycopg_module, unique_violation_cls, unit_id: str, section_id: str, author_id: str, title: str, body_md: str) -> dict:
     """Create a markdown material at the next position within a section."""
     title = (title or "").strip()

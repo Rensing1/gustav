@@ -653,6 +653,13 @@ class InMemoryTeachingRepo:
         items.sort(key=lambda m: (m.position, m.id))
         return items
 
+    def list_materials_for_unit_owned(self, unit_id: str, author_id: str) -> List[MaterialData]:
+        """Mirror the production batch read for tests and local fallback use."""
+        if not self.unit_exists_for_author(unit_id, author_id):
+            return []
+        items = [material for material in self.materials.values() if material.unit_id == unit_id]
+        return sorted(items, key=lambda material: (material.section_id, material.position, material.id))
+
     def create_markdown_material(
         self, unit_id: str, section_id: str, author_id: str, *, title: str, body_md: str
     ) -> MaterialData:
@@ -918,6 +925,13 @@ class InMemoryTeachingRepo:
         tasks = [self.tasks[tid] for tid in ids if tid in self.tasks]
         tasks.sort(key=lambda t: (t.position, t.id))
         return tasks
+
+    def list_tasks_for_unit_owned(self, unit_id: str, author_id: str) -> List[TaskData]:
+        """Mirror the production batch read for tests and local fallback use."""
+        if not self.unit_exists_for_author(unit_id, author_id):
+            return []
+        tasks = [task for task in self.tasks.values() if task.unit_id == unit_id]
+        return sorted(tasks, key=lambda task: (task.section_id, task.position, task.id))
 
     def create_task(
         self,

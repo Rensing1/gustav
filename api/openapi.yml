@@ -1152,6 +1152,133 @@ components:
             $ref: '#/components/schemas/TeacherUnitNodeEditorTask'
         settings:
           $ref: '#/components/schemas/TeacherUnitNodeEditorSettings'
+    TeachingUnitPrintableSummary:
+      type: object
+      required: [id, title, unit_type]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        unit_type:
+          type: string
+          enum: [linear, modular]
+    TeachingUnitPrintableItem:
+      type: object
+      required: [id, content_type, kind, label, position]
+      properties:
+        id:
+          type: string
+          format: uuid
+        content_type:
+          type: string
+          enum: [material, task]
+        kind:
+          type: string
+          enum: [markdown, file, simulation, native, h5p, visual, scratch, calliope, filius, dialog]
+        label:
+          type: string
+          description: Material title or a short plain-text task preview for the selection UI.
+        position:
+          type: integer
+          minimum: 1
+        mime_type:
+          type: string
+          nullable: true
+        filename_original:
+          type: string
+          nullable: true
+        size_bytes:
+          type: integer
+          minimum: 0
+          nullable: true
+    TeachingUnitPrintableNode:
+      type: object
+      required: [id, kind, title, position, materials, tasks]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [section, module]
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        materials:
+          type: array
+          items: { $ref: '#/components/schemas/TeachingUnitPrintableItem' }
+        tasks:
+          type: array
+          items: { $ref: '#/components/schemas/TeachingUnitPrintableItem' }
+    TeachingUnitPrintablePhase:
+      type: object
+      required: [id, title, position, modules]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        modules:
+          type: array
+          items: { $ref: '#/components/schemas/TeachingUnitPrintableNode' }
+    TeachingUnitPrintLimits:
+      type: object
+      required: [max_selected_items, max_source_bytes, max_output_bytes, max_pages]
+      properties:
+        max_selected_items:
+          type: integer
+          example: 200
+        max_source_bytes:
+          type: integer
+          example: 52428800
+        max_output_bytes:
+          type: integer
+          example: 52428800
+        max_pages:
+          type: integer
+          example: 200
+    TeachingUnitPrintableContent:
+      type: object
+      required: [unit, linear_sections, modular_phases, limits]
+      properties:
+        unit:
+          $ref: '#/components/schemas/TeachingUnitPrintableSummary'
+        linear_sections:
+          type: array
+          description: Ordered sections; empty for modular learning units.
+          items: { $ref: '#/components/schemas/TeachingUnitPrintableNode' }
+        modular_phases:
+          type: array
+          description: Ordered phases and modules; empty for linear learning units.
+          items: { $ref: '#/components/schemas/TeachingUnitPrintablePhase' }
+        limits:
+          $ref: '#/components/schemas/TeachingUnitPrintLimits'
+    TeachingUnitPrintRequest:
+      type: object
+      required: [material_ids, task_ids]
+      properties:
+        material_ids:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        task_ids:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
     DiagnosticsCourseMatrixCourse:
       type: object
       required: [id, title, href]
@@ -10624,6 +10751,94 @@ paths:
                   value:
                     error: service_unavailable
                     detail: storage_adapter_unavailable
+
+  /api/teaching/units/{unit_id}/printable-content:
+    get:
+      tags: [Teaching]
+      summary: List printable content of a learning unit (author only)
+      operationId: getTeachingUnitPrintableContent
+      security:
+        - cookieAuth: []
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ordered selection model for a teacher-authored learning unit
+          headers:
+            Cache-Control:
+              schema: { type: string, example: private, no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeachingUnitPrintableContent' }
+        '400': { description: Invalid unit id, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not a teacher or not the author), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
+
+  /api/teaching/units/{unit_id}/printable-pdf:
+    post:
+      tags: [Teaching]
+      summary: Generate a transient printable PDF of selected learning-unit content
+      operationId: createTeachingUnitPrintablePdf
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: Same-origin required (Origin/Referer must match server origin)."
+        - "The PDF is generated transiently and must not be persisted or cached."
+      x-permissions:
+        requiredRole: teacher
+        authorOnly: true
+      parameters:
+        - in: path
+          name: unit_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeachingUnitPrintRequest' }
+      responses:
+        '200':
+          description: Generated student-facing PDF
+          headers:
+            Cache-Control:
+              schema: { type: string, example: private, no-store }
+            Content-Disposition:
+              schema: { type: string, example: 'attachment; filename="gustav-lerneinheit-druckfassung.pdf"' }
+            X-Content-Type-Options:
+              schema: { type: string, example: nosniff }
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid, empty, duplicate, or foreign selection
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Forbidden (not a teacher, not the author, or failed CSRF check), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '413':
+          description: Selection, source bytes, output bytes, or page count exceeds the print policy
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422':
+          description: A selected file material cannot be rendered safely
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503':
+          description: Repository, storage, or PDF renderer unavailable
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   /api/teaching/units/{unit_id}/phases:
     get:

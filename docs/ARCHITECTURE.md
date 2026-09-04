@@ -117,6 +117,8 @@ Details: `docs/references/auth_sessions_and_cookies.md` und `docs/references/use
 
 Lehrkräfte bearbeiten Kurse und wiederverwendbare Lerneinheiten im SvelteKit-Arbeitsraum. Die Oberfläche verwendet objektorientierte Teaching-Endpunkte für Mutationen und dedizierte Read Models für komplexe Räume. Modulare Lerneinheiten bestehen aus Phasen, Lernmodulen, Übungsmodulen, Abschnitten und gerichteten Kanten. Freigaben binden Inhalte an einen Kurs, ohne die wiederverwendbare Lerneinheit zu duplizieren.
 
+Die Druckfassung ist ein transienter Teaching-Use-Case für eigene Lerneinheiten. Ein autorengebundener Batch-Snapshot ordnet ausgewählte Materialien und Aufgaben, entfernt Lehrkraft-Felder vor der Übergabe an den PDF-Adapter und liest nur ausgewählte private Dateien. Der Satz läuft ohne Netzwerkzugriff in einem kurzlebigen, begrenzten Prozess; eingefügte PDF-Seiten werden in neue A4-Seiten überführt. Weder Auswahl noch Ergebnis werden persistiert, und der Ablauf ist nicht an einen Kurs oder eine Freigabe gebunden.
+
 Kurseinladungen gehören zum Teaching-Kontext. Pro aktivem Kurs existiert höchstens eine aktive, 24 Stunden gültige Einladung. Das Capability-Token liegt weder vollständig in PostgreSQL noch in Logs, reist ausschließlich im URL-Fragment und wird erst nach erfolgreichem Keycloak-Login beziehungsweise Registrierung eingelöst. Rotation, Widerruf, Archivierung und Einlösung sind atomar. QR-Codes werden lokal im Browser erzeugt; der Worker nutzt für einzelne Einladungsmails dasselbe konfigurierte SMTP-Relay wie Keycloak.
 
 Details: `docs/references/teaching.md` und `docs/references/user_management.md`.

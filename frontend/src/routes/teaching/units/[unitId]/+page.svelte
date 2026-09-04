@@ -435,8 +435,15 @@
   }
 
   function graphCommandActions(): TeacherGraphCommandBarAction[] {
+    const printAction: TeacherGraphCommandBarAction = {
+      label: "Druckfassung erstellen",
+      href: `/teaching/units/${workspaceState.unit.id}/print`
+    };
     if (workspaceState.graph.kind === "linear") {
-      return [{ label: "Abschnitt hinzufügen", active: showCreateSectionDialog(), onClick: openCreateSectionDialog }];
+      return [
+        { label: "Abschnitt hinzufügen", active: showCreateSectionDialog(), onClick: openCreateSectionDialog },
+        printAction
+      ];
     }
 
     return [
@@ -449,7 +456,8 @@
         label: "Modul hinzufügen",
         active: showCreateModuleDialog(),
         onClick: openCreateModuleDialog
-      }
+      },
+      printAction
     ];
   }
 

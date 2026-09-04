@@ -188,6 +188,28 @@ def list_tasks_for_section_owned(*, dsn: str, psycopg_module, unit_id: str, sect
                 task["dialog"] = configs.get(task["id"])
     return tasks
 
+
+def list_tasks_for_unit_owned(*, dsn: str, psycopg_module, unit_id: str, author_id: str) -> List[dict]:
+    """Return all tasks for one authored unit without per-section queries."""
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
+            cur.execute(
+                f"""
+                select {_TASK_COLUMNS_SQL}
+                from public.unit_tasks
+                where unit_id = %s
+                order by section_id asc, position asc, id asc
+                """,
+                (unit_id,),
+            )
+            rows = cur.fetchall() or []
+            tasks = [_task_row_to_dict(row) for row in rows]
+            configs = _load_dialog_configs(cur, [task["id"] for task in tasks if task["kind"] == "dialog"])
+            for task in tasks:
+                task["dialog"] = configs.get(task["id"])
+    return tasks
+
 def create_task(
     *,
     dsn: str,

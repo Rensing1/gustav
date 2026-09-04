@@ -25,6 +25,9 @@ supabase==2.6.0
 Pillow==10.4.0
 # PDF rendering backend (required for PDF → images in worker)
 pypdfium2==4.30.0
+# Printable learning-unit PDFs (HTML layout plus safe page composition)
+WeasyPrint==69.0
+pypdf==6.16.2
 
 # Markdown rendering (tables) and sanitizing
 markdown-it-py==3.0.0

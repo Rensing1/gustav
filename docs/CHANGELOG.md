@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-04
+
+### Features
+- feat(teaching): Lehrkräfte wählen in eigenen linearen und modularen Lerneinheiten einzelne Materialien und Aufgaben hierarchisch aus und laden daraus eine flüchtige, schwarz-weiß-taugliche PDF-Schülerfassung herunter.
+- feat(print): Markdown, Bilder und statisch bereinigte PDF-Seiten werden in gespeicherter Reihenfolge auf A4 gesetzt; interaktive Inhalte erhalten einen Digitalhinweis, Links ein ausgeschriebenes Ziel und jedes Blatt Kopf- sowie Fußzeilen.
+
+### Security
+- security(print): Autorprüfung, Same-Origin-Schutz, private Antworten, einheitengebundene Auswahlvalidierung, abgeschaltete Renderer-Netzwerkzugriffe sowie harte Grenzen für Auswahl, Dateien, Bilder, Seiten, Laufzeit und Ausgabe schützen den transienten Export.
+- security(print): Musterlösungen, Kriterien, Lehrkraft-Kontext, Fristen und Versuchslimits verlassen die Anwendungsschicht nicht; eingebettete PDFs werden ohne Annotationen und Dokumentmetadaten auf neue A4-Seiten übertragen.
+
+### Tests
+- test(print): Contract-, API-, Use-Case-, Renderer-, SvelteKit- und authentifizierte Browserprüfungen sichern Auswahl, Reihenfolge, PDF-Struktur, Fehlerfälle, Datenschutz und den vollständigen Downloadweg ab.
+
+### Docs
+- docs(teaching): Architektur, Teaching-Referenz und Implementierungsplan dokumentieren die Druckfassung sowie die bewusste Entscheidung gegen Persistenz und Rückerfassung.
+
 ## 2026-09-03
 
 ### Fixes

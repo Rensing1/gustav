@@ -45,6 +45,7 @@ def include_main_routers(
     from backend.web.routes.teaching_unit_modules import teaching_unit_modules_router
     from backend.web.routes.teaching_unit_materials import teaching_unit_materials_router
     from backend.web.routes.teaching_unit_sections import teaching_unit_sections_router
+    from backend.web.routes.teaching_unit_prints import teaching_unit_prints_router
     from backend.web.routes.teaching_unit_tasks import teaching_unit_tasks_router
     from backend.web.routes.teaching_units import teaching_units_router
     from backend.web.routes.learning import learning_router
@@ -66,6 +67,7 @@ def include_main_routers(
             teaching_courses_router,
             teaching_course_modules_router,
             teaching_unit_sections_router,
+            teaching_unit_prints_router,
             teaching_course_members_router,
             teaching_course_invitations_router,
             teaching_unit_modules_router,

@@ -1,6 +1,5 @@
-from pathlib import Path
 import re
-
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -178,17 +177,11 @@ def test_data_inventory_documents_personal_data_boundaries() -> None:
         assert required_term in text
 
 
-def test_tech_debt_inventory_has_no_open_entries_after_harness_hardening() -> None:
-    """Accepted deviations should be explicit, but the closed plan must not leave open debt."""
+def test_tech_debt_inventory_contains_valid_reviewable_entries() -> None:
+    """Open debt is allowed; malformed or unreviewable records are not."""
+    from backend.tools.tech_debt_inventory import parse_entries
 
-    text = _read("docs/harness/TECH_DEBT.md")
-
-    open_rows = [
-        line
-        for line in text.splitlines()
-        if line.startswith("| TD-") and not line.startswith("| TD-EXAMPLE")
-    ]
-    assert open_rows == []
+    parse_entries(_read("docs/harness/TECH_DEBT.md"))
 
 
 def test_quality_scorecard_tracks_split_frontend_and_static_css_hotspots() -> None:

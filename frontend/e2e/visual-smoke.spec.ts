@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 import { currentUserSub, login } from "./support/auth";
@@ -29,9 +30,8 @@ const smokePages: SmokePage[] = [
 ];
 
 async function newSmokePage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({
+  const context = await newBrowserContext(browser, {
     baseURL: webBase,
-    ignoreHTTPSErrors: true
   });
   return { context, page: await context.newPage() };
 }

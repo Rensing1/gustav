@@ -63,6 +63,8 @@ Die Produkträume `learning`, `teaching`, `diagnostics` und `live` werden aussch
 
 FastAPI registriert keine aktiven Legacy-Produktseiten mehr. Ehemalige SSR-/HTMX-Produktpfade werden ausschließlich über einen kleinen Retirement-Adapter kontrolliert mit `410 Gone` beziehungsweise einem sicheren Redirect beantwortet. Verbliebene HTML-Helfer dienen nur dieser Rückzugskompatibilität oder isolierten Inhalten wie Simulationsdarstellungen; sie sind kein zweites Frontend.
 
+Die synchrone Arbeit der Live-Abgabezusammenfassung wird als zusammenhängender Aufruf im begrenzten Threadpool ausgeführt. `backend/teaching/live_tasks.py` liest Aufgaben einmal gebündelt für die Einheit und ordnet sie ausdrücklich nach Abschnittsposition und Aufgabenposition. Der kleine Leseport kennt kein FastAPI; Berechtigungsprüfung und HTTP-Antwort bleiben im Adapter. Echte DB-Tests sichern konstante Aufgabenabfragezahl und Reihenfolge, ein synchronisierter Test die Freigabe des Event Loops. Die vollständige Ablösung globaler Route-Provider ist davon getrennt und noch offen.
+
 ### Fachkontexte
 
 Die fachliche Verantwortung ist in vier Bounded Contexts aufgeteilt:

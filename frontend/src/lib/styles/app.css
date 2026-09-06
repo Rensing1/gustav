@@ -536,7 +536,7 @@ select {
 }
 
 .workspace-data-table thead th {
-  font-family: var(--font-technical, var(--font-ui));
+  font-family: var(--font-ui);
   font-size: 0.9rem;
   letter-spacing: 0.04em;
   color: var(--color-text-muted);

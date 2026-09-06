@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
@@ -15,12 +16,12 @@ async function scrollSurfaceWithKeyboard(page: Page, surface: Locator, edge: "st
 }
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase, hasTouch: true });
+  const context = await newBrowserContext(browser, { baseURL: webBase, hasTouch: true });
   return { context, page: await context.newPage() };
 }
 
 async function verifyIndependentWheelScrolling(browser: Browser, taskUrl: string, learnerEmail: string): Promise<void> {
-  const context = await browser.newContext({ baseURL: webBase });
+  const context = await newBrowserContext(browser, { baseURL: webBase });
   const page = await context.newPage();
   try {
     await login(page, learnerEmail, password);

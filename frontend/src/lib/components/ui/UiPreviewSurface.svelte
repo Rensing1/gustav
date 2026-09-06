@@ -1,5 +1,8 @@
 <script lang="ts">
   import LearnerContentWorkspace from "$lib/components/learning-unit/LearnerContentWorkspace.svelte";
+  import DialogMessage from "$lib/components/learning-unit/DialogMessage.svelte";
+  import LearnerTaskContext from "$lib/components/learning-unit/LearnerTaskContext.svelte";
+  import LearnerTaskSplitDivider from "$lib/components/learning-unit/LearnerTaskSplitDivider.svelte";
   import LearningResponseGroup from "$lib/components/learning-unit/LearningResponseGroup.svelte";
   import type { ContentGroup } from "$lib/learning-unit/workspace";
   import type { LearningMaterial, LearningSubmission, LearningTask } from "$lib/types/learning";
@@ -361,45 +364,25 @@
               <button class="dialog-workspace__switch-button" type="button">Materialien</button>
             </nav>
             <div class="dialog-layout" data-compact-surface="task" data-phase="conversation">
-              <aside class="learner-task-context dialog-sidebar" data-dialog-surface="materials" aria-label="Aufgabe und Kontext">
-                <div class="learner-task-context__scroll">
-                  <header class="learner-task-context__header">
-                    <p class="workspace-label">Aufgabe 2 · KI-Dialog</p>
-                    <div class="learner-task-context__instruction"><p>Untersuche die Perspektive der Quelle im Gespräch.</p></div>
-                  </header>
-                  <section class="learner-material-context" aria-label="Materialien">
-                    <h3>Materialien</h3>
-                    <p class="workspace-note">Quelle: Protokollauszug von 1961</p>
-                  </section>
-                </div>
-              </aside>
+              <LearnerTaskContext
+                courseId="preview-course"
+                taskTitle="Aufgabe 2"
+                taskKind="KI-Dialog"
+                instructionMd="Untersuche die Perspektive der Quelle im Gespräch."
+                roundCurrent={1}
+                roundMaximum={3}
+                variant="dialog"
+                modules={previewContentGroups.map((group) => ({
+                  id: group.id, title: group.title ?? "Materialien", current: true, items: group.items,
+                  closable: false, loaded: true, loading: false, error: null
+                }))}
+              />
+              <LearnerTaskSplitDivider value={null} onPreview={() => {}} onCommit={() => {}} />
               <div class="dialog-main" data-dialog-surface="task">
-                <section class="dialog-progress" aria-label="Gesprächsfortschritt">
-                  <div class="dialog-progress__context">
-                    <p class="workspace-label">KI-Dialog</p>
-                    <strong>Gespräch mit Archivarin Ada</strong>
-                  </div>
-                  <p class="dialog-progress__mode">Mit Hilfestellungen</p>
-                  <div class="dialog-progress__round">
-                    <span>Runde 1 von 3</span>
-                    <div class="dialog-progress__track" role="progressbar" aria-label="Runde 1 von 3" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" style="--dialog-progress-value: 33%"><span></span></div>
-                  </div>
-                </section>
                 <div class="dialog-transcript" role="log" aria-label="Beispielhafter Dialogverlauf">
-                  <article class="dialog-message dialog-message--ai">
-                    <p class="dialog-message__speaker">KI · Archivarin Ada</p>
-                    <div class="markdown-prose"><p>Welche Perspektive erkennst du in der Quelle?</p></div>
-                  </article>
-                  <article class="dialog-message dialog-message--student">
-                    <p class="dialog-message__speaker">Schüler · Du</p>
-                    <div class="markdown-prose"><p>Die Quelle stellt vor allem die Sicht der Regierung dar.</p></div>
-                    <small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>
-                  </article>
-                  <article class="dialog-message dialog-message--ai dialog-message--current" aria-label="Aktuelle Frage">
-                    <p class="dialog-message__current">Aktuelle Frage</p>
-                    <p class="dialog-message__speaker">KI · Archivarin Ada</p>
-                    <div class="markdown-prose"><p>Woran machst du diese Perspektive sprachlich fest?</p></div>
-                  </article>
+                  <DialogMessage kind="ai" speaker="Archivarin Ada" markdown="Welche Perspektive erkennst du in der Quelle?" />
+                  <DialogMessage kind="student" markdown="Die Quelle stellt vor allem die Sicht der Regierung dar." usedStarter />
+                  <DialogMessage kind="ai" speaker="Archivarin Ada" markdown="Woran machst du diese Perspektive sprachlich fest?" current />
                 </div>
                 <section class="dialog-composer" aria-label="Beispielhafte Dialogeingabe">
                   <div class="dialog-starters" aria-label="Satzanfang-Hilfen">
@@ -434,39 +417,24 @@
               <button class="dialog-workspace__switch-button" type="button">Materialien</button>
             </nav>
             <div class="dialog-layout" data-compact-surface="task" data-phase="closing">
-              <aside class="learner-task-context dialog-sidebar" data-dialog-surface="materials" aria-label="Aufgabe und Kontext">
-                <div class="learner-task-context__scroll">
-                  <header class="learner-task-context__header">
-                    <p class="workspace-label">Aufgabe 2 · KI-Dialog</p>
-                    <div class="learner-task-context__instruction"><p>Untersuche die Perspektive der Quelle im Gespräch.</p></div>
-                  </header>
-                  <section class="learner-material-context" aria-label="Materialien">
-                    <h3>Materialien</h3>
-                    <p class="workspace-note">Quelle: Protokollauszug von 1961</p>
-                  </section>
-                </div>
-              </aside>
+              <LearnerTaskContext
+                courseId="preview-course"
+                taskTitle="Aufgabe 2"
+                taskKind="KI-Dialog"
+                instructionMd="Untersuche die Perspektive der Quelle im Gespräch."
+                roundCurrent={1}
+                roundMaximum={3}
+                variant="dialog"
+                modules={previewContentGroups.map((group) => ({
+                  id: group.id, title: group.title ?? "Materialien", current: true, items: group.items,
+                  closable: false, loaded: true, loading: false, error: null
+                }))}
+              />
+              <LearnerTaskSplitDivider value={null} onPreview={() => {}} onCommit={() => {}} />
               <div class="dialog-main" data-dialog-surface="task">
-                <section class="dialog-progress" aria-label="Gesprächsfortschritt">
-                  <div class="dialog-progress__context">
-                    <p class="workspace-label">KI-Dialog</p>
-                    <strong>Gespräch mit Archivarin Ada</strong>
-                  </div>
-                  <p class="dialog-progress__mode">Mit Hilfestellungen</p>
-                  <div class="dialog-progress__round">
-                    <span>Runde 1 von 3</span>
-                    <div class="dialog-progress__track" role="progressbar" aria-label="Runde 1 von 3" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" style="--dialog-progress-value: 33%"><span></span></div>
-                  </div>
-                </section>
                 <div class="dialog-transcript" role="log" aria-label="Dialogverlauf vor dem Abschluss">
-                  <article class="dialog-message dialog-message--ai">
-                    <p class="dialog-message__speaker">KI · Archivarin Ada</p>
-                    <div class="markdown-prose"><p>Woran machst du diese Perspektive sprachlich fest?</p></div>
-                  </article>
-                  <article class="dialog-message dialog-message--student">
-                    <p class="dialog-message__speaker">Schüler · Du</p>
-                    <div class="markdown-prose"><p>Wertende Begriffe lassen die Regierung besonders kompetent erscheinen.</p></div>
-                  </article>
+                  <DialogMessage kind="ai" speaker="Archivarin Ada" markdown="Woran machst du diese Perspektive sprachlich fest?" />
+                  <DialogMessage kind="student" markdown="Wertende Begriffe lassen die Regierung besonders kompetent erscheinen." />
                 </div>
                 <section class="dialog-closing" aria-labelledby="preview-dialog-closing-title">
                   <header>

@@ -9,21 +9,24 @@ Why:
 
 from __future__ import annotations
 
-import asyncio
+import importlib
 import logging
 import os
+import sys as _sys
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
-import importlib
-import sys as _sys
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
+from starlette.concurrency import run_in_threadpool
 
 from backend.storage.config import get_submissions_bucket
 from backend.teaching.errors import TeachingRepositoryUnavailable
+from backend.teaching.live_h5p_review import issue_h5p_review_token
+from backend.teaching.live_tasks import load_live_tasks
 from backend.teaching.storage import NullStorageAdapter
+from backend.web.query_validation import parse_bounded_pagination
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import (
     _current_download_bytes_with_limit,
@@ -41,7 +44,6 @@ from backend.web.routes.teaching_serialization import (
     _build_live_delta_cells,
     _build_live_summary_rows,
 )
-from backend.teaching.live_h5p_review import issue_h5p_review_token
 from backend.web.routes.teaching_shared import (
     _current_sub,
     _is_uuid_like,
@@ -50,8 +52,6 @@ from backend.web.routes.teaching_shared import (
     _require_teacher,
 )
 from backend.web.routes.teaching_validation import canonical_uuid as _canonical_uuid
-from backend.web.query_validation import parse_bounded_pagination
-
 
 teaching_live_router = APIRouter(tags=["Teaching"])
 logger = logging.getLogger("gustav.web.teaching.live")
@@ -87,6 +87,26 @@ def _storage_adapter():
 
 @teaching_live_router.get("/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary")
 async def get_unit_live_summary(
+    request: Request,
+    course_id: str,
+    unit_id: str,
+    updated_since: str | None = None,
+    limit: str = "100",
+    offset: str = "0",
+    include_students: bool = True,
+):
+    """Run the owner-scoped synchronous read as one bounded threadpool job.
+
+    Connections are opened and closed inside the job. No request body is read
+    there, and unrelated requests remain responsive while database I/O waits.
+    """
+    return await run_in_threadpool(
+        _build_unit_live_summary,
+        request, course_id, unit_id, updated_since, limit, offset, include_students,
+    )
+
+
+def _build_unit_live_summary(
     request: Request,
     course_id: str,
     unit_id: str,
@@ -187,17 +207,7 @@ async def get_unit_live_summary(
     try:
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
-            sections = repo.list_sections_for_author(unit_id, sub)  # owner==author in tests
-            for sec in sections:
-                sec_tasks = repo.list_tasks_for_section_owned(unit_id, sec["id"], sub)
-                for t in sec_tasks:
-                    tasks.append({
-                        "id": t["id"],
-                        # API contract: tasks carry instruction_md (not a separate title)
-                        "instruction_md": t.get("instruction_md") or "",
-                        "position": int(t.get("position") or 0),
-                        "kind": str(t.get("kind") or "native"),
-                    })
+            tasks = load_live_tasks(repo, unit_id, sub)
         else:
             # In-memory repo fallback
             section_ids = [sid for sid, sd in repo.sections.items() if sd.unit_id == unit_id]
@@ -238,10 +248,7 @@ async def get_unit_live_summary(
         except Exception:
             roster = []
         member_subs = [sid for sid, _ in roster]
-        names = await asyncio.to_thread(
-            _teaching_module().resolve_live_student_names_by_sub,
-            member_subs,
-        )
+        names = _teaching_module().resolve_live_student_names_by_sub(member_subs)
 
         has_map: set[tuple[str, str]] = set()
         avg_map: dict[tuple[str, str], float | None] = {}

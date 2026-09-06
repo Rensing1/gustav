@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-06
+
+### Technische Schulden – erster Umsetzungsstand
+
+- build: Python- und Node-Installationsfehler brechen Image-Builds ab. Vollständige Python-Runtime-/Harness-Locks mit Hashprüfung erfassen auch die Installer-Werkzeuge des Basisimages.
+- security: Der Online-Audit führt Frontend-, H5P- und Python-Prüfung unabhängig voneinander aus. Sicherheitsupdates außerhalb der vorläufig fixierten DSPy-Baseline sind enthalten; die verbleibenden Meldungen sind keine Sicherheitsfreigabe und verhindern den Sicherheitsabschluss.
+- fix(live): Gebündelte Aufgabenabfrage, ausdrückliche didaktische Reihenfolge und Threadpool-Ausführung verhindern abschnittsweise Zusatzabfragen und blockierende Summary-Arbeit im Event Loop.
+- fix(design): Globale Tokenreferenzen sind auflösbar, Lernschriften zentral definiert und Dialognachrichten zwischen Produkt und UI-Labor geteilt. Alte Dialog-Kontextkopien im Labor sind durch Produktkomponenten ersetzt.
+- test: Browserkontexte erzwingen reguläre TLS-Prüfung. Die Referenzbild-Aktualisierung verwendet den abgesicherten lokalen Feature-Runner; gezielte Live-, Design- und Dialogrundläufe ergänzen Komponenten- und DB-Tests.
+- chore: Ruff E/F/I ohne E501 ist zentral verbindlich. Das Schuldenregister akzeptiert validierte offene Einträge; wiederholte Monatsmessungen vergleichen mit dem vorangegangenen Monat statt mit sich selbst.
+
+Die vollständige Frontend-Controller-/Seitenmigration sowie die Backend-Provider-, Worker- und H5P-Strukturmigration bleiben offen. Einzelstatus und Nachweise: `docs/plan/2026-09-06-technical-debt-abbau.md`.
+
 ## 2026-09-04
 
 ### Features

@@ -16,7 +16,6 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_PATH = REPO_ROOT / "docs/harness/SUPPLY_CHAIN_INVENTORY.json"
 
@@ -108,19 +107,26 @@ def _requirement_files(manifest: Path, *, seen: set[Path] | None = None) -> list
 
 
 def _python_inventory() -> tuple[list[dict[str, Any]], list[Path]]:
-    manifests = _requirement_files(REPO_ROOT / "backend/requirements-harness.txt")
+    lockfile = REPO_ROOT / "backend/requirements-harness.lock"
+    manifests = [lockfile]
+    for relative_path in ("backend/web/requirements.lock", "backend/web/requirements.txt", "backend/requirements-harness.txt", "backend/constraints-ai.txt"):
+        path = REPO_ROOT / relative_path
+        if path.exists():
+            for included in _requirement_files(path):
+                if included not in manifests:
+                    manifests.append(included)
     entries: list[dict[str, Any]] = []
     seen_names: set[str] = set()
-    for requirements in manifests:
+    for requirements in [lockfile]:
         for line in requirements.read_text(encoding="utf-8").splitlines():
             name = _requirement_name(line)
             if not name or name in seen_names:
                 continue
             seen_names.add(name)
-            try:
-                version = metadata.version(name)
-            except metadata.PackageNotFoundError:
-                version = "not-installed"
+            pin = re.match(r"[A-Za-z0-9_.-]+(?:\[[^\]]+\])?==([^\s;\\]+)", line.strip())
+            if not pin:
+                raise ValueError(f"Unpinned Python dependency: {name}")
+            version = pin.group(1)
             license_value = _python_license_for(name)
             entries.append(
                 {

@@ -10,6 +10,8 @@ Preview-Route unter `/ui-lab` dient als visuelle Referenzfläche; Stitch-Projekt
 Primäre Stitch-Referenzen sind die Task- und Graph-Referenzflächen sowie das
 Designsystem `Gustav Logic` im oben genannten Projekt.
 
+Die Prüfung `frontend/src/lib/styles/token-ownership.test.ts` sichert für die globalen Stylesheets ab, dass Schrift-, Farb-, Radius-, Abstands- und Layouttokens ausschließlich in `theme-tokens.css` definiert werden und alle entsprechenden Referenzen auflösbar sind. Lokale Komponentenstyles sind noch nicht vollständig durch diese Prüfung abgedeckt. Im Dialog verwenden Produkt und UI-Labor denselben `DialogMessage`-Baustein; das Labor nutzt außerdem den produktiven Aufgaben-/Kontextbaustein und Spaltentrenner. Das ersetzt keine vollständige Prüfung aller Produktseiten.
+
 ## 1. Produktbild
 
 GUSTAV folgt einer präzisen, kontrastreichen und technisch-scharfen

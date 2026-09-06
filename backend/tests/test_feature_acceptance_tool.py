@@ -211,6 +211,32 @@ def test_regression_command_selects_all_marked_specs(tmp_path: Path) -> None:
     assert command[-2:] == ["--grep", "@feature-acceptance"]
 
 
+def test_visual_update_is_limited_to_one_design_detail_spec(tmp_path: Path) -> None:
+    spec = tmp_path / "design-system.spec.ts"
+    spec.write_text('test("@feature-detail @design-system", () => {});', encoding="utf-8")
+    command = build_playwright_command(
+        feature="design-system", all_features=False, profile="detail",
+        update_snapshots=True, e2e_dir=tmp_path,
+    )
+    assert command[-4:] == [str(spec), "--grep", "@design-system", "--update-snapshots"]
+
+
+@pytest.mark.parametrize("profile,all_features,marker", [
+    ("acceptance", False, "@feature-acceptance @design-system"),
+    ("detail", True, "@feature-detail @design-system"),
+    ("detail", False, "@feature-detail"),
+])
+def test_visual_update_rejects_broad_or_nonvisual_selection(
+    tmp_path: Path, profile: str, all_features: bool, marker: str,
+) -> None:
+    (tmp_path / "design-system.spec.ts").write_text(marker, encoding="utf-8")
+    with pytest.raises(RuntimeError, match="snapshot"):
+        build_playwright_command(
+            feature="design-system", all_features=all_features, profile=profile,
+            update_snapshots=True, e2e_dir=tmp_path,
+        )
+
+
 def test_cli_token_cleanup_uses_the_authenticated_profile_action() -> None:
     """Cleanup must use the Browser-BFF product path, not a direct API call."""
 

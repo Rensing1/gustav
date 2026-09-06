@@ -208,7 +208,8 @@ def test_backend_lint_target_is_part_of_verify() -> None:
 
     assert "lint-backend" in help_text
     assert "backend/requirements-harness.txt" in lint_body
-    assert "python -m ruff check backend --select F" in lint_body
+    assert "python -m ruff check backend" in lint_body
+    assert "--select" not in lint_body
     assert "--exclude 'backend/tests/*'" not in lint_body
     assert "--exclude 'backend/tests_e2e/*'" not in lint_body
     assert "python -m ruff format --check backend" not in lint_body
@@ -240,7 +241,7 @@ def test_visual_smoke_target_is_full_prod_like_not_default_verify() -> None:
     assert "test-visual-smoke" in help_text
     assert "update-visual-baselines" in help_text
     assert "npm run test:e2e" in visual_body
-    assert "@design-system" in update_body
+    assert "backend.tools.feature_acceptance run --profile detail --feature design-system" in update_body
     assert "--update-snapshots" in update_body
     assert "$(MAKE) test-visual-smoke" in full_prod_body
     assert "$(MAKE) test-visual-smoke" not in verify_body

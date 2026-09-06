@@ -15,9 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY backend/web/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-  && apt-get purge -y --auto-remove gcc || true
+COPY backend/web/requirements.lock .
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
+RUN apt-get purge -y --auto-remove gcc
 
 # Copy the backend as a Python package. The runtime entry point is
 # `backend.web.main:app`, so the image must preserve the repository package

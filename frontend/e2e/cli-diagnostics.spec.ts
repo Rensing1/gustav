@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,7 +24,7 @@ const python = resolve(projectRoot, ".venv/bin/python");
 test.use({ trace: "off" });
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase });
+  const context = await newBrowserContext(browser, { baseURL: webBase });
   return { context, page: await context.newPage() };
 }
 

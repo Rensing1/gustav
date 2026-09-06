@@ -25,7 +25,8 @@ Status: Stable
 - `make test-feature-regression` – führt alle markierten Feature-Abnahmen ausdrücklich opt-in gegen den lokalen Stack aus
 - `make test-feature-detail FEATURE=<spec-stem>` – führt eine mit `@feature-detail` markierte, aus dem Pflicht-Gate entfernte Detailreise gezielt aus
 - `make test-feature-details` – führt alle `@feature-detail`-Reisen ausdrücklich opt-in gegen den lokalen Stack aus
-- `make dependency-audit` – Online-Prüfung der aktuellen npm-Advisories für Frontend und H5P; jeder Befund ab `low` schlägt fehl
+- `make dependency-audit` – Drei unabhängige Online-Prüfungen für Frontend, H5P und den vollständigen Python-Harness-Lock; Befunde und Werkzeugfehler führen zum Gesamtfehler
+- `make lock-python` – Erzeugt unter Python 3.11 die vollständigen Runtime-/Harness-Locks mit Hashes und berücksichtigt die vorläufig eingefrorene DSPy-Baseline
 - `make playwright-bootstrap` – installiert die von Playwright unterstützten Chromium- und WebKit-Browser; visuelle Smokes bleiben auf Chromium begrenzt, iPad-nahe Feature-Acceptance-Fälle laufen zusätzlich in WebKit
 - `make test-visual-smoke` – prüft zuerst die Browserinstallation und führt danach die markierten produktnahen Chromium-Smokes aus
 - `make test-full-prod-like` – vollständiges produktionsnahes Freigabeprofil (`verify` + Online-Dependency-Audit + Supabase-Smoke + OpenAI-Smoke + E2E + visueller Browser-Smoke)

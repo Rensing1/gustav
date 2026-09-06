@@ -1,16 +1,16 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain } from "./support/e2e-env";
+import { e2eEmail, e2ePassword } from "./support/e2e-env";
 import { ensureTeacherUser } from "./support/keycloak";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 async function openUiLab(page: Page, viewport: { width: number; height: number }): Promise<void> {
-  const unique = `${viewport.width}_${viewport.height}_${Date.now()}`;
-  const email = `visual_design_${unique}@${emailDomain}`;
+  const email = e2eEmail(`visual-design-${viewport.width}`);
   await ensureTeacherUser(email, password);
   await page.setViewportSize(viewport);
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await login(page, email, password);
   await page.goto("/ui-lab");
   await expect(page.getByRole("heading", { name: "Designsystem-Vorschau für GUSTAV" })).toBeVisible();
@@ -101,9 +101,11 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
     const transcript = workspace.querySelector(".dialog-transcript");
     const aiMessage = workspace.querySelector(".dialog-message--ai");
     const studentMessage = workspace.querySelector(".dialog-message--student");
+    const aiBubble = aiMessage?.querySelector(".dialog-message__bubble");
+    const studentBubble = studentMessage?.querySelector(".dialog-message__bubble");
     const starter = workspace.querySelector(".dialog-starter");
     const switcher = workspace.querySelector(".dialog-workspace__switch");
-    const sessionActions = workspace.querySelector(".dialog-session-actions");
+    const sessionActions = workspace.querySelector(".dialog-composer__actions");
     const composer = workspace.querySelector(".dialog-composer");
     const sendButton = workspace.querySelector(".dialog-composer__actions .workspace-top-action--accent");
     if (
@@ -113,6 +115,8 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
       !(transcript instanceof HTMLElement) ||
       !(aiMessage instanceof HTMLElement) ||
       !(studentMessage instanceof HTMLElement) ||
+      !(aiBubble instanceof HTMLElement) ||
+      !(studentBubble instanceof HTMLElement) ||
       !(starter instanceof HTMLElement) ||
       !(switcher instanceof HTMLElement) ||
       !(sessionActions instanceof HTMLElement) ||
@@ -163,14 +167,16 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
       composerContentWidth: composerBox.width - 2 * Number.parseFloat(getComputedStyle(composer).borderLeftWidth) -
         Number.parseFloat(getComputedStyle(composer).paddingLeft) - Number.parseFloat(getComputedStyle(composer).paddingRight),
       sendButtonWidth: sendButtonBox.width,
+      actionsInComposer: composer.contains(sessionActions),
+      actionsInSidebar: sidebar.contains(sessionActions),
       transcriptBorderStyle: transcriptStyle.borderTopStyle,
       transcriptBorderWidth: transcriptStyle.borderTopWidth,
       transcriptRadius: transcriptStyle.borderRadius,
       transcriptContentWidth,
-      aiBackground: aiStyle.backgroundColor,
+      aiBackground: getComputedStyle(aiBubble).backgroundColor,
       aiLeftBorderWidth: aiStyle.borderLeftWidth,
       aiWidth: aiMessage.getBoundingClientRect().width,
-      studentBackground: studentStyle.backgroundColor,
+      studentBackground: getComputedStyle(studentBubble).backgroundColor,
       studentRightBorderWidth: studentStyle.borderRightWidth,
       studentJustify: studentStyle.justifySelf,
       studentWidth: studentMessage.getBoundingClientRect().width,
@@ -181,28 +187,28 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
   expect(contract.transcriptBorderStyle).toBe("none");
   expect(contract.transcriptBorderWidth).toBe("0px");
   expect(contract.transcriptRadius).toBe("0px");
-  expect(contract.aiBackground).toBe(contract.studentBackground);
-  expect(contract.aiLeftBorderWidth).toBe("4px");
-  expect(contract.studentRightBorderWidth).toBe("4px");
+  expect(contract.aiBackground).not.toBe(contract.studentBackground);
+  expect(contract.aiLeftBorderWidth).toBe("0px");
+  expect(contract.studentRightBorderWidth).toBe("0px");
   expect(contract.studentJustify).toBe("end");
   expect(contract.starterRadius).toBe("0px");
+  // DESIGN.md puts session actions beside the answer, never in the material column.
+  expect(contract.actionsInComposer).toBe(true);
+  expect(contract.actionsInSidebar).toBe(false);
 
-  if (contract.workspaceWidth >= 1152) {
+  if (contract.workspaceWidth >= 960) {
     expect(contract.mainBox.x).toBeGreaterThan(contract.sidebarBox.x + contract.sidebarBox.width - 1);
     expect(contract.sidebarDisplay).toBe("grid");
     expect(contract.mainDisplay).toBe("grid");
     expect(contract.switchDisplay).toBe("none");
-    expect(contract.layoutColumns.split(" ")).toHaveLength(2);
+    expect(contract.layoutColumns.split(" ")).toHaveLength(3);
     expect(contract.sidebarBox.y).toBe(contract.mainBox.y);
-    expect(
-      contract.sidebarBox.y + contract.sidebarBox.height - contract.sessionActionsBox.y - contract.sessionActionsBox.height
-    ).toBeLessThanOrEqual(contract.sidebarPaddingBottom + 1);
     expect(contract.aiWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.studentWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.sendButtonWidth).toBeLessThan(contract.composerContentWidth);
-  } else if (contract.workspaceWidth >= 680) {
-    expect(contract.workspaceWidth).toBeGreaterThanOrEqual(680);
-    expect(contract.workspaceWidth).toBeLessThan(1152);
+  } else if (contract.workspaceWidth >= 768) {
+    expect(contract.workspaceWidth).toBeGreaterThanOrEqual(768);
+    expect(contract.workspaceWidth).toBeLessThan(960);
     expect(contract.sidebarDisplay).toBe("none");
     expect(contract.mainDisplay).toBe("grid");
     expect(contract.switchDisplay).toBe("grid");
@@ -210,7 +216,7 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
     expect(contract.studentWidth).toBeLessThan(contract.transcriptContentWidth);
     expect(contract.sendButtonWidth).toBeLessThan(contract.composerContentWidth);
   } else {
-    expect(contract.workspaceWidth).toBeLessThan(680);
+    expect(contract.workspaceWidth).toBeLessThan(768);
     expect(contract.sidebarDisplay).toBe("none");
     expect(contract.mainDisplay).toBe("grid");
     expect(contract.switchDisplay).toBe("grid");
@@ -225,7 +231,7 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
   const closingShadow = await page.getByTestId("preview-dialog-completion").locator(".dialog-closing").evaluate((closing) => {
     return getComputedStyle(closing).boxShadow;
   });
-  expect(closingShadow).toContain("4px 4px 0px");
+  expect(closingShadow).toBe("none");
 }
 
 async function expectChoiceSwitchDesignContract(page: Page): Promise<void> {
@@ -304,7 +310,7 @@ async function expectChoiceSwitchScreenshot(page: Page, name: string): Promise<v
   }
 }
 
-test.describe("@visual-smoke @design-system contrast design contract", () => {
+test.describe("@feature-detail @visual-smoke @design-system contrast design contract", () => {
   for (const viewport of [
     { name: "desktop", width: 1440, height: 900 },
     { name: "tablet", width: 1024, height: 768 },
@@ -315,6 +321,9 @@ test.describe("@visual-smoke @design-system contrast design contract", () => {
       await expectContrastDesignContract(page);
       await expectDialogDesignContract(page);
       await expectChoiceSwitchDesignContract(page);
+      // The real task preview may focus feedback on mount. Capture the page origin explicitly.
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
       await expect(page).toHaveScreenshot(`ui-lab-light-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide"

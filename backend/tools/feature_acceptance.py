@@ -230,6 +230,7 @@ def build_playwright_command(
     feature: str | None,
     all_features: bool,
     profile: str = "acceptance",
+    update_snapshots: bool = False,
     e2e_dir: Path = E2E_DIR,
 ) -> list[str]:
     """Build the fixed Playwright command for one spec or the opt-in regression."""
@@ -237,11 +238,17 @@ def build_playwright_command(
     marker = PROFILE_MARKERS.get(profile)
     if marker is None:
         raise RuntimeError(f"unknown feature test profile: {profile}")
+    if update_snapshots and (all_features or profile != "detail"):
+        raise RuntimeError("snapshot updates require one explicitly selected detail spec")
     command = ["npm", "run", "test:e2e", "--"]
     if all_features:
         command.extend(["--grep", marker])
         return command
     spec = validate_feature_name(feature or "", profile=profile, e2e_dir=e2e_dir)
+    if update_snapshots:
+        if "@design-system" not in spec.read_text(encoding="utf-8"):
+            raise RuntimeError("snapshot updates require a @design-system spec")
+        return command + [str(spec), "--grep", "@design-system", "--update-snapshots"]
     command.extend([str(spec), "--grep", marker])
     return command
 
@@ -861,13 +868,17 @@ def _exclusive_lock(path: Path | None = None) -> Iterator[None]:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def run_acceptance(*, feature: str | None, all_features: bool, profile: str = "acceptance") -> int:
+def run_acceptance(
+    *, feature: str | None, all_features: bool, profile: str = "acceptance",
+    update_snapshots: bool = False,
+) -> int:
     """Validate, execute and clean one local acceptance run."""
 
     command = build_playwright_command(
         feature=feature,
         all_features=all_features,
         profile=profile,
+        update_snapshots=update_snapshots,
         e2e_dir=E2E_DIR,
     )
     if (PROJECT_ROOT / ".env").is_file():
@@ -934,6 +945,7 @@ def _parser() -> argparse.ArgumentParser:
     selection.add_argument("--feature")
     selection.add_argument("--all", action="store_true", dest="all_features")
     run.add_argument("--profile", choices=tuple(PROFILE_MARKERS), default="acceptance")
+    run.add_argument("--update-snapshots", action="store_true")
     cleanup = subparsers.add_parser("cleanup")
     cleanup.add_argument("--keep-manifest", action="store_true")
     worker = subparsers.add_parser("worker")
@@ -959,6 +971,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 feature=args.feature,
                 all_features=args.all_features,
                 profile=args.profile,
+                update_snapshots=args.update_snapshots,
             )
         if (PROJECT_ROOT / ".env").is_file():
             _load_dotenv(PROJECT_ROOT / ".env")

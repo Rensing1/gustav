@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type BrowserContext, type Page } from "./support/feature-test";
 
 import { apiHeaders, expectApiOk } from "./support/api";
@@ -32,7 +33,7 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
   let learnerContext: BrowserContext | null = null;
 
   try {
-    teacherContext = await browser.newContext({ baseURL: webBase });
+    teacherContext = await newBrowserContext(browser, { baseURL: webBase });
     const teacher = await teacherContext.newPage();
     await login(teacher, teacherEmail, password);
     const createCourse = await teacher.request.post(`${webBase}/api/teaching/courses`, {
@@ -79,7 +80,7 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
     await teacher.keyboard.press("Escape");
     await expect(fullscreen).toBeHidden();
 
-    learnerContext = await browser.newContext({ baseURL: webBase });
+    learnerContext = await newBrowserContext(browser, { baseURL: webBase });
     const learner = await learnerContext.newPage();
     const invitePageResponse = await learner.goto(inviteUrl);
     expect(invitePageResponse?.headers()["cache-control"]).toBe("private, no-store");

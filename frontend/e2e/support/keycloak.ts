@@ -1,4 +1,5 @@
-import { expect, request, type APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext } from "@playwright/test";
+import { newApiContext } from "./browser-context";
 
 import { adminClientId, adminClientSecret, adminPassword, adminRealm, adminUser, kcBase, realm } from "./e2e-env";
 import {
@@ -45,10 +46,7 @@ function configuredRealmSmtp(): Record<string, string> {
 }
 
 async function keycloakAdminContext(): Promise<APIRequestContext> {
-  return request.newContext({
-    baseURL: kcBase,
-    ignoreHTTPSErrors: true
-  });
+  return newApiContext({ baseURL: kcBase });
 }
 
 async function adminToken(kc: APIRequestContext): Promise<string> {

@@ -726,7 +726,7 @@ describe("LearningDialogWorkspace", () => {
     expect(source).toContain("roundCurrent={session.round_count}");
     expect(source).toContain("roundMaximum={session.dialog.max_rounds}");
     expect(source).not.toContain('class="dialog-progress"');
-    expect(source).toContain("dialog-message__bubble");
+    expect(source).toContain("<DialogMessage");
     expect(source).not.toContain('class="dialog-reference-chip"');
     expect(source).not.toContain('class="learner-task-context dialog-sidebar"');
     expect(source).not.toContain("dialog-briefing");

@@ -871,24 +871,24 @@
   margin: 0;
   padding: var(--space-4) 0 0;
   border: 0;
-  border-top: var(--border-width) solid var(--color-border-subtle);
+  border-top: var(--border-width) solid var(--color-line);
 }
 
 .teacher-module-form-group legend {
   padding: 0;
-  color: var(--color-text-strong);
+  color: var(--color-text);
   font-family: var(--font-display);
   font-weight: 700;
 }
 
 .teacher-module-advanced-settings {
-  border-block: var(--border-width) solid var(--color-border-subtle);
+  border-block: var(--border-width) solid var(--color-line);
   padding-block: var(--space-3);
 }
 
 .teacher-module-advanced-settings > summary {
   cursor: pointer;
-  color: var(--color-text-strong);
+  color: var(--color-text);
   font-family: var(--font-display);
   font-weight: 700;
 }
@@ -1252,7 +1252,7 @@
 }
 
 .workspace-node-editor-card-menu__danger {
-  color: var(--color-danger-text, #9d3b28);
+  color: var(--color-danger);
 }
 
 .workspace-node-editor-card-form {
@@ -1312,7 +1312,7 @@
 .workspace-node-editor-file-preview img {
   max-height: 22rem;
   object-fit: contain;
-  background: color-mix(in srgb, var(--color-bg) 88%, white 12%);
+  background: color-mix(in srgb, var(--color-bg-base) 88%, white 12%);
 }
 
 .workspace-node-editor-file-preview iframe {

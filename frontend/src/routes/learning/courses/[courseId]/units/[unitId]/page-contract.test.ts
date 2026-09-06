@@ -374,7 +374,7 @@ describe("learning unit route contract", () => {
     expect(appCss).toMatch(/\.learning-unit-module__materials,\s*\.learning-unit-module__tasks\s*\{[^}]*gap:\s*var\(--space-4\);/s);
     expect(appCss).toMatch(/\.learning-unit-module__tasks\s*\{[^}]*margin-top:\s*var\(--space-6\);/s);
     expect(appCss).toMatch(
-      /\.learning-unit-module__index\s*\{[^}]*font-family:\s*var\(--font-technical\);[^}]*text-transform:\s*uppercase;/s
+      /\.learning-unit-module__index\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*text-transform:\s*uppercase;/s
     );
     expect(designDoc).toContain("Der Modultitel ist der klare Einstiegspunkt eines Moduls");
     expect(designDoc).toContain("`MATERIALIEN` und `AUFGABEN` bleiben technische Marker");
@@ -387,10 +387,10 @@ describe("learning unit route contract", () => {
       /\.learning-unit-content-shell \.learning-unit-pane-grid--split \.learning-unit-module__title\s*\{[^}]*font-size:\s*calc\(1\.34rem \* var\(--learning-unit-headline-scale\)\);/s
     );
     expect(designSystemCss).toMatch(
-      /\.learning-unit-content-shell \.learning-unit-module__meta\s*\{[^}]*font-family:\s*var\(--font-technical\);[^}]*font-size:\s*calc\(0\.78rem \* var\(--learning-unit-label-scale\)\);/s
+      /\.learning-unit-content-shell \.learning-unit-module__meta\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*calc\(0\.78rem \* var\(--learning-unit-label-scale\)\);/s
     );
     expect(designSystemCss).toMatch(
-      /\.learning-unit-content-shell \.learning-unit-module__section-head h5\s*\{[^}]*color:\s*color-mix\(in srgb,\s*var\(--color-text\) 78%,\s*transparent 22%\);[^}]*font-family:\s*var\(--font-technical\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*700;[^}]*letter-spacing:\s*0\.14em;/s
+      /\.learning-unit-content-shell \.learning-unit-module__section-head h5\s*\{[^}]*color:\s*color-mix\(in srgb,\s*var\(--color-text\) 78%,\s*transparent 22%\);[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*700;[^}]*letter-spacing:\s*0\.14em;/s
     );
     expect(designSystemCss).toMatch(
       /\.learning-unit-content-shell \.learning-unit-module__header\s*\{[^}]*margin-bottom:\s*var\(--space-6\);/s

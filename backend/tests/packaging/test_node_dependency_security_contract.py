@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -31,18 +30,18 @@ def test_frontend_uses_the_maintained_markdown_editor_and_exact_security_pins() 
         "@tiptap/extension-table",
         "@tiptap/markdown",
     ):
-        assert dependencies[name] == "3.28.0"
+        assert dependencies[name] == "3.31.3"
 
     assert dependencies["@xyflow/svelte"] == "1.6.2"
     assert dependencies["isomorphic-dompurify"] == "3.19.0"
     assert dependencies["markdown-it"] == "14.3.0"
     assert dependencies["jose"] == "6.2.3"
     assert dev_dependencies["@sveltejs/adapter-node"] == "5.5.7"
-    assert dev_dependencies["@sveltejs/kit"] == "2.70.0"
+    assert dev_dependencies["@sveltejs/kit"] == "2.70.3"
     assert dev_dependencies["svelte"] == "5.56.6"
     assert dev_dependencies["vite"] == "6.4.3"
     assert dev_dependencies["vitest"] == "4.1.10"
-    assert dev_dependencies["postcss"] == "8.5.19"
+    assert dev_dependencies["postcss"] == "8.5.28"
     assert package["overrides"]["cookie"] == "0.7.2"
     assert package["engines"]["node"] == ">=22.13.0"
 
@@ -53,10 +52,11 @@ def test_h5p_uses_safe_compatible_versions_and_targeted_overrides() -> None:
     assert package["engines"]["node"] == ">=22.13.0"
     assert package["dependencies"]["@lumieducation/h5p-express"] == "10.0.5"
     assert package["dependencies"]["express"] == "4.22.2"
+    assert package["dependencies"]["multer"] == "2.3.0"
     assert package["overrides"] == {
         "express": "4.22.2",
         "path-to-regexp": "0.1.13",
-        "qs": "6.15.3",
+        "qs": "6.16.0",
         "underscore": "1.13.8",
     }
 
@@ -86,8 +86,7 @@ def test_build_and_online_audit_gates_are_explicit_and_narrow() -> None:
     assert "buildWarningGate" in vite_config
     assert "handleBuildWarning" in vite_config
     assert "UNUSED_EXTERNAL_IMPORT" in (REPO_ROOT / "frontend/tooling/build-warning-gate.ts").read_text(encoding="utf-8")
-    assert "npm audit --audit-level=low" in makefile
-    assert "npm audit --omit=dev --audit-level=low" in makefile
+    assert "backend.tools.dependency_audit" in _make_target_body(makefile, "dependency-audit")
     assert "$(MAKE) dependency-audit" not in _make_target_body(makefile, "verify")
     assert 'elkjs/lib/elk-api.js' in flow_source
     assert 'elkjs/lib/elk-worker.min.js?url' in flow_source

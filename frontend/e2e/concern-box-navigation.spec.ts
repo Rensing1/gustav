@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
@@ -9,7 +10,7 @@ import { seedLearnerNavigationCourse } from "./support/seed-data";
 const password = e2ePassword;
 
 async function pageFor(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true });
+  const context = await newBrowserContext(browser, { baseURL: webBase });
   return { context, page: await context.newPage() };
 }
 

@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { currentUserSub, login } from "./support/auth";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
@@ -14,7 +15,7 @@ import {
 
 
 async function pageFor(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase });
+  const context = await newBrowserContext(browser, { baseURL: webBase });
   return { context, page: await context.newPage() };
 }
 

@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -332,7 +333,7 @@ test("@feature-detail browser cookie flow persists H5P editor JSON", async ({ pa
   await ensureLearnerUser(learnerEmail, password);
   await login(page, teacherEmail, password);
 
-  const learnerContext = await browser.newContext({ baseURL: webBase });
+  const learnerContext = await newBrowserContext(browser, { baseURL: webBase });
   const learnerPage = await learnerContext.newPage();
   try {
     await login(learnerPage, learnerEmail, password);

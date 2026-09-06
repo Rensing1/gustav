@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
@@ -9,7 +10,7 @@ const password = e2ePassword;
 type DraftMetrics = { draftWrites: number; longTasks: number[] };
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase, hasTouch: true });
+  const context = await newBrowserContext(browser, { baseURL: webBase, hasTouch: true });
   await context.addInitScript(() => {
     const originalSetItem = Storage.prototype.setItem;
     const metrics: DraftMetrics = { draftWrites: 0, longTasks: [] };

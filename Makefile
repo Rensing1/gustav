@@ -36,7 +36,8 @@ help:
 	@echo "  test-route-map     - Check generated route-surface inventory"
 	@echo "  test-db-inventory  - Check generated DB/RLS test inventory"
 	@echo "  supply-chain-check - Check offline dependency/license inventory"
-	@echo "  dependency-audit   - Check current npm advisories (requires network)"
+	@echo "  dependency-audit   - Check frontend, H5P and Python advisories (requires network)"
+	@echo "  lock-python        - Generate hashed Python runtime and harness locks"
 	@echo "  test-frontend-h5p  - Run frontend and H5P checks"
 	@echo "  test-feature-acceptance FEATURE=<spec> - Run one authenticated Playwright feature journey"
 	@echo "  test-feature-regression - Run all authenticated Playwright feature journeys (opt-in)"
@@ -167,7 +168,7 @@ test-fast:
 .PHONY: lint-backend
 lint-backend:
 	@. ./.venv/bin/activate && python -c "import ruff" >/dev/null 2>&1 || { echo "Ruff is not installed. Install harness dependencies with: ./.venv/bin/python -m pip install -r backend/requirements-harness.txt" >&2; exit 1; }
-	. ./.venv/bin/activate && python -m ruff check backend --select F
+	. ./.venv/bin/activate && python -m ruff check backend
 
 .PHONY: test-db-security
 test-db-security:
@@ -259,8 +260,12 @@ supply-chain-check:
 
 .PHONY: dependency-audit
 dependency-audit:
-	@cd frontend && npm audit --audit-level=low
-	@cd h5p-service && npm audit --omit=dev --audit-level=low
+	@.venv/bin/python -m backend.tools.dependency_audit
+
+.PHONY: lock-python
+lock-python:
+	@CUSTOM_COMPILE_COMMAND='make lock-python' .venv/bin/pip-compile --quiet --allow-unsafe --strip-extras --generate-hashes --extra-index-url https://pypi.org/pypi/ --no-emit-index-url --no-emit-trusted-host --output-file backend/web/requirements.lock backend/web/requirements.txt
+	@CUSTOM_COMPILE_COMMAND='make lock-python' .venv/bin/pip-compile --quiet --allow-unsafe --strip-extras --generate-hashes --extra-index-url https://pypi.org/pypi/ --no-emit-index-url --no-emit-trusted-host --constraint backend/web/requirements.lock --output-file backend/requirements-harness.lock backend/requirements-harness.txt
 
 .PHONY: test-frontend-h5p
 test-frontend-h5p:
@@ -303,8 +308,7 @@ verify-feature:
 
 .PHONY: update-visual-baselines
 update-visual-baselines:
-	@cd frontend && node tooling/check-playwright-browser.mjs
-	@cd frontend && npm run test:e2e -- --grep @design-system --update-snapshots
+	@.venv/bin/python -m backend.tools.feature_acceptance run --profile detail --feature design-system --update-snapshots
 
 .PHONY: playwright-bootstrap
 playwright-bootstrap:

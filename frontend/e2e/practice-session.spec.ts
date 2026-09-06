@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
@@ -19,7 +20,7 @@ const projectRoot = resolve(process.cwd(), "..");
 const python = resolve(projectRoot, ".venv/bin/python");
 
 async function pageFor(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase });
+  const context = await newBrowserContext(browser, { baseURL: webBase });
   return { context, page: await context.newPage() };
 }
 

@@ -1,7 +1,10 @@
 # Harness and CI dependencies.
 #
-# The production web image installs `backend/web/requirements.txt` directly.
+# The production web image installs the hash-verified runtime lock.
 # Keep lint/test-only tools here so they do not become runtime packages.
 -r web/requirements.txt
 
 ruff==0.15.20
+pytest==9.0.3
+pip-tools==7.6.1
+pip-audit==2.10.1

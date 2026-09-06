@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from backend.tools.tech_debt_inventory import parse_entries
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REPORT_PATH = REPO_ROOT / "docs" / "harness" / "QUALITY_SCORECARD.md"
@@ -33,6 +34,10 @@ DEFAULT_HOTSPOTS = [
     "h5p-service/server.mjs",
     "frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte",
     "frontend/src/routes/teaching/units/[unitId]/+page.svelte",
+    "frontend/src/routes/teaching/units/[unitId]/nodes/[nodeId]/+page.svelte",
+    "frontend/src/routes/live/+page.svelte",
+    "frontend/src/lib/components/learning-unit/LearningTaskCard.svelte",
+    "backend/learning/repo_submission_command_queries.py",
     "frontend/src/lib/styles/app.css",
     "frontend/src/lib/styles/theme-tokens.css",
     "frontend/src/lib/styles/typography.css",
@@ -159,7 +164,7 @@ def _parse_markdown_table(path: Path, key_header: str) -> list[dict[str, str]]:
 
 
 def _parse_tech_debt() -> list[dict[str, str]]:
-    rows = _parse_markdown_table(TECH_DEBT_PATH, "ID")
+    rows = parse_entries(TECH_DEBT_PATH.read_text(encoding="utf-8"))
     return [
         {
             "id": row.get("ID", ""),
@@ -171,7 +176,7 @@ def _parse_tech_debt() -> list[dict[str, str]]:
             "exit_criterion": row.get("Exit criterion", ""),
         }
         for row in rows
-        if row.get("ID")
+        if row["Status"] != "erledigt"
     ]
 
 
@@ -193,7 +198,8 @@ def _status_text(result: CheckResult | None) -> str:
     return "fail"
 
 
-def _collect_hotspots(history: list[dict[str, Any]]) -> list[tuple[str, int, int | None]]:
+def _collect_hotspots(history: list[dict[str, Any]], *, month: str) -> list[tuple[str, int, int | None]]:
+    history = [entry for entry in history if str(entry.get("month", "")) < month]
     latest_by_path: dict[str, int] = {}
     if history:
         latest = sorted(history, key=lambda item: item.get("month", ""), reverse=True)[0]
@@ -216,6 +222,12 @@ def _collect_hotspots(history: list[dict[str, Any]]) -> list[tuple[str, int, int
         rows.append((rel_path, current, delta))
 
     return rows
+
+
+def _display_command(command: list[str]) -> str:
+    """Publish reproducible commands without a local user's workspace path."""
+    prefix = str(REPO_ROOT) + "/"
+    return " ".join(argument.removeprefix(prefix) for argument in command)
 
 
 def _emit_report(
@@ -250,14 +262,14 @@ def _emit_report(
         [
             "",
             "### Security status",
-            f"- Security quick checks: {_status_text(checks.get('security'))} ({' '.join(checks['security'].command)})",
+            f"- Security quick checks: {_status_text(checks.get('security'))} ({_display_command(checks['security'].command)})",
             "",
             "### Contract diff status",
-            f"- OpenAPI contract baseline: {_status_text(checks.get('openapi'))} ({' '.join(checks['openapi'].command)})",
-            f"- Route map inventory: {_status_text(checks.get('route-map'))} ({' '.join(checks['route-map'].command)})",
+            f"- OpenAPI contract baseline: {_status_text(checks.get('openapi'))} ({_display_command(checks['openapi'].command)})",
+            f"- Route map inventory: {_status_text(checks.get('route-map'))} ({_display_command(checks['route-map'].command)})",
             "",
             "### Docker image parity",
-            f"- Web image smoke check: {_status_text(checks.get('docker-image-smoke'))} ({' '.join(checks['docker-image-smoke'].command)})",
+            f"- Web image smoke check: {_status_text(checks.get('docker-image-smoke'))} ({_display_command(checks['docker-image-smoke'].command)})",
             "",
         ]
     )
@@ -329,7 +341,7 @@ def _build_entry(
         checks_payload[key] = {
             "ok": result.ok,
             "exit_code": result.exit_code,
-            "command": " ".join(result.command),
+            "command": _display_command(result.command),
         }
 
     return {
@@ -442,7 +454,7 @@ def main() -> int:
         )
 
     history = _load_history(args.history)
-    hotspot_rows = _collect_hotspots(history)
+    hotspot_rows = _collect_hotspots(history, month=args.month)
     tech_debt_rows = _parse_tech_debt()
     skill_rows = _parse_skills()
 

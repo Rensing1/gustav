@@ -9,11 +9,10 @@ Why:
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import subprocess
 import sys
-
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = REPO_ROOT / "Makefile"
@@ -97,7 +96,10 @@ def test_route_map_has_no_active_legacy_ui_surface() -> None:
     assert "## Offene Arbeit" not in text
 
 
-def test_route_map_is_synchronized_with_generator() -> None:
+def test_route_map_is_synchronized_with_generator(monkeypatch) -> None:
+    # Route inventory does not need storage; other modules may install dummy keys.
+    for variable in ("SUPABASE_URL", "SUPABASE_PUBLIC_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+        monkeypatch.delenv(variable, raising=False)
     result = subprocess.run(
         [
             sys.executable,

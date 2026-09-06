@@ -34,6 +34,8 @@ Caddy erneuert die lokalen Server- beziehungsweise Leaf-Zertifikate automatisch;
 
 Für die visuellen Playwright-Smokes wird einmalig `make playwright-bootstrap` ausgeführt. `make test-visual-smoke` prüft den Chromium-Browser vor dem Start und meldet den Bootstrap-Befehl frühzeitig, statt erst am Ende des produktnahen Profils zu scheitern.
 
+Gezielte Designprüfungen laufen mit `make test-feature-detail FEATURE=design-system`. Nach Prüfung der Unterschiede erzeugt `make update-visual-baselines` ausschließlich die Designsystem-Referenzen neu; auch dieser Befehl prüft den freigegebenen lokalen Stack und räumt nur laufzugehörige Daten auf. Danach müssen die erzeugten Bilder visuell geprüft und ein Vergleichslauf ohne Aktualisierung erfolgreich ausgeführt werden. Referenzbilder werden nicht pauschal zur Unterdrückung eines Fehlers übernommen. Zentrale Browser-/API-Kontexte in `frontend/e2e/support/browser-context.ts` erzwingen reguläre Zertifikatsprüfung.
+
 ## Lokale Browser-Personas
 
 Für wiederholbare manuelle Prüfungen stehen eine feste Dev-Lehrkraft und ein fester Dev-Schüler zur Verfügung. Die Zugangsdaten liegen ausschließlich in der ignorierten lokalen `.env`:

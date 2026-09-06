@@ -12,21 +12,24 @@ Covers:
 """
 from __future__ import annotations
 
+import asyncio
+import importlib
 import json
 import os
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
-import importlib
-import pytest
-import psycopg
-from psycopg import errors as psy_errors
-import httpx
-from httpx import ASGITransport
 
-pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
+import httpx
+import psycopg
+import pytest
+from httpx import ASGITransport
+from psycopg import errors as psy_errors
 
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 main = importlib.import_module("backend.web.main")
 
@@ -83,6 +86,98 @@ async def _attach_unit(client: httpx.AsyncClient, course_id: str, unit_id: str) 
 async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: str) -> None:
     r = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": student_sub})
     assert r.status_code in (201, 204)
+
+
+@pytest.mark.parametrize("section_count", [0, 1, 20])
+async def test_summary_loads_tasks_once_in_didactic_order(monkeypatch, section_count):
+    """Adding sections must not add task queries or reorder the lesson."""
+    _require_db_or_skip()
+    from backend.teaching.repo_db import DBTeachingRepo
+
+    owner = _session_store().create(sub=f"t-live-bulk-{uuid.uuid4()}", name="Owner", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        course_id = await _create_course(client)
+        unit = await _create_unit(client)
+        try:
+            expected = []
+            for index in range(section_count):
+                section = await _create_section(client, unit["id"], f"Abschnitt {index}")
+                # Include empty sections and multiple tasks in the same section.
+                if index % 3 != 2:
+                    for number in range(2):
+                        task = await _create_task(client, unit["id"], section["id"], f"Aufgabe {index}.{number}")
+                        expected.append(task["id"])
+            await _attach_unit(client, course_id, unit["id"])
+            calls = []
+            original = DBTeachingRepo.list_tasks_for_unit_owned
+
+            def bulk(repo, unit_id, author_id):
+                calls.append((unit_id, author_id))
+                # Reverse adapter output so the contract cannot depend on UUID order.
+                return list(reversed(original(repo, unit_id, author_id)))
+
+            def per_section(*args, **kwargs):
+                pytest.fail("Live summary must not load tasks per section")
+
+            monkeypatch.setattr(DBTeachingRepo, "list_tasks_for_unit_owned", bulk)
+            monkeypatch.setattr(DBTeachingRepo, "list_tasks_for_section_owned", per_section)
+            response = await client.get(
+                f"/api/teaching/courses/{course_id}/units/{unit['id']}/submissions/summary",
+                params={"include_students": "false"},
+            )
+            assert response.status_code == 200
+            assert [task["id"] for task in response.json()["tasks"]] == expected
+            assert calls == [(unit["id"], owner.sub)]
+        finally:
+            await client.delete(f"/api/teaching/courses/{course_id}")
+            await client.delete(f"/api/teaching/units/{unit['id']}")
+
+
+async def test_summary_database_wait_does_not_block_unrelated_request(monkeypatch):
+    """A waiting synchronous adapter must leave the ASGI event loop responsive."""
+    _require_db_or_skip()
+    from backend.teaching.repo_db import DBTeachingRepo
+
+    owner = _session_store().create(sub=f"t-live-thread-{uuid.uuid4()}", name="Owner", roles=["teacher"])
+    entered = threading.Event()
+    independent_finished = threading.Event()
+    observed = []
+    original = DBTeachingRepo.list_sections_for_author
+
+    def waiting_read(repo, unit_id, author_id):
+        entered.set()
+        # A bounded wait also releases the test if the regression blocks its loop.
+        observed.append(independent_finished.wait(timeout=5))
+        return original(repo, unit_id, author_id)
+
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        course_id = await _create_course(client)
+        unit = await _create_unit(client)
+        try:
+            await _attach_unit(client, course_id, unit["id"])
+            monkeypatch.setattr(DBTeachingRepo, "list_sections_for_author", waiting_read)
+            pending = asyncio.create_task(client.get(
+                f"/api/teaching/courses/{course_id}/units/{unit['id']}/submissions/summary",
+                params={"include_students": "false"},
+            ))
+            try:
+                assert await asyncio.to_thread(entered.wait, 5)
+                async with (await _client()) as independent:
+                    response = await independent.get(
+                        f"/api/teaching/courses/{course_id}/units/{unit['id']}/submissions/summary"
+                    )
+                assert response.status_code == 401
+            finally:
+                independent_finished.set()
+                summary = await pending
+            assert summary.status_code == 200
+            assert observed == [True]
+        finally:
+            independent_finished.set()
+            await client.delete(f"/api/teaching/courses/{course_id}")
+            await client.delete(f"/api/teaching/units/{unit['id']}")
 
 
 @pytest.mark.anyio

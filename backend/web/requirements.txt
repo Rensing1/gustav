@@ -1,15 +1,21 @@
 # FastAPI Framework und Server
-fastapi==0.115.0
+-c ../constraints-ai.txt
+# Pin the installer tools shipped by the base image as part of the audited runtime.
+pip==26.2.1
+setuptools==84.0.0
+wheel==0.48.0
+# Preserve the flat route inventory until the app-provider migration is complete.
+fastapi==0.136.3
 uvicorn[standard]==0.32.0
 
 # Template Engine
 jinja2==3.1.4
 
 # Für spätere Erweiterungen (aber schon mal dabei)
-python-multipart==0.0.12  # Für File-Uploads
+python-multipart==0.0.32  # Für File-Uploads
 python-dotenv==1.0.1       # Für Umgebungsvariablen
 PyYAML==6.0.3              # Safe, human-readable GUSTAV CLI sync manifests
-python-jose[cryptography]==3.3.0  # JWT handling (ID token verification)
+python-jose[cryptography]==3.5.0  # JWT handling (ID token verification)
 requests==2.32.3           # HTTP client for OIDC token exchange
 psycopg[binary]==3.2.3     # Postgres driver for DB-backed sessions
 httpx==0.27.0              # In-process API calls from SSR (ASGITransport)
@@ -22,7 +28,7 @@ dspy-ai==3.0.3
 supabase==2.6.0
 
 # Imaging (PDF vision stitching requires Pillow in worker container)
-Pillow==10.4.0
+Pillow==12.3.0
 # PDF rendering backend (required for PDF → images in worker)
 pypdfium2==4.30.0
 # Printable learning-unit PDFs (HTML layout plus safe page composition)
@@ -31,4 +37,4 @@ pypdf==6.16.2
 
 # Markdown rendering (tables) and sanitizing
 markdown-it-py==3.0.0
-bleach==6.1.0
+bleach==6.4.0

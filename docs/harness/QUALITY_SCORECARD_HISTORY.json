@@ -264,6 +264,319 @@
         "count": 0,
         "entries": []
       }
+    },
+    {
+      "checks": {
+        "docker-image-smoke": {
+          "command": ".venv/bin/python -m backend.tools.docker_image_smoke",
+          "exit_code": 0,
+          "ok": true
+        },
+        "openapi": {
+          "command": ".venv/bin/python -m backend.tools.openapi_contract_check --spec api/openapi.yml",
+          "exit_code": 0,
+          "ok": true
+        },
+        "route-map": {
+          "command": ".venv/bin/python -m backend.tools.route_map_inventory --check docs/harness/ROUTE_MAP.md",
+          "exit_code": 0,
+          "ok": true
+        },
+        "security": {
+          "command": ".venv/bin/pytest -q backend/tests/test_config_security.py backend/tests/test_privacy_logging_contract.py backend/tests/test_csrf_tokens_contract.py",
+          "exit_code": 0,
+          "ok": true
+        }
+      },
+      "generated": "2026-09-06T10:31:19",
+      "hotspots": [
+        {
+          "delta_from_previous": 8,
+          "loc": 101,
+          "path": "backend/web/main.py"
+        },
+        {
+          "delta_from_previous": 158,
+          "loc": 540,
+          "path": "backend/web/routes/app.py"
+        },
+        {
+          "delta_from_previous": 70,
+          "loc": 1194,
+          "path": "backend/web/routes/learning.py"
+        },
+        {
+          "delta_from_previous": 24,
+          "loc": 758,
+          "path": "backend/web/routes/teaching.py"
+        },
+        {
+          "delta_from_previous": -121,
+          "loc": 965,
+          "path": "backend/web/routes/teaching_live.py"
+        },
+        {
+          "delta_from_previous": 86,
+          "loc": 597,
+          "path": "backend/learning/repo_db.py"
+        },
+        {
+          "delta_from_previous": 233,
+          "loc": 1500,
+          "path": "backend/learning/workers/process_learning_submission_jobs.py"
+        },
+        {
+          "delta_from_previous": 292,
+          "loc": 1779,
+          "path": "backend/teaching/repo_db.py"
+        },
+        {
+          "delta_from_previous": 43,
+          "loc": 1363,
+          "path": "h5p-service/server.mjs"
+        },
+        {
+          "delta_from_previous": 379,
+          "loc": 1983,
+          "path": "frontend/src/routes/learning/courses/[courseId]/units/[unitId]/+page.svelte"
+        },
+        {
+          "delta_from_previous": 376,
+          "loc": 1439,
+          "path": "frontend/src/routes/teaching/units/[unitId]/+page.svelte"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 1887,
+          "path": "frontend/src/routes/teaching/units/[unitId]/nodes/[nodeId]/+page.svelte"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 1183,
+          "path": "frontend/src/routes/live/+page.svelte"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 1301,
+          "path": "frontend/src/lib/components/learning-unit/LearningTaskCard.svelte"
+        },
+        {
+          "delta_from_previous": null,
+          "loc": 912,
+          "path": "backend/learning/repo_submission_command_queries.py"
+        },
+        {
+          "delta_from_previous": -430,
+          "loc": 862,
+          "path": "frontend/src/lib/styles/app.css"
+        },
+        {
+          "delta_from_previous": 30,
+          "loc": 86,
+          "path": "frontend/src/lib/styles/theme-tokens.css"
+        },
+        {
+          "delta_from_previous": -1,
+          "loc": 39,
+          "path": "frontend/src/lib/styles/typography.css"
+        },
+        {
+          "delta_from_previous": 314,
+          "loc": 1455,
+          "path": "frontend/src/lib/styles/ui-primitives.css"
+        },
+        {
+          "delta_from_previous": 2620,
+          "loc": 5112,
+          "path": "frontend/src/lib/styles/learning-unit.css"
+        },
+        {
+          "delta_from_previous": 1360,
+          "loc": 3828,
+          "path": "frontend/src/lib/styles/teaching-workspace.css"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 5,
+          "path": "frontend/src/lib/styles/design-system.css"
+        },
+        {
+          "delta_from_previous": 0,
+          "loc": 2684,
+          "path": "backend/web/static/css/gustav.css"
+        },
+        {
+          "delta_from_previous": 28,
+          "loc": 2354,
+          "path": "backend/tests/test_learning_api_contract.py"
+        },
+        {
+          "delta_from_previous": 9,
+          "loc": 2018,
+          "path": "backend/tests/test_learning_worker_jobs.py"
+        },
+        {
+          "delta_from_previous": 132,
+          "loc": 1351,
+          "path": "backend/tests/test_teaching_live_unit_summary_api.py"
+        },
+        {
+          "delta_from_previous": 53,
+          "loc": 1237,
+          "path": "backend/tests/test_teaching_live_detail_api.py"
+        },
+        {
+          "delta_from_previous": 89,
+          "loc": 1299,
+          "path": "backend/tests/test_gustav_cli.py"
+        },
+        {
+          "delta_from_previous": 1410,
+          "loc": 2612,
+          "path": "frontend/src/lib/components/learning-unit/LearningTaskCard.test.ts"
+        }
+      ],
+      "month": "2026-09",
+      "openapi_summary": {
+        "openapi_operations": 190,
+        "runtime_operations": 177,
+        "surfaces": {
+          "BFF/internal": 33,
+          "H5P service": 16,
+          "active legacy UI": 0,
+          "auth bridge": 8,
+          "health/ops": 3,
+          "public API": 134,
+          "retired legacy UI": 0
+        }
+      },
+      "skills": {
+        "active": [
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Dokumente lesen, Statusvorschl\u00e4ge machen, Dokumentationsupdates vorbereiten",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Produktcode, Migrationen, Secrets, L\u00f6schungen",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Kein Netzwerk, keine produktive Mutation",
+            "Skill": "gustav-plan-status",
+            "Source path": "`docs/harness/skills/gustav-plan-status/SKILL.md`",
+            "Stop/escalation rules": "Unklare Produktentscheidung an den Produktverantwortlichen",
+            "Trigger phrases": "Planstatus, stale plan, docs/plan index",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Harness-Dokumente pr\u00fcfen und kleine Doku-Korrekturen vorbereiten",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Gates schw\u00e4chen, historische Entscheidungen l\u00f6schen",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Kein Netzwerk, keine Secrets",
+            "Skill": "gustav-harness-gardener",
+            "Source path": "`docs/harness/skills/gustav-harness-gardener/SKILL.md`",
+            "Stop/escalation rules": "Gate- oder Autonomie\u00e4nderungen eskalieren",
+            "Trigger phrases": "Harness-Gardening, stale harness, tech debt",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Diff lesen, Risiken priorisieren, Review-Dokument schreiben",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Code \u00e4ndern, Findings ohne Evidenz erfinden",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Nur Analyse; keine Mutation",
+            "Skill": "gustav-pr-review",
+            "Source path": "`docs/harness/skills/gustav-pr-review/SKILL.md`",
+            "Stop/escalation rules": "Security/API/DB/Privacy-Funde markieren",
+            "Trigger phrases": "PR review, branch review, Review gegen master",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Bestehende Findings pr\u00fcfen, Tests entwerfen, minimale Fixes planen",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Blindes Umsetzen ohne roten Test, fremde \u00c4nderungen revertieren",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Code\u00e4nderungen nur nach TDD und Review",
+            "Skill": "gustav-pr-fix",
+            "Source path": "`docs/harness/skills/gustav-pr-fix/SKILL.md`",
+            "Stop/escalation rules": "Unklare Findings oder Produktentscheidungen eskalieren",
+            "Trigger phrases": "PR-fix, review feedback fix",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "OpenAPI und Contract-Tests pr\u00fcfen, Route-Surface planen",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Breaking Changes entscheiden",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Keine Migrationen, keine Produktentscheidung",
+            "Skill": "gustav-api-contract",
+            "Source path": "`docs/harness/skills/gustav-api-contract/SKILL.md`",
+            "Stop/escalation rules": "Breaking API an den Produktverantwortlichen eskalieren",
+            "Trigger phrases": "OpenAPI, API contract, breaking change",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_openapi_no_null_type.py backend/tests/test_openapi_security_headers.py backend/tests/test_openapi_internal_flags.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Sicherheitsrisiken pr\u00fcfen, negative und positive Tests fordern",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Security-Ausnahmen autorisieren, Secrets lesen oder schreiben",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Keine Secrets, kein Netzwerk",
+            "Skill": "gustav-security-review",
+            "Source path": "`docs/harness/skills/gustav-security-review/SKILL.md`",
+            "Stop/escalation rules": "Security-Tradeoffs an den Produktverantwortlichen eskalieren",
+            "Trigger phrases": "security review, CSRF, RLS, authz, privacy",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_config_security.py backend/tests/test_privacy_logging_contract.py`"
+          },
+          {
+            "Activation status": "active",
+            "Allowed actions/tools": "Routen klassifizieren, Legacy-Exit planen",
+            "Eval status": "manual forward-tested",
+            "Prohibited actions": "Routen l\u00f6schen ohne Characterization-Test",
+            "Review cadence/date": "monatlich, 2026-08-02",
+            "Risk notes": "Keine Laufzeitmutation",
+            "Skill": "gustav-route-map",
+            "Source path": "`docs/harness/skills/gustav-route-map/SKILL.md`",
+            "Stop/escalation rules": "Aktive UI- oder API-Entscheidungen eskalieren",
+            "Trigger phrases": "route map, legacy route, retired UI",
+            "Verification command(s)": "`.venv/bin/pytest -q backend/tests/test_harness_minimum_contract.py`"
+          }
+        ]
+      },
+      "tech_debt": {
+        "count": 3,
+        "entries": [
+          {
+            "bereich": "Abh\u00e4ngigkeiten",
+            "exit_criterion": "Drei aktuelle Audits und nachvollziehbare Bewertung aller Meldungen",
+            "grund": "Verbleibende Python-/H5P-Meldungen; Konflikt mit vorl\u00e4ufiger DSPy-Fixierung",
+            "id": "TD-001",
+            "owner": "Produktverantwortlicher",
+            "review_date": "2026-10-01",
+            "risiko": "Sicherheitsl\u00fccken"
+          },
+          {
+            "bereich": "Backend",
+            "exit_criterion": "Appbezogene Provider und gr\u00fcne Isolationstests ohne Reparatur-Fixtures",
+            "grund": "Route-Fassaden und ver\u00e4nderte Endpoint-Globals",
+            "id": "TD-004",
+            "owner": "Produktverantwortlicher",
+            "review_date": "2026-10-01",
+            "risiko": "Globale Kopplung und Testleckagen"
+          },
+          {
+            "bereich": "Frontend und Abl\u00e4ufe",
+            "exit_criterion": "Gemeinsame Komponenten, getrennte Controller und vollst\u00e4ndige Feature-/Designnachweise",
+            "grund": "Gro\u00dfe Module und verteilte UI-Verantwortung",
+            "id": "TD-006",
+            "owner": "Produktverantwortlicher",
+            "review_date": "2026-10-01",
+            "risiko": "Hohe \u00c4nderungskosten und Designabweichungen"
+          }
+        ]
+      }
     }
   ]
 }

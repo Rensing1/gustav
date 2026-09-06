@@ -2,10 +2,178 @@
   "entries": [
     {
       "ecosystem": "python",
+      "license": "PSF-2.0",
+      "name": "aiohappyeyeballs",
+      "policy": "metadata-recorded",
+      "version": "2.7.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0 AND MIT",
+      "name": "aiohttp",
+      "policy": "metadata-recorded",
+      "version": "3.14.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache 2.0",
+      "name": "aiosignal",
+      "policy": "metadata-recorded",
+      "version": "1.4.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "annotated-doc",
+      "policy": "metadata-recorded",
+      "version": "0.0.5"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "annotated-types",
+      "policy": "metadata-recorded",
+      "version": "0.8.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "anyio",
+      "policy": "metadata-recorded",
+      "version": "4.15.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "attrs",
+      "policy": "metadata-recorded",
+      "version": "26.1.0"
+    },
+    {
+      "ecosystem": "python",
       "license": "Apache Software License",
       "name": "bleach",
       "policy": "metadata-recorded",
-      "version": "6.1.0"
+      "version": "6.4.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "BSD-2-Clause",
+      "name": "boolean-py",
+      "policy": "metadata-recorded",
+      "version": "5.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "brotli",
+      "policy": "metadata-recorded",
+      "version": "1.2.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "build",
+      "policy": "metadata-recorded",
+      "version": "1.6.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "cachecontrol",
+      "policy": "metadata-recorded",
+      "version": "0.14.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "cachetools",
+      "policy": "metadata-recorded",
+      "version": "7.1.8"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MPL-2.0",
+      "name": "certifi",
+      "policy": "metadata-recorded",
+      "version": "2026.7.22"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "cffi",
+      "policy": "metadata-recorded",
+      "version": "2.1.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "charset-normalizer",
+      "policy": "metadata-recorded",
+      "version": "3.5.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "click",
+      "policy": "metadata-recorded",
+      "version": "8.5.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "BSD-3-Clause",
+      "name": "cloudpickle",
+      "policy": "metadata-recorded",
+      "version": "3.1.2"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "cryptography",
+      "policy": "metadata-recorded",
+      "version": "50.0.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "cssselect2",
+      "policy": "metadata-recorded",
+      "version": "0.10.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "cyclonedx-python-lib",
+      "policy": "metadata-recorded",
+      "version": "11.12.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "PSFL",
+      "name": "defusedxml",
+      "policy": "metadata-recorded",
+      "version": "0.7.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache 2",
+      "name": "deprecation",
+      "policy": "metadata-recorded",
+      "version": "2.1.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache 2.0",
+      "name": "diskcache",
+      "policy": "metadata-recorded",
+      "version": "5.6.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT License\n\nCopyright (c) 2023 Stanford Future Data Systems\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+      "name": "dspy",
+      "policy": "metadata-recorded",
+      "version": "3.3.1"
     },
     {
       "ecosystem": "python",
@@ -16,10 +184,115 @@
     },
     {
       "ecosystem": "python",
-      "license": "License :: OSI Approved :: MIT License",
+      "license": "MIT",
+      "name": "ecdsa",
+      "policy": "metadata-recorded",
+      "version": "0.19.2"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
       "name": "fastapi",
       "policy": "metadata-recorded",
-      "version": "0.115.0"
+      "version": "0.136.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "fastuuid",
+      "policy": "metadata-recorded",
+      "version": "0.14.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "filelock",
+      "policy": "metadata-recorded",
+      "version": "3.32.5"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "fonttools",
+      "policy": "metadata-recorded",
+      "version": "4.64.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "frozenlist",
+      "policy": "metadata-recorded",
+      "version": "1.8.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "fsspec",
+      "policy": "metadata-recorded",
+      "version": "2026.7.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "gepa",
+      "policy": "metadata-recorded",
+      "version": "0.1.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "gotrue",
+      "policy": "metadata-recorded",
+      "version": "2.12.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "h11",
+      "policy": "metadata-recorded",
+      "version": "0.16.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "h2",
+      "policy": "metadata-recorded",
+      "version": "4.4.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: Apache Software License",
+      "name": "hf-xet",
+      "policy": "metadata-recorded",
+      "version": "1.6.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "hpack",
+      "policy": "metadata-recorded",
+      "version": "4.2.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "httpcore",
+      "policy": "metadata-recorded",
+      "version": "1.0.9"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "httpcore2",
+      "policy": "metadata-recorded",
+      "version": "2.12.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "httptools",
+      "policy": "metadata-recorded",
+      "version": "0.8.0"
     },
     {
       "ecosystem": "python",
@@ -31,9 +304,93 @@
     {
       "ecosystem": "python",
       "license": "License :: OSI Approved :: BSD License",
+      "name": "httpx2",
+      "policy": "metadata-recorded",
+      "version": "2.12.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "huggingface-hub",
+      "policy": "metadata-recorded",
+      "version": "1.30.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "The MIT License (MIT)\n\nCopyright (c) 2014 Cory Benfield\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
+      "name": "hyperframe",
+      "policy": "metadata-recorded",
+      "version": "6.1.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "idna",
+      "policy": "metadata-recorded",
+      "version": "3.19"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "importlib-metadata",
+      "policy": "metadata-recorded",
+      "version": "9.0.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "iniconfig",
+      "policy": "metadata-recorded",
+      "version": "2.3.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
       "name": "jinja2",
       "policy": "metadata-recorded",
       "version": "3.1.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "jiter",
+      "policy": "metadata-recorded",
+      "version": "0.16.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "json-repair",
+      "policy": "metadata-recorded",
+      "version": "0.63.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "jsonschema",
+      "policy": "metadata-recorded",
+      "version": "4.26.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "jsonschema-specifications",
+      "policy": "metadata-recorded",
+      "version": "2025.9.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "license-expression",
+      "policy": "metadata-recorded",
+      "version": "30.4.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "litellm",
+      "policy": "metadata-recorded",
+      "version": "1.83.0"
     },
     {
       "ecosystem": "python",
@@ -44,10 +401,129 @@
     },
     {
       "ecosystem": "python",
-      "license": "HPND",
+      "license": "UNKNOWN",
+      "name": "markupsafe",
+      "policy": "metadata-recorded",
+      "version": "3.0.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "mdurl",
+      "policy": "metadata-recorded",
+      "version": "0.1.2"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "msgpack",
+      "policy": "metadata-recorded",
+      "version": "1.2.2"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache License 2.0",
+      "name": "multidict",
+      "policy": "metadata-recorded",
+      "version": "6.7.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: Apache Software License",
+      "name": "openai",
+      "policy": "metadata-recorded",
+      "version": "3.8.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: Apache Software License",
+      "name": "orjson",
+      "policy": "metadata-recorded",
+      "version": "3.12.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "packageurl-python",
+      "policy": "metadata-recorded",
+      "version": "0.17.6"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "packaging",
+      "policy": "metadata-recorded",
+      "version": "26.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
       "name": "pillow",
       "policy": "metadata-recorded",
-      "version": "10.4.0"
+      "version": "12.3.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "pip",
+      "policy": "metadata-recorded",
+      "version": "26.2.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: Apache Software License",
+      "name": "pip-api",
+      "policy": "metadata-recorded",
+      "version": "0.0.34"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: Apache Software License",
+      "name": "pip-audit",
+      "policy": "metadata-recorded",
+      "version": "2.10.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "pip-requirements-parser",
+      "policy": "metadata-recorded",
+      "version": "32.0.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "BSD",
+      "name": "pip-tools",
+      "policy": "metadata-recorded",
+      "version": "7.6.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "platformdirs",
+      "policy": "metadata-recorded",
+      "version": "4.11.7"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "pluggy",
+      "policy": "metadata-recorded",
+      "version": "1.6.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "postgrest",
+      "policy": "metadata-recorded",
+      "version": "0.16.11"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "propcache",
+      "policy": "metadata-recorded",
+      "version": "0.5.2"
     },
     {
       "ecosystem": "python",
@@ -55,6 +531,76 @@
       "name": "psycopg",
       "policy": "metadata-recorded",
       "version": "3.2.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "GNU Lesser General Public License v3 (LGPLv3)",
+      "name": "psycopg-binary",
+      "policy": "metadata-recorded",
+      "version": "3.2.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "py-serializable",
+      "policy": "metadata-recorded",
+      "version": "2.1.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "BSD-2-Clause",
+      "name": "pyasn1",
+      "policy": "metadata-recorded",
+      "version": "0.6.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "pycparser",
+      "policy": "metadata-recorded",
+      "version": "3.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "pydantic",
+      "policy": "metadata-recorded",
+      "version": "2.13.5"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "pydantic-core",
+      "policy": "metadata-recorded",
+      "version": "2.46.5"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "pydyf",
+      "policy": "metadata-recorded",
+      "version": "0.12.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "pygments",
+      "policy": "metadata-recorded",
+      "version": "2.21.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "pyjwt",
+      "policy": "metadata-recorded",
+      "version": "2.13.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "pyparsing",
+      "policy": "metadata-recorded",
+      "version": "3.3.2"
     },
     {
       "ecosystem": "python",
@@ -72,6 +618,34 @@
     },
     {
       "ecosystem": "python",
+      "license": "License :: OSI Approved :: GNU General Public License v2 or later (GPLv2+)",
+      "name": "pyphen",
+      "policy": "metadata-recorded",
+      "version": "0.18.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "pyproject-hooks",
+      "policy": "metadata-recorded",
+      "version": "1.2.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "pytest",
+      "policy": "metadata-recorded",
+      "version": "9.0.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Dual License",
+      "name": "python-dateutil",
+      "policy": "metadata-recorded",
+      "version": "2.9.0.post0"
+    },
+    {
+      "ecosystem": "python",
       "license": "BSD-3-Clause",
       "name": "python-dotenv",
       "policy": "metadata-recorded",
@@ -82,14 +656,14 @@
       "license": "MIT",
       "name": "python-jose",
       "policy": "metadata-recorded",
-      "version": "3.3.0"
+      "version": "3.5.0"
     },
     {
       "ecosystem": "python",
       "license": "License :: OSI Approved :: Apache Software License",
       "name": "python-multipart",
       "policy": "metadata-recorded",
-      "version": "0.0.12"
+      "version": "0.0.32"
     },
     {
       "ecosystem": "python",
@@ -100,10 +674,52 @@
     },
     {
       "ecosystem": "python",
+      "license": "MIT",
+      "name": "realtime",
+      "policy": "metadata-recorded",
+      "version": "1.0.6"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "referencing",
+      "policy": "metadata-recorded",
+      "version": "0.37.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "regex",
+      "policy": "metadata-recorded",
+      "version": "2026.9.3"
+    },
+    {
+      "ecosystem": "python",
       "license": "Apache-2.0",
       "name": "requests",
       "policy": "metadata-recorded",
       "version": "2.32.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "rich",
+      "policy": "metadata-recorded",
+      "version": "15.0.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "rpds-py",
+      "policy": "metadata-recorded",
+      "version": "2026.6.3"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "rsa",
+      "policy": "metadata-recorded",
+      "version": "4.9.1"
     },
     {
       "ecosystem": "python",
@@ -114,10 +730,150 @@
     },
     {
       "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "setuptools",
+      "policy": "metadata-recorded",
+      "version": "84.0.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "six",
+      "policy": "metadata-recorded",
+      "version": "1.17.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT OR Apache-2.0",
+      "name": "sniffio",
+      "policy": "metadata-recorded",
+      "version": "1.3.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache 2.0",
+      "name": "sortedcontainers",
+      "policy": "metadata-recorded",
+      "version": "2.4.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "starlette",
+      "policy": "metadata-recorded",
+      "version": "1.6.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "storage3",
+      "policy": "metadata-recorded",
+      "version": "0.7.7"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "strenum",
+      "policy": "metadata-recorded",
+      "version": "0.4.15"
+    },
+    {
+      "ecosystem": "python",
       "license": "MIT",
       "name": "supabase",
       "policy": "metadata-recorded",
       "version": "2.6.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "supafunc",
+      "policy": "metadata-recorded",
+      "version": "0.5.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache 2.0",
+      "name": "tenacity",
+      "policy": "metadata-recorded",
+      "version": "9.1.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT License\n\nCopyright (c) 2022 OpenAI, Shantanu Jain\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+      "name": "tiktoken",
+      "policy": "metadata-recorded",
+      "version": "0.14.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "tinycss2",
+      "policy": "metadata-recorded",
+      "version": "1.5.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "tinyhtml5",
+      "policy": "metadata-recorded",
+      "version": "2.1.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: Apache Software License",
+      "name": "tokenizers",
+      "policy": "metadata-recorded",
+      "version": "0.23.2"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "tomli",
+      "policy": "metadata-recorded",
+      "version": "2.4.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: MIT License",
+      "name": "tomli-w",
+      "policy": "metadata-recorded",
+      "version": "1.2.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MPL-2.0 AND MIT",
+      "name": "tqdm",
+      "policy": "metadata-recorded",
+      "version": "4.70.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "truststore",
+      "policy": "metadata-recorded",
+      "version": "0.10.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "typing-extensions",
+      "policy": "metadata-recorded",
+      "version": "4.16.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "typing-inspection",
+      "policy": "metadata-recorded",
+      "version": "0.4.4"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "urllib3",
+      "policy": "metadata-recorded",
+      "version": "2.7.0"
     },
     {
       "ecosystem": "python",
@@ -128,17 +884,73 @@
     },
     {
       "ecosystem": "python",
+      "license": "MIT License",
+      "name": "uvloop",
+      "policy": "metadata-recorded",
+      "version": "0.22.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "MIT",
+      "name": "watchfiles",
+      "policy": "metadata-recorded",
+      "version": "1.2.0"
+    },
+    {
+      "ecosystem": "python",
       "license": "License :: OSI Approved :: BSD License",
       "name": "weasyprint",
       "policy": "metadata-recorded",
       "version": "69.0"
     },
     {
+      "ecosystem": "python",
+      "license": "License :: OSI Approved :: BSD License",
+      "name": "webencodings",
+      "policy": "metadata-recorded",
+      "version": "0.6.1"
+    },
+    {
+      "ecosystem": "python",
+      "license": "BSD-3-Clause",
+      "name": "websockets",
+      "policy": "metadata-recorded",
+      "version": "12.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "wheel",
+      "policy": "metadata-recorded",
+      "version": "0.48.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "yarl",
+      "policy": "metadata-recorded",
+      "version": "1.24.5"
+    },
+    {
+      "ecosystem": "python",
+      "license": "UNKNOWN",
+      "name": "zipp",
+      "policy": "metadata-recorded",
+      "version": "4.1.0"
+    },
+    {
+      "ecosystem": "python",
+      "license": "Apache-2.0",
+      "name": "zopfli",
+      "policy": "metadata-recorded",
+      "version": "0.4.3"
+    },
+    {
       "ecosystem": "node",
       "license": "MIT",
       "name": "@adobe/css-tools",
       "policy": "allowed",
-      "version": "4.4.4",
+      "version": "4.5.0",
       "workspace": "frontend"
     },
     {
@@ -186,7 +998,7 @@
       "license": "MIT",
       "name": "@babel/code-frame",
       "policy": "allowed",
-      "version": "7.29.0",
+      "version": "7.29.7",
       "workspace": "frontend"
     },
     {
@@ -194,7 +1006,7 @@
       "license": "MIT",
       "name": "@babel/helper-validator-identifier",
       "policy": "allowed",
-      "version": "7.28.5",
+      "version": "7.29.7",
       "workspace": "frontend"
     },
     {
@@ -202,7 +1014,7 @@
       "license": "MIT",
       "name": "@babel/runtime",
       "policy": "allowed",
-      "version": "7.29.2",
+      "version": "7.29.7",
       "workspace": "frontend"
     },
     {
@@ -226,7 +1038,7 @@
       "license": "MIT-0",
       "name": "@csstools/color-helpers",
       "policy": "allowed",
-      "version": "6.1.0",
+      "version": "6.1.1",
       "workspace": "frontend"
     },
     {
@@ -242,7 +1054,7 @@
       "license": "MIT",
       "name": "@csstools/css-calc",
       "policy": "allowed",
-      "version": "3.2.1",
+      "version": "3.3.0",
       "workspace": "frontend"
     },
     {
@@ -258,7 +1070,7 @@
       "license": "MIT",
       "name": "@csstools/css-color-parser",
       "policy": "allowed",
-      "version": "4.1.9",
+      "version": "4.2.2",
       "workspace": "frontend"
     },
     {
@@ -282,7 +1094,7 @@
       "license": "MIT-0",
       "name": "@csstools/css-syntax-patches-for-csstree",
       "policy": "allowed",
-      "version": "1.1.6",
+      "version": "1.1.12",
       "workspace": "frontend"
     },
     {
@@ -522,7 +1334,7 @@
       "license": "OFL-1.1",
       "name": "@fontsource/inter",
       "policy": "allowed",
-      "version": "5.2.8",
+      "version": "5.3.0",
       "workspace": "frontend"
     },
     {
@@ -530,7 +1342,7 @@
       "license": "OFL-1.1",
       "name": "@fontsource/manrope",
       "policy": "allowed",
-      "version": "5.2.8",
+      "version": "5.3.0",
       "workspace": "frontend"
     },
     {
@@ -538,7 +1350,7 @@
       "license": "OFL-1.1",
       "name": "@fontsource/nunito",
       "policy": "allowed",
-      "version": "5.2.7",
+      "version": "5.3.0",
       "workspace": "frontend"
     },
     {
@@ -546,7 +1358,7 @@
       "license": "OFL-1.1",
       "name": "@fontsource/space-grotesk",
       "policy": "allowed",
-      "version": "5.2.10",
+      "version": "5.3.0",
       "workspace": "frontend"
     },
     {
@@ -554,7 +1366,7 @@
       "license": "OFL-1.1",
       "name": "@fontsource/work-sans",
       "policy": "allowed",
-      "version": "5.2.8",
+      "version": "5.3.0",
       "workspace": "frontend"
     },
     {
@@ -586,7 +1398,7 @@
       "license": "MIT",
       "name": "@jridgewell/sourcemap-codec",
       "policy": "allowed",
-      "version": "1.5.5",
+      "version": "1.6.0",
       "workspace": "frontend"
     },
     {
@@ -599,10 +1411,18 @@
     },
     {
       "ecosystem": "node",
+      "license": "MIT",
+      "name": "@napi-rs/lzma-linux-x64-gnu",
+      "policy": "allowed",
+      "version": "1.5.1",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
       "license": "Apache-2.0",
       "name": "@playwright/test",
       "policy": "allowed",
-      "version": "1.59.1",
+      "version": "1.63.0",
       "workspace": "frontend"
     },
     {
@@ -618,7 +1438,7 @@
       "license": "MIT",
       "name": "@rollup/plugin-commonjs",
       "policy": "allowed",
-      "version": "29.0.2",
+      "version": "29.0.3",
       "workspace": "frontend"
     },
     {
@@ -650,7 +1470,7 @@
       "license": "MIT",
       "name": "@rollup/pluginutils",
       "policy": "allowed",
-      "version": "5.3.0",
+      "version": "5.4.0",
       "workspace": "frontend"
     },
     {
@@ -658,7 +1478,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-android-arm-eabi",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -666,7 +1486,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-android-arm64",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -674,7 +1494,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-darwin-arm64",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -682,7 +1502,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-darwin-x64",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -690,7 +1510,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-freebsd-arm64",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -698,7 +1518,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-freebsd-x64",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -706,7 +1526,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-arm-gnueabihf",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -714,7 +1534,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-arm-musleabihf",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -722,7 +1542,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-arm64-gnu",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -730,7 +1550,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-arm64-musl",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -738,7 +1558,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-loong64-gnu",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -746,7 +1566,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-loong64-musl",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -754,7 +1574,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-ppc64-gnu",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -762,7 +1582,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-ppc64-musl",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -770,7 +1590,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-riscv64-gnu",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -778,7 +1598,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-riscv64-musl",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -786,7 +1606,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-s390x-gnu",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -794,7 +1614,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-x64-gnu",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -802,7 +1622,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-linux-x64-musl",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -810,7 +1630,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-openbsd-x64",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -818,7 +1638,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-openharmony-arm64",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -826,7 +1646,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-win32-arm64-msvc",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -834,7 +1654,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-win32-ia32-msvc",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -842,7 +1662,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-win32-x64-gnu",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -850,7 +1670,7 @@
       "license": "MIT",
       "name": "@rollup/rollup-win32-x64-msvc",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -866,7 +1686,7 @@
       "license": "MIT",
       "name": "@svelte-put/shortcut",
       "policy": "allowed",
-      "version": "4.1.0",
+      "version": "4.2.0",
       "workspace": "frontend"
     },
     {
@@ -874,7 +1694,7 @@
       "license": "MIT",
       "name": "@sveltejs/acorn-typescript",
       "policy": "allowed",
-      "version": "1.0.11",
+      "version": "1.0.13",
       "workspace": "frontend"
     },
     {
@@ -890,7 +1710,15 @@
       "license": "MIT",
       "name": "@sveltejs/kit",
       "policy": "allowed",
-      "version": "2.70.0",
+      "version": "2.70.3",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@sveltejs/load-config",
+      "policy": "allowed",
+      "version": "0.2.3",
       "workspace": "frontend"
     },
     {
@@ -930,7 +1758,7 @@
       "license": "MIT",
       "name": "@testing-library/svelte",
       "policy": "allowed",
-      "version": "5.3.1",
+      "version": "5.4.2",
       "workspace": "frontend"
     },
     {
@@ -938,7 +1766,7 @@
       "license": "MIT",
       "name": "@testing-library/svelte-core",
       "policy": "allowed",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "workspace": "frontend"
     },
     {
@@ -946,7 +1774,7 @@
       "license": "MIT",
       "name": "@tiptap/core",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -954,7 +1782,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-blockquote",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -962,7 +1790,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-bold",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -970,7 +1798,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-bullet-list",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -978,7 +1806,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-code",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -986,7 +1814,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-code-block",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -994,7 +1822,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-document",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1002,7 +1830,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-dropcursor",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1010,7 +1838,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-gapcursor",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1018,7 +1846,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-hard-break",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1026,7 +1854,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-heading",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1034,7 +1862,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-horizontal-rule",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1042,7 +1870,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-italic",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1050,7 +1878,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-link",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1058,7 +1886,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-list",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1066,7 +1894,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-list-item",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1074,7 +1902,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-list-keymap",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1082,7 +1910,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-ordered-list",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1090,7 +1918,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-paragraph",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1098,7 +1926,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-placeholder",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1106,7 +1934,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-strike",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1114,7 +1942,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-table",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1122,7 +1950,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-text",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1130,7 +1958,7 @@
       "license": "MIT",
       "name": "@tiptap/extension-underline",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1138,7 +1966,7 @@
       "license": "MIT",
       "name": "@tiptap/extensions",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1146,7 +1974,7 @@
       "license": "MIT",
       "name": "@tiptap/markdown",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1154,7 +1982,7 @@
       "license": "MIT",
       "name": "@tiptap/pm",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1162,7 +1990,7 @@
       "license": "MIT",
       "name": "@tiptap/starter-kit",
       "policy": "allowed",
-      "version": "3.28.0",
+      "version": "3.31.3",
       "workspace": "frontend"
     },
     {
@@ -1250,7 +2078,7 @@
       "license": "MIT",
       "name": "@types/estree",
       "policy": "allowed",
-      "version": "1.0.8",
+      "version": "1.0.9",
       "workspace": "frontend"
     },
     {
@@ -1266,7 +2094,7 @@
       "license": "MIT",
       "name": "@types/markdown-it",
       "policy": "allowed",
-      "version": "14.1.2",
+      "version": "14.2.0",
       "workspace": "frontend"
     },
     {
@@ -1282,7 +2110,7 @@
       "license": "MIT",
       "name": "@types/node",
       "policy": "allowed",
-      "version": "24.12.0",
+      "version": "24.13.3",
       "workspace": "frontend"
     },
     {
@@ -1290,7 +2118,7 @@
       "license": "MIT",
       "name": "@types/qrcode",
       "policy": "allowed",
-      "version": "1.5.5",
+      "version": "1.5.6",
       "workspace": "frontend"
     },
     {
@@ -1386,7 +2214,7 @@
       "license": "MIT",
       "name": "acorn",
       "policy": "allowed",
-      "version": "8.16.0",
+      "version": "8.18.0",
       "workspace": "frontend"
     },
     {
@@ -1714,7 +2542,7 @@
       "license": "MIT",
       "name": "devalue",
       "policy": "allowed",
-      "version": "5.8.1",
+      "version": "5.9.2",
       "workspace": "frontend"
     },
     {
@@ -1746,7 +2574,7 @@
       "license": "(MPL-2.0 OR Apache-2.0)",
       "name": "dompurify",
       "policy": "allowed",
-      "version": "3.4.12",
+      "version": "3.4.14",
       "workspace": "frontend"
     },
     {
@@ -1792,9 +2620,17 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "es-errors",
+      "policy": "allowed",
+      "version": "1.3.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "es-module-lexer",
       "policy": "allowed",
-      "version": "2.3.1",
+      "version": "2.3.2",
       "workspace": "frontend"
     },
     {
@@ -1818,15 +2654,7 @@
       "license": "MIT",
       "name": "esrap",
       "policy": "allowed",
-      "version": "2.2.13",
-      "workspace": "frontend"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "estree-walker",
-      "policy": "allowed",
-      "version": "2.0.2",
+      "version": "2.3.7",
       "workspace": "frontend"
     },
     {
@@ -1850,7 +2678,7 @@
       "license": "Apache-2.0",
       "name": "expect-type",
       "policy": "allowed",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "workspace": "frontend"
     },
     {
@@ -1867,14 +2695,6 @@
       "name": "find-up",
       "policy": "allowed",
       "version": "4.1.0",
-      "workspace": "frontend"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "fsevents",
-      "policy": "allowed",
-      "version": "2.3.2",
       "workspace": "frontend"
     },
     {
@@ -1906,7 +2726,7 @@
       "license": "MIT",
       "name": "hasown",
       "policy": "allowed",
-      "version": "2.0.2",
+      "version": "2.0.4",
       "workspace": "frontend"
     },
     {
@@ -1962,7 +2782,7 @@
       "license": "MIT",
       "name": "is-core-module",
       "policy": "allowed",
-      "version": "2.16.1",
+      "version": "2.16.2",
       "workspace": "frontend"
     },
     {
@@ -2146,7 +2966,7 @@
       "license": "MIT",
       "name": "mdurl",
       "policy": "allowed",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "workspace": "frontend"
     },
     {
@@ -2186,7 +3006,7 @@
       "license": "MIT",
       "name": "nanoid",
       "policy": "allowed",
-      "version": "3.3.16",
+      "version": "3.3.18",
       "workspace": "frontend"
     },
     {
@@ -2194,7 +3014,7 @@
       "license": "MIT",
       "name": "nwsapi",
       "policy": "allowed",
-      "version": "2.2.23",
+      "version": "2.2.27",
       "workspace": "frontend"
     },
     {
@@ -2290,7 +3110,7 @@
       "license": "MIT",
       "name": "picomatch",
       "policy": "allowed",
-      "version": "4.0.5",
+      "version": "4.0.7",
       "workspace": "frontend"
     },
     {
@@ -2298,7 +3118,7 @@
       "license": "Apache-2.0",
       "name": "playwright",
       "policy": "allowed",
-      "version": "1.59.1",
+      "version": "1.63.0",
       "workspace": "frontend"
     },
     {
@@ -2306,7 +3126,7 @@
       "license": "Apache-2.0",
       "name": "playwright-core",
       "policy": "allowed",
-      "version": "1.59.1",
+      "version": "1.63.0",
       "workspace": "frontend"
     },
     {
@@ -2322,7 +3142,7 @@
       "license": "MIT",
       "name": "postcss",
       "policy": "allowed",
-      "version": "8.5.19",
+      "version": "8.5.28",
       "workspace": "frontend"
     },
     {
@@ -2338,7 +3158,7 @@
       "license": "MIT",
       "name": "prosemirror-changeset",
       "policy": "allowed",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "workspace": "frontend"
     },
     {
@@ -2346,7 +3166,7 @@
       "license": "MIT",
       "name": "prosemirror-commands",
       "policy": "allowed",
-      "version": "1.7.1",
+      "version": "1.7.2",
       "workspace": "frontend"
     },
     {
@@ -2426,7 +3246,7 @@
       "license": "MIT",
       "name": "prosemirror-transform",
       "policy": "allowed",
-      "version": "1.12.0",
+      "version": "1.12.1",
       "workspace": "frontend"
     },
     {
@@ -2434,7 +3254,7 @@
       "license": "MIT",
       "name": "prosemirror-view",
       "policy": "allowed",
-      "version": "1.42.1",
+      "version": "1.42.3",
       "workspace": "frontend"
     },
     {
@@ -2514,7 +3334,7 @@
       "license": "MIT",
       "name": "resolve",
       "policy": "allowed",
-      "version": "1.22.11",
+      "version": "1.22.12",
       "workspace": "frontend"
     },
     {
@@ -2522,7 +3342,7 @@
       "license": "MIT",
       "name": "rollup",
       "policy": "allowed",
-      "version": "4.59.0",
+      "version": "4.63.1",
       "workspace": "frontend"
     },
     {
@@ -2578,7 +3398,7 @@
       "license": "MIT",
       "name": "set-cookie-parser",
       "policy": "allowed",
-      "version": "3.1.0",
+      "version": "3.1.2",
       "workspace": "frontend"
     },
     {
@@ -2666,7 +3486,7 @@
       "license": "MIT",
       "name": "svelte-check",
       "policy": "allowed",
-      "version": "4.4.5",
+      "version": "4.7.6",
       "workspace": "frontend"
     },
     {
@@ -2690,7 +3510,7 @@
       "license": "MIT",
       "name": "tinyexec",
       "policy": "allowed",
-      "version": "1.2.4",
+      "version": "1.3.1",
       "workspace": "frontend"
     },
     {
@@ -2698,7 +3518,7 @@
       "license": "MIT",
       "name": "tinyglobby",
       "policy": "allowed",
-      "version": "0.2.15",
+      "version": "0.2.17",
       "workspace": "frontend"
     },
     {
@@ -2706,7 +3526,7 @@
       "license": "MIT",
       "name": "tinyrainbow",
       "policy": "allowed",
-      "version": "3.1.0",
+      "version": "3.1.1",
       "workspace": "frontend"
     },
     {
@@ -2722,7 +3542,7 @@
       "license": "MIT",
       "name": "tldts",
       "policy": "allowed",
-      "version": "7.4.9",
+      "version": "7.4.11",
       "workspace": "frontend"
     },
     {
@@ -2738,7 +3558,7 @@
       "license": "MIT",
       "name": "tldts-core",
       "policy": "allowed",
-      "version": "7.4.9",
+      "version": "7.4.11",
       "workspace": "frontend"
     },
     {
@@ -2802,7 +3622,7 @@
       "license": "MIT",
       "name": "undici",
       "policy": "allowed",
-      "version": "7.28.0",
+      "version": "7.29.1",
       "workspace": "frontend"
     },
     {
@@ -2810,7 +3630,7 @@
       "license": "MIT",
       "name": "undici-types",
       "policy": "allowed",
-      "version": "7.16.0",
+      "version": "7.18.2",
       "workspace": "frontend"
     },
     {
@@ -2826,7 +3646,7 @@
       "license": "MIT",
       "name": "vitefu",
       "policy": "allowed",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "workspace": "frontend"
     },
     {
@@ -2938,7 +3758,7 @@
       "license": "MIT",
       "name": "ws",
       "policy": "allowed",
-      "version": "8.21.1",
+      "version": "8.21.3",
       "workspace": "frontend"
     },
     {
@@ -2986,32 +3806,8 @@
       "license": "MIT",
       "name": "zimmerframe",
       "policy": "allowed",
-      "version": "1.1.4",
+      "version": "1.1.5",
       "workspace": "frontend"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "@emnapi/core",
-      "policy": "allowed",
-      "version": "1.7.1",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "@emnapi/runtime",
-      "policy": "allowed",
-      "version": "1.7.1",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "@emnapi/wasi-threads",
-      "policy": "allowed",
-      "version": "1.1.0",
-      "workspace": "h5p-service"
     },
     {
       "ecosystem": "node",
@@ -3040,17 +3836,9 @@
     {
       "ecosystem": "node",
       "license": "MIT",
-      "name": "@napi-rs/wasm-runtime",
-      "policy": "allowed",
-      "version": "0.2.12",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
       "name": "@node-rs/crc32",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3058,7 +3846,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-android-arm-eabi",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3066,7 +3854,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-android-arm64",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3074,7 +3862,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-darwin-arm64",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3082,7 +3870,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-darwin-x64",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3090,7 +3878,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-freebsd-x64",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3098,7 +3886,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-linux-arm-gnueabihf",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3106,7 +3894,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-linux-arm64-gnu",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3114,7 +3902,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-linux-arm64-musl",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3122,7 +3910,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-linux-x64-gnu",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3130,15 +3918,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-linux-x64-musl",
       "policy": "allowed",
-      "version": "1.10.6",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "@node-rs/crc32-wasm32-wasi",
-      "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3146,7 +3926,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-win32-arm64-msvc",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3154,7 +3934,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-win32-ia32-msvc",
       "policy": "allowed",
-      "version": "1.10.6",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3162,15 +3942,7 @@
       "license": "MIT",
       "name": "@node-rs/crc32-win32-x64-msvc",
       "policy": "allowed",
-      "version": "1.10.6",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "@tybys/wasm-util",
-      "policy": "allowed",
-      "version": "0.10.1",
+      "version": "1.10.7",
       "workspace": "h5p-service"
     },
     {
@@ -3258,7 +4030,7 @@
       "license": "MIT",
       "name": "axios",
       "policy": "allowed",
-      "version": "1.18.1",
+      "version": "1.20.0",
       "workspace": "h5p-service"
     },
     {
@@ -3338,7 +4110,7 @@
       "license": "MIT",
       "name": "concat-stream",
       "policy": "allowed",
-      "version": "1.6.2",
+      "version": "2.0.0",
       "workspace": "h5p-service"
     },
     {
@@ -3376,9 +4148,9 @@
     {
       "ecosystem": "node",
       "license": "MIT",
-      "name": "core-util-is",
+      "name": "dayjs",
       "policy": "allowed",
-      "version": "1.0.3",
+      "version": "1.11.23",
       "workspace": "h5p-service"
     },
     {
@@ -3474,7 +4246,7 @@
       "license": "MIT",
       "name": "dom-serializer",
       "policy": "allowed",
-      "version": "2.0.0",
+      "version": "3.1.1",
       "workspace": "h5p-service"
     },
     {
@@ -3482,7 +4254,7 @@
       "license": "BSD-2-Clause",
       "name": "domelementtype",
       "policy": "allowed",
-      "version": "2.3.0",
+      "version": "3.0.0",
       "workspace": "h5p-service"
     },
     {
@@ -3490,7 +4262,7 @@
       "license": "BSD-2-Clause",
       "name": "domhandler",
       "policy": "allowed",
-      "version": "5.0.3",
+      "version": "6.0.1",
       "workspace": "h5p-service"
     },
     {
@@ -3498,7 +4270,7 @@
       "license": "BSD-2-Clause",
       "name": "domutils",
       "policy": "allowed",
-      "version": "3.2.2",
+      "version": "4.0.2",
       "workspace": "h5p-service"
     },
     {
@@ -3530,7 +4302,7 @@
       "license": "BSD-2-Clause",
       "name": "entities",
       "policy": "allowed",
-      "version": "4.5.0",
+      "version": "8.0.0",
       "workspace": "h5p-service"
     },
     {
@@ -3554,7 +4326,7 @@
       "license": "MIT",
       "name": "es-object-atoms",
       "policy": "allowed",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "workspace": "h5p-service"
     },
     {
@@ -3650,7 +4422,7 @@
       "license": "BSD-3-Clause",
       "name": "fast-uri",
       "policy": "allowed",
-      "version": "3.1.3",
+      "version": "3.1.7",
       "workspace": "h5p-service"
     },
     {
@@ -3786,7 +4558,7 @@
       "license": "MIT",
       "name": "htmlparser2",
       "policy": "allowed",
-      "version": "8.0.2",
+      "version": "12.0.0",
       "workspace": "h5p-service"
     },
     {
@@ -3850,15 +4622,7 @@
       "license": "MIT",
       "name": "is-plain-object",
       "policy": "allowed",
-      "version": "5.0.0",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "isarray",
-      "policy": "allowed",
-      "version": "1.0.0",
+      "version": "5.1.0",
       "workspace": "h5p-service"
     },
     {
@@ -3875,6 +4639,14 @@
       "name": "jsonpath",
       "policy": "allowed",
       "version": "1.3.0",
+      "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "launder",
+      "policy": "allowed",
+      "version": "1.7.1",
       "workspace": "h5p-service"
     },
     {
@@ -3952,22 +4724,6 @@
     {
       "ecosystem": "node",
       "license": "MIT",
-      "name": "minimist",
-      "policy": "allowed",
-      "version": "1.2.8",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "mkdirp",
-      "policy": "allowed",
-      "version": "0.5.6",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
       "name": "ms",
       "policy": "allowed",
       "version": "2.0.0",
@@ -4010,7 +4766,7 @@
       "license": "MIT",
       "name": "multer",
       "policy": "allowed",
-      "version": "1.4.5-lts.1",
+      "version": "2.3.0",
       "workspace": "h5p-service"
     },
     {
@@ -4018,7 +4774,7 @@
       "license": "MIT",
       "name": "nanoid",
       "policy": "allowed",
-      "version": "3.3.16",
+      "version": "3.3.18",
       "workspace": "h5p-service"
     },
     {
@@ -4035,14 +4791,6 @@
       "name": "node-machine-id",
       "policy": "allowed",
       "version": "1.1.12",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "object-assign",
-      "policy": "allowed",
-      "version": "4.1.1",
       "workspace": "h5p-service"
     },
     {
@@ -4106,15 +4854,7 @@
       "license": "MIT",
       "name": "postcss",
       "policy": "allowed",
-      "version": "8.5.19",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "process-nextick-args",
-      "policy": "allowed",
-      "version": "2.0.1",
+      "version": "8.5.28",
       "workspace": "h5p-service"
     },
     {
@@ -4146,7 +4886,7 @@
       "license": "BSD-3-Clause",
       "name": "qs",
       "policy": "allowed",
-      "version": "6.15.3",
+      "version": "6.16.0",
       "workspace": "h5p-service"
     },
     {
@@ -4178,7 +4918,7 @@
       "license": "MIT",
       "name": "readable-stream",
       "policy": "allowed",
-      "version": "2.3.8",
+      "version": "3.6.2",
       "workspace": "h5p-service"
     },
     {
@@ -4187,22 +4927,6 @@
       "name": "require-from-string",
       "policy": "allowed",
       "version": "2.0.2",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "safe-buffer",
-      "policy": "allowed",
-      "version": "5.1.2",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
-      "name": "safe-buffer",
-      "policy": "allowed",
-      "version": "5.1.2",
       "workspace": "h5p-service"
     },
     {
@@ -4226,7 +4950,7 @@
       "license": "MIT",
       "name": "sanitize-html",
       "policy": "allowed",
-      "version": "2.17.0",
+      "version": "2.17.7",
       "workspace": "h5p-service"
     },
     {
@@ -4346,7 +5070,7 @@
       "license": "MIT",
       "name": "string_decoder",
       "policy": "allowed",
-      "version": "1.1.1",
+      "version": "1.3.0",
       "workspace": "h5p-service"
     },
     {
@@ -4371,14 +5095,6 @@
       "name": "toidentifier",
       "policy": "allowed",
       "version": "1.0.1",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "0BSD",
-      "name": "tslib",
-      "policy": "allowed",
-      "version": "2.8.1",
       "workspace": "h5p-service"
     },
     {
@@ -4448,14 +5164,6 @@
     {
       "ecosystem": "node",
       "license": "MIT",
-      "name": "xtend",
-      "policy": "allowed",
-      "version": "4.0.2",
-      "workspace": "h5p-service"
-    },
-    {
-      "ecosystem": "node",
-      "license": "MIT",
       "name": "yauzl-promise",
       "policy": "allowed",
       "version": "4.0.0",
@@ -4515,15 +5223,18 @@
   },
   "schema_version": 1,
   "sources": [
-    "backend/requirements-harness.txt",
+    "backend/requirements-harness.lock",
+    "backend/web/requirements.lock",
     "backend/web/requirements.txt",
+    "backend/requirements-harness.txt",
+    "backend/constraints-ai.txt",
     "frontend/package-lock.json",
     "h5p-service/package-lock.json"
   ],
   "summary": {
-    "node_entries": 542,
-    "python_entries": 19,
+    "node_entries": 529,
+    "python_entries": 135,
     "review_required_entries": 0,
-    "total_entries": 561
+    "total_entries": 664
   }
 }

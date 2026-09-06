@@ -26,6 +26,9 @@
   --font-display: "Space Grotesk", "Manrope", "Inter", sans-serif;
   --font-reading: "Inter", "Work Sans", "Nunito", sans-serif;
   --font-ui: "Space Grotesk", "Inter", sans-serif;
+  --font-learner-headline: "Manrope", "Nunito", "Segoe UI", sans-serif;
+  --font-learner-body: "Work Sans", "Nunito", "Segoe UI", sans-serif;
+  --font-learner-label: "Inter", "Nunito", "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -35,6 +38,9 @@
   --space-6: 2rem;
   --space-7: 3rem;
   --space-8: 4rem;
+  --space-9: 6rem;
+  --font-size-xs: 0.75rem;
+  --border-width: 1px;
   --layout-compact-max: 42rem;
   --layout-content-max: 80rem;
   --layout-wide-max: 112rem;

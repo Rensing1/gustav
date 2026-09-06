@@ -31,7 +31,7 @@ describe("UiPreviewSurface", () => {
     expect(screen.getAllByText("Rückmeldung").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "KI-Dialog · Gespräch" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "KI-Dialog · Abschluss" })).toBeInTheDocument();
-    expect(screen.getAllByText("Gespräch mit Archivarin Ada").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Archivarin Ada").length).toBeGreaterThan(0);
     expect(screen.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Erfolgreich abgemeldet" })).toBeInTheDocument();
 
@@ -40,8 +40,10 @@ describe("UiPreviewSurface", () => {
       name: "Aufgabe und Kontext"
     });
     const conversationComposer = within(conversation).getByRole("region", { name: "Beispielhafte Dialogeingabe" });
-    expect(within(conversationContext).getByText("Aufgabe 2 · KI-Dialog")).toBeInTheDocument();
-    expect(within(conversationContext).getByRole("region", { name: "Materialien" })).toBeInTheDocument();
+    expect(within(conversationContext).getByRole("heading", { name: "Aufgabe 2" })).toBeInTheDocument();
+    expect(within(conversationContext).getByText("KI-Dialog")).toBeInTheDocument();
+    expect(conversation.querySelector(".dialog-progress")).toBeNull();
+    expect(within(conversationContext).getByRole("progressbar", { name: "Runde 1 von 3" })).toBeInTheDocument();
     expect(within(conversation).getByRole("region", { name: "Gesprächsfortschritt" })).toHaveTextContent("Runde 1 von 3");
     expect(within(conversation).getByRole("article", { name: "Aktuelle Frage" })).toHaveTextContent(
       "Woran machst du diese Perspektive sprachlich fest?"

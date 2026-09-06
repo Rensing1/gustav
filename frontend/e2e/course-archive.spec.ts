@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
@@ -9,7 +10,7 @@ import { seedLearnerVisualSmokeCourse } from "./support/seed-data";
 const password = e2ePassword;
 
 async function authenticatedPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: true, acceptDownloads: true });
+  const context = await newBrowserContext(browser, { baseURL: webBase, acceptDownloads: true });
   return { context, page: await context.newPage() };
 }
 

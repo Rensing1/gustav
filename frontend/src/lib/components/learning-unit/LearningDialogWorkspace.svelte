@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import LearnerTaskContext from "$lib/components/learning-unit/LearnerTaskContext.svelte";
+  import DialogMessage from "$lib/components/learning-unit/DialogMessage.svelte";
   import LearnerTaskSplitDivider from "$lib/components/learning-unit/LearnerTaskSplitDivider.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
@@ -434,32 +435,11 @@
 
       <div class="dialog-main" data-dialog-surface="task">
         <div bind:this={transcriptElement} class="dialog-transcript" role="log" aria-label="Dialogverlauf" aria-live="polite">
-          <article
-            class="dialog-message dialog-message--ai"
-            class:dialog-message--current={currentAssistantMessageId() === "opening"}
-            aria-label={currentAssistantMessageId() === "opening" ? "Aktuelle Frage" : undefined}
-          >
-            <p class="dialog-message__speaker">{session.dialog.partner_name}</p>
-            <div class="dialog-message__bubble markdown-prose">{@html renderMarkdown(session.dialog.opening_message_md)}</div>
-          </article>
+          <DialogMessage kind="ai" speaker={session.dialog.partner_name} markdown={session.dialog.opening_message_md} current={currentAssistantMessageId() === "opening"} />
           {#each session.turns as turn}
-            <article class="dialog-message dialog-message--student">
-              <div class="dialog-message__bubble markdown-prose">
-                {@html renderMarkdown(turn.student_message_md)}
-                {#if turn.used_sentence_starter_md}<small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>{/if}
-              </div>
-              <!-- The technical learner subject can be a UUID and must never leak into the interface. -->
-              <span class="dialog-message__avatar" aria-label="Du">D</span>
-            </article>
+            <DialogMessage kind="student" markdown={turn.student_message_md} usedStarter={Boolean(turn.used_sentence_starter_md)} />
             {#if turn.assistant_reply_md}
-              <article
-                class="dialog-message dialog-message--ai"
-                class:dialog-message--current={currentAssistantMessageId() === turn.id}
-                aria-label={currentAssistantMessageId() === turn.id ? "Aktuelle Frage" : undefined}
-              >
-                <p class="dialog-message__speaker">{session.dialog.partner_name}</p>
-                <div class="dialog-message__bubble markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div>
-              </article>
+              <DialogMessage kind="ai" speaker={session.dialog.partner_name} markdown={turn.assistant_reply_md} current={currentAssistantMessageId() === turn.id} />
             {/if}
           {/each}
         </div>

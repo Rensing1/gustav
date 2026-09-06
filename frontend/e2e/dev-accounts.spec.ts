@@ -1,3 +1,4 @@
+import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -47,7 +48,7 @@ function fixtureState(): FixtureState {
 }
 
 async function authenticatedPage(browser: Browser, email: string, password: string) {
-  const context = await browser.newContext({ baseURL: webBase, ignoreHTTPSErrors: false });
+  const context = await newBrowserContext(browser, { baseURL: webBase });
   const page = await context.newPage();
   await login(page, email, password);
   return { context, page };

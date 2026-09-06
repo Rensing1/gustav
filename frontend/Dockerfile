@@ -3,7 +3,7 @@ FROM node:24.18.0-alpine AS deps
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci || npm install
+RUN npm ci
 
 FROM node:24.18.0-alpine AS build
 

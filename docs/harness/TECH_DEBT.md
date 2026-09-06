@@ -8,11 +8,22 @@ Related plans: `docs/plan/2026-05-02-harness-engineering-refactor-plan.md`
 Review cadence: monatlich
 
 ## Zweck
-Dieses Dokument macht bewusst akzeptierte Abweichungen sichtbar. Der aktuelle Harness-Stand akzeptiert keine offenen Abweichungen als Restarbeit des Refactor-Plans.
+Dieses Dokument macht bekannte Abweichungen sichtbar. Die Erfassung ist keine Freigabe eines Risikos. Offene und blockierte Einträge zählen in der Scorecard; erledigte Einträge bleiben mit ihrem Nachweis erhalten. Abgelaufene Prüftermine dürfen Einträge nicht ausblenden.
 
 ## Aktueller Stand
 
-Keine offenen Tech-Debt-Einträge.
+Ausgangsbericht vom 5. September 2026; Umsetzung und Nachweise in `docs/plan/2026-09-06-technical-debt-abbau.md`.
+
+| ID | Bereich | Risiko | Grund | Owner | Review date | Exit criterion | Status | Nachweis |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TD-001 | Abhängigkeiten | Sicherheitslücken | Verbleibende Python-/H5P-Meldungen; Konflikt mit vorläufiger DSPy-Fixierung | Produktverantwortlicher | 2026-10-01 | Drei aktuelle Audits und nachvollziehbare Bewertung aller Meldungen | blockiert | Auditbefunde und getrennte Entscheidungsgrenze im Umsetzungsplan vom 2026-09-06 |
+| TD-002 | Build | Fehlerhafte oder abweichende Images | Verschluckte Installationsfehler und unvollständige Python-Pins | Produktverantwortlicher | 2026-10-01 | Fehlerfester Build, Hash-Locks und bestätigte Runtime-Parität | erledigt | Build-/Hash-Regressionen, Image-Smoke und laufende Web-/Worker-Dienste: exakt 110 Runtime-Pins ohne Zusatzpakete |
+| TD-003 | Harness | Unsichtbare Schulden | Test erzwang leeres Register und Scorecard war veraltet | Produktverantwortlicher | 2026-10-01 | Validierte Einträge, aktuelle Messung und getestete Zählung | erledigt | Register-/Scorecard-Regressionstests und September-Messung mit ausgeführten Gates |
+| TD-004 | Backend | Globale Kopplung und Testleckagen | Route-Fassaden und veränderte Endpoint-Globals | Produktverantwortlicher | 2026-10-01 | Appbezogene Provider und grüne Isolationstests ohne Reparatur-Fixtures | offen | |
+| TD-005 | Live | Skalierung und blockierter Event Loop | Abschnittsweise DB-Verbindungen in der Live-Summary | Produktverantwortlicher | 2026-10-01 | Konstante Aufgabenabfragezahl, Reihenfolge und Nebenläufigkeit getestet | erledigt | Echte DB-/Nebenläufigkeitsregressionen und make verify-feature FEATURE=live-summary erfolgreich |
+| TD-006 | Frontend und Abläufe | Hohe Änderungskosten und Designabweichungen | Große Module und verteilte UI-Verantwortung | Produktverantwortlicher | 2026-10-01 | Gemeinsame Komponenten, getrennte Controller und vollständige Feature-/Designnachweise | offen | |
+| TD-007 | Lint | Widersprüchliche Regeln | Make erzwang nur einen Teil der Ruff-Konfiguration | Produktverantwortlicher | 2026-10-01 | E/F/I ohne E501 zentral konfiguriert und grün | erledigt | make lint-backend; Policy-Vertrag und vollständiges verify-feature-Gate design-system-consistency |
+| TD-008 | Browsertests | Unzuverlässige Sicherheits- und Bildnachweise | TLS-Ausnahmen und veraltete visuelle Referenzen | Produktverantwortlicher | 2026-10-01 | Vertrauenswürdige CA, keine TLS-Ausnahmen und geprüfte Referenzen | erledigt | Zentrale Kontext-/TLS-Tests, lokale CA, geprüfte Light-/Dark-Referenzen und unveränderter Design-Vergleichslauf in drei Breiten |
 
 ## Vorlage für neue Einträge
 
@@ -25,5 +36,7 @@ Neue Einträge müssen als Tabelle mit diesen Spalten angelegt werden:
 - Owner
 - Review date
 - Exit criterion
+- Status (`offen`, `blockiert`, `erledigt`)
+- Nachweis (bei `erledigt` verpflichtend)
 
-Jeder Eintrag braucht ein konkretes Exit-Kriterium und darf nur eine bewusst akzeptierte, zeitlich überprüfbare Abweichung beschreiben. Wenn ein Eintrag nötig wird, beginnt die echte Tabelle mit `| ID | Bereich | Risiko | Grund | Owner | Review date | Exit criterion |`; solange keine echte Tabelle vorhanden ist, zählt die Scorecard null offene Einträge.
+Jeder Eintrag erhält eine eindeutige `TD-`-ID, ein konkretes Exit-Kriterium und einen ISO-Prüftermin. Die bestehende Tabelle wird erweitert; geschlossene Einträge werden nicht gelöscht. Die Tests prüfen die Vollständigkeit und Formatgültigkeit, nicht die Abwesenheit von Schulden. Tabellenzellen enthalten keine unmaskierten Pipe-Zeichen.

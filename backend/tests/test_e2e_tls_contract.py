@@ -8,7 +8,6 @@ import pytest
 
 from backend.tests_e2e import conftest as e2e_conftest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 

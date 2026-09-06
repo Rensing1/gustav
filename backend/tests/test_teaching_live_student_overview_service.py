@@ -12,7 +12,6 @@ from typing import List, Sequence
 
 from backend.teaching.services.live_student_overview import StudentLiveOverviewService
 
-
 LOWER_UNIT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 UPPER_UNIT_ID = LOWER_UNIT_ID.upper()
 

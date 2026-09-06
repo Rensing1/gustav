@@ -15,10 +15,10 @@ Security:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import lzma
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from backend.storage.mime_types import MAKECODE_HEX_MIME

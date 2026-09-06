@@ -14,23 +14,16 @@ Intent:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+import inspect
 import logging
 import os
-from typing import Optional, Sequence
-import inspect
-from dataclasses import dataclass
-from uuid import uuid4
-from importlib import import_module
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from importlib import import_module
+from typing import Optional, Sequence
+from uuid import uuid4
 
-from . import runtime_config, telemetry
-from .course_lifecycle_jobs import (
-    build_storage_adapter_from_env,
-    process_deletion_once,
-    process_expired_export_once,
-    process_export_once,
-)
 from backend.learning.adapters.ports import (
     FeedbackAdapterProtocol,
     FeedbackInvalidAnalysisError,
@@ -49,11 +42,19 @@ from backend.learning.practice.completion import (
 )
 from backend.teaching.course_invitation_mail import process_course_invitation_mail_once
 
+from . import runtime_config, telemetry
+from .course_lifecycle_jobs import (
+    build_storage_adapter_from_env,
+    process_deletion_once,
+    process_expired_export_once,
+    process_export_once,
+)
+
 try:  # pragma: no cover - optional dependency in some environments
     import psycopg
     from psycopg import Connection
-    from psycopg.rows import dict_row
     from psycopg import sql as _sql
+    from psycopg.rows import dict_row
     HAVE_PSYCOPG = True
 except Exception:  # pragma: no cover
     psycopg = None  # type: ignore

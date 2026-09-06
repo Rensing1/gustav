@@ -22,14 +22,14 @@ Permissions:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import importlib
+from dataclasses import dataclass
 from typing import Protocol
 
 import psycopg  # type: ignore
 
-from backend.vision.pdf_renderer import PdfRenderError
 from backend.learning.repo_db import _sanitize_error_message as _sanitize_repo_error_message
+from backend.vision.pdf_renderer import PdfRenderError
 
 
 class BinaryWriteStorage(Protocol):
@@ -106,7 +106,10 @@ class PreprocessPdfSubmissionUseCase:
             return
 
         # Import inside the hot path to avoid coupling during module import.
-        from backend.vision.persistence import SubmissionScope, persist_rendered_pages  # type: ignore
+        from backend.vision.persistence import (  # type: ignore
+            SubmissionScope,
+            persist_rendered_pages,
+        )
 
         scope = SubmissionScope(
             course_id=context.course_id,

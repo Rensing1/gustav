@@ -8,15 +8,15 @@ from __future__ import annotations
 import importlib
 import os
 import uuid
-import pytest
+
 import httpx
+import pytest
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
-
 main = importlib.import_module("backend.web.main")
-from backend.tests.runtime_auth_helpers import install_session_store
 
 
 def _probe_db_and_helpers() -> bool:

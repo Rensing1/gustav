@@ -10,9 +10,9 @@ from __future__ import annotations
 import base64
 import importlib
 import json
-from pathlib import Path
 import sys
 import types
+from pathlib import Path
 
 import pytest
 

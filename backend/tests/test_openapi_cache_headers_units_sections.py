@@ -8,6 +8,7 @@ Validates that 200 responses for units list and sections list document
 from __future__ import annotations
 
 from pathlib import Path
+
 import yaml
 
 

@@ -10,7 +10,6 @@ import pytest
 
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
-
 ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = ROOT / "supabase" / "migrations" / "20260808120000_course_deletion_worker_boundary.sql"
 

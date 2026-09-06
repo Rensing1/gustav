@@ -12,7 +12,9 @@ from datetime import datetime, timezone
 from typing import Any, List, Sequence
 
 from backend.teaching.errors import TeachingRepositoryUnavailable
-from backend.teaching.repo_row_mappers import compute_average_score_from_analysis as _compute_average_score_from_analysis
+from backend.teaching.repo_row_mappers import (
+    compute_average_score_from_analysis as _compute_average_score_from_analysis,
+)
 
 
 def _safe_int(value: object) -> int | None:

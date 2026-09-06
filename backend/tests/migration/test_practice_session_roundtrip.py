@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import os
 import random
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -16,7 +16,6 @@ from backend.tests.utils.db import require_db_or_skip
 
 pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
-
 
 pytestmark = pytest.mark.db_write
 

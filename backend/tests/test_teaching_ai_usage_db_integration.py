@@ -8,9 +8,9 @@ Why:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import os
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 
@@ -19,7 +19,6 @@ from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
-
 
 pytestmark = pytest.mark.db_write
 

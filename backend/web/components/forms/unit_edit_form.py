@@ -4,9 +4,11 @@ Unit Edit Form Component
 Purpose: Simple SSR form to edit a learning unit (title, summary). Submits to
 POST /units/{unit_id}/edit with CSRF. The API enforces author permissions.
 """
-from typing import Optional, Dict
+from typing import Dict, Optional
+
 from backend.web.components.base import Component
-from .fields import TextInputField, TextAreaField
+
+from .fields import TextAreaField, TextInputField
 from .submit import SubmitButton
 
 

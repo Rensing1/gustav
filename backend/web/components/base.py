@@ -6,8 +6,8 @@ Using pure Python for HTML generation ensures type safety and better
 IDE support compared to template engines.
 """
 
-from typing import Optional, Any
 import html
+from typing import Any, Optional
 
 
 class Component:

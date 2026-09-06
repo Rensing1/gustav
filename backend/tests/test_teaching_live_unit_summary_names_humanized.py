@@ -3,16 +3,18 @@ Teaching API — Live summary prefers person names and falls back safely.
 """
 from __future__ import annotations
 
-import os
-import pytest
-import httpx
-from httpx import ASGITransport
 import importlib
+import os
 
-pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
+import httpx
+import pytest
+from httpx import ASGITransport
 
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
+
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
 main = importlib.import_module("backend.web.main")
 teaching = importlib.import_module("backend.web.routes.teaching")

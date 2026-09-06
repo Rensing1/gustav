@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = ROOT / "supabase" / "migrations" / "20260815120000_course_invitations.sql"
 RETRY_HARDENING_MIGRATION = (

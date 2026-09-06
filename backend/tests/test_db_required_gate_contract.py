@@ -15,7 +15,6 @@ import pytest
 
 from backend.tests.utils import db as db_utils
 
-
 pytestmark = pytest.mark.db_write
 
 

@@ -14,7 +14,6 @@ from backend.web.csrf_tokens import (
     validate_csrf,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

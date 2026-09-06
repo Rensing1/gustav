@@ -11,7 +11,6 @@ import ast
 import json
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONFTEST = REPO_ROOT / "backend" / "tests" / "conftest.py"
 IMPORT_PATHS = REPO_ROOT / "backend" / "tests" / "import_paths.py"
@@ -51,10 +50,19 @@ def test_conftest_delegates_environment_and_db_setup() -> None:
 
     text = CONFTEST.read_text(encoding="utf-8")
 
-    assert "from backend.tests.environment import configure_pytest_environment" in text
-    assert "from backend.tests.environment import guard_against_prod_env_during_pytest" in text
-    assert "from backend.tests.environment import prune_external_wiring_env_by_default" in text
-    assert "from backend.tests.db_env import ensure_db_env_defaults" in text
+    imports = {
+        (node.module, alias.name)
+        for node in ast.walk(ast.parse(text))
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    for helper in (
+        "configure_pytest_environment",
+        "guard_against_prod_env_during_pytest",
+        "prune_external_wiring_env_by_default",
+    ):
+        assert ("backend.tests.environment", helper) in imports
+    assert ("backend.tests.db_env", "ensure_db_env_defaults") in imports
     assert "def _ensure_db_env_defaults" not in text
     assert "def _guard_against_prod_env_during_pytest" not in text
     assert "def _prune_external_wiring_env_by_default" not in text

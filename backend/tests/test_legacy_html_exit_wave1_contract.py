@@ -13,7 +13,6 @@ from httpx import ASGITransport
 import backend.web.main as main
 from backend.tests.runtime_auth_helpers import install_session_store
 
-
 pytestmark = pytest.mark.anyio("asyncio")
 
 

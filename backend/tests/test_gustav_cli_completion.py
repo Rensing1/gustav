@@ -7,7 +7,6 @@ import pytest
 
 from backend.tools.gustav_cli import cli, config
 
-
 TOKEN = "gustav_cli_token_secret"
 BASE_URL = "https://gustav.example"
 

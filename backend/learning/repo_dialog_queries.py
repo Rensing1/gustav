@@ -10,7 +10,6 @@ import json
 from typing import Any, Sequence
 from uuid import UUID, uuid5
 
-
 _SUBMISSION_NAMESPACE = UUID("00000000-0000-0000-0000-000000000002")
 
 

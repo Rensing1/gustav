@@ -17,9 +17,10 @@ Security:
 """
 from __future__ import annotations
 
-from typing import Any, Dict
 import os
-from urllib.parse import urlparse as _urlparse, urlunparse as _urlunparse
+from typing import Any, Dict
+from urllib.parse import urlparse as _urlparse
+from urllib.parse import urlunparse as _urlunparse
 
 from .storage import StorageAdapterProtocol
 
@@ -90,7 +91,8 @@ class SupabaseStorageAdapter(StorageAdapterProtocol):
         # Normalize host and path for local dev; ensure modern upload-sign path.
         url = self._normalize_signed_url_host(str(url))
         try:
-            from urllib.parse import urlparse as _p, urlunparse as _u
+            from urllib.parse import urlparse as _p
+            from urllib.parse import urlunparse as _u
             p = _p(url)
             path = p.path or "/"
             # Ensure /storage/v1 prefix

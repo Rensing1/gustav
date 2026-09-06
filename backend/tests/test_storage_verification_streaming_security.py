@@ -5,6 +5,7 @@ Ensures that the streaming helper refuses URLs whose host does not match
 the configured SUPABASE_URL host to prevent SSRF/host escape.
 """
 from __future__ import annotations
+
 import sys
 import types
 from hashlib import sha256 as _sha256

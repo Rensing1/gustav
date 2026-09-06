@@ -11,7 +11,6 @@ import importlib.util
 import json
 from pathlib import Path
 
-
 REALM_EXPORT_PATH = Path("keycloak/realm-gustav.json")
 REALM_RENDERER_PATH = Path("keycloak/render_realm.py")
 

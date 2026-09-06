@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAIN_SOURCE = PROJECT_ROOT / "backend" / "web" / "main.py"
 CLI_CAPABILITY_SOURCE = PROJECT_ROOT / "backend" / "web" / "cli_capability.py"

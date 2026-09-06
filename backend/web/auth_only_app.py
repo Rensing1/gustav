@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable
 from pathlib import Path
-import secrets
 from types import SimpleNamespace
 
 from fastapi import FastAPI, Request

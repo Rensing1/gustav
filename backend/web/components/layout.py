@@ -4,10 +4,11 @@ Layout Component for GUSTAV
 Main layout wrapper that combines all components into a complete HTML page.
 """
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 from .base import Component
-from .navigation import Navigation
 from .breadcrumbs import Breadcrumbs
+from .navigation import Navigation
 
 
 class Layout(Component):

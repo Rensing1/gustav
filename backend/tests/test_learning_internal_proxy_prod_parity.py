@@ -8,15 +8,14 @@ Goal:
 """
 from __future__ import annotations
 
+import asyncio
 import importlib
 
 import httpx
 import pytest
 from httpx import ASGITransport
-import asyncio
 
 from backend.tests.runtime_auth_helpers import install_session_store
-
 
 pytestmark = pytest.mark.anyio("asyncio")
 

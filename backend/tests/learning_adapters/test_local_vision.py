@@ -28,7 +28,11 @@ from backend.learning.workers.process_learning_submission_jobs import (  # type:
     VisionTransientError,
 )
 from backend.storage.config import get_submissions_bucket
-from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives, write_dummy_jpeg, write_dummy_png
+from backend.tests.utils.storage_fixtures import (
+    ensure_pdf_derivatives,
+    write_dummy_jpeg,
+    write_dummy_png,
+)
 
 
 def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch, *, observed: dict) -> None:

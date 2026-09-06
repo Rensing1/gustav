@@ -12,13 +12,13 @@ Security:
 
 from __future__ import annotations
 
-from typing import Dict
 import logging
+from typing import Dict
+
 import requests
 
 from .directory import _KC
 from .oidc import OIDCConfig
-
 
 logger = logging.getLogger(__name__)
 

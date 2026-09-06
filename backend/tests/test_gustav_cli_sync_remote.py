@@ -516,15 +516,16 @@ def test_remote_client_sets_new_module_prerequisite_count_after_creating_edges(
 
     monkeypatch.setattr("backend.tools.gustav_cli.sync_remote._http_json", fake_json)
     client = GustavSyncClient(GustavCLIConfig(BASE_URL, TOKEN))
-    module = lambda key, required: {
-        "key": key,
-        "phase": "start",
-        "title": key.upper(),
-        "module_kind": "learning",
-        "required_prereq_count": required,
-        "materials": [],
-        "tasks": [],
-    }
+    def module(key, required):
+        return {
+            "key": key,
+            "phase": "start",
+            "title": key.upper(),
+            "module_kind": "learning",
+            "required_prereq_count": required,
+            "materials": [],
+            "tasks": [],
+        }
     local = {
         "schema_version": 1,
         "units": {

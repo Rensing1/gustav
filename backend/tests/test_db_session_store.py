@@ -9,10 +9,10 @@ and mapping. No network or external DB required.
 from __future__ import annotations
 
 import os
+
 import pytest
 
 from backend.tests.utils.fake_psycopg import install_fake_psycopg
-
 
 pytestmark = pytest.mark.db_write
 

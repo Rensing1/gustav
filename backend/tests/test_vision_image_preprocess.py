@@ -1,5 +1,5 @@
-from PIL import Image, ImageChops
 import numpy as np
+from PIL import Image, ImageChops
 
 
 def _unique_vals(img):

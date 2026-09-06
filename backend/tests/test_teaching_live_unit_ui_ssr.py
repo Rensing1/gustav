@@ -9,11 +9,11 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 os.environ["ALLOW_SERVICE_DSN_FOR_TESTING"] = "true"
-from backend.tests.runtime_auth_helpers import install_session_store
 
 main = importlib.import_module("backend.web.main")
 

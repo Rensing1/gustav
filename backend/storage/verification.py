@@ -13,12 +13,15 @@ from dataclasses import dataclass
 from hashlib import sha256 as _sha256
 from pathlib import Path
 
-from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
 from backend.storage.config import get_learning_max_upload_bytes
+from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
 
 
 def _allowed_upload_mime() -> frozenset[str]:
-    from backend.storage.learning_policy import ALLOWED_IMAGE_MIME, ALLOWED_FILE_MIME  # avoid circular import
+    from backend.storage.learning_policy import (  # avoid circular import
+        ALLOWED_FILE_MIME,
+        ALLOWED_IMAGE_MIME,
+    )
 
     return frozenset(ALLOWED_IMAGE_MIME | ALLOWED_FILE_MIME)
 

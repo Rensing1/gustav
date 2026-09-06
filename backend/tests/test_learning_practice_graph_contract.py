@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "backend" / "learning" / "repo_modular_unit_queries.py"
 

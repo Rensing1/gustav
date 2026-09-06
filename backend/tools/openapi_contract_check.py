@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
-
 
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 PATH_CONVERTER_RE = re.compile(r"\{([^}:]+):[^}]+\}")

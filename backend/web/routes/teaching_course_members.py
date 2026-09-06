@@ -25,7 +25,6 @@ from backend.web.routes.teaching_payloads import AddMember
 from backend.web.routes.teaching_shared import _current_sub, _json_private, _private_error, _role_in
 from backend.web.routes.teaching_validation import clamp_limit_offset as _clamp_limit_offset
 
-
 teaching_course_members_router = APIRouter(tags=["Teaching"])
 logger = logging.getLogger("gustav.web.teaching.course_members")
 

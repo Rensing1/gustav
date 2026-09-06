@@ -13,7 +13,6 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Protocol, Sequence
 from uuid import UUID
 
-
 MAX_UNIT_IDS = 50
 
 

@@ -18,7 +18,6 @@ from backend.web.ssr_helpers import (
     quote_url_path_value,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

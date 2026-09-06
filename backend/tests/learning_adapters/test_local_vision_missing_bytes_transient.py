@@ -10,8 +10,8 @@ Scenario:
 from __future__ import annotations
 
 import importlib
-from types import SimpleNamespace
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -76,6 +76,7 @@ def test_missing_local_and_remote_is_transient(tmp_path, monkeypatch: pytest.Mon
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
     # Ensure supabase.local resolves to a private host for HTTP fetches
     import socket
+
     import backend.learning.adapters.local_vision as local_vision  # type: ignore
 
     monkeypatch.setattr(
@@ -105,7 +106,9 @@ def test_missing_local_and_remote_is_transient(tmp_path, monkeypatch: pytest.Mon
         adapter.extract(submission=submission, job_payload=job_payload)
 
     # Must be transient and not call the model at all
-    from backend.learning.workers.process_learning_submission_jobs import VisionTransientError  # type: ignore
+    from backend.learning.workers.process_learning_submission_jobs import (
+        VisionTransientError,  # type: ignore
+    )
 
     assert isinstance(ei.value, VisionTransientError)
     assert "remote_fetch_failed" in str(ei.value)

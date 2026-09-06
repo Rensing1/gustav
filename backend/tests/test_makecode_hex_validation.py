@@ -178,7 +178,10 @@ def test_extract_makecode_project_tolerates_malformed_utf8_source() -> None:
 
 
 def test_missing_makecode_source_raises() -> None:
-    from backend.storage.makecode_hex_validation import MakeCodeHexValidationError, extract_makecode_project_from_hex
+    from backend.storage.makecode_hex_validation import (
+        MakeCodeHexValidationError,
+        extract_makecode_project_from_hex,
+    )
 
     hex_bytes = _make_hex_without_magic()
     with pytest.raises(MakeCodeHexValidationError) as exc:
@@ -187,7 +190,10 @@ def test_missing_makecode_source_raises() -> None:
 
 
 def test_invalid_checksum_is_rejected() -> None:
-    from backend.storage.makecode_hex_validation import MakeCodeHexValidationError, extract_makecode_project_from_hex
+    from backend.storage.makecode_hex_validation import (
+        MakeCodeHexValidationError,
+        extract_makecode_project_from_hex,
+    )
 
     # Corrupt checksum (last byte) on a minimal EOF-only file.
     bad = b":00000001FE\n"
@@ -220,7 +226,10 @@ def test_extract_makecode_project_from_hex_skips_corrupt_marker_and_finds_next()
 
 
 def test_makecode_marker_present_but_corrupt_raises_invalid_hex_file() -> None:
-    from backend.storage.makecode_hex_validation import MakeCodeHexValidationError, extract_makecode_project_from_hex
+    from backend.storage.makecode_hex_validation import (
+        MakeCodeHexValidationError,
+        extract_makecode_project_from_hex,
+    )
 
     magic = b"\x41\x14\x0E\x2F\xB8\x2F\xA2\xBB"
     bad_header = b"{bad}"  # valid UTF-8 but invalid JSON

@@ -38,7 +38,7 @@ def _mk_page(b: bytes):
 
 
 def test_vision_extracts_text_and_marks_completed():
-    from backend.vision.vision_adapter import extract_text_from_pages, VisionClient, CompletionRepo
+    from backend.vision.vision_adapter import CompletionRepo, VisionClient, extract_text_from_pages
 
     client: VisionClient = _FakeVisionClient()  # type: ignore[assignment]
     pages = [_mk_page(b"A"), _mk_page(b"BC")]

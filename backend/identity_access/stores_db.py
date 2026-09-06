@@ -15,11 +15,11 @@ Note: This module uses psycopg3. It is imported only when enabled via
 """
 from __future__ import annotations
 
+import os
+import re
+import time
 from dataclasses import dataclass
 from typing import Optional, Sequence
-import os
-import time
-import re
 
 try:
     import psycopg

@@ -17,7 +17,6 @@ from typing import Any
 from backend.teaching.printouts import PrintExportError, PrintPolicy
 from backend.web.components.markdown import render_markdown_safe
 
-
 _A4_PORTRAIT = (595.276, 841.89)
 _A4_LANDSCAPE = (_A4_PORTRAIT[1], _A4_PORTRAIT[0])
 _MAX_IMAGE_PIXELS = 40_000_000

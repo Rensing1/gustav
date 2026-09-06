@@ -10,21 +10,20 @@ from __future__ import annotations
 
 import importlib
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
-
-main = importlib.import_module("backend.web.main")
 from backend.identity_access.oidc import OIDCConfig
 
+main = importlib.import_module("backend.web.main")
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
 @pytest.mark.anyio
 async def test_register_dynamic_redirect_respects_whitelist(monkeypatch: pytest.MonkeyPatch):
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
 
     test_cfg = OIDCConfig(
         base_url="http://kc.example:8080",
@@ -47,7 +46,7 @@ async def test_register_dynamic_redirect_respects_whitelist(monkeypatch: pytest.
 
 @pytest.mark.anyio
 async def test_register_dynamic_redirect_falls_back_on_mismatch(monkeypatch: pytest.MonkeyPatch):
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
 
     static_redirect = "http://app.localhost:8100/auth/callback"
     test_cfg = OIDCConfig(

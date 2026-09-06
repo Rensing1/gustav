@@ -11,8 +11,8 @@ Goals:
 
 import importlib
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
 main = importlib.import_module("backend.web.main")

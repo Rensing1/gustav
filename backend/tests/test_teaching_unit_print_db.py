@@ -9,7 +9,6 @@ import pytest
 
 from backend.teaching.printouts import list_printable_content
 
-
 pytestmark = pytest.mark.db_write
 
 
@@ -23,6 +22,7 @@ def _dsn() -> str:
 def test_printable_snapshot_batches_owned_materials_and_tasks_in_real_database() -> None:
     try:
         import psycopg
+
         from backend.teaching.repo_db import DBTeachingRepo
 
         with psycopg.connect(_dsn(), connect_timeout=5):

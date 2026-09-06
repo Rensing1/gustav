@@ -6,7 +6,6 @@ from pathlib import Path
 
 from starlette.requests import Request
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAIN_SOURCE = PROJECT_ROOT / "backend" / "web" / "main.py"
 

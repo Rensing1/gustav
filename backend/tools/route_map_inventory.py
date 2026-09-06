@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-import sys
 
 import yaml
 
@@ -15,7 +15,6 @@ from backend.tools.openapi_contract_check import (
     openapi_operations,
     runtime_operations,
 )
-
 
 DOC_START = "<!-- route-map:generated:start -->"
 DOC_END = "<!-- route-map:generated:end -->"

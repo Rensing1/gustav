@@ -10,22 +10,25 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Request
-from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 
 from backend.learning.repo_db import DBLearningRepo
-from .security import _is_same_origin
-from backend.learning.usecases.sections import (
-    ListSectionsInput,
-    ListSectionsUseCase,
-    ListUnitSectionsInput,
-    ListUnitSectionsUseCase,
-)
 from backend.learning.usecases.courses import (
     ListCoursesInput,
     ListCoursesUseCase,
     ListCourseUnitsInput,
     ListCourseUnitsUseCase,
+)
+from backend.learning.usecases.h5p_access import (
+    CheckH5PContentAccessInput,
+    CheckH5PContentAccessUseCase,
+)
+from backend.learning.usecases.sections import (
+    ListSectionsInput,
+    ListSectionsUseCase,
+    ListUnitSectionsInput,
+    ListUnitSectionsUseCase,
 )
 from backend.learning.usecases.submissions import (
     CreateSubmissionInput,  # noqa: F401 - kept for route module compatibility
@@ -35,81 +38,139 @@ from backend.learning.usecases.submissions import (
     ListSubmissionsInput,  # noqa: F401 - kept for route module compatibility
     ListSubmissionsUseCase,  # noqa: F401
 )
-from backend.learning.usecases.h5p_access import (
-    CheckH5PContentAccessInput,
-    CheckH5PContentAccessUseCase,
-)
 from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol  # type: ignore
+
+from .security import _is_same_origin
+
 try:
-    from backend.web.storage_wiring import wire_supabase_adapter_if_configured as _wire_storage  # type: ignore
+    from backend.web.storage_wiring import (
+        wire_supabase_adapter_if_configured as _wire_storage,  # type: ignore
+    )
 except ModuleNotFoundError:  # pragma: no cover - container fallback when package path is flattened
     _wire_storage = None  # type: ignore
+from urllib.parse import urlparse as _urlparse  # noqa: F401
+
+import httpx
+
+from backend.storage.config import get_learning_max_upload_bytes, get_submissions_bucket
 from backend.storage.learning_policy import (
     ALLOWED_FILE_MIME,  # noqa: F401 - kept for route module compatibility
     ALLOWED_IMAGE_MIME,  # noqa: F401
 )
-from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
-from backend.web.routes.learning_material_file_routes import (
-    get_material_file as get_material_file,  # noqa: F401 - kept for route module compatibility
-    get_material_file_legacy_alias as get_material_file_legacy_alias,  # noqa: F401
-    learning_material_file_router,
-)
+from backend.web.routes.learning_dialogs import learning_dialog_router
 from backend.web.routes.learning_internal_upload_routes import (
     internal_upload_proxy as internal_upload_proxy,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.learning_internal_upload_routes import (
     internal_upload_stub as internal_upload_stub,  # noqa: F401
+)
+from backend.web.routes.learning_internal_upload_routes import (
     learning_internal_upload_router,
 )
-from backend.web.routes.learning_upload_intents import (
-    create_upload_intent as create_upload_intent,  # noqa: F401 - kept for route module compatibility
-    learning_upload_intents_router,
+from backend.web.routes.learning_material_file_routes import (
+    get_material_file as get_material_file,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.learning_material_file_routes import (
+    get_material_file_legacy_alias as get_material_file_legacy_alias,  # noqa: F401
+)
+from backend.web.routes.learning_material_file_routes import (
+    learning_material_file_router,
 )
 from backend.web.routes.learning_material_files import (
     attach_modular_material_files as _attach_modular_material_files,
+)
+from backend.web.routes.learning_material_files import (
     attach_section_material_files as _attach_section_material_files,
+)
+from backend.web.routes.learning_material_files import (
     material_file_href as _material_file_href,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.learning_material_files import (
     resolve_student_material_file_url as _resolve_student_material_file_url,  # noqa: F401
+)
+from backend.web.routes.learning_material_files import (
     resolve_student_modular_material_file_url as _resolve_student_modular_material_file_url,  # noqa: F401
 )
+from backend.web.routes.learning_portfolio import learning_portfolio_router
 from backend.web.routes.learning_storage_validation import (
     download_bytes_with_limit as _download_bytes_with_limit,
-    load_local_storage_bytes_for_validation as _load_local_storage_bytes_for_validation,  # noqa: F401
-    load_storage_bytes_for_validation as _load_storage_bytes_for_validation,  # noqa: F401
-    verify_storage_object as _verify_storage_object,  # noqa: F401
 )
-from backend.web.routes.learning_submission_files import (
-    attach_submission_files as _attach_submission_files,  # noqa: F401
-    get_submission_file as get_submission_file,  # noqa: F401 - kept for route module compatibility
-    learning_submission_files_router,
-    list_submissions as list_submissions,  # noqa: F401
-    normalize_download_disposition as _normalize_download_disposition,  # noqa: F401
-    submission_file_href as _submission_file_href,  # noqa: F401
+from backend.web.routes.learning_storage_validation import (
+    load_local_storage_bytes_for_validation as _load_local_storage_bytes_for_validation,  # noqa: F401
+)
+from backend.web.routes.learning_storage_validation import (
+    load_storage_bytes_for_validation as _load_storage_bytes_for_validation,  # noqa: F401
+)
+from backend.web.routes.learning_storage_validation import (
+    verify_storage_object as _verify_storage_object,  # noqa: F401
 )
 from backend.web.routes.learning_submission_commands import (
     create_submission as create_submission,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.learning_submission_commands import (
     finalize_submission as finalize_submission,  # noqa: F401
+)
+from backend.web.routes.learning_submission_commands import (
     learning_submission_commands_router,
 )
-from backend.web.routes.learning_dialogs import learning_dialog_router
-from backend.web.routes.learning_portfolio import learning_portfolio_router
+from backend.web.routes.learning_submission_files import (
+    attach_submission_files as _attach_submission_files,  # noqa: F401
+)
+from backend.web.routes.learning_submission_files import (
+    get_submission_file as get_submission_file,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.learning_submission_files import (
+    learning_submission_files_router,
+)
+from backend.web.routes.learning_submission_files import (
+    list_submissions as list_submissions,  # noqa: F401
+)
+from backend.web.routes.learning_submission_files import (
+    normalize_download_disposition as _normalize_download_disposition,  # noqa: F401
+)
+from backend.web.routes.learning_submission_files import (
+    submission_file_href as _submission_file_href,  # noqa: F401
+)
 from backend.web.routes.learning_submission_processing import (
     dev_try_process_pdf as _dev_try_process_pdf,  # noqa: F401
+)
+from backend.web.routes.learning_submission_processing import (
     validate_submission_payload as _validate_submission_payload,  # noqa: F401
+)
+from backend.web.routes.learning_upload_config import (
+    dev_upload_stub_enabled as _dev_upload_stub_enabled,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.learning_upload_config import (
+    upload_intent_ttl_seconds as _upload_intent_ttl_seconds,  # noqa: F401
+)
+from backend.web.routes.learning_upload_config import (
+    upload_proxy_enabled as _upload_proxy_enabled,  # noqa: F401
+)
+from backend.web.routes.learning_upload_config import (
+    upload_proxy_timeout_seconds as _upload_proxy_timeout_seconds,  # noqa: F401
+)
+from backend.web.routes.learning_upload_intents import (
+    create_upload_intent as create_upload_intent,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.learning_upload_intents import (
+    learning_upload_intents_router,
+)
+from backend.web.routes.learning_upload_proxy import (
+    async_forward_upload as _default_async_forward_upload,
 )
 from backend.web.routes.learning_upload_proxy import (
     decode_proxy_headers as _decode_proxy_headers,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.learning_upload_proxy import (
     encode_proxy_headers as _encode_proxy_headers,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.learning_upload_proxy import (
     filter_upload_proxy_headers as _filter_upload_proxy_headers,  # noqa: F401
+)
+from backend.web.routes.learning_upload_proxy import (
     normalized_parts as _normalized_parts,  # noqa: F401
 )
-from backend.web.routes.learning_upload_proxy import async_forward_upload as _default_async_forward_upload
-from backend.web.routes.learning_upload_config import (
-    dev_upload_stub_enabled as _dev_upload_stub_enabled,  # noqa: F401 - kept for route module compatibility
-    upload_intent_ttl_seconds as _upload_intent_ttl_seconds,  # noqa: F401
-    upload_proxy_enabled as _upload_proxy_enabled,  # noqa: F401
-    upload_proxy_timeout_seconds as _upload_proxy_timeout_seconds,  # noqa: F401
-)
-import httpx
-from urllib.parse import urlparse as _urlparse, quote as _quote  # noqa: F401
+
 learning_router = APIRouter(tags=["Learning"])
 learning_router.include_router(learning_material_file_router)
 learning_router.include_router(learning_upload_intents_router)

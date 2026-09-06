@@ -12,7 +12,6 @@ from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes.security import _is_same_origin
 from backend.web.routes.teaching_shared import _is_uuid_like, _private_error
 
-
 _repo_provider: Callable[[], Any] | None = None
 
 

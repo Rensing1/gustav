@@ -8,6 +8,7 @@ Ensures 200 responses for the section-scoped list endpoints document
 from __future__ import annotations
 
 from pathlib import Path
+
 import yaml
 
 

@@ -14,11 +14,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from httpx import ASGITransport
 from jose import jwt
 
-
-main = importlib.import_module("backend.web.main")
 from backend.identity_access.oidc import OIDCConfig
 from backend.tests.runtime_auth_helpers import install_oidc_config
 
+main = importlib.import_module("backend.web.main")
 
 pytestmark = pytest.mark.anyio("asyncio")
 

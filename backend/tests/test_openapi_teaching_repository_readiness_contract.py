@@ -6,7 +6,6 @@ from pathlib import Path
 
 import yaml
 
-
 OPENAPI = Path(__file__).resolve().parents[2] / "api" / "openapi.yml"
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 REPOSITORY_PREFIXES = ("/api/teaching/", "/api/live/", "/api/diagnostics/")

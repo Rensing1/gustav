@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from http.cookies import SimpleCookie
 import importlib
+from http.cookies import SimpleCookie
 from types import SimpleNamespace
 
 import httpx

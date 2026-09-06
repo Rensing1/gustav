@@ -15,8 +15,8 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from backend.tests.runtime_auth_helpers import install_session_store
 from backend.teaching.storage import StorageAdapterProtocol
+from backend.tests.runtime_auth_helpers import install_session_store
 
 main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")

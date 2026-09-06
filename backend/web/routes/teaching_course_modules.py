@@ -32,7 +32,6 @@ from backend.web.routes.teaching_shared import (
     _role_in,
 )
 
-
 teaching_course_modules_router = APIRouter(tags=["Teaching"])
 logger = logging.getLogger("gustav.web.teaching.course_modules")
 

@@ -32,9 +32,14 @@ from backend.learning.usecases.submissions import (  # noqa: E402
     CreateSubmissionInput,
     CreateSubmissionUseCase,
 )
-from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
+from backend.tests.test_learning_api_contract import (  # noqa: E402 - database availability is checked before worker imports
+    _prepare_learning_fixture,  # type: ignore  # noqa: E402
+)
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
-from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
+from backend.tests.utils.db_isolation import (  # noqa: E402
+    cleanup_learning_jobs_for_run,
+    current_test_run_id,
+)
 
 
 def _dsn() -> str:

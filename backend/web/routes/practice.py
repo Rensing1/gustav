@@ -12,7 +12,6 @@ from backend.learning.practice.repo_db import DBPracticeRepo
 from backend.learning.practice.service import ActivePracticeSessionError, PracticeService
 from backend.web.routes.security import _is_same_origin
 
-
 practice_router = APIRouter(tags=["Learning"])
 _SERVICE: PracticeService | None = None
 _NO_STORE = {"Cache-Control": "private, no-store", "Vary": "Origin"}

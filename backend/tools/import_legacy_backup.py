@@ -7,6 +7,7 @@ executes the ETL pipeline described in docs/migration/legacy-import.md.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import shutil
@@ -14,13 +15,12 @@ import subprocess
 import sys
 import tarfile
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
-import json
-import uuid
 
 try:  # Optional dependency guard
     import psycopg

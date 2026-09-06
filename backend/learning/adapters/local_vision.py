@@ -15,25 +15,32 @@ Security:
 
 from __future__ import annotations
 
-import os
+import base64
 import ipaddress
+import logging
+import os
 import socket
 from typing import Dict, Optional
-import base64
-import logging
 from urllib.parse import urlparse as _urlparse
 
+from backend.learning.adapters.dspy import helpers as dspy_helpers
 from backend.learning.adapters.ports import (
     VisionPermanentError,
     VisionResult,
     VisionTransientError,
 )
-from backend.learning.adapters.dspy import helpers as dspy_helpers
-from backend.vision.pipeline import stitch_images_vertically, process_pdf_bytes
-from backend.storage.config import get_submissions_bucket, get_learning_max_upload_bytes
+from backend.storage.config import get_learning_max_upload_bytes, get_submissions_bucket
 from backend.storage.learning_policy import resolve_local_verify_root_from_env
-from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
+from backend.storage.mime_types import (
+    FILIUS_FLS_MIME,
+    JPEG_MIME,
+    MAKECODE_HEX_MIME,
+    PDF_MIME,
+    PNG_MIME,
+    SCRATCH_SB3_MIME,
+)
 from backend.storage.submission_content_signatures import validate_submission_content_signature
+from backend.vision.pipeline import process_pdf_bytes, stitch_images_vertically
 
 LOG = logging.getLogger(__name__)
 
@@ -680,8 +687,11 @@ class _LocalVisionAdapter:
 
         # Scratch SB3: deterministic evidence extraction (no OCR).
         if mime == SCRATCH_SB3_MIME:
+            from backend.scratch.sb3_evidence_v2 import (
+                EVIDENCE_SCHEMA_V2,
+                build_evidence_markdown_v2,
+            )
             from backend.storage.sb3_validation import SB3ValidationError, load_project_json
-            from backend.scratch.sb3_evidence_v2 import EVIDENCE_SCHEMA_V2, build_evidence_markdown_v2
 
             meta = {"adapter": "local_vision", "backend": "sb3", "schema": EVIDENCE_SCHEMA_V2}
             root = resolve_local_verify_root_from_env() or ""
@@ -724,11 +734,14 @@ class _LocalVisionAdapter:
 
         # MakeCode HEX: deterministic evidence extraction (no OCR).
         if mime == MAKECODE_HEX_MIME:
-            from backend.storage.makecode_hex_validation import MakeCodeHexValidationError, extract_makecode_project_from_hex
             from backend.makecode.hex_evidence_v1 import (
                 EVIDENCE_SCHEMA_V1,
                 build_evidence_markdown_v1,
                 build_fallback_evidence_markdown_v1,
+            )
+            from backend.storage.makecode_hex_validation import (
+                MakeCodeHexValidationError,
+                extract_makecode_project_from_hex,
             )
 
             meta = {"adapter": "local_vision", "backend": "makecode_hex", "schema": EVIDENCE_SCHEMA_V1}
@@ -777,8 +790,8 @@ class _LocalVisionAdapter:
 
         # Filius FLS: deterministic evidence extraction (no OCR).
         if mime == FILIUS_FLS_MIME:
-            from backend.storage.filius_validation import FiliusValidationError
             from backend.filius.evidence_v1 import EVIDENCE_SCHEMA_V1, build_evidence_markdown_v1
+            from backend.storage.filius_validation import FiliusValidationError
 
             meta = {"adapter": "local_vision", "backend": "filius_fls", "schema": EVIDENCE_SCHEMA_V1}
             root = resolve_local_verify_root_from_env() or ""
@@ -862,8 +875,9 @@ class _LocalVisionAdapter:
         lm = self._get_ocr_lm()
         try:
             import dspy  # type: ignore
-            from backend.learning.adapters.dspy.usage import capture_dspy_usage
+
             from backend.learning.adapters.dspy import vision_program
+            from backend.learning.adapters.dspy.usage import capture_dspy_usage
 
             with dspy.context(  # type: ignore[attr-defined]
                 lm=lm,

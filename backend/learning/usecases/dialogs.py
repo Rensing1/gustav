@@ -8,10 +8,9 @@ Why:
 
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from typing import Any, Protocol, Sequence
-
 
 MAX_MESSAGE_CHARS = 2_000
 MAX_STARTER_CHARS = 240

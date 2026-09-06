@@ -9,8 +9,8 @@ Why:
 
 from __future__ import annotations
 
-from datetime import datetime
 import math
+from datetime import datetime
 from typing import Sequence
 
 from backend.learning.practice.scheduler import (

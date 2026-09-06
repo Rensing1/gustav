@@ -10,7 +10,6 @@ import time
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-
 _REVIEW_CREDENTIAL_AAD = b"gustav-h5p-review-v1"
 
 

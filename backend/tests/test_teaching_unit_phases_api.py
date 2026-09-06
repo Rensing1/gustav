@@ -9,17 +9,16 @@ from __future__ import annotations
 
 import importlib
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
-pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 main = importlib.import_module("backend.web.main")
 teaching = importlib.import_module("backend.web.routes.teaching")
-from backend.tests.runtime_auth_helpers import install_session_store
-
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 
 async def _client() -> httpx.AsyncClient:

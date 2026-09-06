@@ -5,7 +5,8 @@ Role-based navigation that adapts to user type (student/teacher/admin).
 All links use HTMX for SPA-like navigation without page reloads.
 """
 
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 from .base import Component
 
 # ---------------------------------------------------------------------------

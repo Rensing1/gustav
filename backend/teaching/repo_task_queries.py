@@ -12,8 +12,12 @@ import json
 from typing import Any, List, Optional, Sequence
 
 from backend.teaching.repo_row_mappers import (
-    compute_average_score_from_analysis as _compute_average_score_from_analysis,
     TASK_COLUMNS_SQL as _TASK_COLUMNS_SQL,
+)
+from backend.teaching.repo_row_mappers import (
+    compute_average_score_from_analysis as _compute_average_score_from_analysis,
+)
+from backend.teaching.repo_row_mappers import (
     task_row_to_dict as _task_row_to_dict,
 )
 

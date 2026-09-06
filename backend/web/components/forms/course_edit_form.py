@@ -4,8 +4,10 @@ Course Edit Form Component
 Purpose: Simple form for editing a course via SSR. Uses CSRF and submits to
 POST /courses/{course_id}/edit, which delegates to the API PATCH endpoint.
 """
-from typing import Optional, Dict
+from typing import Dict, Optional
+
 from backend.web.components.base import Component
+
 from .fields import TextInputField
 from .submit import SubmitButton
 

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import importlib
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
 from httpx import ASGITransport
-
 
 import backend.web.main as main  # type: ignore
 from backend.tests.runtime_auth_helpers import install_session_store

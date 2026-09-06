@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse
 
 from backend.learning.usecases.dialogs import DialogServiceUnavailable, DialogUseCases
 
-
 learning_dialog_router = APIRouter(tags=["Learning"])
 _USECASES: Any | None = None
 

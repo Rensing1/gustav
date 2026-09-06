@@ -6,7 +6,6 @@ import json
 import pytest
 from starlette.requests import Request
 
-
 teaching_routes = importlib.import_module("backend.web.routes.teaching")
 
 

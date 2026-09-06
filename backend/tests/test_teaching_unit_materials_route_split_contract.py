@@ -7,7 +7,6 @@ from pathlib import Path
 
 from fastapi.routing import APIRoute
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEACHING_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "teaching.py"
 MATERIALS_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "teaching_unit_materials.py"

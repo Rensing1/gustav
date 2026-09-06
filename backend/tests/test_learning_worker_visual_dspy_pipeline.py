@@ -18,11 +18,11 @@ Notes:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import os
-from pathlib import Path
 import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -31,18 +31,27 @@ pytestmark = pytest.mark.db_write
 import psycopg  # type: ignore  # noqa: E402
 
 from backend.learning.repo_db import DBLearningRepo  # noqa: E402
-from backend.learning.usecases.submissions import CreateSubmissionInput, CreateSubmissionUseCase  # noqa: E402
+from backend.learning.usecases.submissions import (  # noqa: E402
+    CreateSubmissionInput,
+    CreateSubmissionUseCase,
+)
 from backend.learning.workers.process_learning_submission_jobs import (  # noqa: E402
     FeedbackResult,
     VisionResult,
     run_once,
 )
+from backend.tests.test_learning_api_contract import (  # noqa: E402 - database availability is checked before worker imports
+    _prepare_learning_fixture,  # type: ignore  # noqa: E402
+)
+from backend.tests.test_learning_visual_upload_only_api import (  # noqa: E402 - database availability is checked before worker imports
+    _prepare_visual_task_fixture,  # type: ignore  # noqa: E402
+)
 from backend.tests.test_learning_worker_jobs import _dsn  # type: ignore  # noqa: E402
-from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
-from backend.tests.test_learning_visual_upload_only_api import _prepare_visual_task_fixture  # type: ignore  # noqa: E402
-from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
-
+from backend.tests.utils.db_isolation import (  # noqa: E402
+    cleanup_learning_jobs_for_run,
+    current_test_run_id,
+)
 
 try:
     _require_db_or_skip()

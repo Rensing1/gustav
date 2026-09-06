@@ -8,7 +8,6 @@ import pytest
 
 from backend.teaching.services.tasks import TasksService
 
-
 VALID_DIALOG = {
     "partner_name": "Vertreterin",
     "partner_description_md": "Eine Gesprächspartnerin mit bürgerrechtlicher Perspektive.",

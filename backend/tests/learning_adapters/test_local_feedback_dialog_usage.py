@@ -6,8 +6,7 @@ import pytest
 
 from backend.learning.adapters import local_feedback
 from backend.learning.adapters.dspy import dialog_assessment_program
-from backend.learning.adapters.ports import FeedbackResult, TokenUsageEvent
-from backend.learning.adapters.ports import FeedbackTransientError
+from backend.learning.adapters.ports import FeedbackResult, FeedbackTransientError, TokenUsageEvent
 
 
 def test_dialog_assessment_captures_provider_usage(monkeypatch: pytest.MonkeyPatch) -> None:

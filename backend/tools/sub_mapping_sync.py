@@ -98,7 +98,10 @@ def _kc_email_mapping(*, legacy_dsn: str, base_url: str, host_header: str, realm
     """
     # Import locally to avoid hard dependency at module import time (speeds tests).
     try:  # pragma: no cover - exercised in integration
-        from backend.tools.legacy_user_import import fetch_legacy_users, KeycloakAdminClient  # type: ignore
+        from backend.tools.legacy_user_import import (  # type: ignore
+            KeycloakAdminClient,
+            fetch_legacy_users,
+        )
     except Exception as exc:  # pragma: no cover
         raise click.ClickException(f"Failed to import Keycloak helpers: {exc}")
 

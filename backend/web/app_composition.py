@@ -8,10 +8,10 @@ Why:
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 import os
-from pathlib import Path
 import sys
+from collections.abc import Iterable
+from pathlib import Path
 from weakref import WeakSet
 
 from fastapi import APIRouter, FastAPI

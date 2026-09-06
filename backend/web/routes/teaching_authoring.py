@@ -16,7 +16,6 @@ from backend.web.routes.teaching_shared import (
     _require_teacher,
 )
 
-
 _repo_provider: Callable[[], Any] | None = None
 
 

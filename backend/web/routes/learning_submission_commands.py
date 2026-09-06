@@ -26,9 +26,13 @@ from backend.learning.usecases.submissions import (
     FinalizeLatestDraftUseCase,
 )
 from backend.storage.learning_policy import resolve_local_verify_root_from_env
-from backend.storage.mime_types import FILIUS_FLS_MIME, MAKECODE_HEX_MIME, PDF_MIME, SCRATCH_SB3_MIME
+from backend.storage.mime_types import (
+    FILIUS_FLS_MIME,
+    MAKECODE_HEX_MIME,
+    PDF_MIME,
+    SCRATCH_SB3_MIME,
+)
 from backend.storage.submission_content_signatures import validate_submission_content_signature
-
 
 learning_submission_commands_router = APIRouter(tags=["Learning"])
 logger = logging.getLogger("gustav.web.learning")
@@ -209,7 +213,10 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                     status_code=503,
                     headers=_cache_headers_error(),
                 )
-            from backend.storage.makecode_hex_validation import MakeCodeHexValidationError, extract_makecode_project_from_hex
+            from backend.storage.makecode_hex_validation import (
+                MakeCodeHexValidationError,
+                extract_makecode_project_from_hex,
+            )
 
             try:
                 _ = extract_makecode_project_from_hex(hex_bytes)
@@ -241,7 +248,10 @@ async def create_submission(request: Request, course_id: str, task_id: str, payl
                 status_code=503,
                 headers=_cache_headers_error(),
             )
-        from backend.storage.filius_validation import FiliusValidationError, extract_configuration_xml_bytes
+        from backend.storage.filius_validation import (
+            FiliusValidationError,
+            extract_configuration_xml_bytes,
+        )
 
         try:
             _ = extract_configuration_xml_bytes(fls_bytes)

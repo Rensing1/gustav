@@ -24,13 +24,13 @@ pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
 
 from backend.learning.repo_db import DBLearningRepo  # noqa: E402
-from backend.vision.pdf_renderer import PdfRenderError  # noqa: E402
 
 # Import target use case (to be implemented via TDD).
 from backend.learning.usecases.pdf_preprocessing import (  # type: ignore  # noqa: E402
     PreprocessPdfSubmissionUseCase,
     SubmissionContext,
 )
+from backend.vision.pdf_renderer import PdfRenderError  # noqa: E402
 
 
 def _service_dsn() -> str:

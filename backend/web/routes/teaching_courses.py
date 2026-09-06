@@ -15,7 +15,12 @@ from fastapi import APIRouter, Request
 from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import _get_repo
-from backend.web.routes.teaching_payloads import CourseArchiveBatchPayload, CourseCreate, CourseDeletionPayload, CourseUpdate
+from backend.web.routes.teaching_payloads import (
+    CourseArchiveBatchPayload,
+    CourseCreate,
+    CourseDeletionPayload,
+    CourseUpdate,
+)
 from backend.web.routes.teaching_serialization import _serialize_course
 from backend.web.routes.teaching_shared import (
     _current_sub,
@@ -25,7 +30,6 @@ from backend.web.routes.teaching_shared import (
     _role_in,
 )
 from backend.web.routes.teaching_validation import clamp_limit_offset as _clamp_limit_offset
-
 
 teaching_courses_router = APIRouter(tags=["Teaching"])
 

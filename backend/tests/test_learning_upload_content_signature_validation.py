@@ -6,15 +6,15 @@ before creating a submission or queueing feedback work.
 
 from __future__ import annotations
 
-from hashlib import sha256
 import importlib
-from io import BytesIO
 import uuid
+from hashlib import sha256
+from io import BytesIO
 
 import httpx
+import pytest
 from httpx import ASGITransport
 from PIL import Image
-import pytest
 
 from backend.tests.runtime_auth_helpers import install_session_store
 

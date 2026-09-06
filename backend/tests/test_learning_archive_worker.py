@@ -8,9 +8,9 @@ import zipfile
 
 import pytest
 
-from backend.learning.workers.course_lifecycle_jobs import ExportTooLarge, build_export_zip
 from backend.learning.workers import course_lifecycle_jobs as lifecycle
 from backend.learning.workers import process_learning_submission_jobs as worker
+from backend.learning.workers.course_lifecycle_jobs import ExportTooLarge, build_export_zip
 
 
 def _snapshot() -> dict:

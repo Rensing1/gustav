@@ -4,7 +4,8 @@ Breadcrumb component for GUSTAV
 Generates a simple breadcrumb trail based on the current request path.
 """
 
-from typing import List, Tuple, Dict, Optional
+from typing import Dict, List, Optional, Tuple
+
 from .base import Component
 from .navigation import ROUTE_MAP, ROUTE_PATTERNS
 

@@ -15,17 +15,24 @@ import sys as _sys
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote as _quote
-from uuid import UUID, uuid4 as _uuid4
+from uuid import UUID
+from uuid import uuid4 as _uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from backend.storage.keys import make_submission_key
-from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
+from backend.storage.mime_types import (
+    FILIUS_FLS_MIME,
+    JPEG_MIME,
+    MAKECODE_HEX_MIME,
+    PDF_MIME,
+    PNG_MIME,
+    SCRATCH_SB3_MIME,
+)
 from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.teaching.storage import NullStorageAdapter
 from backend.web.routes.learning_upload_proxy import encode_proxy_headers as _encode_proxy_headers
-
 
 learning_upload_intents_router = APIRouter(tags=["Learning"])
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 MATERIAL_COLUMNS_SQL = """
     id::text,
     unit_id::text,

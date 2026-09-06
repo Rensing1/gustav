@@ -88,7 +88,7 @@ def test_page_limit_enforced(monkeypatch):
                 def render(self, **_kwargs):
                     class B:
                         def to_pil(self):
-                            class I:
+                            class FakeImage:
                                 width = 800
                                 height = 1200
                                 mode = "L"
@@ -100,7 +100,7 @@ def test_page_limit_enforced(monkeypatch):
                                 def save(self, fp, format="PNG"):
                                     fp.write(b"PNGDATA")
 
-                            return I()
+                            return FakeImage()
 
                     return B()
 
@@ -126,7 +126,7 @@ def test_open_failure_raises(monkeypatch):
     fake = SimpleNamespace(PdfDocument=raise_open, BitmapConvFlags=SimpleNamespace(ANNOT=1))
     monkeypatch.setitem(mock.sys.modules, "pypdfium2", fake)
 
-    from backend.vision.pdf_renderer import render_pdf_to_images, PdfRenderError
+    from backend.vision.pdf_renderer import PdfRenderError, render_pdf_to_images
 
     with pytest.raises(PdfRenderError):
         render_pdf_to_images(b"broken")
@@ -147,7 +147,7 @@ def test_render_failure_raises(monkeypatch):
     fake = SimpleNamespace(PdfDocument=lambda b: FakeDoc(), BitmapConvFlags=SimpleNamespace(ANNOT=1))
     monkeypatch.setitem(mock.sys.modules, "pypdfium2", fake)
 
-    from backend.vision.pdf_renderer import render_pdf_to_images, PdfRenderError
+    from backend.vision.pdf_renderer import PdfRenderError, render_pdf_to_images
 
     with pytest.raises(PdfRenderError):
         render_pdf_to_images(b"%PDF")

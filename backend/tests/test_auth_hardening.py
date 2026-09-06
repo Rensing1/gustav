@@ -10,14 +10,14 @@ Covers:
 """
 
 import importlib
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
 from backend.identity_access.oidc import OIDCConfig
-from backend.identity_access.stores import SessionStore, SessionRecord, StateStore
+from backend.identity_access.stores import SessionRecord, SessionStore, StateStore
 from backend.tests.runtime_auth_helpers import install_oidc_client
 from backend.web.auth_runtime import AuthSettings
 from backend.web.components.navigation import Navigation
@@ -260,7 +260,7 @@ async def test_logout_without_session_only_sends_client_id(monkeypatch: pytest.M
         client.cookies.clear()
         r_lo = await client.get("/auth/logout", follow_redirects=False)
     assert r_lo.status_code in (302, 303)
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
     qs = parse_qs(urlparse(r_lo.headers.get("location", "")).query)
     # Without a session/id_token, logout must fall back to client_id only
     assert qs.get("client_id") == [main.RUNTIME.oidc_config.client_id]
@@ -275,7 +275,7 @@ async def test_logout_session_without_id_token_falls_back_to_client_id():
         client.cookies.set("gustav_session", sess.session_id)
         r = await client.get("/auth/logout", follow_redirects=False)
     assert r.status_code in (302, 303)
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
     qs = parse_qs(urlparse(r.headers.get("location", "")).query)
     assert qs.get("client_id") == [main.RUNTIME.oidc_config.client_id]
     assert "id_token_hint" not in qs
@@ -298,7 +298,7 @@ async def test_logout_prefers_forwarded_id_token_hint_over_session_value():
             headers={"x-gustav-id-token-hint": "fresh-bff-id-token"},
         )
     assert r.status_code in (302, 303)
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
     qs = parse_qs(urlparse(r.headers.get("location", "")).query)
     assert qs.get("id_token_hint") == ["fresh-bff-id-token"]
     assert "client_id" not in qs
@@ -348,7 +348,7 @@ async def test_logout_rejects_external_redirect_uri():
     assert r.status_code in (302, 303)
     loc = r.headers.get("location", "")
     # Extract the post_logout_redirect_uri from the IdP end-session URL
-    from urllib.parse import urlparse, parse_qs, unquote
+    from urllib.parse import parse_qs, unquote, urlparse
     qs = parse_qs(urlparse(loc).query)
     post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
     # Compute expected app base from configured redirect URI
@@ -365,7 +365,7 @@ async def test_logout_allows_inapp_redirect_path():
         r = await client.get("/auth/logout?redirect=/courses", follow_redirects=False)
     assert r.status_code in (302, 303)
     loc = r.headers.get("location", "")
-    from urllib.parse import urlparse, parse_qs, unquote
+    from urllib.parse import parse_qs, unquote, urlparse
     qs = parse_qs(urlparse(loc).query)
     post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
     ru = main.RUNTIME.oidc_config.redirect_uri
@@ -430,7 +430,7 @@ async def test_logout_double_slash_redirect_is_internal():
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get("/auth/logout?redirect=//", follow_redirects=False)
     assert r.status_code in (302, 303)
-    from urllib.parse import urlparse, parse_qs, unquote
+    from urllib.parse import parse_qs, unquote, urlparse
     qs = parse_qs(urlparse(r.headers.get("location", "")).query)
     post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
     ru = main.RUNTIME.oidc_config.redirect_uri
@@ -458,7 +458,7 @@ async def test_login_rejects_unsafe_internal_paths(monkeypatch: pytest.MonkeyPat
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r_login = await client.get(f"/auth/login?redirect={bad_redirect}", follow_redirects=False)
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
         qs = parse_qs(urlparse(r_login.headers.get("location", "")).query)
         state = qs.get("state", [None])[0]
         assert state, "state must be present in authorization URL"
@@ -490,7 +490,7 @@ async def test_logout_rejects_unsafe_internal_paths(bad_redirect: str):
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/logout?redirect={bad_redirect}", follow_redirects=False)
     assert r.status_code in (302, 303)
-    from urllib.parse import urlparse, parse_qs, unquote
+    from urllib.parse import parse_qs, unquote, urlparse
     qs = parse_qs(urlparse(r.headers.get("location", "")).query)
     post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
     ru = main.RUNTIME.oidc_config.redirect_uri
@@ -517,7 +517,7 @@ async def test_redirect_max_length_enforced(monkeypatch: pytest.MonkeyPatch):
     # Login flow should ignore long redirect and send user to '/'
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r_login = await client.get(f"/auth/login?redirect={long_path}", follow_redirects=False)
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
         qs = parse_qs(urlparse(r_login.headers.get("location", "")).query)
         state = qs.get("state", [None])[0]
         assert state
@@ -539,7 +539,7 @@ async def test_redirect_max_length_enforced(monkeypatch: pytest.MonkeyPatch):
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         r = await client.get(f"/auth/logout?redirect={long_path}", follow_redirects=False)
     assert r.status_code in (302, 303)
-    from urllib.parse import urlparse, parse_qs, unquote
+    from urllib.parse import parse_qs, unquote, urlparse
     qs = parse_qs(urlparse(r.headers.get("location", "")).query)
     post_logout = unquote(qs.get("post_logout_redirect_uri", [""])[0])
     ru = main.RUNTIME.oidc_config.redirect_uri

@@ -18,8 +18,8 @@ Tests are skipped by default when the env vars or psycopg3 are not available.
 from __future__ import annotations
 
 import os
-import pytest
 
+import pytest
 
 pytestmark = pytest.mark.db_write
 

@@ -14,7 +14,6 @@ import zipfile
 
 import pytest
 
-
 VALID_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <java version="17" class="java.beans.XMLDecoder">
   <string>2.5</string>
@@ -47,7 +46,10 @@ def test_extract_configuration_xml_returns_project_configuration() -> None:
     ],
 )
 def test_invalid_filius_archives_raise_stable_codes(fls_bytes: bytes, expected: str) -> None:
-    from backend.storage.filius_validation import FiliusValidationError, extract_configuration_xml_bytes
+    from backend.storage.filius_validation import (
+        FiliusValidationError,
+        extract_configuration_xml_bytes,
+    )
 
     with pytest.raises(FiliusValidationError) as exc:
         extract_configuration_xml_bytes(fls_bytes)
@@ -56,7 +58,11 @@ def test_invalid_filius_archives_raise_stable_codes(fls_bytes: bytes, expected: 
 
 
 def test_configuration_size_limit_raises_stable_code() -> None:
-    from backend.storage.filius_validation import FiliusLimits, FiliusValidationError, extract_configuration_xml_bytes
+    from backend.storage.filius_validation import (
+        FiliusLimits,
+        FiliusValidationError,
+        extract_configuration_xml_bytes,
+    )
 
     with pytest.raises(FiliusValidationError) as exc:
         extract_configuration_xml_bytes(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from backend.identity_access.cli_tokens import InMemoryCLITokenStore
-from backend.identity_access.cli_tokens import DBCLITokenStore
+from backend.identity_access.cli_tokens import DBCLITokenStore, InMemoryCLITokenStore
 
 
 def test_cli_token_create_returns_raw_token_once_and_stores_only_hash() -> None:

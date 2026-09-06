@@ -1,32 +1,38 @@
 "GUSTAV web application"
 from __future__ import annotations
 
+import logging
+import os
+import sys as _sys
 from functools import partial
 from pathlib import Path
-import os
-import logging
 
 from fastapi import FastAPI
 
 # Auth & OIDC Imports
-from backend.identity_access.tokens import BearerTokenVerificationError, IDTokenVerificationError, verify_bearer_token, verify_id_token
-import sys as _sys
-
-from backend.web.auth_session import SESSION_COOKIE_NAME  # noqa: F401
+from backend.identity_access.tokens import (
+    BearerTokenVerificationError,
+    IDTokenVerificationError,
+    verify_bearer_token,
+    verify_id_token,
+)
 from backend.web import auth_runtime
 from backend.web.app_composition import (
     bootstrap_runtime_environment,
     create_app_shell,
     mount_static_files,
+)
+from backend.web.app_composition import (
     running_under_pytest as _running_under_pytest,
 )
-from backend.web.runtime_config import load_teaching_live_poll_interval_seconds
 from backend.web.auth_only_app import create_app_auth_only as _create_app_auth_only
+from backend.web.auth_session import SESSION_COOKIE_NAME  # noqa: F401
 from backend.web.layout_response import render_layout_response
 from backend.web.main_auth_wiring import create_main_auth_wiring
 from backend.web.main_middleware_wiring import install_main_middlewares
 from backend.web.main_router_wiring import include_main_routers
 from backend.web.main_storage_wiring import initialize_main_storage
+from backend.web.runtime_config import load_teaching_live_poll_interval_seconds
 from backend.web.runtime_errors import install_runtime_error_handlers
 
 bootstrap_runtime_environment()

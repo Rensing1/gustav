@@ -16,14 +16,14 @@ Design principles:
 
 from __future__ import annotations
 
-from contextlib import nullcontext
 import logging
+from contextlib import nullcontext
 from typing import Any, Sequence
 
 from backend.learning.adapters.dspy import json_observability
 from backend.learning.adapters.dspy import programs as dspy_programs
-from backend.learning.adapters.dspy.usage import capture_dspy_usage
 from backend.learning.adapters.dspy.types import CriteriaAnalysis
+from backend.learning.adapters.dspy.usage import capture_dspy_usage
 from backend.learning.adapters.ports import FeedbackResult, TokenUsageEvent
 
 LOG = logging.getLogger(__name__)

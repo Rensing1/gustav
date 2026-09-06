@@ -7,14 +7,15 @@ tests and documentation can reference a single source of truth.
 
 from __future__ import annotations
 
-import re
 import os
+import re
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
-from .verification import VerificationConfig
 from backend.storage.config import get_learning_max_upload_bytes, get_submissions_bucket
 from backend.storage.mime_types import ALLOWED_FILE_MIME, ALLOWED_IMAGE_MIME
+
+from .verification import VerificationConfig
 
 # Pull the size limit from central config to keep routers and policy in sync.
 # Defaults to 10 MiB when LEARNING_MAX_UPLOAD_BYTES is not set.

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import importlib
-from fastapi import FastAPI, Request
+
 import httpx
 import pytest
+from fastapi import FastAPI, Request
 
 _dialog_routes = importlib.import_module("backend.web.routes.learning_dialogs")
 learning_dialog_router = _dialog_routes.learning_dialog_router

@@ -8,10 +8,10 @@ Security: Cookies carry only an opaque session id. Session data stays server-sid
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Optional
 import secrets
 import time
+from dataclasses import dataclass
+from typing import Dict, Optional
 
 
 def _now() -> int:

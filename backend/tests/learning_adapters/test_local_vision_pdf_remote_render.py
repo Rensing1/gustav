@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import base64
 import importlib
-from io import BytesIO
-from contextlib import contextmanager
-from types import SimpleNamespace
 import sys
+from contextlib import contextmanager
+from io import BytesIO
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -67,6 +67,7 @@ def test_pdf_remote_fetch_and_render_stitch(tmp_path, monkeypatch: pytest.Monkey
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
     # Ensure supabase.local resolves to a private host for HTTP fetches
     import socket
+
     import backend.learning.adapters.local_vision as local_vision  # type: ignore
 
     monkeypatch.setattr(

@@ -8,17 +8,18 @@ Requirements:
 - Allowlist: /auth/*, /health, /static/* are not redirected
 """
 
-import pytest
-import httpx
 import importlib
-from httpx import ASGITransport
-from urllib.parse import urlparse, parse_qs
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlparse
 
+import httpx
+import pytest
+from httpx import ASGITransport
+
+from backend.identity_access.cli_tokens import InMemoryCLITokenStore
 from backend.tests.runtime_auth_helpers import install_cli_token_store
 from backend.web.auth_middleware import is_public_path
 from backend.web.auth_runtime import build_cli_token_store
-from backend.identity_access.cli_tokens import InMemoryCLITokenStore
 
 main = importlib.import_module("backend.web.main")
 teaching_routes = importlib.import_module("backend.web.routes.teaching")

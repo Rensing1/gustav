@@ -11,9 +11,8 @@ Security model:
 """
 from __future__ import annotations
 
-from markdown_it import MarkdownIt
 import bleach
-
+from markdown_it import MarkdownIt
 
 _ALLOWED_TAGS = [
     "p",

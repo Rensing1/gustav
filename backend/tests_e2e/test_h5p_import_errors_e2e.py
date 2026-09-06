@@ -25,7 +25,6 @@ from urllib.parse import urljoin
 import pytest
 import requests
 
-
 pytestmark = pytest.mark.e2e
 
 WEB_BASE = os.getenv("WEB_BASE", "https://app.localhost").rstrip("/")
@@ -284,7 +283,7 @@ def test_install_library_then_content_only_import_succeeds():
     r_list = sess.get(f"{WEB_BASE}/h5p/libraries", timeout=30)
     assert r_list.status_code == 200
     libs = r_list.json().get("libraries") or []
-    ubernamen = {l.get("ubername") for l in libs if isinstance(l, dict)}
+    ubernamen = {library.get("ubername") for library in libs if isinstance(library, dict)}
     assert f"H5P.GustavMinimal-1.{minor}" in ubernamen
 
     content_pkg = _build_content_only_h5p_bytes(main_library="H5P.GustavMinimal", major=1, minor=minor)

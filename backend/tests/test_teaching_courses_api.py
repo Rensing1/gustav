@@ -8,18 +8,19 @@ It assumes authentication via the existing session middleware and requires the
 
 from __future__ import annotations
 
-import pytest
-import httpx
-from httpx import ASGITransport
 import importlib
 
-pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
+import httpx
+import pytest
+from httpx import ASGITransport
 
-main = importlib.import_module("backend.web.main")
-teaching = importlib.import_module("backend.web.routes.teaching")
 from backend.teaching.repo_db import DBTeachingRepo
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
+main = importlib.import_module("backend.web.main")
+teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client():

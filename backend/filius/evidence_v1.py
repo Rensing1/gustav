@@ -12,22 +12,21 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 
-from backend.storage.filius_validation import extract_configuration_xml_bytes
 from backend.filius.topology import (
     FiliusApplication,
     FiliusDocumentationItem,
     FiliusEmailAccount,
     FiliusEmailClient,
     FiliusEmailServer,
+    FiliusFilesystemFile,
     FiliusFirewall,
     FiliusFirewallRule,
-    FiliusFilesystemFile,
     FiliusInterface,
     FiliusManualRoute,
     FiliusTopology,
     extract_topology,
 )
-
+from backend.storage.filius_validation import extract_configuration_xml_bytes
 
 EVIDENCE_SCHEMA_V1 = "filius.evidence.v1"
 _SECTION_HEADINGS = (

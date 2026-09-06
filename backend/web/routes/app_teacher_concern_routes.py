@@ -12,7 +12,6 @@ from backend.web.routes import teaching as teaching_routes
 from backend.web.routes import teaching_guards
 from backend.web.security.guards import has_any_role
 
-
 app_teacher_concern_router = APIRouter(tags=["App"])
 
 

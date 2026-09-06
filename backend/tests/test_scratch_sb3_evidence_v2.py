@@ -10,7 +10,6 @@ Intent:
 from __future__ import annotations
 
 
-
 def _min_project(*, sprite_blocks: dict) -> dict:
     return {
         "targets": [

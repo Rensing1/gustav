@@ -2,6 +2,7 @@
 Async standalone smoke check using httpx.AsyncClient against the ASGI app.
 """
 import importlib
+
 import anyio
 import httpx
 from httpx import ASGITransport

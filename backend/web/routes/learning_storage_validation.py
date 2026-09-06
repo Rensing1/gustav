@@ -7,7 +7,10 @@ import os
 import sys as _sys
 from pathlib import Path
 
-from backend.storage.learning_policy import resolve_local_verify_root_from_env, verification_config_from_env
+from backend.storage.learning_policy import (
+    resolve_local_verify_root_from_env,
+    verification_config_from_env,
+)
 from backend.storage.verification import verify_storage_object_integrity
 from backend.teaching.storage import NullStorageAdapter
 from backend.web.routes import learning_downloads

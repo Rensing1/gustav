@@ -13,10 +13,17 @@ from typing import Dict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
+from backend.learning.usecases.dialogs import _message as _dialog_message
+from backend.learning.usecases.dialogs import _starters as _dialog_starters
 from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_authoring, teaching_guards
+from backend.web.routes.learning_dialogs import _public_payload as _public_dialog_payload
 from backend.web.routes.teaching import _get_repo
-from backend.web.routes.teaching_payloads import TaskCreatePayload, TaskReorderPayload, TaskUpdatePayload
+from backend.web.routes.teaching_payloads import (
+    TaskCreatePayload,
+    TaskReorderPayload,
+    TaskUpdatePayload,
+)
 from backend.web.routes.teaching_serialization import _serialize_task
 from backend.web.routes.teaching_shared import (
     _current_sub,
@@ -26,9 +33,6 @@ from backend.web.routes.teaching_shared import (
     _require_teacher,
 )
 from backend.web.routes.teaching_task_services import _get_tasks_service
-from backend.learning.usecases.dialogs import _message as _dialog_message, _starters as _dialog_starters
-from backend.web.routes.learning_dialogs import _public_payload as _public_dialog_payload
-
 
 teaching_unit_tasks_router = APIRouter(tags=["Teaching"])
 

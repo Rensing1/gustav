@@ -5,10 +5,9 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
-
 
 CATEGORIES = (
     "usecase_fastapi_imports",

@@ -47,8 +47,9 @@ async def test_modular_unlock_status_matches_db_helper_for_each_module(monkeypat
 
     try:
         import psycopg  # type: ignore
-        from backend.teaching.repo_db import DBTeachingRepo
+
         from backend.learning.repo_db import DBLearningRepo
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         assert isinstance(learning.REPO, DBLearningRepo)
@@ -142,8 +143,9 @@ async def test_modular_unlock_done_transition_matches_db_helper_minimal(monkeypa
 
     try:
         import psycopg  # type: ignore
-        from backend.teaching.repo_db import DBTeachingRepo
+
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         assert isinstance(learning.REPO, DBLearningRepo)

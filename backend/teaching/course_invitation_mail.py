@@ -9,19 +9,18 @@ Why:
 
 from __future__ import annotations
 
+import logging
+import os
+import smtplib
+import ssl
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr
 from html import escape
-import logging
-import os
-import smtplib
-import ssl
 from typing import Protocol
 
 from backend.teaching.course_invitations import build_invitation_token
-
 
 LOG = logging.getLogger(__name__)
 

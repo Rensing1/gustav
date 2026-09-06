@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import os
 
-
 MATERIALS_BUCKET_DEFAULT = "materials"
 SUBMISSIONS_BUCKET_DEFAULT = "submissions"
 

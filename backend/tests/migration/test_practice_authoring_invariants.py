@@ -16,7 +16,6 @@ from backend.tests.utils.db import require_db_or_skip
 pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
 
-
 pytestmark = pytest.mark.db_write
 
 

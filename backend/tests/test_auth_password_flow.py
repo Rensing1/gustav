@@ -9,11 +9,10 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-
-main = importlib.import_module("backend.web.main")
 from backend.identity_access.oidc import OIDCConfig
 from backend.identity_access.stores import StateStore
 
+main = importlib.import_module("backend.web.main")
 
 pytestmark = pytest.mark.anyio("asyncio")
 

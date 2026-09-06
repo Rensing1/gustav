@@ -11,8 +11,8 @@ listing or mutating sections of a learning unit authored by someone else.
 from __future__ import annotations
 
 import os
-import pytest
 
+import pytest
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
@@ -28,6 +28,7 @@ async def test_rls_repo_smoke_sections_methods_exist_and_rls_active():
 
     try:
         import psycopg  # type: ignore
+
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
     except Exception:
         pytest.skip("DBTeachingRepo unavailable")

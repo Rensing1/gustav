@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from backend.web.cli_capability import CLICapability, path_matches_template
 
-
 # Compatibility name for integrations that still import the former type.
 CLIAuthoringCapability = CLICapability
 

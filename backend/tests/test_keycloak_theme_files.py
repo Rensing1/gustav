@@ -14,7 +14,6 @@ Scope:
 
 from pathlib import Path
 
-
 THEME_ROOT = Path("keycloak/themes/gustav/login")
 EMAIL_THEME_ROOT = Path("keycloak/themes/gustav/email")
 

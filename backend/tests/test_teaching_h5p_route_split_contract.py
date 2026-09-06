@@ -8,11 +8,11 @@ Why:
 
 from __future__ import annotations
 
+import ast
 import importlib
 from pathlib import Path
 
 from fastapi.routing import APIRoute
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEACHING_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "teaching.py"
@@ -158,7 +158,7 @@ def test_h5p_router_uses_explicit_task_service_provider() -> None:
     h5p_source = TEACHING_H5P_SOURCE.read_text(encoding="utf-8")
 
     assert hasattr(task_services, "_get_tasks_service")
-    assert "from backend.web.routes import teaching_task_services" in h5p_source
+    assert any(isinstance(node, ast.ImportFrom) and node.module == "backend.web.routes" and any(alias.name == "teaching_task_services" for alias in node.names) for node in ast.walk(ast.parse(h5p_source)))
     assert "teaching_task_services._get_tasks_service" in h5p_source
     assert "teaching._get_tasks_service" not in h5p_source
 
@@ -172,7 +172,7 @@ def test_h5p_router_uses_explicit_teaching_guard_module() -> None:
     assert hasattr(guards, "_guard_unit_author")
     assert hasattr(guards, "_csrf_guard")
     assert hasattr(guards, "configure_teaching_guard_repo_provider")
-    assert "from backend.web.routes import teaching_guards" in h5p_source
+    assert any(isinstance(node, ast.ImportFrom) and node.module == "backend.web.routes" and any(alias.name == "teaching_guards" for alias in node.names) for node in ast.walk(ast.parse(h5p_source)))
     assert "teaching_guards._guard_unit_author" in h5p_source
     assert "teaching_guards._csrf_guard" in h5p_source
     assert "teaching._guard_unit_author" not in h5p_source

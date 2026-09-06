@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import datetime, timezone
 
 import pytest
-
-from datetime import datetime, timezone
 
 from backend.learning.repo_db import DBLearningRepo
 from backend.learning.usecases.submissions import CreateSubmissionInput, CreateSubmissionUseCase

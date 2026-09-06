@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from backend.teaching.repo_row_mappers import (
     MATERIAL_COLUMNS_SQL as _MATERIAL_COLUMNS_SQL,
+)
+from backend.teaching.repo_row_mappers import (
     material_row_to_dict as _material_row_to_dict,
 )
 

@@ -17,119 +17,276 @@ from pydantic import BaseModel, Field
 from backend.identity_access.admin_client import AdminClient
 from backend.identity_access.cli_tokens import CLITokenRecord
 from backend.identity_access.tokens import verify_bearer_token
-from backend.web.auth_session import SESSION_COOKIE_NAME, app_session_ttl_seconds, set_session_cookie
-from backend.web.security.guards import has_any_role as has_any_role  # noqa: F401
+from backend.web.auth_session import (
+    SESSION_COOKIE_NAME,
+    app_session_ttl_seconds,
+    set_session_cookie,
+)
 from backend.web.routes import teaching as teaching_routes  # noqa: F401
 from backend.web.routes import teaching_guards as teaching_guards  # noqa: F401
 from backend.web.routes.app_diagnostics_routes import (
-    app_diagnostics_router,
-    get_diagnostics_course_matrix as get_diagnostics_course_matrix,  # noqa: F401
-    get_diagnostics_learner_profile as get_diagnostics_learner_profile,  # noqa: F401
     _build_diagnostics_course_matrix_rows as _build_diagnostics_course_matrix_rows,  # noqa: F401
+)
+from backend.web.routes.app_diagnostics_routes import (
     _build_diagnostics_learner_profile_courses as _build_diagnostics_learner_profile_courses,  # noqa: F401
+)
+from backend.web.routes.app_diagnostics_routes import (
     _teacher_course_has_member as _teacher_course_has_member,  # noqa: F401
+)
+from backend.web.routes.app_diagnostics_routes import (
+    app_diagnostics_router,
+)
+from backend.web.routes.app_diagnostics_routes import (
+    get_diagnostics_course_matrix as get_diagnostics_course_matrix,  # noqa: F401
+)
+from backend.web.routes.app_diagnostics_routes import (
+    get_diagnostics_learner_profile as get_diagnostics_learner_profile,  # noqa: F401
+)
+from backend.web.routes.app_learner_view_routes import (
+    _list_concern_box_courses_for_student as _list_concern_box_courses_for_student,  # noqa: F401
+)
+from backend.web.routes.app_learner_view_routes import (
+    _list_learner_courses as _list_learner_courses,  # noqa: F401
 )
 from backend.web.routes.app_learner_view_routes import (
     app_learner_view_router,
+)
+from backend.web.routes.app_learner_view_routes import (
     create_learner_concern_box_entry as create_learner_concern_box_entry,  # noqa: F401
+)
+from backend.web.routes.app_learner_view_routes import (
     get_learner_concern_box as get_learner_concern_box,  # noqa: F401
+)
+from backend.web.routes.app_learner_view_routes import (
     get_learner_home as get_learner_home,  # noqa: F401
-    _list_concern_box_courses_for_student as _list_concern_box_courses_for_student,  # noqa: F401
-    _list_learner_courses as _list_learner_courses,  # noqa: F401
+)
+from backend.web.routes.app_live_routes import (
+    _decode_json_response_body as _decode_json_response_body,  # noqa: F401
+)
+from backend.web.routes.app_live_routes import (
+    _live_dashboard_localpart_identifier as _live_dashboard_localpart_identifier,  # noqa: F401
+)
+from backend.web.routes.app_live_routes import (
+    _live_selection_href as _live_selection_href,  # noqa: F401
+)
+from backend.web.routes.app_live_routes import (
+    _live_task_meta_by_id as _live_task_meta_by_id,  # noqa: F401
+)
+from backend.web.routes.app_live_routes import (
+    _round_live_average as _round_live_average,  # noqa: F401
 )
 from backend.web.routes.app_live_routes import (
     app_live_router,
+)
+from backend.web.routes.app_live_routes import (
     get_live_course_units as get_live_course_units,  # noqa: F401
+)
+from backend.web.routes.app_live_routes import (
     get_live_detail_sheet as get_live_detail_sheet,  # noqa: F401
+)
+from backend.web.routes.app_live_routes import (
     get_live_unit_dashboard as get_live_unit_dashboard,  # noqa: F401
+)
+from backend.web.routes.app_live_routes import (
     get_live_unit_matrix as get_live_unit_matrix,  # noqa: F401
-    _decode_json_response_body as _decode_json_response_body,  # noqa: F401
-    _live_dashboard_localpart_identifier as _live_dashboard_localpart_identifier,  # noqa: F401
-    _live_selection_href as _live_selection_href,  # noqa: F401
-    _live_task_meta_by_id as _live_task_meta_by_id,  # noqa: F401
-    _round_live_average as _round_live_average,  # noqa: F401
 )
 from backend.web.routes.app_profile_helpers import (
     claims_email as _claims_email,  # noqa: F401
+)
+from backend.web.routes.app_profile_helpers import (
     normalized_attributes as _normalized_attributes,
+)
+from backend.web.routes.app_profile_helpers import (
     parse_lock_timestamp as _parse_lock_timestamp,
+)
+from backend.web.routes.app_profile_helpers import (
     profile_identity_defaults as _profile_identity_defaults,
+)
+from backend.web.routes.app_profile_helpers import (
     split_name_suggestion as _split_name_suggestion,  # noqa: F401
 )
 from backend.web.routes.app_profile_routes import (
     ProfileNameLockedError,
     app_profile_router,
+)
+from backend.web.routes.app_profile_routes import (
     create_profile_cli_token as create_profile_cli_token,  # noqa: F401 - kept for route module compatibility
+)
+from backend.web.routes.app_profile_routes import (
     get_app_profile as get_app_profile,  # noqa: F401
+)
+from backend.web.routes.app_profile_routes import (
     list_profile_cli_tokens as list_profile_cli_tokens,  # noqa: F401
+)
+from backend.web.routes.app_profile_routes import (
     patch_profile_display_name as patch_profile_display_name,  # noqa: F401
+)
+from backend.web.routes.app_profile_routes import (
     patch_profile_name as patch_profile_name,  # noqa: F401
+)
+from backend.web.routes.app_profile_routes import (
     revoke_profile_cli_token as revoke_profile_cli_token,  # noqa: F401
 )
 from backend.web.routes.app_session_helpers import (
     bff_session_payload as _bff_session_payload,
+)
+from backend.web.routes.app_session_helpers import (
     bff_session_store as _bff_session_store,
+)
+from backend.web.routes.app_session_helpers import (
     current_user as _current_user,
+)
+from backend.web.routes.app_session_helpers import (
     internal_bff_secret_configured as _internal_bff_secret_configured,  # noqa: F401
+)
+from backend.web.routes.app_session_helpers import (
     oidc_config as _oidc_config,
+)
+from backend.web.routes.app_session_helpers import (
     private_headers as _private_headers,
+)
+from backend.web.routes.app_session_helpers import (
     require_internal_bff_secret as _require_internal_bff_secret,
+)
+from backend.web.routes.app_session_helpers import (
     runtime_from_request as _runtime_from_request,
+)
+from backend.web.routes.app_session_helpers import (
     runtime_settings as _runtime_settings,
+)
+from backend.web.routes.app_session_helpers import (
     session_store as _session_store,
+)
+from backend.web.routes.app_session_helpers import (
     spaces_for_role as _spaces_for_role,
+)
+from backend.web.routes.app_session_helpers import (
     start_target_for_role as _start_target_for_role,
+)
+from backend.web.routes.app_session_helpers import (
     user_payload as _user_payload,
 )
 from backend.web.routes.app_teacher_concern_routes import (
-    app_teacher_concern_router,
-    archive_teacher_concern_box_entry as archive_teacher_concern_box_entry,  # noqa: F401
-    get_teacher_concern_box as get_teacher_concern_box,  # noqa: F401
-    get_teacher_home as get_teacher_home,  # noqa: F401
-    restore_teacher_concern_box_entry as restore_teacher_concern_box_entry,  # noqa: F401
     _teacher_concern_box_scopes as _teacher_concern_box_scopes,  # noqa: F401
+)
+from backend.web.routes.app_teacher_concern_routes import (
     _teacher_home_workstarter as _teacher_home_workstarter,  # noqa: F401
 )
-from backend.web.routes.app_teacher_node_editor_routes import (
-    app_teacher_node_editor_router,
-    get_teacher_unit_node_editor as get_teacher_unit_node_editor,  # noqa: F401
+from backend.web.routes.app_teacher_concern_routes import (
+    app_teacher_concern_router,
 )
-from backend.web.routes.app_teacher_unit_routes import (
-    app_teacher_unit_router,
-    get_teacher_units_catalog as get_teacher_units_catalog,  # noqa: F401
-    get_teacher_unit_workspace as get_teacher_unit_workspace,  # noqa: F401
-    _build_teacher_unit_course_refs as _build_teacher_unit_course_refs,  # noqa: F401
-    _field_value as _field_value,  # noqa: F401
-    _find_course_unit as _find_course_unit,  # noqa: F401
-    _list_teacher_course_units as _list_teacher_course_units,  # noqa: F401
-    _list_teacher_courses as _list_teacher_courses,  # noqa: F401
-    _list_teacher_section_materials as _list_teacher_section_materials,  # noqa: F401
-    _list_teacher_section_tasks as _list_teacher_section_tasks,  # noqa: F401
-    _list_teacher_unit_edges as _list_teacher_unit_edges,  # noqa: F401
-    _list_teacher_unit_modules as _list_teacher_unit_modules,  # noqa: F401
-    _list_teacher_unit_phases as _list_teacher_unit_phases,  # noqa: F401
-    _list_teacher_unit_sections as _list_teacher_unit_sections,  # noqa: F401
-    _list_teacher_units as _list_teacher_units,  # noqa: F401
-    _list_submission_pairs_for_students as _list_submission_pairs_for_students,  # noqa: F401
-    _list_unit_task_ids as _list_unit_task_ids,  # noqa: F401
-    _teacher_units_catalog as _teacher_units_catalog,  # noqa: F401
+from backend.web.routes.app_teacher_concern_routes import (
+    archive_teacher_concern_box_entry as archive_teacher_concern_box_entry,  # noqa: F401
+)
+from backend.web.routes.app_teacher_concern_routes import (
+    get_teacher_concern_box as get_teacher_concern_box,  # noqa: F401
+)
+from backend.web.routes.app_teacher_concern_routes import (
+    get_teacher_home as get_teacher_home,  # noqa: F401
+)
+from backend.web.routes.app_teacher_concern_routes import (
+    restore_teacher_concern_box_entry as restore_teacher_concern_box_entry,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    _build_usage_totals as _build_usage_totals,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    _count_teacher_course_members as _count_teacher_course_members,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    _empty_usage_totals as _empty_usage_totals,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    _get_teacher_course as _get_teacher_course,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    _list_teacher_course_ai_usage_events as _list_teacher_course_ai_usage_events,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    _list_teacher_course_cards as _list_teacher_course_cards,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    _list_teacher_course_members as _list_teacher_course_members,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    _list_teacher_course_members_window as _list_teacher_course_members_window,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    _parse_usage_filter_timestamp as _parse_usage_filter_timestamp,  # noqa: F401
 )
 from backend.web.routes.app_teacher_course_routes import (
     app_teacher_course_router,
-    get_teacher_course_ai_usage as get_teacher_course_ai_usage,  # noqa: F401
-    get_teacher_course_context as get_teacher_course_context,  # noqa: F401
-    get_teacher_course_list as get_teacher_course_list,  # noqa: F401
-    _build_usage_totals as _build_usage_totals,  # noqa: F401
-    _count_teacher_course_members as _count_teacher_course_members,  # noqa: F401
-    _empty_usage_totals as _empty_usage_totals,  # noqa: F401
-    _get_teacher_course as _get_teacher_course,  # noqa: F401
-    _list_teacher_course_ai_usage_events as _list_teacher_course_ai_usage_events,  # noqa: F401
-    _list_teacher_course_cards as _list_teacher_course_cards,  # noqa: F401
-    _list_teacher_course_members as _list_teacher_course_members,  # noqa: F401
-    _list_teacher_course_members_window as _list_teacher_course_members_window,  # noqa: F401
-    _parse_usage_filter_timestamp as _parse_usage_filter_timestamp,  # noqa: F401
 )
-
+from backend.web.routes.app_teacher_course_routes import (
+    get_teacher_course_ai_usage as get_teacher_course_ai_usage,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    get_teacher_course_context as get_teacher_course_context,  # noqa: F401
+)
+from backend.web.routes.app_teacher_course_routes import (
+    get_teacher_course_list as get_teacher_course_list,  # noqa: F401
+)
+from backend.web.routes.app_teacher_node_editor_routes import (
+    app_teacher_node_editor_router,
+)
+from backend.web.routes.app_teacher_node_editor_routes import (
+    get_teacher_unit_node_editor as get_teacher_unit_node_editor,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _build_teacher_unit_course_refs as _build_teacher_unit_course_refs,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _field_value as _field_value,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _find_course_unit as _find_course_unit,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_submission_pairs_for_students as _list_submission_pairs_for_students,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_teacher_course_units as _list_teacher_course_units,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_teacher_courses as _list_teacher_courses,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_teacher_section_materials as _list_teacher_section_materials,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_teacher_section_tasks as _list_teacher_section_tasks,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_teacher_unit_edges as _list_teacher_unit_edges,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_teacher_unit_modules as _list_teacher_unit_modules,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_teacher_unit_phases as _list_teacher_unit_phases,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_teacher_unit_sections as _list_teacher_unit_sections,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_teacher_units as _list_teacher_units,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _list_unit_task_ids as _list_unit_task_ids,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    _teacher_units_catalog as _teacher_units_catalog,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    app_teacher_unit_router,
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    get_teacher_unit_workspace as get_teacher_unit_workspace,  # noqa: F401
+)
+from backend.web.routes.app_teacher_unit_routes import (
+    get_teacher_units_catalog as get_teacher_units_catalog,  # noqa: F401
+)
+from backend.web.security.guards import has_any_role as has_any_role  # noqa: F401
 
 app_router = APIRouter(tags=["App"])
 app_router.include_router(app_learner_view_router)

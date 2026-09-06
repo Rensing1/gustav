@@ -1,3 +1,5 @@
+# Database availability is deliberately checked before importing worker fixtures.
+# ruff: noqa: E402
 """
 Worker integration tests for the learning submission pipeline.
 
@@ -8,14 +10,14 @@ Why:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from hashlib import sha256
 import json
 import logging
 import os
-from pathlib import Path
 import uuid
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+from pathlib import Path
 from typing import Sequence
 
 import pytest
@@ -34,16 +36,23 @@ except pytest.skip.Exception as exc:  # pragma: no cover - module level skip
 
 import psycopg  # type: ignore  # noqa: E402
 
-from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore
-from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id
-from backend.learning.workers import process_learning_submission_jobs as worker_module  # noqa: E402  # type: ignore
+from backend.learning.workers import (
+    process_learning_submission_jobs as worker_module,  # noqa: E402  # type: ignore
+)
+from backend.learning.workers import telemetry  # noqa: E402  # type: ignore
 from backend.learning.workers.process_learning_submission_jobs import (  # noqa: E402  # type: ignore
     FeedbackResult,
     TokenUsageEvent,
     VisionResult,
     run_once,
 )
-from backend.learning.workers import telemetry  # noqa: E402  # type: ignore
+from backend.tests.test_learning_api_contract import (
+    _prepare_learning_fixture,  # type: ignore
+)
+from backend.tests.utils.db_isolation import (
+    cleanup_learning_jobs_for_run,
+    current_test_run_id,
+)
 
 
 def _dsn() -> str:

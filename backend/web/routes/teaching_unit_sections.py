@@ -14,7 +14,11 @@ from fastapi.responses import JSONResponse, Response
 from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import _get_repo
-from backend.web.routes.teaching_payloads import SectionCreatePayload, SectionReorderPayload, SectionUpdatePayload
+from backend.web.routes.teaching_payloads import (
+    SectionCreatePayload,
+    SectionReorderPayload,
+    SectionUpdatePayload,
+)
 from backend.web.routes.teaching_serialization import _serialize_section
 from backend.web.routes.teaching_shared import (
     _current_sub,
@@ -22,7 +26,6 @@ from backend.web.routes.teaching_shared import (
     _json_private,
     _require_teacher,
 )
-
 
 teaching_unit_sections_router = APIRouter(tags=["Teaching"])
 

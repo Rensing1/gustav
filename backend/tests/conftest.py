@@ -4,21 +4,26 @@ Pytest configuration for backend tests.
 Why: Force AnyIO to use the asyncio backend to avoid sandbox restrictions
 that can affect the Trio backend (e.g., socketpair permission errors).
 """
-import os
 import importlib
+import os
 import re
 import sys
 from pathlib import Path
+
 import pytest
 
-from backend.tests.import_paths import configure_test_import_paths
-from backend.tests.import_paths import canonicalize_legacy_route_aliases
-from backend.tests.runtime_auth_helpers import install_session_store
-from backend.tests.environment import configure_pytest_environment
-from backend.tests.environment import guard_against_prod_env_during_pytest
-from backend.tests.environment import prune_external_wiring_env_by_default
-from backend.tests.environment import truthy_env as _truthy_env
 from backend.tests.db_env import ensure_db_env_defaults
+from backend.tests.environment import (
+    configure_pytest_environment,
+    guard_against_prod_env_during_pytest,
+    prune_external_wiring_env_by_default,
+)
+from backend.tests.environment import truthy_env as _truthy_env
+from backend.tests.import_paths import (
+    canonicalize_legacy_route_aliases,
+    configure_test_import_paths,
+)
+from backend.tests.runtime_auth_helpers import install_session_store
 
 LEGACY_MIGRATION_MARKER = "legacy_migration"
 GLOBAL_PUBLIC_TRUNCATE_RE = re.compile(r"truncate\s+table\s+public\.", re.IGNORECASE)
@@ -163,8 +168,8 @@ def _reset_learning_repo_between_tests():
     """
 
     try:
-        import os
         import importlib
+        import os
         learning = importlib.import_module("backend.web.routes.learning")
         try:
             import psycopg  # type: ignore
@@ -198,8 +203,9 @@ def _reset_learning_route_globals_between_tests():
     """Restore mutable Learning endpoint globals before each test."""
 
     try:
-        from fastapi.routing import APIRoute
         import importlib
+
+        from fastapi.routing import APIRoute
         learning = importlib.import_module("backend.web.routes.learning")
 
         helper_names = (
@@ -231,8 +237,9 @@ def _reset_teaching_route_globals_between_tests():
     """Restore mutable Teaching endpoint globals before each test."""
 
     try:
-        from fastapi.routing import APIRoute
         import importlib
+
+        from fastapi.routing import APIRoute
         teaching = importlib.import_module("backend.web.routes.teaching")
 
         helper_names = ("_get_repo", "_get_materials_service")
@@ -400,6 +407,7 @@ def _reset_learning_requests_alias(monkeypatch: pytest.MonkeyPatch):
     """
     try:
         import importlib
+
         import requests as real_requests  # type: ignore
         # Bind the canonical Learning module to the real requests library.
         learning = importlib.import_module("backend.web.routes.learning")
@@ -421,6 +429,7 @@ def _reset_route_storage_adapters_between_tests():
     """
     try:
         import importlib
+
         from backend.teaching.storage import NullStorageAdapter  # type: ignore
 
         for alias in ("backend.web.routes.learning", "backend.web.routes.teaching"):
@@ -509,7 +518,8 @@ def _reset_settings_environment_override():
         before each test to keep CSRF/cookie decisions deterministic.
     """
     try:
-        import importlib, sys as _sys
+        import importlib
+        import sys as _sys
         # Reset override on the package-oriented runtime module if present.
         for name in ("backend.web.main",):
             mod = _sys.modules.get(name) or importlib.import_module(name)

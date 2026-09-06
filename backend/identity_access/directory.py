@@ -14,14 +14,16 @@ Security:
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, Dict, List
-import re
-import os
 import logging
+import os
+import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable, Dict, List
+
 import requests
+
 from backend.identity_access.domain import ALLOWED_ROLES
 
 logger = logging.getLogger(__name__)

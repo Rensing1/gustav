@@ -13,16 +13,16 @@ same-origin, with private, no-store cache headers on both paths.
 from __future__ import annotations
 
 import importlib
-import pytest
-import httpx
-from httpx import ASGITransport
 import uuid
+
+import httpx
+import pytest
+from httpx import ASGITransport
 
 main = importlib.import_module("backend.web.main")
 teaching = importlib.import_module("backend.web.routes.teaching")
 teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-
 
 pytestmark = pytest.mark.anyio("asyncio")
 

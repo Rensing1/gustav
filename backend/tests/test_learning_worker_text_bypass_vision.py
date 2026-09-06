@@ -1,3 +1,5 @@
+# Database availability is deliberately checked before importing worker fixtures.
+# ruff: noqa: E402
 """
 Worker should bypass Vision for text submissions and never mutate text.
 
@@ -9,20 +11,40 @@ Expectations:
 from __future__ import annotations
 
 import os
+
 import pytest
 
 pytest.importorskip("psycopg")
 pytestmark = pytest.mark.db_write
+from datetime import (
+    datetime,
+    timezone,
+)
+from uuid import uuid4
+
 import psycopg  # type: ignore
 
-from backend.learning.repo_db import DBLearningRepo  # type: ignore
-from backend.learning.usecases import CreateSubmissionInput, CreateSubmissionUseCase  # type: ignore
-from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore
-from backend.tests.test_learning_worker_jobs import _dsn  # type: ignore
-from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # type: ignore
-from backend.learning.workers.process_learning_submission_jobs import FeedbackResult, run_once  # type: ignore
-from datetime import datetime, timezone
-from uuid import uuid4
+from backend.learning.repo_db import (
+    DBLearningRepo,  # type: ignore
+)
+from backend.learning.usecases import (  # type: ignore
+    CreateSubmissionInput,
+    CreateSubmissionUseCase,
+)
+from backend.learning.workers.process_learning_submission_jobs import (  # type: ignore
+    FeedbackResult,
+    run_once,
+)
+from backend.tests.test_learning_api_contract import (
+    _prepare_learning_fixture,  # type: ignore
+)
+from backend.tests.test_learning_worker_jobs import (
+    _dsn,  # type: ignore
+)
+from backend.tests.utils.db_isolation import (  # type: ignore
+    cleanup_learning_jobs_for_run,
+    current_test_run_id,
+)
 
 
 class _ExplodingVisionAdapter:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REPO_SOURCE = PROJECT_ROOT / "backend" / "teaching" / "repo_db.py"
 UNIT_QUERIES_SOURCE = PROJECT_ROOT / "backend" / "teaching" / "repo_unit_queries.py"

@@ -25,8 +25,8 @@ def _is_same_origin(request: Request) -> bool:
     """
     origin_val = request.headers.get("origin")
     try:
-        from urllib.parse import urlparse
         import os
+        from urllib.parse import urlparse
 
         def parse_origin(url: str) -> tuple[str, str, int]:
             p = urlparse(url)

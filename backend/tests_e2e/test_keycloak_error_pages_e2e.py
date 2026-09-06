@@ -15,7 +15,6 @@ import time
 import pytest
 import requests
 
-
 pytestmark = pytest.mark.e2e
 
 

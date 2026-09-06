@@ -120,8 +120,11 @@ def dev_try_process_pdf(*, root: str, storage_key: str, submission_id: str, cour
         return
 
     try:
+        from backend.vision.persistence import (  # type: ignore
+            SubmissionScope,
+            persist_rendered_pages,
+        )
         from backend.vision.pipeline import process_pdf_bytes  # type: ignore
-        from backend.vision.persistence import SubmissionScope, persist_rendered_pages  # type: ignore
     except Exception:
         return
 

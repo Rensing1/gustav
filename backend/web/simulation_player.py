@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from fastapi.responses import Response
 
-
 SIMULATION_CONTENT_SECURITY_POLICY = "; ".join(
     (
         "sandbox allow-scripts",

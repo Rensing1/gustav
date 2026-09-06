@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import Any
 
 
-
 class SB3ValidationError(ValueError):
     """Raised when an SB3 archive fails validation.
 

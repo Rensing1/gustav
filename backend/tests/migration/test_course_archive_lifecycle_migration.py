@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = ROOT / "supabase" / "migrations" / "20260806120000_course_archive_lifecycle.sql"
 WORKER_MIGRATION = ROOT / "supabase" / "migrations" / "20260806130000_course_archive_worker_functions.sql"

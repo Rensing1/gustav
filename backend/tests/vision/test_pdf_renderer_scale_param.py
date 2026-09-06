@@ -5,8 +5,8 @@ not `dpi`. This test fakes the pdfium module and asserts the call shape.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 import sys
+from types import SimpleNamespace
 
 
 def test_render_uses_scale(monkeypatch):

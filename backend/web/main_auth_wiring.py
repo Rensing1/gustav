@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
-import logging
 
 from fastapi import Request
 
@@ -56,7 +56,8 @@ def create_main_auth_wiring(
     """
 
     roles_for_cli_sub = default_roles_for_cli_sub
-    bound_roles_for_cli_sub = lambda sub: roles_for_cli_sub(sub, oidc_config=oidc_config, logger=logger)
+    def bound_roles_for_cli_sub(sub):
+        return roles_for_cli_sub(sub, oidc_config=oidc_config, logger=logger)
     auth_middleware_dependencies = AuthMiddlewareDependencies(
         session_store=session_store,
         cli_token_store=cli_token_store,

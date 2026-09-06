@@ -16,15 +16,14 @@ from __future__ import annotations
 import importlib
 
 import httpx
-from httpx import ASGITransport
 import pytest
+from httpx import ASGITransport
+
+from backend.tests.runtime_auth_helpers import install_session_store
 
 main = importlib.import_module("backend.web.main")
 teaching = importlib.import_module("backend.web.routes.teaching")
-
 pytestmark = pytest.mark.anyio("asyncio")
-
-from backend.tests.runtime_auth_helpers import install_session_store
 
 teaching_pkg = importlib.import_module("backend.web.routes.teaching")
 
@@ -46,7 +45,8 @@ async def test_members_limit_zero_uses_documented_default_10(monkeypatch: pytest
     teacher = store.create(sub="t-members-default-10", name="Teach", roles=["teacher"])
 
     # Keep this test deterministic and fully local (no Keycloak dependency).
-    resolve_names = lambda subs: {sid: f"Name:{sid}" for sid in subs}
+    def resolve_names(subs):
+        return {sid: f"Name:{sid}" for sid in subs}
     monkeypatch.setattr(teaching, "_resolve_student_names_runtime", resolve_names, raising=False)
     monkeypatch.setattr(teaching_pkg, "_resolve_student_names_runtime", resolve_names, raising=False)
 

@@ -7,10 +7,9 @@ import socket
 import subprocess
 import sys
 import time
-from urllib.error import HTTPError
 import urllib.request
+from urllib.error import HTTPError
 from uuid import uuid4
-
 
 REQUIRED_IMPORTS = (
     "backend.web.main",

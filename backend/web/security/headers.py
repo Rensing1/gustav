@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import os
+from collections.abc import Callable
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request

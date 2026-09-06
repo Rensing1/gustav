@@ -9,7 +9,6 @@ import pytest
 
 from backend.identity_access import directory
 
-
 # Route modules are loaded dynamically in adapter tests so the production
 # dependency graph remains visible to the import-boundary scanner.
 teaching = importlib.import_module("backend.web.routes.teaching")

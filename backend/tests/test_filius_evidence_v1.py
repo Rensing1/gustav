@@ -9,9 +9,8 @@ Intent:
 from __future__ import annotations
 
 import io
-from pathlib import Path
 import zipfile
-
+from pathlib import Path
 
 MINIMAL_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <java version="17" class="java.beans.XMLDecoder">

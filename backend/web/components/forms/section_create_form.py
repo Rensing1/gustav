@@ -2,9 +2,12 @@
 Section Creation Form Component
 """
 from typing import Optional
+
 from backend.web.components.base import Component
+
 from .fields import TextInputField
 from .submit import SubmitButton
+
 
 class SectionCreateForm(Component):
     """

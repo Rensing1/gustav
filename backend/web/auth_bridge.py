@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
-import logging
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse

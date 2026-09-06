@@ -10,7 +10,6 @@ import time
 
 from backend.web.auth_session import app_session_ttl_seconds
 
-
 _CSRF_BY_SESSION: dict[str, str] = {}
 _DEV_CSRF_SIGNING_SECRET = secrets.token_bytes(32)
 

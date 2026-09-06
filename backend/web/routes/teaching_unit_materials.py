@@ -28,14 +28,13 @@ from backend.web.routes.teaching_payloads import (
     MaterialUploadIntentPayload,
 )
 from backend.web.routes.teaching_serialization import _serialize_material
-from backend.web.simulation_player import build_simulation_response
 from backend.web.routes.teaching_shared import (
     _current_sub,
     _is_uuid_like,
     _json_private,
     _require_teacher,
 )
-
+from backend.web.simulation_player import build_simulation_response
 
 teaching_unit_materials_router = APIRouter(tags=["Teaching"])
 logger = logging.getLogger("gustav.web.teaching.materials")

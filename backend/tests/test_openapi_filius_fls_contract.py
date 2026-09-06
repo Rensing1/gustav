@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import yaml
 
-
 FILIUS_MIME = "application/x.filius.fls"
 
 

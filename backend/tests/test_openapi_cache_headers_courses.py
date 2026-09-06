@@ -8,6 +8,7 @@ Validates that 200 responses for GET /api/teaching/courses document a
 from __future__ import annotations
 
 from pathlib import Path
+
 import yaml
 
 

@@ -13,18 +13,18 @@ Notes:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse, Response, HTMLResponse, JSONResponse
-from urllib.parse import urlencode
+import logging
 import os
 import secrets
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from backend.identity_access.oidc import OIDCClient, OIDCConfig
 from backend.web.auth_session import SESSION_COOKIE_NAME, session_cookie_options
-import logging
 
 from .redirects import safe_inapp_path
-
 
 auth_router = APIRouter(tags=["Auth"])  # explicit paths, no prefix (align with OpenAPI)
 logger = logging.getLogger("gustav.web.auth")
@@ -506,8 +506,8 @@ def _default_app_base(redirect_uri: str) -> str:
         - On parsing issues, try environment fallbacks; finally use
           `https://app.localhost`.
     """
-    from urllib.parse import urlparse
     import os
+    from urllib.parse import urlparse
 
     # 1) Common case: strip /auth/callback suffix
     if isinstance(redirect_uri, str) and "/auth/callback" in redirect_uri:

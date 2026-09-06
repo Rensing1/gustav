@@ -8,10 +8,17 @@ Why:
 
 from __future__ import annotations
 
-from io import BytesIO
 import string
+from io import BytesIO
 
-from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
+from backend.storage.mime_types import (
+    FILIUS_FLS_MIME,
+    JPEG_MIME,
+    MAKECODE_HEX_MIME,
+    PDF_MIME,
+    PNG_MIME,
+    SCRATCH_SB3_MIME,
+)
 
 _ZIP_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
 _PRINTABLE_BYTES = set((string.printable + "\r\n\t").encode("ascii"))

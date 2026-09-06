@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import hashlib
 import os
-from pathlib import Path
 import sys
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -170,7 +170,9 @@ def test_stream_missing_file_is_transient(monkeypatch: pytest.MonkeyPatch, tmp_p
         "sha256": "f" * 64,
     }
 
-    from backend.learning.workers.process_learning_submission_jobs import VisionTransientError  # type: ignore
+    from backend.learning.workers.process_learning_submission_jobs import (
+        VisionTransientError,  # type: ignore
+    )
 
     with pytest.raises(VisionTransientError):
         adapter.extract(submission=submission, job_payload=job_payload)

@@ -1,3 +1,5 @@
+# Database availability is deliberately checked before importing worker fixtures.
+# ruff: noqa: E402
 """Worker test: submission in 'extracted' state should reach 'completed'."""
 from __future__ import annotations
 
@@ -16,11 +18,18 @@ pytest.importorskip("psycopg")
 pytestmark = pytest.mark.db_write
 import psycopg  # type: ignore  # noqa: E402
 
+from backend.learning.adapters.ports import (
+    FeedbackResult,
+)
+from backend.storage.config import (
+    get_submissions_bucket,
+)
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
-from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
-from backend.storage.config import get_submissions_bucket
+from backend.tests.utils.db_isolation import (  # noqa: E402
+    cleanup_learning_jobs_for_run,
+    current_test_run_id,
+)
 from backend.tests.utils.storage_fixtures import ensure_pdf_derivatives  # noqa: E402
-from backend.learning.adapters.ports import FeedbackResult
 
 
 def _dsn() -> str:

@@ -4,13 +4,12 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
-from hashlib import sha256 as calculate_sha256
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256 as calculate_sha256
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 from uuid import uuid4
 
-from backend.teaching.storage import StorageAdapterProtocol
 from backend.storage.config import (
     get_materials_bucket,
     get_materials_max_upload_bytes,
@@ -19,6 +18,7 @@ from backend.storage.config import (
 from backend.storage.keys import make_materials_key
 from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.teaching.services.simulation_validation import validate_simulation_html
+from backend.teaching.storage import StorageAdapterProtocol
 
 
 class MaterialsRepoProtocol(Protocol):

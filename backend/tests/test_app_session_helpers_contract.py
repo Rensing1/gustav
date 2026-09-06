@@ -6,7 +6,6 @@ import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APP_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "app.py"
 HELPERS_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "app_session_helpers.py"

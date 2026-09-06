@@ -17,10 +17,14 @@ from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import (
     _MODULAR_UNIT_CREATE_REQUIRED_METHODS,
-    _collect_unit_delete_storage_objects as _default_collect_unit_delete_storage_objects,
-    _delete_unit_storage_objects as _default_delete_unit_storage_objects,
     _get_repo,
     _require_modular_repo_methods,
+)
+from backend.web.routes.teaching import (
+    _collect_unit_delete_storage_objects as _default_collect_unit_delete_storage_objects,
+)
+from backend.web.routes.teaching import (
+    _delete_unit_storage_objects as _default_delete_unit_storage_objects,
 )
 from backend.web.routes.teaching_payloads import UnitCreatePayload, UnitUpdatePayload
 from backend.web.routes.teaching_serialization import _serialize_unit
@@ -32,7 +36,6 @@ from backend.web.routes.teaching_shared import (
     _require_teacher,
 )
 from backend.web.routes.teaching_validation import clamp_limit_offset as _clamp_limit_offset
-
 
 teaching_units_router = APIRouter(tags=["Teaching"])
 logger = logging.getLogger("gustav.web.teaching.units")

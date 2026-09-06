@@ -15,13 +15,12 @@ Security:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import io
 import re
 import zipfile
+from dataclasses import dataclass
 
 from backend.storage.config import get_learning_max_upload_bytes
-
 
 FILIUS_CONFIGURATION_PATH = "projekt/konfiguration.xml"
 

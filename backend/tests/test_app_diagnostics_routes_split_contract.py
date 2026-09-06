@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APP_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "app.py"
 DIAGNOSTICS_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "app_diagnostics_routes.py"

@@ -8,7 +8,6 @@ Why:
 
 from __future__ import annotations
 
-
 PDF_MIME = "application/pdf"
 PNG_MIME = "image/png"
 JPEG_MIME = "image/jpeg"

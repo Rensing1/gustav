@@ -10,7 +10,6 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-
 app_profile_router = APIRouter(tags=["App"])
 
 

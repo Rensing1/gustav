@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import pytest
 
-from backend.learning.workers.process_learning_submission_jobs import FeedbackResult, VisionResult, run_once
 from backend.learning.repo_db import DBLearningRepo
 from backend.learning.usecases.submissions import CreateSubmissionInput, CreateSubmissionUseCase
+from backend.learning.workers.process_learning_submission_jobs import (
+    FeedbackResult,
+    VisionResult,
+    run_once,
+)
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 from backend.tests.utils.db_isolation import current_test_run_id
 

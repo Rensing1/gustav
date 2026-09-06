@@ -8,7 +8,6 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-
 import backend.web.main as main  # type: ignore
 from backend.tests.runtime_auth_helpers import install_session_store
 

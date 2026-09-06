@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from dataclasses import replace
 import logging
 import smtplib
+from dataclasses import replace
+from datetime import datetime, timezone
 
 import pytest
 

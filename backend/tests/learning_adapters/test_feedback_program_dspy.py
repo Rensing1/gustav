@@ -13,8 +13,8 @@ Approach:
 
 from __future__ import annotations
 
-import sys
 import builtins
+import sys
 from importlib import import_module
 from types import SimpleNamespace
 

@@ -11,10 +11,10 @@ Why:
 from __future__ import annotations
 
 import os
+
 import pytest
 
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
-
 
 pytestmark = pytest.mark.db_write
 

@@ -47,7 +47,6 @@ from backend.web.routes.teaching_shared import (
 )
 from backend.web.routes.teaching_validation import canonical_uuid as _canonical_uuid
 
-
 teaching_unit_modules_router = APIRouter(tags=["Teaching"])
 _BOUND_TEACHING_MODULE = _sys.modules.get("backend.web.routes.teaching")
 

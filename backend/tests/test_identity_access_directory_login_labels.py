@@ -4,8 +4,9 @@ Identity Directory — login-label resolvers expose email localparts.
 from __future__ import annotations
 
 import threading
-import types
 import time
+import types
+
 import pytest
 
 

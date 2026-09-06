@@ -4,6 +4,7 @@ OpenAPI contract: Teaching visibility patch declares Cache-Control headers and C
 from __future__ import annotations
 
 from pathlib import Path
+
 import yaml
 
 

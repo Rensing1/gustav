@@ -13,15 +13,16 @@ from __future__ import annotations
 import importlib
 import logging
 import re
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
-main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_oidc_client, install_session_store
 from backend.web.auth_session import app_session_ttl_seconds
+
+main = importlib.import_module("backend.web.main")
 
 
 @pytest.fixture

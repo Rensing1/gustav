@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence
 import json
 import os
 import re
+from dataclasses import dataclass
+from typing import Any, List, Optional, Sequence
+
 from backend.learning import repo_course_unit_queries as _repo_course_unit_queries
 from backend.learning import repo_dialog_queries as _repo_dialog_queries
 from backend.learning import repo_history_worker_queries as _repo_history_worker_queries
@@ -16,19 +17,30 @@ from backend.learning import repo_submission_command_queries as _repo_submission
 from backend.learning import repo_submission_summary_queries as _repo_submission_summary_queries
 from backend.learning.repo_submission_mapping import (
     build_analysis_payload as _build_analysis_payload,
+)
+from backend.learning.repo_submission_mapping import (
     build_scores as _build_scores,
+)
+from backend.learning.repo_submission_mapping import (
     image_text_stub as _image_text_stub,
+)
+from backend.learning.repo_submission_mapping import (
     pdf_text_stub as _pdf_text_stub,
+)
+from backend.learning.repo_submission_mapping import (
     render_feedback as _render_feedback,
+)
+from backend.learning.repo_submission_mapping import (
     row_to_submission as _row_to_submission,
+)
+from backend.learning.repo_submission_mapping import (
     sanitize_error_message as _sanitize_error_message,  # noqa: F401
 )
 from backend.learning.submission_kind_policy import validate_task_submission_kind
 
 try:  # pragma: no cover -- optional dependency in some environments
     import psycopg
-    from psycopg import Connection
-    from psycopg import sql
+    from psycopg import Connection, sql
     from psycopg.types.json import Json
 
     HAVE_PSYCOPG = True

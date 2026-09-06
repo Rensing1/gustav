@@ -11,7 +11,6 @@ from __future__ import annotations
 import importlib
 import os
 
-
 _default_app_base = importlib.import_module("backend.web.routes.auth")._default_app_base
 
 

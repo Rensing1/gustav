@@ -16,7 +16,6 @@ from __future__ import annotations
 import logging
 import os
 
-
 _STARTUP_ATTEMPTED = False
 
 
@@ -42,8 +41,8 @@ def wire_supabase_adapter_if_configured() -> bool:
     try:
         # Lazy imports keep optional dependency out of non-storage paths.
         from backend.teaching.storage_supabase import SupabaseStorageAdapter  # type: ignore
-        from backend.web.routes import teaching as _teaching  # type: ignore
         from backend.web.routes import learning as _learning  # type: ignore
+        from backend.web.routes import teaching as _teaching  # type: ignore
 
         adapter = None
         # Preferred: use official client when key is a JWT (remote/prod)

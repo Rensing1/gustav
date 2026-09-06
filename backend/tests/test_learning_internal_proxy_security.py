@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+
 import httpx
 import pytest
 from httpx import ASGITransport
 from starlette.requests import Request as StarletteRequest
 
 from backend.tests.runtime_auth_helpers import install_session_store
-
 
 pytestmark = pytest.mark.anyio("asyncio")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

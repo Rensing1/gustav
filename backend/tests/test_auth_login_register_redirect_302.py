@@ -10,17 +10,15 @@ Covers /auth/login and /auth/register without HX-Request, verifying:
 
 from __future__ import annotations
 
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
-
-from backend.web.auth_only_app import create_app_auth_only
-from backend.identity_access.stores import StateStore
 from backend.identity_access.oidc import OIDCConfig
-
+from backend.identity_access.stores import StateStore
+from backend.web.auth_only_app import create_app_auth_only
 
 pytestmark = pytest.mark.anyio("asyncio")
 

@@ -1,13 +1,13 @@
-import os
-import sys
-import uuid
-from hashlib import sha256
+import importlib
 import json
 import lzma
+import os
 import struct
+import sys
 import tempfile
+import uuid
 import zipfile
-import importlib
+from hashlib import sha256
 
 import httpx
 import pytest
@@ -15,7 +15,6 @@ from httpx import ASGITransport
 
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.storage_fixtures import dummy_png_bytes
-
 
 pytestmark = pytest.mark.supabase_integration
 

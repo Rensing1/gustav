@@ -7,7 +7,6 @@ from typing import Any
 
 from backend.teaching.services.tasks import TasksService
 
-
 _repo_provider: Callable[[], Any] | None = None
 
 

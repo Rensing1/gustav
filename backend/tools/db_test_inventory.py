@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import argparse
 import ast
-from dataclasses import dataclass
-from pathlib import Path
 import re
 import sys
-
+from dataclasses import dataclass
+from pathlib import Path
 
 DB_TEST_INVENTORY_OK = "db-test-inventory-ok"
 

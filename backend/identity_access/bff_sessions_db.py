@@ -7,10 +7,10 @@ Why:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
 import re
 import time
+from dataclasses import dataclass
 
 try:
     import psycopg

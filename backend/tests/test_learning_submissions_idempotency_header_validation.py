@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import importlib
 import uuid
-import pytest
-import httpx
-from httpx import ASGITransport
 
+import httpx
+import pytest
+from httpx import ASGITransport
 
 pytestmark = pytest.mark.anyio("asyncio")
 

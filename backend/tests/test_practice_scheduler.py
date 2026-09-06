@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import math
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -13,7 +13,6 @@ from backend.learning.practice.scheduler import (
     classify_native,
     schedule,
 )
-
 
 UTC = timezone.utc
 BASE = datetime(2026, 8, 4, 8, 0, tzinfo=UTC)

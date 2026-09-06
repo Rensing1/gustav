@@ -14,7 +14,6 @@ from urllib.parse import quote, urlencode
 
 from .operations import course_operation
 
-
 Request = Callable[..., int]
 
 

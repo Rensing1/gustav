@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEACHING_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "teaching.py"
 HELPERS_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "teaching_validation.py"

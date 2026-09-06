@@ -8,7 +8,6 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-
 main = importlib.import_module("backend.web.main")
 app_routes = importlib.import_module("backend.web.routes.app")
 teacher_concern_routes = importlib.import_module("backend.web.routes.app_teacher_concern_routes")

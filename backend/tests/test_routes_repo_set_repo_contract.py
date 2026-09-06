@@ -54,6 +54,7 @@ def test_learning_set_repo_updates_existing_route_get_repo_after_reload():
     """Reloaded Learning modules must retarget old route globals to the current repo accessor."""
 
     import sys
+
     from fastapi.routing import APIRoute
     main = importlib.import_module("backend.web.main")
     original_learning = importlib.import_module("backend.web.routes.learning")
@@ -92,6 +93,7 @@ def test_teaching_set_storage_adapter_updates_existing_route_globals_after_reloa
     """Reloaded Teaching modules must still retarget already-registered route globals."""
 
     import sys
+
     from fastapi.routing import APIRoute
     main = importlib.import_module("backend.web.main")
     original_teaching = importlib.import_module("backend.web.routes.teaching")
@@ -134,6 +136,7 @@ def test_teaching_route_guard_uses_endpoint_repo_accessor_after_reload():
     """Teaching guard adapters must honor the repo accessor installed on route globals."""
 
     import uuid
+
     from fastapi.routing import APIRoute
     teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")
 

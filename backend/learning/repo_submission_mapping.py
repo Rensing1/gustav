@@ -13,7 +13,6 @@ import json
 import re
 from typing import Any, Iterable, Optional, Sequence
 
-
 ERROR_MAX_LENGTH = 256
 SENSITIVE_TOKEN_PATTERN = re.compile(r"(?i)(secret|token|password|key)[-_a-z0-9]*\s*[:=]\s*\S+")
 FILESYSTEM_PATH_PATTERN = re.compile(r"(?:[A-Za-z]:\\[^\s]+|/[^\s]+)")

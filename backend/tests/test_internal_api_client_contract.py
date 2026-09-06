@@ -14,7 +14,6 @@ from backend.web.internal_api import (
     teaching_internal_base,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

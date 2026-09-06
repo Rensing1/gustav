@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import importlib
 import os
-import pytest
+
 import httpx
+import pytest
 from httpx import ASGITransport
 
-from backend.tests.utils.fake_psycopg import install_fake_psycopg
 from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.fake_psycopg import install_fake_psycopg
 
 main = importlib.import_module("backend.web.main")
 

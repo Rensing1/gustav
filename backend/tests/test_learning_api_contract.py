@@ -14,15 +14,14 @@ from dataclasses import dataclass
 from typing import Sequence
 from uuid import uuid4
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
+from backend.identity_access.stores import SessionStore
+from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 from backend.tests.utils.storage_fixtures import dummy_jpeg_bytes, dummy_png_bytes
-from backend.tests.runtime_auth_helpers import install_session_store
-from backend.identity_access.stores import SessionStore
-
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
@@ -1231,7 +1230,8 @@ async def test_learning_material_file_routes_return_503_when_visibility_lookup_i
     async def _unexpected_download(**kwargs):  # noqa: ANN001
         raise AssertionError(f"material download should not start when lookup is unavailable: {kwargs}")
 
-    fake_repo_factory = lambda: type("_Repo", (), {"_dsn": ""})()
+    def fake_repo_factory():
+        return type("_Repo", (), {"_dsn": ""})()
     monkeypatch.setattr(learning, "_get_repo", fake_repo_factory)
     monkeypatch.setattr(learning, "_download_storage_object_via_presign", _unexpected_download)
 

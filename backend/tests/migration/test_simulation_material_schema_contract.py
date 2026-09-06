@@ -1,12 +1,11 @@
 """Migration contract for interactive simulation materials."""
 
+import os
 from pathlib import Path
 
-import os
 import pytest
 
 from backend.tests.utils.db import require_db_or_skip
-
 
 MIGRATION = Path("supabase/migrations/20260808180000_interactive_simulation_materials.sql")
 

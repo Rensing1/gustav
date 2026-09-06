@@ -5,12 +5,12 @@ Provides basic building blocks such as FormField and SubmitButton that are
 used inside task cards and dialogs.
 """
 
-from .fields import FormField, TextAreaField, FileUploadField, TextInputField
-from .submit import SubmitButton
 from .course_create_form import CourseCreateForm
+from .fields import FileUploadField, FormField, TextAreaField, TextInputField
+from .section_create_form import SectionCreateForm
+from .submit import SubmitButton
 from .unit_create_form import UnitCreateForm
 from .unit_edit_form import UnitEditForm
-from .section_create_form import SectionCreateForm
 
 __all__ = [
     "FormField",

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import importlib
-import httpx
 import logging
+
+import httpx
 import pytest
 from httpx import ASGITransport
 

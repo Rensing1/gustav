@@ -13,10 +13,10 @@ Scope:
 """
 from __future__ import annotations
 
+import logging
 import types
 
 import pytest
-import logging
 
 
 @pytest.mark.anyio

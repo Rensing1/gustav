@@ -13,8 +13,8 @@ Then:
 from __future__ import annotations
 
 import types
-import pytest
 
+import pytest
 
 pytestmark = pytest.mark.anyio("asyncio")
 

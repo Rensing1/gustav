@@ -12,8 +12,8 @@ Defaults:
 """
 from __future__ import annotations
 
-import os
 import ipaddress
+import os
 from urllib.parse import parse_qsl, urlparse
 
 import pytest

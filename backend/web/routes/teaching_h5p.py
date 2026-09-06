@@ -11,17 +11,16 @@ from __future__ import annotations
 
 import logging
 import os
-from urllib.parse import urlsplit
 from typing import Any
+from urllib.parse import urlsplit
 
+import httpx
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
-import httpx
 from pydantic import BaseModel
 
-from backend.web.routes import teaching_authoring
-from backend.web.routes import teaching_task_services
-from backend.web.routes import teaching_guards
+from backend.web.routes import teaching_authoring, teaching_guards, teaching_task_services
+from backend.web.routes.teaching_serialization import _serialize_task
 from backend.web.routes.teaching_shared import (
     _current_sub,
     _is_uuid_like,
@@ -29,8 +28,6 @@ from backend.web.routes.teaching_shared import (
     _private_error,
     _require_teacher,
 )
-from backend.web.routes.teaching_serialization import _serialize_task
-
 
 teaching_h5p_router = APIRouter(tags=["Teaching"])
 logger = logging.getLogger("gustav.web.teaching.h5p")

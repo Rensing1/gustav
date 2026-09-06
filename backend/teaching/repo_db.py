@@ -11,28 +11,28 @@ Design:
 """
 from __future__ import annotations
 
-from functools import wraps
-import sys
-from typing import Any, List, Tuple, Optional, Dict, Sequence
+import logging
 import os
 import re
-import logging
+import sys
 from datetime import datetime
+from functools import wraps
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
-from backend.teaching import repo_row_mappers as _repo_row_mappers
-from backend.teaching import repo_live_queries as _repo_live_queries
+from backend.teaching import repo_ai_usage_queries as _repo_ai_usage_queries
+from backend.teaching import repo_concern_box_queries as _repo_concern_box_queries
+from backend.teaching import repo_course_lifecycle_queries as _repo_course_lifecycle_queries
+from backend.teaching import repo_course_module_queries as _repo_course_module_queries
 from backend.teaching import repo_invitation_queries as _repo_invitation_queries
+from backend.teaching import repo_live_queries as _repo_live_queries
 from backend.teaching import repo_material_queries as _repo_material_queries
 from backend.teaching import repo_member_queries as _repo_member_queries
+from backend.teaching import repo_row_mappers as _repo_row_mappers
 from backend.teaching import repo_section_queries as _repo_section_queries
-from backend.teaching import repo_unit_queries as _repo_unit_queries
-from backend.teaching import repo_course_module_queries as _repo_course_module_queries
-from backend.teaching import repo_course_lifecycle_queries as _repo_course_lifecycle_queries
-from backend.teaching import repo_concern_box_queries as _repo_concern_box_queries
-from backend.teaching import repo_ai_usage_queries as _repo_ai_usage_queries
 from backend.teaching import repo_task_queries as _repo_task_queries
 from backend.teaching import repo_unit_module_queries as _repo_unit_module_queries
+from backend.teaching import repo_unit_queries as _repo_unit_queries
 from backend.teaching.errors import TeachingRepositoryUnavailable
 
 try:

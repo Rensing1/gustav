@@ -11,9 +11,9 @@ Covers:
 
 from __future__ import annotations
 
+import builtins
 import sys
 from types import SimpleNamespace
-import builtins
 
 import pytest
 

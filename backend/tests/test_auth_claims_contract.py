@@ -11,7 +11,6 @@ from backend.web.auth_claims import (
     user_context_from_claims,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

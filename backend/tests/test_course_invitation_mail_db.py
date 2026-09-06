@@ -16,7 +16,6 @@ from backend.teaching.course_invitations import recipient_digest
 from backend.teaching.repo_db import DBTeachingRepo
 from backend.tests.utils.db import require_db_or_skip
 
-
 pytestmark = pytest.mark.db_write
 
 SERVICE_DSN = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"

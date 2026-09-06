@@ -31,7 +31,6 @@ from urllib.parse import urlsplit
 
 import requests
 
-
 LOG = logging.getLogger("gustav.tools.keycloak_admin_sync")
 
 LOCAL_KC_HOSTS = {

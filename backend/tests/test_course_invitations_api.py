@@ -22,7 +22,6 @@ from backend.teaching.repo_db import DBTeachingRepo
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip
 
-
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 main = importlib.import_module("backend.web.main")

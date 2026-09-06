@@ -9,7 +9,6 @@ from fastapi import Response
 
 from backend.web.auth_utils import cookie_opts
 
-
 SESSION_COOKIE_NAME = "gustav_session"
 logger = logging.getLogger("gustav.identity_access")
 

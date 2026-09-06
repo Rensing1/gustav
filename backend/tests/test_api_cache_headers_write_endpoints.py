@@ -11,17 +11,15 @@ from __future__ import annotations
 
 import importlib
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
 
 pytestmark = pytest.mark.anyio("asyncio")
-
-
 main = importlib.import_module("backend.web.main")
 teaching = importlib.import_module("backend.web.routes.teaching")
-from backend.tests.runtime_auth_helpers import install_session_store
 
 
 async def _client() -> httpx.AsyncClient:

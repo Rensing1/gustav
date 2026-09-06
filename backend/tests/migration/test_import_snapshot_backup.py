@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import io
 import gzip
+import io
 import tarfile
 from pathlib import Path
 

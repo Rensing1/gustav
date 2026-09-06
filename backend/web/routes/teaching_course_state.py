@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import time
 
-
 RECENTLY_DELETED_TTL_SECONDS = 15.0
 _RECENTLY_DELETED_BY: dict[str, dict[str, float]] = {}
 

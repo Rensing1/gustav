@@ -7,13 +7,20 @@ specialized validators.
 
 from __future__ import annotations
 
-from io import BytesIO
 import zipfile
+from io import BytesIO
 
 import pytest
 from PIL import Image
 
-from backend.storage.mime_types import FILIUS_FLS_MIME, JPEG_MIME, MAKECODE_HEX_MIME, PDF_MIME, PNG_MIME, SCRATCH_SB3_MIME
+from backend.storage.mime_types import (
+    FILIUS_FLS_MIME,
+    JPEG_MIME,
+    MAKECODE_HEX_MIME,
+    PDF_MIME,
+    PNG_MIME,
+    SCRATCH_SB3_MIME,
+)
 
 
 def _png_bytes() -> bytes:

@@ -7,9 +7,9 @@ subset of SQL used by DBSessionStore tests (INSERT/SELECT/DELETE).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import time
 import types
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 

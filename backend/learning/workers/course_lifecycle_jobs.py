@@ -21,7 +21,6 @@ from typing import Any
 
 import psycopg
 
-
 LOG = logging.getLogger(__name__)
 EXPORT_STORAGE_BUCKET = "learning-exports"
 
@@ -38,6 +37,7 @@ def build_storage_adapter_from_env():
     if not base_url or not service_key:
         return None
     from storage3._sync.client import SyncStorageClient
+
     from backend.teaching.storage_supabase import SupabaseStorageAdapter
 
     client = SyncStorageClient(

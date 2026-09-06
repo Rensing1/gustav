@@ -8,11 +8,11 @@ Why:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
-from typing import Dict, Optional
 import secrets
 import time
+from dataclasses import dataclass
+from typing import Dict, Optional
 
 
 def _now() -> int:

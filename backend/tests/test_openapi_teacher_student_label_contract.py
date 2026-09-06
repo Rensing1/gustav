@@ -6,7 +6,6 @@ from pathlib import Path
 
 import yaml
 
-
 SPEC_PATH = Path(__file__).resolve().parents[2] / "api" / "openapi.yml"
 
 

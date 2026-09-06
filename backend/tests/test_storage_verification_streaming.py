@@ -11,9 +11,9 @@ from typing import Any, Dict
 
 import pytest
 
-from backend.storage.verification import verify_storage_object_integrity
 import backend.storage.verification as verification
 from backend.storage.learning_policy import VerificationConfig
+from backend.storage.verification import verify_storage_object_integrity
 from backend.teaching.storage import StorageAdapterProtocol
 
 

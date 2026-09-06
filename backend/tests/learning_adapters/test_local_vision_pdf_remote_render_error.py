@@ -9,8 +9,8 @@ Expected:
 from __future__ import annotations
 
 import importlib
-from types import SimpleNamespace
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -21,6 +21,7 @@ def test_pdf_remote_render_error_transient(tmp_path, monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
     # Ensure supabase.local resolves to a private host for HTTP fetches
     import socket
+
     import backend.learning.adapters.local_vision as local_vision  # type: ignore
 
     monkeypatch.setattr(

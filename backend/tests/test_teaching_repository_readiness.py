@@ -27,7 +27,6 @@ from backend.web.runtime_errors import (
     install_runtime_error_handlers,
 )
 
-
 teaching = importlib.import_module("backend.web.routes.teaching")
 basic_pages = importlib.import_module("backend.web.routes.basic_pages")
 teaching_repo_db = importlib.import_module("backend.teaching.repo_db")

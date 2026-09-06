@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import importlib
 import uuid
+
 import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.teaching.storage import StorageAdapterProtocol
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
-from backend.teaching.storage import StorageAdapterProtocol
 
 main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import inspect
 import importlib
+import inspect
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

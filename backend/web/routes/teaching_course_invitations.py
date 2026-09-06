@@ -31,7 +31,6 @@ from backend.web.routes.teaching_payloads import (
 )
 from backend.web.routes.teaching_shared import _current_sub, _json_private, _private_error, _role_in
 
-
 teaching_course_invitations_router = APIRouter(tags=["Teaching"])
 
 

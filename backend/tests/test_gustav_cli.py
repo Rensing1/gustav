@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import stat
-import hashlib
 from urllib.error import HTTPError
 
 import pytest

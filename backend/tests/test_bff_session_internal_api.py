@@ -9,16 +9,15 @@ Why:
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from httpx import ASGITransport
-from types import SimpleNamespace
 
-
-main = importlib.import_module("backend.web.main")
 from backend.identity_access.bff_sessions import BFFSessionStore
 
+main = importlib.import_module("backend.web.main")
 
 pytestmark = pytest.mark.anyio("asyncio")
 

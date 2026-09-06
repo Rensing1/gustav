@@ -7,6 +7,7 @@ to ensure consistent client generation for CSV semantics.
 from __future__ import annotations
 
 from pathlib import Path
+
 import yaml
 
 

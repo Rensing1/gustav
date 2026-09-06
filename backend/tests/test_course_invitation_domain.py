@@ -14,7 +14,6 @@ from backend.teaching.course_invitations import (
     recipient_digest,
 )
 
-
 SECRET = "test-course-invitation-secret-that-is-long-enough"
 
 

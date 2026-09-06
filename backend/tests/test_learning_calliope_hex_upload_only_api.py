@@ -12,23 +12,22 @@ Intent:
 
 from __future__ import annotations
 
-from hashlib import sha256
 import importlib
 import json
 import lzma
-from pathlib import Path
 import struct
 import tempfile
 import uuid
+from hashlib import sha256
+from pathlib import Path
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
-
-from backend.tests.runtime_auth_helpers import install_session_store
 from backend.teaching.storage import StorageAdapterProtocol
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")
@@ -139,8 +138,8 @@ async def _prepare_task_fixture(
     teaching = importlib.import_module("backend.web.routes.teaching")
 
     try:
-        from backend.teaching.repo_db import DBTeachingRepo
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
+        from backend.teaching.repo_db import DBTeachingRepo
 
         assert isinstance(teaching.REPO, DBTeachingRepo)
         assert isinstance(learning.REPO, DBLearningRepo)

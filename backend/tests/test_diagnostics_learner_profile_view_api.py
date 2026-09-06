@@ -5,9 +5,8 @@ from __future__ import annotations
 import importlib
 
 import httpx
-from httpx import ASGITransport
 import pytest
-
+from httpx import ASGITransport
 
 main = importlib.import_module("backend.web.main")
 app_routes = importlib.import_module("backend.web.routes.app")

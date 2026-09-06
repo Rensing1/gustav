@@ -9,11 +9,10 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
 
 main = importlib.import_module("backend.web.main")
 teaching_routes = importlib.import_module("backend.web.routes.teaching")
-from backend.tests.runtime_auth_helpers import install_session_store
-
 
 pytestmark = pytest.mark.anyio("asyncio")
 

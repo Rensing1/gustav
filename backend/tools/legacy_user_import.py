@@ -30,7 +30,6 @@ from uuid import UUID
 import psycopg
 import requests
 
-
 logger = logging.getLogger("gustav.tools.legacy_import")
 
 

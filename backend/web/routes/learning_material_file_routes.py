@@ -24,7 +24,6 @@ from backend.web.material_file_access import (
 )
 from backend.web.simulation_player import build_simulation_response
 
-
 learning_material_file_router = APIRouter(tags=["Learning"])
 
 

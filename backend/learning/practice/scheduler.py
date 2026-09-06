@@ -8,10 +8,9 @@ Why:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-import math
-
 
 SCHEDULER_VERSION = "gustav-practice-v1"
 SECONDS_PER_DAY = 86_400

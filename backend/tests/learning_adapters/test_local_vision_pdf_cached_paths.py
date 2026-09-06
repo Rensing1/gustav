@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import base64
 import importlib
-from io import BytesIO
-from contextlib import contextmanager
-from types import SimpleNamespace
 import sys
+from contextlib import contextmanager
+from io import BytesIO
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image

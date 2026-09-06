@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from http.cookies import SimpleCookie
+from pathlib import Path
 
 from starlette.responses import Response
 
@@ -14,7 +14,6 @@ from backend.web.auth_session import (
     session_cookie_options,
     set_session_cookie,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

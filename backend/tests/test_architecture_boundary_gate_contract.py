@@ -9,15 +9,14 @@ Why:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 from backend.tools import architecture_boundary_scan
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = REPO_ROOT / "Makefile"

@@ -8,10 +8,9 @@ Why:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import random
+from dataclasses import dataclass, field
 from typing import Protocol, Sequence
-
 
 MAX_SELECTED_STACKS = 50
 MAX_SESSION_ITEMS = 1000

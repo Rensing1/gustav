@@ -14,12 +14,12 @@ Usage:
 """
 from __future__ import annotations
 
+import inspect
+import logging
 import os
 from typing import Iterable
-import inspect
 
 import requests
-import logging
 
 from backend.storage.config import get_submissions_bucket
 

@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 MIGRATION = Path("supabase/migrations/20260812123000_practice_completion_helpers.sql")
 
 

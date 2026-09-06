@@ -8,10 +8,10 @@ Intent:
 
 from __future__ import annotations
 
-from hashlib import sha256
 import io
-from pathlib import Path
 import zipfile
+from hashlib import sha256
+from pathlib import Path
 
 import pytest
 
@@ -19,7 +19,6 @@ pytest.importorskip("psycopg")
 
 from backend.learning.workers.process_learning_submission_jobs import VisionResult  # type: ignore
 from backend.storage.config import get_submissions_bucket
-
 
 FILIUS_MIME = "application/x.filius.fls"
 XML = b"""<?xml version="1.0" encoding="UTF-8"?>

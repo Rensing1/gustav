@@ -16,7 +16,6 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-
 learning_portfolio_router = APIRouter(tags=["Learning"])
 
 

@@ -11,16 +11,15 @@ Why:
 from __future__ import annotations
 
 import importlib
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
-
-main = importlib.import_module("backend.web.main")
 from backend.identity_access.oidc import OIDCConfig
 
+main = importlib.import_module("backend.web.main")
 
 pytestmark = pytest.mark.anyio("asyncio")
 

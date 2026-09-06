@@ -8,9 +8,9 @@ PostgreSQL fixtures.
 from __future__ import annotations
 
 import importlib
+import uuid
 from pathlib import Path
 from typing import Any, Iterable, Optional
-import uuid
 
 from backend.learning.repo_db import DBLearningRepo
 

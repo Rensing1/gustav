@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import importlib
 
-from fastapi import FastAPI, Request
-from httpx import ASGITransport
 import httpx
 import pytest
+from fastapi import FastAPI, Request
+from httpx import ASGITransport
 
 practice = importlib.import_module("backend.web.routes.practice")
 

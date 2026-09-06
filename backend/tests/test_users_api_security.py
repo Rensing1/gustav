@@ -6,13 +6,12 @@ enforced. Directory backend is not exercised (returns empty list on success).
 """
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
 import backend.web.main as main  # type: ignore  # noqa: E402
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-
 
 pytestmark = pytest.mark.anyio("asyncio")
 

@@ -10,17 +10,16 @@ for development; in production we may want to back the cache with Redis.
 """
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from typing import Dict, Tuple
-import time
 
 import requests
 from jose import jwt
 from jose.exceptions import JOSEError
 
 from .oidc import OIDCConfig
-
-import logging
 
 logger = logging.getLogger("gustav.identity_access.tokens")
 

@@ -26,7 +26,6 @@ from urllib.parse import urljoin
 import pytest
 import requests
 
-
 pytestmark = pytest.mark.e2e
 
 WEB_BASE = os.getenv("WEB_BASE", "https://app.localhost").rstrip("/")

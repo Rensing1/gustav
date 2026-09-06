@@ -15,12 +15,15 @@ import sys as _sys
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from backend.web.security.guards import has_any_role
 from backend.web.routes import teaching as teaching_routes
 from backend.web.routes import teaching_guards
 from backend.web.routes.app_session_helpers import (
     current_user as _current_user,
+)
+from backend.web.routes.app_session_helpers import (
     private_headers as _private_headers,
+)
+from backend.web.routes.app_session_helpers import (
     user_payload as _user_payload,
 )
 from backend.web.routes.app_teacher_course_routes import _get_teacher_course
@@ -29,7 +32,7 @@ from backend.web.routes.app_teacher_unit_routes import (
     _find_course_unit,
     _list_teacher_course_units,
 )
-
+from backend.web.security.guards import has_any_role
 
 app_live_router = APIRouter(tags=["App"])
 

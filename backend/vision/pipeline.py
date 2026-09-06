@@ -11,16 +11,18 @@ Design goals:
 
 from __future__ import annotations
 
-from typing import List, Tuple, TYPE_CHECKING
 from io import BytesIO
+from typing import TYPE_CHECKING, List, Tuple
+
 from PIL import Image
+
 from . import pdf_renderer as _pdf
 
 if TYPE_CHECKING:  # only for type checkers; avoid import-time coupling in tests
     from .pdf_renderer import RenderMeta, RenderPage  # pragma: no cover
 
-from .pdf_renderer import RenderMeta, RenderPage
 from .image_preprocess import preprocess as _preprocess
+from .pdf_renderer import RenderMeta, RenderPage
 
 
 def process_pdf_bytes(pdf_bytes: bytes) -> Tuple[List["RenderPage"], "RenderMeta"]:

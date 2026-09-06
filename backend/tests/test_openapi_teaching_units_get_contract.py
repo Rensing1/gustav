@@ -8,6 +8,7 @@ authorOnly semantics for permissions.
 from __future__ import annotations
 
 from pathlib import Path
+
 import yaml
 
 

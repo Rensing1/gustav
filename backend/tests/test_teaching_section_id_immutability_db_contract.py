@@ -14,7 +14,6 @@ import os
 
 import pytest
 
-
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 

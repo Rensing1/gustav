@@ -1,6 +1,9 @@
 import pytest
 
-from backend.learning.usecases.submissions import FinalizeLatestDraftInput, FinalizeLatestDraftUseCase
+from backend.learning.usecases.submissions import (
+    FinalizeLatestDraftInput,
+    FinalizeLatestDraftUseCase,
+)
 
 
 class RecordingRepo:

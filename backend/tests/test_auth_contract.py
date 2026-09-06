@@ -8,22 +8,27 @@ interactions (Keycloak) are not performed here; we only assert HTTP contracts.
 
 import base64
 import importlib
+import time
+import types
 from http.cookies import SimpleCookie
+from typing import Callable, Dict
 from urllib.parse import parse_qs, urlparse
 
-import pytest
 import httpx
-from httpx import ASGITransport
-import time
-from typing import Dict, Callable
-from jose import jwt
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-import types
+import pytest
 import requests
 import yaml
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from httpx import ASGITransport
+from jose import jwt
 
-from backend.tests.runtime_auth_helpers import install_oidc_client, install_oidc_config, install_session_store, install_state_store
+from backend.tests.runtime_auth_helpers import (
+    install_oidc_client,
+    install_oidc_config,
+    install_session_store,
+    install_state_store,
+)
 
 TEST_ISSUER = "http://keycloak:8080/realms/gustav"
 TEST_AUDIENCE = "gustav-web"
@@ -198,8 +203,9 @@ async def test_login_redirect():
 @pytest.mark.anyio
 async def test_login_dynamic_redirect_respects_whitelist(monkeypatch: pytest.MonkeyPatch):
     """When Host matches WEB_BASE/redirect_uri host, use dynamic redirect_uri."""
+    from urllib.parse import parse_qs, urlparse
+
     from backend.identity_access.oidc import OIDCConfig
-    from urllib.parse import urlparse, parse_qs
 
     test_cfg = OIDCConfig(
         base_url="http://kc.example:8080",
@@ -224,8 +230,9 @@ async def test_login_dynamic_redirect_respects_whitelist(monkeypatch: pytest.Mon
 @pytest.mark.anyio
 async def test_login_dynamic_redirect_falls_back_on_mismatch(monkeypatch: pytest.MonkeyPatch):
     """When Host differs, fall back to configured redirect_uri (avoid IdP errors)."""
+    from urllib.parse import parse_qs, urlparse
+
     from backend.identity_access.oidc import OIDCConfig
-    from urllib.parse import urlparse, parse_qs
 
     static_redirect = "http://app.localhost:8100/auth/callback"
     test_cfg = OIDCConfig(
@@ -305,8 +312,9 @@ async def test_forgot_redirect_prefers_public_base_url(monkeypatch: pytest.Monke
 @pytest.mark.anyio
 async def test_forgot_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyPatch):
     """Forgot redirect forwards login_hint as query param."""
+    from urllib.parse import parse_qs, urlparse
+
     from backend.identity_access.oidc import OIDCConfig
-    from urllib.parse import urlparse, parse_qs
 
     test_cfg = OIDCConfig(
         base_url="http://kc.example:8080",
@@ -692,8 +700,9 @@ async def test_register_redirect_forwards_login_hint(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.anyio
 async def test_register_callback_redirects_to_safe_in_app_target(monkeypatch: pytest.MonkeyPatch):
-    import backend.web.main as main  # type: ignore  # noqa: E402
     from urllib.parse import parse_qs, urlparse
+
+    import backend.web.main as main  # type: ignore  # noqa: E402
 
     class FakeOIDC:
         def __init__(self):

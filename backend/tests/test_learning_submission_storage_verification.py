@@ -9,24 +9,24 @@ from __future__ import annotations
 
 import importlib
 import tempfile
+import uuid
 from contextlib import contextmanager
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 from PIL import Image
 
-import uuid
+from backend.teaching.storage import StorageAdapterProtocol
+from backend.tests.runtime_auth_helpers import install_session_store
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")
-from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-from backend.teaching.storage import StorageAdapterProtocol
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
 
 
 class FakeStorageAdapter(StorageAdapterProtocol):

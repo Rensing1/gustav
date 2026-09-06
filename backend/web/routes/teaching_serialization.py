@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 import hashlib
+import logging
 from dataclasses import asdict, is_dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
-
 
 logger = logging.getLogger("gustav.web.teaching.serialization")
 

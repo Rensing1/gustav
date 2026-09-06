@@ -7,6 +7,7 @@ document privacy headers for 200 responses.
 from __future__ import annotations
 
 from pathlib import Path
+
 import yaml
 
 

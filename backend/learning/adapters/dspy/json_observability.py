@@ -80,6 +80,8 @@ def build_json_adapter(*, stage: str):  # type: ignore[no-untyped-def]
         from dspy.adapters.chat_adapter import ChatAdapter
         from dspy.adapters.json_adapter import (
             JSONAdapter as _DSPYJSONAdapter,
+        )
+        from dspy.adapters.json_adapter import (
             _has_open_ended_mapping,
         )
         from dspy.adapters.types.tool import ToolCalls

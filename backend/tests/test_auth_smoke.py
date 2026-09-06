@@ -11,7 +11,6 @@ from httpx import ASGITransport
 
 from backend.web.auth_only_app import create_app_auth_only
 
-
 pytestmark = pytest.mark.anyio("asyncio")
 
 

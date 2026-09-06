@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import importlib
+from datetime import datetime, timezone
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.tests.runtime_auth_helpers import install_session_store
 
 main = importlib.import_module("backend.web.main")
 app_routes = importlib.import_module("backend.web.routes.app")
-from backend.tests.runtime_auth_helpers import install_session_store
-
 
 pytestmark = pytest.mark.anyio("asyncio")
 

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
-import os
 
 from backend.identity_access.bff_sessions import BFFSessionStore
 from backend.identity_access.cli_tokens import DBCLITokenStore, InMemoryCLITokenStore

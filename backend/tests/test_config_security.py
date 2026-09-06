@@ -239,8 +239,9 @@ async def test_prod_requires_storage_verify_and_disables_proxy(monkeypatch: pyte
     )
     monkeypatch.delenv("REQUIRE_STORAGE_VERIFY", raising=False)
 
-    from backend.web import config as cfg  # type: ignore
     import importlib
+
+    from backend.web import config as cfg  # type: ignore
     importlib.reload(cfg)
 
     # 1) REQUIRE_STORAGE_VERIFY missing/false must raise
@@ -287,8 +288,9 @@ async def test_prod_forbids_auto_create_storage_buckets(monkeypatch: pytest.Monk
     # The new guard must reject this setting in prod-like envs
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "true")
 
-    from backend.web import config as cfg  # type: ignore
     import importlib
+
+    from backend.web import config as cfg  # type: ignore
     importlib.reload(cfg)
     with pytest.raises(SystemExit):
         cfg.ensure_secure_config_on_startup()

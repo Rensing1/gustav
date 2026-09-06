@@ -8,23 +8,23 @@ Why:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import random
 import secrets
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.types.json import Jsonb
 
-from backend.learning.repo_db import _dsn as learning_dsn
-from backend.learning.practice.service import ActivePracticeSessionError
 from backend.learning.practice.scheduler import (
     PreviousPracticeState,
     classify_h5p,
     schedule,
     scheduler_classification,
 )
+from backend.learning.practice.service import ActivePracticeSessionError
+from backend.learning.repo_db import _dsn as learning_dsn
 
 
 def _uuid(value: str) -> str:

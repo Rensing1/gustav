@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import hmac
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode, urlparse
-import hmac
-import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from backend.identity_access.domain import ALLOWED_ROLES
 from backend.web.auth_claims import primary_role, user_context_from_claims
-from backend.web.auth_flow import auth_failure_path_class, auth_failure_reason, requires_bff_bearer_auth
+from backend.web.auth_flow import (
+    auth_failure_path_class,
+    auth_failure_reason,
+    requires_bff_bearer_auth,
+)
 from backend.web.auth_session import SESSION_COOKIE_NAME
 from backend.web.cli_capabilities import cli_capability_for_request
 from backend.web.legacy_retirement import retired_legacy_product_response

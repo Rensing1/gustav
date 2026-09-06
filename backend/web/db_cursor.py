@@ -16,7 +16,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Any, Iterator, Tuple
 
-
 try:
     import psycopg  # type: ignore
 except Exception:  # pragma: no cover - defensive, exercised in tests when mocked

@@ -9,6 +9,7 @@ KISS behavior:
 from __future__ import annotations
 
 from io import BytesIO
+
 from PIL import Image
 
 from backend.vision.pipeline import stitch_images_vertically

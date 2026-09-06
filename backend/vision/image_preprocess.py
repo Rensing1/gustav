@@ -13,6 +13,7 @@ Design:
 """
 
 from typing import Optional
+
 from PIL import Image, ImageFilter, ImageOps
 
 

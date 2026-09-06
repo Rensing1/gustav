@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import base64
 import importlib
+import sys
 from contextlib import contextmanager
 from types import SimpleNamespace
-import sys
 
 import pytest
 
@@ -30,6 +30,7 @@ from backend.learning.workers.process_learning_submission_jobs import (  # type:
     VisionTransientError,
 )
 from backend.tests.utils.storage_fixtures import dummy_png_bytes, write_dummy_png
+
 
 def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
     class _FakeLM:

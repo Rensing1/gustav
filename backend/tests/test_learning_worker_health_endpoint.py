@@ -14,9 +14,8 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from backend.tests.runtime_auth_helpers import install_session_store
-
 from backend.learning.workers import health as worker_health
+from backend.tests.runtime_auth_helpers import install_session_store
 
 main = importlib.import_module("backend.web.main")
 

@@ -4,18 +4,18 @@ Teaching API — Update & Delete courses (owner checks, validation)
 from __future__ import annotations
 
 import importlib
-import pytest
+
 import httpx
+import pytest
 from httpx import ASGITransport
 
-
-pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
-
-
-main = importlib.import_module("backend.web.main")
+from backend.teaching.repo_db import DBTeachingRepo
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
-from backend.teaching.repo_db import DBTeachingRepo
+
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
+main = importlib.import_module("backend.web.main")
+
 teaching = importlib.import_module("backend.web.routes.teaching")
 
 

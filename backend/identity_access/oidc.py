@@ -12,11 +12,11 @@ client does not manage persistence.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import os
 from dataclasses import dataclass
 from typing import Dict, Optional
-import hashlib
-import base64
-import os
 from urllib.parse import urlencode
 
 # Small indirection to ease monkeypatching in tests

@@ -27,7 +27,6 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-
 EVIDENCE_SCHEMA_V2 = "scratch.evidence.v2"
 
 _NUM_RE = re.compile(r"^-?(?:0|[1-9]\d*)(?:\.\d+)?$")

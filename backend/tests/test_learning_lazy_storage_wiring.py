@@ -14,13 +14,12 @@ import sys
 import types
 import uuid
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
-
 
 pytestmark = pytest.mark.anyio("asyncio")
 

@@ -8,7 +8,6 @@ from pathlib import Path
 
 from fastapi.routing import APIRoute
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAIN_SOURCE = PROJECT_ROOT / "backend" / "web" / "main.py"
 

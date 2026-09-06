@@ -11,7 +11,6 @@ import pytest
 
 from backend.teaching.errors import TeachingRepositoryUnavailable
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REPO_SOURCE = PROJECT_ROOT / "backend" / "teaching" / "repo_db.py"
 LIVE_QUERIES_SOURCE = PROJECT_ROOT / "backend" / "teaching" / "repo_live_queries.py"

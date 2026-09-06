@@ -15,15 +15,14 @@ import uuid
 from hashlib import sha256
 from pathlib import Path
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
-
-
-pytestmark = pytest.mark.anyio("asyncio")
 
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.storage_fixtures import dummy_png_bytes
+
+pytestmark = pytest.mark.anyio("asyncio")
 
 main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")

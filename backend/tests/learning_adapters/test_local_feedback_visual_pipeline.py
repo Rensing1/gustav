@@ -12,11 +12,11 @@ from __future__ import annotations
 import base64
 import hashlib
 import importlib
-from io import BytesIO
-from pathlib import Path
 import random
 import struct
 import zlib
+from io import BytesIO
+from pathlib import Path
 
 import pytest
 from PIL import Image, ImageOps

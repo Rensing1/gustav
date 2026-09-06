@@ -15,13 +15,12 @@ Why:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import os
+from dataclasses import dataclass
 from typing import Iterable
 
 from backend.storage.makecode_hex_validation import MakeCodeProject
-
 
 EVIDENCE_SCHEMA_V1 = "makecode.evidence.v1"
 

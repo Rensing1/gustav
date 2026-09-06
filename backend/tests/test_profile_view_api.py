@@ -9,11 +9,10 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.identity_access.cli_tokens import InMemoryCLITokenStore
 
 main = importlib.import_module("backend.web.main")
 app_routes = importlib.import_module("backend.web.routes.app")
-from backend.identity_access.cli_tokens import InMemoryCLITokenStore
-
 
 pytestmark = pytest.mark.anyio("asyncio")
 

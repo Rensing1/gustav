@@ -3,8 +3,8 @@ import types
 import uuid
 from pathlib import Path
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
 from backend.tests.runtime_auth_helpers import install_session_store
@@ -32,7 +32,8 @@ def _patch_create_submission_dependencies(
     each distinct globals dictionary once.
     """
 
-    fake_get_repo = lambda: fake_repo
+    def fake_get_repo():
+        return fake_repo
     learning_routes = importlib.import_module("backend.web.routes.learning")
     patched_learning_module = False
     for route in main.app.routes:

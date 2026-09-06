@@ -12,7 +12,11 @@ from backend.learning.adapters.dspy.signatures import (
     VisualFeedbackNoCriteriaSignature,
     VisualFeedbackSynthesisSignature,
 )
-from backend.learning.adapters.dspy.types import CriteriaAnalysis, CriterionResult, LeanCriterionResult
+from backend.learning.adapters.dspy.types import (
+    CriteriaAnalysis,
+    CriterionResult,
+    LeanCriterionResult,
+)
 
 
 def _ensure_lean_criteria_results(value: Any) -> list[LeanCriterionResult]:

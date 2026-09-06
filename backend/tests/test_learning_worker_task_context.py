@@ -1,18 +1,20 @@
+# Database availability is deliberately checked before importing worker fixtures.
+# ruff: noqa: E402
 """
 Worker should pass task context (instruction + teacher-only AI context) to the
 Feedback adapter when supported.
 """
 from __future__ import annotations
 
+import importlib
 import json
 import os
-import importlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Sequence
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
 pytest.importorskip("psycopg")
@@ -20,8 +22,6 @@ pytestmark = pytest.mark.db_write
 import psycopg  # type: ignore  # noqa: E402
 
 main = importlib.import_module("backend.web.main")
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
-from backend.teaching.repo_db import DBTeachingRepo
 from backend.learning.repo_db import DBLearningRepo  # noqa: E402
 from backend.learning.usecases.submissions import (  # noqa: E402
     CreateSubmissionInput,
@@ -32,9 +32,18 @@ from backend.learning.workers.process_learning_submission_jobs import (  # noqa:
     VisionResult,
     run_once,
 )
-from backend.tests.test_learning_api_contract import _prepare_learning_fixture  # type: ignore  # noqa: E402
-from backend.tests.utils.db_isolation import cleanup_learning_jobs_for_run, current_test_run_id  # noqa: E402
+from backend.teaching.repo_db import (
+    DBTeachingRepo,
+)
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
+from backend.tests.test_learning_api_contract import (
+    _prepare_learning_fixture,  # type: ignore  # noqa: E402
+)
+from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip  # noqa: E402
+from backend.tests.utils.db_isolation import (  # noqa: E402
+    cleanup_learning_jobs_for_run,
+    current_test_run_id,
+)
 
 
 async def _client() -> httpx.AsyncClient:

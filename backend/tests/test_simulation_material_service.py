@@ -7,7 +7,6 @@ import pytest
 
 from backend.teaching.services.materials import MaterialsService
 
-
 HTML = b"<!doctype html><html><body><button>Start</button><script>let x=1</script></body></html>"
 
 

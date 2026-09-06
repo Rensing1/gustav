@@ -9,7 +9,6 @@ Why:
 from __future__ import annotations
 
 
-
 def configure_test_import_paths() -> None:
     """Keep the historical hook as a no-op while tests use package imports."""
 

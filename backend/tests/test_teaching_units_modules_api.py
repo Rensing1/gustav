@@ -8,23 +8,21 @@ strict RLS.
 """
 from __future__ import annotations
 
-import os
-from uuid import uuid4
-import uuid
 import importlib
+import os
+import uuid
+from uuid import uuid4
 
-import pytest
 import httpx
+import pytest
 from fastapi.routing import APIRoute
 from httpx import ASGITransport
 
-pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
-
-main = importlib.import_module("backend.web.main")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-
-
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+
+pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
+main = importlib.import_module("backend.web.main")
 
 
 async def _client() -> httpx.AsyncClient:

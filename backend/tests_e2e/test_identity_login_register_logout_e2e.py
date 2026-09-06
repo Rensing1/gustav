@@ -13,8 +13,8 @@ How to run locally:
 from __future__ import annotations
 
 import os
-import time
 import re
+import time
 from urllib.parse import urljoin, urlparse
 
 import pytest

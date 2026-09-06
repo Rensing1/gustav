@@ -9,7 +9,6 @@ import pytest
 from fastapi.responses import JSONResponse, Response
 from httpx import ASGITransport
 
-
 main = importlib.import_module("backend.web.main")
 app_routes = importlib.import_module("backend.web.routes.app")
 teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")

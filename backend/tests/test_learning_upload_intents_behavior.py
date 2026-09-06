@@ -15,9 +15,9 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
-from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 
 pytestmark = pytest.mark.anyio("asyncio")
 

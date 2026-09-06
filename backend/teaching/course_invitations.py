@@ -13,7 +13,6 @@ import hmac
 import re
 from uuid import UUID
 
-
 TOKEN_VERSION = "v1"
 _MIN_SECRET_LENGTH = 32
 _EMAIL_PATTERN = re.compile(r"^[^@\s\x00-\x1f\x7f]+@[^@\s\x00-\x1f\x7f]+$")

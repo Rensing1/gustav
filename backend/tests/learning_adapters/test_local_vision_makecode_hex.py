@@ -9,11 +9,11 @@ Intent:
 
 from __future__ import annotations
 
-from hashlib import sha256
 import json
 import lzma
-from pathlib import Path
 import struct
+from hashlib import sha256
+from pathlib import Path
 
 import pytest
 

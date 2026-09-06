@@ -6,17 +6,24 @@ from fastapi import APIRouter, Request, Response
 
 from backend.teaching.printouts import (
     PrintExportError,
-    create_printable_pdf as build_printable_pdf,
     list_printable_content,
     validate_selection,
+)
+from backend.teaching.printouts import (
+    create_printable_pdf as build_printable_pdf,
 )
 from backend.teaching.printouts_pdf import IsolatedLearningUnitPdfRenderer
 from backend.web.routes import teaching_guards
 from backend.web.routes.teaching import _get_repo
 from backend.web.routes.teaching_payloads import TeachingUnitPrintPayload
-from backend.web.routes.teaching_shared import _current_sub, _is_uuid_like, _json_private, _private_error, _require_teacher
+from backend.web.routes.teaching_shared import (
+    _current_sub,
+    _is_uuid_like,
+    _json_private,
+    _private_error,
+    _require_teacher,
+)
 from backend.web.routes.teaching_unit_materials import _material_file_settings, _storage_adapter
-
 
 teaching_unit_prints_router = APIRouter(tags=["Teaching"])
 PDF_RENDERER = IsolatedLearningUnitPdfRenderer()

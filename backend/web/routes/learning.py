@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import sys as _sys
 from typing import Any
@@ -32,8 +31,6 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - container fallback when package path is flattened
     _wire_storage = None  # type: ignore
 from urllib.parse import urlparse as _urlparse  # noqa: F401
-
-import httpx
 
 from backend.storage.config import get_learning_max_upload_bytes, get_submissions_bucket
 from backend.storage.learning_policy import (
@@ -123,9 +120,6 @@ from backend.web.routes.learning_upload_intents import (
     learning_upload_intents_router,
 )
 from backend.web.routes.learning_upload_proxy import (
-    async_forward_upload as _default_async_forward_upload,
-)
-from backend.web.routes.learning_upload_proxy import (
     decode_proxy_headers as _decode_proxy_headers,  # noqa: F401 - kept for route module compatibility
 )
 from backend.web.routes.learning_upload_proxy import (
@@ -151,7 +145,6 @@ learning_router.include_router(learning_submission_files_router)
 learning_router.include_router(learning_submission_commands_router)
 learning_router.include_router(learning_dialog_router)
 learning_router.include_router(learning_portfolio_router)
-logger = logging.getLogger("gustav.web.learning")
 
 # Compatibility note for source-level contract tests after upload-intent route
 # extraction: the Filius branch now lives in learning_upload_intents.py as
@@ -171,34 +164,6 @@ def _current_storage_adapter() -> StorageAdapterProtocol:
     """Resolve the active storage adapter for the running route module."""
 
     return STORAGE_ADAPTER
-
-
-def _current_async_forward_upload() -> Any:
-    """Resolve the active upload forwarder for the running route module."""
-
-    default = globals().get("_DEFAULT_ASYNC_FORWARD_UPLOAD")
-    local = _async_forward_upload
-    if default is not None and callable(local) and local is not default:
-        return local
-    module = _current_learning_module()
-    current = getattr(module, "_async_forward_upload", None) if module is not None else None
-    if default is not None and callable(current) and current is not default:
-        return current
-    return local
-
-
-def _current_emit_upload_proxy_telemetry() -> Any:
-    """Resolve the active telemetry emitter for the running route module."""
-
-    default = globals().get("_DEFAULT_EMIT_UPLOAD_PROXY_TELEMETRY")
-    local = _emit_upload_proxy_telemetry
-    if default is not None and callable(local) and local is not default:
-        return local
-    module = _current_learning_module()
-    current = getattr(module, "_emit_upload_proxy_telemetry", None) if module is not None else None
-    if default is not None and callable(current) and current is not default:
-        return current
-    return local
 
 
 def _current_download_bytes_with_limit() -> Any:
@@ -338,27 +303,6 @@ async def _read_request_stream_with_limit(request: Request, limit: int) -> tuple
     return bytes(buffer), None
 
 
-async def _async_forward_upload(
-    *,
-    url: str,
-    payload: bytes,
-    content_type: str,
-    timeout: float,
-    headers: dict[str, str] | None = None,
-) -> httpx.Response:
-    """Forward the upload to Supabase (patchable for tests)."""
-    return await _default_async_forward_upload(
-        url=url,
-        payload=payload,
-        content_type=content_type,
-        timeout=timeout,
-        headers=headers,
-    )
-
-
-_DEFAULT_ASYNC_FORWARD_UPLOAD = _async_forward_upload
-
-
 def _cache_headers_success() -> dict[str, str]:
     # Success responses: private and explicitly non-storable (defense-in-depth
     # against history stores and intermediary caches potentially keeping PII).
@@ -370,34 +314,6 @@ def _cache_headers_error() -> dict[str, str]:
     # Error responses: must never be stored; protects PII-bearing error pages.
     # Include Vary: Origin for consistency with success responses.
     return {"Cache-Control": "private, no-store", "Vary": "Origin"}
-
-
-def _emit_upload_proxy_telemetry(
-    *,
-    outcome: str,
-    status_code: int,
-    reason: str,
-    target_host: str,
-    content_type: str,
-    size_bytes: int | None,
-) -> None:
-    """Emit low-cardinality upload proxy telemetry without PII."""
-    try:
-        logger.info(
-            "learning.upload_proxy outcome=%s status=%s reason=%s host=%s mime=%s size_bytes=%s",
-            outcome,
-            int(status_code),
-            str(reason or "n/a"),
-            str(target_host or "n/a"),
-            str(content_type or "n/a"),
-            int(size_bytes) if size_bytes is not None else -1,
-        )
-    except Exception:
-        # Telemetry must never affect API behavior.
-        return
-
-
-_DEFAULT_EMIT_UPLOAD_PROXY_TELEMETRY = _emit_upload_proxy_telemetry
 
 
 def _require_strict_same_origin(request: Request) -> bool:

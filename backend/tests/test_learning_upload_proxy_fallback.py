@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import importlib
 import uuid
+from dataclasses import replace
 
 import httpx
 import pytest
-from fastapi.routing import APIRoute
 from httpx import ASGITransport
 
 from backend.tests.learning_route_helpers import VisibleLearningRepo
@@ -89,7 +89,7 @@ async def test_upload_proxy_flow(monkeypatch):
             headers={"Origin": "http://test"},
         )
 
-    # Monkeypatch requests.put used by proxy to avoid network
+    # Supply the asynchronous transport explicitly to avoid network access
     body_sent = {}
 
     class _Resp:
@@ -104,15 +104,10 @@ async def test_upload_proxy_flow(monkeypatch):
         body_sent["headers"] = proxy_headers
         return _Resp()
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    # Some suites reload backend.web.routes.learning. Patch the FastAPI endpoint globals as well.
-    for route in main.app.routes:
-        if isinstance(route, APIRoute) and route.path == "/api/learning/internal/upload-proxy":
-            route.endpoint.__globals__["_async_forward_upload"] = fake_forward
-            break
-    else:  # pragma: no cover - defensive to surface wiring issues
-        raise AssertionError("upload-proxy route not registered on FastAPI app")
-
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
     # Request upload-intent; expect same-origin proxy url
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)

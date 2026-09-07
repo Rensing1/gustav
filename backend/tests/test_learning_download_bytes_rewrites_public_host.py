@@ -14,6 +14,7 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+import httpx
 import pytest
 
 learning = importlib.import_module("backend.web.routes.learning")
@@ -75,7 +76,7 @@ async def test_download_bytes_rewrites_public_host_to_internal(monkeypatch: pyte
         def stream(self, method: str, url: str, headers=None):  # noqa: ANN001 - httpx compat
             return _FakeStream(self, url)
 
-    monkeypatch.setattr(learning.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
 
     public_url = "https://app.localhost/storage/v1/object/sign/submissions/x/y/z/file.sb3?token=abc"
     out = await learning._download_bytes_with_limit(url=public_url, max_bytes=1024, headers=None)
@@ -97,7 +98,7 @@ async def test_download_bytes_rejects_non_storage_path(monkeypatch: pytest.Monke
         def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003 - httpx compat
             created.append(self)
 
-    monkeypatch.setattr(learning.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
 
     invalid_url = "https://app.localhost/anything/else?token=abc"
     out = await learning._download_bytes_with_limit(url=invalid_url, max_bytes=1024, headers=None)
@@ -117,7 +118,7 @@ async def test_download_bytes_rejects_invalid_public_port(monkeypatch: pytest.Mo
         def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003 - httpx compat
             created.append(self)
 
-    monkeypatch.setattr(learning.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
 
     invalid_port_url = "https://app.localhost:8443/storage/v1/object/sign/submissions/x/y/z/file.sb3?token=abc"
     out = await learning._download_bytes_with_limit(url=invalid_port_url, max_bytes=1024, headers=None)
@@ -139,7 +140,7 @@ async def test_download_bytes_rejects_http_in_production(monkeypatch: pytest.Mon
         def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003 - httpx compat
             created.append(self)
 
-    monkeypatch.setattr(active_learning.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
 
     http_url = "http://app.localhost/storage/v1/object/sign/submissions/x/y/z/file.sb3?token=abc"
     out = await active_learning._download_bytes_with_limit(url=http_url, max_bytes=1024, headers=None)
@@ -196,7 +197,7 @@ async def test_download_bytes_allows_internal_http_rewrite_in_production_for_pri
         def stream(self, method: str, url: str, headers=None):  # noqa: ANN001 - httpx compat
             return _FakeStream(self, url)
 
-    monkeypatch.setattr(learning.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
 
     public_url = "https://app.localhost/storage/v1/object/sign/submissions/x/y/z/file.hex?token=abc"
     out = await learning._download_bytes_with_limit(url=public_url, max_bytes=1024, headers=None)

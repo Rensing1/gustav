@@ -11,9 +11,37 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger("gustav.web.learning")
+
+
+def emit_upload_proxy_telemetry(
+    *,
+    outcome: str,
+    status_code: int,
+    reason: str,
+    target_host: str,
+    content_type: str,
+    size_bytes: int | None,
+) -> None:
+    """Emit low-cardinality upload proxy telemetry without PII."""
+    try:
+        logger.info(
+            "learning.upload_proxy outcome=%s status=%s reason=%s host=%s mime=%s size_bytes=%s",
+            outcome,
+            int(status_code),
+            str(reason or "n/a"),
+            str(target_host or "n/a"),
+            str(content_type or "n/a"),
+            int(size_bytes) if size_bytes is not None else -1,
+        )
+    except Exception:
+        # Telemetry must never affect API behavior.
+        return
 
 
 def encode_proxy_headers(headers: Any) -> str | None:

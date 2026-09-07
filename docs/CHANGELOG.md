@@ -2,6 +2,13 @@
 
 ## 2026-09-07
 
+### Technische Schulden – Explizite Upload-Weiterleitung
+
+- refactor(learning): Der interne Upload-Proxy erhält Netzwerktransport und Telemetrie ausdrücklich beim Aufbau des Backends. Dynamische Transportauswahl über die Learning-Fassade, überflüssige Wrapper und der zugehörige direkte Testeingriff in Endpoint-Globals entfallen.
+- test: Getrennte Provider-Prüfungen sichern Transport-/Telemetriezuordnung, private Fehlerantworten und Nebenläufigkeit ab. Drei bestehende Testdateien verwenden explizite Transportadapter statt Moduländerungen; zwei bisher unvollständige Fehlerfalltests führen jetzt echte HTTP-Anfragen und Ergebnisprüfungen aus.
+- test: Fünf Download-Tests ersetzen ihren HTTP-Client direkt statt über einen unbenutzten Import der Learning-Fassade. Der vollständige lokale Prüflauf besteht mit 2965 Backend-Tests und unverändert 33 ausdrücklich deaktivierten Tests; Frontend und Build sind ebenfalls grün.
+- scope: Sicherheitsregeln, asynchroner HTTP-Transport, Protokollformat und Proxy-Konfiguration bleiben erhalten. Keine Änderung von API, Schema, ENV, UI, Graphdarstellung oder DSPy; DB-/Storage-Verdrahtung der Upload-Intents bleibt Folgearbeit.
+
 ### Technische Schulden – Teaching-DB-Tests wieder verlässlich ausführen
 
 - test: 43 bedingt übersprungene Teaching-DB-Verträge verwenden eine gemeinsame aktuelle Adapterprüfung. Ein falscher Testadapter bei erreichbarer Datenbank ist ein Fehler statt eines Skips; kopierte breite Fehlerabfangblöcke entfallen.

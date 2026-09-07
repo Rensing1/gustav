@@ -7,6 +7,7 @@ before attempting to forward.
 from __future__ import annotations
 
 import importlib
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -29,13 +30,6 @@ async def _client():
 
 def _main():
     return importlib.import_module("backend.web.main")
-
-
-def _reload_learning_route():
-    module_name = "backend.web.routes.learning"
-    if module_name in importlib.sys.modules:
-        return importlib.reload(importlib.import_module(module_name))
-    return importlib.import_module(module_name)
 
 
 def _student_session(monkeypatch: pytest.MonkeyPatch, main_module, sub: str):
@@ -68,9 +62,7 @@ async def test_proxy_rejects_wrong_host(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    # Reload to pick env
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-host")
 
@@ -78,7 +70,10 @@ async def test_proxy_rejects_wrong_host(monkeypatch: pytest.MonkeyPatch) -> None
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when host invalid")
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     bad = "https://evil.example.com/storage/v1/object/upload/x"
     async with (await _client()) as c:
@@ -99,14 +94,16 @@ async def test_proxy_rejects_invalid_path(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-path")
 
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when path invalid")
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     # Path does not begin with expected storage upload prefix
     bad = "https://supabase.local:54321/storage/v1/other"
@@ -138,14 +135,16 @@ async def test_proxy_rejects_path_traversal(monkeypatch: pytest.MonkeyPatch, bad
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-traversal")
 
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when path contains traversal")
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     bad = f"https://supabase.local:54321{bad_path}"
     async with (await _client()) as c:
@@ -166,14 +165,16 @@ async def test_proxy_rejects_disallowed_mime(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-mime")
 
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when MIME invalid")
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     good = "https://supabase.local:54321/storage/v1/object/upload/submissions/file"
     async with (await _client()) as c:
@@ -196,7 +197,6 @@ async def test_proxy_filters_forward_headers(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-headers")
 
@@ -209,9 +209,13 @@ async def test_proxy_filters_forward_headers(monkeypatch: pytest.MonkeyPatch) ->
         captured.update(kwargs)
         return _Resp()
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
-    token = learning._encode_proxy_headers(  # type: ignore[attr-defined]
+    upload_proxy = importlib.import_module("backend.web.routes.learning_upload_proxy")
+    token = upload_proxy.encode_proxy_headers(
         {
             "Authorization": "Bearer secret",
             "Cookie": "x=y",
@@ -246,14 +250,16 @@ async def test_proxy_rejects_port_mismatch(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-port")
 
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("forward must not be called when port mismatched")
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     bad = "https://supabase.local:65432/storage/v1/object/upload/submissions/file"
     async with (await _client()) as c:
@@ -277,7 +283,6 @@ async def test_proxy_allows_supabase_public_host(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("SUPABASE_PUBLIC_URL", "https://app.localhost")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-public")
 
@@ -287,7 +292,10 @@ async def test_proxy_allows_supabase_public_host(monkeypatch: pytest.MonkeyPatch
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         return _Resp()
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     good = "https://app.localhost/storage/v1/object/upload/submissions/file"
     async with (await _client()) as c:
@@ -308,7 +316,6 @@ async def test_proxy_allows_host_docker_internal_http(monkeypatch: pytest.Monkey
     monkeypatch.setenv("SUPABASE_URL", "http://host.docker.internal:54321")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-docker")
 
@@ -318,7 +325,10 @@ async def test_proxy_allows_host_docker_internal_http(monkeypatch: pytest.Monkey
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         return _Resp()
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     good = "http://host.docker.internal:54321/storage/v1/object/upload/submissions/file"
     async with (await _client()) as c:
@@ -342,7 +352,6 @@ async def test_proxy_allows_double_slash_path(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("SUPABASE_URL", "http://host.docker.internal:54321")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-doubleslash")
 
@@ -352,7 +361,10 @@ async def test_proxy_allows_double_slash_path(monkeypatch: pytest.MonkeyPatch) -
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         return _Resp()
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     # Note the double slash after /storage/v1/
     good = "http://host.docker.internal:54321/storage/v1//object/upload/submissions/file"
@@ -375,7 +387,6 @@ async def test_proxy_streams_request_body_without_calling_body(monkeypatch: pyte
     monkeypatch.setenv("SUPABASE_URL", "http://host.docker.internal:54321")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-stream")
 
@@ -385,7 +396,10 @@ async def test_proxy_streams_request_body_without_calling_body(monkeypatch: pyte
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         return _Resp()
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     async def _fail_body(self):  # type: ignore[no-untyped-def]
         raise AssertionError("Request.body() usage is forbidden for streaming proxy")
@@ -412,7 +426,6 @@ async def test_proxy_emits_telemetry_for_successful_upload(monkeypatch: pytest.M
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = _main()
-    learning = _reload_learning_route()
 
     student = _student_session(monkeypatch, main, "s-proxy-telemetry")
 
@@ -427,8 +440,14 @@ async def test_proxy_emits_telemetry_for_successful_upload(monkeypatch: pytest.M
     def fake_emit(**kwargs):  # type: ignore[no-untyped-def]
         telemetry_events.append(dict(kwargs))
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
-    monkeypatch.setattr(learning, "_emit_upload_proxy_telemetry", fake_emit, raising=False)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, emit=fake_emit),
+    )
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -25,32 +26,37 @@ async def _client():
     return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
-def _reload_learning_route():
-    module_name = "backend.web.routes.learning"
-    if module_name in importlib.sys.modules:
-        return importlib.reload(importlib.import_module(module_name))
-    return importlib.import_module(module_name)
-
-
 @pytest.mark.anyio
 async def test_upload_proxy_raises_502_on_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     # Enable proxy and set SUPABASE_URL host validation
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
-    # Reload module to pick up env
     main = importlib.import_module("backend.web.main")
-    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
-    store.create(sub="s-proxy-err", name="S", roles=["student"])
+    student = store.create(sub="s-proxy-err", name="S", roles=["student"])
 
     # Monkeypatch async forwarder to raise
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise RuntimeError("upstream down")
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        response = await client.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": "https://supabase.local:54321/storage/v1/object/test"},
+            content=b"abc", headers={"Origin": "http://test"},
+        )
+    assert response.status_code == 502
+    assert response.json() == {"error": "bad_gateway", "detail": "proxy_failed"}
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["vary"] == "Origin"
 
 
 @pytest.mark.anyio
@@ -59,10 +65,9 @@ async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = importlib.import_module("backend.web.main")
-    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
-    store.create(sub="s-proxy-500", name="S", roles=["student"])
+    student = store.create(sub="s-proxy-500", name="S", roles=["student"])
 
     class _Resp:
         status_code = 500
@@ -70,7 +75,22 @@ async def test_upload_proxy_raises_502_on_non_2xx(monkeypatch: pytest.MonkeyPatc
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         return _Resp()
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
+
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
+        response = await client.put(
+            "/api/learning/internal/upload-proxy",
+            params={"url": "https://supabase.local:54321/storage/v1/object/test"},
+            content=b"abc", headers={"Origin": "http://test"},
+        )
+    assert response.status_code == 502
+    assert response.json() == {"error": "bad_gateway", "detail": "upstream_error"}
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["vary"] == "Origin"
 
 
 @pytest.mark.anyio
@@ -79,7 +99,6 @@ async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = importlib.import_module("backend.web.main")
-    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
     student = store.create(sub="s-proxy-await", name="S", roles=["student"])
@@ -94,7 +113,10 @@ async def test_upload_proxy_awaits_async_forwarder(monkeypatch: pytest.MonkeyPat
         invoked.set()
         return _Resp()
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
@@ -114,7 +136,6 @@ async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.Monkey
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = importlib.import_module("backend.web.main")
-    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
     student = store.create(sub="s-proxy-parallel", name="S", roles=["student"])
@@ -133,7 +154,10 @@ async def test_upload_proxy_handles_parallel_requests(monkeypatch: pytest.Monkey
         in_flight -= 1
         return _Resp()
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
@@ -159,7 +183,6 @@ async def test_upload_proxy_enforces_https_scheme(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("SUPABASE_URL", "https://supabase.local:54321")
 
     main = importlib.import_module("backend.web.main")
-    learning = _reload_learning_route()
 
     store = install_session_store(monkeypatch, main)
     student = store.create(sub="s-proxy-http", name="S", roles=["student"])
@@ -167,7 +190,10 @@ async def test_upload_proxy_enforces_https_scheme(monkeypatch: pytest.MonkeyPatc
     async def fake_forward(**kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("insecure URL must be rejected before forwarding")
 
-    monkeypatch.setattr(learning, "_async_forward_upload", fake_forward)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_proxy_providers",
+        replace(main.app.state.learning_upload_proxy_providers, forward=fake_forward),
+    )
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)

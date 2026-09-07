@@ -13,6 +13,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from backend.storage.learning_policy import STORAGE_KEY_RE, resolve_local_verify_root_from_env
+from backend.web.learning_upload_proxy_providers import learning_upload_proxy_providers
 from backend.web.routes.learning_upload_proxy import (
     decode_proxy_headers as _decode_proxy_headers,
 )
@@ -73,17 +74,6 @@ async def _read_request_stream_with_limit(request: Request, limit: int) -> tuple
     return await _learning_module()._read_request_stream_with_limit(request, limit)
 
 
-def _current_async_forward_upload():
-    local_forwarder = globals().get("_async_forward_upload")
-    if callable(local_forwarder):
-        return local_forwarder
-    return _learning_module()._current_async_forward_upload()
-
-
-def _current_emit_upload_proxy_telemetry():
-    return _learning_module()._current_emit_upload_proxy_telemetry()
-
-
 def _allowed_image_mime() -> set[str]:
     return set(_learning_module().ALLOWED_IMAGE_MIME)
 
@@ -139,13 +129,21 @@ async def internal_upload_stub(request: Request):
 
 @learning_internal_upload_router.put("/api/learning/internal/upload-proxy")
 async def internal_upload_proxy(request: Request):
-    """Proxy a file upload to a presigned Storage URL as a same-origin fallback."""
+    """Forward a student upload through the explicitly supplied async transport.
 
+    The request supplies the authenticated identity, target URL and upload bytes.
+    Require the student role, same origin and the enabled proxy before accepting
+    a configured storage target and a bounded, allowed body. Return private hash
+    and size metadata on success, or the existing validation/upstream error.
+    Telemetry receives metadata only, never signed URLs or uploaded contents.
+    """
+
+    providers = learning_upload_proxy_providers(request)
     target_host_for_log = "n/a"
     content_type_for_log = request.headers.get("content-type") or "application/octet-stream"
 
     def _proxy_error(payload: dict[str, str], *, status_code: int, reason: str) -> JSONResponse:
-        _current_emit_upload_proxy_telemetry()(
+        providers.emit(
             outcome="error",
             status_code=status_code,
             reason=reason,
@@ -157,7 +155,7 @@ async def internal_upload_proxy(request: Request):
 
     user, error = _require_student(request)
     if error:
-        _current_emit_upload_proxy_telemetry()(
+        providers.emit(
             outcome="error",
             status_code=int(getattr(error, "status_code", 401)),
             reason="auth",
@@ -238,7 +236,7 @@ async def internal_upload_proxy(request: Request):
         return _proxy_error({"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, reason="mime_not_allowed")
 
     try:
-        resp = await _current_async_forward_upload()(
+        resp = await providers.forward(
             url=target,
             payload=body,
             content_type=content_type,
@@ -252,7 +250,7 @@ async def internal_upload_proxy(request: Request):
 
     h = _hashlib.sha256()
     h.update(body)
-    _current_emit_upload_proxy_telemetry()(
+    providers.emit(
         outcome="success",
         status_code=200,
         reason="ok",

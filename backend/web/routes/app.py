@@ -159,9 +159,6 @@ from backend.web.routes.app_teacher_node_editor_routes import (
     app_teacher_node_editor_router,
 )
 from backend.web.routes.app_teacher_unit_routes import (
-    _build_teacher_unit_course_refs as _build_teacher_unit_course_refs,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
     _field_value as _field_value,  # noqa: F401
 )
 from backend.web.routes.app_teacher_unit_routes import (
@@ -174,34 +171,10 @@ from backend.web.routes.app_teacher_unit_routes import (
     _list_teacher_course_units as _list_teacher_course_units,  # noqa: F401
 )
 from backend.web.routes.app_teacher_unit_routes import (
-    _list_teacher_courses as _list_teacher_courses,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
-    _list_teacher_section_materials as _list_teacher_section_materials,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
-    _list_teacher_section_tasks as _list_teacher_section_tasks,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
-    _list_teacher_unit_edges as _list_teacher_unit_edges,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
-    _list_teacher_unit_modules as _list_teacher_unit_modules,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
-    _list_teacher_unit_phases as _list_teacher_unit_phases,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
-    _list_teacher_unit_sections as _list_teacher_unit_sections,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
     _list_unit_task_ids as _list_unit_task_ids,  # noqa: F401
 )
 from backend.web.routes.app_teacher_unit_routes import (
     app_teacher_unit_router,
-)
-from backend.web.routes.app_teacher_unit_routes import (
-    get_teacher_unit_workspace as get_teacher_unit_workspace,  # noqa: F401
 )
 from backend.web.security.guards import has_any_role as has_any_role  # noqa: F401
 

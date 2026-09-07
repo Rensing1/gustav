@@ -323,3 +323,36 @@ Contract-/Umgebungsprüfung: Bestehende Teaching-Workspace- und Learning-Graph-V
 - 41 Dokumentations-/Schuldenregistertests und `git diff --check` ohne Befund. Die bestätigten Korrekturen beziehen sich auf den reproduzierten gemeinsamen Testgraphen und die Eingabereihenfolge; eine konkret vom Produktverantwortlichen beobachtete Lerneinheit wurde noch nicht benannt.
 
 F6a ist abgeschlossen. F6b entkoppelt als nächstes die Backend-Datenaufbereitung der Graph-/Workspace-Ansichten; der rollenübergreifende Vergleich bleibt dabei ein gemeinsamer Regressionsnachweis. Übrige Provider-, Seiten-/Controller-/CSS-, Worker- und H5P-Arbeit sowie der Sicherheitsabschluss bleiben offen. Keine API-, Schema-, ENV- oder DSPy-Änderung und kein Push.
+
+### F6b: Expliziter Datenzugang des Lehrkraft-Workspace
+
+User Story: Als Lehrkraft möchte ich meine linearen und modularen Lerneinheiten mit unveränderter Auswahl, Struktur und Inhaltszählern öffnen. Als Lernender behalte ich dieselbe Graphanordnung, ohne Zugriff auf Bearbeitung oder gesperrte Inhalte zu erhalten.
+
+Umfang: Zuerst den bestehenden Teaching-Workspace in einen frameworkunabhängigen Lesedienst und ausdrücklich bereitgestellten Datenzugang überführen. Der synchrone Handler führt DB-Arbeit im begrenzten Threadpool aus. Ausschließlich dort verwendete globale Helfer/Aliase entfernen; noch von Live-/Diagnostikansichten verwendete Helfer bleiben bis zu deren Migration erhalten. Der Learning-Graph verwendet weiterhin seinen eigenen mitgliedschafts- und freischaltungsgebundenen Datenzugang; dessen Provider-Migration folgt getrennt. Keine Zusammenlegung der Rollenberechtigungen. Kurszuordnungs- und Inhaltsabfragen pro Kurs/Abschnitt werden in diesem Schritt nicht optimiert; TD-009 bleibt offen.
+
+| Given – When – Then | Automatisierter Nachweis |
+| --- | --- |
+| Zwei unabhängig aufgebaute Testumgebungen mit unterschiedlichen Repository-Antworten – abwechselnd Workspace lesen – keine globalen Überschreibungen, private Antworten | `test_teacher_workspace_provider_isolation.py` |
+| Fehlende Anmeldung, Schülerrolle oder ungültige Einheiten-ID – Workspace anfragen – Ablehnung vor Repository-Aufbau | Provider-/HTTP-Tests |
+| Fremde/fehlende Einheit, fehlerhafte Eigentümerprüfung oder fehlender modularer Adapter – lesen – unveränderte 403/404/503 ohne Inhaltszugriff | Provider-/HTTP-Tests und echte DB-Eigentümerprüfung |
+| Eigene leere/lineare/modulare Einheit – erste/letzte Auswahl, explizite Phase, Modul und Kante oder unbekannte Auswahl öffnen – Struktur, Zähler und Auswahlpriorität bleiben erhalten | `test_teaching_unit_workspace_view_api.py`, künftig echte DB statt In-Memory mit übersprungenem modularen Fall |
+| Langsamer Repository-Aufbau bzw. vorübergehender Initialisierungsfehler – parallele Shell-Anfrage bzw. erneuter Versuch – Shell bleibt erreichbar, Initialisierung wiederholbar | Provider-Nebenläufigkeits-/Retry-Tests |
+| Lehrkraft und eingeschriebener Schüler – denselben verzweigten Graphen laden – Geometrie bleibt gleich, Schülerrechte bleiben beschränkt | vorhandenes `graph-role-parity.spec.ts`, `@feature-acceptance` |
+
+Contract-First: `GET /api/teaching/views/units/{unit_id}/workspace` und Learning-Graph-Vertrag geprüft; URL, Parameter, Antwortfelder und Statuscodes bleiben unverändert. Keine API- oder Schemaänderung, daher kein neuer Vertragsausschnitt und keine Migration. Vorhandene modulare Migrationen und RLS bleiben maßgeblich; ENV-Laden und DB-Konfiguration werden nicht geändert, keine Secrets ausgegeben. Tests zuerst rot, dann minimale Extraktion, danach Refactoring. Lokalen Stack neu bauen und Supabase-/CA-Status prüfen. Abschlussgate: `make verify-feature FEATURE=graph-role-parity`, zusätzlich bestehender Lehrkraft-Bearbeitungsrundlauf. Kein DSPy-Eingriff und kein Push.
+
+#### Umsetzung und gezielte Nachweise F6b
+
+- Red: Die neuen Isolationstests scheiterten zunächst am fehlenden Workspace-Provider. Die drei auf echte DB umgestellten bestehenden HTTP-Tests waren vor der Extraktion grün; der modulare Fall wurde erstmals nicht übersprungen.
+- Green/Refactor: `TeacherWorkspaceProviders` stellt den verzögert erzeugten DB-Adapter bereit. `UnitWorkspaceService` trennt Eigentümerprüfung, lineare und modulare Projektion ohne Web-Import. Der HTTP-Handler übernimmt Anmeldung, Rollenprüfung und Fehlerantworten; synchrone DB-Arbeit läuft im begrenzten Threadpool. Acht ungenutzte Lesehelfer und der Workspace-Handler-Alias entfallen. Fünf von Live-/Diagnostikansichten weiterhin benötigte Helfer bleiben ausdrücklich außerhalb dieses Teilschritts.
+- 29 gezielte Prüfungen bestanden: 22 Provider-/HTTP-/Nebenläufigkeitstests, fünf echte DB-Workspace-Tests und zwei Route-/Helfergrenzen-Verträge. Die DB-Fälle erfassen leere, lineare und modulare Einheiten, erste/letzte/unbekannte Auswahl, Phasen-/Kantenpriorität, echte Material-/Aufgabenzähler sowie fremde Lehrkraft-/Admin-Eigentümer. Graphantworten enthalten keine Aufgabeninhalte oder privaten Lehrkraft-Kontexte.
+- Kritische Durchsicht: Keine gemeinsame Berechtigungslogik für Teaching und Learning eingeführt; bestehende Autor-RLS und Schülerfreischaltung bleiben getrennt. Die 200er-Kursbegrenzung und Abfragen je Kurs/Abschnitt bleiben unverändert. Eine gebündelte Zähler-/Zuordnungsabfrage benötigt einen eigenen Paritäts- und Abfragezahlnachweis, nicht nur diese Extraktion.
+- Lokale Supabase-Konfiguration verfügbar, Datenbank-Preflight grün; Caddy-CA in System, Chromium/Codex und Firefox vertrauenswürdig. Web-Container mit dem neuen Code neu gebaut. Der erste Gate-Aufruf stoppte korrekt am veralteten DB-Testinventar; dieses wurde für die neu echte DB-Testdatei regeneriert. Kein Datenreset und keine Änderung an Zertifikatsprüfung oder Secure-Cookies.
+
+#### Abschlussnachweis F6b
+
+- `make verify-feature FEATURE=graph-role-parity` vollständig erfolgreich: **2733 Backend-Tests bestanden, 76 vorgesehen übersprungen; 688 Frontend-Tests, 8 Tooling-Tests, 62 H5P-Tests und ein authentifizierter rollenübergreifender Browserrundlauf bestanden**. Svelte ohne Fehler/Warnungen, Produktionsbuild und Build-Warnungsgate grün. API-Vertrag, Architektur-/Importgrenzen, Route-/DB-Inventare, Supply Chain, Ruff und Image-Smoke bestanden.
+- Zusätzlich `make test-feature-acceptance FEATURE=teacher-graph-module-actions` erfolgreich. Der vorhandene Lehrkraft-Ablauf prüft Phasen-/Modulbearbeitung, Auswahl, Rückkehr zum Graphen und bestätigte Testlöschungen. Beide Browserprofile bestätigen die vollständige Bereinigung ausschließlich ihrer laufbezogenen Testdaten. Keine historische Gesamtsuite und kein Reset fester Dev-Personas.
+- Architektur, Changelog und Schuldenregister aktualisiert. Keine API-, Schema-, ENV-, Frontend- oder DSPy-Änderung. Der abgeschlossene Teil betrifft den Lehrkraft-Workspace, nicht die gesamte Provider-Migration.
+
+Nächster Teilschritt F6c ist der ausdrücklich bereitgestellte Datenzugang des Schülergraphen: bestehende Kursmitgliedschaft, einheitengebundene Sichtbarkeit und Freischaltungsregeln erhalten; weiterhin gemeinsamer Geometrie- und Berechtigungsnachweis mit der Lehrkraftansicht. Live-/Diagnostik-Provider, übrige Seiten-/Controller-/CSS-, Worker-/H5P-Arbeit, gebündelte Abfragen und Sicherheitsabschluss bleiben offen. Kein Push.

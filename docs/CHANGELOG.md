@@ -2,6 +2,12 @@
 
 ## 2026-09-07
 
+### Technische Schulden – Datenaufbereitung des Lehrkraft-Graphen
+
+- refactor(teaching): Der Workspace für lineare und modulare Lerneinheiten verwendet ausdrücklich bereitgestellten Datenbankzugang und einen frameworkunabhängigen Lesedienst. Der synchrone Handler führt DB-Arbeit im begrenzten Threadpool aus; ungenutzte Workspace-Helfer und Fassaden-Aliase entfallen.
+- test: Der zuvor übersprungene modulare Workspace-Test läuft gegen die echte lokale Datenbank. Ergänzte Prüfungen sichern Eigentümergrenzen, Leerzustände, Auswahlpriorität, Inhaltszähler, Abhängigkeitsisolation und Nebenläufigkeit. Der rollenübergreifende Browservergleich bleibt gemeinsamer Nachweis.
+- scope: API, Schema, RLS, UI und DSPy bleiben unverändert. Learning-Graph-Provider, Live-/Diagnostik-Helfer und gebündelte Zähler-/Kursabfragen sind getrennte Folgearbeiten.
+
 ### Technische Schulden – gemeinsame Graphdarstellung beider Rollen
 
 - fix(frontend): Lehrkraft- und Schülergraph verwenden übereinstimmende Knoteninnenabstände und Anschlusspositionen. Phasen und verzweigte Kanten werden anhand stabiler Regeln statt der Eingabelistenreihenfolge angeordnet.

@@ -20,11 +20,15 @@ def test_teacher_unit_bff_routes_live_outside_app_hotspot() -> None:
     assert not hasattr(app, "get_teacher_units_catalog")
     catalog_routes = importlib.import_module("backend.web.routes.app_teacher_catalog_routes")
     assert catalog_routes.get_teacher_units_catalog.__module__ == catalog_routes.__name__
-    assert app.get_teacher_unit_workspace is unit_routes.get_teacher_unit_workspace
+    assert not hasattr(app, "get_teacher_unit_workspace")
+    assert unit_routes.get_teacher_unit_workspace.__module__ == unit_routes.__name__
     assert '@app_router.get("/api/teaching/views/units/catalog")' not in app_source
     assert '@app_router.get("/api/teaching/views/units/{unit_id}/workspace")' not in app_source
     assert '@app_teacher_unit_router.get("/api/teaching/views/units/catalog")' not in unit_source
-    assert '@app_teacher_unit_router.get("/api/teaching/views/units/{unit_id}/workspace")' in unit_source
+    assert (
+        '@app_teacher_unit_router.get("/api/teaching/views/units/{unit_id}/workspace")'
+        in unit_source
+    )
 
 
 def test_teacher_unit_read_model_helpers_live_with_teacher_unit_routes() -> None:
@@ -35,11 +39,6 @@ def test_teacher_unit_read_model_helpers_live_with_teacher_unit_routes() -> None
 
     helper_names = (
         "_list_teacher_course_units",
-        "_list_teacher_unit_sections",
-        "_list_teacher_unit_phases",
-        "_list_teacher_unit_modules",
-        "_list_teacher_unit_edges",
-        "_build_teacher_unit_course_refs",
         "_list_submission_pairs_for_students",
         "_list_unit_task_ids",
         "_find_course_unit",
@@ -48,3 +47,13 @@ def test_teacher_unit_read_model_helpers_live_with_teacher_unit_routes() -> None
         assert getattr(app, helper_name) is getattr(unit_routes, helper_name)
         assert f"def {helper_name}(" not in app_source
         assert f"def {helper_name}(" in unit_source
+
+    for name in (
+        "_list_teacher_unit_sections",
+        "_list_teacher_unit_phases",
+        "_list_teacher_unit_modules",
+        "_list_teacher_unit_edges",
+        "_build_teacher_unit_course_refs",
+    ):
+        assert not hasattr(app, name)
+        assert not hasattr(unit_routes, name)

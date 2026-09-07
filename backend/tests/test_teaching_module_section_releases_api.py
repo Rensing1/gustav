@@ -14,10 +14,9 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.teaching import require_teaching_db_repo
 
 main = importlib.import_module("backend.web.main")
-teaching = importlib.import_module("backend.web.routes.teaching")
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
@@ -61,12 +60,7 @@ def _releases_path(course_id: str, module_id: str) -> str:
 
 @pytest.mark.anyio
 async def test_list_releases_owner_only_and_cache_header(monkeypatch: pytest.MonkeyPatch):
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required")
+    require_teaching_db_repo()
 
     store = install_session_store(monkeypatch, main)
     owner = store.create(sub="t-owner-rel", name="Owner", roles=["teacher"])

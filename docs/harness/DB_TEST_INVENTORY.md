@@ -11,7 +11,7 @@ Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Te
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 146
+- Inventarisierte Dateien: 147
 - Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 0
 - Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 105
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
@@ -169,6 +169,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/utils/db_isolation.py | test-infra | - | no-db-marker-needed | - | Keep pytest infrastructure marker-free |
 | backend/tests/utils/fake_psycopg.py | test-infra | - | no-db-marker-needed | - | Keep pytest infrastructure marker-free |
 | backend/tests/utils/storage_fixtures.py | test-infra | - | no-db-marker-needed | - | Keep pytest infrastructure marker-free |
+| backend/tests/utils/teaching.py | test-infra | - | no-db-marker-needed | requires-db | Keep pytest infrastructure marker-free |
 
 ## Pflege-Regeln
 - Neue echte DB/RLS-Testdateien bekommen direkt `db_read` oder `db_write`.

@@ -128,6 +128,9 @@ def _find_signals(path: Path, tree: ast.AST) -> tuple[str, ...]:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             names = [alias.name for alias in getattr(node, "names", [])]
             module = getattr(node, "module", None)
+            # Importing the explicit DB prerequisite also covers aliased calls.
+            if module == "backend.tests.utils.teaching" and "require_teaching_db_repo" in names:
+                signals.add("requires-db")
             if module == "psycopg" or any(name == "psycopg" for name in names):
                 signals.add("psycopg-import")
         elif isinstance(node, ast.Call):

@@ -16,12 +16,11 @@ import pytest
 from httpx import ASGITransport
 
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.teaching import require_teaching_db_repo
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 main = importlib.import_module("backend.web.main")
 
-teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -82,14 +81,7 @@ async def test_materials_require_auth_and_author_role(monkeypatch: pytest.Monkey
 @pytest.mark.anyio
 async def test_author_can_crud_materials_and_non_author_is_blocked(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     author = store.create(sub="teacher-materials-A", name="Autor", roles=["teacher"])
     other = store.create(sub="teacher-materials-B", name="Fremd", roles=["teacher"])
@@ -157,14 +149,7 @@ async def test_author_can_crud_materials_and_non_author_is_blocked(monkeypatch: 
 @pytest.mark.anyio
 async def test_material_validation_and_unknown_ids(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     author = store.create(sub="teacher-materials-validate", name="Autor", roles=["teacher"])
 
@@ -225,14 +210,7 @@ def _assert_positions(materials: Sequence[dict], expected_ids: Sequence[str]) ->
 @pytest.mark.anyio
 async def test_material_reorder_and_payload_guards(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     author = store.create(sub="teacher-materials-reorder", name="Autor", roles=["teacher"])
     other = store.create(sub="teacher-materials-reorder-other", name="Fremd", roles=["teacher"])
@@ -295,14 +273,7 @@ async def test_material_reorder_and_payload_guards(monkeypatch: pytest.MonkeyPat
 async def test_patch_rejects_invalid_body_md_type(monkeypatch: pytest.MonkeyPatch):
     """PATCH must return 400 when body_md is not a string."""
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     author = store.create(sub="teacher-materials-patch-invalid", name="Autor", roles=["teacher"])
     async with (await _client()) as client:
@@ -323,14 +294,7 @@ async def test_patch_rejects_invalid_body_md_type(monkeypatch: pytest.MonkeyPatc
 async def test_reorder_rejects_invalid_uuid_in_payload(monkeypatch: pytest.MonkeyPatch):
     """Reorder must return 400 invalid_material_ids when list contains a non-UUID."""
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     author = store.create(sub="teacher-materials-reorder-invalid", name="Autor", roles=["teacher"])
     async with (await _client()) as client:
@@ -353,14 +317,7 @@ async def test_reorder_rejects_invalid_uuid_in_payload(monkeypatch: pytest.Monke
 async def test_patch_rejects_empty_title_as_invalid(monkeypatch: pytest.MonkeyPatch):
     """PATCH must return 400 invalid_title when title is an empty string."""
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     author = store.create(sub="teacher-materials-patch-empty-title", name="Autor", roles=["teacher"])
     async with (await _client()) as client:

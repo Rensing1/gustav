@@ -43,6 +43,36 @@ def test_verify_runs_db_test_inventory_gate() -> None:
     assert "$(MAKE) test-db-inventory" in body
 
 
+def test_inventory_preserves_explicit_teaching_db_prerequisites(tmp_path: Path) -> None:
+    from backend.tools import db_test_inventory
+
+    tests = tmp_path / "backend" / "tests"
+    utils = tests / "utils"
+    utils.mkdir(parents=True)
+    (utils / "teaching.py").write_text(
+        "def require_teaching_db_repo():\n    require_db_or_skip()\n"
+    )
+    for name, alias in (("direct", ""), ("aliased", " as require_repo")):
+        (tests / f"test_{name}.py").write_text(
+            "import pytest\npytestmark = pytest.mark.db_write\n"
+            f"from backend.tests.utils.teaching import require_teaching_db_repo{alias}\n"
+        )
+    (tests / "test_helper_unit.py").write_text(
+        "from backend.tests.utils import teaching as helpers\n"
+        "def test_mocked_helper(monkeypatch):\n"
+        "    monkeypatch.setattr(helpers, 'require_db_or_skip', lambda: None)\n"
+        "    helpers.require_teaching_db_repo()\n"
+    )
+    records = {r.path: r for r in db_test_inventory.scan_tests(tests, repo_root=tmp_path)}
+    for name in ("direct", "aliased"):
+        record = records[f"backend/tests/test_{name}.py"]
+        assert record.classification == "real-db"
+        assert record.marker_status == "marked-db"
+        assert record.signals == ("requires-db",)
+    assert records["backend/tests/utils/teaching.py"].classification == "test-infra"
+    assert "backend/tests/test_helper_unit.py" not in records
+
+
 def test_db_test_inventory_classifies_real_db_candidates(tmp_path: Path) -> None:
     from backend.tools import db_test_inventory
 

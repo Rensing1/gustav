@@ -2,6 +2,13 @@
 
 ## 2026-09-07
 
+### Technische Schulden – Teaching-DB-Tests wieder verlässlich ausführen
+
+- test: 43 bedingt übersprungene Teaching-DB-Verträge verwenden eine gemeinsame aktuelle Adapterprüfung. Ein falscher Testadapter bei erreichbarer Datenbank ist ein Fehler statt eines Skips; kopierte breite Fehlerabfangblöcke entfallen.
+- test: Kursfixtures enthalten die erforderlichen Metadaten; paginierte Kurslisten verwenden eindeutige Testidentitäten. Die Mitglieder-Namensauflösung wird am tatsächlichen Verbraucher ersetzt, unbenutzte Testeingriffe sind entfernt.
+- tooling: Das DB-Testinventar erkennt die explizite Teaching-DB-Vorbedingung auch bei importiertem Alias. Alle bisherigen DB-Testdateien bleiben erfasst; die neue Hilfe ist als Testinfrastruktur eingeordnet.
+- scope: Ausschließlich Tests, Testwerkzeug und Dokumentation; keine Änderung von API, Datenbankschema, ENV, UI, Graphdarstellung, Berechtigungen oder DSPy.
+
 ### Technische Schulden – H5P-Zugriffsprüfung
 
 - refactor(learning): H5P-Zugriff erhält den Datenzugang ausdrücklich; der synchrone Handler verwendet den bestehenden frameworkunabhängigen Anwendungsfall. Mitgliedschaft, lineare Freigabe und modulare Zugänglichkeit bleiben unverändert abgesichert.

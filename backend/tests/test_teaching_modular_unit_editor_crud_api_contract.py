@@ -17,12 +17,11 @@ import pytest
 from httpx import ASGITransport
 
 from backend.tests.runtime_auth_helpers import install_session_store
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.teaching import require_teaching_db_repo
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 main = importlib.import_module("backend.web.main")
-teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -42,14 +41,7 @@ def _teacher_session(monkeypatch: pytest.MonkeyPatch, sub: str):
 async def test_teaching_modular_unit_module_update_and_delete_remove_backing_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-1")
 
@@ -101,14 +93,7 @@ async def test_teaching_modular_unit_module_update_and_delete_remove_backing_con
 async def test_teaching_modular_unit_phase_delete_cascades_to_modules_edges_and_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-2")
 
@@ -162,14 +147,7 @@ async def test_teaching_modular_create_section_after_deleting_last_phase_remains
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Deleting the last phase must not break subsequent section creation."""
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-last-phase")
 
@@ -204,14 +182,7 @@ async def test_teaching_modular_create_section_keeps_documented_section_to_modul
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`createSection` in modular units must still create the backing module entry."""
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-3")
 
@@ -240,14 +211,7 @@ async def test_teaching_modular_module_delete_clamps_required_prereq_count_after
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Deleting a prerequisite module must clamp target k-of-n to remaining incoming edges."""
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-4")
 
@@ -298,14 +262,7 @@ async def test_teaching_modular_phase_delete_clamps_required_prereq_count_after_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Deleting a phase with prerequisite modules must clamp target k-of-n to zero."""
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor CRUD API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-crud-5")
 

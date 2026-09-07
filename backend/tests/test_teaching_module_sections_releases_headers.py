@@ -12,11 +12,10 @@ import pytest
 from httpx import ASGITransport
 
 from backend.tests.runtime_auth_helpers import install_session_store  # noqa: E402
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.teaching import require_teaching_db_repo
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 main = importlib.import_module("backend.web.main")
-teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -53,13 +52,7 @@ async def _attach_unit_to_course(client: httpx.AsyncClient, course_id: str, unit
 @pytest.mark.anyio
 async def test_releases_list_headers_vary_origin_owner_and_errors(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     owner = store.create(sub="teacher-releases-owner", name="Owner", roles=["teacher"])
     other = store.create(sub="teacher-releases-other", name="Other", roles=["teacher"])

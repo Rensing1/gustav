@@ -14,11 +14,10 @@ import pytest
 from httpx import ASGITransport
 
 from backend.tests.runtime_auth_helpers import install_session_store
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.teaching import require_teaching_db_repo
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 main = importlib.import_module("backend.web.main")
-teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -65,13 +64,7 @@ def _visibility_path(course_id: str, module_id: str, section_id: str) -> str:
 @pytest.mark.anyio
 async def test_section_visibility_requires_teacher_owner(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     # Unauthenticated request → 401 before any other validation
     async with (await _client()) as client:
@@ -114,14 +107,7 @@ async def test_section_visibility_requires_teacher_owner(monkeypatch: pytest.Mon
 @pytest.mark.anyio
 async def test_section_visibility_toggle_and_error_conditions(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     owner_sub = "teacher-section-release-toggle"
     owner = store.create(sub=owner_sub, name="Frau Toggle", roles=["teacher"])
@@ -187,14 +173,7 @@ async def test_section_visibility_toggle_and_error_conditions(monkeypatch: pytes
 async def test_section_visibility_invalid_ids_and_not_found_details(monkeypatch: pytest.MonkeyPatch):
     """Validate 400 for invalid UUIDs and 404 detail codes for missing module."""
     store = install_session_store(monkeypatch, main)
-    _require_db_or_skip()
-
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
+    require_teaching_db_repo()
 
     owner = store.create(sub="teacher-section-release-ids", name="Ids", roles=["teacher"])
 

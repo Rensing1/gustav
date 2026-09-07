@@ -9,18 +9,17 @@ It assumes authentication via the existing session middleware and requires the
 from __future__ import annotations
 
 import importlib
+from uuid import uuid4
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
-from backend.teaching.repo_db import DBTeachingRepo
 from backend.tests.runtime_auth_helpers import install_session_store
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.teaching import require_teaching_db_repo
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 main = importlib.import_module("backend.web.main")
-teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client():
@@ -32,13 +31,10 @@ async def test_teacher_can_create_and_list_own_courses(monkeypatch: pytest.Monke
     # Ensure in-memory session store for this test run
     store = install_session_store(monkeypatch, main)
     # Require DB-backed repo
-    try:
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
-    _require_db_or_skip()
+    require_teaching_db_repo()
     # Arrange: teacher session
-    sess = store.create(sub="teacher-1", name="Frau Lehrerin", roles=["teacher"])
+    teacher_sub = f"teacher-courses-{uuid4()}"
+    sess = store.create(sub=teacher_sub, name="Lehrkraft", roles=["teacher"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", sess.session_id)
@@ -53,7 +49,7 @@ async def test_teacher_can_create_and_list_own_courses(monkeypatch: pytest.Monke
         assert create.status_code == 201
         body = create.json()
         assert body.get("title") == "Biologie Q1"
-        assert body.get("teacher_id") == "teacher-1"
+        assert body.get("teacher_id") == teacher_sub
         assert body.get("id")
 
         # Act: list courses
@@ -74,11 +70,7 @@ async def test_create_course_invalid_title_returns_400(monkeypatch: pytest.Monke
     # Ensure in-memory session store
     store = install_session_store(monkeypatch, main)
     # Require DB-backed repo
-    try:
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
-    _require_db_or_skip()
+    require_teaching_db_repo()
 
     teacher = store.create(sub="teacher-bad-title", name="Owner", roles=["teacher"])
 
@@ -95,6 +87,7 @@ async def test_create_course_invalid_title_returns_400(monkeypatch: pytest.Monke
 @pytest.mark.anyio
 async def test_create_course_requires_complete_new_metadata(monkeypatch: pytest.MonkeyPatch):
     """New courses must not enter the catalog without lifecycle metadata."""
+    teaching = importlib.import_module("backend.web.routes.teaching")
     store = install_session_store(monkeypatch, main)
     repo = teaching._Repo()  # type: ignore[attr-defined]
     monkeypatch.setattr(teaching, "REPO", repo, raising=False)
@@ -111,6 +104,7 @@ async def test_create_course_requires_complete_new_metadata(monkeypatch: pytest.
 @pytest.mark.anyio
 async def test_create_course_invalid_title_in_memory_repo(monkeypatch: pytest.MonkeyPatch):
     """Ensure fallback repo mirrors DB validation for blank titles."""
+    teaching = importlib.import_module("backend.web.routes.teaching")
     store = install_session_store(monkeypatch, main)
     # Force fallback by swapping repo with fresh in-memory implementation.
     repo = teaching._Repo()  # type: ignore[attr-defined]
@@ -153,11 +147,7 @@ async def test_student_cannot_create_course_forbidden(monkeypatch: pytest.Monkey
 async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
     # Require DB-backed repo
-    try:
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
-    _require_db_or_skip()
+    require_teaching_db_repo()
     # Arrange: two teachers and one student
     t1 = store.create(sub="teacher-A", name="Frau A", roles=["teacher"])
     t2 = store.create(sub="teacher-B", name="Herr B", roles=["teacher"])
@@ -167,7 +157,8 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
         mapping = {"student-1": "Max Musterschüler", "student-2": "Mia Muster"}
         return {i: mapping.get(i, f"Name:{i}") for i in ids}
 
-    monkeypatch.setattr(teaching, "resolve_student_names", fake_resolver_bulk, raising=False)
+    members = importlib.import_module("backend.web.routes.teaching_course_members")
+    monkeypatch.setattr(members, "_resolve_student_names_runtime", fake_resolver_bulk)
 
     # Teacher A creates a course
     async with (await _client()) as client:
@@ -219,22 +210,13 @@ async def test_manage_members_add_list_remove_with_owner_checks(monkeypatch: pyt
 @pytest.mark.anyio
 async def test_add_member_missing_student_sub_returns_400(monkeypatch: pytest.MonkeyPatch):
     store = install_session_store(monkeypatch, main)
-    try:
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
-    _require_db_or_skip()
+    require_teaching_db_repo()
 
     owner = store.create(sub="teacher-member-missing", name="Owner", roles=["teacher"])
 
-    def fake_resolver(ids: list[str]) -> dict[str, str]:
-        return {sid: f"Name:{sid}" for sid in ids}
-
-    monkeypatch.setattr(teaching, "resolve_student_names", fake_resolver, raising=False)
-
     async with (await _client()) as client:
         client.cookies.set("gustav_session", owner.session_id)
-        created = await client.post("/api/teaching/courses", json={"title": "Physik 10"})
+        created = await client.post("/api/teaching/courses", json={"title": "Physik 10", "subject": "Physik", "grade_level": "10", "school_year_start": 2026})
         assert created.status_code == 201
         course_id = created.json()["id"]
 
@@ -250,26 +232,16 @@ async def test_student_listing_includes_member_courses(monkeypatch: pytest.Monke
     store = install_session_store(monkeypatch, main)
     # Teacher creates course and adds student
     # Require DB-backed repo
-    try:
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for this test")
-    _require_db_or_skip()
-    t = store.create(sub="teacher-X", name="Lehrkraft X", roles=["teacher"])
-    s = store.create(sub="student-X", name="Schüler X", roles=["student"])
-
-    # monkeypatch resolver for completeness (not used by listing)
-    def fake_resolver_bulk(ids: list[str]) -> dict[str, str]:
-        return {i: f"Name:{i}" for i in ids}
-
-    monkeypatch.setattr(teaching, "resolve_student_names", fake_resolver_bulk, raising=False)
+    require_teaching_db_repo()
+    t = store.create(sub=f"teacher-listing-{uuid4()}", name="Lehrkraft", roles=["teacher"])
+    s = store.create(sub=f"student-listing-{uuid4()}", name="Schüler", roles=["student"])
 
     async with (await _client()) as client:
         client.cookies.set("gustav_session", t.session_id)
         c = await client.post("/api/teaching/courses", json={"title": "Physik 9", "subject": "Physik", "grade_level": "9", "school_year_start": 2026})
         assert c.status_code == 201
         course_id = c.json()["id"]
-        a = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": "student-X"})
+        a = await client.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": s.sub})
         assert a.status_code in (201, 204)
 
     # As student: should see the course in listing
@@ -284,6 +256,7 @@ async def test_student_listing_includes_member_courses(monkeypatch: pytest.Monke
 @pytest.mark.anyio
 async def test_list_courses_default_limit_matches_contract_10(monkeypatch: pytest.MonkeyPatch):
     """GET /api/teaching/courses without `limit` must default to 10."""
+    teaching = importlib.import_module("backend.web.routes.teaching")
     store = install_session_store(monkeypatch, main)
     # Isolate behavior from DB state.
     teaching.set_repo(teaching._Repo())  # type: ignore[attr-defined]

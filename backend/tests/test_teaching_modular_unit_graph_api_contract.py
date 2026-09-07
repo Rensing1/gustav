@@ -17,12 +17,11 @@ import pytest
 from httpx import ASGITransport
 
 from backend.tests.runtime_auth_helpers import install_session_store
-from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
+from backend.tests.utils.teaching import require_teaching_db_repo
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 main = importlib.import_module("backend.web.main")
-teaching = importlib.import_module("backend.web.routes.teaching")
 
 
 async def _client() -> httpx.AsyncClient:
@@ -52,13 +51,7 @@ def _teacher_session(monkeypatch: pytest.MonkeyPatch, sub: str):
 async def test_teaching_modular_unit_graph_endpoints_support_visual_authoring(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-1")
 
@@ -144,13 +137,7 @@ async def test_teaching_modular_unit_required_prereq_count_tracks_incoming_edges
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Option 1: k defaults to n and keeps tracking while "auto" (k==n)."""
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-k1")
 
@@ -225,13 +212,7 @@ async def test_teaching_modular_unit_required_prereq_count_decreases_when_auto_a
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When k==n, removing an incoming edge should keep k in sync."""
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-k2")
 
@@ -290,13 +271,7 @@ async def test_teaching_modular_unit_duplicate_edge_returns_conflict_instead_of_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Creating the same edge twice must return a stable API error, not 500."""
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-dup-edge")
 
@@ -341,13 +316,7 @@ async def test_teaching_modular_unit_edge_create_accepts_uppercase_module_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Edge create must accept valid UUIDs regardless of letter casing."""
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-upper-edge")
 
@@ -375,13 +344,7 @@ async def test_teaching_modular_unit_edge_delete_rejects_linear_unit_invalid_uni
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Edge delete endpoint must reject linear units with a typed 400 detail code."""
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-del-linear")
 
@@ -408,13 +371,7 @@ async def test_teaching_modular_unit_edge_delete_by_path_params_happy_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Preferred edge delete endpoint should work without DELETE request body."""
-    _require_db_or_skip()
-    try:
-        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
-
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-    except Exception:
-        pytest.skip("DB-backed TeachingRepo required for modular editor API tests")
+    require_teaching_db_repo()
 
     teacher = _teacher_session(monkeypatch, "t-api-mod-editor-del-path")
 

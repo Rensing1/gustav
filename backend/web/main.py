@@ -42,6 +42,10 @@ from backend.web.main_storage_wiring import initialize_main_storage
 from backend.web.profile_providers import ProfileProviders, create_profile_providers
 from backend.web.runtime_config import load_teaching_live_poll_interval_seconds
 from backend.web.runtime_errors import install_runtime_error_handlers
+from backend.web.teacher_catalog_providers import (
+    TeacherCatalogProviders,
+    create_teacher_catalog_providers,
+)
 
 bootstrap_runtime_environment()
 
@@ -56,6 +60,7 @@ def create_app(
     profile_providers: ProfileProviders | None = None,
     concern_box_providers: ConcernBoxProviders | None = None,
     learning_course_providers: LearningCourseProviders | None = None,
+    teacher_catalog_providers: TeacherCatalogProviders | None = None,
     access_token_verifier: Callable[[str, OIDCConfig], Mapping[str, object]] | None = None,
 ) -> FastAPI:
     """Create the package-oriented FastAPI runtime.
@@ -75,6 +80,7 @@ def create_app(
     mount_static_files(created_app, static_dir)
     runtime = auth_runtime.create_auth_runtime(running_under_pytest=_running_under_pytest())
     created_app.state.runtime = runtime
+    created_app.state.teacher_catalog_providers = teacher_catalog_providers if teacher_catalog_providers is not None else create_teacher_catalog_providers()
     created_app.state.learning_course_providers = learning_course_providers if learning_course_providers is not None else create_learning_course_providers()
     created_app.state.concern_box_providers = concern_box_providers if concern_box_providers is not None else create_concern_box_providers()
     created_app.state.profile_providers = profile_providers if profile_providers is not None else create_profile_providers(runtime)

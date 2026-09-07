@@ -12,7 +12,8 @@ def test_teacher_concern_routes_live_in_focused_router_module() -> None:
     app_routes = importlib.import_module("backend.web.routes.app")
     concern_routes = importlib.import_module("backend.web.routes.app_teacher_concern_routes")
 
-    assert app_routes.get_teacher_home is concern_routes.get_teacher_home
+    assert not hasattr(app_routes, "get_teacher_home")
+    assert concern_routes.get_teacher_home.__module__ == concern_routes.__name__
     assert not hasattr(concern_routes, "get_teacher_concern_box")
     assert not hasattr(concern_routes, "archive_teacher_concern_box_entry")
     assert not hasattr(concern_routes, "restore_teacher_concern_box_entry")

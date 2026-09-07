@@ -38,6 +38,20 @@ test("@feature-acceptance teacher starts live work and resumes authoring from ho
   await expect(page).toHaveURL(`/teaching/units/${seeded.unitId}`);
 
   await page.goto("/teaching");
+  await page.getByRole("link", { name: "Alle Lerneinheiten" }).click();
+  await expect(page).toHaveURL("/teaching/units");
+  const catalogUnit = page.getByRole("link", { name: seeded.unitTitle, exact: true });
+  await expect(catalogUnit).toBeVisible();
+  await page.getByRole("searchbox", { name: "Suche" }).fill(seeded.unitTitle);
+  await expect(page).toHaveURL((url) => url.searchParams.get("query") === seeded.unitTitle);
+  await page.reload();
+  await expect(page.getByRole("searchbox", { name: "Suche" })).toHaveValue(seeded.unitTitle);
+  await expect(catalogUnit).toBeVisible();
+  await page.getByRole("searchbox", { name: "Suche" }).fill(`Kein Treffer ${unique}`);
+  await expect(page).toHaveURL((url) => url.searchParams.get("query") === `Kein Treffer ${unique}`);
+  await expect(catalogUnit).toHaveCount(0);
+
+  await page.goto("/teaching");
   await page.getByRole("link", { name: "Neue Lerneinheit" }).click();
   await expect(page).toHaveURL(/\/teaching\/units\?create=1$/);
   await expect(page.getByRole("dialog", { name: "Neue Lerneinheit" })).toBeVisible();

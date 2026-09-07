@@ -1,9 +1,9 @@
-"""Teacher unit Browser-BFF routes.
+"""Teacher unit workspace Browser-BFF routes.
 
 Why:
     The app router is the compatibility facade for SvelteKit BFF read models.
-    Teacher unit catalog and workspace payloads are a cohesive read surface, so
-    their route handlers and small read helpers live together here.
+    Workspace handlers retain their read helpers here until their own migration.
+    The catalog uses an explicit service in app_teacher_catalog_routes instead.
 """
 
 from __future__ import annotations
@@ -30,14 +30,6 @@ app_teacher_unit_router = APIRouter(tags=["App"])
 def _list_teacher_course_units(course_id: str, owner_sub: str) -> list[dict]:
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     return repo.list_course_units_for_owner(course_id, owner_sub)
-
-
-def _list_teacher_units(owner_sub: str, limit: int, offset: int) -> list[dict]:
-    repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
-    return [
-        teaching_routes._serialize_unit(item)  # type: ignore[attr-defined]
-        for item in (repo.list_units_for_author(author_id=owner_sub, limit=limit, offset=offset) or [])
-    ]
 
 
 def _list_teacher_courses(owner_sub: str, limit: int, offset: int) -> list[dict[str, str]]:
@@ -194,126 +186,6 @@ def _find_course_unit(course_id: str, owner_sub: str, unit_id: str) -> dict[str,
     return None
 
 
-def _teacher_units_catalog(owner_sub: str, query: str = "", sort: str | None = None) -> dict[str, object]:
-    """Build the owner-scoped unit catalog projection shared by teacher views.
-
-    The teacher home page deliberately reuses this projection so its recent
-    units follow the exact same activity and sorting rules as the full catalog.
-    Callers must pass the authenticated teacher subject; repository reads keep
-    enforcing author ownership.
-    """
-    course_refs_by_unit, _ = _build_teacher_unit_course_refs(owner_sub)
-    units = _list_teacher_units(owner_sub, limit=200, offset=0)
-
-    items: list[dict[str, object]] = []
-
-    for unit in units:
-        unit_id = str(unit.get("id") or "")
-        refs = course_refs_by_unit.get(unit_id, [])
-        sections = _list_teacher_unit_sections(unit_id, owner_sub)
-        sections_count = len(sections)
-        courses_count = len(refs)
-        last_activity = max(
-            [str(unit.get("updated_at") or "")]
-            + [str(section.get("updated_at") or "") for section in sections]
-        )
-        haystack = " ".join(
-            part.strip().lower()
-            for part in (
-                str(unit.get("title") or ""),
-                str(unit.get("summary") or ""),
-            )
-            if part
-        )
-
-        if courses_count > 0:
-            status_label = "Aktiv im Unterricht"
-            status_tone = "success"
-        elif sections_count == 0:
-            status_label = "Entwurf"
-            status_tone = "muted"
-        else:
-            status_label = "In Bearbeitung"
-            status_tone = "accent"
-
-        items.append(
-            {
-                "id": unit_id,
-                "title": str(unit.get("title") or ""),
-                "topic": str(unit.get("summary") or "").strip() or None,
-                "updated_at": last_activity,
-                "href": f"/teaching/units/{unit_id}",
-                "courses_count": courses_count,
-                "courses": [
-                    {
-                        "id": str(ref.get("id") or ""),
-                        "title": str(ref.get("title") or ""),
-                        "href": str(ref.get("href") or ""),
-                    }
-                    for ref in refs
-                    if str(ref.get("id") or "")
-                ],
-                "status_label": status_label,
-                "status_tone": status_tone,
-                "searchable": haystack,
-            }
-        )
-
-    query_value = query.strip()
-    if query_value:
-        needle = query_value.lower()
-        items = [item for item in items if needle in str(item["searchable"])]
-
-    active_sort = sort or "updated_desc"
-    if active_sort == "title_asc":
-        items.sort(key=lambda item: str(item["title"]).lower())
-    else:
-        items.sort(key=lambda item: str(item["updated_at"]), reverse=True)
-
-    list_items = [
-        {
-            "id": str(item["id"]),
-            "title": str(item["title"]),
-            "topic": item["topic"],
-            "status_label": str(item["status_label"]),
-            "status_tone": str(item["status_tone"]),
-            "courses_count": int(item["courses_count"]),
-            "courses": item["courses"],
-            "updated_at": str(item["updated_at"]),
-            "href": str(item["href"]),
-        }
-        for item in items
-    ]
-
-    return {
-        "query": query_value,
-        "sort": active_sort,
-        "result_count": len(list_items),
-        "items": list_items,
-        "create_href": "/teaching/units?create=1",
-    }
-
-
-@app_teacher_unit_router.get("/api/teaching/views/units/catalog")
-async def get_teacher_units_catalog(
-    request: Request,
-    query: str = "",
-    sort: str | None = None,
-):
-    """Return the teacher units catalog as a structured bestandsliste.
-
-    The payload stays intentionally small and UI-ready. It avoids mixed meta
-    strings so the frontend can render a flat table-like inventory with a
-    separate course cell and a dedicated title link.
-    """
-    user = _current_user(request)
-    if user is None:
-        return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
-    if not has_any_role(user, {"teacher", "admin"}):
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_private_headers())
-
-    body = {"user": _user_payload(user), **_teacher_units_catalog(str(user.get("sub") or ""), query, sort)}
-    return JSONResponse(body, headers=_private_headers())
 
 
 @app_teacher_unit_router.get("/api/teaching/views/units/{unit_id}/workspace")

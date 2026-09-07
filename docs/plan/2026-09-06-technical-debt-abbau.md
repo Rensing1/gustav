@@ -21,7 +21,7 @@ DSPy wird auf dem tatsächlich eingesetzten Stand einschließlich Abhängigkeite
 | C | Zentrale Browser-/API-Testkontexte mit regulärer TLS-Prüfung; lokale CA; aktuelle, visuell geprüfte Referenzen und vollständiges UI-Labor | teilweise umgesetzt; UI-Labor noch nicht vollständig |
 | D | Verbindliche gemeinsame UI-Bausteine und Varianten; zentrale Tokens; geordnete fachliche CSS-Importfassaden ohne Cascade Layers; ausführbare Designregeln | begonnen; vollständige Baustein-/CSS-Migration offen |
 | E | Alle aktiven Oberflächen verwenden gemeinsame Bausteine; Learning-, Teaching-, Live-Controller, Aufgabenarten und Server-View-Models besitzen getrennte Verantwortung | ausstehend |
-| F | Appbezogene typisierte Provider statt Route-Fassaden und Endpoint-Globals; isolierte Apps in Tests; Abgabe-/Workerphasen und H5P-Router entkoppelt | begonnen: Profil-/CLI-, Kummerkasten- und Lernenden-Kursprovider migriert; Gesamtmigration offen |
+| F | Appbezogene typisierte Provider statt Route-Fassaden und Endpoint-Globals; isolierte Apps in Tests; Abgabe-/Workerphasen und H5P-Router entkoppelt | begonnen: Profil-/CLI-, Kummerkasten-, Lernenden-Kurs- und Lehrer-Katalogprovider migriert; Gesamtmigration offen |
 | G | Gebündelte Live-Aufgabenabfrage mit didaktischer Reihenfolge; blockierende Adapterarbeit außerhalb des Event Loops; Abfragezahl und Nebenläufigkeit getestet | umgesetzt; verify-feature live-summary erfolgreich |
 | H | Zentrale Ruff-Regeln E/F/I ohne E501; bereinigte Verstöße; vollständige Dokumentation und Abschlussnachweise | Lint umgesetzt; Gesamtabschlussnachweise bleiben offen |
 
@@ -100,7 +100,7 @@ Upstream-Nachweise für H5P: [ICNS](https://github.com/advisories/GHSA-w3rx-r6r6
 
 ### Weiterhin offen
 
-E und der größte Teil von F sind noch offen: vollständige Seiten-/Controller-/View-Model-Migration, übrige appbezogene Provider einschließlich Entfernung der Reparatur-Fixtures, Abgabe-/Workerphasen sowie H5P-Routertrennung. F1 migriert Profil und CLI-Verwaltung, F2 den Kummerkasten, F3 die Lernenden-Kursübersicht (siehe unten). D enthält bisher nur zentrale globale Tokenprüfung und die gemeinsame Dialognachricht; gemeinsame Aktions-/Formvarianten, vollständige Seitennutzung und fachliche CSS-Importfassaden fehlen. C besitzt geprüfte Designreferenzen, aber noch kein vollständiges UI-Labor. Die vorgesehenen H5P-Authoring-/Review- und zusätzlichen iPad-WebKit-Nachweise gehören zu den jeweiligen noch offenen Paketen. Der Gesamtplan ist deshalb ausdrücklich nicht abgeschlossen.
+E und der größte Teil von F sind noch offen: vollständige Seiten-/Controller-/View-Model-Migration, übrige appbezogene Provider einschließlich Entfernung der Reparatur-Fixtures, Abgabe-/Workerphasen sowie H5P-Routertrennung. F1 migriert Profil und CLI-Verwaltung, F2 den Kummerkasten, F3 die Lernenden-Kursübersicht, F4 Lehrer-Startseite und Lerneinheitenkatalog (siehe unten). D enthält bisher nur zentrale globale Tokenprüfung und die gemeinsame Dialognachricht; gemeinsame Aktions-/Formvarianten, vollständige Seitennutzung und fachliche CSS-Importfassaden fehlen. C besitzt geprüfte Designreferenzen, aber noch kein vollständiges UI-Labor. Die vorgesehenen H5P-Authoring-/Review- und zusätzlichen iPad-WebKit-Nachweise gehören zu den jeweiligen noch offenen Paketen. Der Gesamtplan ist deshalb ausdrücklich nicht abgeschlossen.
 
 ### F1: Appbezogene Profil-Provider (7. September 2026)
 
@@ -200,3 +200,48 @@ Vorprüfung: Die drei OpenAPI-Verträge und die Kursarchiv-/Mitgliedschaftsmigra
 - Svelte-Prüfung ohne Fehler/Warnungen; Produktionsbuild mit ausschließlich den dokumentierten Upstream-Ausnahmen. Import-/Architekturgrenzen, API-Vertrag, Route-/DB-Inventar, Supply Chain, Ruff und Image-Smoke grün. `git diff --check` ohne Befund.
 
 F3 ist abgeschlossen. Die übrige Provider-Migration einschließlich Lehrer-Startseite, weitere Frontend-/Worker-/H5P-Arbeitspakete und der Sicherheitsabschluss bleiben offen. Keine API-, Schema-, ENV-, UI- oder DSPy-Änderung; kein zusätzlicher Dienst, keine zusätzliche Datenbank und kein Push.
+
+### F4: Gemeinsame Regeln für Lehrer-Startseite und Lerneinheitenkatalog
+
+Als Lehrkraft möchte ich auf der Startseite weiterhin meine Kurse und die drei zuletzt bearbeiteten Lerneinheiten finden. Der Katalog soll dieselbe Bearbeitungsreihenfolge, Suchfunktion, Kurszuordnung und Statusanzeige behalten. Als Entwickler möchte ich beide Lesewege mit gezielt übergebenen Testdaten prüfen können, ohne gemeinsame Web-Module umzuschreiben.
+
+Umfang: `GET /api/teaching/views/teacher-home` und `GET /api/teaching/views/units/catalog`. Ein gemeinsamer frameworkunabhängiger Katalogdienst hinter vier eigentümergebundenen Repository-Operationen übernimmt die bisherigen Projektionen. Ein kleiner expliziter Provider verwendet den vorhandenen DBTeachingRepo; beide HTTP-Handler laufen synchron im begrenzten Threadpool. Der Katalog-Handler erhält ein fokussiertes Modul; tote Katalog-/Home-Aliase entfallen. Workspace-/Editor-Routen und ihre noch benötigten Helfer bleiben unverändert. Keine zusätzlichen Dienste oder Datenbanken; GUSTAV bleibt eine Plattform.
+
+| Given – When – Then | Nachweis |
+| --- | --- |
+| Getrennt vorbereitete Test-Anwendungsobjekte – Home/Katalog abwechselnd laden – ausschließlich die übergebenen Repositorydaten | `test_teacher_catalog_provider_isolation.py` |
+| Entwurf, bearbeitete und kursgebundene Einheit – Katalog laden – unveränderte Statuslabels, Kurslinks und Reihenfolge einschließlich Abschnittsänderungen | Service-/API-Tests |
+| Mehr als drei Einheiten, leere Listen und Such-/Sortierparameter – Home/Katalog laden – Begrenzung, leere Zustände und Filter unverändert | Service-/API-Tests |
+| Fehlende Anmeldung oder Schülerrolle – laden – 401/403 vor Adapterzugriff; Adapterausfall – private 503-Antwort | Isolationstests |
+| Eigene und fremde Inhalte – eigene Home-/Katalogansicht – nur eigene Kurse und Einheiten | echte DB-Tests in `test_teaching_units_catalog_view_api.py` |
+| Wartender DB-Zugang – unabhängiger Shell-Request – Event Loop bleibt frei | synchronisierter Isolationstest |
+| Echte Lehrkraft – von Home zu Live/Editor/Katalog wechseln, suchen und neu laden – Zuordnung und Anzeige bleiben erhalten | erweitertes `teacher-home-workstarter.spec.ts` mit genau einem `@feature-acceptance`-Szenario |
+
+Vorprüfung: Die beiden vorhandenen OpenAPI-Verträge einschließlich 503 bleiben gültig. Bestehende Kurs-/Einheiten-/Abschnitts-RLS und ENV-Namen bleiben unverändert; keine Migration, UI-, KI- oder DSPy-Änderung. Tests zuerst, bestehende Katalogtests auf frische Authentifizierung und echte DB mit gezielter Datenbereinigung umstellen. Gate: lokale CA prüfen, lokalen Webdienst neu bauen, `make verify-feature FEATURE=teacher-home-workstarter`. Kein Push.
+
+Bewusste Grenze: Die vorhandene begrenzte Katalogabfrage lädt weiterhin Kurszuordnungen pro Kurs und Abschnitte pro Einheit. F4 beseitigt keine N+1-Struktur und ändert die bisherigen 200er-Anforderungen/Adaptergrenzen nicht stillschweigend. Eine spätere gebündelte Katalogabfrage benötigt eigene DB-Paritäts-/Abfragezahltests und bleibt offen. Die Startseite kann die doppelte Kurslistenabfrage ohne Änderung der Projektion vermeiden.
+
+#### Umsetzung und gezielte Nachweise F4
+
+- Ausgangspunkt: sauberer, per Fast-Forward synchronisierter `master` auf `994a7380`. Der neue Isolationstest war vor Implementierung wegen des fehlenden Providers rot. Anschließend wurden die beiden Lese-Handler migriert und die überholten Home-/Katalog-Aliase entfernt.
+- `UnitCatalogService` übernimmt die bisherigen Regeln unverändert hinter vier Repository-Operationen. Die Startseite verwendet die bereits gelesene Kursliste erneut und übernimmt höchstens drei Katalogeinträge. Die HTTP-Adapter behalten Rollenprüfung und private Antworten; Initialisierungsfehler bleiben private 503-Antworten mit erneut versuchbarer Initialisierung.
+- 24 gezielte Service-/Provider-/Home-/Katalog-/Routertests erfolgreich: Statusanzeigen, Suche, Titel-/Aktivitätssortierung, Abschnittsaktivität, leere Listen, Drei-Einheiten-Grenze, Admin-Zugang, 401/403/503 und unabhängiger Shell-Zugriff bei wartendem Repository. Echte lokale DB-Tests weisen für zwei synthetische Eigentümer getrennte Kurse, Einheiten und Kurszuordnungen nach.
+- Die bisherigen Katalogtests verwenden ausdrücklich vorbereitete Authentifizierung und echte DB-Daten statt globaler In-Memory-Umschaltungen. Ein beim ersten fehlgeschlagenen Testlauf zurückgebliebener leerer Testkurs wurde anhand seiner konkreten ID und seines synthetischen Eigentümers bereinigt. Die korrigierte Fixture erfasst und löscht ausschließlich ihre eigenen Kurse und Einheiten; das DB-Inventar ist aktualisiert.
+- Der erweiterte authentifizierte Browserrundlauf `teacher-home-workstarter` ist erfolgreich: Startseite → Live-Unterricht, Startseite → Editor, Startseite → Katalog, Suche einschließlich Neuladen und leerer Treffermenge sowie Öffnen des Anlegedialogs. Die laufbezogene Browser-Testdatenbereinigung wurde bestätigt; die Produkt-UI ist unverändert.
+- Kritische Durchsicht: Keine FastAPI-Abhängigkeit im Katalogdienst, keine dynamische Fassade in beiden Handlern, keine zusätzliche Installation oder Datenbank. Workspace/Node-Editor und ihre benötigten Helfer bleiben bewusst unangetastet. Die verbleibenden kurs-/einheitenweisen Einzelabfragen und Listenbegrenzungen sind ausdrücklich als TD-009 erfasst und nicht als gelöst gewertet.
+
+#### Zusätzliche Eingrenzung am Abschluss-Gate
+
+Der erste vollständige F4-Lauf endete mit 14 Fehlern, 2668 bestandenen und 78 übersprungenen Backend-Tests. Die Fehler betreffen globale Learning-Repository-Overrides; derselbe Block besteht isoliert vollständig (22 Tests). Insbesondere liest `learning._get_repo()` im Gesamtlauf nach `set_repo(replacement)` weiter ein altes DB-Repository. Vor Abschluss wird diese reihenfolgeabhängige Testleckage mit einem minimalen Reproduktionsnachweis eingegrenzt. Eine nötige Korrektur soll ausschließlich die Testisolation des verursachenden Tests betreffen; keine Aufweichung fachlicher Zugriffsprüfungen und keine Erweiterung der Produktmigration auf Upload oder Portfolio.
+
+Eingrenzung: Alle 433 Learning-Tests bestehen für sich. Ein temporärer Diagnosecheck im Gesamtlauf meldet die erste falsche Getter-Modulidentität unmittelbar nach `test_upload_intent_lazy_rewire_on_first_request`. Dessen vorhandene Aufräumroutine stellt nur `sys.modules` wieder her; `set_repo` hat aber auch die Namespaces der vorher registrierten Handler verändert. Reparaturplan: zuerst ein deterministischer Test für Import/Repository-Austausch/Wiederherstellung, dann die lokale Import-Isolation dieses Reload-Tests um Namespace- und Package-Attribut-Wiederherstellung ergänzen. Keine neue globale Reparatur-Fixture und keine Änderung der Produkt-Repository-Logik.
+
+Der gezielte Regressionstest war mit der bisherigen Aufräumroutine rot: Die Identität des ursprünglichen `_get_repo` ging verloren. Nach der lokalen Korrektur sind beide Varianten (normaler Ablauf und Ausnahme während des Neuladens) sowie die drei bestehenden Reload-Tests grün. Auch der gemeinsame Lauf mit den zuvor betroffenen Portfolio-/Upload-/Repository-Tests ist grün. Die ursprünglichen globalen Produkt-Fassaden bleiben als offene Schuld bestehen; die Korrektur beschränkt sich auf die bereits vorhandene Import-Isolation dieses Testmoduls. Der temporäre Diagnosecheck wird nicht Teil des Repositorys.
+
+#### Abschlussnachweis F4
+
+- `make local-ca-status`: lokale CA in System, Chromium/Codex und Firefox vertraut. `docker compose up -d --build web`: lokaler Webdienst erfolgreich neu gebaut und gestartet.
+- `make verify-feature FEATURE=teacher-home-workstarter` vollständig erfolgreich: **2684 Backend-Tests bestanden, 78 vorgesehen übersprungen; 683 Frontend-Tests, 8 Tooling-Tests, 62 H5P-Tests und 1 authentifizierter Browserrundlauf bestanden**. Die anschließende Feature-Bereinigung bestätigt, dass keine laufbezogenen Browser-Testkonten oder Daten zurückbleiben.
+- Svelte-Prüfung ohne Fehler/Warnungen; Produktionsbuild mit ausschließlich den dokumentierten Upstream-Ausnahmen. Import-/Architekturgrenzen, API-Vertrag, Route-/DB-Inventar, Supply Chain, Ruff und Image-Smoke grün. `git diff --check` ohne Befund.
+
+F4 ist abgeschlossen. Die übrigen Provider, insbesondere Workspace/Node-Editor, die Frontend-/Worker-/H5P-Arbeitspakete und der Sicherheitsabschluss bleiben offen. Die Katalog-Abfrageoptimierung ist als TD-009 dokumentiert. API, Schema, ENV, UI und DSPy bleiben unverändert; keine zusätzliche Installation, kein zusätzlicher Dienst, keine zusätzliche Datenbank und kein Push.

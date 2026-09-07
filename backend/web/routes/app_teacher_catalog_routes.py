@@ -8,12 +8,12 @@ from backend.web.routes.app_session_helpers import current_user, private_headers
 from backend.web.security.guards import has_any_role
 from backend.web.teacher_catalog_providers import teacher_catalog_providers
 
-app_teacher_concern_router = APIRouter(tags=["App"])
+app_teacher_catalog_router = APIRouter(tags=["App"])
 
 
-@app_teacher_concern_router.get("/api/teaching/views/teacher-home")
-def get_teacher_home(request: Request):
-    """Read the owner's work starter; synchronous database work runs in the threadpool."""
+@app_teacher_catalog_router.get("/api/teaching/views/units/catalog")
+def get_teacher_units_catalog(request: Request, query: str = "", sort: str | None = None):
+    """Read only the authenticated teacher's searchable catalog in the threadpool."""
     user = current_user(request)
     if user is None:
         return JSONResponse(
@@ -25,9 +25,7 @@ def get_teacher_home(request: Request):
     return JSONResponse(
         {
             "user": user_payload(user),
-            **service.home(str(user.get("sub") or "")),
-            "units_href": "/teaching/units",
-            "create_unit_href": "/teaching/units?create=1",
+            **service.catalog(str(user.get("sub") or ""), query, sort),
         },
         headers=private_headers(),
     )

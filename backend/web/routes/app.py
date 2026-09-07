@@ -112,14 +112,9 @@ from backend.web.routes.app_session_helpers import (
 from backend.web.routes.app_session_helpers import (
     user_payload as _user_payload,
 )
-from backend.web.routes.app_teacher_concern_routes import (
-    _teacher_home_workstarter as _teacher_home_workstarter,  # noqa: F401
-)
+from backend.web.routes.app_teacher_catalog_routes import app_teacher_catalog_router
 from backend.web.routes.app_teacher_concern_routes import (
     app_teacher_concern_router,
-)
-from backend.web.routes.app_teacher_concern_routes import (
-    get_teacher_home as get_teacher_home,  # noqa: F401
 )
 from backend.web.routes.app_teacher_course_routes import (
     _build_usage_totals as _build_usage_totals,  # noqa: F401
@@ -203,22 +198,13 @@ from backend.web.routes.app_teacher_unit_routes import (
     _list_teacher_unit_sections as _list_teacher_unit_sections,  # noqa: F401
 )
 from backend.web.routes.app_teacher_unit_routes import (
-    _list_teacher_units as _list_teacher_units,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
     _list_unit_task_ids as _list_unit_task_ids,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
-    _teacher_units_catalog as _teacher_units_catalog,  # noqa: F401
 )
 from backend.web.routes.app_teacher_unit_routes import (
     app_teacher_unit_router,
 )
 from backend.web.routes.app_teacher_unit_routes import (
     get_teacher_unit_workspace as get_teacher_unit_workspace,  # noqa: F401
-)
-from backend.web.routes.app_teacher_unit_routes import (
-    get_teacher_units_catalog as get_teacher_units_catalog,  # noqa: F401
 )
 from backend.web.security.guards import has_any_role as has_any_role  # noqa: F401
 
@@ -228,6 +214,7 @@ app_router.include_router(app_live_router)
 app_router.include_router(app_diagnostics_router)
 app_router.include_router(app_profile_router)
 app_router.include_router(app_teacher_concern_router)
+app_router.include_router(app_teacher_catalog_router)
 app_router.include_router(app_concern_box_router)
 app_router.include_router(app_teacher_course_router)
 app_router.include_router(app_teacher_unit_router)

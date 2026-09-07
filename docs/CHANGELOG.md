@@ -2,6 +2,13 @@
 
 ## 2026-09-07
 
+### Technische Schulden – gemeinsame Lehrer-Startseiten- und Katalogregeln
+
+- refactor(teaching): Lehrer-Startseite und Lerneinheitenkatalog verwenden denselben frameworkunabhängigen Katalogdienst und ausdrücklich bereitgestellten Datenbankzugang. Globale Home-/Katalog-Aliase entfallen; die Startseite liest ihre Kursliste nur einmal.
+- refactor(web): Beide synchronen Lese-Handler führen DB-Arbeit im begrenzten Threadpool aus. Eigentümergrenzen, Statusanzeigen, Such-/Sortierregeln und Links bleiben unverändert.
+- test: Isolierte Abhängigkeitstests, echte DB-Eigentümerprüfungen und der erweiterte authentifizierte Startseiten-/Katalogrundlauf sichern Teil F4 ab. API, Schema, UI und DSPy bleiben unverändert. Übrige Provider sowie die gebündelte Katalogabfrage bleiben offen.
+- test: Die lokale Import-Isolation der Storage-Neuladetests stellt zusätzlich veränderte Modul-Namespaces und Package-Verweise wieder her. Zwei Regressionen sichern normale Ausführung und Fehlerfall; so bleiben nachfolgende Learning-Tests nicht an einem fremden Repository-Zugang hängen.
+
 ### Technische Schulden – Datenzugang der Lernenden-Kursübersicht
 
 - refactor(learning): Startseite, persönliche Kursliste und Kurs-Lerneinheiten erhalten ihren Datenbankzugang ausdrücklich beim Aufbau der Backend-Anwendung. Die bisherigen globalen Kurs-Handler und Home-Aliase entfallen. GUSTAV bleibt eine gemeinsame Plattform, ohne zusätzliche Dienste oder Datenbanken.

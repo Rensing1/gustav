@@ -13,6 +13,7 @@ import importlib
 import sys
 import types
 import uuid
+from contextlib import contextmanager, nullcontext
 
 import httpx
 import pytest
@@ -34,8 +35,8 @@ def _is_reload_owned_module(name: str) -> bool:
     )
 
 
-@pytest.fixture(autouse=True)
-def restore_import_state_after_test():
+@contextmanager
+def isolated_web_imports():
     """Keep deliberate route-module reloads from leaking into later tests."""
 
     snapshot = {
@@ -43,11 +44,56 @@ def restore_import_state_after_test():
         for name, module in list(sys.modules.items())
         if _is_reload_owned_module(name) or name == "supabase"
     }
-    yield
-    for name in list(sys.modules):
-        if _is_reload_owned_module(name) or name == "supabase":
-            sys.modules.pop(name, None)
-    sys.modules.update(snapshot)
+    # Repository/storage setters also mutate old endpoint namespaces. Restoring
+    # sys.modules alone would keep those old modules wired to the fresh import.
+    owned_modules = {
+        **snapshot,
+        "backend.web": sys.modules["backend.web"],
+        "backend.web.routes": sys.modules["backend.web.routes"],
+    }
+    namespaces = {name: vars(module).copy() for name, module in owned_modules.items()}
+    try:
+        yield
+    finally:
+        for name in list(sys.modules):
+            if _is_reload_owned_module(name) or name == "supabase":
+                sys.modules.pop(name, None)
+        sys.modules.update(snapshot)
+        # Package attributes must agree with the restored import cache, too.
+        for name, module in owned_modules.items():
+            vars(module).clear()
+            vars(module).update(namespaces[name])
+
+
+@pytest.fixture(autouse=True)
+def restore_import_state_after_test():
+    with isolated_web_imports():
+        yield
+
+
+@pytest.mark.parametrize("fail_during_reload", [False, True])
+def test_reload_isolation_restores_repository_accessors_and_package_attributes(fail_during_reload):
+    """Reload tests must restore mutated old modules, not just their cache entries."""
+    routes_package = importlib.import_module("backend.web.routes")
+
+    original = importlib.import_module("backend.web.routes.learning")
+    original_getter = original._get_repo
+    original_repo = original_getter()
+    expected_error = pytest.raises(RuntimeError, match="reload test failed") if fail_during_reload else nullcontext()
+    with expected_error:
+        with isolated_web_imports():
+            _clear_web_modules()
+            importlib.import_module("backend.web.main")
+            fresh = importlib.import_module("backend.web.routes.learning")
+            fresh.set_repo(VisibleLearningRepo())
+            assert fresh is not original
+            if fail_during_reload:
+                raise RuntimeError("reload test failed")
+
+    assert importlib.import_module("backend.web.routes.learning") is original
+    assert original._get_repo is original_getter
+    assert original._get_repo() is original_repo
+    assert routes_package.learning is original
 
 
 def _clear_web_modules(*, include_teaching: bool = False) -> None:

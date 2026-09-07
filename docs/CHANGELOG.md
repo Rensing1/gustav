@@ -2,6 +2,12 @@
 
 ## 2026-09-07
 
+### Technische Schulden – Materialdateien und Simulationen
+
+- refactor(learning): Die drei Materialabrufe verwenden explizite DB-/Storage-/Download-Abhängigkeiten statt globaler Routenfassaden. Unbenutzte Handler-Aliase entfallen. Synchrone Metadatenabfrage und Storage-Signierung laufen im begrenzten Threadpool; der Download bleibt asynchron.
+- test: Isolations-, Fehler-, Initialisierungs- und Nebenläufigkeitstests sichern die neue Verdrahtung. Bestehende DB-Dateitests benötigen für den Abruf keine globalen Storage- oder Endpoint-Overrides mehr. Der Simulations-Browsernachweis prüft jetzt zusätzlich den erneuten Abruf nach Freigabeentzug; Graph-/Datei- und lineare Materialabläufe bleiben abgesichert.
+- scope: API, Schema, ENV-Namen, UI, DSPy, SQL-Freischaltung, Download-Schutz und Simulation-Sandbox unverändert. Globale Upload-/Abgabe-/Autorenspeicher-Verdrahtung bleibt getrennte Folgearbeit.
+
 ### Technische Schulden – Datenzugang zu Modulinhalten
 
 - refactor(learning): Modulinhalt verwendet ausdrücklich bereitgestellten Datenbankzugang und einen frameworkunabhängigen Anwendungsfall. Graph und Inhalt teilen die modulare Kurszuordnungsprüfung; die zentrale SQL-Freischaltung und erneute DB-Berechtigungsprüfung bleiben bestehen. Der synchrone HTTP-Handler liegt außerhalb des Learning-Routenhotspots.

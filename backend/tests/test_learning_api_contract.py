@@ -19,9 +19,11 @@ import pytest
 from httpx import ASGITransport
 
 from backend.identity_access.stores import SessionStore
+from backend.learning.repo_db import DBLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 from backend.tests.utils.storage_fixtures import dummy_jpeg_bytes, dummy_png_bytes
+from backend.web.learning_material_providers import LearningMaterialProviders
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
@@ -50,6 +52,15 @@ async def _client() -> httpx.AsyncClient:
         base_url="http://test",
         headers={"Origin": "http://test"},
     )
+
+
+def _material_client(*, student_sub, storage, download, repository=DBLearningRepo):
+    """Use explicit download dependencies while keeping the real visibility DB."""
+    app = main.create_app(
+        learning_material_providers=LearningMaterialProviders(repository=repository, storage=storage, download=download),
+        access_token_verifier=lambda token, cfg: {"sub": student_sub, "realm_access": {"roles": ["student"]}},
+    )
+    return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers={"Authorization": "Bearer test.jwt"})
 
 
 @pytest.fixture(autouse=True)
@@ -1094,11 +1105,9 @@ async def test_learning_material_file_route_streams_released_material(monkeypatc
     """Released learner materials should stream through the canonical app route."""
 
     teaching = importlib.import_module("backend.web.routes.teaching")
-    learning = importlib.import_module("backend.web.routes.learning")
 
     fixture = await _prepare_learning_fixture(monkeypatch)
     original_adapter = teaching.STORAGE_ADAPTER
-    original_learning_adapter = learning.STORAGE_ADAPTER
     try:
         class _Adapter:
             def presign_upload(self, *, bucket, key, expires_in, headers):
@@ -1120,8 +1129,6 @@ async def test_learning_material_file_route_streams_released_material(monkeypatc
             return b"%PDF-material%"
 
         teaching.set_storage_adapter(_Adapter())
-        learning.set_storage_adapter(_Adapter())
-        monkeypatch.setattr(learning, "_download_bytes_with_limit", _fake_download)
 
         async with (await _client()) as teacher_client:
             teacher_client.cookies.set("gustav_session", fixture.teacher_session_id)
@@ -1135,8 +1142,7 @@ async def test_learning_material_file_route_streams_released_material(monkeypatc
                 size_bytes=1024,
             )
 
-        async with (await _client()) as student_client:
-            student_client.cookies.set("gustav_session", fixture.student_session_id)
+        async with _material_client(student_sub=fixture.student_sub, storage=_Adapter, download=_fake_download) as student_client:
             response = await student_client.get(
                 f"/api/learning/courses/{fixture.course_id}/materials/{material['id']}/file",
                 params={"disposition": "attachment"},
@@ -1148,7 +1154,6 @@ async def test_learning_material_file_route_streams_released_material(monkeypatc
         assert response.headers.get("Content-Type") == "application/pdf"
         assert "attachment" in str(response.headers.get("Content-Disposition") or "")
     finally:
-        learning.set_storage_adapter(original_learning_adapter)
         teaching.set_storage_adapter(original_adapter)
 
 
@@ -1157,12 +1162,10 @@ async def test_learning_material_file_legacy_alias_requires_matching_section(mon
     """Legacy alias route must stay fail-closed when section_id does not match the visible material."""
 
     teaching = importlib.import_module("backend.web.routes.teaching")
-    learning = importlib.import_module("backend.web.routes.learning")
 
     fixture = await _prepare_learning_fixture(monkeypatch, create_hidden_section=True)
     assert fixture.hidden_section_id is not None
     original_adapter = teaching.STORAGE_ADAPTER
-    original_learning_adapter = learning.STORAGE_ADAPTER
     try:
         class _Adapter:
             def presign_upload(self, *, bucket, key, expires_in, headers):
@@ -1181,8 +1184,6 @@ async def test_learning_material_file_legacy_alias_requires_matching_section(mon
             return b"%PDF-material%"
 
         teaching.set_storage_adapter(_Adapter())
-        learning.set_storage_adapter(_Adapter())
-        monkeypatch.setattr(learning, "_download_bytes_with_limit", _fake_download)
 
         async with (await _client()) as teacher_client:
             teacher_client.cookies.set("gustav_session", fixture.teacher_session_id)
@@ -1196,8 +1197,7 @@ async def test_learning_material_file_legacy_alias_requires_matching_section(mon
                 size_bytes=1024,
             )
 
-        async with (await _client()) as student_client:
-            student_client.cookies.set("gustav_session", fixture.student_session_id)
+        async with _material_client(student_sub=fixture.student_sub, storage=_Adapter, download=_fake_download) as student_client:
             response = await student_client.get(
                 f"/api/learning/courses/{fixture.course_id}/sections/{fixture.hidden_section_id}/materials/{material['id']}/file",
                 params={"disposition": "inline"},
@@ -1205,7 +1205,6 @@ async def test_learning_material_file_legacy_alias_requires_matching_section(mon
 
         assert response.status_code == 404, response.text
     finally:
-        learning.set_storage_adapter(original_learning_adapter)
         teaching.set_storage_adapter(original_adapter)
 
 
@@ -1223,33 +1222,17 @@ async def test_learning_material_file_routes_return_503_when_visibility_lookup_i
 ):
     """Visibility lookup failures must stay distinguishable from real 404 material misses."""
 
-    learning = importlib.import_module("backend.web.routes.learning")
-
     fixture = await _prepare_learning_fixture(monkeypatch)
 
-    async def _unexpected_download(**kwargs):  # noqa: ANN001
-        raise AssertionError(f"material download should not start when lookup is unavailable: {kwargs}")
+    async def forbidden(**kwargs):
+        pytest.fail("unavailable visibility reached storage")
 
-    def fake_repo_factory():
-        return type("_Repo", (), {"_dsn": ""})()
-    monkeypatch.setattr(learning, "_get_repo", fake_repo_factory)
-    monkeypatch.setattr(learning, "_download_storage_object_via_presign", _unexpected_download)
-
-    from fastapi.routing import APIRoute
-
-    for route in main.app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        if route.path not in {
-            "/api/learning/courses/{course_id}/materials/{material_id}/file",
-            "/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file",
-        }:
-            continue
-        monkeypatch.setitem(route.endpoint.__globals__, "_get_repo", fake_repo_factory)
-        monkeypatch.setitem(route.endpoint.__globals__, "_download_storage_object_via_presign", _unexpected_download)
-
-    async with (await _client()) as student_client:
-        student_client.cookies.set("gustav_session", fixture.student_session_id)
+    async with _material_client(
+        student_sub=fixture.student_sub,
+        repository=lambda: type("UnavailableRepo", (), {"_dsn": ""})(),
+        storage=lambda: pytest.fail("unavailable visibility reached signer"),
+        download=forbidden,
+    ) as student_client:
         response = await student_client.get(
             path_template.format(
                 course_id=fixture.course_id,

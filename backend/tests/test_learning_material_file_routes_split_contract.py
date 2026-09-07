@@ -12,8 +12,9 @@ def test_material_file_routes_live_in_focused_router_module() -> None:
     learning = importlib.import_module("backend.web.routes.learning")
     material_routes = importlib.import_module("backend.web.routes.learning_material_file_routes")
 
-    assert learning.get_material_file is material_routes.get_material_file
-    assert learning.get_material_file_legacy_alias is material_routes.get_material_file_legacy_alias
+    assert not hasattr(learning, "get_material_file")
+    assert not hasattr(learning, "get_material_file_legacy_alias")
+    assert callable(material_routes.get_material_file)
 
 
 def test_learning_hotspot_no_longer_defines_material_file_route_handlers() -> None:

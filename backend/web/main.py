@@ -39,6 +39,10 @@ from backend.web.learning_graph_providers import (
     LearningGraphProviders,
     create_learning_graph_providers,
 )
+from backend.web.learning_material_providers import (
+    LearningMaterialProviders,
+    create_learning_material_providers,
+)
 from backend.web.learning_module_providers import (
     LearningModuleProviders,
     create_learning_module_providers,
@@ -78,6 +82,7 @@ def create_app(
     learning_course_providers: LearningCourseProviders | None = None,
     learning_graph_providers: LearningGraphProviders | None = None,
     learning_module_providers: LearningModuleProviders | None = None,
+    learning_material_providers: LearningMaterialProviders | None = None,
     teacher_catalog_providers: TeacherCatalogProviders | None = None,
     teacher_editor_providers: TeacherEditorProviders | None = None,
     teacher_workspace_providers: TeacherWorkspaceProviders | None = None,
@@ -100,6 +105,7 @@ def create_app(
     mount_static_files(created_app, static_dir)
     runtime = auth_runtime.create_auth_runtime(running_under_pytest=_running_under_pytest())
     created_app.state.runtime = runtime
+    created_app.state.learning_material_providers = learning_material_providers if learning_material_providers is not None else create_learning_material_providers(environment=lambda: runtime.settings.environment)
     created_app.state.learning_module_providers = learning_module_providers if learning_module_providers is not None else create_learning_module_providers()
     created_app.state.learning_graph_providers = learning_graph_providers if learning_graph_providers is not None else create_learning_graph_providers()
     created_app.state.teacher_workspace_providers = teacher_workspace_providers if teacher_workspace_providers is not None else create_teacher_workspace_providers()

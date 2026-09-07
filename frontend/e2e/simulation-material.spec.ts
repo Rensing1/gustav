@@ -2,6 +2,7 @@ import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
+import { apiHeaders, expectApiOk } from "./support/api";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedSimulationMaterialCourse } from "./support/seed-data";
@@ -102,6 +103,15 @@ test("@feature-acceptance teacher publishes and learner resets a sandboxed simul
     await expect(learner.page.frameLocator(".learning-material-simulation__frame").locator("#counter")).toHaveText("0");
     await learner.page.getByRole("button", { name: "Simulation schließen" }).click();
     await expect(learner.page.locator(".learning-material-simulation__frame")).toHaveCount(0);
+
+    const hide = await teacher.page.request.patch(
+      `${webBase}/api/teaching/courses/${seeded.courseId}/modules/${seeded.moduleId}/sections/${seeded.sectionId}/visibility`,
+      { headers: apiHeaders(), data: { visible: false } }
+    );
+    await expectApiOk(hide);
+    const hidden = await learner.page.request.get(`${webBase}${simulationUrl}`);
+    expect(hidden.status()).toBe(404);
+    expect(hidden.headers()["cache-control"]).toBe("private, no-store");
   } finally {
     await learner.context.close();
     await teacher.context.close();

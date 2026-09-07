@@ -76,6 +76,7 @@ export type LearnerBookWorkspaceCourse = LearnerVisualSmokeCourse & {
 };
 
 export type SimulationMaterialCourse = {
+  moduleId: string;
   courseId: string;
   unitId: string;
   sectionId: string;
@@ -252,7 +253,7 @@ export async function seedSimulationMaterialCourse(
   const moduleId = await attachUnitToCourse(teacherPage, courseId, unitId);
   await releaseSection(teacherPage, courseId, moduleId, sectionId);
   await addCurrentLearnerToCourse(teacherPage, courseId, learnerSub);
-  return { courseId, unitId, sectionId };
+  return { courseId, unitId, sectionId, moduleId };
 }
 
 export async function seedTeacherAiUsageCourse(

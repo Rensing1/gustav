@@ -403,7 +403,6 @@ async def test_learning_modular_material_file_url_streams_visible_material(monke
     teacher = store.create(sub="t-mod-file-stream-1", name="Lehrkraft", roles=["teacher"])  # type: ignore
     student = store.create(sub="s-mod-file-stream-1", name="Schüler", roles=["student"])  # type: ignore
     original_adapter = teaching.STORAGE_ADAPTER
-    original_learning_adapter = learning.STORAGE_ADAPTER
     try:
         class _Adapter:
             def presign_upload(self, *, bucket, key, expires_in, headers):
@@ -425,8 +424,6 @@ async def test_learning_modular_material_file_url_streams_visible_material(monke
             return b"%PDF-modular-material%"
 
         teaching.set_storage_adapter(_Adapter())
-        learning.set_storage_adapter(_Adapter())
-        monkeypatch.setattr(learning, "_download_bytes_with_limit", _fake_download)
 
         async with (await _client()) as c:
             c.cookies.set("gustav_session", teacher.session_id)
@@ -467,14 +464,20 @@ async def test_learning_modular_material_file_url_streams_visible_material(monke
             payload = r_content.json()
             material = payload["materials"][0]
 
-            file_response = await c.get(material["file_url"], params={"disposition": "attachment"})
+            from backend.web.learning_material_providers import LearningMaterialProviders
+
+            read_app = main.create_app(
+                learning_material_providers=LearningMaterialProviders(repository=DBLearningRepo, storage=_Adapter, download=_fake_download),
+                access_token_verifier=lambda token, cfg: {"sub": student.sub, "realm_access": {"roles": ["student"]}},
+            )
+            async with httpx.AsyncClient(transport=ASGITransport(app=read_app), base_url="http://test", headers={"Authorization": "Bearer test.jwt"}) as reader:
+                file_response = await reader.get(material["file_url"], params={"disposition": "attachment"})
             assert file_response.status_code == 200, file_response.text
             assert file_response.content == b"%PDF-modular-material%"
             assert file_response.headers.get("Cache-Control") == "private, no-store"
             assert file_response.headers.get("Content-Type") == "application/pdf"
             assert "attachment" in str(file_response.headers.get("Content-Disposition") or "")
     finally:
-        learning.set_storage_adapter(original_learning_adapter)
         teaching.set_storage_adapter(original_adapter)
 
 

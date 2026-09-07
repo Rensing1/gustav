@@ -65,12 +65,6 @@ from backend.web.routes.learning_internal_upload_routes import (
     learning_internal_upload_router,
 )
 from backend.web.routes.learning_material_file_routes import (
-    get_material_file as get_material_file,  # noqa: F401 - kept for route module compatibility
-)
-from backend.web.routes.learning_material_file_routes import (
-    get_material_file_legacy_alias as get_material_file_legacy_alias,  # noqa: F401
-)
-from backend.web.routes.learning_material_file_routes import (
     learning_material_file_router,
 )
 from backend.web.routes.learning_material_files import (
@@ -396,14 +390,6 @@ def _cache_headers_error() -> dict[str, str]:
     # Error responses: must never be stored; protects PII-bearing error pages.
     # Include Vary: Origin for consistency with success responses.
     return {"Cache-Control": "private, no-store", "Vary": "Origin"}
-
-
-def _teaching_storage_adapter() -> object | None:
-    for module_name in ("backend.web.routes.teaching",):
-        module = _sys.modules.get(module_name)
-        if module is not None:
-            return getattr(module, "STORAGE_ADAPTER", None)
-    return None
 
 
 def _emit_upload_proxy_telemetry(

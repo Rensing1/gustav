@@ -29,6 +29,7 @@ from backend.web.app_composition import (
 )
 from backend.web.auth_only_app import create_app_auth_only as _create_app_auth_only
 from backend.web.auth_session import SESSION_COOKIE_NAME  # noqa: F401
+from backend.web.concern_box_providers import ConcernBoxProviders, create_concern_box_providers
 from backend.web.layout_response import render_layout_response
 from backend.web.main_auth_wiring import create_main_auth_wiring
 from backend.web.main_middleware_wiring import install_main_middlewares
@@ -49,6 +50,7 @@ static_dir = Path(__file__).parent / "static"
 def create_app(
     *,
     profile_providers: ProfileProviders | None = None,
+    concern_box_providers: ConcernBoxProviders | None = None,
     access_token_verifier: Callable[[str, OIDCConfig], Mapping[str, object]] | None = None,
 ) -> FastAPI:
     """Create the package-oriented FastAPI runtime.
@@ -68,6 +70,7 @@ def create_app(
     mount_static_files(created_app, static_dir)
     runtime = auth_runtime.create_auth_runtime(running_under_pytest=_running_under_pytest())
     created_app.state.runtime = runtime
+    created_app.state.concern_box_providers = concern_box_providers if concern_box_providers is not None else create_concern_box_providers()
     created_app.state.profile_providers = profile_providers if profile_providers is not None else create_profile_providers(runtime)
     initialize_main_storage()
     auth_wiring = create_main_auth_wiring(

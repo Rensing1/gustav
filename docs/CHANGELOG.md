@@ -2,6 +2,12 @@
 
 ## 2026-09-07
 
+### Technische Schulden – appbezogener Kummerkasten
+
+- refactor(teaching): Die fünf Kummerkasten-Endpunkte besitzen explizite appbezogene Repository-/Namensprovider. Kursauswahl, Mitgliedschaftsprüfung und datensparsame Posteingangsprojektion liegen in einem frameworkunabhängigen Dienst; dynamische Kummerkasten-Fassaden und ihre Aliase entfallen.
+- refactor(web): Synchrone DB-/Namensauflösung läuft im begrenzten Threadpool. API, RLS, atomare Mitgliedschaftsprüfung und UI bleiben unverändert; anonyme Subjects erreichen weder Namensauflösung noch öffentliche Antworten.
+- test: Frische Test-Apps, Zwei-App-Isolation, Nebenläufigkeit, echte Eigentümer-/Mitgliedschaftsprüfungen und ein authentifizierter Senden-/Archivieren-/Wiederherstellen-Rundlauf sichern Teil F2 ab. Die Home-Routen und übrigen Provider bleiben offen; DSPy bleibt unverändert.
+
 ### Technische Schulden – appbezogene Profil-Provider
 
 - refactor(identity): Profilregeln und Normalisierung liegen im frameworkunabhängigen Fachkontext. Die App-Factory nimmt explizite typisierte Profil-Provider an; globale Profil-Fassaden, dynamische Modulrückgriffe und überholte Aliase entfallen.

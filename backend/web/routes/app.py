@@ -20,6 +20,7 @@ from backend.web.auth_session import (
 )
 from backend.web.routes import teaching as teaching_routes  # noqa: F401
 from backend.web.routes import teaching_guards as teaching_guards  # noqa: F401
+from backend.web.routes.app_concern_box_routes import app_concern_box_router
 from backend.web.routes.app_diagnostics_routes import (
     _build_diagnostics_course_matrix_rows as _build_diagnostics_course_matrix_rows,  # noqa: F401
 )
@@ -39,19 +40,10 @@ from backend.web.routes.app_diagnostics_routes import (
     get_diagnostics_learner_profile as get_diagnostics_learner_profile,  # noqa: F401
 )
 from backend.web.routes.app_learner_view_routes import (
-    _list_concern_box_courses_for_student as _list_concern_box_courses_for_student,  # noqa: F401
-)
-from backend.web.routes.app_learner_view_routes import (
     _list_learner_courses as _list_learner_courses,  # noqa: F401
 )
 from backend.web.routes.app_learner_view_routes import (
     app_learner_view_router,
-)
-from backend.web.routes.app_learner_view_routes import (
-    create_learner_concern_box_entry as create_learner_concern_box_entry,  # noqa: F401
-)
-from backend.web.routes.app_learner_view_routes import (
-    get_learner_concern_box as get_learner_concern_box,  # noqa: F401
 )
 from backend.web.routes.app_learner_view_routes import (
     get_learner_home as get_learner_home,  # noqa: F401
@@ -127,25 +119,13 @@ from backend.web.routes.app_session_helpers import (
     user_payload as _user_payload,
 )
 from backend.web.routes.app_teacher_concern_routes import (
-    _teacher_concern_box_scopes as _teacher_concern_box_scopes,  # noqa: F401
-)
-from backend.web.routes.app_teacher_concern_routes import (
     _teacher_home_workstarter as _teacher_home_workstarter,  # noqa: F401
 )
 from backend.web.routes.app_teacher_concern_routes import (
     app_teacher_concern_router,
 )
 from backend.web.routes.app_teacher_concern_routes import (
-    archive_teacher_concern_box_entry as archive_teacher_concern_box_entry,  # noqa: F401
-)
-from backend.web.routes.app_teacher_concern_routes import (
-    get_teacher_concern_box as get_teacher_concern_box,  # noqa: F401
-)
-from backend.web.routes.app_teacher_concern_routes import (
     get_teacher_home as get_teacher_home,  # noqa: F401
-)
-from backend.web.routes.app_teacher_concern_routes import (
-    restore_teacher_concern_box_entry as restore_teacher_concern_box_entry,  # noqa: F401
 )
 from backend.web.routes.app_teacher_course_routes import (
     _build_usage_totals as _build_usage_totals,  # noqa: F401
@@ -254,6 +234,7 @@ app_router.include_router(app_live_router)
 app_router.include_router(app_diagnostics_router)
 app_router.include_router(app_profile_router)
 app_router.include_router(app_teacher_concern_router)
+app_router.include_router(app_concern_box_router)
 app_router.include_router(app_teacher_course_router)
 app_router.include_router(app_teacher_unit_router)
 app_router.include_router(app_teacher_node_editor_router)

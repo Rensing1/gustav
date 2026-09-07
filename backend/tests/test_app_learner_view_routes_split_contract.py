@@ -13,8 +13,8 @@ def test_learner_routes_live_in_focused_router_module() -> None:
     learner_routes = importlib.import_module("backend.web.routes.app_learner_view_routes")
 
     assert app_routes.get_learner_home is learner_routes.get_learner_home
-    assert app_routes.get_learner_concern_box is learner_routes.get_learner_concern_box
-    assert app_routes.create_learner_concern_box_entry is learner_routes.create_learner_concern_box_entry
+    assert not hasattr(learner_routes, "get_learner_concern_box")
+    assert not hasattr(learner_routes, "create_learner_concern_box_entry")
 
 
 def test_app_hotspot_no_longer_defines_learner_route_handlers_or_payload() -> None:
@@ -32,5 +32,4 @@ def test_learner_router_owns_learner_paths() -> None:
     paths = {getattr(route, "path", "") for route in learner_routes.app_learner_view_router.routes}
 
     assert "/api/learning/views/learner-home" in paths
-    assert "/api/learning/views/concern-box" in paths
-    assert "/api/learning/concern-box/entries" in paths
+    assert paths == {"/api/learning/views/learner-home"}

@@ -21,7 +21,7 @@ DSPy wird auf dem tatsächlich eingesetzten Stand einschließlich Abhängigkeite
 | C | Zentrale Browser-/API-Testkontexte mit regulärer TLS-Prüfung; lokale CA; aktuelle, visuell geprüfte Referenzen und vollständiges UI-Labor | teilweise umgesetzt; UI-Labor noch nicht vollständig |
 | D | Verbindliche gemeinsame UI-Bausteine und Varianten; zentrale Tokens; geordnete fachliche CSS-Importfassaden ohne Cascade Layers; ausführbare Designregeln | begonnen; vollständige Baustein-/CSS-Migration offen |
 | E | Alle aktiven Oberflächen verwenden gemeinsame Bausteine; Learning-, Teaching-, Live-Controller, Aufgabenarten und Server-View-Models besitzen getrennte Verantwortung | ausstehend |
-| F | Appbezogene typisierte Provider statt Route-Fassaden und Endpoint-Globals; isolierte Apps in Tests; Abgabe-/Workerphasen und H5P-Router entkoppelt | begonnen: Profil-/CLI-Provider migriert; Gesamtmigration offen |
+| F | Appbezogene typisierte Provider statt Route-Fassaden und Endpoint-Globals; isolierte Apps in Tests; Abgabe-/Workerphasen und H5P-Router entkoppelt | begonnen: Profil-/CLI- und Kummerkasten-Provider migriert; Gesamtmigration offen |
 | G | Gebündelte Live-Aufgabenabfrage mit didaktischer Reihenfolge; blockierende Adapterarbeit außerhalb des Event Loops; Abfragezahl und Nebenläufigkeit getestet | umgesetzt; verify-feature live-summary erfolgreich |
 | H | Zentrale Ruff-Regeln E/F/I ohne E501; bereinigte Verstöße; vollständige Dokumentation und Abschlussnachweise | Lint umgesetzt; Gesamtabschlussnachweise bleiben offen |
 
@@ -100,7 +100,7 @@ Upstream-Nachweise für H5P: [ICNS](https://github.com/advisories/GHSA-w3rx-r6r6
 
 ### Weiterhin offen
 
-E und der größte Teil von F sind noch offen: vollständige Seiten-/Controller-/View-Model-Migration, übrige appbezogene Provider einschließlich Entfernung der Reparatur-Fixtures, Abgabe-/Workerphasen sowie H5P-Routertrennung. F1 migriert zunächst ausschließlich Profil und CLI-Verwaltung (siehe unten). D enthält bisher nur zentrale globale Tokenprüfung und die gemeinsame Dialognachricht; gemeinsame Aktions-/Formvarianten, vollständige Seitennutzung und fachliche CSS-Importfassaden fehlen. C besitzt geprüfte Designreferenzen, aber noch kein vollständiges UI-Labor. Die vorgesehenen H5P-Authoring-/Review- und zusätzlichen iPad-WebKit-Nachweise gehören zu den jeweiligen noch offenen Paketen. Der Gesamtplan ist deshalb ausdrücklich nicht abgeschlossen.
+E und der größte Teil von F sind noch offen: vollständige Seiten-/Controller-/View-Model-Migration, übrige appbezogene Provider einschließlich Entfernung der Reparatur-Fixtures, Abgabe-/Workerphasen sowie H5P-Routertrennung. F1 migriert Profil und CLI-Verwaltung, F2 den Kummerkasten (siehe unten). D enthält bisher nur zentrale globale Tokenprüfung und die gemeinsame Dialognachricht; gemeinsame Aktions-/Formvarianten, vollständige Seitennutzung und fachliche CSS-Importfassaden fehlen. C besitzt geprüfte Designreferenzen, aber noch kein vollständiges UI-Labor. Die vorgesehenen H5P-Authoring-/Review- und zusätzlichen iPad-WebKit-Nachweise gehören zu den jeweiligen noch offenen Paketen. Der Gesamtplan ist deshalb ausdrücklich nicht abgeschlossen.
 
 ### F1: Appbezogene Profil-Provider (7. September 2026)
 
@@ -133,3 +133,36 @@ Grundlage: [Keycloak User Profile](https://www.keycloak.org/docs/latest/server_a
 - `make local-ca-status` und `make docker-validate` erfolgreich. API-Vertrag, PostgreSQL-Schema, ENV-Beispiel, Python-Locks und DSPy-Fixierung sind unverändert. Keine historische opt-in-Gesamtregression ausgeführt.
 
 F1 ist damit abgeschlossen. Für bestehende andere Installationen bleibt die Übernahme derselben einzelnen Keycloak-Profildeklaration ein notwendiger Deployment-Schritt; ein Push oder Zugriff auf eine entfernte Installation fand nicht statt. F insgesamt sowie C–E und der Sicherheitsabschluss bleiben wie oben beschrieben offen.
+
+### F2: Appbezogener Kummerkasten
+
+Als Lernender möchte ich einen Hinweis weiterhin nur an meine eigene Kurslehrkraft senden und selbst wählen, ob mein Name sichtbar ist. Als Lehrkraft möchte ich ausschließlich Hinweise meiner Kurse lesen, archivieren und wiederherstellen. Als Entwickler möchte ich diese Abläufe mit getrennt verdrahteten Apps prüfen können, ohne globale Routen- oder Repository-Zustände zu überschreiben.
+
+Die fünf Kummerkasten-Endpunkte erhalten einen gemeinsamen fokussierten Router und explizite appbezogene Repository-/Namensprovider. Die fachliche Projektion und Mitgliedschaftsprüfung werden hinter kleine frameworkunabhängige Ports verschoben. Der Produktionsprovider erzeugt den vorhandenen RLS-Repository-Adapter verzögert und appbezogen; DB-Verbindungen bleiben in den vorhandenen Adapteroperationen. Die synchrone Arbeit läuft im begrenzten Threadpool. Die bisherigen Home-Routen bleiben zunächst in ihren Modulen; ausschließlich Kummerkasten-Aliase und dynamische Rückgriffe entfallen. Die kanonische Namensauflösung wird ohne Verhaltensänderung in Identity & Access geteilt.
+
+| Given – When – Then | Nachweis |
+| --- | --- |
+| Zwei Apps mit getrennten Repositories – abwechselnd lesen/senden/archivieren/wiederherstellen – keine Vermischung | neue Provider-Isolationstests |
+| Anonyme und benannte Hinweise – Posteingang laden – Namensauflösung nur für benannte Hinweise, keine Subject-IDs in der Antwort | Service-/API-Tests |
+| Fremder Kurs oder fremde Lehrkraft – senden/archivieren/wiederherstellen – unveränderte Ablehnung und unveränderte gespeicherte Daten | echte lokale DB-Tests |
+| Fehlende Rolle, Anmeldung, Same-Origin-Nachweis oder ungültige ID – Mutation – Ablehnung vor Adapterzugriff | API-Tests |
+| Wartender Repository-Aufruf – unabhängigen Shell-Request ausführen – Event Loop bleibt frei | synchronisierter Nebenläufigkeitstest |
+| Authentifizierter Lernender und Lehrkraft – Hinweis senden, lesen, archivieren und wiederherstellen – Zustand bleibt nach Neuladen erhalten | `concern-box-lifecycle` mit genau einem `@feature-acceptance`-Szenario |
+
+Vorprüfung: OpenAPI-Endpunkte und bestehende Kummerkasten-Migrationen einschließlich RLS und atomarer Mitgliedschaftsprüfung bleiben unverändert. Keine Schema-, API-, ENV-, Keycloak- oder DSPy-Änderung vorgesehen. Tests werden zuerst geschrieben; vorhandene API-Tests werden auf frische Apps und explizite Testdatenbereinigung umgestellt. Gate vor Abschluss und Commit: `make verify-feature FEATURE=concern-box-lifecycle`, davor `make local-ca-status` und Neubau des lokalen Webdienstes. Keine historische Gesamtregression und kein Reset fremder Daten.
+
+#### Umsetzung und Zwischenprüfung F2
+
+- Ausgangspunkt: sauberer, per Fast-Forward synchronisierter `master` auf `30b00a1a`. Die ersten neuen Isolationstests waren wegen des noch fehlenden Providers rot; nach der Extraktion sind die gezielten API-/Isolations-/Namens-/Routerprüfungen grün.
+- Der neue Dienst kennt kein FastAPI. Die vorhandene Repository-Implementierung behält die atomare Mitgliedschaftsprüfung und Eigentümer-RLS. Der appbezogene Standardprovider initialisiert verzögert, behandelt Initialisierungsfehler als private 503-Antwort und erlaubt einen erneuten Versuch. Namensauflösung erfolgt gebündelt und ausschließlich für benannte Beiträge.
+- Die bisherigen Kummerkasten-API-Tests verwenden frische Apps und löschen ausschließlich selbst angelegte Kurse samt abhängigen Testbeiträgen. Das DB-Inventar erfasst diese Tests nun ausdrücklich als `db_write`; Route-Inventar und öffentliche API bleiben unverändert.
+- Der neue authentifizierte Browserrundlauf prüft getrennte Rollen/Sitzungen, anonymes und benanntes Senden sowie Archivierung und Wiederherstellung einschließlich Neuladen. Die ersten Läufe korrigierten einen zu strengen Label-Selektor und ein Neuladen vor abgeschlossener Navigation im neuen Test; Produkt-UI und Authentifizierung wurden nicht geändert. Der gezielte Rundlauf ist anschließend grün, die Bereinigung seiner Testkonten und Daten bestätigt.
+- Kritische Durchsicht: HTTP-Rollen-/CSRF-Prüfungen bleiben im Router, Datensichtbarkeit im fachlichen Dienst und RLS im DB-Adapter. Die bestehende statische Namensfunktion bleibt nur für noch nicht migrierte Teaching-Aufrufer als Alias erhalten. Die Home-Routen wurden bewusst nicht mitverschoben; ihre Provider-Migration bleibt ein eigenes Arbeitspaket.
+
+#### Abschlussnachweis F2
+
+- `make local-ca-status`: aktuelle lokale CA in System, Chromium/Codex und Firefox vertraut. `docker compose up -d --build web`: lokaler Webdienst erfolgreich neu gebaut und gestartet.
+- `make verify` und anschließend das vollständige `make verify-feature FEATURE=concern-box-lifecycle`: erfolgreich. Abschlusslauf: **2659 Backend-Tests bestanden, 78 vorgesehen übersprungen; 683 Frontend-Tests, 8 Tooling-Tests und 62 H5P-Tests bestanden; 1 authentifizierter Browserrundlauf bestanden**. Die Feature-Bereinigung bestätigt, dass keine laufbezogenen Konten oder Daten zurückbleiben.
+- Svelte-Prüfung ohne Fehler/Warnungen; Produktionsbuild mit ausschließlich den dokumentierten Upstream-Ausnahmen. Import-/Architekturgrenzen, API-Vertrag, Route-/DB-Inventar, Supply Chain, Ruff und Image-Smoke grün. `git diff --check` ohne Befund.
+
+F2 ist abgeschlossen; F insgesamt, die noch offenen Frontend-/Worker-/H5P-Pakete und der Sicherheitsabschluss bleiben offen. API, Schema, ENV, Keycloak und DSPy wurden in diesem Teilpaket nicht verändert. Kein Zugriff auf eine entfernte Installation und kein Push.

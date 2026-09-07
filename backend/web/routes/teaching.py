@@ -28,6 +28,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from backend.identity_access.student_names import resolve_student_names as resolve_student_names
 from backend.storage.config import (
     get_submissions_bucket,  # noqa: F401 - kept for route module compatibility
 )
@@ -455,33 +456,6 @@ def _load_unit_live_helper_rows(
 
 
 # --- User directory adapter (mockable) ------------------------------------------
-
-def resolve_student_names(subs: list[str]) -> dict[str, str]:
-    """Resolve canonical teacher-visible learner labels via the directory.
-
-    The directory already applies the shared `TeacherStudentLabel` contract.
-    This web adapter preserves its exact result and only derives a localpart
-    from legacy email-like subjects when no directory record exists.
-    """
-    out: dict[str, str] = {}
-    try:
-        from backend.identity_access import directory  # type: ignore
-        raw = directory.resolve_student_names(subs)
-        for sid in subs:
-            val = str((raw or {}).get(sid, "")).strip()
-            if not val or val == sid:
-                fallback = ""
-                try:
-                    if sid.startswith("legacy-email:") or ("@" in sid):
-                        fallback = directory.localpart_identifier(sid)  # type: ignore[attr-defined]
-                except Exception:
-                    fallback = ""
-                out[sid] = fallback or "Unbekannt"
-            else:
-                out[sid] = val
-        return out
-    except Exception:
-        return {s: "Unbekannt" for s in subs}
 
 
 def resolve_live_student_names_by_sub(subs: list[str]) -> dict[str, str]:

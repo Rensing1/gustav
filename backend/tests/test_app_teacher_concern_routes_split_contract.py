@@ -13,9 +13,9 @@ def test_teacher_concern_routes_live_in_focused_router_module() -> None:
     concern_routes = importlib.import_module("backend.web.routes.app_teacher_concern_routes")
 
     assert app_routes.get_teacher_home is concern_routes.get_teacher_home
-    assert app_routes.get_teacher_concern_box is concern_routes.get_teacher_concern_box
-    assert app_routes.archive_teacher_concern_box_entry is concern_routes.archive_teacher_concern_box_entry
-    assert app_routes.restore_teacher_concern_box_entry is concern_routes.restore_teacher_concern_box_entry
+    assert not hasattr(concern_routes, "get_teacher_concern_box")
+    assert not hasattr(concern_routes, "archive_teacher_concern_box_entry")
+    assert not hasattr(concern_routes, "restore_teacher_concern_box_entry")
 
 
 def test_app_hotspot_no_longer_defines_teacher_concern_handlers_or_helpers() -> None:
@@ -35,6 +35,4 @@ def test_teacher_concern_router_owns_teacher_concern_paths() -> None:
     paths = {getattr(route, "path", "") for route in concern_routes.app_teacher_concern_router.routes}
 
     assert "/api/teaching/views/teacher-home" in paths
-    assert "/api/teaching/views/concern-box" in paths
-    assert "/api/teaching/concern-box/entries/{entry_id}/archive" in paths
-    assert "/api/teaching/concern-box/entries/{entry_id}/restore" in paths
+    assert paths == {"/api/teaching/views/teacher-home"}

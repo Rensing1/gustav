@@ -18,9 +18,9 @@
   } from "$lib/components/teacher-unit-graph/GraphSelectionBar.svelte";
   import type { TeacherGraphCommandBarAction } from "$lib/components/teacher-unit-graph/TeacherGraphCommandBar.svelte";
   import TeacherGraphEdge from "$lib/components/teacher-unit-graph/TeacherGraphEdge.svelte";
-  import TeacherGraphViewportControls, {
-    type TeacherGraphViewportController
-  } from "$lib/components/teacher-unit-graph/TeacherGraphViewportControls.svelte";
+  import GraphViewportControls, {
+    type GraphViewportController
+  } from "$lib/components/ui/GraphViewportControls.svelte";
   import { TEACHER_GRAPH_SELECTION_CONTEXT } from "$lib/components/teacher-unit-graph/selection-context";
   import GraphUnitNode from "$lib/components/teacher-unit-graph/GraphUnitNode.svelte";
   import GraphInspectorPanel from "$lib/components/ui/GraphInspectorPanel.svelte";
@@ -81,7 +81,7 @@
   let createSectionOpen = $state(false);
   let flowViewport = $state<{ x: number; y: number; zoom: number } | undefined>(undefined);
   let flowBuildSequence = 0;
-  let graphViewportController: TeacherGraphViewportController | null = null;
+  let graphViewportController: GraphViewportController | null = null;
 
   const nodeTypes = {
     unitNode: GraphUnitNode,
@@ -1040,7 +1040,7 @@
     return modularPhases()[0] ? `phase:${modularPhases()[0].id}` : flowNodes[0]?.id ?? null;
   }
 
-  function registerGraphViewportController(controller: TeacherGraphViewportController) {
+  function registerGraphViewportController(controller: GraphViewportController) {
     graphViewportController = controller;
   }
 
@@ -1158,7 +1158,7 @@
       class="teacher-flow-canvas"
       {nodeTypes}
       {edgeTypes}
-      minZoom={0.52}
+      minZoom={0.1}
       maxZoom={1.26}
       elementsSelectable={true}
       nodesFocusable={true}
@@ -1171,7 +1171,7 @@
       onconnect={handleConnect}
       onnodedragstop={handleNodeDragStop}
     >
-      <TeacherGraphViewportControls
+      <GraphViewportControls
         initialNodeId={initialGraphFocusNodeId()}
         onControllerReady={registerGraphViewportController}
       />

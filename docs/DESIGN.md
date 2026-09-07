@@ -427,6 +427,8 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
 
 ### 11.2 Lernpfad
 
+Lehrkraft- und Schüleransicht verwenden für dieselbe modulare Lerneinheit dieselbe Graphgeometrie: Phasenreihenfolge, relative Knotenpositionen, Knotengrößen und Anschlusspositionen stimmen überein. Statusfarben, Fortschritt, Auswahl und Bearbeitungsaktionen sind dagegen rollenbezogen. Die gemeinsame Steuerung trennt einen lesbaren Startfokus von der bewussten `Gesamtansicht`; diese darf auch auf schmalen Bildschirmen unter die Lesevergrößerung herauszoomen. Nach dem einmaligen Startfokus setzen Datenaktualisierungen den gewählten Ausschnitt nicht automatisch zurück. Lernende erhalten keinen Schalter zum Aktivieren der Knotenbearbeitung.
+
 - Graph bleibt Phasen-zentriert
 - Knoten sind harte, klar gerahmte Objekte
 - aktiver Status ist orange

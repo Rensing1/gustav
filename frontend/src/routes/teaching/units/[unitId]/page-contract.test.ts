@@ -22,7 +22,7 @@ describe("teacher unit graph route contract", () => {
       "utf8"
     );
     const viewportControlsSource = readFileSync(
-      path.resolve(currentDir, "../../../../lib/components/teacher-unit-graph/TeacherGraphViewportControls.svelte"),
+      path.resolve(currentDir, "../../../../lib/components/ui/GraphViewportControls.svelte"),
       "utf8"
     );
 

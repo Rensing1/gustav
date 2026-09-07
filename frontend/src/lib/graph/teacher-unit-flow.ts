@@ -678,7 +678,8 @@ function buildModularEdges(
   }
 
   for (const bucketEdges of bucketed.values()) {
-    bucketEdges.sort((left, right) => (left.source ?? "").localeCompare(right.source ?? ""));
+    // A branch needs a target tie-breaker so input order cannot swap its lanes.
+    bucketEdges.sort((left, right) => left.source.localeCompare(right.source) || left.target.localeCompare(right.target));
     const total = bucketEdges.length;
     const center = (total - 1) / 2;
     bucketEdges.forEach((edge, index) => {
@@ -734,7 +735,8 @@ export async function buildTeacherUnitFlow(
     };
   }
 
-  const phases = workspace.graph.phases ?? [];
+  // Both role adapters use stored didactic positions, never response-array order.
+  const phases = [...(workspace.graph.phases ?? [])].sort((left, right) => left.position - right.position);
   const graphEdges = workspace.graph.edges ?? [];
   const edgeIndexes = buildEdgeIndexes(graphEdges);
   const laneLayouts = phases.map((phase) => layoutPhaseModules(phase, graphEdges));

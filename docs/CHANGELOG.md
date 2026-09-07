@@ -2,6 +2,12 @@
 
 ## 2026-09-07
 
+### Technische Schulden – gemeinsame Graphdarstellung beider Rollen
+
+- fix(frontend): Lehrkraft- und Schülergraph verwenden übereinstimmende Knoteninnenabstände und Anschlusspositionen. Phasen und verzweigte Kanten werden anhand stabiler Regeln statt der Eingabelistenreihenfolge angeordnet.
+- refactor(frontend): Gemeinsame Graphsteuerung für lesbaren Startfokus und Gesamtansicht; der Start wartet auf die fertige Darstellung. Die Gesamtansicht kann auf kleinen Bildschirmen weiter herauszoomen. Lernende erhalten keine Knotenbearbeitung; Freischaltung und Fortschritt bleiben unverändert.
+- test: Ein rollenübergreifender Browsernachweis vergleicht denselben verzweigten Graphen aus echter Datenhaltung samt Berechtigungsgrenzen, Neuladen und drei Bildschirmbreiten in Light/Dark. Workspace-Provider-Migration und weitere UI-Schulden sind getrennte Folgearbeiten.
+
 ### Technische Schulden – Datenzugang des Inhaltseditors
 
 - refactor(teaching): Die Editoransicht für Abschnitte und Module verwendet ausdrücklich bereitgestellten Datenbankzugang und einen frameworkunabhängigen Lesedienst. Der Handler benötigt weder globale Teaching-Provider noch Workspace-Helfer und führt DB-Arbeit im begrenzten Threadpool aus.

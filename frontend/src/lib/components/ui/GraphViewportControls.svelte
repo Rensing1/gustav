@@ -1,24 +1,26 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { ControlButton, Controls, useSvelteFlow } from "@xyflow/svelte";
+  import { onMount, untrack } from "svelte";
+  import { ControlButton, Controls, useNodesInitialized, useSvelteFlow, useViewportInitialized } from "@xyflow/svelte";
 
-  import type { TeacherFlowEdge, TeacherFlowNode } from "$lib/graph/teacher-unit-flow";
-
-  export type TeacherGraphViewportController = {
+  export type GraphViewportController = {
     focusNode: (nodeId?: string | null) => void;
     showAll: () => void;
   };
 
   let {
     initialNodeId = null,
-    onControllerReady
+    onControllerReady,
+    showInteractionToggle = true
   }: {
     initialNodeId?: string | null;
-    onControllerReady?: ((controller: TeacherGraphViewportController) => void) | null;
+    onControllerReady?: ((controller: GraphViewportController) => void) | null;
+    showInteractionToggle?: boolean;
   } = $props();
 
-  const flow = useSvelteFlow<TeacherFlowNode, TeacherFlowEdge>();
-  let initialFocusApplied = false;
+  const flow = useSvelteFlow();
+  const nodesInitialized = useNodesInitialized();
+  const viewportInitialized = useViewportInitialized();
+  let initialFocusApplied = $state(false);
 
   function focusNode(nodeId: string | null = initialNodeId, attempt = 0) {
     if (!nodeId) return;
@@ -36,19 +38,25 @@
     await flow.fitView({
       nodes: phaseBands.length > 0 ? phaseBands : allNodes,
       padding: 0.2,
-      minZoom: 0.52,
+      // Overview may shrink below reading size; the focus action restores it.
+      minZoom: 0.1,
       maxZoom: 0.92,
       duration: 0
     });
   }
 
-  const controller: TeacherGraphViewportController = { focusNode, showAll };
+  const controller: GraphViewportController = { focusNode, showAll };
 
   onMount(() => {
     onControllerReady?.(controller);
-    if (!initialFocusApplied && initialNodeId) {
+  });
+
+  // Role adapters can deliver nodes after mount. Focus once they are measured,
+  // then preserve the user's camera when selection or progress changes.
+  $effect(() => {
+    if (!initialFocusApplied && initialNodeId && nodesInitialized.current && viewportInitialized.current) {
       initialFocusApplied = true;
-      requestAnimationFrame(() => focusNode(initialNodeId));
+      untrack(() => focusNode(initialNodeId));
     }
   });
 </script>
@@ -67,4 +75,4 @@
   </ControlButton>
 {/snippet}
 
-<Controls position="bottom-right" showFitView={false} after={additionalControls} />
+<Controls position="bottom-right" showFitView={false} showLock={showInteractionToggle} after={additionalControls} />

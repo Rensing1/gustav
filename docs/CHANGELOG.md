@@ -2,6 +2,13 @@
 
 ## 2026-09-07
 
+### Technische Schulden – Datenzugang zu Modulinhalten
+
+- refactor(learning): Modulinhalt verwendet ausdrücklich bereitgestellten Datenbankzugang und einen frameworkunabhängigen Anwendungsfall. Graph und Inhalt teilen die modulare Kurszuordnungsprüfung; die zentrale SQL-Freischaltung und erneute DB-Berechtigungsprüfung bleiben bestehen. Der synchrone HTTP-Handler liegt außerhalb des Learning-Routenhotspots.
+- refactor(web): Modulinhalt und Materiallink-Anreicherung erhalten denselben Adapter. Lineare Abschnitte und Module teilen die URL-Projektion; nicht bestätigte Materialsichtbarkeit erzeugt keine Links. Die vorhandene `include`-Auswertung liegt in einem gemeinsamen Parser.
+- test: Explizite Testverdrahtung ersetzt weitere Endpoint-Globals-Eingriffe. Neue Isolations-, Fehler-, Nebenläufigkeits- und echte DB-Prüfungen sowie der erweiterte rollenübergreifende Browserablauf erfassen erlaubte Datei-Bytes, gesperrte Materialien und entzogene Mitgliedschaft.
+- scope: API, Schema, ENV, RLS, SQL-Freischaltung, UI und DSPy bleiben unverändert. Datei-/Simulations-Streaming, lineare Inhaltsprovider, Uploads und Abgaben bleiben getrennte Folgearbeiten.
+
 ### Technische Schulden – Datenzugang des Schülergraphen
 
 - refactor(learning): Die Graphroute verwendet ausdrücklich bereitgestellten Datenbankzugang und einen frameworkunabhängigen Anwendungsfall für Mitgliedschaft und Einheitenzuordnung. Der synchrone Handler liegt außerhalb des Learning-Routenhotspots und führt DB-Arbeit im begrenzten Threadpool aus.

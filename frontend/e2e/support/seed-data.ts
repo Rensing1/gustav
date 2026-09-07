@@ -144,7 +144,7 @@ async function createMarkdownMaterial(
   return (await response.json()).id as string;
 }
 
-async function createFileMaterial(
+export async function createFileMaterial(
   page: Page,
   unitId: string,
   sectionId: string,

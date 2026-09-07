@@ -88,6 +88,7 @@ def load_visible_material_asset_metadata(
     student_sub: str,
     course_id: str,
     material_ids: list[str],
+    repo: object | None = None,
 ) -> dict[str, StudentMaterialAssetMetadata]:
     """Load visible stored-material metadata with one fail-closed DB lookup."""
 
@@ -96,7 +97,8 @@ def load_visible_material_asset_metadata(
     ]
     if not (student_sub and _is_uuid_like(course_id) and valid_material_ids):
         return {}
-    repo = _get_repo()
+    # Linear callers retain their legacy provider until their own migration.
+    repo = repo if repo is not None else _get_repo()
     try:
         return load_student_material_asset_metadata_batch(
             repo=repo,
@@ -121,83 +123,12 @@ def resolve_student_modular_material_file_url(
     )
 
 
-def attach_section_material_files(
-    *,
-    student_sub: str,
-    course_id: str,
-    sections: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    material_ids = [
-        str(material.get("id") or "")
-        for section in sections
-        for material in (section.get("materials") or [])
-        if isinstance(section, dict)
-        and isinstance(material, dict)
-        and material.get("kind") in {"file", "simulation"}
-    ]
-    material_rows = load_visible_material_asset_metadata(
-        student_sub=student_sub,
-        course_id=course_id,
-        material_ids=material_ids,
-    )
-    enriched: list[dict[str, Any]] = []
-    for section in sections:
-        payload = dict(section)
-        materials = []
-        for material in payload.get("materials") or []:
-            material_payload = dict(material)
-            if material_payload.get("kind") == "file":
-                material_id = str(material_payload.get("id") or "")
-                row = material_rows.get(material_id)
-                material_payload["file_url"] = (
-                    material_file_href(
-                        course_id=course_id, material_id=material_id, disposition="inline"
-                    )
-                    if row is not None and row.kind == "file"
-                    else None
-                )
-            else:
-                material_payload["file_url"] = None
-            if material_payload.get("kind") == "simulation":
-                material_id = str(material_payload.get("id") or "")
-                row = material_rows.get(material_id)
-                material_payload["simulation_url"] = (
-                    material_simulation_href(course_id=course_id, material_id=material_id)
-                    if row is not None and row.kind == "simulation"
-                    else None
-                )
-            else:
-                material_payload["simulation_url"] = None
-            materials.append(material_payload)
-        payload["materials"] = materials
-        enriched.append(payload)
-    return enriched
-
-
-def attach_modular_material_files(
-    *,
-    student_sub: str,
-    course_id: str,
-    unit_id: str,
-    module_id: str,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    # Unit and module ids are part of the legacy helper signature. Visibility is
-    # resolved by material id and course membership inside the DB helper.
-    _ = (unit_id, module_id)
-
-    out = dict(payload)
-    material_rows = load_visible_material_asset_metadata(
-        student_sub=student_sub,
-        course_id=course_id,
-        material_ids=[
-            str(material.get("id") or "")
-            for material in (out.get("materials") or [])
-            if isinstance(material, dict) and material.get("kind") in {"file", "simulation"}
-        ],
-    )
-    materials = []
-    for material in out.get("materials") or []:
+def _attach_material_urls(
+    *, course_id: str, materials: list[dict], material_rows: dict[str, StudentMaterialAssetMetadata]
+) -> list[dict]:
+    """Copy material rows and expose same-origin URLs only for confirmed asset kinds."""
+    enriched = []
+    for material in materials or []:
         material_payload = dict(material)
         if material_payload.get("kind") == "file":
             material_id = str(material_payload.get("id") or "")
@@ -221,6 +152,59 @@ def attach_modular_material_files(
             )
         else:
             material_payload["simulation_url"] = None
-        materials.append(material_payload)
-    out["materials"] = materials
+        enriched.append(material_payload)
+    return enriched
+
+
+def attach_section_material_files(
+    *, student_sub: str, course_id: str, sections: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Enrich legacy section lists with one visibility lookup and the shared projection."""
+    material_rows = load_visible_material_asset_metadata(
+        student_sub=student_sub,
+        course_id=course_id,
+        material_ids=[
+            str(material.get("id") or "")
+            for section in sections
+            for material in (section.get("materials") or [])
+            if isinstance(section, dict)
+            and isinstance(material, dict)
+            and material.get("kind") in {"file", "simulation"}
+        ],
+    )
+    enriched = []
+    for section in sections:
+        payload = dict(section)
+        payload["materials"] = _attach_material_urls(
+            course_id=course_id,
+            materials=payload.get("materials") or [],
+            material_rows=material_rows,
+        )
+        enriched.append(payload)
+    return enriched
+
+
+def attach_modular_material_files(
+    *, repo: object, student_sub: str, course_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Enrich authorized module contents using the same explicitly supplied repository.
+
+    The additional visibility query is fail-closed: unavailable or mismatched
+    metadata produces no URL. Neither the module payload nor its rows are mutated.
+    Streaming endpoints must still recheck access when a URL is requested.
+    """
+    out = dict(payload)
+    material_rows = load_visible_material_asset_metadata(
+        repo=repo,
+        student_sub=student_sub,
+        course_id=course_id,
+        material_ids=[
+            str(material.get("id") or "")
+            for material in (out.get("materials") or [])
+            if isinstance(material, dict) and material.get("kind") in {"file", "simulation"}
+        ],
+    )
+    out["materials"] = _attach_material_urls(
+        course_id=course_id, materials=out.get("materials") or [], material_rows=material_rows
+    )
     return out

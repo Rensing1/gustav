@@ -16,7 +16,8 @@ def test_learning_material_file_helpers_live_in_focused_module() -> None:
     assert learning._resolve_student_material_file_url is material_files.resolve_student_material_file_url
     assert learning._resolve_student_modular_material_file_url is material_files.resolve_student_modular_material_file_url
     assert learning._attach_section_material_files is material_files.attach_section_material_files
-    assert learning._attach_modular_material_files is material_files.attach_modular_material_files
+    assert not hasattr(learning, "_attach_modular_material_files")
+    assert "repo" in inspect.signature(material_files.attach_modular_material_files).parameters
 
 
 def test_learning_route_hotspot_no_longer_defines_material_file_helpers() -> None:

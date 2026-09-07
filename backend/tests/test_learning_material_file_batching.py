@@ -138,7 +138,7 @@ def test_attach_section_material_files_batches_storage_lookup(
 def test_attach_modular_material_files_batches_storage_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    learning = importlib.import_module("backend.web.routes.learning")
+    material_files = importlib.import_module("backend.web.routes.learning_material_files")
 
     cursor = _FakeCursor(
         fetchall_results=[
@@ -168,14 +168,12 @@ def test_attach_modular_material_files_batches_storage_lookup(
     )
     connect_calls: list[str] = []
 
-    monkeypatch.setattr(learning, "_get_repo", lambda: SimpleNamespace(_dsn="postgresql://test"))
     _patch_material_cursor(monkeypatch, cursor=cursor, connect_calls=connect_calls)
 
-    payload = learning._attach_modular_material_files(
+    payload = material_files.attach_modular_material_files(
+        repo=SimpleNamespace(_dsn="postgresql://test"),
         student_sub="student-1",
         course_id="33333333-3333-4333-8333-333333333333",
-        unit_id="88888888-8888-4888-8888-888888888888",
-        module_id="99999999-9999-4999-8999-999999999999",
         payload={
             "materials": [
                 {"id": "55555555-5555-4555-8555-555555555555", "kind": "file"},

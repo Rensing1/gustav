@@ -5,8 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from backend.learning.usecases.modular_unit_access import InvalidModularUnitType
 from backend.learning.usecases.unit_graph import (
-    GraphInvalidUnitType,
     GraphRepositoryIncomplete,
     LearningGraphUseCase,
 )
@@ -44,7 +44,7 @@ def get_modular_unit_graph(request: Request, course_id: str, unit_id: str):
         payload = use_case.read(str(user.get("sub", "")), course_id_norm, unit_id_norm)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=headers)
-    except GraphInvalidUnitType:
+    except InvalidModularUnitType:
         return JSONResponse(
             {"error": "bad_request", "detail": "invalid_unit_type"},
             status_code=400,

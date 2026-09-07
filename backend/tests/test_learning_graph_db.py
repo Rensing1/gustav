@@ -90,6 +90,88 @@ def graph_path(course_id, unit_id):
     return f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph"
 
 
+async def test_module_content_projection_and_include_match_database(app):
+    authenticate(app, "teacher")
+    async with client_for(app) as client:
+        course_id, unit_id = await course(client, app), await unit(client, app)
+        phases = await client.get(f"/api/teaching/units/{unit_id}/phases")
+        phase_id = phases.json()[0]["id"]
+        modules = []
+        for title in ("Offen", "Gesperrt"):
+            modules.append(
+                (
+                    await create(
+                        client,
+                        f"/api/teaching/units/{unit_id}/modules",
+                        {
+                            "title": title,
+                            "phase_id": phase_id,
+                        },
+                    )
+                )["id"]
+            )
+        await create(
+            client,
+            f"/api/teaching/units/{unit_id}/modules/edges",
+            {
+                "from_module_id": modules[0],
+                "to_module_id": modules[1],
+            },
+        )
+        target = await client.get(
+            f"/api/teaching/units/{unit_id}/modules/{modules[0]}/content-target"
+        )
+        section_id = target.json()["section_id"]
+        await create(
+            client,
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/materials",
+            {
+                "title": "Einstieg",
+                "body_md": "Sichtbarer Inhalt",
+            },
+        )
+        await create(
+            client,
+            f"/api/teaching/units/{unit_id}/sections/{section_id}/tasks",
+            {
+                "instruction_md": "Lies den Einstieg.",
+                "criteria": [],
+                "teacher_context_md": "Privater Modulkontext",
+                "model_solution_md": "Private Modullösung",
+            },
+        )
+        await attach_and_enroll(client, app, course_id, unit_id)
+        authenticate(app, "student")
+        base = f"/api/learning/courses/{course_id}/units/{unit_id}/modules"
+        for include, materials, tasks in [
+            (None, True, True),
+            ("materials", True, False),
+            ("tasks", False, True),
+        ]:
+            expected = DBLearningRepo().get_modular_module_content(
+                student_sub=app.state.student,
+                course_id=course_id,
+                unit_id=unit_id,
+                module_id=modules[0],
+                include_materials=materials,
+                include_tasks=tasks,
+            )
+            for material in expected["materials"]:
+                material.update(file_url=None, simulation_url=None)
+            response = await client.get(
+                f"{base}/{modules[0]}", params={} if include is None else {"include": include}
+            )
+            assert response.status_code == 200
+            assert response.json() == expected
+            assert "Privater Modulkontext" not in response.text
+            assert "Private Modullösung" not in response.text
+        for module_id in (modules[1], str(uuid4())):
+            response = await client.get(f"{base}/{module_id}")
+            assert response.status_code == 404
+            assert response.json() == {"error": "not_found"}
+            assert response.headers["Cache-Control"] == "private, no-store"
+
+
 async def test_empty_and_populated_graph_match_existing_database_projection(app):
     authenticate(app, "teacher")
     async with client_for(app) as client:

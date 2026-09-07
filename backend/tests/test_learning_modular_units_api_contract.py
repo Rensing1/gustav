@@ -67,23 +67,17 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
 
 @pytest.mark.anyio
 async def test_learning_modular_module_content_rejects_empty_include_query_value(
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`include=` must fail with 400 invalid_include (no silent defaulting)."""
-    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
+    from backend.web.learning_module_providers import LearningModuleProviders
 
-    class _StubRepo:
-        def list_units_for_student_course(self, *, student_sub: str, course_id: str):
-            assert student_sub
-            assert course_id
-            return []
+    def forbidden():
+        pytest.fail("invalid selection reached repository")
 
-    monkeypatch.setattr(learning, "_get_repo", lambda: _StubRepo(), raising=True)
+    app = main.create_app(learning_module_providers=LearningModuleProviders(repository=forbidden))
+    student = app.state.runtime.session_store.create(sub="s-mod-include", name="S", roles=["student"])
 
-    store = _session_store(monkeypatch)
-    student = store.create(sub="s-mod-include-empty-1", name="Schueler", roles=["student"])  # type: ignore
-
-    async with (await _client()) as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         c.cookies.set("gustav_session", student.session_id)
         r = await c.get(
             "/api/learning/courses/11111111-1111-1111-1111-111111111111/"
@@ -98,23 +92,17 @@ async def test_learning_modular_module_content_rejects_empty_include_query_value
 
 @pytest.mark.anyio
 async def test_learning_modular_module_content_rejects_trailing_comma_in_include_query(
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`include=materials,` must fail with 400 invalid_include."""
-    learning = importlib.import_module("backend.web.routes.learning")  # noqa: E402
+    from backend.web.learning_module_providers import LearningModuleProviders
 
-    class _StubRepo:
-        def list_units_for_student_course(self, *, student_sub: str, course_id: str):
-            assert student_sub
-            assert course_id
-            return []
+    def forbidden():
+        pytest.fail("invalid selection reached repository")
 
-    monkeypatch.setattr(learning, "_get_repo", lambda: _StubRepo(), raising=True)
+    app = main.create_app(learning_module_providers=LearningModuleProviders(repository=forbidden))
+    student = app.state.runtime.session_store.create(sub="s-mod-include", name="S", roles=["student"])
 
-    store = _session_store(monkeypatch)
-    student = store.create(sub="s-mod-include-trailing-1", name="Schueler", roles=["student"])  # type: ignore
-
-    async with (await _client()) as c:
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         c.cookies.set("gustav_session", student.session_id)
         r = await c.get(
             "/api/learning/courses/11111111-1111-1111-1111-111111111111/"
@@ -948,36 +936,24 @@ async def test_learning_modular_graph_returns_503_when_repo_lacks_graph_capabili
 
 @pytest.mark.anyio
 async def test_learning_modular_module_content_returns_503_when_repo_lacks_content_capability(
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from fastapi.routing import APIRoute  # noqa: E402
+    from backend.web.learning_module_providers import LearningModuleProviders
 
-    store = _session_store(monkeypatch)
-    student = store.create(sub="s-mod-guard-content", name="S", roles=["student"])  # type: ignore
 
     class _RepoWithoutModuleContent:
-        def get_modular_unit_graph(self, **_kwargs):  # pragma: no cover - defensive
-            return {}
-
-    class _FakeListCourseUnitsUseCase:
-        def __init__(self, _repo):  # type: ignore[no-untyped-def]
-            pass
-
-        def execute(self, _input):  # type: ignore[no-untyped-def]
+        def list_units_for_student_course(self, **kwargs):
             return [{"unit": {"id": "11111111-1111-1111-1111-111111111111", "unit_type": "modular"}}]
 
-    route = next(
-        r
-        for r in main.app.routes
-        if isinstance(r, APIRoute)
-        and r.path == "/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}"
+
+    app = main.create_app(
+        learning_module_providers=LearningModuleProviders(repository=_RepoWithoutModuleContent)
     )
-    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsUseCase", _FakeListCourseUnitsUseCase)
-    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsInput", lambda **kwargs: kwargs)
-    monkeypatch.setitem(route.endpoint.__globals__, "_get_repo", lambda: _RepoWithoutModuleContent())
+    student = app.state.runtime.session_store.create(
+        sub="s-mod-content", name="S", roles=["student"]
+    )
 
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        transport=ASGITransport(app=app),
         base_url="http://test",
     ) as c:
         c.cookies.set("gustav_session", student.session_id)
@@ -994,16 +970,16 @@ async def test_learning_modular_module_content_returns_503_when_repo_lacks_conte
 
 @pytest.mark.anyio
 async def test_learning_modular_module_content_defaults_include_to_materials_and_tasks(
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Missing include query must default to materials+tasks for deterministic clients."""
-    from fastapi.routing import APIRoute  # noqa: E402
+    from backend.web.learning_module_providers import LearningModuleProviders
 
-    store = _session_store(monkeypatch)
-    student = store.create(sub="s-mod-include-default", name="S", roles=["student"])  # type: ignore
     observed_flags: dict[str, bool] = {}
 
     class _RepoWithModuleContent:
+        def list_units_for_student_course(self, **kwargs):
+            return [{"unit": {"id": "11111111-1111-1111-1111-111111111111", "unit_type": "modular"}}]
+
         def get_modular_module_content(self, **kwargs):  # type: ignore[no-untyped-def]
             observed_flags["materials"] = bool(kwargs.get("include_materials"))
             observed_flags["tasks"] = bool(kwargs.get("include_tasks"))
@@ -1032,25 +1008,15 @@ async def test_learning_modular_module_content_defaults_include_to_materials_and
                 ],
             }
 
-    class _FakeListCourseUnitsUseCase:
-        def __init__(self, _repo):  # type: ignore[no-untyped-def]
-            pass
-
-        def execute(self, _input):  # type: ignore[no-untyped-def]
-            return [{"unit": {"id": "11111111-1111-1111-1111-111111111111", "unit_type": "modular"}}]
-
-    route = next(
-        r
-        for r in main.app.routes
-        if isinstance(r, APIRoute)
-        and r.path == "/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}"
+    app = main.create_app(
+        learning_module_providers=LearningModuleProviders(repository=_RepoWithModuleContent)
     )
-    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsUseCase", _FakeListCourseUnitsUseCase)
-    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsInput", lambda **kwargs: kwargs)
-    monkeypatch.setitem(route.endpoint.__globals__, "_get_repo", lambda: _RepoWithModuleContent())
+    student = app.state.runtime.session_store.create(
+        sub="s-mod-content", name="S", roles=["student"]
+    )
 
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        transport=ASGITransport(app=app),
         base_url="http://test",
     ) as c:
         c.cookies.set("gustav_session", student.session_id)

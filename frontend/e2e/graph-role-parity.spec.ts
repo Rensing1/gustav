@@ -5,6 +5,7 @@ import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { expect, test, type Page } from "./support/feature-test";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { expectNoViewportOverflow } from "./support/layout-sanity";
+import { createFileMaterial } from "./support/seed-data";
 
 async function create(page: Page, url: string, data: Record<string, unknown>) {
   const response = await page.request.post(`${webBase}${url}`, { headers: apiHeaders(), data });
@@ -66,6 +67,15 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     const sectionId = (await target.json()).section_id;
     await create(teacher, `${base}/sections/${sectionId}/materials`, { title: "Einstieg", body_md: "Ein gemeinsamer Lernpfad." });
     await create(teacher, `${base}/sections/${sectionId}/tasks`, { instruction_md: "Beschreibe den Lernpfad.", criteria: [], teacher_context_md: "Privater Graph-Testkontext" });
+    const imageBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAQ1BDQAAAABJRU5ErkJggg==", "base64");
+    const visibleFile = await createFileMaterial(teacher, unit.id, sectionId, {
+      filename: "graphbild.png", mimeType: "image/png", title: "Graphbild", bytes: imageBytes
+    });
+    const lockedTarget = await teacher.request.get(`${webBase}${base}/modules/${modules[3].id}/content-target`);
+    await expectApiOk(lockedTarget);
+    const lockedFile = await createFileMaterial(teacher, unit.id, (await lockedTarget.json()).section_id, {
+      filename: "gesperrtes-graphbild.png", mimeType: "image/png", title: "Gesperrtes Graphbild", bytes: imageBytes
+    });
     const course = await create(teacher, "/api/teaching/courses", {
       title: `Graphkurs ${Date.now()}`, subject: "Testfach", grade_level: "Jahrgangsübergreifend",
       school_year_start: new Date().getFullYear()
@@ -95,6 +105,8 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     expect(forbidden.status()).toBe(403);
     const lockedContent = await learner.request.get(`${webBase}/api/learning/courses/${course.id}/units/${unit.id}/modules/${modules[3].id}`);
     expect(lockedContent.status()).toBe(404);
+    const fileUrl = (id: string) => `${webBase}/api/learning/courses/${course.id}/materials/${id}/file?disposition=inline`;
+    expect((await learner.request.get(fileUrl(lockedFile))).status()).toBe(404);
 
     for (const [label, viewport] of [
       ["desktop", { width: 1440, height: 900 }],
@@ -133,8 +145,20 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     await expect(learner).toHaveURL(new RegExp(`module=${modules[0].id}`));
     await expect(learner.getByRole("button", { name: "Aufgabe 1 beginnen" })).toBeVisible();
     await expect(learner.locator("body")).not.toContainText("Privater Graph-Testkontext");
+    const imageToggle = learner.getByRole("button", { name: "Graphbild", exact: true }).and(learner.locator("[aria-expanded]"));
+    if (await imageToggle.getAttribute("aria-expanded") === "false") await imageToggle.click();
+    const preview = learner.getByRole("img", { name: "Materialvorschau", exact: true });
+    await expect(preview).toBeVisible();
+    await expect.poll(() => preview.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
+    const imageResponse = await learner.request.get(fileUrl(visibleFile));
+    await expectApiOk(imageResponse);
+    expect(await imageResponse.body()).toEqual(imageBytes);
     await learner.goBack();
     await expect(learner.getByRole("button", { name: "Gesamtansicht", exact: true })).toBeVisible();
+    const removeMember = await teacher.request.delete(`${webBase}/api/teaching/courses/${course.id}/members/${await currentUserSub(learner)}`, { headers: apiHeaders() });
+    await expectApiOk(removeMember, 204);
+    expect((await learner.request.get(fileUrl(visibleFile))).status()).toBe(404);
+    expect((await learner.request.get(`${webBase}/api/learning/courses/${course.id}/units/${unit.id}/modules/${modules[0].id}`)).status()).toBe(404);
   } finally {
     await learnerContext.close();
     await teacherContext.close();

@@ -14,10 +14,6 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 
 from backend.learning.repo_db import DBLearningRepo
-from backend.learning.usecases.courses import (
-    ListCourseUnitsInput,
-    ListCourseUnitsUseCase,
-)
 from backend.learning.usecases.h5p_access import (
     CheckH5PContentAccessInput,
     CheckH5PContentAccessUseCase,
@@ -55,6 +51,7 @@ from backend.storage.learning_policy import (
     ALLOWED_FILE_MIME,  # noqa: F401 - kept for route module compatibility
     ALLOWED_IMAGE_MIME,  # noqa: F401
 )
+from backend.web.learning_content_query import parse_include as _parse_include
 from backend.web.routes.learning_course_routes import learning_course_router
 from backend.web.routes.learning_dialogs import learning_dialog_router
 from backend.web.routes.learning_graph_routes import learning_graph_router
@@ -77,9 +74,6 @@ from backend.web.routes.learning_material_file_routes import (
     learning_material_file_router,
 )
 from backend.web.routes.learning_material_files import (
-    attach_modular_material_files as _attach_modular_material_files,
-)
-from backend.web.routes.learning_material_files import (
     attach_section_material_files as _attach_section_material_files,
 )
 from backend.web.routes.learning_material_files import (
@@ -91,6 +85,7 @@ from backend.web.routes.learning_material_files import (
 from backend.web.routes.learning_material_files import (
     resolve_student_modular_material_file_url as _resolve_student_modular_material_file_url,  # noqa: F401
 )
+from backend.web.routes.learning_module_routes import learning_module_router
 from backend.web.routes.learning_portfolio import learning_portfolio_router
 from backend.web.routes.learning_storage_validation import (
     download_bytes_with_limit as _download_bytes_with_limit,
@@ -174,6 +169,7 @@ from backend.web.routes.learning_upload_proxy import (
 learning_router = APIRouter(tags=["Learning"])
 learning_router.include_router(learning_course_router)
 learning_router.include_router(learning_graph_router)
+learning_router.include_router(learning_module_router)
 learning_router.include_router(learning_material_file_router)
 learning_router.include_router(learning_upload_intents_router)
 learning_router.include_router(learning_internal_upload_router)
@@ -410,14 +406,6 @@ def _teaching_storage_adapter() -> object | None:
     return None
 
 
-def _require_repo_methods(repo: object, *method_names: str) -> JSONResponse | None:
-    """Ensure modular read routes fail closed when repo capabilities are missing."""
-    for method_name in method_names:
-        if not callable(getattr(repo, method_name, None)):
-            return JSONResponse({"error": "service_unavailable"}, status_code=503, headers=_cache_headers_error())
-    return None
-
-
 def _emit_upload_proxy_telemetry(
     *,
     outcome: str,
@@ -629,24 +617,6 @@ def _require_student(request: Request):
 """CSRF helper imported from .security"""
 
 
-def _parse_include(
-    value: str | None, *, default_materials: bool = False, default_tasks: bool = False
-) -> tuple[bool, bool]:
-    if value is None:
-        return default_materials, default_tasks
-    raw = value.strip()
-    if not raw:
-        raise ValueError("invalid_include")
-    parts = raw.split(",")
-    tokens = [token.strip() for token in parts]
-    if any(not token for token in tokens):
-        raise ValueError("invalid_include")
-    allowed = {"materials", "tasks"}
-    if any(token not in allowed for token in tokens):
-        raise ValueError("invalid_include")
-    return "materials" in tokens, "tasks" in tokens
-
-
 def _canonical_uuid_or_none(value: object) -> str | None:
     """Return a canonical UUID string or None when parsing fails."""
     try:
@@ -715,18 +685,6 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
         ...
 
     def get_task_kind_for_student(self, *, student_sub: str, course_id: str, task_id: str) -> str:
-        ...
-
-    def get_modular_module_content(
-        self,
-        *,
-        student_sub: str,
-        course_id: str,
-        unit_id: str,
-        module_id: str,
-        include_materials: bool,
-        include_tasks: bool,
-    ) -> dict:
         ...
 
 
@@ -935,98 +893,6 @@ async def list_unit_sections(
         sections=sections,
     )
     return JSONResponse(sections, headers=_cache_headers_success())
-
-
-@learning_router.get("/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}")
-async def get_modular_unit_module_content(
-    request: Request,
-    course_id: str,
-    unit_id: str,
-    module_id: str,
-    include: str | None = None,
-):
-    """Return module content (materials/tasks) for a modular unit (student-only).
-
-    Why:
-        For modular units the UI loads a *module* (not a whole unit) once the
-        student has unlocked it. This endpoint is modular-only: for linear
-        units the client must use the existing section endpoints.
-
-    Behavior:
-        - Requires an authenticated session with role "student".
-        - 400 detail=invalid_uuid when any path param is not UUID-like.
-        - 400 detail=invalid_include for an unsupported include query.
-        - 404 when the course/unit/module is not visible to the student (fail-closed).
-        - 400 detail=invalid_unit_type when the unit is not modular.
-
-    Permissions:
-        Caller must have the `student` role and be a member of the course.
-    """
-    user, error = _require_student(request)
-    if error:
-        return error
-
-    try:
-        course_id_norm = str(UUID(course_id))
-        unit_id_norm = str(UUID(unit_id))
-        module_id_norm = str(UUID(module_id))
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
-
-    try:
-        _include_materials, _include_tasks = _parse_include(
-            include, default_materials=True, default_tasks=True
-        )
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers_error())
-
-    try:
-        rows = ListCourseUnitsUseCase(_get_repo()).execute(
-            ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=course_id_norm)
-        )
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-
-    unit: dict[str, Any] | None = None
-    for item in rows:
-        candidate = item.get("unit")
-        candidate_id = _canonical_uuid_or_none((candidate or {}).get("id")) if isinstance(candidate, dict) else None
-        if candidate_id == unit_id_norm:
-            unit = candidate
-            break
-    if not unit:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-
-    unit_type = str(unit.get("unit_type") or "").strip().lower()
-    if unit_type != "modular":
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
-
-    repo = _get_repo()
-    repo_error = _require_repo_methods(repo, "get_modular_module_content")
-    if repo_error:
-        return repo_error
-
-    try:
-        payload = repo.get_modular_module_content(
-            student_sub=str(user.get("sub", "")),
-            course_id=course_id_norm,
-            unit_id=unit_id_norm,
-            module_id=module_id_norm,
-            include_materials=_include_materials,
-            include_tasks=_include_tasks,
-        )
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
-    payload = _attach_modular_material_files(
-        student_sub=str(user.get("sub", "")),
-        course_id=course_id_norm,
-        unit_id=unit_id_norm,
-        module_id=module_id_norm,
-        payload=payload,
-    )
-    return JSONResponse(payload, headers=_cache_headers_success())
 
 
 _DEFAULT_DOWNLOAD_BYTES_WITH_LIMIT = _download_bytes_with_limit

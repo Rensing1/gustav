@@ -21,7 +21,7 @@ DSPy wird auf dem tatsächlich eingesetzten Stand einschließlich Abhängigkeite
 | C | Zentrale Browser-/API-Testkontexte mit regulärer TLS-Prüfung; lokale CA; aktuelle, visuell geprüfte Referenzen und vollständiges UI-Labor | teilweise umgesetzt; UI-Labor noch nicht vollständig |
 | D | Verbindliche gemeinsame UI-Bausteine und Varianten; zentrale Tokens; geordnete fachliche CSS-Importfassaden ohne Cascade Layers; ausführbare Designregeln | begonnen; vollständige Baustein-/CSS-Migration offen |
 | E | Alle aktiven Oberflächen verwenden gemeinsame Bausteine; Learning-, Teaching-, Live-Controller, Aufgabenarten und Server-View-Models besitzen getrennte Verantwortung | ausstehend |
-| F | Appbezogene typisierte Provider statt Route-Fassaden und Endpoint-Globals; isolierte Apps in Tests; Abgabe-/Workerphasen und H5P-Router entkoppelt | begonnen: Profil-/CLI- und Kummerkasten-Provider migriert; Gesamtmigration offen |
+| F | Appbezogene typisierte Provider statt Route-Fassaden und Endpoint-Globals; isolierte Apps in Tests; Abgabe-/Workerphasen und H5P-Router entkoppelt | begonnen: Profil-/CLI-, Kummerkasten- und Lernenden-Kursprovider migriert; Gesamtmigration offen |
 | G | Gebündelte Live-Aufgabenabfrage mit didaktischer Reihenfolge; blockierende Adapterarbeit außerhalb des Event Loops; Abfragezahl und Nebenläufigkeit getestet | umgesetzt; verify-feature live-summary erfolgreich |
 | H | Zentrale Ruff-Regeln E/F/I ohne E501; bereinigte Verstöße; vollständige Dokumentation und Abschlussnachweise | Lint umgesetzt; Gesamtabschlussnachweise bleiben offen |
 
@@ -100,7 +100,7 @@ Upstream-Nachweise für H5P: [ICNS](https://github.com/advisories/GHSA-w3rx-r6r6
 
 ### Weiterhin offen
 
-E und der größte Teil von F sind noch offen: vollständige Seiten-/Controller-/View-Model-Migration, übrige appbezogene Provider einschließlich Entfernung der Reparatur-Fixtures, Abgabe-/Workerphasen sowie H5P-Routertrennung. F1 migriert Profil und CLI-Verwaltung, F2 den Kummerkasten (siehe unten). D enthält bisher nur zentrale globale Tokenprüfung und die gemeinsame Dialognachricht; gemeinsame Aktions-/Formvarianten, vollständige Seitennutzung und fachliche CSS-Importfassaden fehlen. C besitzt geprüfte Designreferenzen, aber noch kein vollständiges UI-Labor. Die vorgesehenen H5P-Authoring-/Review- und zusätzlichen iPad-WebKit-Nachweise gehören zu den jeweiligen noch offenen Paketen. Der Gesamtplan ist deshalb ausdrücklich nicht abgeschlossen.
+E und der größte Teil von F sind noch offen: vollständige Seiten-/Controller-/View-Model-Migration, übrige appbezogene Provider einschließlich Entfernung der Reparatur-Fixtures, Abgabe-/Workerphasen sowie H5P-Routertrennung. F1 migriert Profil und CLI-Verwaltung, F2 den Kummerkasten, F3 die Lernenden-Kursübersicht (siehe unten). D enthält bisher nur zentrale globale Tokenprüfung und die gemeinsame Dialognachricht; gemeinsame Aktions-/Formvarianten, vollständige Seitennutzung und fachliche CSS-Importfassaden fehlen. C besitzt geprüfte Designreferenzen, aber noch kein vollständiges UI-Labor. Die vorgesehenen H5P-Authoring-/Review- und zusätzlichen iPad-WebKit-Nachweise gehören zu den jeweiligen noch offenen Paketen. Der Gesamtplan ist deshalb ausdrücklich nicht abgeschlossen.
 
 ### F1: Appbezogene Profil-Provider (7. September 2026)
 
@@ -166,3 +166,37 @@ Vorprüfung: OpenAPI-Endpunkte und bestehende Kummerkasten-Migrationen einschlie
 - Svelte-Prüfung ohne Fehler/Warnungen; Produktionsbuild mit ausschließlich den dokumentierten Upstream-Ausnahmen. Import-/Architekturgrenzen, API-Vertrag, Route-/DB-Inventar, Supply Chain, Ruff und Image-Smoke grün. `git diff --check` ohne Befund.
 
 F2 ist abgeschlossen; F insgesamt, die noch offenen Frontend-/Worker-/H5P-Pakete und der Sicherheitsabschluss bleiben offen. API, Schema, ENV, Keycloak und DSPy wurden in diesem Teilpaket nicht verändert. Kein Zugriff auf eine entfernte Installation und kein Push.
+
+### F3: Expliziter Datenzugang der Kursübersicht für Lernende
+
+Als Lernender möchte ich auf meiner Startseite weiterhin meine aktuellen und vergangenen Kurse sehen und die freigegebenen Lerneinheiten meiner Kurse erreichen. Als Entwickler möchte ich für diese Leseabläufe gezielt ein Test-Repository übergeben können, ohne globale Learning-Repositories oder App-Helfer zu überschreiben. GUSTAV bleibt eine zusammenhängende Plattform mit einer Installation je Dev-/Prod-System; mehrere Test-Anwendungsobjekte dienen ausschließlich dem Nachweis, dass Testdaten und Einstellungen sich nicht gegenseitig beeinflussen.
+
+Umfang: drei GET-Endpunkte (`/api/learning/views/learner-home`, `/api/learning/courses`, `/api/learning/courses/{course_id}/units`). Ein expliziter appbezogener Kurs-Provider verwendet den bestehenden DBLearningRepo und die vorhandenen Kurs-Anwendungsfälle. Die Home-Projektion wandert in einen frameworkunabhängigen Anwendungsfall. Synchrone Handler führen DB-Arbeit im begrenzten Threadpool aus. Überholte Home-Aliase und die beiden Kurs-Handler in der Learning-Fassade entfallen; die übrigen Learning-Endpunkte bleiben zunächst unverändert. Die Lehrer-Startseite benötigt die gesonderte Entkopplung des Lerneinheitenkatalogs und gehört nicht zu F3.
+
+| Given – When – Then | Automatisierter Nachweis |
+| --- | --- |
+| Zwei getrennt vorbereitete Test-Anwendungsobjekte mit unterschiedlichen Kurs-Repositories – abwechselnd Home/Kurse/Lerneinheiten laden – keine gegenseitige Beeinflussung | `test_learning_course_provider_isolation.py` |
+| Aktuelle/vergangene/leere Kurslisten und extreme Seitengrößen – laden – unveränderte Links, Projektion und Begrenzung | Provider-/Use-Case-Tests |
+| Fehlende Anmeldung, falsche Rolle oder ungültige Kurs-ID – lesen – 401/403/400 vor Repositoryzugriff | Provider-/API-Tests |
+| Fremder oder nach Austritt nicht mehr zugänglicher Kurs – Lerneinheiten lesen – unverändert 404, kein Existenzleck | echte DB-Tests in `test_learning_my_courses_api.py` |
+| Wartender Kursadapter – unabhängiger Shell-Request – Event Loop bleibt frei | synchronisierter Isolationstest |
+| Authentifizierte Lehrkraft und Lernender – Kurs öffnen, archivieren, Startseite neu laden – aktuelle und vergangene Kurse bleiben richtig getrennt | `learner-course-overview.spec.ts`, genau ein `@feature-acceptance`-Szenario |
+
+Vorprüfung: Die drei OpenAPI-Verträge und die Kursarchiv-/Mitgliedschaftsmigrationen bleiben unverändert; dieselben ENV-Namen und DB-Adapter gelten lokal und produktiv. Keine Schema-, API-, DSPy-, KI- oder UI-Änderung vorgesehen. Tests zuerst (Red-Green-Refactor), gezielte API-Tests auf frische Apps und laufbezogene Bereinigung umstellen. Vor Abschluss: lokale CA prüfen, Webdienst neu bauen, `make verify-feature FEATURE=learner-course-overview` erfolgreich ausführen. Keine historische Gesamtsuite, kein Reset bestehender Konten, kein Push.
+
+#### Umsetzung und gezielte Nachweise F3
+
+- Fortgesetzt vom unveränderten Produktstand `5370878e`: Vor der Unterbrechung waren nur Plan und neue Tests geschrieben. Der neue Provider-Test war vor Implementierung wegen fehlender Verdrahtung rot; anschließend wurden die drei Lese-Handler umgestellt.
+- Die neue Verdrahtung besitzt nur einen Repository-Zugang. `ListCoursesUseCase` und `ListCourseUnitsUseCase` bleiben unverändert; `LearnerHomeUseCase` übernimmt lediglich die bisher im Web-Handler verschachtelte Projektion. Es entstehen keine zusätzlichen Dienste, Datenbanken oder Konfigurationsvariablen.
+- Die Kurs-API-Tests benötigen keinen globalen Session-Store-Austausch mehr. Sie erzeugen ihre eigene Authentifizierung und bereinigen ausschließlich selbst erzeugte Kurse und Lerneinheiten. Die Home-Tests übergeben ihr Test-Repository ausdrücklich. Globale Reparatur-Fixtures bleiben für noch nicht migrierte Bereiche bestehen, werden von diesen drei Handlern aber nicht benötigt.
+- 47 gezielte Home-/Provider-/Kurs-/Modul-/Repository-Tests erfolgreich, einschließlich echter DB-Nachweise für Reihenfolge, Archivierung, beendete Mitgliedschaft und identische 404-Antworten für fremde und unbekannte Kurse.
+- Authentifizierter Browserrundlauf `learner-course-overview` erfolgreich: leere Startseite, Kurs-/Lerneinheitennavigation, Archivierung durch die Lehrkraft, aktuelle/vergangene Kurslisten und Archivlinks nach Neuladen. Im neuen Test wurden die bereits bestehende Weiterleitung ins Lehrerarchiv und der Schuljahr-Zusatz in Archivlinks berücksichtigt; keine Produkt-UI geändert. Laufbezogene Testdatenbereinigung bestätigt.
+- Kritische Durchsicht: Rollenprüfung und HTTP-Statuscodes bleiben im Adapter, Seitengrößen im bestehenden Anwendungsfall, Kurs-/Archivsichtbarkeit im bestehenden RLS-Repository. Keine zusätzlichen Abfragen pro Kurs; die Startseite liest weiterhin jeweils eine begrenzte aktuelle und vergangene Kursliste. Das vorhandene Fehlerverhalten bleibt unverändert, ohne stillen Rückfall auf ein globales Repository.
+
+#### Abschlussnachweis F3
+
+- `make local-ca-status`: lokale CA in System, Chromium/Codex und Firefox vertraut. `docker compose up -d --build web`: lokaler Webdienst erfolgreich neu gebaut und gestartet.
+- `make verify-feature FEATURE=learner-course-overview` vollständig erfolgreich: **2672 Backend-Tests bestanden, 78 vorgesehen übersprungen; 683 Frontend-Tests, 8 Tooling-Tests, 62 H5P-Tests und 1 authentifizierter Browserrundlauf bestanden**. Die anschließende Feature-Bereinigung bestätigt, dass keine laufbezogenen Konten oder Daten zurückbleiben.
+- Svelte-Prüfung ohne Fehler/Warnungen; Produktionsbuild mit ausschließlich den dokumentierten Upstream-Ausnahmen. Import-/Architekturgrenzen, API-Vertrag, Route-/DB-Inventar, Supply Chain, Ruff und Image-Smoke grün. `git diff --check` ohne Befund.
+
+F3 ist abgeschlossen. Die übrige Provider-Migration einschließlich Lehrer-Startseite, weitere Frontend-/Worker-/H5P-Arbeitspakete und der Sicherheitsabschluss bleiben offen. Keine API-, Schema-, ENV-, UI- oder DSPy-Änderung; kein zusätzlicher Dienst, keine zusätzliche Datenbank und kein Push.

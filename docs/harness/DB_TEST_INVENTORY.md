@@ -88,7 +88,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/test_learning_lazy_storage_wiring.py | storage-or-config | - | no-db-marker-needed | supabase | Keep service-free unless it reaches the real DB |
 | backend/tests/test_learning_modular_units_api_contract.py | real-db | db_write | marked-db | env:DATABASE_URL, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/test_learning_modular_unlock_parity.py | real-db | db_write | marked-db | env:DATABASE_URL, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
-| backend/tests/test_learning_my_courses_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
+| backend/tests/test_learning_my_courses_api.py | real-db | db_write | marked-db | env:RLS_TEST_SERVICE_DSN, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/test_learning_pdf_preprocessing_usecase.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, psycopg-required, requires-db | Keep marker and isolation visible |
 | backend/tests/test_learning_repo_mark_extracted.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/test_learning_repo_semantics.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_DSN, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |

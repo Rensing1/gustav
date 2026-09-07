@@ -12,7 +12,8 @@ def test_learner_routes_live_in_focused_router_module() -> None:
     app_routes = importlib.import_module("backend.web.routes.app")
     learner_routes = importlib.import_module("backend.web.routes.app_learner_view_routes")
 
-    assert app_routes.get_learner_home is learner_routes.get_learner_home
+    assert not hasattr(app_routes, "get_learner_home")
+    assert learner_routes.get_learner_home.__module__ == learner_routes.__name__
     assert not hasattr(learner_routes, "get_learner_concern_box")
     assert not hasattr(learner_routes, "create_learner_concern_box_entry")
 

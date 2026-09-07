@@ -2,6 +2,12 @@
 
 ## 2026-09-07
 
+### Technische Schulden – Datenzugang der Lernenden-Kursübersicht
+
+- refactor(learning): Startseite, persönliche Kursliste und Kurs-Lerneinheiten erhalten ihren Datenbankzugang ausdrücklich beim Aufbau der Backend-Anwendung. Die bisherigen globalen Kurs-Handler und Home-Aliase entfallen. GUSTAV bleibt eine gemeinsame Plattform, ohne zusätzliche Dienste oder Datenbanken.
+- refactor(web): Die vorhandenen Kurs-Anwendungsfälle bleiben erhalten; die Home-Projektion ist von HTTP getrennt. Drei synchrone Handler führen DB-Abfragen im begrenzten Threadpool aus.
+- test: Gezielte Abhängigkeitstests ohne globale Repository-Overrides sowie echte DB-Tests sichern Berechtigungen, Archiv-/Austrittsregeln und Reihenfolge. Ein authentifizierter Browserrundlauf prüft Kursnavigation und den Wechsel zu vergangenen Kursen. API, Datenbankschema, UI und DSPy bleiben unverändert; Teil F3 schließt die Gesamtmigration nicht ab.
+
 ### Technische Schulden – appbezogener Kummerkasten
 
 - refactor(teaching): Die fünf Kummerkasten-Endpunkte besitzen explizite appbezogene Repository-/Namensprovider. Kursauswahl, Mitgliedschaftsprüfung und datensparsame Posteingangsprojektion liegen in einem frameworkunabhängigen Dienst; dynamische Kummerkasten-Fassaden und ihre Aliase entfallen.

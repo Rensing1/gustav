@@ -15,8 +15,6 @@ from fastapi.routing import APIRoute
 
 from backend.learning.repo_db import DBLearningRepo
 from backend.learning.usecases.courses import (
-    ListCoursesInput,
-    ListCoursesUseCase,
     ListCourseUnitsInput,
     ListCourseUnitsUseCase,
 )
@@ -57,6 +55,7 @@ from backend.storage.learning_policy import (
     ALLOWED_FILE_MIME,  # noqa: F401 - kept for route module compatibility
     ALLOWED_IMAGE_MIME,  # noqa: F401
 )
+from backend.web.routes.learning_course_routes import learning_course_router
 from backend.web.routes.learning_dialogs import learning_dialog_router
 from backend.web.routes.learning_internal_upload_routes import (
     internal_upload_proxy as internal_upload_proxy,  # noqa: F401 - kept for route module compatibility
@@ -172,6 +171,7 @@ from backend.web.routes.learning_upload_proxy import (
 )
 
 learning_router = APIRouter(tags=["Learning"])
+learning_router.include_router(learning_course_router)
 learning_router.include_router(learning_material_file_router)
 learning_router.include_router(learning_upload_intents_router)
 learning_router.include_router(learning_internal_upload_router)
@@ -881,84 +881,6 @@ async def check_h5p_content_access(request: Request, course_id: str, content_id:
     if allowed:
         return Response(status_code=204, headers=_cache_headers_success())
     return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-
-
-@learning_router.get("/api/learning/courses")
-async def list_my_courses(request: Request, scope: str = "current", limit: int = 50, offset: int = 0):
-    """List courses for the current student (alphabetical, minimal fields).
-
-    Why:
-        Dedicated Learning endpoint that exposes only student-facing fields and
-        separates responsibilities from Teaching. This reduces accidental data
-        leakage (e.g., teacher_id) and keeps the contract stable for learners.
-
-    Parameters:
-        request: FastAPI request carrying the authenticated user context.
-        limit: Page size clamp to 1..100 (default 50).
-        offset: Zero-based starting index (default 0).
-
-    Behavior:
-        - Requires an authenticated session with role "student".
-        - Returns courses where the caller is a member, sorted by
-          title asc, id asc (stable secondary order).
-        - Uses private, no-store Cache-Control headers.
-
-    Permissions:
-        Caller must have the `student` role; membership filtering is enforced in
-        the repository via RLS and explicit joins. Responds 403 if caller lacks
-        the student role.
-    """
-    user, error = _require_student(request)
-    if error:
-        return error
-    items = ListCoursesUseCase(_get_repo()).execute(
-        ListCoursesInput(
-            student_sub=str(user.get("sub", "")),
-            limit=int(limit or 50),
-            offset=int(offset or 0),
-            scope="past" if scope == "past" else "current",
-        )
-    )
-    return JSONResponse(items, headers=_cache_headers_success())
-
-
-@learning_router.get("/api/learning/courses/{course_id}/units")
-async def list_course_units(request: Request, course_id: str):
-    """List learning units of a course for the current student.
-
-    Why:
-        Students need a read-only listing of units within a course ordered by
-        the teacher-defined module position, independent from section releases.
-
-    Parameters:
-        request: FastAPI request with authenticated user context.
-        course_id: UUID of the course; 400 when not UUID-like.
-
-    Behavior:
-        - Requires an authenticated session with role "student".
-        - Responds 200 with an array of objects { unit: UnitPublic, position }.
-        - Responds 404 when the course does not exist or the caller is not a
-          member (intentionally indistinguishable to avoid leaking existence).
-        - Responses include private Cache-Control headers.
-
-    Permissions:
-        Caller must have the `student` role (403 otherwise) and be a member of
-        the course. Membership and ordering are enforced at the DB boundary.
-    """
-    user, error = _require_student(request)
-    if error:
-        return error
-    try:
-        UUID(course_id)
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
-    try:
-        rows = ListCourseUnitsUseCase(_get_repo()).execute(
-            ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=str(course_id))
-        )
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-    return JSONResponse(rows, headers=_cache_headers_success())
 
 
 @learning_router.get("/api/learning/courses/{course_id}/units/{unit_id}/sections")

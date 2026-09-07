@@ -40,13 +40,7 @@ from backend.web.routes.app_diagnostics_routes import (
     get_diagnostics_learner_profile as get_diagnostics_learner_profile,  # noqa: F401
 )
 from backend.web.routes.app_learner_view_routes import (
-    _list_learner_courses as _list_learner_courses,  # noqa: F401
-)
-from backend.web.routes.app_learner_view_routes import (
     app_learner_view_router,
-)
-from backend.web.routes.app_learner_view_routes import (
-    get_learner_home as get_learner_home,  # noqa: F401
 )
 from backend.web.routes.app_live_routes import (
     _decode_json_response_body as _decode_json_response_body,  # noqa: F401

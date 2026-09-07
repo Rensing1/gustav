@@ -8,6 +8,8 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
+from backend.web.learning_course_providers import LearningCourseProviders
+
 main = importlib.import_module("backend.web.main")
 app_routes = importlib.import_module("backend.web.routes.app")
 teacher_concern_routes = importlib.import_module("backend.web.routes.app_teacher_concern_routes")
@@ -38,20 +40,23 @@ def _mock_bearer_auth(
 
 
 @pytest.mark.anyio
-async def test_learner_home_returns_student_courses(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        app_routes,
-        "_list_learner_courses",
-        lambda student_sub, limit, offset, scope="current": [
-            {"id": "course-1", "title": "Mathe 9b"},
-            {"id": "course-2", "title": "Informatik"},
-        ] if scope == "current" else [],
-    )
-    headers = _mock_bearer_auth(monkeypatch, sub="student-home", roles=["student"], name="Lena")
+async def test_learner_home_returns_student_courses() -> None:
+    class Courses:
+        def list_personal_courses(self, *, student_sub, limit, offset, scope):
+            return [
+                {"id": "course-1", "title": "Mathe 9b"},
+                {"id": "course-2", "title": "Informatik"},
+            ] if scope == "current" else []
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+    app = main.create_app(
+        learning_course_providers=LearningCourseProviders(repository=Courses),
+        access_token_verifier=lambda token, cfg: {
+            "sub": "student-home", "realm_access": {"roles": ["student"]},
+        },
+    )
+    headers = {"Authorization": "Bearer test.jwt"}
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/api/learning/views/learner-home", headers=headers)
 
     assert response.status_code == 200
@@ -254,10 +259,13 @@ async def test_teacher_courses_view_returns_teacher_course_cards(monkeypatch: py
 
 
 @pytest.mark.anyio
-async def test_learner_home_forbids_teacher(monkeypatch: pytest.MonkeyPatch) -> None:
-    headers = _mock_bearer_auth(monkeypatch, sub="teacher-home", roles=["teacher"], name="Ada")
+async def test_learner_home_forbids_teacher() -> None:
+    app = main.create_app(access_token_verifier=lambda token, cfg: {
+        "sub": "teacher-home", "realm_access": {"roles": ["teacher"]},
+    })
+    headers = {"Authorization": "Bearer test.jwt"}
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/api/learning/views/learner-home", headers=headers)
 
     assert response.status_code == 403

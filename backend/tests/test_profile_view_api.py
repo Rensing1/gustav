@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import httpx
@@ -10,19 +11,30 @@ import pytest
 from httpx import ASGITransport
 
 from backend.identity_access.cli_tokens import InMemoryCLITokenStore
-
-main = importlib.import_module("backend.web.main")
-app_routes = importlib.import_module("backend.web.routes.app")
+from backend.identity_access.profile import ProfileService
+from backend.web.main import create_app
+from backend.web.profile_providers import ProfileProviders, create_profile_providers
 
 pytestmark = pytest.mark.anyio("asyncio")
 
 
-def _install_cli_token_store(monkeypatch: pytest.MonkeyPatch, store: InMemoryCLITokenStore) -> None:
-    monkeypatch.setattr(main.RUNTIME, "cli_token_store", store)
+@pytest.fixture
+def app():
+    """Use a fresh app with an explicit verifier, never a global auth override."""
+    claims = {}
+    created_app = create_app(access_token_verifier=lambda token, cfg: claims)
+    created_app.state.verified_claims = claims
+    return created_app
+
+
+def _install_cli_token_store(
+    monkeypatch: pytest.MonkeyPatch, app, store: InMemoryCLITokenStore
+) -> None:
+    monkeypatch.setattr(app.state.runtime, "cli_token_store", store)
 
 
 def _mock_bearer_auth(
-    monkeypatch: pytest.MonkeyPatch,
+    app,
     *,
     sub: str,
     roles: list[str],
@@ -30,46 +42,45 @@ def _mock_bearer_auth(
     email: str = "lena.schmidt@example.com",
 ) -> dict[str, str]:
     claims = {
-            "sub": sub,
-            "name": name,
-            "gustav_display_name": name,
-            "email": email,
-            "realm_access": {"roles": roles},
-            "exp": 4102444800,
+        "sub": sub,
+        "name": name,
+        "gustav_display_name": name,
+        "email": email,
+        "realm_access": {"roles": roles},
+        "exp": 4102444800,
     }
-    monkeypatch.setattr(main, "verify_bearer_token", lambda token, cfg: claims)
-    monkeypatch.setattr(app_routes, "verify_bearer_token", lambda token, cfg: claims, raising=False)
+    app.state.verified_claims.update(claims)
     return {"Authorization": "Bearer test.jwt"}
 
 
-@pytest.mark.anyio
-async def test_profile_view_returns_identity_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        app_routes,
-        "_load_profile_identity",
-        lambda sub, claims, request=None: {
-            "display_name": "Lena",
+def _install_identity(monkeypatch, app, user, *, update=lambda **kwargs: None, claims=None):
+    identity = SimpleNamespace(get_user=lambda **kwargs: user, update_user=update)
+    providers = ProfileProviders(
+        identity=lambda: identity, verify_claims=lambda token: claims or {}
+    )
+    monkeypatch.setattr(app.state, "profile_providers", providers)
+
+
+async def test_profile_view_returns_identity_fields(app, monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_identity(
+        monkeypatch,
+        app,
+        {
             "email": "lena.schmidt@example.com",
-            "first_name": "Lena",
-            "last_name": "Schmidt",
-            "name_locked_until": None,
-            "name_can_edit": True,
+            "firstName": "Lena",
+            "lastName": "Schmidt",
+            "attributes": {"display_name": ["Lena"]},
         },
     )
-    headers = _mock_bearer_auth(monkeypatch, sub="student-profile", roles=["student"], name="Lena")
-
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+    headers = _mock_bearer_auth(app, sub="student-profile", roles=["student"], name="Lena")
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         response = await client.get("/api/app/profile", headers=headers)
-
     assert response.status_code == 200
-    assert response.headers.get("Cache-Control") == "private, no-store"
+    assert response.headers["Cache-Control"] == "private, no-store"
     assert response.json() == {
-        "user": {
-            "sub": "student-profile",
-            "name": "Lena",
-            "role": "student",
-            "roles": ["student"],
-        },
+        "user": {"sub": "student-profile", "name": "Lena", "role": "student", "roles": ["student"]},
         "display_name": "Lena",
         "email": "lena.schmidt@example.com",
         "first_name": "Lena",
@@ -80,147 +91,150 @@ async def test_profile_view_returns_identity_fields(monkeypatch: pytest.MonkeyPa
     }
 
 
-@pytest.mark.anyio
-async def test_profile_view_uses_runtime_oidc_config_for_claims_and_identity_adapter(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runtime_cfg = SimpleNamespace(name="runtime-oidc")
-    verify_cfgs: list[object] = []
-    admin_cfgs: list[object] = []
-
-    def _verify_bearer_token(token: str, cfg: object) -> dict[str, object]:
-        verify_cfgs.append(cfg)
-        return {
-            "sub": "student-runtime-profile",
-            "name": "Lena",
-            "gustav_display_name": "Lena",
-            "email": "lena.schmidt@example.com",
-            "realm_access": {"roles": ["student"]},
-            "exp": 4102444800,
-        }
-
-    class StubAdminClient:
-        def __init__(self, cfg: object) -> None:
-            admin_cfgs.append(cfg)
-
-        def get_user(self, *, user_id: str) -> dict[str, object]:
-            return {
-                "id": user_id,
-                "email": "lena.schmidt@example.com",
-                "firstName": "Lena",
-                "lastName": "Schmidt",
-                "attributes": {"display_name": ["Lena"]},
-            }
-
-    monkeypatch.setattr(main.RUNTIME, "oidc_config", runtime_cfg)
-    monkeypatch.setattr(main, "verify_bearer_token", _verify_bearer_token)
-    monkeypatch.setattr(app_routes, "verify_bearer_token", _verify_bearer_token)
-    monkeypatch.setattr(app_routes, "AdminClient", StubAdminClient)
-
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        response = await client.get("/api/app/profile", headers={"Authorization": "Bearer test.jwt"})
-
-    assert response.status_code == 200
-    assert verify_cfgs[-1] is runtime_cfg
-    assert admin_cfgs == [runtime_cfg]
+def test_default_profile_providers_use_own_runtime_oidc_config(monkeypatch):
+    wiring = importlib.import_module("backend.web.profile_providers")
+    cfg = object()
+    runtime = SimpleNamespace(oidc_config=cfg)
+    seen = []
+    monkeypatch.setattr(wiring, "AdminClient", lambda config: seen.append(config))
+    monkeypatch.setattr(wiring, "verify_bearer_token", lambda *, token, cfg: {"cfg": cfg})
+    providers = create_profile_providers(runtime)
+    providers.identity()
+    assert seen == [cfg]
+    assert providers.verify_claims("test.jwt") == {"cfg": cfg}
 
 
-@pytest.mark.anyio
-async def test_profile_current_claims_use_route_verifier_not_main_module_alias(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    route_claims = {
-        "sub": "student-route-verifier",
-        "name": "Lena",
-        "gustav_display_name": "Lena",
-        "email": "route-verifier@example.com",
-        "realm_access": {"roles": ["student"]},
-        "exp": 4102444800,
-    }
-    middleware_claims = {
-        **route_claims,
-        "email": "middleware-only@example.com",
-    }
-    main_calls = {"count": 0}
-    captured_claims: dict[str, object] = {}
-
-    def _main_verify_bearer_token(token: str, cfg: object) -> dict[str, object]:
-        main_calls["count"] += 1
-        if main_calls["count"] == 1:
-            return middleware_claims
-        raise AssertionError("profile route must not re-resolve claims through main.verify_bearer_token")
-
-    def _route_verify_bearer_token(token: str, cfg: object) -> dict[str, object]:
-        return route_claims
-
-    def _load_profile_identity(sub: str, claims: dict[str, object], request=None) -> dict[str, object]:
-        captured_claims.update(claims)
-        return {
-            "display_name": "Lena",
-            "email": str(claims.get("email") or ""),
-            "first_name": "Lena",
-            "last_name": "",
-            "name_locked_until": None,
-            "name_can_edit": True,
-        }
-
-    monkeypatch.setattr(main, "verify_bearer_token", _main_verify_bearer_token)
-    monkeypatch.setattr(app_routes, "verify_bearer_token", _route_verify_bearer_token, raising=False)
-    monkeypatch.setattr(app_routes, "_load_profile_identity", _load_profile_identity)
-
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        response = await client.get("/api/app/profile", headers={"Authorization": "Bearer test.jwt"})
-
-    assert response.status_code == 200
-    assert captured_claims["email"] == "route-verifier@example.com"
-    assert main_calls["count"] == 1
-
-
-@pytest.mark.anyio
-async def test_profile_display_name_update_calls_identity_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, str]] = []
-
-    monkeypatch.setattr(
-        app_routes,
-        "_update_profile_display_name",
-        lambda sub, display_name, request=None: calls.append((sub, display_name)),
+async def test_profile_claims_come_from_app_provider_not_main_alias(app, monkeypatch):
+    _install_identity(monkeypatch, app, {}, claims={"email": "route-verifier@example.com"})
+    headers = _mock_bearer_auth(
+        app,
+        sub="student-profile",
+        roles=["student"],
+        name="Lena",
+        email="middleware-only@example.com",
     )
-    headers = _mock_bearer_auth(monkeypatch, sub="student-profile", roles=["student"], name="Lena")
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/app/profile", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["email"] == "route-verifier@example.com"
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+
+async def test_profile_display_name_update_calls_identity_adapter(app, monkeypatch):
+    calls = []
+    _install_identity(
+        monkeypatch,
+        app,
+        {"email": "student@example.com"},
+        update=lambda **kwargs: calls.append(kwargs),
+    )
+    headers = _mock_bearer_auth(app, sub="student-profile", roles=["student"], name="Lena")
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         response = await client.patch(
             "/api/app/profile/display-name",
             headers={**headers, "Origin": "http://test"},
-            json={"display_name": "Lena Neu"},
+            json={"display_name": "  Lena Neu  "},
         )
-
     assert response.status_code == 204
-    assert calls == [("student-profile", "Lena Neu")]
+    assert calls == [
+        {
+            "user_id": "student-profile",
+            "payload": {
+                "email": "student@example.com",
+                "attributes": {"display_name": ["Lena Neu"]},
+            },
+        }
+    ]
 
 
-@pytest.mark.anyio
-async def test_profile_name_update_rejects_locked_names(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _raise_locked(sub: str, first_name: str, last_name: str, request=None) -> None:
-        raise app_routes.ProfileNameLockedError("2026-10-03T00:00:00+00:00")
-
-    monkeypatch.setattr(app_routes, "_update_profile_name", _raise_locked)
-    headers = _mock_bearer_auth(monkeypatch, sub="student-profile", roles=["student"], name="Lena")
-
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+async def test_profile_name_update_rejects_locked_names(app, monkeypatch):
+    calls = []
+    lock = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+    _install_identity(
+        monkeypatch,
+        app,
+        {"attributes": {"name_locked_until": [lock]}},
+        update=lambda **kwargs: calls.append(kwargs),
+    )
+    headers = _mock_bearer_auth(app, sub="student-profile", roles=["student"], name="Lena")
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         response = await client.patch(
             "/api/app/profile/name",
             headers={**headers, "Origin": "http://test"},
             json={"first_name": "Lena", "last_name": "Schmidt"},
         )
-
     assert response.status_code == 409
-    assert response.json() == {
-        "error": "name_locked",
-        "detail": "2026-10-03T00:00:00+00:00",
-    }
+    assert response.json() == {"error": "name_locked", "detail": lock}
+    assert calls == []
 
 
-def test_update_profile_name_updates_only_names_and_attributes(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "method,path,payload",
+    [
+        ("GET", "/api/app/profile", None),
+        ("PATCH", "/api/app/profile/name", {"first_name": "A"}),
+        ("PATCH", "/api/app/profile/display-name", {"display_name": "A"}),
+        ("GET", "/api/app/profile/cli-tokens", None),
+        ("POST", "/api/app/profile/cli-tokens", {"label": "A", "scopes": ["read"]}),
+        ("DELETE", "/api/app/profile/cli-tokens/absent", None),
+    ],
+)
+async def test_anonymous_profile_requests_never_access_identity_or_store(
+    app, monkeypatch, method, path, payload
+):
+    def forbidden():
+        pytest.fail("unauthenticated request accessed a provider")
+
+    monkeypatch.setattr(
+        app.state,
+        "profile_providers",
+        ProfileProviders(identity=forbidden, verify_claims=lambda token: {}),
+    )
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.request(
+            method, path, json=payload, headers={"Origin": "http://test"}
+        )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "path,payload",
+    [
+        ("name", {"first_name": "  ", "last_name": ""}),
+        ("display-name", {"display_name": "  "}),
+    ],
+)
+async def test_empty_profile_fields_are_rejected_before_identity_access(
+    app, monkeypatch, path, payload
+):
+    def forbidden():
+        pytest.fail("invalid input accessed identity")
+
+    monkeypatch.setattr(
+        app.state,
+        "profile_providers",
+        ProfileProviders(identity=forbidden, verify_claims=lambda token: {}),
+    )
+    headers = _mock_bearer_auth(app, sub="student-profile", roles=["student"], name="Lena")
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.patch(
+            f"/api/app/profile/{path}", json=payload, headers={**headers, "Origin": "http://test"}
+        )
+    assert response.status_code == 400
+
+
+def test_update_profile_name_updates_only_names_and_attributes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     recorded: dict[str, object] = {}
 
     class StubAdminClient:
@@ -244,10 +258,9 @@ def test_update_profile_name_updates_only_names_and_attributes(monkeypatch: pyte
             recorded["payload"] = payload
 
     oidc_config = object()
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(runtime=SimpleNamespace(oidc_config=oidc_config))))
-    monkeypatch.setattr(app_routes, "AdminClient", StubAdminClient)
+    service = ProfileService(StubAdminClient(oidc_config))
 
-    app_routes._update_profile_name("student-profile", "Lena", "Schmidt", request)
+    service.update_name("student-profile", "Lena", "Schmidt")
 
     assert recorded["get_user_id"] == "student-profile"
     assert recorded["update_user_id"] == "student-profile"
@@ -268,7 +281,9 @@ def test_update_profile_name_updates_only_names_and_attributes(monkeypatch: pyte
     assert isinstance(lock_values[0], str)
 
 
-def test_update_profile_display_name_updates_only_attributes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_update_profile_display_name_updates_only_attributes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     recorded: dict[str, object] = {}
 
     class StubAdminClient:
@@ -291,10 +306,9 @@ def test_update_profile_display_name_updates_only_attributes(monkeypatch: pytest
             recorded["payload"] = payload
 
     oidc_config = object()
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(runtime=SimpleNamespace(oidc_config=oidc_config))))
-    monkeypatch.setattr(app_routes, "AdminClient", StubAdminClient)
+    service = ProfileService(StubAdminClient(oidc_config))
 
-    app_routes._update_profile_display_name("student-profile", "Lena Neu", request)
+    service.update_display_name("student-profile", "Lena Neu")
 
     assert recorded["get_user_id"] == "student-profile"
     assert recorded["update_user_id"] == "student-profile"
@@ -305,18 +319,22 @@ def test_update_profile_display_name_updates_only_attributes(monkeypatch: pytest
         "attributes": {
             "name_locked_until": ["2026-10-03T00:00:00+00:00"],
             "display_name": ["Lena Neu"],
-        }
+        },
     }
 
 
 @pytest.mark.anyio
-async def test_profile_cli_token_lifecycle_returns_raw_token_only_once(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_profile_cli_token_lifecycle_returns_raw_token_only_once(
+    app, monkeypatch: pytest.MonkeyPatch
+) -> None:
     now = {"value": 1_000}
     store = InMemoryCLITokenStore(now=lambda: now["value"])
-    _install_cli_token_store(monkeypatch, store)
-    headers = _mock_bearer_auth(monkeypatch, sub="teacher-cli-profile", roles=["teacher"], name="Lena")
+    _install_cli_token_store(monkeypatch, app, store)
+    headers = _mock_bearer_auth(app, sub="teacher-cli-profile", roles=["teacher"], name="Lena")
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         created = await client.post(
             "/api/app/profile/cli-tokens",
             headers={**headers, "Origin": "http://test"},
@@ -349,13 +367,16 @@ async def test_profile_cli_token_lifecycle_returns_raw_token_only_once(monkeypat
 
 @pytest.mark.anyio
 async def test_profile_cli_tokens_use_app_runtime_store(
+    app,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = InMemoryCLITokenStore(now=lambda: 1_000)
-    monkeypatch.setattr(main.RUNTIME, "cli_token_store", store)
-    headers = _mock_bearer_auth(monkeypatch, sub="teacher-cli-runtime", roles=["teacher"], name="Lena")
+    monkeypatch.setattr(app.state.runtime, "cli_token_store", store)
+    headers = _mock_bearer_auth(app, sub="teacher-cli-runtime", roles=["teacher"], name="Lena")
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         created = await client.post(
             "/api/app/profile/cli-tokens",
             headers={**headers, "Origin": "http://test"},
@@ -370,7 +391,9 @@ async def test_profile_cli_tokens_use_app_runtime_store(
 
 
 @pytest.mark.anyio
-async def test_student_cannot_list_create_or_revoke_cli_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_student_cannot_list_create_or_revoke_cli_tokens(
+    app, monkeypatch: pytest.MonkeyPatch
+) -> None:
     store = InMemoryCLITokenStore(now=lambda: 1_000)
     teacher_token = store.create_token(
         user_sub="teacher-cli-owner",
@@ -378,10 +401,12 @@ async def test_student_cannot_list_create_or_revoke_cli_tokens(monkeypatch: pyte
         scopes=["read"],
         ttl_seconds=30 * 24 * 60 * 60,
     )
-    _install_cli_token_store(monkeypatch, store)
-    headers = _mock_bearer_auth(monkeypatch, sub="student-cli-profile", roles=["student"], name="Lena")
+    _install_cli_token_store(monkeypatch, app, store)
+    headers = _mock_bearer_auth(app, sub="student-cli-profile", roles=["student"], name="Lena")
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         listed = await client.get("/api/app/profile/cli-tokens", headers=headers)
         created = await client.post(
             "/api/app/profile/cli-tokens",
@@ -413,14 +438,17 @@ async def test_student_cannot_list_create_or_revoke_cli_tokens(monkeypatch: pyte
     ],
 )
 async def test_profile_cli_token_create_invalid_payload_returns_contract_400(
+    app,
     monkeypatch: pytest.MonkeyPatch,
     payload: dict[str, object],
 ) -> None:
     store = InMemoryCLITokenStore(now=lambda: 1_000)
-    _install_cli_token_store(monkeypatch, store)
-    headers = _mock_bearer_auth(monkeypatch, sub="teacher-cli-profile", roles=["teacher"], name="Lena")
+    _install_cli_token_store(monkeypatch, app, store)
+    headers = _mock_bearer_auth(app, sub="teacher-cli-profile", roles=["teacher"], name="Lena")
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         response = await client.post(
             "/api/app/profile/cli-tokens",
             headers={**headers, "Origin": "http://test"},

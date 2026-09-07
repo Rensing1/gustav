@@ -12,12 +12,22 @@ def test_profile_routes_live_in_focused_router_module() -> None:
     app_routes = importlib.import_module("backend.web.routes.app")
     profile_routes = importlib.import_module("backend.web.routes.app_profile_routes")
 
-    assert app_routes.get_app_profile is profile_routes.get_app_profile
-    assert app_routes.patch_profile_display_name is profile_routes.patch_profile_display_name
-    assert app_routes.patch_profile_name is profile_routes.patch_profile_name
-    assert app_routes.list_profile_cli_tokens is profile_routes.list_profile_cli_tokens
-    assert app_routes.create_profile_cli_token is profile_routes.create_profile_cli_token
-    assert app_routes.revoke_profile_cli_token is profile_routes.revoke_profile_cli_token
+    for route in profile_routes.app_profile_router.routes:
+        assert route.endpoint.__module__ == profile_routes.__name__
+        assert not hasattr(app_routes, route.endpoint.__name__)
+
+
+def test_profile_routes_have_no_dynamic_facade_or_global_repair_dependency() -> None:
+    source = (REPO_ROOT / "backend/web/routes/app_profile_routes.py").read_text(encoding="utf-8")
+    for forbidden in ("_app_module", "sys.modules", "importlib", "__globals__", "from backend.web.routes.app import"):
+        assert forbidden not in source
+
+
+def test_profile_use_cases_do_not_import_the_web_adapter() -> None:
+    for name in ("profile.py", "profile_helpers.py"):
+        source = (REPO_ROOT / "backend/identity_access" / name).read_text(encoding="utf-8")
+        assert "backend.web" not in source
+        assert "fastapi" not in source
 
 
 def test_app_hotspot_no_longer_defines_profile_route_handlers() -> None:

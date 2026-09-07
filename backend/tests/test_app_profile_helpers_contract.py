@@ -7,12 +7,10 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APP_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "app.py"
-HELPERS_SOURCE = PROJECT_ROOT / "backend" / "web" / "routes" / "app_profile_helpers.py"
+HELPERS_SOURCE = PROJECT_ROOT / "backend" / "identity_access" / "profile_helpers.py"
 
 
 def test_profile_normalization_helpers_live_outside_app_hotspot() -> None:
-    app_routes = importlib.import_module("backend.web.routes.app")
-    helpers = importlib.import_module("backend.web.routes.app_profile_helpers")
     app_source = APP_SOURCE.read_text(encoding="utf-8")
     helpers_source = HELPERS_SOURCE.read_text(encoding="utf-8")
 
@@ -24,14 +22,11 @@ def test_profile_normalization_helpers_live_outside_app_hotspot() -> None:
     assert "def parse_lock_timestamp(" in helpers_source
     assert "def profile_identity_defaults(" in helpers_source
     assert "def normalized_attributes(" in helpers_source
-    assert app_routes._claims_email is helpers.claims_email
-    assert app_routes._parse_lock_timestamp is helpers.parse_lock_timestamp
-    assert app_routes._profile_identity_defaults is helpers.profile_identity_defaults
-    assert app_routes._normalized_attributes is helpers.normalized_attributes
+    assert "profile_helpers" not in app_source
 
 
 def test_profile_normalization_helpers_keep_existing_rules() -> None:
-    helpers = importlib.import_module("backend.web.routes.app_profile_helpers")
+    helpers = importlib.import_module("backend.identity_access.profile_helpers")
 
     assert helpers.claims_email({"preferred_username": "user@example.test"}) == "user@example.test"
     assert helpers.normalized_attributes(

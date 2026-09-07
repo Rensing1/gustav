@@ -16,6 +16,7 @@ import secrets
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from typing import Protocol
 from uuid import uuid4
 
 try:
@@ -74,6 +75,16 @@ class CLITokenRecord:
 class CreatedCLIToken:
     raw_token: str
     record: CLITokenRecord
+
+
+class ProfileCLITokenStore(Protocol):
+    """Owner-scoped token management needed by the profile HTTP adapter."""
+
+    def list_tokens(self, user_sub: str) -> list[CLITokenRecord]: ...
+
+    def create_token(self, *, user_sub: str, label: str, scopes: list[str], ttl_seconds: int) -> CreatedCLIToken: ...
+
+    def revoke_token(self, *, user_sub: str, token_id: str) -> bool: ...
 
 
 class InMemoryCLITokenStore:

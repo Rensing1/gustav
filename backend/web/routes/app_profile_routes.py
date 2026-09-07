@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
-import importlib
-import sys as _sys
-from typing import Any
+from datetime import datetime, timezone
+from typing import cast
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from backend.identity_access.cli_tokens import CLITokenRecord, ProfileCLITokenStore
+from backend.identity_access.profile import ProfileNameLockedError, ProfileService
+from backend.web.profile_providers import profile_providers
+from backend.web.routes.app_session_helpers import current_user as _current_user
+from backend.web.routes.app_session_helpers import private_headers as _private_headers
+from backend.web.routes.app_session_helpers import user_payload as _user_payload
+
+# These handlers perform synchronous identity/DB I/O. FastAPI runs ordinary
+# def handlers in its bounded threadpool, keeping the event loop responsive.
 app_profile_router = APIRouter(tags=["App"])
 
 
@@ -30,51 +38,46 @@ class CLITokenCreatePayload(BaseModel):
     ttl_days: object | None = 30
 
 
-class ProfileNameLockedError(RuntimeError):
-    """Raised when Vorname/Nachname are currently locked."""
+def _profile_service(request: Request) -> ProfileService:
+    return ProfileService(profile_providers(request).identity())
 
 
-def _app_module():
-    module = _sys.modules.get("backend.web.routes.app")
-    if module is None:  # pragma: no cover - defensive import fallback
-        module = importlib.import_module("backend.web.routes.app")
-    return module
+def _cli_token_store(request: Request) -> ProfileCLITokenStore:
+    # Management and bearer authentication must use the same app-owned store.
+    return cast(ProfileCLITokenStore, request.app.state.runtime.cli_token_store)
 
 
-def _current_user(request: Request) -> dict | None:
-    return _app_module()._current_user(request)
+def _epoch_to_iso(value: int | None) -> str | None:
+    if value is None:
+        return None
+    return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
 
 
-def _private_headers() -> dict[str, str]:
-    return _app_module()._private_headers()
+def _serialize_cli_token(record: CLITokenRecord) -> dict[str, object]:
+    return {
+        "id": record.id,
+        "label": record.label,
+        "scopes": record.scopes,
+        "created_at": _epoch_to_iso(record.created_at),
+        "expires_at": _epoch_to_iso(record.expires_at),
+        "last_used_at": _epoch_to_iso(record.last_used_at),
+        "revoked_at": _epoch_to_iso(record.revoked_at),
+    }
 
 
 def _current_claims(request: Request) -> dict[str, object]:
-    return _app_module()._current_claims(request)
-
-
-def _load_profile_identity(sub: str, claims: dict[str, object], request: Request | None = None) -> dict[str, object]:
-    return _app_module()._load_profile_identity(sub, claims, request)
-
-
-def _user_payload(user: dict) -> dict[str, object]:
-    return _app_module()._user_payload(user)
-
-
-def _update_profile_display_name(sub: str, display_name: str, request: Request | None = None) -> None:
-    _app_module()._update_profile_display_name(sub, display_name, request)
-
-
-def _update_profile_name(sub: str, first_name: str, last_name: str, request: Request | None = None) -> None:
-    _app_module()._update_profile_name(sub, first_name, last_name, request)
-
-
-def _cli_token_store(request: Request | None = None):
-    return _app_module()._cli_token_store(request)
-
-
-def _serialize_cli_token(record: Any) -> dict[str, object]:
-    return _app_module()._serialize_cli_token(record)
+    """Re-resolve bearer claims for BFF-owned routes that need raw identity data."""
+    auth_header = str(request.headers.get("authorization") or "")
+    if not auth_header.lower().startswith("bearer "):
+        return {}
+    token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return {}
+    try:
+        claims = profile_providers(request).verify_claims(token)
+    except Exception:
+        return {}
+    return claims if isinstance(claims, dict) else {}
 
 
 def _require_cli_token_teacher(request: Request) -> tuple[dict | None, JSONResponse | None]:
@@ -94,7 +97,7 @@ def _require_cli_token_teacher(request: Request) -> tuple[dict | None, JSONRespo
 
 
 @app_profile_router.get("/api/app/profile")
-async def get_app_profile(request: Request):
+def get_app_profile(request: Request):
     """Return the authenticated user's profile read-model."""
 
     user = _current_user(request)
@@ -102,7 +105,7 @@ async def get_app_profile(request: Request):
         return JSONResponse({"error": "unauthenticated"}, status_code=401, headers=_private_headers())
 
     claims = _current_claims(request)
-    profile = _load_profile_identity(str(user.get("sub") or ""), claims, request)
+    profile = _profile_service(request).load(str(user.get("sub") or ""), claims)
     body = {
         "user": _user_payload(user),
         "display_name": str(profile.get("display_name") or ""),
@@ -117,7 +120,7 @@ async def get_app_profile(request: Request):
 
 
 @app_profile_router.patch("/api/app/profile/display-name")
-async def patch_profile_display_name(request: Request, payload: ProfileDisplayNameUpdatePayload):
+def patch_profile_display_name(request: Request, payload: ProfileDisplayNameUpdatePayload):
     """Update only the display name for the current user."""
 
     user = _current_user(request)
@@ -128,12 +131,12 @@ async def patch_profile_display_name(request: Request, payload: ProfileDisplayNa
     if not display_name:
         return JSONResponse({"error": "bad_request", "detail": "invalid_display_name"}, status_code=400, headers=_private_headers())
 
-    _update_profile_display_name(str(user.get("sub") or ""), display_name, request)
+    _profile_service(request).update_display_name(str(user.get("sub") or ""), display_name)
     return Response(status_code=204, headers=_private_headers())
 
 
 @app_profile_router.patch("/api/app/profile/name")
-async def patch_profile_name(request: Request, payload: ProfileNameUpdatePayload):
+def patch_profile_name(request: Request, payload: ProfileNameUpdatePayload):
     """Update Vorname/Nachname for the current user."""
 
     user = _current_user(request)
@@ -146,7 +149,7 @@ async def patch_profile_name(request: Request, payload: ProfileNameUpdatePayload
         return JSONResponse({"error": "bad_request", "detail": "invalid_name"}, status_code=400, headers=_private_headers())
 
     try:
-        _update_profile_name(str(user.get("sub") or ""), first_name, last_name, request)
+        _profile_service(request).update_name(str(user.get("sub") or ""), first_name, last_name)
     except ProfileNameLockedError as exc:
         return JSONResponse(
             {"error": "name_locked", "detail": str(exc)},
@@ -157,7 +160,7 @@ async def patch_profile_name(request: Request, payload: ProfileNameUpdatePayload
 
 
 @app_profile_router.get("/api/app/profile/cli-tokens")
-async def list_profile_cli_tokens(request: Request):
+def list_profile_cli_tokens(request: Request):
     """Return the current teacher's CLI-token metadata without raw values."""
 
     user, error = _require_cli_token_teacher(request)
@@ -169,7 +172,7 @@ async def list_profile_cli_tokens(request: Request):
 
 
 @app_profile_router.post("/api/app/profile/cli-tokens")
-async def create_profile_cli_token(request: Request, payload: CLITokenCreatePayload):
+def create_profile_cli_token(request: Request, payload: CLITokenCreatePayload):
     """Create a CLI token for the current teacher and return it exactly once."""
 
     user, error = _require_cli_token_teacher(request)
@@ -211,7 +214,7 @@ async def create_profile_cli_token(request: Request, payload: CLITokenCreatePayl
 
 
 @app_profile_router.delete("/api/app/profile/cli-tokens/{token_id}")
-async def revoke_profile_cli_token(request: Request, token_id: str):
+def revoke_profile_cli_token(request: Request, token_id: str):
     """Revoke one CLI token owned by the current teacher."""
 
     user, error = _require_cli_token_teacher(request)

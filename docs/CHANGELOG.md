@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-07
+
+### Technische Schulden – appbezogene Profil-Provider
+
+- refactor(identity): Profilregeln und Normalisierung liegen im frameworkunabhängigen Fachkontext. Die App-Factory nimmt explizite typisierte Profil-Provider an; globale Profil-Fassaden, dynamische Modulrückgriffe und überholte Aliase entfallen.
+- refactor(profile): Die sechs Profil-/CLI-Handler führen synchrone Identity-/DB-Arbeit im begrenzten Threadpool aus. Token-Verwaltung und Authentifizierung verwenden denselben appbezogenen Store. API, Berechtigungen, Namenssperre und Datenbankschema bleiben unverändert.
+- fix(identity): Die Realm-Vorlage deklariert das bisher fehlende optionale Attribut `name_locked_until` ausschließlich für Administratoren. Dadurch kann Keycloak die vorgesehene Namenssperre tatsächlich speichern. Bestehende Realms benötigen dieselbe einzelne Profildeklaration; ein Image-Neubau ersetzt deren Konfiguration nicht. Im lokalen Realm wurde sie ohne Reset ergänzt und durch den zuvor roten Browserrundlauf bestätigt.
+- test: Zwei-App-Isolation, paralleler Shell-Zugriff bei wartendem Identity-Adapter, echte DB-Token-Eigentümerschaft und ein authentifizierter Profilrundlauf für beide Rollen ergänzen die bisherigen Profiltests. Der Rundlauf prüft alle sechs migrierten Handler einschließlich Namenspersistenz und Sperre.
+
+Dies ist Teil F1 des Schuldenabbauplans, nicht der Abschluss der Teaching-/Learning-/BFF-Provider-Migration. DSPy und seine vorläufig fixierten Abhängigkeiten bleiben unverändert.
+
 ## 2026-09-06
 
 ### Technische Schulden – erster Umsetzungsstand

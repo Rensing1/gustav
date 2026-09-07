@@ -1,4 +1,4 @@
-"""Profile normalization helpers for application-level routes.
+"""Framework-independent normalization of self-service profile data.
 
 Why:
     Profile views combine bearer claims with identity-provider user attributes.

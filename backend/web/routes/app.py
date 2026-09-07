@@ -8,15 +8,11 @@ Why:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from backend.identity_access.admin_client import AdminClient
-from backend.identity_access.cli_tokens import CLITokenRecord
-from backend.identity_access.tokens import verify_bearer_token
+from backend.identity_access.admin_client import AdminClient  # noqa: F401 - remaining live facade
 from backend.web.auth_session import (
     SESSION_COOKIE_NAME,
     app_session_ttl_seconds,
@@ -90,43 +86,7 @@ from backend.web.routes.app_live_routes import (
 from backend.web.routes.app_live_routes import (
     get_live_unit_matrix as get_live_unit_matrix,  # noqa: F401
 )
-from backend.web.routes.app_profile_helpers import (
-    claims_email as _claims_email,  # noqa: F401
-)
-from backend.web.routes.app_profile_helpers import (
-    normalized_attributes as _normalized_attributes,
-)
-from backend.web.routes.app_profile_helpers import (
-    parse_lock_timestamp as _parse_lock_timestamp,
-)
-from backend.web.routes.app_profile_helpers import (
-    profile_identity_defaults as _profile_identity_defaults,
-)
-from backend.web.routes.app_profile_helpers import (
-    split_name_suggestion as _split_name_suggestion,  # noqa: F401
-)
-from backend.web.routes.app_profile_routes import (
-    ProfileNameLockedError,
-    app_profile_router,
-)
-from backend.web.routes.app_profile_routes import (
-    create_profile_cli_token as create_profile_cli_token,  # noqa: F401 - kept for route module compatibility
-)
-from backend.web.routes.app_profile_routes import (
-    get_app_profile as get_app_profile,  # noqa: F401
-)
-from backend.web.routes.app_profile_routes import (
-    list_profile_cli_tokens as list_profile_cli_tokens,  # noqa: F401
-)
-from backend.web.routes.app_profile_routes import (
-    patch_profile_display_name as patch_profile_display_name,  # noqa: F401
-)
-from backend.web.routes.app_profile_routes import (
-    patch_profile_name as patch_profile_name,  # noqa: F401
-)
-from backend.web.routes.app_profile_routes import (
-    revoke_profile_cli_token as revoke_profile_cli_token,  # noqa: F401
-)
+from backend.web.routes.app_profile_routes import app_profile_router
 from backend.web.routes.app_session_helpers import (
     bff_session_payload as _bff_session_payload,
 )
@@ -140,7 +100,7 @@ from backend.web.routes.app_session_helpers import (
     internal_bff_secret_configured as _internal_bff_secret_configured,  # noqa: F401
 )
 from backend.web.routes.app_session_helpers import (
-    oidc_config as _oidc_config,
+    oidc_config as _oidc_config,  # noqa: F401 - remaining session facade
 )
 from backend.web.routes.app_session_helpers import (
     private_headers as _private_headers,
@@ -149,7 +109,7 @@ from backend.web.routes.app_session_helpers import (
     require_internal_bff_secret as _require_internal_bff_secret,
 )
 from backend.web.routes.app_session_helpers import (
-    runtime_from_request as _runtime_from_request,
+    runtime_from_request as _runtime_from_request,  # noqa: F401 - remaining session facade
 )
 from backend.web.routes.app_session_helpers import (
     runtime_settings as _runtime_settings,
@@ -312,127 +272,6 @@ class BFFSessionSyncPayload(BaseModel):
 
 class AppSessionSyncPayload(BaseModel):
     id_token: str | None = Field(default=None, min_length=1)
-
-
-def _cli_token_store(request: Request | None = None):
-    if request is not None:
-        runtime = _runtime_from_request(request)
-        if runtime is not None and hasattr(runtime, "cli_token_store"):
-            return runtime.cli_token_store
-    raise RuntimeError("app runtime cli_token_store is not configured")
-
-
-def _epoch_to_iso(value: int | None) -> str | None:
-    if value is None:
-        return None
-    return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
-
-
-def _serialize_cli_token(record: CLITokenRecord) -> dict[str, object]:
-    return {
-        "id": record.id,
-        "label": record.label,
-        "scopes": record.scopes,
-        "created_at": _epoch_to_iso(record.created_at),
-        "expires_at": _epoch_to_iso(record.expires_at),
-        "last_used_at": _epoch_to_iso(record.last_used_at),
-        "revoked_at": _epoch_to_iso(record.revoked_at),
-    }
-
-
-def _current_claims(request: Request) -> dict[str, object]:
-    """Re-resolve bearer claims for BFF-owned routes that need raw identity data."""
-    auth_header = str(request.headers.get("authorization") or "")
-    if not auth_header.lower().startswith("bearer "):
-        return {}
-    token = auth_header.split(" ", 1)[1].strip()
-    if not token:
-        return {}
-    try:
-        claims = verify_bearer_token(token=token, cfg=_oidc_config(request))
-    except Exception:
-        return {}
-    return claims if isinstance(claims, dict) else {}
-
-
-def _load_profile_identity(sub: str, claims: dict[str, object], request: Request | None = None) -> dict[str, object]:
-    defaults = _profile_identity_defaults(claims)
-    client = AdminClient(_oidc_config(request))
-    try:
-        user = client.get_user(user_id=sub)
-    except Exception:
-        return defaults
-
-    attributes = _normalized_attributes(user.get("attributes"))
-    display_name = str((attributes.get("display_name") or [defaults["display_name"]])[0] or "").strip()
-    email = str(user.get("email") or defaults["email"] or "").strip()
-    first_name = str(user.get("firstName") or "").strip()
-    last_name = str(user.get("lastName") or "").strip()
-    if not first_name and not last_name:
-        first_name = str(defaults["first_name"] or "")
-        last_name = str(defaults["last_name"] or "")
-
-    locked_until = _parse_lock_timestamp((attributes.get("name_locked_until") or [None])[0])
-    now = datetime.now(timezone.utc)
-    can_edit = locked_until is None or locked_until <= now
-    lock_value = locked_until.astimezone(timezone.utc).isoformat() if locked_until else None
-
-    return {
-        "display_name": display_name or str(defaults["display_name"]),
-        "email": email,
-        "first_name": first_name,
-        "last_name": last_name,
-        "name_locked_until": lock_value,
-        "name_can_edit": can_edit,
-    }
-
-
-def _update_profile_display_name(sub: str, display_name: str, request: Request | None = None) -> None:
-    """Persist only the mutable display-name attribute for one profile.
-
-    Why:
-        Some identity providers treat fields like `username` or `email` as
-        read-only. This update therefore sends only the attribute delta that is
-        actually needed and keeps the existing attribute bag intact.
-    """
-    client = AdminClient(_oidc_config(request))
-    user = client.get_user(user_id=sub)
-    attributes = _normalized_attributes(user.get("attributes"))
-    attributes["display_name"] = [str(display_name).strip()]
-    client.update_user(
-        user_id=sub,
-        payload={
-            "email": str(user.get("email") or "").strip(),
-            "attributes": attributes,
-        },
-    )
-
-
-def _update_profile_name(sub: str, first_name: str, last_name: str, request: Request | None = None) -> None:
-    """Persist only Vorname, Nachname and the lock attribute for one profile.
-
-    Why:
-        Login-related fields can be externally managed and therefore immutable.
-        We update only the profile fields that belong to this use case so the
-        request also works for brokered or restricted accounts.
-    """
-    client = AdminClient(_oidc_config(request))
-    user = client.get_user(user_id=sub)
-    attributes = _normalized_attributes(user.get("attributes"))
-    locked_until = _parse_lock_timestamp((attributes.get("name_locked_until") or [None])[0])
-    now = datetime.now(timezone.utc)
-    if locked_until is not None and locked_until > now:
-        raise ProfileNameLockedError(locked_until.astimezone(timezone.utc).isoformat())
-
-    next_lock = (now + timedelta(days=180)).astimezone(timezone.utc).isoformat()
-    attributes["name_locked_until"] = [next_lock]
-    payload = {
-        "firstName": str(first_name).strip(),
-        "lastName": str(last_name).strip(),
-        "email": str(user.get("email") or "").strip(),
-        "attributes": attributes,
-    }
-    client.update_user(user_id=sub, payload=payload)
 
 
 @app_router.get("/api/app/session-bootstrap")

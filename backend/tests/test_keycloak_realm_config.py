@@ -45,6 +45,17 @@ def test_realm_uses_email_as_username():
     assert data.get("loginWithEmailAllowed", True) is True
 
 
+def test_profile_name_lock_is_a_managed_admin_only_attribute():
+    """Keycloak must persist the lock without letting users bypass it themselves."""
+    data = json.loads(REALM_EXPORT_PATH.read_text(encoding="utf-8"))
+    profile = json.loads(_registration_profile_config(data))
+    matches = [item for item in profile["attributes"] if item["name"] == "name_locked_until"]
+    assert len(matches) == 1
+    assert matches[0]["permissions"] == {"view": ["admin"], "edit": ["admin"]}
+    assert not matches[0].get("required")
+    assert profile.get("unmanagedAttributePolicy", "DISABLED") == "DISABLED"
+
+
 def test_gustav_web_client_exports_roles_in_id_token():
     data = json.loads(REALM_EXPORT_PATH.read_text(encoding="utf-8"))
     clients = data.get("clients", [])

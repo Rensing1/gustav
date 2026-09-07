@@ -21,7 +21,7 @@ DSPy wird auf dem tatsächlich eingesetzten Stand einschließlich Abhängigkeite
 | C | Zentrale Browser-/API-Testkontexte mit regulärer TLS-Prüfung; lokale CA; aktuelle, visuell geprüfte Referenzen und vollständiges UI-Labor | teilweise umgesetzt; UI-Labor noch nicht vollständig |
 | D | Verbindliche gemeinsame UI-Bausteine und Varianten; zentrale Tokens; geordnete fachliche CSS-Importfassaden ohne Cascade Layers; ausführbare Designregeln | begonnen; vollständige Baustein-/CSS-Migration offen |
 | E | Alle aktiven Oberflächen verwenden gemeinsame Bausteine; Learning-, Teaching-, Live-Controller, Aufgabenarten und Server-View-Models besitzen getrennte Verantwortung | ausstehend |
-| F | Appbezogene typisierte Provider statt Route-Fassaden und Endpoint-Globals; isolierte Apps in Tests; Abgabe-/Workerphasen und H5P-Router entkoppelt | begonnen: Profil-/CLI-, Kummerkasten-, Lernenden-Kurs- und Lehrer-Katalogprovider migriert; Gesamtmigration offen |
+| F | Appbezogene typisierte Provider statt Route-Fassaden und Endpoint-Globals; isolierte Apps in Tests; Abgabe-/Workerphasen und H5P-Router entkoppelt | begonnen: Profil-/CLI-, Kummerkasten-, Lernenden-Kurs- und Lehrer-Katalog- und Inhaltseditorprovider migriert; Gesamtmigration offen |
 | G | Gebündelte Live-Aufgabenabfrage mit didaktischer Reihenfolge; blockierende Adapterarbeit außerhalb des Event Loops; Abfragezahl und Nebenläufigkeit getestet | umgesetzt; verify-feature live-summary erfolgreich |
 | H | Zentrale Ruff-Regeln E/F/I ohne E501; bereinigte Verstöße; vollständige Dokumentation und Abschlussnachweise | Lint umgesetzt; Gesamtabschlussnachweise bleiben offen |
 
@@ -100,7 +100,7 @@ Upstream-Nachweise für H5P: [ICNS](https://github.com/advisories/GHSA-w3rx-r6r6
 
 ### Weiterhin offen
 
-E und der größte Teil von F sind noch offen: vollständige Seiten-/Controller-/View-Model-Migration, übrige appbezogene Provider einschließlich Entfernung der Reparatur-Fixtures, Abgabe-/Workerphasen sowie H5P-Routertrennung. F1 migriert Profil und CLI-Verwaltung, F2 den Kummerkasten, F3 die Lernenden-Kursübersicht, F4 Lehrer-Startseite und Lerneinheitenkatalog (siehe unten). D enthält bisher nur zentrale globale Tokenprüfung und die gemeinsame Dialognachricht; gemeinsame Aktions-/Formvarianten, vollständige Seitennutzung und fachliche CSS-Importfassaden fehlen. C besitzt geprüfte Designreferenzen, aber noch kein vollständiges UI-Labor. Die vorgesehenen H5P-Authoring-/Review- und zusätzlichen iPad-WebKit-Nachweise gehören zu den jeweiligen noch offenen Paketen. Der Gesamtplan ist deshalb ausdrücklich nicht abgeschlossen.
+E und der größte Teil von F sind noch offen: vollständige Seiten-/Controller-/View-Model-Migration, übrige appbezogene Provider einschließlich Entfernung der Reparatur-Fixtures, Abgabe-/Workerphasen sowie H5P-Routertrennung. F1 migriert Profil und CLI-Verwaltung, F2 den Kummerkasten, F3 die Lernenden-Kursübersicht, F4 Lehrer-Startseite und Lerneinheitenkatalog, F5 den Inhaltseditor (siehe unten). D enthält bisher nur zentrale globale Tokenprüfung und die gemeinsame Dialognachricht; gemeinsame Aktions-/Formvarianten, vollständige Seitennutzung und fachliche CSS-Importfassaden fehlen. C besitzt geprüfte Designreferenzen, aber noch kein vollständiges UI-Labor. Die vorgesehenen H5P-Authoring-/Review- und zusätzlichen iPad-WebKit-Nachweise gehören zu den jeweiligen noch offenen Paketen. Der Gesamtplan ist deshalb ausdrücklich nicht abgeschlossen.
 
 ### F1: Appbezogene Profil-Provider (7. September 2026)
 
@@ -245,3 +245,41 @@ Der gezielte Regressionstest war mit der bisherigen Aufräumroutine rot: Die Ide
 - Svelte-Prüfung ohne Fehler/Warnungen; Produktionsbuild mit ausschließlich den dokumentierten Upstream-Ausnahmen. Import-/Architekturgrenzen, API-Vertrag, Route-/DB-Inventar, Supply Chain, Ruff und Image-Smoke grün. `git diff --check` ohne Befund.
 
 F4 ist abgeschlossen. Die übrigen Provider, insbesondere Workspace/Node-Editor, die Frontend-/Worker-/H5P-Arbeitspakete und der Sicherheitsabschluss bleiben offen. Die Katalog-Abfrageoptimierung ist als TD-009 dokumentiert. API, Schema, ENV, UI und DSPy bleiben unverändert; keine zusätzliche Installation, kein zusätzlicher Dienst, keine zusätzliche Datenbank und kein Push.
+
+### F5: Expliziter Datenzugang des Inhaltseditors
+
+Als Lehrkraft möchte ich Materialien, Aufgaben und Einstellungen meiner Abschnitte und Module unverändert bearbeiten können. Als Entwickler möchte ich die Editoransicht mit ausdrücklich übergebenen Daten prüfen können, ohne globale Teaching-Repositories oder Workspace-Helfer umzuschalten.
+
+Abgrenzung: Zunächst nur `GET /api/teaching/views/units/{unit_id}/nodes/{node_id}/editor`. Der Workspace besitzt zusätzliche Graph-/Auswahlregeln und bleibt ein separates Folgepaket. Der Editor erhält einen expliziten Repository-Provider und einen frameworkunabhängigen Lesedienst. Die bereits vorhandene reine Aufgaben-Normalisierung wird unverändert in den Fachkontext verschoben und über den bestehenden Serializer-Alias weiterverwendet; Aufgabenarten werden nicht neu implementiert. Synchrone DB-Arbeit läuft im begrenzten Threadpool. Keine zusätzliche Installation, Datenbank oder Infrastruktur.
+
+| Given – When – Then | Nachweis |
+| --- | --- |
+| Getrennte Testdaten – abwechselnd Editoransichten lesen – keine gegenseitige Beeinflussung | neue `test_teacher_editor_provider_isolation.py` |
+| Linearer Abschnitt oder Lern-/Übungsmodul – laden – korrekte Materialien, Aufgabenarten, Einstellungen und Backing-Section | Service- und echte DB-Tests |
+| Erster/letzter/leerer Abschnitt und fremder Knoten derselben Lehrkraft – laden – richtige Reihenfolge/leere Listen bzw. 404 | echte DB-Tests |
+| Fremde Einheit, unbekannte Einheit – laden – unverändert 403 bzw. 404 vor Inhaltsabfrage | Service-/DB-Tests; bestehende Unterscheidung bewusst beibehalten |
+| Fehlende Anmeldung, Schülerrolle oder ungültige IDs – laden – 401/403/400 vor Repository-Erzeugung | Isolationstests |
+| Repositoryausfall oder wartender Adapter – laden – private 503-Antwort bzw. unabhängiger Shell-Request bleibt möglich | Provider-/Nebenläufigkeitstests |
+| Aufgaben mit vorhandenen/alten Konfigurationsfeldern – normalisieren – identische öffentliche Felder ohne interne H5P-Spalten | Normalisierungs-/Editor-Tests |
+| Authentifizierte Lehrkraft – linearen und modularen Editor öffnen, Material ändern, neu laden – Inhalte und gespeicherte Änderung bleiben korrekt zugeordnet | neues `teacher-node-editor.spec.ts`, ein `@feature-acceptance`-Szenario |
+
+Vorprüfung: OpenAPI-Vertrag einschließlich 400/401/403/404/503 und bestehende Einheiten-/Modul-/Abschnittsmigrationen gelten unverändert. RLS, Aufgabenarten, ENV-Namen, API, Schema und UI werden nicht geändert; DSPy/KI bleiben ausdrücklich außerhalb dieses Pakets. Tests zuerst (Red-Green-Refactor). Bisherige Editor-Tests werden von globalen In-Memory-Overrides auf echte DB-Tests mit laufbezogener Bereinigung umgestellt; Workspace-Tests bleiben unverändert. Gate vor Abschluss: `make local-ca-status`, lokaler Web-Neubau, `make verify-feature FEATURE=teacher-node-editor`. Kein Push.
+
+#### Umsetzung und gezielte Nachweise F5
+
+- Ausgangspunkt: sauberer, per Fast-Forward synchronisierter `master` auf `d31a41a9`. Die neuen Tests waren vor Implementierung wegen des fehlenden Providers rot. Nach der Extraktion sind 20 Provider-/Service-/Normalisierungstests grün. Ein zusätzlicher zunächst roter Fehlerfall sichert die bestehende geschlossene 403-Antwort bei unklarem Existenznachweis ab.
+- `NodeEditorService` verwendet sieben vorhandene Repository-Operationen. Die Eigentümerprüfung erfolgt vor Inhaltsabfragen; fremde Einheiten behalten 403, fehlende Einheiten/Knoten 404. Die Zuordnung von Modulen zur Backing-Section bleibt einheitengebunden. Materialien, Aufgaben, Musterlösungen, Fachkontext und Einstellungen behalten ihre bisherige Lehrkraft-Projektion. Der Web-Handler besitzt Rollen-/Parameterprüfung und HTTP-Fehlerabbildung, aber keine dynamische Fassade.
+- Die reine Aufgaben-Normalisierung wurde unverändert verschoben. Der statische Serializer-Alias bleibt für bestehende Aufrufer erhalten; keine zweite Aufgabenarten-Implementierung und keine KI-Änderung. Die bisherigen Serializer-/H5P-/Aufgabenartenprüfungen sind grün (19 Tests).
+- Die zwei bisherigen Editor-Tests liegen nun in `test_teacher_node_editor_db.py` mit frischer Authentifizierung, echten DB-Daten und gezielter Bereinigung ausschließlich selbst angelegter Einheiten samt abhängiger Inhalte. Der bisher wegen fehlender In-Memory-Modulfunktionen übersprungene Editor-Test läuft nun tatsächlich. Drei zusätzliche Szenarien sichern leere erste/letzte Knoten sowie Eigentümer-/Einheitengrenzen für lineare Einheiten, Lernmodule und Übungsmodule ab. DB-Inventar aktualisiert.
+- Gemeinsamer gezielter Lauf: 32 Editor-/Workspace-/OpenAPI-Tests bestanden, ein bestehender In-Memory-Workspace-Test vorgesehen übersprungen. Der neue Browserrundlauf `teacher-node-editor` ist grün: lineare und modulare Materialien über die echte Oberfläche umbenennen, Seite verlassen, wieder öffnen und neu laden; anschließend Kriterien einer Modulaufgabe anzeigen. Im Test wurde der doppelte Labeltext „Titel“ auf das Materialformular eingegrenzt. Produkt-UI unverändert; laufbezogene Browser-Testdatenbereinigung bestätigt.
+- Kritische Durchsicht: Keine zusätzlichen Abfragen je Material oder Aufgabe; weiterhin jeweils eine Material- und Aufgabenlistenabfrage für den ausgewählten Knoten. Die Eigentümer-/Knotenermittlung wird nicht stillschweigend verändert. Workspace und dessen globale Helfer bleiben als Folgepaket offen. Der neue Provider initialisiert verzögert, erlaubt Wiederholung nach Initialisierungsfehlern und teilt keine Verbindung oder Benutzerkontexte zwischen Requests.
+
+Der erste vollständige Backend-Durchgang ergab 2707 bestandene Tests, 77 vorgesehene Überspringungen und ausschließlich einen Dokumentationsbefund: Der historische Harness-Vertrag verbietet die pauschale Formulierung „bleibt offen“. Die Workspace-Notiz verweist nun konkret auf die offene Schuld TD-004 und den Umsetzungsplan; der Arbeitsstand wird nicht verborgen oder als abgeschlossen ausgegeben. Alle 22 Harness-Dokumentationsprüfungen sind danach grün. Die funktionalen Prüfungen einschließlich des im vorigen Paket korrigierten Reload-Testblocks blieben ohne Befund.
+
+#### Abschlussnachweis F5
+
+- `make local-ca-status`: lokale CA in System, Chromium/Codex und Firefox vertraut. `docker compose up -d --build web`: lokaler Webdienst erfolgreich neu gebaut und gestartet.
+- `make verify-feature FEATURE=teacher-node-editor` vollständig erfolgreich: **2708 Backend-Tests bestanden, 77 vorgesehen übersprungen; 683 Frontend-Tests, 8 Tooling-Tests, 62 H5P-Tests und 1 authentifizierter Browserrundlauf bestanden**. Die anschließende Feature-Bereinigung bestätigt, dass keine laufbezogenen Browser-Testkonten oder Daten zurückbleiben.
+- Svelte-Prüfung ohne Fehler/Warnungen; Produktionsbuild mit ausschließlich den dokumentierten Upstream-Ausnahmen. Import-/Architekturgrenzen, API-Vertrag, Route-/DB-Inventar, Supply Chain, Ruff und Image-Smoke grün. `git diff --check` ohne Befund.
+
+F5 ist abgeschlossen. Nächstes Backend-Teilpaket ist die Workspace-Ansicht mit Graph und Knotenauswahl. Die übrige Provider-Migration, Frontend-/Worker-/H5P-Arbeitspakete und der Sicherheitsabschluss bleiben offen; der Gesamtplan ist nicht abgeschlossen. API, Schema, ENV, UI und DSPy bleiben unverändert; keine zusätzliche Installation, kein zusätzlicher Dienst, keine zusätzliche Datenbank und kein Push.

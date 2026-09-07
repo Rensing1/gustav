@@ -2,6 +2,12 @@
 
 ## 2026-09-07
 
+### Technische Schulden – Datenzugang des Inhaltseditors
+
+- refactor(teaching): Die Editoransicht für Abschnitte und Module verwendet ausdrücklich bereitgestellten Datenbankzugang und einen frameworkunabhängigen Lesedienst. Der Handler benötigt weder globale Teaching-Provider noch Workspace-Helfer und führt DB-Arbeit im begrenzten Threadpool aus.
+- refactor(teaching): Die bestehende Aufgaben-Normalisierung liegt gemeinsam in `task_payload.py`; der bisherige Serializer bleibt als statischer Alias kompatibel. Keine Änderungen an Aufgabenarten, API, UI, RLS, Schema oder DSPy.
+- test: Echte DB-Tests ersetzen die bisherigen In-Memory-Editorprüfungen und erfassen auch zuvor übersprungene modulare Inhalte. Isolation, Fehler-/Eigentümergrenzen und ein authentifizierter linearer/modularer Bearbeitungsrundlauf sichern F5 ab. Workspace und übrige Provider bleiben offen.
+
 ### Technische Schulden – gemeinsame Lehrer-Startseiten- und Katalogregeln
 
 - refactor(teaching): Lehrer-Startseite und Lerneinheitenkatalog verwenden denselben frameworkunabhängigen Katalogdienst und ausdrücklich bereitgestellten Datenbankzugang. Globale Home-/Katalog-Aliase entfallen; die Startseite liest ihre Kursliste nur einmal.

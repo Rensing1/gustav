@@ -158,9 +158,6 @@ from backend.web.routes.app_teacher_course_routes import (
 from backend.web.routes.app_teacher_node_editor_routes import (
     app_teacher_node_editor_router,
 )
-from backend.web.routes.app_teacher_node_editor_routes import (
-    get_teacher_unit_node_editor as get_teacher_unit_node_editor,  # noqa: F401
-)
 from backend.web.routes.app_teacher_unit_routes import (
     _build_teacher_unit_course_refs as _build_teacher_unit_course_refs,  # noqa: F401
 )

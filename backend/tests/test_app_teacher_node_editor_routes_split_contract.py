@@ -17,6 +17,7 @@ def test_teacher_node_editor_route_lives_outside_app_hotspot() -> None:
     node_source = NODE_ROUTES_SOURCE.read_text(encoding="utf-8")
 
     assert app.app_teacher_node_editor_router is node_routes.app_teacher_node_editor_router
-    assert app.get_teacher_unit_node_editor is node_routes.get_teacher_unit_node_editor
+    assert not hasattr(app, "get_teacher_unit_node_editor")
+    assert node_routes.get_teacher_unit_node_editor.__module__ == node_routes.__name__
     assert '@app_router.get("/api/teaching/views/units/{unit_id}/nodes/{node_id}/editor")' not in app_source
     assert '@app_teacher_node_editor_router.get("/api/teaching/views/units/{unit_id}/nodes/{node_id}/editor")' in node_source

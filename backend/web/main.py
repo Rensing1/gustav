@@ -46,6 +46,10 @@ from backend.web.teacher_catalog_providers import (
     TeacherCatalogProviders,
     create_teacher_catalog_providers,
 )
+from backend.web.teacher_editor_providers import (
+    TeacherEditorProviders,
+    create_teacher_editor_providers,
+)
 
 bootstrap_runtime_environment()
 
@@ -61,6 +65,7 @@ def create_app(
     concern_box_providers: ConcernBoxProviders | None = None,
     learning_course_providers: LearningCourseProviders | None = None,
     teacher_catalog_providers: TeacherCatalogProviders | None = None,
+    teacher_editor_providers: TeacherEditorProviders | None = None,
     access_token_verifier: Callable[[str, OIDCConfig], Mapping[str, object]] | None = None,
 ) -> FastAPI:
     """Create the package-oriented FastAPI runtime.
@@ -80,6 +85,7 @@ def create_app(
     mount_static_files(created_app, static_dir)
     runtime = auth_runtime.create_auth_runtime(running_under_pytest=_running_under_pytest())
     created_app.state.runtime = runtime
+    created_app.state.teacher_editor_providers = teacher_editor_providers if teacher_editor_providers is not None else create_teacher_editor_providers()
     created_app.state.teacher_catalog_providers = teacher_catalog_providers if teacher_catalog_providers is not None else create_teacher_catalog_providers()
     created_app.state.learning_course_providers = learning_course_providers if learning_course_providers is not None else create_learning_course_providers()
     created_app.state.concern_box_providers = concern_box_providers if concern_box_providers is not None else create_concern_box_providers()

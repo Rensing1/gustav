@@ -7,11 +7,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_modular_material_file_helper_is_defined_only_once() -> None:
+def test_retired_modular_material_file_helper_is_removed() -> None:
     source = (REPO_ROOT / "backend" / "web" / "routes" / "learning_material_files.py").read_text(encoding="utf-8")
     learning_source = (REPO_ROOT / "backend" / "web" / "routes" / "learning.py").read_text(encoding="utf-8")
 
-    assert source.count("def resolve_student_modular_material_file_url(") == 1
+    assert "def resolve_student_modular_material_file_url(" not in source
     assert "def _resolve_student_modular_material_file_url(" not in learning_source
 
 

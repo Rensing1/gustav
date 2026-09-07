@@ -2,6 +2,13 @@
 
 ## 2026-09-07
 
+### Technische Schulden – Datenzugang der Abschnittslisten
+
+- refactor(learning): Beide Abschnittslisten erhalten ihren Datenzugang ausdrücklich. Ihre synchronen HTTP-Handler liegen außerhalb des Learning-Routenhotspots; vorhandene Anwendungsfälle, Reihenfolge, Seitengrenzen und unterschiedliche Leerlisten-Antworten bleiben erhalten.
+- refactor(web): Abschnittslisten und Materiallink-Anreicherung verwenden denselben Adapter. Die Materiallisten-Helfer benötigen keine globale Learning-Fassade mehr; zwei unbenutzte Einzeldatei-Helfer und ihre Aliase entfallen.
+- test: Neue Isolations-, Parameter-, Nebenläufigkeits- und echte DB-Paritätstests sichern Freigaben, private Felder und Mitgliedschaftsentzug ab. Batchingtests verwenden explizite Adapter; der lineare Material-Browsernachweis prüft zusätzlich beide Abschnittsabrufe nach Kursentzug.
+- scope: Keine Änderung an API, Schema, ENV, UI, SQL-Freischaltung oder DSPy. Übrige Lern-/Upload-/Abgabe-/H5P-Provider bleiben getrennte Folgearbeit.
+
 ### Technische Schulden – Materialdateien und Simulationen
 
 - refactor(learning): Die drei Materialabrufe verwenden explizite DB-/Storage-/Download-Abhängigkeiten statt globaler Routenfassaden. Unbenutzte Handler-Aliase entfallen. Synchrone Metadatenabfrage und Storage-Signierung laufen im begrenzten Threadpool; der Download bleibt asynchron.

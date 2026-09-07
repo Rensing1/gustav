@@ -13,11 +13,12 @@ def test_learning_material_file_helpers_live_in_focused_module() -> None:
     learning = importlib.import_module("backend.web.routes.learning")
     material_files = importlib.import_module("backend.web.routes.learning_material_files")
 
-    assert learning._resolve_student_material_file_url is material_files.resolve_student_material_file_url
-    assert learning._resolve_student_modular_material_file_url is material_files.resolve_student_modular_material_file_url
-    assert learning._attach_section_material_files is material_files.attach_section_material_files
+    assert not hasattr(learning, "_resolve_student_material_file_url")
+    assert not hasattr(learning, "_resolve_student_modular_material_file_url")
+    assert not hasattr(learning, "_attach_section_material_files")
     assert not hasattr(learning, "_attach_modular_material_files")
     assert "repo" in inspect.signature(material_files.attach_modular_material_files).parameters
+    assert inspect.signature(material_files.attach_section_material_files).parameters["repo"].default is inspect.Parameter.empty
 
 
 def test_learning_route_hotspot_no_longer_defines_material_file_helpers() -> None:
@@ -36,4 +37,5 @@ def test_focused_material_file_module_keeps_readable_public_helper_names() -> No
 
     assert "def attach_section_material_files(" in source
     assert "def attach_modular_material_files(" in source
-    assert "def resolve_student_material_file_url(" in source
+    assert "def material_file_href(" in source
+    assert "def resolve_student_material_file_url(" not in source

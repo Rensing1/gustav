@@ -1,4 +1,4 @@
-"""Real-DB graph parity and membership boundaries with run-owned cleanup."""
+"""Real-DB Learning read parity and membership boundaries with run-owned cleanup."""
 
 import os
 from uuid import uuid4
@@ -88,6 +88,106 @@ async def attach_and_enroll(client, app, course_id, unit_id):
 
 def graph_path(course_id, unit_id):
     return f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph"
+
+
+async def test_linear_sections_projection_pagination_and_membership_revocation(app):
+    authenticate(app, "teacher")
+    async with client_for(app) as client:
+        course_id, unit_id = await course(client, app), await unit(client, app, kind="linear")
+        module = await create(
+            client, f"/api/teaching/courses/{course_id}/modules", {"unit_id": unit_id}
+        )
+        sections = []
+        for title in ("Erster Abschnitt", "Letzter Abschnitt"):
+            section = await create(
+                client, f"/api/teaching/units/{unit_id}/sections", {"title": title}
+            )
+            sections.append(section["id"])
+            await create(
+                client,
+                f"/api/teaching/units/{unit_id}/sections/{section['id']}/materials",
+                {"title": title, "body_md": "Sichtbarer Inhalt"},
+            )
+            await create(
+                client,
+                f"/api/teaching/units/{unit_id}/sections/{section['id']}/tasks",
+                {
+                    "instruction_md": "Lies den Abschnitt.",
+                    "criteria": [],
+                    "teacher_context_md": "Privater Abschnittskontext",
+                    "model_solution_md": "Private Lösung",
+                },
+            )
+        await create(
+            client, f"/api/teaching/courses/{course_id}/members", {"student_sub": app.state.student}
+        )
+        paths = [
+            f"/api/learning/courses/{course_id}/sections",
+            f"/api/learning/courses/{course_id}/units/{unit_id}/sections",
+        ]
+        authenticate(app, "student")
+        assert (await client.get(paths[0])).status_code == 404
+        empty = await client.get(paths[1])
+        assert empty.status_code == 200 and empty.json() == []
+        authenticate(app, "teacher")
+        for section_id in sections:
+            response = await client.patch(
+                f"/api/teaching/courses/{course_id}/modules/{module['id']}/sections/{section_id}/visibility",
+                json={"visible": True},
+            )
+            assert response.status_code == 200
+        authenticate(app, "student")
+        repo = DBLearningRepo()
+        for index, path in enumerate(paths):
+            for include, materials, tasks in [
+                (None, False, False),
+                ("materials", True, False),
+                ("tasks", False, True),
+                ("materials,tasks", True, True),
+            ]:
+                query = (
+                    repo.list_released_sections
+                    if index == 0
+                    else repo.list_released_sections_by_unit
+                )
+                expected = query(
+                    student_sub=app.state.student,
+                    course_id=course_id,
+                    include_materials=materials,
+                    include_tasks=tasks,
+                    limit=50,
+                    offset=0,
+                    **({} if index == 0 else {"unit_id": unit_id}),
+                )
+                for row in expected:
+                    for material in row.get("materials", []):
+                        material.update(file_url=None, simulation_url=None)
+                response = await client.get(
+                    path, params={} if include is None else {"include": include}
+                )
+                assert response.status_code == 200
+                assert response.json() == expected
+                assert [item["section"]["id"] for item in response.json()] == sections
+                assert "Privater Abschnittskontext" not in response.text
+                assert "Private Lösung" not in response.text
+            for offset, expected_section in enumerate(sections):
+                response = await client.get(path, params={"limit": 1, "offset": offset})
+                assert response.status_code == 200
+                assert [item["section"]["id"] for item in response.json()] == [expected_section]
+            beyond = await client.get(path, params={"limit": 1, "offset": 99})
+            assert beyond.status_code == (404 if index == 0 else 200)
+            if index == 1:
+                assert beyond.json() == []
+        authenticate(app, "teacher")
+        removed = await client.delete(
+            f"/api/teaching/courses/{course_id}/members/{app.state.student}"
+        )
+        assert removed.status_code == 204
+        authenticate(app, "student")
+        for path in paths:
+            response = await client.get(path)
+            assert response.status_code == 403
+            assert response.headers["cache-control"] == "private, no-store"
 
 
 async def test_module_content_projection_and_include_match_database(app):

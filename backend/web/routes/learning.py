@@ -18,12 +18,6 @@ from backend.learning.usecases.h5p_access import (
     CheckH5PContentAccessInput,
     CheckH5PContentAccessUseCase,
 )
-from backend.learning.usecases.sections import (
-    ListSectionsInput,
-    ListSectionsUseCase,
-    ListUnitSectionsInput,
-    ListUnitSectionsUseCase,
-)
 from backend.learning.usecases.submissions import (
     CreateSubmissionInput,  # noqa: F401 - kept for route module compatibility
     CreateSubmissionUseCase,  # noqa: F401
@@ -51,7 +45,6 @@ from backend.storage.learning_policy import (
     ALLOWED_FILE_MIME,  # noqa: F401 - kept for route module compatibility
     ALLOWED_IMAGE_MIME,  # noqa: F401
 )
-from backend.web.learning_content_query import parse_include as _parse_include
 from backend.web.routes.learning_course_routes import learning_course_router
 from backend.web.routes.learning_dialogs import learning_dialog_router
 from backend.web.routes.learning_graph_routes import learning_graph_router
@@ -67,20 +60,9 @@ from backend.web.routes.learning_internal_upload_routes import (
 from backend.web.routes.learning_material_file_routes import (
     learning_material_file_router,
 )
-from backend.web.routes.learning_material_files import (
-    attach_section_material_files as _attach_section_material_files,
-)
-from backend.web.routes.learning_material_files import (
-    material_file_href as _material_file_href,  # noqa: F401 - kept for route module compatibility
-)
-from backend.web.routes.learning_material_files import (
-    resolve_student_material_file_url as _resolve_student_material_file_url,  # noqa: F401
-)
-from backend.web.routes.learning_material_files import (
-    resolve_student_modular_material_file_url as _resolve_student_modular_material_file_url,  # noqa: F401
-)
 from backend.web.routes.learning_module_routes import learning_module_router
 from backend.web.routes.learning_portfolio import learning_portfolio_router
+from backend.web.routes.learning_section_routes import learning_section_router
 from backend.web.routes.learning_storage_validation import (
     download_bytes_with_limit as _download_bytes_with_limit,
 )
@@ -161,6 +143,7 @@ from backend.web.routes.learning_upload_proxy import (
 )
 
 learning_router = APIRouter(tags=["Learning"])
+learning_router.include_router(learning_section_router)
 learning_router.include_router(learning_course_router)
 learning_router.include_router(learning_graph_router)
 learning_router.include_router(learning_module_router)
@@ -644,18 +627,6 @@ except Exception:  # pragma: no cover - typing fallback
 
 
 class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
-    def list_released_sections(
-        self,
-        *,
-        student_sub: str,
-        course_id: str,
-        include_materials: bool,
-        include_tasks: bool,
-        limit: int,
-        offset: int,
-    ) -> list[dict]:
-        ...
-
     def create_submission(self, data) -> dict:
         ...
 
@@ -717,61 +688,6 @@ def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in
                 route_globals["_get_repo"] = _get_repo
 
 
-@learning_router.get("/api/learning/courses/{course_id}/sections")
-async def list_sections(
-    request: Request,
-    course_id: str,
-    include: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
-):
-    """List released sections for a course (student-only).
-
-    Intent:
-        Return only sections released to the authenticated student.
-
-    Permissions:
-        Caller must have the `student` role and be enrolled in the course.
-    """
-    user, error = _require_student(request)
-    if error:
-        return error
-
-    try:
-        UUID(course_id)
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
-
-    try:
-        include_materials, include_tasks = _parse_include(include)
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers_error())
-
-    input_data = ListSectionsInput(
-        student_sub=str(user.get("sub", "")),
-        course_id=course_id,
-        include_materials=include_materials,
-        include_tasks=include_tasks,
-        # Clamp happens in the use case to keep adapter thin
-        limit=limit,
-        offset=offset,
-    )
-
-    try:
-        sections = ListSectionsUseCase(_get_repo()).execute(input_data)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-
-    sections = _attach_section_material_files(
-        student_sub=str(user.get("sub", "")),
-        course_id=course_id,
-        sections=sections,
-    )
-    return JSONResponse(sections, headers=_cache_headers_success())
-
-
 @learning_router.get("/api/learning/courses/{course_id}/h5p/contents/{content_id}/access")
 async def check_h5p_content_access(request: Request, course_id: str, content_id: str):
     """Return 204 when the student may access an H5P content id (fail-closed).
@@ -818,67 +734,6 @@ async def check_h5p_content_access(request: Request, course_id: str, content_id:
     if allowed:
         return Response(status_code=204, headers=_cache_headers_success())
     return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-
-
-@learning_router.get("/api/learning/courses/{course_id}/units/{unit_id}/sections")
-async def list_unit_sections(
-    request: Request,
-    course_id: str,
-    unit_id: str,
-    include: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
-):
-    """List released sections for a specific unit (student-only).
-
-    Why:
-        Unit-scoped endpoint aligns with the SSR unit page and avoids
-        client-side filtering. Returns 200 with an array that may be empty.
-
-    Permissions:
-        Caller must have the `student` role and be enrolled in the course.
-        The unit must belong to the course; otherwise respond with 404 to avoid
-        leaking existence details.
-    """
-    user, error = _require_student(request)
-    if error:
-        return error
-
-    # Validate path params eagerly to align with contract detail=invalid_uuid
-    try:
-        UUID(course_id)
-        UUID(unit_id)
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
-
-    try:
-        include_materials, include_tasks = _parse_include(include)
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_include"}, status_code=400, headers=_cache_headers_error())
-
-    input_data = ListUnitSectionsInput(
-        student_sub=str(user.get("sub", "")),
-        course_id=course_id,
-        unit_id=unit_id,
-        include_materials=include_materials,
-        include_tasks=include_tasks,
-        limit=limit,
-        offset=offset,
-    )
-    try:
-        sections = ListUnitSectionsUseCase(_get_repo()).execute(input_data)
-    except PermissionError:
-        return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-
-    # 200 with possibly empty list
-    sections = _attach_section_material_files(
-        student_sub=str(user.get("sub", "")),
-        course_id=course_id,
-        sections=sections,
-    )
-    return JSONResponse(sections, headers=_cache_headers_success())
 
 
 _DEFAULT_DOWNLOAD_BYTES_WITH_LIMIT = _download_bytes_with_limit

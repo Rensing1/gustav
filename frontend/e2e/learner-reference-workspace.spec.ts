@@ -1,7 +1,8 @@
 import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
-import { login } from "./support/auth";
+import { currentUserSub, login } from "./support/auth";
+import { apiHeaders, expectApiOk } from "./support/api";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { expectNoViewportOverflow } from "./support/layout-sanity";
@@ -122,6 +123,20 @@ test("@feature-acceptance reads a document stack without losing the active task"
       }).map((element) => element.getBoundingClientRect().height));
       expect(Math.min(...touchTargets)).toBeGreaterThanOrEqual(44);
       await expectNoViewportOverflow(learner.page);
+    }
+
+    const removed = await teacher.page.request.delete(
+      `${webBase}/api/teaching/courses/${seeded.courseId}/members/${await currentUserSub(learner.page)}`,
+      { headers: apiHeaders() }
+    );
+    await expectApiOk(removed, 204);
+    for (const path of [
+      `/api/learning/courses/${seeded.courseId}/sections`,
+      `/api/learning/courses/${seeded.courseId}/units/${seeded.unitId}/sections`
+    ]) {
+      const denied = await learner.page.request.get(`${webBase}${path}?include=materials,tasks`);
+      expect(denied.status()).toBe(403);
+      expect(denied.headers()["cache-control"]).toBe("private, no-store");
     }
   } finally {
     await learner.context.close();

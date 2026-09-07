@@ -9,8 +9,6 @@ Why:
 
 from __future__ import annotations
 
-import importlib
-import sys as _sys
 from typing import Any
 from urllib.parse import quote as _quote
 from uuid import UUID
@@ -18,21 +16,7 @@ from uuid import UUID
 from backend.web.material_file_access import (
     StudentMaterialAssetMetadata,
     load_student_material_asset_metadata_batch,
-    load_student_material_file_metadata,
 )
-
-
-def _learning_module():
-    module = _sys.modules.get("backend.web.routes.learning")
-    if module is None:  # pragma: no cover - defensive import fallback
-        module = importlib.import_module("backend.web.routes.learning")
-    return module
-
-
-def _get_repo():
-    """Resolve the active Learning repo provider after reloads or monkeypatches."""
-
-    return _learning_module()._get_repo()
 
 
 def _is_uuid_like(value: object) -> bool:
@@ -60,35 +44,12 @@ def material_simulation_href(*, course_id: str, material_id: str) -> str:
     )
 
 
-def resolve_student_material_file_url(
-    *,
-    student_sub: str,
-    course_id: str,
-    material_id: str,
-) -> str | None:
-    if not (student_sub and _is_uuid_like(course_id) and _is_uuid_like(material_id)):
-        return None
-    repo = _get_repo()
-    try:
-        metadata = load_student_material_file_metadata(
-            repo=repo,
-            student_sub=student_sub,
-            course_id=str(course_id),
-            material_id=str(material_id),
-        )
-    except Exception:
-        return None
-    if metadata is None:
-        return None
-    return material_file_href(course_id=course_id, material_id=material_id, disposition="inline")
-
-
 def load_visible_material_asset_metadata(
     *,
     student_sub: str,
     course_id: str,
     material_ids: list[str],
-    repo: object | None = None,
+    repo: object,
 ) -> dict[str, StudentMaterialAssetMetadata]:
     """Load visible stored-material metadata with one fail-closed DB lookup."""
 
@@ -97,8 +58,6 @@ def load_visible_material_asset_metadata(
     ]
     if not (student_sub and _is_uuid_like(course_id) and valid_material_ids):
         return {}
-    # Linear callers retain their legacy provider until their own migration.
-    repo = repo if repo is not None else _get_repo()
     try:
         return load_student_material_asset_metadata_batch(
             repo=repo,
@@ -108,19 +67,6 @@ def load_visible_material_asset_metadata(
         )
     except Exception:
         return {}
-
-
-def resolve_student_modular_material_file_url(
-    *,
-    student_sub: str,
-    course_id: str,
-    material_id: str,
-) -> str | None:
-    return resolve_student_material_file_url(
-        student_sub=student_sub,
-        course_id=course_id,
-        material_id=material_id,
-    )
 
 
 def _attach_material_urls(
@@ -157,10 +103,11 @@ def _attach_material_urls(
 
 
 def attach_section_material_files(
-    *, student_sub: str, course_id: str, sections: list[dict[str, Any]]
+    *, repo: object, student_sub: str, course_id: str, sections: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Enrich legacy section lists with one visibility lookup and the shared projection."""
+    """Enrich authorized section lists using the same explicitly supplied DB adapter."""
     material_rows = load_visible_material_asset_metadata(
+        repo=repo,
         student_sub=student_sub,
         course_id=course_id,
         material_ids=[

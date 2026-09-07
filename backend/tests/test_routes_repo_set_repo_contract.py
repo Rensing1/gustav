@@ -50,8 +50,8 @@ def test_learning_set_repo_updates_public_repo_alias():
         learning.set_repo(original)  # type: ignore[attr-defined]
 
 
-def test_learning_set_repo_updates_existing_route_get_repo_after_reload():
-    """Reloaded Learning modules must retarget old route globals to the current repo accessor."""
+def test_learning_set_repo_updates_legacy_route_but_not_section_providers_after_reload():
+    """Retarget remaining legacy routes without recoupling migrated section reads."""
 
     import sys
 
@@ -59,13 +59,17 @@ def test_learning_set_repo_updates_existing_route_get_repo_after_reload():
     main = importlib.import_module("backend.web.main")
     original_learning = importlib.import_module("backend.web.routes.learning")
 
-    def _find_sections_endpoint():
+    def _find_endpoint(path):
         for route in main.app.routes:
-            if isinstance(route, APIRoute) and route.path == "/api/learning/courses/{course_id}/sections":
+            if isinstance(route, APIRoute) and route.path == path:
                 return route.endpoint
-        raise AssertionError("learning sections route not registered")
+        raise AssertionError(f"learning route not registered: {path}")
 
-    endpoint = _find_sections_endpoint()
+    endpoint = _find_endpoint("/api/learning/courses/{course_id}/h5p/contents/{content_id}/access")
+    sections_endpoint = _find_endpoint("/api/learning/courses/{course_id}/sections")
+    section_providers = main.app.state.learning_section_providers
+    section_repository = section_providers.repository()
+    assert "_get_repo" not in sections_endpoint.__globals__
     original_repo = original_learning._get_repo()  # type: ignore[attr-defined]
     original_get_repo = endpoint.__globals__["_get_repo"]
 
@@ -76,14 +80,17 @@ def test_learning_set_repo_updates_existing_route_get_repo_after_reload():
     assert fresh_learning is not original_learning
 
     class _StubRepo:
-        def list_released_sections(self, **kwargs):
-            return []
+        def is_h5p_content_released_for_student(self, **kwargs):
+            return False
 
     replacement = _StubRepo()
     try:
         fresh_learning.set_repo(replacement)  # type: ignore[attr-defined]
         assert endpoint.__globals__["_get_repo"] is fresh_learning._get_repo  # type: ignore[attr-defined]
         assert endpoint.__globals__["_get_repo"]() is replacement
+        assert "_get_repo" not in sections_endpoint.__globals__
+        assert main.app.state.learning_section_providers is section_providers
+        assert section_providers.repository() is section_repository
     finally:
         fresh_learning.set_repo(original_repo)  # type: ignore[attr-defined]
         endpoint.__globals__["_get_repo"] = original_get_repo

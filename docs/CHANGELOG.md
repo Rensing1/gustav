@@ -2,6 +2,12 @@
 
 ## 2026-09-07
 
+### Technische Schulden – Datenzugang des Schülergraphen
+
+- refactor(learning): Die Graphroute verwendet ausdrücklich bereitgestellten Datenbankzugang und einen frameworkunabhängigen Anwendungsfall für Mitgliedschaft und Einheitenzuordnung. Der synchrone Handler liegt außerhalb des Learning-Routenhotspots und führt DB-Arbeit im begrenzten Threadpool aus.
+- test: Isolations-, Fehler-, Nebenläufigkeits- und echte DB-Paritätstests sichern Leerzustände, Übungsmodule, private Graphdaten und entzogene Mitgliedschaft ab. Der bisherige Graph-503-Test benötigt keine direkten Änderungen an Endpoint-Globals mehr. Der gemeinsame Browservergleich gilt weiterhin für beide Rollen.
+- scope: SQL-Freischaltung, RLS, API, Schema, UI und DSPy bleiben unverändert. Modulinhalt-/Upload-/Abgabe-Provider und die übrigen Schulden sind getrennte Folgearbeiten.
+
 ### Technische Schulden – Datenaufbereitung des Lehrkraft-Graphen
 
 - refactor(teaching): Der Workspace für lineare und modulare Lerneinheiten verwendet ausdrücklich bereitgestellten Datenbankzugang und einen frameworkunabhängigen Lesedienst. Der synchrone Handler führt DB-Arbeit im begrenzten Threadpool aus; ungenutzte Workspace-Helfer und Fassaden-Aliase entfallen.

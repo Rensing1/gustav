@@ -917,47 +917,33 @@ async def test_learning_modular_locked_task_is_hidden_in_sql_helpers(monkeypatch
 
 
 @pytest.mark.anyio
-async def test_learning_modular_graph_returns_503_when_repo_lacks_graph_capability(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from fastapi.routing import APIRoute  # noqa: E402
+async def test_learning_modular_graph_returns_503_when_repo_lacks_graph_capability() -> None:
+    from backend.web.learning_graph_providers import LearningGraphProviders
 
-    store = _session_store(monkeypatch)
-    student = store.create(sub="s-mod-guard-graph", name="S", roles=["student"])  # type: ignore
-
-    class _RepoWithoutGraph:
-        pass
-
-    class _FakeListCourseUnitsUseCase:
-        def __init__(self, _repo):  # type: ignore[no-untyped-def]
-            pass
-
-        def execute(self, _input):  # type: ignore[no-untyped-def]
+    class RepoWithoutGraph:
+        def list_units_for_student_course(self, *, student_sub, course_id):
             return [{"unit": {"id": "11111111-1111-1111-1111-111111111111", "unit_type": "modular"}}]
 
-    route = next(
-        r
-        for r in main.app.routes
-        if isinstance(r, APIRoute)
-        and r.path == "/api/learning/courses/{course_id}/units/{unit_id}/modules/graph"
+    app = main.create_app(
+        learning_graph_providers=LearningGraphProviders(repository=RepoWithoutGraph)
     )
-    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsUseCase", _FakeListCourseUnitsUseCase)
-    monkeypatch.setitem(route.endpoint.__globals__, "ListCourseUnitsInput", lambda **kwargs: kwargs)
-    monkeypatch.setitem(route.endpoint.__globals__, "_get_repo", lambda: _RepoWithoutGraph())
-
+    student = app.state.runtime.session_store.create(
+        sub="s-mod-guard-graph", name="S", roles=["student"]
+    )
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=main.app, raise_app_exceptions=False),
+        transport=ASGITransport(app=app),
         base_url="http://test",
-    ) as c:
-        c.cookies.set("gustav_session", student.session_id)
-        r = await c.get(
+    ) as client:
+        client.cookies.set("gustav_session", student.session_id)
+        response = await client.get(
             "/api/learning/courses/00000000-0000-0000-0000-000000000001/"
             "units/11111111-1111-1111-1111-111111111111/modules/graph"
         )
 
-    assert r.status_code == 503
-    assert r.json().get("error") == "service_unavailable"
-    assert r.headers.get("Cache-Control") == "private, no-store"
+    assert response.status_code == 503
+    assert response.json() == {"error": "service_unavailable"}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert "Origin" in response.headers["Vary"]
 
 
 @pytest.mark.anyio

@@ -57,6 +57,7 @@ from backend.storage.learning_policy import (
 )
 from backend.web.routes.learning_course_routes import learning_course_router
 from backend.web.routes.learning_dialogs import learning_dialog_router
+from backend.web.routes.learning_graph_routes import learning_graph_router
 from backend.web.routes.learning_internal_upload_routes import (
     internal_upload_proxy as internal_upload_proxy,  # noqa: F401 - kept for route module compatibility
 )
@@ -172,6 +173,7 @@ from backend.web.routes.learning_upload_proxy import (
 
 learning_router = APIRouter(tags=["Learning"])
 learning_router.include_router(learning_course_router)
+learning_router.include_router(learning_graph_router)
 learning_router.include_router(learning_material_file_router)
 learning_router.include_router(learning_upload_intents_router)
 learning_router.include_router(learning_internal_upload_router)
@@ -715,15 +717,6 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
     def get_task_kind_for_student(self, *, student_sub: str, course_id: str, task_id: str) -> str:
         ...
 
-    def get_modular_unit_graph(
-        self,
-        *,
-        student_sub: str,
-        course_id: str,
-        unit_id: str,
-    ) -> dict:
-        ...
-
     def get_modular_module_content(
         self,
         *,
@@ -942,83 +935,6 @@ async def list_unit_sections(
         sections=sections,
     )
     return JSONResponse(sections, headers=_cache_headers_success())
-
-
-@learning_router.get("/api/learning/courses/{course_id}/units/{unit_id}/modules/graph")
-async def get_modular_unit_graph(request: Request, course_id: str, unit_id: str):
-    """Return the module graph (advance organizer) for a modular learning unit.
-
-    Why:
-        The Learning UI supports two unit formats:
-        - "linear": section-by-section progression controlled by teacher releases
-        - "modular": graph-based progression with an advance organizer
-        This endpoint is modular-only and must fail clearly for linear units so
-        clients can handle the case deterministically.
-
-    Behavior:
-        - Requires an authenticated session with role "student".
-        - 400 detail=invalid_uuid when path params are not UUID-like.
-        - 404 when the caller is not a course member or the unit is not part of
-          the course (intentionally indistinguishable).
-        - 400 detail=invalid_unit_type when the unit is not modular.
-        - 200 with the modular graph payload (phases/modules/edges and unlock
-          state) for modular units.
-
-    Permissions:
-        Caller must have the `student` role and be enrolled in the course.
-    """
-    user, error = _require_student(request)
-    if error:
-        return error
-
-    # Validate path params eagerly to align with contract detail=invalid_uuid
-    try:
-        course_id_norm = str(UUID(course_id))
-        unit_id_norm = str(UUID(unit_id))
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_uuid"}, status_code=400, headers=_cache_headers_error())
-
-    # Reuse the existing course-unit listing helper to enforce membership/404
-    # semantics while keeping the adapter thin. This is efficient enough for
-    # MVP (courses have few units); a dedicated DB helper can be introduced
-    # later if needed.
-    try:
-        rows = ListCourseUnitsUseCase(_get_repo()).execute(
-            ListCourseUnitsInput(student_sub=str(user.get("sub", "")), course_id=course_id_norm)
-        )
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-
-    unit: dict[str, Any] | None = None
-    for item in rows:
-        candidate = item.get("unit")
-        candidate_id = _canonical_uuid_or_none((candidate or {}).get("id")) if isinstance(candidate, dict) else None
-        if candidate_id == unit_id_norm:
-            unit = candidate
-            break
-    if not unit:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-
-    unit_type = str(unit.get("unit_type") or "").strip().lower()
-    if unit_type != "modular":
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
-
-    repo = _get_repo()
-    repo_error = _require_repo_methods(repo, "get_modular_unit_graph")
-    if repo_error:
-        return repo_error
-
-    try:
-        payload = repo.get_modular_unit_graph(
-            student_sub=str(user.get("sub", "")),
-            course_id=course_id_norm,
-            unit_id=unit_id_norm,
-        )
-    except LookupError:
-        return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
-    except ValueError:
-        return JSONResponse({"error": "bad_request", "detail": "invalid_unit_type"}, status_code=400, headers=_cache_headers_error())
-    return JSONResponse(payload, headers=_cache_headers_success())
 
 
 @learning_router.get("/api/learning/courses/{course_id}/units/{unit_id}/modules/{module_id}")

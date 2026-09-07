@@ -50,8 +50,8 @@ def test_learning_set_repo_updates_public_repo_alias():
         learning.set_repo(original)  # type: ignore[attr-defined]
 
 
-def test_learning_set_repo_updates_legacy_route_but_not_section_providers_after_reload():
-    """Retarget remaining legacy routes without recoupling migrated section reads."""
+def test_learning_set_repo_preserves_explicit_read_providers_after_reload():
+    """Legacy helper aliases must not recouple migrated H5P or section reads."""
 
     import sys
 
@@ -67,11 +67,13 @@ def test_learning_set_repo_updates_legacy_route_but_not_section_providers_after_
 
     endpoint = _find_endpoint("/api/learning/courses/{course_id}/h5p/contents/{content_id}/access")
     sections_endpoint = _find_endpoint("/api/learning/courses/{course_id}/sections")
+    h5p_providers = main.app.state.learning_h5p_providers
+    h5p_repository = h5p_providers.repository()
     section_providers = main.app.state.learning_section_providers
     section_repository = section_providers.repository()
     assert "_get_repo" not in sections_endpoint.__globals__
+    assert "_get_repo" not in endpoint.__globals__
     original_repo = original_learning._get_repo()  # type: ignore[attr-defined]
-    original_get_repo = endpoint.__globals__["_get_repo"]
 
     for name in ("backend.web.routes.learning",):
         sys.modules.pop(name, None)
@@ -85,15 +87,17 @@ def test_learning_set_repo_updates_legacy_route_but_not_section_providers_after_
 
     replacement = _StubRepo()
     try:
-        fresh_learning.set_repo(replacement)  # type: ignore[attr-defined]
-        assert endpoint.__globals__["_get_repo"] is fresh_learning._get_repo  # type: ignore[attr-defined]
-        assert endpoint.__globals__["_get_repo"]() is replacement
+        original_learning.set_repo(replacement)  # type: ignore[attr-defined]
+        assert fresh_learning.REPO is replacement
+        assert fresh_learning._get_repo() is replacement
+        assert "_get_repo" not in endpoint.__globals__
+        assert main.app.state.learning_h5p_providers is h5p_providers
+        assert h5p_providers.repository() is h5p_repository
         assert "_get_repo" not in sections_endpoint.__globals__
         assert main.app.state.learning_section_providers is section_providers
         assert section_providers.repository() is section_repository
     finally:
-        fresh_learning.set_repo(original_repo)  # type: ignore[attr-defined]
-        endpoint.__globals__["_get_repo"] = original_get_repo
+        original_learning.set_repo(original_repo)  # type: ignore[attr-defined]
 
 
 def test_teaching_set_storage_adapter_updates_existing_route_globals_after_reload():

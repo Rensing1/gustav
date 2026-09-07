@@ -28,7 +28,6 @@ from backend.tests.runtime_auth_helpers import install_session_store
 from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 
 main = importlib.import_module("backend.web.main")
-learning = importlib.import_module("backend.web.routes.learning")
 
 
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
@@ -56,13 +55,14 @@ class _UseStorageAdapter:
         self._original: object | None = None
 
     def __enter__(self):  # noqa: ANN001
-        self._original = getattr(learning, "STORAGE_ADAPTER", None)
-        learning.set_storage_adapter(self._adapter)
+        self._learning = importlib.import_module("backend.web.routes.learning")
+        self._original = getattr(self._learning, "STORAGE_ADAPTER", None)
+        self._learning.set_storage_adapter(self._adapter)
         return self._adapter
 
     def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
         if self._original is not None:
-            learning.set_storage_adapter(self._original)  # type: ignore[arg-type]
+            self._learning.set_storage_adapter(self._original)  # type: ignore[arg-type]
         return False
 
 
@@ -104,15 +104,14 @@ async def _prepare_task_fixture(
     _require_db_or_skip()
 
     teaching = importlib.import_module("backend.web.routes.teaching")
+    learning = importlib.import_module("backend.web.routes.learning")
 
-    try:
-        from backend.learning.repo_db import DBLearningRepo
-        from backend.teaching.repo_db import DBTeachingRepo
+    from backend.learning.repo_db import DBLearningRepo
+    from backend.teaching.repo_db import DBTeachingRepo
 
-        assert isinstance(teaching.REPO, DBTeachingRepo)
-        assert isinstance(learning.REPO, DBLearningRepo)
-    except Exception:
-        pytest.skip("DB-backed repos required")
+    # A reachable DB with stale test wiring is a failure, not an optional skip.
+    assert isinstance(teaching.REPO, DBTeachingRepo)
+    assert isinstance(learning.REPO, DBLearningRepo)
 
     session_store = install_session_store(monkeypatch, main)
     teacher = session_store.create(sub=f"t-scratch-{uuid.uuid4()}", name="T", roles=["teacher"])

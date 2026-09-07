@@ -103,6 +103,11 @@ test("@feature-acceptance teacher authors and learner completes deterministic na
     expect(contentId).toMatch(/^[1-9][0-9]*$/);
     registerE2EH5PContent(contentId, teacherEmail);
 
+    const accessPath = `${webBase}/api/learning/courses/${seeded.courseId}/h5p/contents/${contentId}/access`;
+    const playerPath = `${webBase}/h5p/player/model?course_id=${seeded.courseId}&content_id=${contentId}`;
+    expect((await learner.page.request.get(accessPath)).status()).toBe(204);
+    expect((await learner.page.request.get(playerPath)).status()).toBe(200);
+
     await learner.page.goto(
       `/learning/practice?course_id=${seeded.courseId}&practice_module_id=${seeded.practiceModuleId}`
     );
@@ -165,6 +170,20 @@ test("@feature-acceptance teacher authors and learner completes deterministic na
     expect(sawNative).toBe(true);
     expect(sawH5p).toBe(true);
     await expect(learner.page.getByRole("heading", { name: "Übung geschafft" })).toBeVisible();
+
+    const removed = await teacher.page.request.delete(
+      `${webBase}/api/teaching/courses/${seeded.courseId}/members/${learnerSub}`,
+      { headers: apiHeaders() }
+    );
+    expect(removed.status()).toBe(204);
+    const denied = await learner.page.request.get(accessPath);
+    expect(denied.status()).toBe(404);
+    expect(denied.headers()["cache-control"]).toBe("private, no-store");
+    // The sidecar retains its existing short-lived authorization cache (30s default).
+    await expect.poll(async () => (await learner.page.request.get(playerPath)).status(), {
+      timeout: 45_000,
+      intervals: [1000]
+    }).toBe(404);
   } finally {
     await learner.context.close();
     await teacher.context.close();

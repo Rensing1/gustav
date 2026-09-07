@@ -27,7 +27,6 @@ pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 main = importlib.import_module("backend.web.main")
 teaching = importlib.import_module("backend.web.routes.teaching")
-learning = importlib.import_module("backend.web.routes.learning")
 
 
 @pytest.fixture(autouse=True)
@@ -140,7 +139,7 @@ async def test_delta_returns_cells_after_submission():
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
-        assert isinstance(learning.REPO, DBLearningRepo)
+        assert isinstance(importlib.import_module("backend.web.routes.learning").REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required for delta tests")
 
@@ -215,7 +214,7 @@ async def test_delta_falls_back_when_helper_score_columns_are_missing(monkeypatc
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
-        assert isinstance(learning.REPO, DBLearningRepo)
+        assert isinstance(importlib.import_module("backend.web.routes.learning").REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required for delta compatibility test")
 
@@ -326,7 +325,7 @@ async def test_delta_includes_average_score_for_completed_analysis():
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
-        assert isinstance(learning.REPO, DBLearningRepo)
+        assert isinstance(importlib.import_module("backend.web.routes.learning").REPO, DBLearningRepo)
         import psycopg  # type: ignore
     except Exception:
         pytest.skip("DB-backed repos required for delta average score test")
@@ -417,7 +416,7 @@ async def test_delta_includes_latest_h5p_score_x_y_and_completion_flag():
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
-        assert isinstance(learning.REPO, DBLearningRepo)
+        assert isinstance(importlib.import_module("backend.web.routes.learning").REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required for delta H5P test")
 

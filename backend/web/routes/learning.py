@@ -4,20 +4,15 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import sys as _sys
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from backend.learning.repo_db import DBLearningRepo
-from backend.learning.usecases.h5p_access import (
-    CheckH5PContentAccessInput,
-    CheckH5PContentAccessUseCase,
-)
 from backend.learning.usecases.submissions import (
     CreateSubmissionInput,  # noqa: F401 - kept for route module compatibility
     CreateSubmissionUseCase,  # noqa: F401
@@ -48,6 +43,7 @@ from backend.storage.learning_policy import (
 from backend.web.routes.learning_course_routes import learning_course_router
 from backend.web.routes.learning_dialogs import learning_dialog_router
 from backend.web.routes.learning_graph_routes import learning_graph_router
+from backend.web.routes.learning_h5p_routes import learning_h5p_router
 from backend.web.routes.learning_internal_upload_routes import (
     internal_upload_proxy as internal_upload_proxy,  # noqa: F401 - kept for route module compatibility
 )
@@ -143,6 +139,7 @@ from backend.web.routes.learning_upload_proxy import (
 )
 
 learning_router = APIRouter(tags=["Learning"])
+learning_router.include_router(learning_h5p_router)
 learning_router.include_router(learning_section_router)
 learning_router.include_router(learning_course_router)
 learning_router.include_router(learning_graph_router)
@@ -646,6 +643,7 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
 
 
 def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in tests
+    """Keep legacy helper aliases aligned; migrated HTTP handlers need no repair."""
     global _REPO, REPO
     _REPO = repo
     REPO = repo
@@ -655,85 +653,6 @@ def set_repo(repo: _LearningRepoCombined) -> None:  # pragma: no cover - used in
             continue
         setattr(module, "_REPO", repo)
         setattr(module, "REPO", repo)
-    apps = []
-    for module_name in ("backend.web.main",):
-        main_module = _sys.modules.get(module_name)
-        app = getattr(main_module, "app", None) if main_module is not None else None
-        if app is not None:
-            apps.append(app)
-    try:
-        from backend.web.app_composition import iter_registered_apps
-
-        apps.extend(iter_registered_apps())
-    except Exception:
-        pass
-    seen_apps: set[int] = set()
-    for app in apps:
-        app_id = id(app)
-        if app_id in seen_apps:
-            continue
-        seen_apps.add(app_id)
-        routes = getattr(app, "routes", None)
-        if not routes:
-            continue
-        for route in routes:
-            if not isinstance(route, APIRoute):
-                continue
-            if not str(getattr(route, "path", "")).startswith("/api/learning"):
-                continue
-            route_globals = getattr(route.endpoint, "__globals__", None)
-            if isinstance(route_globals, dict) and "_REPO" in route_globals:
-                route_globals["_REPO"] = repo
-                route_globals["REPO"] = repo
-                route_globals["_get_repo"] = _get_repo
-
-
-@learning_router.get("/api/learning/courses/{course_id}/h5p/contents/{content_id}/access")
-async def check_h5p_content_access(request: Request, course_id: str, content_id: str):
-    """Return 204 when the student may access an H5P content id (fail-closed).
-
-    Why:
-        The H5P sidecar must verify that a student is allowed to load a given
-        H5P `content_id` within a course, without enumerating all released tasks.
-
-    Behavior:
-        - 204: content is part of a released H5P task in the course for this student
-        - 404: not allowed / not member / not released (fail-closed)
-        - 400: invalid UUID or invalid content id
-
-    Permissions:
-        Caller must have role `student`.
-    """
-    user, error = _require_student(request)
-    if error:
-        return error
-
-    try:
-        UUID(course_id)
-    except ValueError:
-        return JSONResponse(
-            {"error": "bad_request", "detail": "invalid_uuid"},
-            status_code=400,
-            headers=_cache_headers_error(),
-        )
-
-    if not isinstance(content_id, str) or not re.fullmatch(r"[0-9]+", content_id):
-        return JSONResponse(
-            {"error": "bad_request", "detail": "invalid_content_id"},
-            status_code=400,
-            headers=_cache_headers_error(),
-        )
-
-    allowed = CheckH5PContentAccessUseCase(_get_repo()).execute(
-        CheckH5PContentAccessInput(
-            student_sub=str(user.get("sub", "")),
-            course_id=course_id,
-            content_id=content_id,
-        )
-    )
-    if allowed:
-        return Response(status_code=204, headers=_cache_headers_success())
-    return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
 
 _DEFAULT_DOWNLOAD_BYTES_WITH_LIMIT = _download_bytes_with_limit

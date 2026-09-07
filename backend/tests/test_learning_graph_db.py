@@ -90,6 +90,71 @@ def graph_path(course_id, unit_id):
     return f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph"
 
 
+async def test_h5p_access_respects_reused_content_releases_and_membership(app):
+    """Any accessible task permits reused content; removing all access denies it."""
+    authenticate(app, "teacher")
+    async with client_for(app) as client:
+        course_id, unit_id = await course(client, app), await unit(client, app, kind="linear")
+        module = await create(
+            client, f"/api/teaching/courses/{course_id}/modules", {"unit_id": unit_id}
+        )
+        content_id = str(uuid4().int)
+        sections = []
+        for title in ("Erste H5P-Aufgabe", "Zweite H5P-Aufgabe"):
+            section = await create(
+                client, f"/api/teaching/units/{unit_id}/sections", {"title": title}
+            )
+            sections.append(section["id"])
+            await create(
+                client,
+                f"/api/teaching/units/{unit_id}/sections/{section['id']}/tasks",
+                {"instruction_md": title, "criteria": [], "h5p": {"content_id": content_id}},
+            )
+        await create(
+            client, f"/api/teaching/courses/{course_id}/members", {"student_sub": app.state.student}
+        )
+        path = f"/api/learning/courses/{course_id}/h5p/contents/{content_id}/access"
+
+        async def expect_access(status, target=path):
+            authenticate(app, "student")
+            response = await client.get(target)
+            assert response.status_code == status
+            assert response.headers["cache-control"] == "private, no-store"
+            if status == 204:
+                assert response.content == b""
+            else:
+                assert response.json() == {"error": "not_found"}
+
+        async def release(section_id, visible):
+            authenticate(app, "teacher")
+            response = await client.patch(
+                f"/api/teaching/courses/{course_id}/modules/{module['id']}/sections/{section_id}/visibility",
+                json={"visible": visible},
+            )
+            assert response.status_code == 200
+
+        await expect_access(404)
+        for section_id in sections:
+            await release(section_id, True)
+        await expect_access(204)
+        await expect_access(404, path.replace(content_id, str(uuid4().int)))
+        await expect_access(404, path.replace(course_id, str(uuid4())))
+        authenticate(app, "student", sub=f"outsider-{uuid4()}")
+        assert (await client.get(path)).status_code == 404
+        await release(sections[0], False)
+        await expect_access(204)
+        await release(sections[1], False)
+        await expect_access(404)
+        await release(sections[0], True)
+        await expect_access(204)
+        authenticate(app, "teacher")
+        removed = await client.delete(
+            f"/api/teaching/courses/{course_id}/members/{app.state.student}"
+        )
+        assert removed.status_code == 204
+        await expect_access(404)
+
+
 async def test_linear_sections_projection_pagination_and_membership_revocation(app):
     authenticate(app, "teacher")
     async with client_for(app) as client:

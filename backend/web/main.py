@@ -39,6 +39,10 @@ from backend.web.learning_graph_providers import (
     LearningGraphProviders,
     create_learning_graph_providers,
 )
+from backend.web.learning_h5p_providers import (
+    LearningH5PProviders,
+    create_learning_h5p_providers,
+)
 from backend.web.learning_material_providers import (
     LearningMaterialProviders,
     create_learning_material_providers,
@@ -85,6 +89,7 @@ def create_app(
     concern_box_providers: ConcernBoxProviders | None = None,
     learning_course_providers: LearningCourseProviders | None = None,
     learning_graph_providers: LearningGraphProviders | None = None,
+    learning_h5p_providers: LearningH5PProviders | None = None,
     learning_module_providers: LearningModuleProviders | None = None,
     learning_material_providers: LearningMaterialProviders | None = None,
     learning_section_providers: LearningSectionProviders | None = None,
@@ -110,6 +115,7 @@ def create_app(
     mount_static_files(created_app, static_dir)
     runtime = auth_runtime.create_auth_runtime(running_under_pytest=_running_under_pytest())
     created_app.state.runtime = runtime
+    created_app.state.learning_h5p_providers = learning_h5p_providers if learning_h5p_providers is not None else create_learning_h5p_providers()
     created_app.state.learning_section_providers = learning_section_providers if learning_section_providers is not None else create_learning_section_providers()
     created_app.state.learning_material_providers = learning_material_providers if learning_material_providers is not None else create_learning_material_providers(environment=lambda: runtime.settings.environment)
     created_app.state.learning_module_providers = learning_module_providers if learning_module_providers is not None else create_learning_module_providers()

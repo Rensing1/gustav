@@ -19,7 +19,6 @@ pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 main = importlib.import_module("backend.web.main")
 teaching = importlib.import_module("backend.web.routes.teaching")
 teaching_guards = importlib.import_module("backend.web.routes.teaching_guards")
-learning = importlib.import_module("backend.web.routes.learning")
 
 
 @pytest.fixture(autouse=True)
@@ -102,7 +101,7 @@ async def test_student_live_overview_lists_all_units_and_supports_filtering() ->
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
-        assert isinstance(learning.REPO, DBLearningRepo)
+        assert isinstance(importlib.import_module("backend.web.routes.learning").REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required for student live overview")
 
@@ -167,7 +166,7 @@ async def test_student_live_overview_rejects_foreign_unit_and_non_member() -> No
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         assert isinstance(teaching.REPO, DBTeachingRepo)
         from backend.learning.repo_db import DBLearningRepo  # type: ignore
-        assert isinstance(learning.REPO, DBLearningRepo)
+        assert isinstance(importlib.import_module("backend.web.routes.learning").REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required for student live overview")
 

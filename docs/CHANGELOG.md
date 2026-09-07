@@ -2,6 +2,14 @@
 
 ## 2026-09-07
 
+### Technische Schulden – H5P-Zugriffsprüfung
+
+- refactor(learning): H5P-Zugriff erhält den Datenzugang ausdrücklich; der synchrone Handler verwendet den bestehenden frameworkunabhängigen Anwendungsfall. Mitgliedschaft, lineare Freigabe und modulare Zugänglichkeit bleiben unverändert abgesichert.
+- cleanup: Der letzte direkte Handler verlässt das Learning-Routenmodul. Der Testmechanismus zum nachträglichen Umschreiben globaler Repository-Variablen registrierter Learning-Endpunkte entfällt; noch verwendete globale Helfer-Aliase bleiben erhalten.
+- test: Provider-, Nebenläufigkeits-, Reload- und echte DB-Tests prüfen auch mehrfach verwendete Inhalte und Freigabeentzug. Der H5P-Übungsbrowserlauf prüft Mitgliedschaftsentzug an API und Player-Modell, dort nach Ablauf des unveränderten Zugriffscaches.
+- test: Veraltete Learning-Modulreferenzen in Scratch-/Visual-Upload- und Live-Tests entfernt. Die gezielte Reload-Reihenfolge überspringt diese DB-Prüfungen nicht mehr; falsche Scratch-Testadapter bei erreichbarer DB führen zu einem Fehler statt einem Skip.
+- scope: Keine API-, Schema-, ENV-, SQL-, UI-, H5P-Dienst- oder DSPy-Änderung.
+
 ### Technische Schulden – Datenzugang der Abschnittslisten
 
 - refactor(learning): Beide Abschnittslisten erhalten ihren Datenzugang ausdrücklich. Ihre synchronen HTTP-Handler liegen außerhalb des Learning-Routenhotspots; vorhandene Anwendungsfälle, Reihenfolge, Seitengrenzen und unterschiedliche Leerlisten-Antworten bleiben erhalten.

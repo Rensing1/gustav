@@ -28,7 +28,6 @@ from backend.tests.utils.db import require_db_or_skip as _require_db_or_skip
 from backend.tests.utils.storage_fixtures import dummy_png_bytes
 
 main = importlib.import_module("backend.web.main")
-learning = importlib.import_module("backend.web.routes.learning")
 teaching = importlib.import_module("backend.web.routes.teaching")
 
 from backend.identity_access.stores import SessionStore  # noqa: E402
@@ -66,7 +65,7 @@ async def _prepare_visual_task_fixture(monkeypatch: pytest.MonkeyPatch | None = 
     # Verify repos are DB-backed (avoid in-memory fallbacks masking behavior)
     try:
         assert isinstance(teaching.REPO, DBTeachingRepo)
-        assert isinstance(learning.REPO, DBLearningRepo)
+        assert isinstance(importlib.import_module("backend.web.routes.learning").REPO, DBLearningRepo)
     except Exception:
         pytest.skip("DB-backed repos required")
 
@@ -159,7 +158,6 @@ def _provide_submission_validation_bytes(monkeypatch: pytest.MonkeyPatch) -> Non
     async def _load_storage_bytes_for_validation(*, storage_key: str, max_bytes: int) -> bytes:  # noqa: ARG001
         return dummy_png_bytes()
 
-    monkeypatch.setattr(learning, "_load_storage_bytes_for_validation", _load_storage_bytes_for_validation)
     backend_learning = importlib.import_module("backend.web.routes.learning")
     monkeypatch.setattr(backend_learning, "_load_storage_bytes_for_validation", _load_storage_bytes_for_validation, raising=False)
     for route in main.app.routes:

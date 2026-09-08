@@ -18,6 +18,7 @@ from httpx import ASGITransport
 from backend.teaching.storage import NullStorageAdapter, StorageAdapterProtocol
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
+from backend.web.learning_upload_intent_providers import LearningUploadIntentProviders
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -71,14 +72,12 @@ def _use_storage_adapter(adapter):
 
 
 @pytest.fixture(autouse=True)
-def restore_learning_route_state():
-    """Restore route-level test doubles after each upload-intent behavior test."""
+def restore_learning_storage_state():
+    """Restore the remaining shared storage adapter after each behavior test."""
 
-    repo = learning._get_repo()  # type: ignore[attr-defined]
     adapter = learning.STORAGE_ADAPTER
     adapter_override = learning._STORAGE_ADAPTER_OVERRIDE_ACTIVE
     yield
-    learning.set_repo(repo)  # type: ignore[arg-type]
     learning.set_storage_adapter(adapter, override=adapter_override)  # type: ignore[arg-type]
 
 
@@ -88,7 +87,10 @@ async def _client() -> httpx.AsyncClient:
 
 async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     # Reuse existing teaching APIs to seed data quickly
-    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+    )
     store = install_session_store(monkeypatch, main)
     student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
@@ -225,7 +227,10 @@ async def test_upload_intent_requires_membership(monkeypatch: pytest.MonkeyPatch
         def list_submissions(self, **_kwargs):
             raise PermissionError("not a course member")
 
-    learning.set_repo(_MembershipDeniedRepo())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: _MembershipDeniedRepo()),
+    )
 
     # Prepare teacher-created resources without enrolling the student
     store = install_session_store(monkeypatch, main)
@@ -271,7 +276,10 @@ async def test_upload_intent_task_not_visible_returns_404(monkeypatch: pytest.Mo
         def list_submissions(self, **_kwargs):
             raise LookupError("task not visible")
 
-    learning.set_repo(_TaskHiddenRepo())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: _TaskHiddenRepo()),
+    )
 
     store = install_session_store(monkeypatch, main)
     student = store.create(sub=f"s-{uuid.uuid4()}", name="S", roles=["student"])
@@ -358,21 +366,14 @@ async def test_upload_intent_fail_closed_when_authorization_check_unavailable(mo
     monkeypatch.setenv("LEARNING_UPLOAD_INTENT_TTL_SECONDS", "600")
     monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "false")
 
-    def _boom(self, _req):  # noqa: ANN001
-        raise RuntimeError("boom")
+    class _UnavailableRepo(VisibleLearningRepo):
+        def list_submissions(self, **kwargs):
+            raise RuntimeError("authorization unavailable")
 
-    monkeypatch.setattr(learning.ListSubmissionsUseCase, "execute", _boom, raising=True)
-
-    import importlib
-
-    original_import_module = importlib.import_module
-
-    def _blocked_import(name, package=None):  # noqa: ANN001
-        if name == "backend.web.routes.teaching":
-            raise ModuleNotFoundError(name)
-        return original_import_module(name, package=package)
-
-    monkeypatch.setattr(importlib, "import_module", _blocked_import, raising=True)
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=_UnavailableRepo),
+    )
 
     with _use_storage_adapter(FakeStorageAdapter()):
         async with (await _client()) as c:

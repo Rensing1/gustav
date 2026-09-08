@@ -17,6 +17,7 @@ from httpx import ASGITransport
 
 from backend.teaching.storage import StorageAdapterProtocol
 from backend.tests.runtime_auth_helpers import install_session_store
+from backend.web.learning_upload_intent_providers import LearningUploadIntentProviders
 
 main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")
@@ -29,12 +30,10 @@ FILIUS_MIME = "application/x.filius.fls"
 
 
 @pytest.fixture(autouse=True)
-def restore_learning_route_state():
-    repo = learning.REPO
+def restore_learning_storage_state():
     storage_adapter = learning.STORAGE_ADAPTER
     storage_override = learning._STORAGE_ADAPTER_OVERRIDE_ACTIVE  # type: ignore[attr-defined]
     yield
-    learning.set_repo(repo)  # type: ignore[arg-type]
     learning.set_storage_adapter(storage_adapter, override=storage_override)
 
 
@@ -79,7 +78,10 @@ def _student_session(monkeypatch: pytest.MonkeyPatch) -> str:
 
 @pytest.mark.anyio
 async def test_filius_upload_intent_allows_only_fls(monkeypatch: pytest.MonkeyPatch) -> None:
-    learning.set_repo(FakeLearningRepo(task_kind="filius"))  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: FakeLearningRepo(task_kind="filius")),
+    )
     learning.set_storage_adapter(FakeStorageAdapter())
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
 
@@ -99,7 +101,10 @@ async def test_filius_upload_intent_allows_only_fls(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.anyio
 async def test_non_filius_upload_intent_rejects_fls(monkeypatch: pytest.MonkeyPatch) -> None:
-    learning.set_repo(FakeLearningRepo(task_kind="native"))  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: FakeLearningRepo(task_kind="native")),
+    )
     learning.set_storage_adapter(FakeStorageAdapter())
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
 

@@ -1,6 +1,8 @@
 """Real-DB Learning read parity and membership boundaries with run-owned cleanup."""
 
+import importlib
 import os
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
@@ -153,6 +155,62 @@ async def test_h5p_access_respects_reused_content_releases_and_membership(app):
         )
         assert removed.status_code == 204
         await expect_access(404)
+
+
+@pytest.mark.parametrize("unit_kind", ["linear", "modular"])
+async def test_upload_intents_enforce_current_database_visibility(app, monkeypatch, unit_kind):
+    """Sign only visible tasks; revoking access prevents any further signing."""
+    calls = []
+
+    def presign(**kwargs):
+        calls.append(kwargs)
+        return {"url": "https://storage.example/upload", "headers": kwargs["headers"]}
+
+    routes = importlib.import_module("backend.web.routes.learning_upload_intents")
+    monkeypatch.setattr(routes, "_current_storage_adapter", lambda: SimpleNamespace(presign_upload=presign))
+    monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
+    authenticate(app, "teacher")
+    async with client_for(app) as client:
+        course_id, unit_id = await course(client, app), await unit(client, app, kind=unit_kind)
+        section = await create(client, f"/api/teaching/units/{unit_id}/sections", {"title": "Uploadprüfung"})
+        task = await create(client, f"/api/teaching/units/{unit_id}/sections/{section['id']}/tasks", {"instruction_md": "Lade deine Lösung hoch.", "criteria": []})
+        module = await create(client, f"/api/teaching/courses/{course_id}/modules", {"unit_id": unit_id})
+        path = f"/api/learning/courses/{course_id}/tasks/{task['id']}/upload-intents"
+
+        async def expect_intent(status, target=path):
+            authenticate(app, "student")
+            before = len(calls)
+            response = await client.post(target, json={"kind": "image", "filename": "bild.png", "mime_type": "image/png", "size_bytes": 10})
+            assert response.status_code == status, response.text
+            assert response.headers["cache-control"] == "private, no-store"
+            assert response.headers["vary"] == "Origin"
+            assert len(calls) == before + (1 if status == 200 else 0)
+            if status == 404:
+                assert response.json() == {"error": "not_found"}
+
+        async def release(visible):
+            authenticate(app, "teacher")
+            response = await client.patch(f"/api/teaching/courses/{course_id}/modules/{module['id']}/sections/{section['id']}/visibility", json={"visible": visible})
+            assert response.status_code == 200
+
+        await expect_intent(404)
+        authenticate(app, "teacher")
+        await create(client, f"/api/teaching/courses/{course_id}/members", {"student_sub": app.state.student})
+        if unit_kind == "linear":
+            await expect_intent(404)
+            await release(True)
+        await expect_intent(200)
+        await expect_intent(404, path.replace(task['id'], str(uuid4())))
+        await expect_intent(404, path.replace(course_id, str(uuid4())))
+        if unit_kind == "linear":
+            await release(False)
+            await expect_intent(404)
+            await release(True)
+            await expect_intent(200)
+        authenticate(app, "teacher")
+        removed = await client.delete(f"/api/teaching/courses/{course_id}/members/{app.state.student}")
+        assert removed.status_code == 204
+        await expect_intent(404)
 
 
 async def test_linear_sections_projection_pagination_and_membership_revocation(app):

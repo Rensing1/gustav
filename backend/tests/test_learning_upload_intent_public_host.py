@@ -16,6 +16,7 @@ from httpx import ASGITransport
 from backend.teaching.storage_supabase import SupabaseStorageAdapter
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
+from backend.web.learning_upload_intent_providers import LearningUploadIntentProviders
 
 main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")
@@ -53,7 +54,10 @@ async def test_upload_intent_uses_public_supabase_host(monkeypatch: pytest.Monke
 
     # Wire a SupabaseStorageAdapter with a stub client that yields internal URLs
     learning.set_storage_adapter(SupabaseStorageAdapter(_SupabaseClientStub()))
-    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+    )
 
     # Minimal course/task owned by teacher, visible to student
     session_store = install_session_store(monkeypatch, main)

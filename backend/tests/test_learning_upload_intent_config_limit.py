@@ -16,6 +16,7 @@ from httpx import ASGITransport
 from backend.teaching.storage import StorageAdapterProtocol
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
+from backend.web.learning_upload_intent_providers import LearningUploadIntentProviders
 
 main = importlib.import_module("backend.web.main")
 learning = importlib.import_module("backend.web.routes.learning")
@@ -50,7 +51,10 @@ async def test_learning_upload_intent_uses_config_limit(monkeypatch: pytest.Monk
 
     # Wire the fake storage adapter
     learning.set_storage_adapter(_FakeAdapter())
-    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+    )
 
     # Minimal course/task owned by teacher, visible to student
     session_store = install_session_store(monkeypatch, main)

@@ -19,6 +19,7 @@ from httpx import ASGITransport
 
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
+from backend.web.learning_upload_intent_providers import LearningUploadIntentProviders
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -56,7 +57,10 @@ async def test_upload_proxy_flow(monkeypatch):
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "http://127.0.0.1:54321")
     learning.set_storage_adapter(_FakeAdapter())
-    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+    )
 
     # Seed minimal course/task via teaching API
     store = install_session_store(monkeypatch, main)

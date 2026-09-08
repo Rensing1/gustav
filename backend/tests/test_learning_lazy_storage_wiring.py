@@ -21,6 +21,7 @@ from httpx import ASGITransport
 
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
+from backend.web.learning_upload_intent_providers import LearningUploadIntentProviders
 
 pytestmark = pytest.mark.anyio("asyncio")
 
@@ -225,7 +226,10 @@ async def test_upload_intent_lazy_rewire_on_first_request(monkeypatch):
 
     # Assert still Null after startup wiring failure
     assert isinstance(learning.STORAGE_ADAPTER, NullStorageAdapter)
-    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+    )
 
     # Prepare course/task data
     student_sid, course_id, task_id = await _prepare_fixture(main, monkeypatch)  # type: ignore
@@ -270,7 +274,10 @@ async def test_upload_intent_uses_same_origin_proxy_when_enabled(monkeypatch):
 
     main = importlib.import_module("backend.web.main")
     learning = importlib.import_module("backend.web.routes.learning")
-    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+    )
 
     class _FakeAdapter:
         def presign_upload(self, *, bucket: str, key: str, expires_in: int, headers: dict[str, str]):

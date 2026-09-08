@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-08
+
+### Technische Schulden – Datenbankzugang der Upload-Freigaben
+
+- refactor(learning): Upload-Intents erhalten ihren Repository-Provider ausdrücklich. Berechtigungsprüfung und Aufgabentyp-Abfrage verwenden denselben einmal aufgelösten Adapter; drei dynamische Repository-/Use-Case-Rückverweise entfallen.
+- perf(web): Der Upload-Intent-Handler führt seine ausschließlich synchrone Arbeit im begrenzten Threadpool aus. Wartender Repository-Aufbau, DB-Abfragen und Signierung halten die Ereignisschleife nicht mehr auf.
+- test: Explizite Testadapter ersetzen globale Repository-Umschaltungen in den betroffenen Upload-Prüfungen. Neue Provider-Verträge prüfen Fehlerfälle, MIME-Regeln, Größenränder, Zuordnung und Nebenläufigkeit. Echte DB-Tests sichern Freigaben und Mitgliedschaftsentzug in linearen und modularen Lerneinheiten ab.
+- scope: Keine Änderung an API, Schema, SQL, ENV, UI, beiden Graphansichten oder DSPy. Die gemeinsame Speicherinitialisierung bleibt unverändert und wird separat migriert.
+
 ## 2026-09-07
 
 ### Technische Schulden – Explizite Upload-Weiterleitung

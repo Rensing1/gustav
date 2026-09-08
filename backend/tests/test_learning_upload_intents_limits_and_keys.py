@@ -16,6 +16,7 @@ from httpx import ASGITransport
 
 from backend.tests.learning_route_helpers import VisibleLearningRepo
 from backend.tests.runtime_auth_helpers import install_session_store
+from backend.web.learning_upload_intent_providers import LearningUploadIntentProviders
 
 learning = importlib.import_module("backend.web.routes.learning")
 
@@ -98,7 +99,10 @@ async def test_learning_upload_intent_uses_config_limit_and_key_shape(monkeypatc
     # Override adapter to record bucket/key
     recorder = _Recorder()
     learning.set_storage_adapter(recorder)  # type: ignore[arg-type]
-    learning.set_repo(VisibleLearningRepo())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        _main().app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+    )
 
     sid, course_id, task_id = await _seed_course_with_task(monkeypatch)
     async with (await _client()) as c:

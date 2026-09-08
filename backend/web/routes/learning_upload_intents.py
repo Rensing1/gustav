@@ -21,6 +21,7 @@ from uuid import uuid4 as _uuid4
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from backend.learning.usecases.submissions import ListSubmissionsInput, ListSubmissionsUseCase
 from backend.storage.keys import make_submission_key
 from backend.storage.mime_types import (
     FILIUS_FLS_MIME,
@@ -32,6 +33,7 @@ from backend.storage.mime_types import (
 )
 from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.teaching.storage import NullStorageAdapter
+from backend.web.learning_upload_intent_providers import learning_upload_intent_providers
 from backend.web.routes.learning_upload_proxy import encode_proxy_headers as _encode_proxy_headers
 
 learning_upload_intents_router = APIRouter(tags=["Learning"])
@@ -62,10 +64,6 @@ def _require_strict_same_origin(request: Request) -> bool:
 
 def _max_upload_bytes() -> int:
     return int(_learning_module()._max_upload_bytes())
-
-
-def _get_repo():
-    return _learning_module()._get_repo()
 
 
 def _storage_bucket() -> str:
@@ -102,17 +100,17 @@ def _allowed_image_mime() -> set[str]:
     return set(_learning_module().ALLOWED_IMAGE_MIME)
 
 
-def _list_submissions_use_case():
-    return _learning_module().ListSubmissionsUseCase
-
-
-def _list_submissions_input():
-    return _learning_module().ListSubmissionsInput
-
-
 @learning_upload_intents_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents")
-async def create_upload_intent(request: Request, course_id: str, task_id: str, payload: dict[str, Any]):
-    """Create a short-lived upload intent for a submission asset (image/PDF/SB3)."""
+def create_upload_intent(request: Request, course_id: str, task_id: str, payload: dict[str, Any]):
+    """Authorize and sign an upload for the student's task using one DB adapter.
+
+    Parameters are the authenticated request, course/task UUIDs and file metadata.
+    Require the student role and same origin before resolving the repository.
+    Membership and current task visibility remain enforced by the existing
+    use case and DB adapter. Sign only after authorization and MIME validation;
+    failures retain the existing private HTTP responses. Synchronous database
+    and storage work runs in FastAPI's bounded threadpool.
+    """
 
     user = _current_user(request)
     if not user:
@@ -151,8 +149,9 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         return JSONResponse({"error": "bad_request", "detail": "invalid_input"}, status_code=400, headers=_cache_headers_error())
 
     try:
-        _ = _list_submissions_use_case()(_get_repo()).execute(
-            _list_submissions_input()(
+        repo = learning_upload_intent_providers(request).repository()
+        ListSubmissionsUseCase(repo).execute(
+            ListSubmissionsInput(
                 course_id=str(course_id),
                 task_id=str(task_id),
                 student_sub=str(user.get("sub", "")),
@@ -172,7 +171,6 @@ async def create_upload_intent(request: Request, course_id: str, task_id: str, p
         )
 
     task_kind = "native"
-    repo = _get_repo()
     if callable(getattr(repo, "get_task_kind_for_student", None)):
         try:
             task_kind = str(

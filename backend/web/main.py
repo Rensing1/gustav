@@ -55,6 +55,10 @@ from backend.web.learning_section_providers import (
     LearningSectionProviders,
     create_learning_section_providers,
 )
+from backend.web.learning_upload_intent_providers import (
+    LearningUploadIntentProviders,
+    create_learning_upload_intent_providers,
+)
 from backend.web.learning_upload_proxy_providers import (
     LearningUploadProxyProviders,
     create_learning_upload_proxy_providers,
@@ -98,6 +102,7 @@ def create_app(
     learning_material_providers: LearningMaterialProviders | None = None,
     learning_section_providers: LearningSectionProviders | None = None,
     learning_upload_proxy_providers: LearningUploadProxyProviders | None = None,
+    learning_upload_intent_providers: LearningUploadIntentProviders | None = None,
     teacher_catalog_providers: TeacherCatalogProviders | None = None,
     teacher_editor_providers: TeacherEditorProviders | None = None,
     teacher_workspace_providers: TeacherWorkspaceProviders | None = None,
@@ -120,6 +125,7 @@ def create_app(
     mount_static_files(created_app, static_dir)
     runtime = auth_runtime.create_auth_runtime(running_under_pytest=_running_under_pytest())
     created_app.state.runtime = runtime
+    created_app.state.learning_upload_intent_providers = learning_upload_intent_providers if learning_upload_intent_providers is not None else create_learning_upload_intent_providers()
     created_app.state.learning_upload_proxy_providers = learning_upload_proxy_providers if learning_upload_proxy_providers is not None else create_learning_upload_proxy_providers()
     created_app.state.learning_h5p_providers = learning_h5p_providers if learning_h5p_providers is not None else create_learning_h5p_providers()
     created_app.state.learning_section_providers = learning_section_providers if learning_section_providers is not None else create_learning_section_providers()

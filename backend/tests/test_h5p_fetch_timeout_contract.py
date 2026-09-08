@@ -28,7 +28,7 @@ def _extract_block(src: str, *, start_token: str, end_token: str) -> str:
 
 def test_h5p_service_upstream_fetches_use_fetch_with_timeout() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    server_path = repo_root / "h5p-service" / "server.mjs"
+    server_path = repo_root / "h5p-service" / "routes" / "ajax.mjs"
     auth_forwarding_path = repo_root / "h5p-service" / "lib" / "auth_forwarding.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
     assert auth_forwarding_path.is_file(), f"Missing H5P auth forwarding helper: {auth_forwarding_path}"

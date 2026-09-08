@@ -16,6 +16,72 @@ from backend.web.main import create_app
 pytestmark = [pytest.mark.anyio("asyncio"), pytest.mark.db_write]
 
 
+@pytest.mark.parametrize("size", [0, 1, 20, 201])
+def test_catalog_batch_parity_limits_and_constant_query_count(app, monkeypatch, size):
+    """Compare production-role batch reads with the former owner-scoped reads."""
+    from backend.teaching.repo_db import DBTeachingRepo
+    from backend.teaching.services.unit_catalog import UnitCatalogService
+
+    owner, stranger = f"catalog-{uuid4()}", f"catalog-{uuid4()}"
+    dsn = os.environ["RLS_TEST_SERVICE_DSN"]
+    assert is_safe_db_test_dsn(dsn)
+    # Seed only run-owned records in the unchanged production schema.
+    unit_ids = [str(uuid4()) for _ in range(size + 1)]
+    course_ids = [str(uuid4()) for _ in unit_ids]
+    app.state.unit_ids.extend(unit_ids)
+    app.state.course_ids.extend(course_ids)
+    with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+        for index, (unit_id, course_id) in enumerate(zip(unit_ids, course_ids)):
+            subject = owner if index < size else stranger
+            cur.execute("insert into public.units (id, title, author_id) values (%s, %s, %s)", (unit_id, f"Einheit {index}", subject))
+            cur.execute("insert into public.courses (id, title, teacher_id, school_year_start, subject, grade_level) values (%s, %s, %s, 2026, 'Informatik', '10')", (course_id, f"Kurs {index}", subject))
+            cur.execute("insert into public.course_modules (course_id, unit_id, position) values (%s, %s, 1)", (course_id, unit_id))
+            if index % 2 == 0:
+                cur.execute("insert into public.unit_sections (unit_id, title, position) values (%s, 'Abschnitt', 1)", (unit_id,))
+
+    repo = DBTeachingRepo()
+
+    class FormerReads:
+        def __getattr__(self, name):
+            return getattr(repo, name)
+
+        def list_catalog_course_refs(self, *, owner_sub, course_ids):
+            return [{"course_id": course_id, "unit_id": unit["id"]}
+                    for course_id in course_ids
+                    for unit in repo.list_course_units_for_owner(course_id, owner_sub)]
+
+        def list_catalog_section_summaries(self, *, owner_sub, unit_ids):
+            result = {}
+            for unit_id in unit_ids:
+                sections = repo.list_sections_for_author(unit_id, owner_sub)
+                if sections:
+                    result[unit_id] = {"count": len(sections), "updated_at": max(s["updated_at"] for s in sections)}
+            return result
+
+    expected = UnitCatalogService(FormerReads()).catalog(owner)
+    executions = []
+    real_connect = psycopg.connect
+
+    class CountingCursor(psycopg.Cursor):
+        def execute(self, query, params=None, **kwargs):
+            executions.append(str(query))
+            return super().execute(query, params, **kwargs)
+
+    def connect(*args, **kwargs):
+        return real_connect(*args, **{**kwargs, "cursor_factory": CountingCursor})
+
+    with monkeypatch.context() as patch:
+        patch.setattr(psycopg, "connect", connect)
+        actual = UnitCatalogService(repo).catalog(owner)
+    assert actual == expected
+    assert actual["result_count"] == min(size, 200)
+    assert len(executions) == (4 if size == 0 else 8)
+    assert unit_ids[-1] not in {item["id"] for item in actual["items"]}
+    # Explicitly supplied foreign IDs must not bypass ownership either.
+    assert repo.list_catalog_course_refs(owner_sub=owner, course_ids=[course_ids[-1]]) == []
+    assert repo.list_catalog_section_summaries(owner_sub=owner, unit_ids=[unit_ids[-1]]) == {}
+
+
 @pytest.fixture
 def app():
     require_db_or_skip()

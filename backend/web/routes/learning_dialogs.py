@@ -10,10 +10,10 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from backend.learning.usecases.dialogs import DialogServiceUnavailable, DialogUseCases
+from backend.learning.usecases.dialogs import DialogServiceUnavailable
+from backend.web.learning_dialog_providers import learning_dialog_providers
 
 learning_dialog_router = APIRouter(tags=["Learning"])
-_USECASES: Any | None = None
 
 
 def _learning_facade():  # type: ignore[no-untyped-def]
@@ -21,21 +21,6 @@ def _learning_facade():  # type: ignore[no-untyped-def]
     if module is None:
         import backend.web.routes.learning as module  # type: ignore
     return module
-
-
-def set_dialog_dependencies(*, usecases: Any | None = None) -> None:
-    """Override dialog use cases in focused adapter tests."""
-
-    global _USECASES
-    _USECASES = usecases
-
-
-def _usecases() -> Any:
-    if _USECASES is not None:
-        return _USECASES
-    from backend.learning.adapters.local_dialog import build
-
-    return DialogUseCases(_learning_facade()._get_repo(), build())
 
 
 def _ids(*values: str) -> bool:
@@ -159,7 +144,7 @@ def _public_payload(value: Any) -> Any:
 
 
 @learning_dialog_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions")
-async def start_dialog_session(request: Request, course_id: str, task_id: str):
+def start_dialog_session(request: Request, course_id: str, task_id: str):
     if (error := _mutation_guard(request)) is not None:
         return error
     student_sub, error = _student(request)
@@ -168,34 +153,34 @@ async def start_dialog_session(request: Request, course_id: str, task_id: str):
     if not _ids(course_id, task_id):
         return _result(lambda: (_ for _ in ()).throw(ValueError("invalid_uuid")))
     return _result(
-        lambda: _usecases().start(course_id=course_id, task_id=task_id, student_sub=student_sub),
+        lambda: learning_dialog_providers(request).usecases().start(course_id=course_id, task_id=task_id, student_sub=student_sub),
         success_status=201,
     )
 
 
 @learning_dialog_router.get("/api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}")
-async def get_dialog_session(request: Request, course_id: str, task_id: str, session_id: str):
+def get_dialog_session(request: Request, course_id: str, task_id: str, session_id: str):
     student_sub, error = _student(request)
     if error:
         return error
     if not _ids(course_id, task_id, session_id):
         return _result(lambda: (_ for _ in ()).throw(ValueError("invalid_uuid")))
     return _result(
-        lambda: _usecases().get(
+        lambda: learning_dialog_providers(request).usecases().get(
             course_id=course_id, task_id=task_id, session_id=session_id, student_sub=student_sub
         )
     )
 
 
 @learning_dialog_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}/turns")
-async def send_dialog_turn(request: Request, course_id: str, task_id: str, session_id: str, payload: dict[str, Any]):
+def send_dialog_turn(request: Request, course_id: str, task_id: str, session_id: str, payload: dict[str, Any]):
     if (error := _mutation_guard(request)) is not None:
         return error
     student_sub, error = _student(request)
     if error:
         return error
     return _result(
-        lambda: _usecases().send_turn(
+        lambda: learning_dialog_providers(request).usecases().send_turn(
             course_id=course_id,
             task_id=task_id,
             session_id=session_id,
@@ -211,14 +196,14 @@ async def send_dialog_turn(request: Request, course_id: str, task_id: str, sessi
 
 
 @learning_dialog_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}/turns/{turn_id}/retry")
-async def retry_dialog_turn(request: Request, course_id: str, task_id: str, session_id: str, turn_id: str):
+def retry_dialog_turn(request: Request, course_id: str, task_id: str, session_id: str, turn_id: str):
     if (error := _mutation_guard(request)) is not None:
         return error
     student_sub, error = _student(request)
     if error:
         return error
     return _result(
-        lambda: _usecases().retry_turn(
+        lambda: learning_dialog_providers(request).usecases().retry_turn(
             course_id=course_id,
             task_id=task_id,
             session_id=session_id,
@@ -231,14 +216,14 @@ async def retry_dialog_turn(request: Request, course_id: str, task_id: str, sess
 
 
 @learning_dialog_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}/complete")
-async def complete_dialog_session(request: Request, course_id: str, task_id: str, session_id: str, payload: dict[str, Any]):
+def complete_dialog_session(request: Request, course_id: str, task_id: str, session_id: str, payload: dict[str, Any]):
     if (error := _mutation_guard(request)) is not None:
         return error
     student_sub, error = _student(request)
     if error:
         return error
     return _result(
-        lambda: _usecases().complete(
+        lambda: learning_dialog_providers(request).usecases().complete(
             course_id=course_id,
             task_id=task_id,
             session_id=session_id,
@@ -252,14 +237,14 @@ async def complete_dialog_session(request: Request, course_id: str, task_id: str
 
 
 @learning_dialog_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/dialog-sessions/{session_id}/abandon")
-async def abandon_dialog_session(request: Request, course_id: str, task_id: str, session_id: str):
+def abandon_dialog_session(request: Request, course_id: str, task_id: str, session_id: str):
     if (error := _mutation_guard(request)) is not None:
         return error
     student_sub, error = _student(request)
     if error:
         return error
     return _result(
-        lambda: _usecases().abandon(
+        lambda: learning_dialog_providers(request).usecases().abandon(
             course_id=course_id, task_id=task_id, session_id=session_id, student_sub=student_sub
         )
         if _ids(course_id, task_id, session_id)

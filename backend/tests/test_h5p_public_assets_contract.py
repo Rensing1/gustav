@@ -39,8 +39,12 @@ def test_h5p_model_endpoints_remain_protected_after_public_assets() -> None:
 
     require_auth_index = src.index("app.use(requireAuth);")
     auth_me_index = src.index('app.get("/auth/me"')
-    editor_model_index = src.index('app.get("/editor/model"')
-    player_model_index = src.index('app.get("/player/model"')
+    editor_model_index = src.index('mountAuthoringRoutes(app,')
+    player_model_index = src.index('mountPlayerRoutes(app,')
+    review_guard_index = src.index("app.use(createReviewModeMiddleware(")
+    ajax_index = src.index("mountAjaxRoutes(app,")
+    error_index = src.index("app.use((err, req, res")
+    assert require_auth_index < review_guard_index < editor_model_index < player_model_index < ajax_index < error_index
 
     assert require_auth_index < auth_me_index
     assert require_auth_index < editor_model_index

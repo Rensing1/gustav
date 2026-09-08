@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 from backend.teaching import repo_ai_usage_queries as _repo_ai_usage_queries
+from backend.teaching import repo_catalog_queries as _repo_catalog_queries
 from backend.teaching import repo_concern_box_queries as _repo_concern_box_queries
 from backend.teaching import repo_course_lifecycle_queries as _repo_course_lifecycle_queries
 from backend.teaching import repo_course_module_queries as _repo_course_module_queries
@@ -320,6 +321,18 @@ class DBTeachingRepo:
                 )
                 rows = cur.fetchall() or []
         return [_course_row_to_dict(r) for r in rows]
+
+    def list_catalog_course_refs(self, *, owner_sub: str, course_ids: list[str]) -> list[dict]:
+        """Batch course assignments with explicit ownership and transaction-local RLS."""
+        return _repo_catalog_queries.list_catalog_course_refs(
+            dsn=self._dsn, psycopg_module=psycopg, owner_sub=owner_sub, course_ids=course_ids
+        )
+
+    def list_catalog_section_summaries(self, *, owner_sub: str, unit_ids: list[str]) -> dict[str, dict]:
+        """Batch count/activity metadata for the authenticated author's selected units."""
+        return _repo_catalog_queries.list_catalog_section_summaries(
+            dsn=self._dsn, psycopg_module=psycopg, owner_sub=owner_sub, unit_ids=unit_ids
+        )
 
     def list_courses_for_student(self, *, student_id: str, limit: int, offset: int) -> List[dict]:
         return _repo_member_queries.list_courses_for_student(

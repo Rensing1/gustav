@@ -18,6 +18,7 @@ import lzma
 import struct
 import tempfile
 import uuid
+from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
 
@@ -60,9 +61,14 @@ class _UseStorageAdapter:
     def __enter__(self):  # noqa: ANN001
         self._original = getattr(learning, "STORAGE_ADAPTER", None)
         learning.set_storage_adapter(self._adapter)
+        self._providers = main.app.state.learning_upload_intent_providers
+        main.app.state.learning_upload_intent_providers = replace(
+            self._providers, storage=lambda: self._adapter
+        )
         return self._adapter
 
     def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+        main.app.state.learning_upload_intent_providers = self._providers
         if self._original is not None:
             learning.set_storage_adapter(self._original)  # type: ignore[arg-type]
         return False

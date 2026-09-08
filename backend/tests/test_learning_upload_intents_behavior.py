@@ -61,24 +61,14 @@ class FakeStorageAdapter(StorageAdapterProtocol):
 
 @contextmanager
 def _use_storage_adapter(adapter):
-    """Temporarily override the learning storage adapter for a test."""
-    current_learning = importlib.import_module("backend.web.routes.learning")
-    original = getattr(current_learning, "STORAGE_ADAPTER", None)
-    current_learning.set_storage_adapter(adapter)
-    try:
+    """Temporarily replace only this backend's explicit upload dependency."""
+    from dataclasses import replace
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(main.app.state, "learning_upload_intent_providers", replace(
+            main.app.state.learning_upload_intent_providers, storage=lambda: adapter
+        ))
         yield adapter
-    finally:
-        current_learning.set_storage_adapter(original)
-
-
-@pytest.fixture(autouse=True)
-def restore_learning_storage_state():
-    """Restore the remaining shared storage adapter after each behavior test."""
-
-    adapter = learning.STORAGE_ADAPTER
-    adapter_override = learning._STORAGE_ADAPTER_OVERRIDE_ACTIVE
-    yield
-    learning.set_storage_adapter(adapter, override=adapter_override)  # type: ignore[arg-type]
 
 
 async def _client() -> httpx.AsyncClient:

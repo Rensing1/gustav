@@ -56,10 +56,9 @@ async def test_upload_proxy_flow(monkeypatch):
     # Enable proxy and ensure adapter configured
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "true")
     monkeypatch.setenv("SUPABASE_URL", "http://127.0.0.1:54321")
-    learning.set_storage_adapter(_FakeAdapter())
     monkeypatch.setattr(
         main.app.state, "learning_upload_intent_providers",
-        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo(), storage=lambda: _FakeAdapter()),
     )
 
     # Seed minimal course/task via teaching API

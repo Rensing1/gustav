@@ -2,6 +2,15 @@
 
 ## 2026-09-08
 
+### Technische Schulden – Speicher, Katalog, Dialoge und Verarbeitungsgrenzen
+
+- refactor(learning): Upload-Freigaben erhalten Speicher und Datenbank ausdrücklich; dynamische Rückverweise auf die Learning-Fassade entfallen vollständig für diesen Endpunkt. Der vorhandene Storage3-Aufbau wird mit Materialabrufen geteilt, ohne globale Speicherumschaltungen. Erfolgreicher Aufbau wird wiederverwendet, fehlgeschlagener Aufbau erneut versucht.
+- perf(teaching): Der Lerneinheitenkatalog bündelt Kurszuordnungen und Abschnittszähler/Aktivitätsdaten. Höchstens vier fachliche Leseabfragen statt zusätzlicher Abfragen je Kurs und Lerneinheit; Eigentümergrenzen, bestehende 200er-Limits und Projektion bleiben erhalten.
+- refactor(learning): Sechs Dialog-Endpunkte erhalten ihren Anwendungsfalldienst ausdrücklich und führen ihre synchrone Arbeit im begrenzten Threadpool aus. Der globale Testschalter entfällt; KI-Generator und Verbrauchspuffer werden weiterhin pro Anfrage neu erzeugt. Keine Änderung an DSPy, Prompts oder Modellen.
+- refactor(worker): Datenbankzugriffe für Kontext und Ergebnisse liegen getrennt von der Ablaufsteuerung. Die Orchestrierung behält Verbindungen, Commit/Rollback und die Grenze vor externen KI-Aufrufen. Abgabe-Eingaberegeln liegen in einem frameworkunabhängigen Modul mit ausdrücklich übergebenem Größenlimit.
+- refactor(h5p): Erstellung/Import, Player/Review und Ajax/Ergebnisweiterleitung erhalten getrennte Router mit ausdrücklichen Abhängigkeiten. Middleware-Reihenfolge, URLs und HTML bleiben unverändert. Das Image enthält die neuen Router; zusätzliche lokale HTTP-Tests prüfen Sicherheitsgrenzen und Ergebnisweiterleitung.
+- scope: Keine Oberflächen-/Graphgestaltung, kein API-/Schema-/ENV-Wechsel. Weitere Backend-Provider und die vollständige Trennung der Abgabe-/Workerphasen sind noch nicht abgeschlossen. Ein zusätzlicher Dialog-Zugriffsbefund ist als TD-010 dokumentiert; bestehende Zugriffsregeln werden nicht stillschweigend geändert.
+
 ### Technische Schulden – Datenbankzugang der Upload-Freigaben
 
 - refactor(learning): Upload-Intents erhalten ihren Repository-Provider ausdrücklich. Berechtigungsprüfung und Aufgabentyp-Abfrage verwenden denselben einmal aufgelösten Adapter; drei dynamische Repository-/Use-Case-Rückverweise entfallen.

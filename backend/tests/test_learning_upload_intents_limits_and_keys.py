@@ -98,10 +98,9 @@ async def test_learning_upload_intent_uses_config_limit_and_key_shape(monkeypatc
         importlib.reload(importlib.import_module("backend.storage.config"))
     # Override adapter to record bucket/key
     recorder = _Recorder()
-    learning.set_storage_adapter(recorder)  # type: ignore[arg-type]
     monkeypatch.setattr(
         _main().app.state, "learning_upload_intent_providers",
-        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo(), storage=lambda: recorder),
     )
 
     sid, course_id, task_id = await _seed_course_with_task(monkeypatch)

@@ -48,6 +48,21 @@ class CatalogRepository:
         assert author_id == "owner"
         return [{"updated_at": "2026-02-01"}] if unit_id in ("active", "working") else []
 
+    def list_catalog_course_refs(self, *, owner_sub, course_ids):
+        assert owner_sub == "owner"
+        return [
+            {"course_id": course_id, "unit_id": unit["id"]}
+            for course_id in course_ids
+            for unit in self.list_course_units_for_owner(course_id, owner_sub)
+        ]
+
+    def list_catalog_section_summaries(self, *, owner_sub, unit_ids):
+        assert owner_sub == "owner"
+        return {
+            unit_id: {"count": 1, "updated_at": "2026-02-01"}
+            for unit_id in unit_ids if unit_id in ("active", "working")
+        }
+
 
 def client_for(repo, *, role="teacher", factory=None):
     app = create_app(
@@ -116,6 +131,24 @@ async def test_query_sort_and_empty_catalog():
     async with client_for(Empty()) as client:
         home = (await client.get(HOME_PATH)).json()
         assert home["courses"] == home["recent_units"] == []
+
+
+async def test_catalog_never_reads_assignments_or_sections_in_a_loop():
+    class Batched(CatalogRepository):
+        def list_course_units_for_owner(self, *args):
+            pytest.fail("per-course read")
+
+        def list_sections_for_author(self, *args):
+            pytest.fail("per-unit read")
+
+        def list_catalog_course_refs(self, *, owner_sub, course_ids):
+            assert owner_sub == "owner"
+            assert course_ids == ["course-z", "course-a"]
+            return [{"course_id": "course-z", "unit_id": "active"}]
+
+    async with client_for(Batched()) as client:
+        assert (await client.get(CATALOG_PATH)).status_code == 200
+        assert (await client.get(HOME_PATH)).status_code == 200
 
 
 @pytest.mark.parametrize("path", [HOME_PATH, CATALOG_PATH])

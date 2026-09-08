@@ -22,8 +22,8 @@ PAYLOAD = {"kind": "image", "filename": "bild.png", "mime_type": "image/png", "s
 
 @pytest.fixture
 def storage(monkeypatch):
-    """Replace only signing; shared storage initialization is a later migration."""
-    routes = importlib.import_module("backend.web.routes.learning_upload_intents")
+    """Replace the storage builder; every provider still owns its lazy factory."""
+    wiring = importlib.import_module("backend.web.learning_upload_intent_providers")
     calls = []
 
     def presign(**kwargs):
@@ -31,7 +31,7 @@ def storage(monkeypatch):
         return {"url": "https://storage.example/upload", "headers": kwargs["headers"]}
 
     adapter = SimpleNamespace(presign_upload=presign, calls=calls)
-    monkeypatch.setattr(routes, "_current_storage_adapter", lambda: adapter)
+    monkeypatch.setattr(wiring, "build_storage_adapter", lambda: adapter)
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     monkeypatch.setenv("LEARNING_MAX_UPLOAD_BYTES", "100")
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "false")
@@ -258,5 +258,5 @@ def test_default_repository_is_lazy_and_failed_construction_remains_retryable(mo
 def test_upload_handler_needs_no_legacy_repository_or_use_case_lookup():
     routes = importlib.import_module("backend.web.routes.learning_upload_intents")
     assert not inspect.iscoroutinefunction(routes.create_upload_intent)
-    for name in ("_get_repo", "_list_submissions_use_case", "_list_submissions_input"):
+    for name in ("_get_repo", "_list_submissions_use_case", "_list_submissions_input", "_learning_module"):
         assert not hasattr(routes, name)

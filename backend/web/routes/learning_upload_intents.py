@@ -9,12 +9,11 @@ Why:
 
 from __future__ import annotations
 
-import importlib
 import os
-import sys as _sys
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote as _quote
+from urllib.parse import urlparse as _urlparse
 from uuid import UUID
 from uuid import uuid4 as _uuid4
 
@@ -22,7 +21,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from backend.learning.usecases.submissions import ListSubmissionsInput, ListSubmissionsUseCase
+from backend.storage.config import get_learning_max_upload_bytes as _max_upload_bytes
+from backend.storage.config import get_submissions_bucket as _storage_bucket
 from backend.storage.keys import make_submission_key
+from backend.storage.learning_policy import ALLOWED_IMAGE_MIME
 from backend.storage.mime_types import (
     FILIUS_FLS_MIME,
     JPEG_MIME,
@@ -34,70 +36,33 @@ from backend.storage.mime_types import (
 from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.teaching.storage import NullStorageAdapter
 from backend.web.learning_upload_intent_providers import learning_upload_intent_providers
+from backend.web.routes.app_session_helpers import current_user as _current_user
+from backend.web.routes.learning_upload_config import (
+    dev_upload_stub_enabled as _dev_upload_stub_enabled,
+)
+from backend.web.routes.learning_upload_config import (
+    upload_intent_ttl_seconds as _upload_intent_ttl_seconds,
+)
+from backend.web.routes.learning_upload_config import (
+    upload_proxy_enabled as _upload_proxy_enabled,
+)
 from backend.web.routes.learning_upload_proxy import encode_proxy_headers as _encode_proxy_headers
+from backend.web.routes.security import _is_same_origin
 
 learning_upload_intents_router = APIRouter(tags=["Learning"])
 
 
-def _learning_module():
-    module = _sys.modules.get("backend.web.routes.learning")
-    if module is None:  # pragma: no cover - defensive import fallback
-        module = importlib.import_module("backend.web.routes.learning")
-    return module
-
-
 def _cache_headers_success() -> dict[str, str]:
-    return _learning_module()._cache_headers_success()
+    """Never cache private authorization or signing responses."""
+    return {"Cache-Control": "private, no-store", "Vary": "Origin"}
 
 
-def _cache_headers_error() -> dict[str, str]:
-    return _learning_module()._cache_headers_error()
-
-
-def _current_user(request: Request) -> dict | None:
-    return _learning_module()._current_user(request)
+_cache_headers_error = _cache_headers_success
 
 
 def _require_strict_same_origin(request: Request) -> bool:
-    return bool(_learning_module()._require_strict_same_origin(request))
-
-
-def _max_upload_bytes() -> int:
-    return int(_learning_module()._max_upload_bytes())
-
-
-def _storage_bucket() -> str:
-    return str(_learning_module()._storage_bucket())
-
-
-def _current_storage_adapter():
-    return _learning_module()._current_storage_adapter()
-
-
-def _wire_storage() -> None:
-    wire_storage = getattr(_learning_module(), "_wire_storage", None)
-    if callable(wire_storage):
-        wire_storage()
-
-
-def _dev_upload_stub_enabled() -> bool:
-    return bool(_learning_module()._dev_upload_stub_enabled())
-
-
-def _upload_intent_ttl_seconds() -> int:
-    return int(_learning_module()._upload_intent_ttl_seconds())
-
-
-def _upload_proxy_enabled() -> bool:
-    return bool(_learning_module()._upload_proxy_enabled())
-
-
-def _urlparse(raw: str):
-    return _learning_module()._urlparse(raw)
-
-
-def _allowed_image_mime() -> set[str]:
-    return set(_learning_module().ALLOWED_IMAGE_MIME)
+    """Require a present, matching Origin/Referer before any adapter access."""
+    return bool(request.headers.get("origin") or request.headers.get("referer")) and _is_same_origin(request)
 
 
 @learning_upload_intents_router.post("/api/learning/courses/{course_id}/tasks/{task_id}/upload-intents")
@@ -206,7 +171,7 @@ def create_upload_intent(request: Request, course_id: str, task_id: str, payload
         accepted = [FILIUS_FLS_MIME]
     else:
         if kind == "image":
-            allowed_image_mime = _allowed_image_mime()
+            allowed_image_mime = ALLOWED_IMAGE_MIME
             if mime_type not in allowed_image_mime:
                 return JSONResponse(
                     {"error": "bad_request", "detail": "mime_not_allowed"}, status_code=400, headers=_cache_headers_error()
@@ -243,13 +208,10 @@ def create_upload_intent(request: Request, course_id: str, task_id: str, payload
     )
 
     bucket = _storage_bucket()
-    adapter = _current_storage_adapter()
-    if isinstance(adapter, NullStorageAdapter):
-        try:
-            _wire_storage()
-        except Exception:
-            pass
-        adapter = _current_storage_adapter()
+    try:
+        adapter = learning_upload_intent_providers(request).storage()
+    except Exception:
+        adapter = NullStorageAdapter()
 
     if not bucket or isinstance(adapter, NullStorageAdapter):
         if _dev_upload_stub_enabled():

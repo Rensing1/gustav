@@ -1,6 +1,5 @@
 """Real-DB Learning read parity and membership boundaries with run-owned cleanup."""
 
-import importlib
 import os
 from types import SimpleNamespace
 from uuid import uuid4
@@ -92,6 +91,62 @@ def graph_path(course_id, unit_id):
     return f"/api/learning/courses/{course_id}/units/{unit_id}/modules/graph"
 
 
+async def test_dialog_provider_preserves_database_ownership_and_private_context(app, monkeypatch):
+    """Characterize existing ownership and retained-session access (see TD-010)."""
+    from backend.web import learning_dialog_providers as wiring
+
+    monkeypatch.setattr(wiring, "build_dialog_generator", lambda: SimpleNamespace(
+        initial_starters=lambda **kwargs: pytest.fail("free-text startup called AI")
+    ))
+    authenticate(app, "teacher")
+    async with client_for(app) as client:
+        course_id, unit_id = await course(client, app), await unit(client, app, kind="linear")
+        section = await create(client, f"/api/teaching/units/{unit_id}/sections", {"title": "Dialog"})
+        task = await create(client, f"/api/teaching/units/{unit_id}/sections/{section['id']}/tasks", {
+            "instruction_md": "Begründe deine Position.", "criteria": ["Begründung"],
+            "dialog": {
+                "partner_name": "Gesprächspartner", "partner_description_md": "Fragt nach.",
+                "role_md": "PRIVATE_ROLE", "learning_goal_md": "PRIVATE_GOAL",
+                "opening_message_md": "Was denkst du?", "response_mode": "free_text", "max_rounds": 3,
+            },
+        })
+        module = await create(client, f"/api/teaching/courses/{course_id}/modules", {"unit_id": unit_id})
+        await create(client, f"/api/teaching/courses/{course_id}/members", {"sub": app.state.student})
+        path = f"/api/learning/courses/{course_id}/tasks/{task['id']}/dialog-sessions"
+        authenticate(app, "student")
+        # Existing contract deviation: the DB denies hidden tasks, but its error
+        # is not yet mapped to the documented private HTTP 404 (TD-010).
+        with pytest.raises(psycopg.errors.NoDataFound):
+            await client.post(path)
+
+        async def release(visible):
+            authenticate(app, "teacher")
+            response = await client.patch(f"/api/teaching/courses/{course_id}/modules/{module['id']}/sections/{section['id']}/visibility", json={"visible": visible})
+            assert response.status_code == 200
+            authenticate(app, "student")
+
+        await release(True)
+        started = await client.post(path)
+        assert started.status_code == 201, started.text
+        session_id = started.json()["id"]
+        assert (await client.post(path)).json()["id"] == session_id
+        detail = await client.get(f"{path}/{session_id}")
+        assert detail.status_code == 200
+        assert "PRIVATE_ROLE" not in detail.text and "PRIVATE_GOAL" not in detail.text
+        assert detail.headers["cache-control"] == "private, no-store"
+        authenticate(app, "student", sub=f"outsider-{uuid4()}")
+        assert (await client.get(f"{path}/{session_id}")).status_code == 404
+        await release(False)
+        # Existing sessions remain readable by their owner after revocation.
+        # This refactoring must not silently redefine access to retained work.
+        assert (await client.get(f"{path}/{session_id}")).status_code == 200
+        await release(True)
+        authenticate(app, "teacher")
+        assert (await client.delete(f"/api/teaching/courses/{course_id}/members/{app.state.student}")).status_code == 204
+        authenticate(app, "student")
+        assert (await client.get(f"{path}/{session_id}")).status_code == 200
+
+
 async def test_h5p_access_respects_reused_content_releases_and_membership(app):
     """Any accessible task permits reused content; removing all access denies it."""
     authenticate(app, "teacher")
@@ -166,8 +221,11 @@ async def test_upload_intents_enforce_current_database_visibility(app, monkeypat
         calls.append(kwargs)
         return {"url": "https://storage.example/upload", "headers": kwargs["headers"]}
 
-    routes = importlib.import_module("backend.web.routes.learning_upload_intents")
-    monkeypatch.setattr(routes, "_current_storage_adapter", lambda: SimpleNamespace(presign_upload=presign))
+    from dataclasses import replace
+
+    monkeypatch.setattr(app.state, "learning_upload_intent_providers", replace(
+        app.state.learning_upload_intent_providers, storage=lambda: SimpleNamespace(presign_upload=presign)
+    ))
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
     authenticate(app, "teacher")
     async with client_for(app) as client:

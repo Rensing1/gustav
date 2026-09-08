@@ -29,14 +29,6 @@ pytestmark = pytest.mark.anyio("asyncio")
 FILIUS_MIME = "application/x.filius.fls"
 
 
-@pytest.fixture(autouse=True)
-def restore_learning_storage_state():
-    storage_adapter = learning.STORAGE_ADAPTER
-    storage_override = learning._STORAGE_ADAPTER_OVERRIDE_ACTIVE  # type: ignore[attr-defined]
-    yield
-    learning.set_storage_adapter(storage_adapter, override=storage_override)
-
-
 class FakeLearningRepo:
     def __init__(self, *, task_kind: str) -> None:
         self.task_kind = task_kind
@@ -80,9 +72,8 @@ def _student_session(monkeypatch: pytest.MonkeyPatch) -> str:
 async def test_filius_upload_intent_allows_only_fls(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         main.app.state, "learning_upload_intent_providers",
-        LearningUploadIntentProviders(repository=lambda: FakeLearningRepo(task_kind="filius")),
+        LearningUploadIntentProviders(repository=lambda: FakeLearningRepo(task_kind="filius"), storage=FakeStorageAdapter),
     )
-    learning.set_storage_adapter(FakeStorageAdapter())
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
 
     async with (await _client()) as c:
@@ -103,9 +94,8 @@ async def test_filius_upload_intent_allows_only_fls(monkeypatch: pytest.MonkeyPa
 async def test_non_filius_upload_intent_rejects_fls(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         main.app.state, "learning_upload_intent_providers",
-        LearningUploadIntentProviders(repository=lambda: FakeLearningRepo(task_kind="native")),
+        LearningUploadIntentProviders(repository=lambda: FakeLearningRepo(task_kind="native"), storage=FakeStorageAdapter),
     )
-    learning.set_storage_adapter(FakeStorageAdapter())
     monkeypatch.setenv("LEARNING_STORAGE_BUCKET", "submissions")
 
     async with (await _client()) as c:

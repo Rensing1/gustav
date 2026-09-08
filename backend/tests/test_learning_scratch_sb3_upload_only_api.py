@@ -16,6 +16,7 @@ import importlib
 import tempfile
 import uuid
 import zipfile
+from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
 
@@ -58,9 +59,14 @@ class _UseStorageAdapter:
         self._learning = importlib.import_module("backend.web.routes.learning")
         self._original = getattr(self._learning, "STORAGE_ADAPTER", None)
         self._learning.set_storage_adapter(self._adapter)
+        self._providers = main.app.state.learning_upload_intent_providers
+        main.app.state.learning_upload_intent_providers = replace(
+            self._providers, storage=lambda: self._adapter
+        )
         return self._adapter
 
     def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+        main.app.state.learning_upload_intent_providers = self._providers
         if self._original is not None:
             self._learning.set_storage_adapter(self._original)  # type: ignore[arg-type]
         return False

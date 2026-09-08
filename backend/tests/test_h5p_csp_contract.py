@@ -62,6 +62,8 @@ def test_h5p_csp_policy_matrix_and_debug_access_control() -> None:
     assert security_headers_path.is_file(), f"Missing H5P security headers helper: {security_headers_path}"
 
     js = server_path.read_text(encoding="utf-8")
+    route_sources = [(server_path.parent / module).read_text(encoding="utf-8") for module in ("routes/authoring.mjs", "routes/player.mjs")]
+    js += "\n".join(route_sources)
     security_js = security_headers_path.read_text(encoding="utf-8")
 
     # Debug HTML pages must be admin-only.
@@ -95,5 +97,6 @@ def test_h5p_csp_policy_matrix_and_debug_access_control() -> None:
     # Only debug HTML routes may override the header to CSP_DEBUG_HTML.
     # Guard this by requiring exactly two uses of CSP_DEBUG_HTML in sendHtml calls
     # (editor + player pages).
-    send_html_uses = re.findall(r"sendHtml\([\s\S]*?CSP_DEBUG_HTML", js)
+    # Scan each module separately; a regex must not span an import boundary.
+    send_html_uses = [match for source in [server_path.read_text(encoding="utf-8"), *route_sources] for match in re.findall(r"sendHtml\([\s\S]*?CSP_DEBUG_HTML", source)]
     assert len(send_html_uses) == 2, f"Expected 2 CSP_DEBUG_HTML overrides, got {len(send_html_uses)}"

@@ -20,7 +20,7 @@ from pathlib import Path
 def test_h5p_player_model_does_not_use_as_user_id() -> None:
     repo_root = Path(__file__).resolve().parents[2]
 
-    server_path = repo_root / "h5p-service" / "server.mjs"
+    server_path = repo_root / "h5p-service" / "routes" / "player.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
     server_js = server_path.read_text(encoding="utf-8")
     assert "as_user_id" not in server_js
@@ -31,4 +31,3 @@ def test_h5p_player_model_does_not_use_as_user_id() -> None:
     player_js = player_path.read_text(encoding="utf-8")
     assert "as_user_id" not in player_js
     assert "asUserId" not in player_js
-

@@ -7,9 +7,9 @@ def test_review_user_state_url_uses_controller_context_id() -> None:
     """Lumi's controller forwards `contextId`, so review URLs must use that name."""
 
     root = Path(__file__).resolve().parents[2]
-    source = (root / "h5p-service" / "server.mjs").read_text(encoding="utf-8")
+    source = (root / "h5p-service" / "routes" / "player.mjs").read_text(encoding="utf-8")
     start = source.index('app.get("/player/review"')
-    end = source.index('app.post("/contents"', start)
+    end = source.index('app.get("/player",', start)
     review_route = source[start:end]
 
     assert 'u.searchParams.set("contextId", String(contextId));' in review_route

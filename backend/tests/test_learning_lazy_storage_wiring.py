@@ -216,16 +216,18 @@ async def test_upload_intent_lazy_rewire_on_first_request(monkeypatch):
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "false")
     monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "false")
 
-    # Install fake supabase module: first call fails (startup), subsequent succeed.
-    _install_flaky_supabase_module()
-
-    # Import app (startup wiring runs and fails once)
+    # Upload storage now owns its lazy construction, independent of startup wiring.
     main = importlib.import_module("backend.web.main")
-    learning = importlib.import_module("backend.web.routes.learning")
-    from backend.teaching.storage import NullStorageAdapter
+    wiring = importlib.import_module("backend.web.learning_upload_intent_providers")
+    calls = []
 
-    # Assert still Null after startup wiring failure
-    assert isinstance(learning.STORAGE_ADAPTER, NullStorageAdapter)
+    def build():
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("storage unavailable")
+        return types.SimpleNamespace(presign_upload=lambda **kwargs: {"url": "https://storage.example/upload"})
+
+    monkeypatch.setattr(wiring, "build_storage_adapter", build)
     monkeypatch.setattr(
         main.app.state, "learning_upload_intent_providers",
         LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
@@ -233,6 +235,10 @@ async def test_upload_intent_lazy_rewire_on_first_request(monkeypatch):
 
     # Prepare course/task data
     student_sid, course_id, task_id = await _prepare_fixture(main, monkeypatch)  # type: ignore
+
+    # Simulate a previous failed initialization, then exercise HTTP retry.
+    with pytest.raises(RuntimeError, match="storage unavailable"):
+        main.app.state.learning_upload_intent_providers.storage()
 
     # First upload-intent should trigger lazy wiring and succeed
     async with (await _client(main.app)) as c:
@@ -246,6 +252,7 @@ async def test_upload_intent_lazy_rewire_on_first_request(monkeypatch):
         data = r.json()
         assert "storage_key" in data and isinstance(data["storage_key"], str)
         assert "url" in data and isinstance(data["url"], str)
+        assert len(calls) == 2
 
 
 @pytest.mark.anyio
@@ -273,11 +280,6 @@ async def test_upload_intent_uses_same_origin_proxy_when_enabled(monkeypatch):
     monkeypatch.setenv("ENABLE_DEV_UPLOAD_STUB", "false")
 
     main = importlib.import_module("backend.web.main")
-    learning = importlib.import_module("backend.web.routes.learning")
-    monkeypatch.setattr(
-        main.app.state, "learning_upload_intent_providers",
-        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
-    )
 
     class _FakeAdapter:
         def presign_upload(self, *, bucket: str, key: str, expires_in: int, headers: dict[str, str]):
@@ -289,7 +291,10 @@ async def test_upload_intent_uses_same_origin_proxy_when_enabled(monkeypatch):
             }
 
     # Inject fake adapter and bucket so the route can proceed to presign
-    learning.set_storage_adapter(_FakeAdapter())  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        main.app.state, "learning_upload_intent_providers",
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo(), storage=_FakeAdapter),
+    )
 
     # Prepare teacher/student/course/task via helpers
     student_sid, course_id, task_id = await _prepare_fixture(main, monkeypatch)  # type: ignore

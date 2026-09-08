@@ -11,6 +11,7 @@ import importlib
 import tempfile
 import uuid
 from contextlib import contextmanager
+from dataclasses import replace
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
@@ -57,10 +58,13 @@ class FakeStorageAdapter(StorageAdapterProtocol):
 @contextmanager
 def _use_storage_adapter(adapter: StorageAdapterProtocol):
     original = getattr(learning, "STORAGE_ADAPTER", None)
+    providers = main.app.state.learning_upload_intent_providers
+    main.app.state.learning_upload_intent_providers = replace(providers, storage=lambda: adapter)
     learning.set_storage_adapter(adapter)
     try:
         yield adapter
     finally:
+        main.app.state.learning_upload_intent_providers = providers
         if original is not None:
             learning.set_storage_adapter(original)
 

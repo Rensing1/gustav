@@ -50,10 +50,9 @@ async def test_learning_upload_intent_uses_config_limit(monkeypatch: pytest.Monk
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "false")
 
     # Wire the fake storage adapter
-    learning.set_storage_adapter(_FakeAdapter())
     monkeypatch.setattr(
         main.app.state, "learning_upload_intent_providers",
-        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo(), storage=lambda: _FakeAdapter()),
     )
 
     # Minimal course/task owned by teacher, visible to student

@@ -53,10 +53,9 @@ async def test_upload_intent_uses_public_supabase_host(monkeypatch: pytest.Monke
     monkeypatch.setenv("SUPABASE_URL", "http://supabase_kong_gustav-alpha2:8000")
 
     # Wire a SupabaseStorageAdapter with a stub client that yields internal URLs
-    learning.set_storage_adapter(SupabaseStorageAdapter(_SupabaseClientStub()))
     monkeypatch.setattr(
         main.app.state, "learning_upload_intent_providers",
-        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo(), storage=lambda: SupabaseStorageAdapter(_SupabaseClientStub())),
     )
 
     # Minimal course/task owned by teacher, visible to student

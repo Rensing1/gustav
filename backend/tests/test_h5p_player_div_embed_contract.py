@@ -22,7 +22,7 @@ from pathlib import Path
 
 def test_h5p_player_model_forces_div_embed_type() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    server_path = repo_root / "h5p-service" / "server.mjs"
+    server_path = repo_root / "h5p-service" / "routes" / "player.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
 
     js = server_path.read_text(encoding="utf-8")
@@ -30,4 +30,3 @@ def test_h5p_player_model_forces_div_embed_type() -> None:
     # We add a small helper and apply it to the /player/model output.
     assert "ensureDivEmbedTypes" in js
     assert "embedTypes: ensureDivEmbedTypes" in js
-

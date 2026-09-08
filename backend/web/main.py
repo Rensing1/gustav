@@ -35,6 +35,10 @@ from backend.web.learning_course_providers import (
     LearningCourseProviders,
     create_learning_course_providers,
 )
+from backend.web.learning_dialog_providers import (
+    LearningDialogProviders,
+    create_learning_dialog_providers,
+)
 from backend.web.learning_graph_providers import (
     LearningGraphProviders,
     create_learning_graph_providers,
@@ -96,6 +100,7 @@ def create_app(
     profile_providers: ProfileProviders | None = None,
     concern_box_providers: ConcernBoxProviders | None = None,
     learning_course_providers: LearningCourseProviders | None = None,
+    learning_dialog_providers: LearningDialogProviders | None = None,
     learning_graph_providers: LearningGraphProviders | None = None,
     learning_h5p_providers: LearningH5PProviders | None = None,
     learning_module_providers: LearningModuleProviders | None = None,
@@ -125,6 +130,7 @@ def create_app(
     mount_static_files(created_app, static_dir)
     runtime = auth_runtime.create_auth_runtime(running_under_pytest=_running_under_pytest())
     created_app.state.runtime = runtime
+    created_app.state.learning_dialog_providers = learning_dialog_providers if learning_dialog_providers is not None else create_learning_dialog_providers()
     created_app.state.learning_upload_intent_providers = learning_upload_intent_providers if learning_upload_intent_providers is not None else create_learning_upload_intent_providers()
     created_app.state.learning_upload_proxy_providers = learning_upload_proxy_providers if learning_upload_proxy_providers is not None else create_learning_upload_proxy_providers()
     created_app.state.learning_h5p_providers = learning_h5p_providers if learning_h5p_providers is not None else create_learning_h5p_providers()

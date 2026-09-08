@@ -674,3 +674,15 @@ Die ergänzende Dokumentationsprüfung meldete zunächst eine vom Harness ausdr�
 - Keine API-, Schema-, SQL-, ENV-, UI-, Graph- oder DSPy-Änderung. Kein Browserlauf in diesem internen Verdrahtungsschritt, kein Reset, keine Neukonfiguration der laufenden Installation und kein Push. Die gemeinsamen Speicheradapter und übrigen dynamischen Hilfsfunktionen sind noch nicht abgelöst.
 
 Nächster abgegrenzter Schritt: Die gemeinsame Speicherinitialisierung untersuchen und den Upload-Intent-Speicherzugang ohne globale Umschaltung verdrahten. Dabei bestehendes Nachinitialisieren, Signierung, Fehlerantworten und noch nicht migrierte Abgabe-/Teaching-Verbraucher getrennt absichern. TD-004 und der Gesamtplan sind weiterhin nicht abgeschlossen.
+
+### Fortsetzung vom 8. September: beauftragte Backend-Pakete 1–3 und 5
+
+Der aktuelle Detailplan ist `docs/plan/2026-09-08-backend-schuldenpakete.md`. Der Auftrag umfasst weitere Backend-Bereinigung, ausdrücklich nicht die Oberflächenmigration (Paket 4); diese wartet auf Beratung. DSPy bleibt ebenfalls separat.
+
+- Upload-Freigaben verwenden jetzt expliziten Speicherzugang und keine dynamische Learning-Fassade mehr. Der Standard-Storage3-Aufbau wird mit Materialabrufen geteilt; globale Initialisierung anderer Verbraucher ist nicht bereits entfernt.
+- Der Lehrkraft-Katalog liest Kurszuordnungen und Abschnittszähler/Aktivität gebündelt. Echte DB-Parität bei 0, 1, 20 und 201 Einträgen sowie fremden IDs ist nachgewiesen; bestehende 200er-Limits bleiben erhalten.
+- Sechs Dialog-Endpunkte verwenden einen expliziten Anwendungsfalldienst im begrenzten Threadpool. Generator und Verbrauchspuffer bleiben anfragebezogen; kein DSPy-Programm wurde verändert.
+- Abgabe-Eingaberegeln sind frameworkunabhängig; Worker-Kontext-/Ergebnispersistenz ist von der Ablaufsteuerung getrennt. H5P-Dienstrouter sind in Erstellung/Import, Player/Review und Ajax/Ergebnisweiterleitung gegliedert. Middleware-, Transaktions- und API-Grenzen bleiben erhalten.
+- Zusätzlicher Bestandsbefund TD-010: nicht übersetzter Sichtbarkeitsfehler beim Dialogstart und eigene gespeicherte Dialoge, die nach Entzug weiterhin lesbar sind. Im echten DB-Test charakterisiert, nicht als erledigt ausgegeben.
+
+Die vollständige Provider-Migration und weitere Abgabe-/Workerphasen sind noch nicht abgeschlossen. Gezielte Nachweise, Gesamtlauf und konkrete Restarbeiten stehen im verlinkten Detailplan; frühere Zwischenstandsangaben weiter oben sind historische Nachweise.

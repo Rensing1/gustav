@@ -27,6 +27,8 @@ def test_h5p_service_wraps_async_routes_and_has_error_middleware() -> None:
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
 
     js = server_path.read_text(encoding="utf-8")
+    for module in ("lib/route_helpers.mjs", "routes/authoring.mjs", "routes/player.mjs", "routes/ajax.mjs"):
+        js += (server_path.parent / module).read_text(encoding="utf-8")
 
     # Contract: define a wrapper for async route handlers and use it consistently.
     assert "function asyncHandler" in js or "const asyncHandler" in js
@@ -50,4 +52,3 @@ def test_h5p_service_wraps_async_routes_and_has_error_middleware() -> None:
 
     # Contract: a central error middleware exists for unhandled exceptions.
     assert "app.use((err, req, res" in js or "app.use(function (err, req, res" in js
-

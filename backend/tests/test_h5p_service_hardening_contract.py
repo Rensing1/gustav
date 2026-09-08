@@ -29,7 +29,7 @@ def _extract_block(src: str, *, start_token: str, end_token: str) -> str:
 
 def test_h5p_export_content_disposition_is_sanitized() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    server_path = repo_root / "h5p-service" / "server.mjs"
+    server_path = repo_root / "h5p-service" / "routes" / "authoring.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
     js = server_path.read_text(encoding="utf-8")
 
@@ -45,7 +45,7 @@ def test_h5p_export_content_disposition_is_sanitized() -> None:
 
 def test_h5p_finisheddata_does_not_read_or_log_upstream_response_body() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    server_path = repo_root / "h5p-service" / "server.mjs"
+    server_path = repo_root / "h5p-service" / "routes" / "ajax.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
     js = server_path.read_text(encoding="utf-8")
 

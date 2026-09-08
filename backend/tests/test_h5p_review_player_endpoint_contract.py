@@ -18,7 +18,7 @@ from pathlib import Path
 
 def test_h5p_service_has_review_player_route() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    server_path = repo_root / "h5p-service" / "server.mjs"
+    server_path = repo_root / "h5p-service" / "routes" / "player.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
 
     js = server_path.read_text(encoding="utf-8")

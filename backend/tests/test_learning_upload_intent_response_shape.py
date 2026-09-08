@@ -53,10 +53,9 @@ async def _client() -> httpx.AsyncClient:
 @pytest.mark.anyio
 async def test_upload_intent_response_does_not_include_method(monkeypatch: pytest.MonkeyPatch) -> None:
     # Force adapter to a fake one; ensure proxy is disabled for stable URL shape
-    learning.set_storage_adapter(_FakeAdapter())
     monkeypatch.setattr(
         main.app.state, "learning_upload_intent_providers",
-        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo()),
+        LearningUploadIntentProviders(repository=lambda: VisibleLearningRepo(), storage=lambda: _FakeAdapter()),
     )
     monkeypatch.setenv("ENABLE_STORAGE_UPLOAD_PROXY", "false")
 

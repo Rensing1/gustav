@@ -1,6 +1,5 @@
 """Explicit DB, signing and bounded-download dependencies for learner materials."""
 
-import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
@@ -10,6 +9,7 @@ from fastapi import Request
 from starlette.concurrency import run_in_threadpool
 
 from backend.learning.repo_db import DBLearningRepo
+from backend.storage.supabase_factory import build_storage_adapter as _build_storage_adapter
 from backend.teaching.storage import StorageAdapterProtocol
 from backend.web.material_file_access import (
     StudentMaterialAssetMetadata,
@@ -92,25 +92,6 @@ class LearningMaterialProviders:
         return await self.download(url=url, max_bytes=max_bytes, headers=headers)
 
 
-def _build_storage_adapter() -> StorageAdapterProtocol:
-    """Build the existing server-side adapter from the standard production ENV.
-
-    Storage3 accepts the service key directly, as in the course lifecycle worker.
-    No route globals or alternate local hosts are involved. Failed construction
-    raises so the lazy factory can retry instead of caching an unavailable client.
-    """
-    base_url = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
-    service_key = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
-    if not base_url or not service_key:
-        raise RuntimeError("storage_not_configured")
-    from storage3._sync.client import SyncStorageClient
-
-    from backend.teaching.storage_supabase import SupabaseStorageAdapter
-
-    client = SyncStorageClient(
-        f"{base_url}/storage/v1", {"Authorization": f"Bearer {service_key}", "apikey": service_key}
-    )
-    return SupabaseStorageAdapter(client)
 
 
 def create_learning_material_providers(

@@ -11,9 +11,9 @@ class UnitCatalogRepository(Protocol):
     def list_courses_for_teacher(
         self, *, teacher_id: str, limit: int, offset: int
     ) -> list[dict]: ...
-    def list_course_units_for_owner(self, course_id: str, owner_sub: str) -> list[dict]: ...
+    def list_catalog_course_refs(self, *, owner_sub: str, course_ids: list[str]) -> list[dict]: ...
     def list_units_for_author(self, *, author_id: str, limit: int, offset: int) -> list[dict]: ...
-    def list_sections_for_author(self, unit_id: str, author_id: str) -> list[dict]: ...
+    def list_catalog_section_summaries(self, *, owner_sub: str, unit_ids: list[str]) -> dict[str, dict]: ...
 
 
 class UnitCatalogService:
@@ -34,17 +34,18 @@ class UnitCatalogService:
     def course_refs(self, owner_sub: str, courses: list[dict]) -> dict[str, list[dict]]:
         """Associate units only with owner-scoped course reads."""
         refs = {}
-        for course in courses:
-            for unit in self.repository.list_course_units_for_owner(course["id"], owner_sub):
-                unit_id = str(unit.get("id") or "")
-                if unit_id:
-                    refs.setdefault(unit_id, []).append(
-                        {
-                            "id": course["id"],
-                            "title": course["title"],
-                            "href": f"/teaching/courses/{course['id']}",
-                        }
-                    )
+        if not courses:
+            return refs
+        courses_by_id = {course["id"]: course for course in courses}
+        for assignment in self.repository.list_catalog_course_refs(
+            owner_sub=owner_sub, course_ids=list(courses_by_id)
+        ):
+            unit_id = str(assignment.get("unit_id") or "")
+            course = courses_by_id.get(assignment.get("course_id"))
+            if unit_id and course:
+                refs.setdefault(unit_id, []).append(
+                    {"id": course["id"], "title": course["title"], "href": f"/teaching/courses/{course['id']}"}
+                )
         return refs
 
     def home(self, owner_sub: str) -> dict[str, object]:
@@ -79,18 +80,20 @@ class UnitCatalogService:
             owner_sub, courses if courses is not None else self.courses(owner_sub)
         )
         units = self.repository.list_units_for_author(author_id=owner_sub, limit=200, offset=0)
+        summaries = self.repository.list_catalog_section_summaries(
+            owner_sub=owner_sub, unit_ids=[str(unit["id"]) for unit in units]
+        ) if units else {}
 
         items: list[dict[str, object]] = []
 
         for unit in units:
             unit_id = str(unit.get("id") or "")
             refs = course_refs_by_unit.get(unit_id, [])
-            sections = self.repository.list_sections_for_author(unit_id, owner_sub)
-            sections_count = len(sections)
+            section_summary = summaries.get(unit_id, {})
+            sections_count = int(section_summary.get("count") or 0)
             courses_count = len(refs)
             last_activity = max(
-                [str(unit.get("updated_at") or "")]
-                + [str(section.get("updated_at") or "") for section in sections]
+                str(unit.get("updated_at") or ""), str(section_summary.get("updated_at") or "")
             )
             haystack = " ".join(
                 part.strip().lower()

@@ -8,9 +8,10 @@ import httpx
 import pytest
 from fastapi import FastAPI, Request
 
+from backend.web.learning_dialog_providers import LearningDialogProviders
+
 _dialog_routes = importlib.import_module("backend.web.routes.learning_dialogs")
 learning_dialog_router = _dialog_routes.learning_dialog_router
-set_dialog_dependencies = _dialog_routes.set_dialog_dependencies
 
 
 COURSE_ID = "11111111-1111-4111-8111-111111111111"
@@ -59,7 +60,7 @@ def _app(usecases: UseCases) -> FastAPI:
         return await call_next(request)
 
     app.include_router(learning_dialog_router)
-    set_dialog_dependencies(usecases=usecases)
+    app.state.learning_dialog_providers = LearningDialogProviders(usecases=lambda: usecases)
     return app
 
 

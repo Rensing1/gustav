@@ -27,7 +27,7 @@ def _load_h5p_server_source() -> str:
     repo_root = Path(__file__).resolve().parents[2]
     server_path = repo_root / "h5p-service" / "server.mjs"
     assert server_path.is_file(), f"Missing H5P service file: {server_path}"
-    return server_path.read_text(encoding="utf-8")
+    return server_path.read_text(encoding="utf-8") + (server_path.parent / "routes" / "player.mjs").read_text(encoding="utf-8")
 
 
 def test_h5p_sendjson_sets_private_no_store() -> None:

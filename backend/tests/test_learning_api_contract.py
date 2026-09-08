@@ -1272,11 +1272,11 @@ async def test_set_storage_adapter_updates_existing_learning_helpers_after_reloa
     try:
         fresh_learning.set_storage_adapter(adapter)
         assert fresh_learning.STORAGE_ADAPTER is adapter
-        assert upload_intents._current_storage_adapter() is adapter
+        assert not hasattr(upload_intents, "_current_storage_adapter")
         assert storage_validation._current_storage_adapter() is adapter
     finally:
         fresh_learning.set_storage_adapter(original_adapter)
-        assert upload_intents._current_storage_adapter() is original_adapter
+        assert not hasattr(upload_intents, "_current_storage_adapter")
         assert storage_validation._current_storage_adapter() is original_adapter
 
 

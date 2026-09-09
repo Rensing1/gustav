@@ -1,5 +1,7 @@
 # Paket 4: Browser-Befundkatalog der Lernenden-Arbeitsfläche
 
+Nachtrag vom 9. September: Diese Untersuchung war für einen plattformweiten Designvergleich zu eng. Insbesondere fehlten die abweichenden Buttons in `/learning/practice` und die Lehrkraftseiten. Der [rollenübergreifende Ergänzungskatalog](2026-09-09-design-befundkatalog.md) dokumentiert diese Lücke und die neue Browserprüfung; die folgenden älteren Befunde bleiben als gesonderte Aufgabenraum-Stichprobe erhalten.
+
 Stand: 8. September 2026. Ergebnis: **sieben bestätigte Abweichungen und ein Gestaltungsvorschlag**, dazu zwei gesonderte Prüfhinweise. Dies ist eine priorisierte Browser-Stichprobe, keine vollständige Freigabe der Oberfläche und noch kein Implementierungsauftrag für einzelne Lösungen.
 
 ## Grundlage und Reichweite

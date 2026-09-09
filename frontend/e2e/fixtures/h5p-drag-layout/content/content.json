@@ -1,0 +1,347 @@
+{
+  "scoreShow": "Auswerten",
+  "tryAgain": "Erneut versuchen",
+  "scoreExplanation": "Jede richtige Zuordnung ergibt einen Punkt.",
+  "question": {
+    "settings": {
+      "size": {
+        "width": 600,
+        "height": 900
+      }
+    },
+    "task": {
+      "elements": [
+        {
+          "x": 3,
+          "y": 6,
+          "width": 16,
+          "height": 5,
+          "dropZones": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "type": {
+            "library": "H5P.AdvancedText 1.1",
+            "params": {
+              "text": "<p>Testbegriff 1</p>"
+            },
+            "subContentId": "2949d8bc-663b-4424-b549-ffaec0b228a8",
+            "metadata": {
+              "contentType": "Text",
+              "license": "U",
+              "title": "Testbegriff 1",
+              "authors": [],
+              "changes": []
+            }
+          },
+          "backgroundOpacity": 100,
+          "multiple": false
+        },
+        {
+          "x": 3,
+          "y": 22,
+          "width": 16,
+          "height": 5,
+          "dropZones": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "type": {
+            "library": "H5P.AdvancedText 1.1",
+            "params": {
+              "text": "<p>Testbegriff 2</p>"
+            },
+            "subContentId": "d6b751c8-946b-4de1-98ac-f5be046c21fa",
+            "metadata": {
+              "contentType": "Text",
+              "license": "U",
+              "title": "Testbegriff 2",
+              "authors": [],
+              "changes": []
+            }
+          },
+          "backgroundOpacity": 100,
+          "multiple": false
+        },
+        {
+          "x": 3,
+          "y": 38,
+          "width": 16,
+          "height": 5,
+          "dropZones": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "type": {
+            "library": "H5P.AdvancedText 1.1",
+            "params": {
+              "text": "<p>Testbegriff 3</p>"
+            },
+            "subContentId": "61c3aaa4-e026-4954-a7fc-04c1fd50f004",
+            "metadata": {
+              "contentType": "Text",
+              "license": "U",
+              "title": "Testbegriff 3",
+              "authors": [],
+              "changes": []
+            }
+          },
+          "backgroundOpacity": 100,
+          "multiple": false
+        },
+        {
+          "x": 3,
+          "y": 54,
+          "width": 16,
+          "height": 5,
+          "dropZones": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "type": {
+            "library": "H5P.AdvancedText 1.1",
+            "params": {
+              "text": "<p>Testbegriff 4</p>"
+            },
+            "subContentId": "97861a7e-5f58-43ff-945f-c673d629b5a3",
+            "metadata": {
+              "contentType": "Text",
+              "license": "U",
+              "title": "Testbegriff 4",
+              "authors": [],
+              "changes": []
+            }
+          },
+          "backgroundOpacity": 100,
+          "multiple": false
+        },
+        {
+          "x": 3,
+          "y": 70,
+          "width": 16,
+          "height": 5,
+          "dropZones": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "type": {
+            "library": "H5P.AdvancedText 1.1",
+            "params": {
+              "text": "<p>Testbegriff 5</p>"
+            },
+            "subContentId": "56c6869a-e2cb-4c02-ae92-41cc92960ca5",
+            "metadata": {
+              "contentType": "Text",
+              "license": "U",
+              "title": "Testbegriff 5",
+              "authors": [],
+              "changes": []
+            }
+          },
+          "backgroundOpacity": 100,
+          "multiple": false
+        },
+        {
+          "x": 3,
+          "y": 86,
+          "width": 16,
+          "height": 5,
+          "dropZones": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "type": {
+            "library": "H5P.AdvancedText 1.1",
+            "params": {
+              "text": "<p>Testbegriff 6</p>"
+            },
+            "subContentId": "812b27e5-9edc-4186-91d9-12126bdc0477",
+            "metadata": {
+              "contentType": "Text",
+              "license": "U",
+              "title": "Testbegriff 6",
+              "authors": [],
+              "changes": []
+            }
+          },
+          "backgroundOpacity": 100,
+          "multiple": false
+        }
+      ],
+      "dropZones": [
+        {
+          "x": 53,
+          "y": 6,
+          "width": 16,
+          "height": 5,
+          "correctElements": [
+            "0"
+          ],
+          "showLabel": true,
+          "backgroundOpacity": 100,
+          "tipsAndFeedback": {
+            "tip": ""
+          },
+          "single": true,
+          "autoAlign": true,
+          "label": "<div>Feld 1</div>"
+        },
+        {
+          "x": 53,
+          "y": 22,
+          "width": 16,
+          "height": 5,
+          "correctElements": [
+            "1"
+          ],
+          "showLabel": true,
+          "backgroundOpacity": 100,
+          "tipsAndFeedback": {
+            "tip": ""
+          },
+          "single": true,
+          "autoAlign": true,
+          "label": "<div>Feld 2</div>"
+        },
+        {
+          "x": 53,
+          "y": 38,
+          "width": 16,
+          "height": 5,
+          "correctElements": [
+            "2"
+          ],
+          "showLabel": true,
+          "backgroundOpacity": 100,
+          "tipsAndFeedback": {
+            "tip": ""
+          },
+          "single": true,
+          "autoAlign": true,
+          "label": "<div>Feld 3</div>"
+        },
+        {
+          "x": 53,
+          "y": 54,
+          "width": 16,
+          "height": 5,
+          "correctElements": [
+            "3"
+          ],
+          "showLabel": true,
+          "backgroundOpacity": 100,
+          "tipsAndFeedback": {
+            "tip": ""
+          },
+          "single": true,
+          "autoAlign": true,
+          "label": "<div>Feld 4</div>"
+        },
+        {
+          "x": 53,
+          "y": 70,
+          "width": 16,
+          "height": 5,
+          "correctElements": [
+            "4"
+          ],
+          "showLabel": true,
+          "backgroundOpacity": 100,
+          "tipsAndFeedback": {
+            "tip": ""
+          },
+          "single": true,
+          "autoAlign": true,
+          "label": "<div>Feld 5</div>"
+        },
+        {
+          "x": 53,
+          "y": 86,
+          "width": 16,
+          "height": 5,
+          "correctElements": [
+            "5"
+          ],
+          "showLabel": true,
+          "backgroundOpacity": 100,
+          "tipsAndFeedback": {
+            "tip": ""
+          },
+          "single": true,
+          "autoAlign": true,
+          "label": "<div>Feld 6</div>"
+        }
+      ]
+    }
+  },
+  "overallFeedback": [
+    {
+      "from": 0,
+      "to": 49,
+      "feedback": "Prüfen Sie die Zuordnungen noch einmal."
+    },
+    {
+      "from": 50,
+      "to": 99,
+      "feedback": "Die meisten Zuordnungen stimmen. Prüfen Sie die übrigen."
+    },
+    {
+      "from": 100,
+      "to": 100,
+      "feedback": "Alle Zuordnungen sind richtig."
+    }
+  ],
+  "behaviour": {
+    "enableRetry": true,
+    "enableCheckButton": true,
+    "singlePoint": false,
+    "applyPenalties": false,
+    "enableScoreExplanation": false,
+    "dropZoneHighlighting": "always",
+    "autoAlignSpacing": 2,
+    "enableFullScreen": false,
+    "showScorePoints": true,
+    "showTitle": false
+  },
+  "grabbablePrefix": "Ziehbares Element {num} von {total}.",
+  "grabbableSuffix": "In Ablagefeld {num} abgelegt.",
+  "dropzonePrefix": "Ablagefeld {num} von {total}.",
+  "noDropzone": "Kein Ablagefeld.",
+  "tipLabel": "Hinweis anzeigen.",
+  "tipAvailable": "Hinweis verfügbar",
+  "correctAnswer": "Richtige Antwort",
+  "wrongAnswer": "Falsche Antwort",
+  "feedbackHeader": "Rückmeldung",
+  "scoreBarLabel": "Sie haben :num von :total Punkten erreicht.",
+  "scoreExplanationButtonLabel": "Punktevergabe anzeigen",
+  "a11yCheck": "Antworten auswerten. Die Zuordnungen werden als richtig, falsch oder unbeantwortet markiert.",
+  "a11yRetry": "Aufgabe erneut versuchen. Alle Zuordnungen werden zurückgesetzt.",
+  "localize": {
+    "fullscreen": "Vollbild",
+    "exitFullscreen": "Vollbild schließen"
+  }
+}

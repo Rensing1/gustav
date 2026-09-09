@@ -1908,6 +1908,9 @@
 }
 
 .h5p-task-player {
+  min-width: 0;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
@@ -5109,4 +5112,19 @@ button.learner-material-context__module-toggle:focus-visible,
     width: 100%;
     max-width: 100%;
   }
+}
+
+/* Prevent intrinsic H5P canvas widths from widening a grid track after resize. */
+.h5p-task-player > div {
+  min-width: 0;
+}
+
+.h5p-task-player h5p-player {
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+
+.h5p-task-player .h5p-content {
+  max-width: 100%;
 }

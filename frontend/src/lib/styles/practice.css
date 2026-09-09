@@ -381,6 +381,8 @@
 }
 
 .practice-task-card {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: var(--space-5);
 }

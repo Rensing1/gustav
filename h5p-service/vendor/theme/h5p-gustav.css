@@ -80,7 +80,7 @@ button.h5p-core-cancel-button {
 .h5peditor .h5p-joubelui-button {
   font-family: var(--font-base) !important;
   border-radius: var(--radius-full) !important;
-  background: var(--color-primary) !important;
+  background: var(--color-link, var(--color-primary)) !important;
   color: var(--color-bg-base) !important;
   border: 1px solid var(--color-border) !important;
   box-shadow: none !important;
@@ -647,4 +647,54 @@ button.h5p-core-cancel-button {
 
 .h5peditor .field.importance-high > .h5peditor-label-wrapper > .h5peditor-label {
   color: var(--color-primary);
+}
+
+/* DragQuestion owns its em-based geometry; theme only surfaces and states. */
+.h5p-dragquestion,
+.h5p-dragquestion .h5p-draggable,
+.h5p-dragquestion .h5p-dropzone > .h5p-inner,
+.h5p-dragquestion .h5p-label {
+  background: var(--color-bg-surface) !important;
+  color: var(--color-text) !important;
+}
+
+.h5p-dragquestion .h5p-draggable {
+  border: 1px solid var(--color-text-muted) !important;
+  box-shadow: none;
+}
+
+.h5p-dragquestion .h5p-label {
+  white-space: normal;
+  font-weight: 700;
+}
+
+.h5p-dragquestion .h5p-dq-highlight-dz-always .h5p-dropzone > .h5p-inner,
+.h5p-dragquestion .h5p-dropzone > .h5p-inner.h5p-active {
+  border: 2px dashed var(--color-text-muted) !important;
+}
+
+.h5p-dragquestion .h5p-draggable.h5p-dropped,
+.h5p-dragquestion .h5p-draggable.h5p-draggable-hover,
+.h5p-dragquestion .h5p-dropzone > .h5p-inner.h5p-over {
+  background: var(--color-bg-muted, var(--color-bg-surface)) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-link, var(--color-primary)) !important;
+}
+
+.h5p-dragquestion .h5p-draggable.h5p-correct,
+.h5p-dragquestion .h5p-dropzone.h5p-correct-answer {
+  border-color: var(--color-success) !important;
+  color: var(--color-success) !important;
+  background: var(--color-bg-surface) !important;
+}
+
+.h5p-dragquestion .h5p-draggable.h5p-wrong {
+  border-color: var(--color-danger, var(--color-error)) !important;
+  color: var(--color-danger, var(--color-error)) !important;
+  background: var(--color-bg-surface) !important;
+}
+
+.h5p-dragquestion [role="button"]:focus-visible {
+  outline: 3px solid var(--color-link, var(--color-primary));
+  outline-offset: 2px;
 }

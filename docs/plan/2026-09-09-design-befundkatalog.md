@@ -2,6 +2,8 @@
 
 Stand: 9. September 2026. Ergänzt um H5P und Auth auf ausdrücklichen Folgeauftrag. Konkrete Befunde sind von Gestaltungsvorschlägen und Prüfgrenzen getrennt. Noch keine Designimplementierung und keine vollständige Abnahme der Plattform.
 
+**Aktuellster Stand:** Die [abgeschlossene zusätzliche lokale Untersuchung mit DS-33 bis DS-35](2026-09-09-designaudit-zusatzlandschaft.md#abschluss-der-zusätzlichen-lokalen-untersuchung) ergänzt die [Restprüfung mit DS-26 bis DS-32](2026-09-09-designabschluss-restpruefung.md). Die freigegebene Zusatzlandschaft und lokale Mails ermöglichten jetzt auch echte Registrierung/Verifikation/Reset, Kursbeitritt, Datei-Abgaben, Dialogabschluss, weiteres H5P, Bilddruck und die Prüfung einer linearen Einheit sowie einer Klasse mit 24 Lernenden. Frühere „noch offen“-Absätze beschreiben historische Zwischenstände. Die repräsentative lokale Untersuchung ist abgeschlossen; Designreparaturen und ausdrücklich benannte externe Abnahmegrenzen bleiben offen. Nicht als fehlerfreie Plattformfreigabe lesen.
+
 ## Ergebnis in verständlicher Form
 
 GUSTAV hat bereits eine erkennbare gemeinsame Gestaltung: kantige Flächen, klare Rahmen, Monospace-Beschriftungen für Aktionen und harte Schatten. Diese Sprache tragen die Lehrkraft-Startseite, die Katalogaktionen, der Kursbereich und auch der Kummerkasten für Lernende. Daneben bestehen andere Gestaltungen fort: die Übungsbuttons, die Kurserstellung, Teile der Dialoge und die Mitgliedersuche. Es geht deshalb nicht um ein neues Design für jede Rolle, sondern um das konsequente Anwenden derselben Regeln auf vergleichbare Elemente.
@@ -151,10 +153,10 @@ Zusätzliche Belegquelle: Zwei von Felix am 9. September bereitgestellte Screens
 
 - Die Artikelbeschriftungen und verschiebbaren Begriffe erscheinen im Verhältnis zu Aufgabenstellung und Plattformtext extrem klein. Die großen, fast vollbreiten Zuordnungsflächen verschärfen den Größenbruch. Ob Inhaltsautoring, interne Skalierung oder GUSTAV-CSS die Ursache ist, muss an genau diesem Inhalt untersucht werden.
 - In Dark bleiben die Begriffskarten hellgrau, während ihre Schrift sehr hell wird; dadurch sind die Begriffe kaum lesbar. Die H5P-Fläche wechselt nur teilweise passend zum Theme. Dies ist unabhängig von der offenen Größenursache ein sichtbarer Lesbarkeitsmangel.
-- „Auswerten“ ist in beiden Bildern sehr kontrastarm, „Aufgabe überspringen“ dagegen deutlich lesbar, aber anders gestaltet. Der tatsächliche Aktivierungszustand von „Auswerten“ lässt sich aus den Bildern nicht bestimmen. Nicht vorschnell einen deaktivierten Zustand als aktiven Kontrastfehler werten; Standard, deaktiviert, Fokus und aktiv müssen separat geprüft werden.
+- „Auswerten“ ist in beiden Bildern sehr kontrastarm, „Aufgabe überspringen“ dagegen deutlich lesbar, aber anders gestaltet. Felix hat ausdrücklich bestätigt, dass „Auswerten“ im gezeigten Zustand nicht deaktiviert ist. Damit liegt ein Lesbarkeitsfehler einer aktiven Aktion vor: nahezu weiße Schrift auf Weiß im Light Mode und dunkle Schrift auf dunkler Fläche im Dark Mode. Der Aktivierungszustand ist durch Felix bestätigt, nicht durch eigene DOM-Messung. Standard, deaktiviert und Fokus bleiben zusätzlich separat zu prüfen.
 - Der abgerundete H5P-Rahmen bestätigt DS-13 auch für einen realen Übungsinhalt. Die Formulierung „Ordnen Sie …“ weicht vom sonstigen Du ab; das ist zunächst Inhaltssprache, nicht automatisch ein Plattform- oder DSPy-Fehler.
 
-Nächster gezielter Nachweis: dieselbe Zuordnungsaufgabe in beiden Modi öffnen, Schrift-/Flächenmaße und Styles innen/außen getrennt ermitteln, einen echten Drag-/Tastaturablauf und den Wechsel des Auswerten-Zustands prüfen. Erst danach Ursache und Reparatur festlegen. Die separate, parallel erschienene H5P-Layout-Arbeit wird hier nicht als eigener erledigter Nachweis vereinnahmt.
+Nächster gezielter Nachweis: dieselbe Zuordnungsaufgabe in beiden Modi öffnen, Schrift-/Flächenmaße und Styles innen/außen getrennt ermitteln und einen echten Drag-/Tastaturablauf prüfen. Die aktive Auswerten-Aktion muss in beiden Modi klar lesbar sein; deaktivierte und fokussierte Varianten zusätzlich vergleichen. Erst danach Ursache und Reparatur festlegen. Die separate, parallel erschienene H5P-Layout-Arbeit wird hier nicht als eigener erledigter Nachweis vereinnahmt.
 
 ### DS-16 · P2 · H5P-Lehrkrafteditor im Dark Mode nur teilweise angepasst
 
@@ -166,16 +168,136 @@ Eigener Browsernachweis, Desktop und mobil: Der äußere Editorrahmen bleibt hel
 
 Teaching-Start, Kursaktionen, Lerneinheitenaktionen, Graph-Textwerkzeuge, KI-Nutzung und Lernenden-Kummerkasten teilen große Teile der kantigen Aktionssprache. Teaching und Practice brechen in den geprüften schmalen Ansichten auf eine Spalte um; der Practice-Start bleibt durch Scrollen erreichbar. Sein Tastaturfokus war sichtbar. Unterschiedliche Inhaltsbreiten für Graph, Listen und längere Lesetexte sind nicht automatisch Fehler. Rot für Destruktives und kompakte Symbolwerkzeuge sind ebenfalls keine grundsätzlichen Abweichungen.
 
+## Vertiefungen und weitere Prüfungen
+
+### Weitere Browserprüfung: Live, Diagnostik und Standardeditoren
+
+Fortsetzung am 9. September mit erneut erfolgreicher lokaler CA-Prüfung und regulärem Dev-Lehrkraft-Login. Browser-Skill: Bedienung und Sichtprüfung getrennt; persistenter lokaler Prüfcontroller mit gezielter Freigabe. Bestehende Produktänderungen wurden weder verändert noch neu gebaut. Damit beschreiben die Bilder den laufenden Stack, nicht automatisch den neuesten uncommitteten CSS-Stand. Keine Inhalte oder Lernleistungen gespeichert; nur Navigation, Ansichten, Reiter und Einstellungen geöffnet beziehungsweise geschlossen.
+
+Diese Tabelle erweitert die frühere Abdeckung; Live-/Diagnostikdetails und Standardeditoren sind nicht mehr pauschal als unbesucht zu behandeln:
+
+| Arbeitsfläche | Erreichter Zustand und Bedienung | Betrachtete Größen/Modi |
+| --- | --- | --- |
+| Live über `/live` | Kurs und Lerneinheit über Auswahlfelder gewählt; Schülerzeile geöffnet; vorhandene Textabgabe und H5P-Abgabe ohne Vorschau; Rückmeldungsreiter gewählt | Desktop Light/Dark; mobil Dark, oben und bis zum Detail gescrollt |
+| Diagnostik-Kursmatrix | Belegte Matrix direkt geöffnet, Lernendenname angeklickt | Desktop Light/Dark; mobil Light/Dark |
+| Diagnostik-Lernendenprofil | Vorhandenes Profil; Lerneinheiten-Link angeklickt und 404 abgewartet | Desktop Light/Dark; 404 Light |
+| Textmaterialeditor | Vorhandenes Material ausgewählt, geladene Formatierungsleiste und Inhalt betrachtet | Desktop Dark; mobil Dark. Frühe Light-Aufnahme zeigte noch die initiale Textarea und zählt nicht als vollständige Rich-Text-Sichtprüfung |
+| Native Aufgabe | Vorhandene Aufgabe mit zwei Kriterien geöffnet; weitere Einstellungen geöffnet und wieder geschlossen | Desktop Light/Dark; Kriterienbereich mobil Light |
+| Dateimaterialeditor | Vorhandenes Bildmaterial ausgewählt, Titel/Alternativtext und Dateiaktionen betrachtet | Desktop Light; keine neue Datei geöffnet oder hochgeladen |
+
+Die Mobilansicht ist weiterhin ein 390 × 844 CSS-Pixel-Viewport, kein echter Touchgerätetest; Desktop 1440 × 1000. Die Prüfungen zeigen vorhandene Ansichten mit einem synthetischen Lernenden, keine vollbesetzte Klasse. Kein umfassender Realtime-, Sortier-, Speicher- oder Fehlerzustandsnachweis. Kurzzeitige Zustände direkt nach Navigation wurden nicht als endgültiger Zielzustand gewertet.
+
+#### DS-18 · P2 · Aktiver Live-Reiter ist im Dark Mode kaum lesbar
+
+Reproduktion: `/live` → Kurs → Lerneinheit → Lernendenzeile → „Rückmeldung“ → Dark Mode. Gemessen am ausgewählten Reiter: Schrift `rgb(240, 241, 241)`, Hintergrund `rgba(255, 250, 243, 0.96)`, Radius 11,52 px. Auch beim zuvor ausgewählten „Abgabe“-Reiter sichtbar. Dies ist ein aktiver, ausgewählter Reiter, kein deaktivierter Button.
+
+Quelle: `frontend/src/lib/styles/teaching-workspace.css:100` und `:114`, `.workspace-tab` und `.workspace-tab--active`. Der feste helle Hintergrund erklärt den Konflikt mit der wechselnden Textfarbe. Zusätzlich weicht die runde Reitergestaltung von den unterstrichenen Reitern anderer Arbeitsflächen ab. Zuerst Lesbarkeit, anschließend gemeinsame Reitervarianten behandeln.
+
+![Aktiver Live-Reiter im Dark Mode](assets/2026-09-09-designdetails/live-active-tab-dark.png)
+
+#### DS-19 · P2 · Diagnostikdetails verwenden eine ältere Gestaltung ohne tragfähigen Dark Mode
+
+Kursmatrix und Lernendenprofil zeigen beigefarbene, stark gerundete Flächen, blaue Aktionen und runde „Neu laden“- beziehungsweise „Zur Kursmatrix“-Links. Im Dark Mode bleiben die Flächen hell, während Namen, Summenbeschriftungen und Lerneinheitentitel hell werden. Mehrere zentrale Angaben sind kaum lesbar. Dies konkretisiert den früheren Vorschlag DS-09: Nicht nur der Einstieg, sondern die tatsächlichen Detailseiten sind betroffen.
+
+Quellen: `frontend/src/routes/diagnostics/courses/[courseId]/+page.svelte:64` und `frontend/src/routes/diagnostics/learners/[studentSub]/+page.svelte`, lokale Styles mit festen hellen Flächen. Vergleich: Die aktuelle Live-Matrix wechselt ihre Hauptflächen passend mit dem Theme. Begleittexte wie „kursuebergreifenden Summaries“ und „Erste … Diagnostikansicht“ sind ebenfalls nicht konsistent mit verständlichen fertigen Plattformtexten; fachliche Fortschrittsberechnungen wurden hier nicht bewertet.
+
+![Diagnostik-Kursmatrix dunkel](assets/2026-09-09-designdetails/diagnostics-dark.png)
+
+![Diagnostik-Lernendenprofil dunkel](assets/2026-09-09-designdetails/diagnostics-profile-dark.png)
+
+#### DS-20 · P2 · Diagnostik-Kursmatrix verbreitert mobil die gesamte Seite
+
+Bei 390 px Viewport beträgt die Dokumentbreite 758 px. Nicht nur Tabellenspalten, sondern auch Einleitung und Außenkarte ragen rechts heraus. Das ist von einem bewusst intern horizontal scrollbaren Datenraster zu unterscheiden. Reproduziert in Light und Dark, Dark zusätzlich numerisch gemessen. Ziel: Seitenrahmen und Einleitung müssen in die Breite passen; falls nötig, darf nur die Matrix einen eigenen klar erkennbaren Scrollbereich erhalten.
+
+![Diagnostik-Kursmatrix mobil](assets/2026-09-09-designdetails/diagnostics-mobile-dark.png)
+
+#### DS-21 · P2 · Aufgabenleiste in Live unterscheidet Module nicht ausreichend
+
+Die 13 Aufgaben der Testlerneinheit erscheinen als schmale Farbfelder ohne sichtbare Titel oder Modulgruppen. Im zugänglichen DOM wiederholen sich Namen wie „1. Aufgabe: Noch offen“, weil mehrere Module ihre eigene Zählung haben. Quelle: `frontend/src/routes/live/+page.svelte:674`, Beschriftung aus `task.task_label` und Bewertung. Der Bildschirmbefund belegt fehlende sichtbare Kontextinformation; eine vollständige Hover-/Tooltip-Abnahme liegt noch nicht vor. Empfehlung: Modul und Aufgabentitel in der Orientierung berücksichtigen, nicht nur lokale Position und Farbe. Keine Farbskala ohne fachliche Beratung ändern.
+
+#### DS-22 · P2 · Diagnostik-Profil verlinkt auf eine nicht vorhandene Detailseite
+
+Normaler Klick auf die Lerneinheit im Lernendenprofil führt zu `/diagnostics/courses/[courseId]/units/[unitId]` und sichtbar „404 / Not Found“. Der Quellbaum enthält für diesen Pfad keine Svelte-Seite. Dies ist ein gesonderter Navigationsfehler, kein bloßes Stylingproblem. Die Fehlerseite enthält zudem keine kontextuelle Rückkehraktion und zeigt eine englische Meldung unter der allgemeinen Diagnostik-Einleitung.
+
+![Ziel des Diagnostik-Links](assets/2026-09-09-designdetails/diagnostics-unit-target.png)
+
+#### Positive Vergleichsergebnisse und weitere Grenzen
+
+Textmaterial- und native Aufgabenbearbeitung teilen eine kantige, lesbare Formatierungsleiste. Diese verteilt sich mobil auf mehrere Zeilen statt rechts abgeschnitten zu werden. „Änderungen speichern“, „Vorschau öffnen“ und „Herunterladen“ folgen der etablierten Hauptaktionsgestaltung. Die Kriterienverwaltung zeigt erste/letzte Verschiebungsrichtung passend deaktiviert; es wurde nichts verschoben. Die einzeiligen Kriterienfelder zeigen mobil allerdings nur einen Ausschnitt längerer Kriterien: als Dichte-/Lesbarkeitsvorschlag vormerken, nicht als Datenverlust ausgeben.
+
+![Materialeditor mit umgebrochener Werkzeugleiste](assets/2026-09-09-designdetails/material-editor-mobile.png)
+
+Weiter offen: übrige Aufgabentypen und deren Bearbeitungsdialoge, vollständig vergleichbare Graphzustände beider Rollen, Übungsrückmeldung und Zusammenfassung, reale Klassen mit vielen Lernenden, umfassende Tastatur-/Hover-Zustände sowie Auth-Folgeabläufe. Die leere Suche aus dem Prüfinventar wurde in diesem Durchgang mangels entsprechender Suche in den besuchten Ansichten nicht erneut geprüft; die vorherigen Suchstichproben bleiben bestehen. Der Durchgang liefert keine vollständige Plattformfreigabe.
+
+### Ursachenvertiefung: H5P-Theme-Vertrag (DS-17, P2)
+
+Fortsetzung am 9. September, reine Quellprüfung; keine neue Browserabnahme. Das H5P-Theme und das aktuelle Svelte-Theme verwenden teilweise unterschiedliche Variablennamen. Ein lesender Abgleich der `var(...)`-Referenzen in `h5p-service/vendor/theme/h5p-gustav.css` gegen Definitionen in `frontend/src/lib/styles/*.css` ergibt im untersuchten Arbeitsstand 29 unterschiedliche Referenzen, davon 16 ohne Definition in diesen Svelte-Styles:
+
+`--font-base`, `--color-primary`, `--focus-ring-width`, `--color-focus-ring`, `--focus-ring-offset`, `--radius-full`, `--color-error`, `--color-bg-overlay`, `--radius-md`, `--color-bg-hover`, `--color-bg-focus`, `--color-border-focus`, `--radius-lg`, `--text-sm`, `--text-base`, `--color-text-heading`.
+
+Das ist ein statischer Vertragsbefund, nicht die Behauptung von 16 unabhängig reproduzierten Darstellungsfehlern. Definitionen durch weitere Laufzeit-Styles, lokale Gültigkeitsbereiche und Fallbacks müssen bei der Browserprüfung berücksichtigt werden. Insbesondere enthält die parallele Reparatur bereits den Fallback `var(--color-link, var(--color-primary))` für JoubelUI-Buttons; diese Stelle ist deshalb nicht gleichzusetzen mit den verbleibenden direkten Verweisen.
+
+| Bereich | Konkreter Quellhinweis | Noch nötiger Nachweis |
+| --- | --- | --- |
+| Core-Buttons | `h5p-gustav.css:55` und `:69` verwenden weiterhin direkt `--color-primary` | Standard und Fokus eines tatsächlich genutzten Core-Buttons in Light/Dark |
+| Fokusrahmen | Unter anderem `:47`, `:104`, `:418` erwarten die drei alten Fokusvariablen | Mit Tastatur fokussieren; sichtbaren Rahmen prüfen, nicht nur Fokus im DOM |
+| Editorbeschriftungen | Unter anderem `:449` erwartet `--color-text-heading`, `:649` weiterhin `--color-primary` | Konkrete Beschriftung im geladenen Editor nach Theme-Wechsel messen |
+| Schrift und Formen | `--font-base`, `--radius-full`, `--radius-md` statt der aktuellen Schrift-/Radiusnamen | Tatsächliche Schrift und Ecken pro Bedienelement vergleichen; nicht blind alte Namen wieder einführen |
+
+Die Theme-Übertragung in `backend/web/static/js/h5p_task_editor.js:27` liest vorhandene Variablen vom Hauptdokument und kopiert sie ab Zeile 61 ins Editor-Dokument. Sie übersetzt keine alten Namen in neue. Ein fehlender Name wird durch diese Übertragung daher nicht automatisch ergänzt. Der Svelte-Lader `frontend/src/lib/runtime/h5p-task-editor.ts` verwendet genau diesen Editor-Einstieg. Das erklärt die technische Bruchstelle; die genaue Kaskade jedes sichtbaren Fehlers ist separat nachzuweisen.
+
+Abgrenzung zur parallelen Reparatur: Die aktuell uncommitteten Änderungen behandeln DragQuestion-Flächen, Zustände, einen JoubelUI-Buttonhintergrund und intrinsische Gridbreiten. Der zugehörige Plan berichtet außerdem eine separate Inhaltskorrektur der em-Geometrie sowie einen roten Kontrasttest. Das sind fremde Arbeitsnachweise, hier weder erneut ausgeführt noch als abgeschlossen bestätigt. Die vorhandene Spec prüft DragQuestion, nicht alle Core-Buttons, Editorfelder oder Auth-Seiten. Ein grüner DragQuestion-Test wäre deshalb kein Erledigungsnachweis für DS-16/DS-17.
+
+Für eine spätere Reparatur zuerst Tests entwerfen: (1) benötigte H5P-Variablen und ihre wirksamen Werte im Player und Editor prüfen, (2) aktive Buttons und Editorbeschriftungen in beiden Modi messen, (3) Fokus mit echten Tastatureingaben prüfen, (4) mindestens einen weiteren tatsächlich genutzten Inhaltstyp neben DragQuestion einbeziehen. Ziel ist ein kleiner expliziter Theme-Vertrag, nicht zusätzliche unverbundene Einzelkorrekturen. Noch kein Implementierungsauftrag.
+
+## Ergänzter Rollenvergleich der Graphansichten
+
+Browserdurchgang am 9. September, reguläre getrennte Dev-Logins, erfolgreiche CA-Prüfung. Dieselbe modulare Lerneinheit mit drei Phasen und acht Modulen wurde in beiden Rollen betrachtet. Desktop 1440 × 1000, schmaler Viewport 390 × 844; keine Touchgeräte- oder umfassende Tastaturabnahme. Keine Module verschoben, Verbindungen geändert oder Lernleistungen gespeichert. Der laufende Stack wurde nicht neu gebaut.
+
+**Positiver Nachweis zur bisher offenen Anordnung:** Alle acht Modulknoten besitzen rollenübergreifend dieselben Graphkoordinaten und dieselben unskalierten Maße von 248 × 104 px. Auch die drei Phasenbänder stimmen in Position und Größe überein. Die sichtbare Verzweigung und Zusammenführung sind nach „Gesamtansicht“ gleich. Unterschiedliche Metadaten sind fachlich sinnvoll: Lehrkräfte sehen Inhaltszahlen, Lernende Fortschritt beziehungsweise fällige Übungen. Die frühere pauschale Sorge einer abweichenden Knotenanordnung ist für diese Testlerneinheit damit nicht bestätigt. Andere Graphgrößen und gespeicherte Ansichten sind damit nicht vollständig geprüft.
+
+Bediennachweise: In beiden Rollen Zoom hinein/heraus und „Gesamtansicht“ geklickt; Gesamtansichten separat visuell geprüft. Beim Lernenden zusätzlich Zoomfaktor 0,612385 → 0,734862 → 0,612385 gemessen. „Auswahl fokussieren“ stellt mobil Faktor 0,82 und einen lesbaren ausgewählten Knoten her. Ein vorhandenes Modul wurde über seinen Knoten geöffnet und über „Zum Lernpfad“ wieder verlassen. Light → Dark → Light durchgeführt. Der Interaktionsschalter der Lehrkraft und Änderungen am Graphen bleiben ungetestet. Ein erster zu enger Textselektor fand den Modulknoten nicht; nach Korrektur funktionierte der normale Klick. Dies ist kein Plattformfehler.
+
+![Lehrkraft: Gesamtansicht, nach Scrollen zu den Werkzeugen](assets/2026-09-09-graphvergleich/teacher-fit-light.png)
+
+![Lernende: dieselbe Graphstruktur in Gesamtansicht](assets/2026-09-09-graphvergleich/student-fit-light.png)
+
+#### DS-23 · P2 · Graphwerkzeug verliert im Dark Mode beim Hover sein Symbol
+
+„Gesamtansicht“ zeigt unter dem Mauszeiger einen nahezu weißen Hintergrund bei fast weißem Symbol. Am Lernendenbutton gemessen: Text-/Symbolfarbe `rgb(240, 241, 241)`, Hintergrund `rgb(244, 244, 244)`. Derselbe sichtbare Effekt trat bei der Lehrkraft auf. Der Button ist aktiv und funktioniert. Reproduktion: Dark Mode → Maus auf „Gesamtansicht“. Quelle zur Integration: `frontend/src/lib/components/ui/GraphViewportControls.svelte`; die Basisgestaltung in `frontend/src/lib/styles/teaching-workspace.css:2298` reicht für diesen Hover-Zustand nicht aus. Keine vollständige CSS-Kaskadenanalyse aller Werkzeugzustände. Ergänzt DS-07 um einen konkreten visuellen Fehler; die englischen Zoom-Bezeichnungen bestehen weiterhin.
+
+![Aktives Graphwerkzeug mit kaum sichtbarem Hover-Symbol](assets/2026-09-09-graphvergleich/student-mobile-hover-dark.png)
+
+#### DS-24 · P2 · Graph-Startausschnitt und verfügbare Bildschirmhöhe passen nicht zusammen
+
+Beim frischen Lehrkraftaufruf beginnt die 800 px hohe Graphfläche erst bei y ≈ 362 px. Auf dem 1000 px hohen Bildschirm liegen die unteren Phasen und die Werkzeuge daher außerhalb des ersten sichtbaren Bereichs. Zugleich nimmt Leerraum einen großen Teil der Fläche ein. Beim Lernenden ist initial ebenfalls nicht der gesamte Graph sichtbar; die Werkzeuge sind dort jedoch erreichbar. „Gesamtansicht“ korrigiert den Graphausschnitt, nicht die Höhe des umgebenden Seitenaufbaus. Der Klick auf die Lehrkraftwerkzeuge scrollt die Seite zu ihnen; die obige Vergleichsaufnahme ist deshalb ausdrücklich kein Startbild.
+
+Quellhinweis: `.teacher-flow-shell` in `frontend/src/lib/styles/teaching-workspace.css` verwendet `height: min(80vh, 56rem)` und `min-height: 44rem`; `.learning-unit-stage--graph` in `frontend/src/lib/styles/learning-unit.css:480` verwendet eine eigene Höhenregel. Empfehlung: den tatsächlich verbleibenden Platz nach Kopfbereich berücksichtigen und bewusst entscheiden, ob der Einstieg Gesamtüberblick oder lesbarer Modulfokus sein soll. Nicht die übereinstimmenden Knotenkoordinaten ändern, um ein Ausschnittproblem zu kaschieren.
+
+![Lehrkraft: tatsächlicher erster Bildschirmausschnitt](assets/2026-09-09-graphvergleich/teacher-light.png)
+
+#### DS-25 · P3 · Gesperrte Module und mobile Übersicht brauchen verständlichere Orientierung
+
+„Transferaufgabe“ und „Abschluss“ sind beim Lernenden tatsächlich deaktivierte Buttons, nicht bloß optisch blass. Ein Klick auf die umgebende Knotenfläche öffnet keine Erklärung. Die sichtbaren Knoten enthalten weder „Gesperrt“ noch eine Freischaltbedingung; der Button besitzt auch keinen erklärenden Titel. Anders als bei der aktiven H5P-Auswerten-Aktion ist der deaktivierte Zustand hier im DOM bestätigt. Die stark reduzierte Lesbarkeit betrifft aber die Orientierung über künftige Lernschritte und sollte nicht mit der deaktivierten Aktion gleichgesetzt werden. Quellen: `LearningGraphNode.svelte`, `disabled={!data.openable}`, und `teaching-workspace.css:2713`, zusätzliche Transparenz für gesperrte Knoten. Eine vollständige Screenreaderprüfung steht aus.
+
+In der mobilen Gesamtansicht werden alle acht Knoten zu einer kaum lesbaren Miniatur – in beiden Rollen, Light wie Dark beim Lernenden. Das ist kein horizontaler Dokumentüberlauf: Beide Seiten bleiben bei 390 px Dokumentbreite. Die vorhandene Fokusaktion verbessert die Lesbarkeit des ausgewählten Moduls, blendet dafür andere Bereiche aus. Als Beratungspunkt festhalten: Übersicht und lesbare Navigation deutlicher unterscheiden, gegebenenfalls eine ergänzende Modulliste anbieten; nicht vorschnell alle Knoten auf Mobilbreite umordnen.
+
+![Mobile Gesamtansicht im Dark Mode](assets/2026-09-09-graphvergleich/student-mobile-dark.png)
+
+![Fokusaktion macht das ausgewählte Modul wieder lesbar](assets/2026-09-09-graphvergleich/student-mobile-focus-dark.png)
+
+Abdeckung aktualisiert: Ein direkter Rollenvergleich gleicher Graphinhalte liegt jetzt vor. Offen bleiben weitere Graphgrößen, umfangreiche Tastatur-/Touch-/Fokuszustände, Bearbeitung und gespeicherte Ausschnitte. Die übrigen Aufgabentypen, Übungsabschluss und Auth-Folgeabläufe bleiben ebenfalls offen. Kein Nachweis vollständiger Designkonsistenz der Plattform. Der Browser-Skill hat insbesondere den Vergleich vor/nach Bedienung und die getrennte Beurteilung von Seitenbreite und tatsächlicher Lesbarkeit bestimmt.
+
 ## Empfohlene Reihenfolge für konsistente Weiterentwicklung
 
-1. DS-01, DS-02 und DS-06 als konkrete Lesbarkeits-/Layoutfehler behandeln. Vor Umsetzung jeweils gezielte fehlschlagende Tests für Dark-Mode-Eingabe, Drawerhöhen und Radioanordnung entwerfen.
+1. Die inzwischen belegten P1-Befunde DS-26 (Editor-Roundtrip mit Inline-Code) und DS-34 (normaler Bearbeitungsweg linearer Abschnitte) vorziehen. Danach Kontrast und mobile Nutzbarkeit einschließlich DS-01, DS-02, DS-06, Auth, Einladung, H5P, Live und Diagnostik behandeln. Vor Umsetzung jeweils gezielte fehlschlagende Tests entwerfen; Details stehen im aktuellen Abschlussbericht.
 2. Eine gemeinsame Aktionsbasis und Feldbasis anhand der vorhandenen Designregeln festlegen. Varianten nach Bedeutung benennen: primär, sekundär, klein/kontextuell, destruktiv; außerdem Standard, Hover, Fokus und deaktiviert. Practice und Kurserstellung als verpflichtende Vergleichsseiten aufnehmen.
 3. Dialoge und Schubladen anschließend auf diese Grundlagen bringen. Gleiche Aufgaben sollen gleich wirken; unterschiedliche Arbeitsabläufe bleiben erhalten.
-4. Offene Routen und Zustände aus der Abdeckungstabelle ergänzen, bevor eine plattformweite Freigabe behauptet wird. Graphen dabei immer für beide Rollen mit denselben Inhalten vergleichen. Diagnose-Einstieg und Aktionsgewichtung gesondert beraten.
+4. Bei der späteren Freigabe die im aktuellen Abschlussbericht benannten Geräte-/IServ-/Accessibility-Grenzen beachten. Die repräsentativen lokalen Routennachweise liegen inzwischen vor. Graphen bei Reparaturen weiterhin für beide Rollen mit denselben Inhalten vergleichen. Diagnose-Einstieg und Aktionsgewichtung gesondert beraten.
 5. Bei einer späteren Implementierung einen gezielten authentifizierten Browser-Akzeptanztest samt `make verify-feature FEATURE=<konkrete-spec>` zuordnen und zusätzlich echte Vergleichsscreenshots prüfen. Bestandene Funktions- oder Komponententests allein beweisen keine visuelle Konsistenz.
 
 DSPy, Optimierung und KI-Inhalte bleiben außerhalb dieses Designauftrags. Der Browser-Skill hat die Trennung zwischen Sichtprüfung, Bedienprüfung und ausdrücklich offenen Zuständen bestimmt; Produktcode, API und Schema wurden nicht geändert.
 
 ## Repository-Prüfung
 
-`PYTEST_ADDOPTS=-rs make verify` erfolgreich (Exit 0). Der Lauf prüft die technische Basis, nicht die visuelle Konsistenz. Während der Untersuchung neu erschienene, fremde H5P-Test-/Plan-Dateien bleiben unangetastet und gehören nicht zu dieser Dokumentationsänderung.
+`make verify` wurde nach Abschluss der zusätzlichen Untersuchung erneut erfolgreich ausgeführt (Exit 0). Einzelzahlen und Grenzen stehen im [aktuellen Prüfvermerk](2026-09-09-designaudit-zusatzlandschaft.md#abschließende-repository-prüfung). Der Lauf prüft die technische Basis, nicht die visuelle Konsistenz. `git diff --check` und die lokalen Bild-/Dokumentverweise wurden zusätzlich geprüft. Die parallele H5P-Reparatur gehört nicht zu dieser Dokumentationsänderung; kein Push.

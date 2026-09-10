@@ -8,10 +8,13 @@ describe("auth theme contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const cssSource = readFileSync(path.resolve(currentDir, "auth-theme.css"), "utf8");
 
-    expect(cssSource).toContain("--auth-color-accent: #ff512f;");
-    expect(cssSource).toContain("--auth-color-bg-base: #f9f9f9;");
-    expect(cssSource).toContain('--auth-font-display: "Space Grotesk", "Manrope", "Inter", sans-serif;');
-    expect(cssSource).toContain("--auth-color-shadow: 4px 4px 0 0 rgba(27, 27, 27, 0.98);");
+    expect(cssSource).toContain("--auth-color-accent: var(--color-accent);");
+    expect(cssSource).toContain("--auth-color-bg-base: var(--color-bg-base);");
+    expect(cssSource).toContain("--auth-font-display: var(--font-display);");
+    expect(cssSource).toContain("--auth-color-shadow: var(--color-shadow);");
+    expect(cssSource).toContain("--auth-color-primary-button-text: var(--color-on-accent);");
+    expect(cssSource).toContain("box-sizing: border-box;");
+    expect(cssSource).toContain("min-height: var(--layout-control-min);");
     expect(cssSource).toMatch(/\.design-auth-frame,[\s\S]*?border-radius:\s*0;/s);
     expect(cssSource).toMatch(/\.design-auth-frame,[\s\S]*?box-shadow:\s*var\(--auth-color-shadow\);/s);
     expect(cssSource).toMatch(/\.design-auth-frame,[\s\S]*?width:\s*min\(100%,\s*31\.5rem\);/s);

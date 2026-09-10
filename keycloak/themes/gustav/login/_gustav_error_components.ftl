@@ -15,14 +15,6 @@
   <#return has_realm_segment && has_account_target>
 </#function>
 
-<#function is_login_action_link link="">
-  <#if !(link?has_content)>
-    <#return false>
-  </#if>
-  <#local normalized = link?trim?lower_case>
-  <#return normalized?contains("/login-actions/") || normalized?starts_with("login-actions/")>
-</#function>
-
 <#function is_allowed_app_link link="" trustedBaseUrl="">
   <#if !(link?has_content)>
     <#return false>
@@ -62,26 +54,10 @@
   <#return "">
 </#function>
 
-<#macro render_recovery_links appLink="">
+<#macro render_recovery_links>
+  <#-- Trusted deployment origin only; never use a request-supplied return address on errors. -->
   <div class="kc-links">
-    <#assign has_item = false>
-    <#local login_url = (url.loginUrl)!"">
-    <#local registration_url = (url.registrationUrl)!"">
-    <#local registration_allowed = (realm.registrationAllowed)!false>
-    <#if appLink?has_content>
-      <a href="${appLink}">${msg("gustavBackToApp")}</a>
-      <#assign has_item = true>
-    </#if>
-    <#if login_url?has_content && !is_login_action_link(login_url)>
-      <#if has_item><span> · </span></#if>
-      <a href="${login_url}">${msg("gustavTryLoginAgain")}</a>
-      <#assign has_item = true>
-    </#if>
-    <#if registration_allowed && registration_url?has_content && !is_login_action_link(registration_url)>
-      <#if has_item><span> · </span></#if>
-      <a href="${registration_url}">${msg("doRegister")}</a>
-      <#assign has_item = true>
-    </#if>
+    <a href="${properties.gustavAppOrigin?remove_ending("/")}/auth/login">${msg("gustavTryLoginAgain")}</a>
   </div>
 </#macro>
 

@@ -4,6 +4,11 @@ RUN apk add --no-cache curl \
  && curl -L "https://github.com/leroyguillaume/keycloak-bcrypt/releases/download/v${KEYCLOAK_BCRYPT_VERSION}/keycloak-bcrypt-${KEYCLOAK_BCRYPT_VERSION}.jar" \
         --output /tmp/keycloak-bcrypt-${KEYCLOAK_BCRYPT_VERSION}.jar
 
+FROM node:24.18.0-alpine AS auth-fonts
+WORKDIR /fonts
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+
 FROM python:3.12-alpine AS realm-renderer
 ARG ALLOWED_REGISTRATION_DOMAINS=
 WORKDIR /work
@@ -26,6 +31,10 @@ COPY keycloak/themes/gustav /opt/keycloak/themes/gustav
 # Copy the shared auth stylesheet into the theme so Svelte entry pages and
 # Keycloak-hosted flows speak the same visual language without runtime mounts.
 COPY frontend/src/lib/styles/auth-theme.css /opt/keycloak/themes/gustav/login/resources/css/auth-theme.css
+COPY frontend/src/lib/styles/theme-tokens.css /opt/keycloak/themes/gustav/login/resources/css/theme-tokens.css
+# Reuse the locked font packages including their licences; no cross-origin font requests.
+COPY --from=auth-fonts /fonts/node_modules/@fontsource/inter /opt/keycloak/themes/gustav/login/resources/fonts/inter
+COPY --from=auth-fonts /fonts/node_modules/@fontsource/space-grotesk /opt/keycloak/themes/gustav/login/resources/fonts/space-grotesk
 
 # Install bcrypt password hash provider so imported Supabase hashes remain valid.
 # Source: https://github.com/leroyguillaume/keycloak-bcrypt (Apache-2.0)

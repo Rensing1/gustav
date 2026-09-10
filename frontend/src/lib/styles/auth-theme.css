@@ -1,47 +1,37 @@
-:root {
-  --auth-color-bg-base: #f9f9f9;
-  --auth-color-surface: #ffffff;
-  --auth-color-surface-muted: #f3f3f4;
-  --auth-color-text: #1a1c1c;
-  --auth-color-text-muted: #5c5c5c;
-  --auth-color-accent: #ff512f;
-  --auth-color-accent-soft: rgba(255, 81, 47, 0.14);
-  --auth-color-border: #1b1b1b;
-  --auth-color-line: rgba(27, 27, 27, 0.14);
-  --auth-color-danger: #ba1a1a;
-  --auth-font-display: "Space Grotesk", "Manrope", "Inter", sans-serif;
-  --auth-font-body: "Inter", "Work Sans", "Nunito", sans-serif;
-  --auth-font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --auth-color-primary-button: #ff512f;
-  --auth-color-primary-button-text: #ffffff;
-  --auth-color-focus: rgba(255, 81, 47, 0.2);
-  --auth-color-shadow: 4px 4px 0 0 rgba(27, 27, 27, 0.98);
-  --auth-color-button-shadow: 4px 4px 0 0 rgba(27, 27, 27, 0.98);
-  --auth-radius-s: 0;
-  --auth-radius-l: 2px;
-  --auth-dot-color: rgba(27, 27, 27, 0.14);
-  --app-bg-dot-color: var(--auth-dot-color);
+/* Resolve aliases at each theme scope, including the Svelte app shell. */
+:root,
+[data-theme] {
+  --auth-color-bg-base: var(--color-bg-base);
+  --auth-color-surface: var(--color-bg-surface);
+  --auth-color-surface-muted: var(--color-bg-muted);
+  --auth-color-text: var(--color-text);
+  --auth-color-text-muted: var(--color-text-muted);
+  --auth-color-accent: var(--color-accent);
+  --auth-color-accent-soft: var(--color-accent-soft);
+  --auth-color-border: var(--color-border);
+  --auth-color-line: var(--color-line);
+  --auth-color-danger: var(--color-danger);
+  --auth-font-display: var(--font-display);
+  --auth-font-body: var(--font-reading);
+  --auth-font-mono: var(--font-mono);
+  --auth-color-primary-button: var(--color-accent);
+  --auth-color-primary-button-text: var(--color-on-accent);
+  --auth-color-focus: var(--color-accent-soft);
+  --auth-color-shadow: var(--color-shadow);
+  --auth-color-button-shadow: var(--color-shadow);
+  --auth-radius-s: var(--radius-s);
+  --auth-radius-l: var(--radius-l);
+  --auth-color-link: var(--color-link);
 }
 
-[data-theme="dark"],
-html[data-theme="dark"] {
-  --auth-color-bg-base: #121212;
-  --auth-color-surface: #1a1a1a;
-  --auth-color-surface-muted: #1d1d1d;
-  --auth-color-text: #f0f1f1;
-  --auth-color-text-muted: #c6c6c6;
-  --auth-color-accent: #ff512f;
-  --auth-color-accent-soft: rgba(255, 81, 47, 0.2);
-  --auth-color-border: #f0f1f1;
-  --auth-color-line: rgba(240, 241, 241, 0.18);
-  --auth-color-danger: #ffb4ab;
-  --auth-color-primary-button: #ff512f;
-  --auth-color-primary-button-text: #ffffff;
-  --auth-color-focus: rgba(255, 81, 47, 0.24);
-  --auth-color-shadow: 4px 4px 0 0 rgba(240, 241, 241, 0.4);
-  --auth-color-button-shadow: 4px 4px 0 0 rgba(240, 241, 241, 0.4);
-  --auth-dot-color: rgba(240, 241, 241, 0.18);
-  --app-bg-dot-color: var(--auth-dot-color);
+.design-auth-shell,
+.design-auth-shell *,
+.design-auth-frame,
+.design-auth-frame *,
+.kc-auth-shell,
+.kc-auth-shell * {
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .design-auth-shell,
@@ -50,7 +40,7 @@ html[data-theme="dark"] {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: clamp(1.5rem, 3vw, 2.75rem);
+  padding: var(--space-5);
   background:
     radial-gradient(circle, var(--app-bg-dot-color) 1.35px, transparent 1.5px),
     linear-gradient(0deg, var(--auth-color-bg-base), var(--auth-color-bg-base));
@@ -75,7 +65,7 @@ html[data-theme="dark"] {
   border-radius: 0;
   background: var(--auth-color-surface);
   box-shadow: var(--auth-color-shadow);
-  padding: clamp(1.75rem, 3vw, 2.35rem);
+  padding: var(--space-5);
 }
 
 .kc-form-shell {
@@ -86,7 +76,7 @@ html[data-theme="dark"] {
 .design-auth-frame__eyebrow,
 .kc-auth-eyebrow {
   margin: 0 0 0.75rem;
-  color: var(--auth-color-accent);
+  color: var(--auth-color-link);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-size: 0.7rem;
@@ -140,7 +130,8 @@ html[data-theme="dark"] {
 .design-auth-frame__action.workspace-button,
 .kc-submit,
 .auth-submit {
-  min-height: 2.7rem;
+  min-height: var(--layout-control-min);
+  padding: var(--space-2) var(--space-4);
   border: 1px solid var(--auth-color-border);
   border-radius: var(--auth-radius-s);
   background: var(--auth-color-primary-button);
@@ -156,7 +147,7 @@ html[data-theme="dark"] {
 
 .design-auth-frame__action.workspace-button.workspace-button--ghost,
 .auth-actions .workspace-button--ghost {
-  min-height: 2.7rem;
+  min-height: var(--layout-control-min);
   padding: 0.42rem 0.82rem;
   border: 1px solid var(--auth-color-border);
   border-radius: var(--auth-radius-s);
@@ -195,7 +186,8 @@ html[data-theme="dark"] {
 input.kc-input,
 textarea.kc-input,
 select.kc-input {
-  min-height: 2.95rem;
+  min-height: var(--layout-control-min);
+  max-width: 100%;
   width: 100%;
   padding: 0.82rem 0.9rem;
   border: 1px solid var(--auth-color-border);
@@ -410,7 +402,7 @@ select.kc-input:focus {
 
 .kc-links a,
 .auth-links a {
-  color: var(--auth-color-accent);
+  color: var(--auth-color-link);
   font-family: var(--auth-font-mono);
   font-size: 0.76rem;
   font-weight: 700;
@@ -469,7 +461,7 @@ select.kc-input:focus {
   .kc-auth-card,
   .kc-card {
     width: min(100%, 100%);
-    padding: 1.25rem;
+    padding: var(--space-5);
   }
 
   .design-auth-frame__actions,

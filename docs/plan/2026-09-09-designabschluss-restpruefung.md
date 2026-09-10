@@ -26,11 +26,15 @@ Quellhinweis: `frontend/src/lib/components/learning-unit/tiptap-markdown-editor.
 
 ### DS-27 · P2 · Einladungsseite im Dark Mode nahezu weiß auf weiß
 
+**Reparaturstatus 10. September 2026: behoben.** Gültige und ungültige Einladung teilen den kantigen Auth-Rahmen und lesbare zentrale Farben. Vollständiges Gate `course-invite-registration` mit Registrierung, lokaler Verifikationsmail und Kursbeitritt bestanden; vier Breiten in beiden Darstellungen gesichtet, etwa [ungültige Einladung dunkel](assets/2026-09-10-designreparatur-paket3/invite-invalid-dark-390.png). Folgend der historische Befund.
+
 `/invite` ohne Einladungstoken erreicht regulär die ungültige Einladung. Die Karte bleibt weiß und stark gerundet, während Überschrift und Erklärung hell werden. Die separate Route `/invite/result` zeigt denselben Fehlertyp dagegen lesbar ohne weiße Karte. Reproduziert bei 390 px. Quelle: `frontend/src/routes/invite/+page.svelte`, `.invite-card` mit `var(--color-surface, #fff)` und eigenständigen Rundungen; die Darstellung eines gültigen Einladungslinks wurde mangels vorhandenen Links nicht simuliert.
 
 ![Ungültige Einladung im Dark Mode](assets/2026-09-09-restpruefung/invite-invalid-mobile-dark.png)
 
 ### DS-28 · P2 · Auth-Fehlerseite hat mobil verschachtelte, überbreite Karten
+
+**Reparaturstatus 10. September 2026: behoben.** Gemeinsamer einfacher Rahmen, passende Feldbreiten und fester sicherer Rückweg über GUSTAV. Vollständiges Gate `auth-design-consistency` prüft echten verbrauchten Resetlink und fremde Rücksprungadresse; [Fehleransicht dunkel](assets/2026-09-10-designreparatur-paket3/consumed-link-dark-320.png) tatsächlich gesichtet. Folgend der historische Befund.
 
 In einem separaten anonymen Browserkontext wurde das reguläre Loginformular geöffnet, dessen eigene Cookies entfernt und seine zuvor erhaltene Formularadresse erneut aufgerufen. Der Server zeigt daraufhin korrekt einen Cookie-Fehler. Dies ist ein echter Fehlerzustand, **kein Nachweis eines abgelaufenen E-Mail-Tokens**. Die Fehleransicht zeigt zwei gegeneinander versetzte Rahmen; der innere Rahmen ragt rechts aus dem Viewport. Deutsch-/English-Links stehen weit auseinander untereinander. Ein direkter Rückweg zur App wird im erreichten Zustand nicht angeboten, obwohl der Hinweis zum Neustart über die App auffordert.
 

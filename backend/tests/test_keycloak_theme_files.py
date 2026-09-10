@@ -74,6 +74,15 @@ def _resolve_login_template(name: str) -> Path:
     return tpl
 
 
+def _theme_text(template: Path) -> str:
+    """Inspect the shared frame with its consumer; browser tests verify rendered nesting."""
+    text = template.read_text(encoding="utf-8")
+    assert '<#import "_gustav_layout.ftl" as layout>' in text
+    assert "<@layout.document" in text
+    assert "<!DOCTYPE html>" not in text
+    return text + "\n" + (THEME_ROOT / "_gustav_layout.ftl").read_text(encoding="utf-8")
+
+
 def test_theme_messages_de_present_and_has_keys():
     msgs = THEME_ROOT / "messages" / "messages_de.properties"
     assert msgs.exists(), "messages_de.properties missing"
@@ -91,7 +100,7 @@ def test_theme_messages_de_present_and_has_keys():
 
 
 def test_theme_css_contains_component_hooks():
-    css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
+    css = Path("frontend/src/lib/styles/auth-theme.css")
     assert css.exists(), "auth-theme.css missing"
     text = css.read_text(encoding="utf-8")
     # Expected class hooks used by our FTL templates for compact layout
@@ -133,7 +142,7 @@ def test_theme_properties_globalize_keycloak_shell_classes():
 
 
 def test_theme_css_uses_auth_design_tokens_instead_of_legacy_palette():
-    css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
+    css = Path("frontend/src/lib/styles/auth-theme.css")
     text = css.read_text(encoding="utf-8")
 
     for token in [
@@ -156,13 +165,13 @@ def test_theme_global_template_and_footer_exist():
     footer = THEME_ROOT / "footer.ftl"
     assert template.exists(), "template.ftl missing"
     assert footer.exists(), "footer.ftl missing"
-    template_text = template.read_text(encoding="utf-8")
+    template_text = _theme_text(template)
     footer_text = footer.read_text(encoding="utf-8")
     for marker in [
         '<#macro registrationLayout',
         'css/auth-theme.css?v=${properties.gustavThemeVersion!"dev"}',
         'css/gustav.css?v=${properties.gustavThemeVersion!"dev"}',
-        'class="${properties.kcLoginClass!}"',
+        'class="kc-gustav kc-auth-shell"',
         '<@loginFooter.content',
     ]:
         assert marker in template_text, f"template.ftl should include {marker}"
@@ -172,7 +181,7 @@ def test_theme_global_template_and_footer_exist():
 
 def test_keycloak_auth_stylesheet_defines_global_primitives_for_latent_pages():
     """The shared auth stylesheet should define primitives used by inherited Keycloak templates."""
-    css = (THEME_ROOT / "resources" / "css" / "auth-theme.css").read_text(encoding="utf-8")
+    css = (Path("frontend/src/lib/styles/auth-theme.css")).read_text(encoding="utf-8")
     for marker in [
         ".kc-form-group",
         ".kc-input-wrapper",
@@ -189,7 +198,7 @@ def test_login_username_input_is_email():
     """Login template should use an email input for username field (accessibility/UX)."""
     tpl = (THEME_ROOT / "login.ftl")
     assert tpl.exists(), "login.ftl missing"
-    text = tpl.read_text(encoding="utf-8")
+    text = _theme_text(tpl)
     assert 'id="username"' in text, "username input missing"
     assert 'type="email"' in text, "username input should be type=email"
     assert 'autocomplete="email"' in text, "username input should have autocomplete=email"
@@ -203,7 +212,7 @@ def test_login_has_conditional_remember_me_checkbox():
     """
     tpl = (THEME_ROOT / "login.ftl")
     assert tpl.exists(), "login.ftl missing"
-    text = tpl.read_text(encoding="utf-8")
+    text = _theme_text(tpl)
     assert "realm.rememberMe" in text, "rememberMe block should be conditional on realm.rememberMe"
     assert 'name="rememberMe"' in text, "rememberMe checkbox name must be rememberMe"
     assert 'type="checkbox"' in text, "rememberMe control must be a checkbox input"
@@ -214,7 +223,7 @@ def test_update_password_templates_use_login_css_hooks():
     """Update-password templates should reuse the login layout hooks for consistency."""
     for name in ["update-password.ftl", "login-update-password.ftl"]:
         tpl = _resolve_login_template(name)
-        text = tpl.read_text(encoding="utf-8")
+        text = _theme_text(tpl)
         for cls in [
             "kc-card",
             "kc-title",
@@ -231,7 +240,7 @@ def test_keycloak_primary_forms_use_workspace_primitives() -> None:
     """Keycloak auth forms should reuse the same button and field primitives as Svelte auth pages."""
     for name in ["login.ftl", "register.ftl", "login-reset-password.ftl", "login-update-password.ftl", "update-password.ftl"]:
         tpl = _resolve_login_template(name)
-        text = tpl.read_text(encoding="utf-8")
+        text = _theme_text(tpl)
         assert "workspace-button" in text, f"{name} should opt into the shared workspace button primitive"
         assert "workspace-field" in text, f"{name} should opt into the shared workspace field primitive"
         assert 'class="kc-form-shell"' in text, f"{name} should wrap fields in a shared inner form shell"
@@ -241,7 +250,7 @@ def test_update_password_templates_use_keycloak_field_names():
     """Update-password form must use Keycloak's expected field names and autocomplete hints."""
     for name in ["update-password.ftl", "login-update-password.ftl"]:
         tpl = _resolve_login_template(name)
-        text = tpl.read_text(encoding="utf-8")
+        text = _theme_text(tpl)
         assert 'name="password-new"' in text, f"{name} must post password-new"
         assert 'name="password-confirm"' in text, f"{name} must post password-confirm"
         assert 'autocomplete="new-password"' in text, f"{name} should set autocomplete=new-password"
@@ -250,10 +259,10 @@ def test_update_password_templates_use_keycloak_field_names():
 def test_verify_email_template_uses_gustav_layout_hooks():
     """Verify-email page should keep the same compact GUSTAV layout."""
     tpl = _resolve_login_template("login-verify-email.ftl")
-    text = tpl.read_text(encoding="utf-8")
+    text = _theme_text(tpl)
     for marker in [
-        'class="kc-gustav"',
-        'class="kc-card"',
+        'class="kc-gustav kc-auth-shell"',
+        'class="kc-card kc-auth-card"',
         "gustav.css",
         "auth-theme.css",
     ]:
@@ -263,10 +272,10 @@ def test_verify_email_template_uses_gustav_layout_hooks():
 def test_info_template_uses_gustav_layout_hooks():
     """Info page should keep the same compact GUSTAV layout."""
     tpl = _resolve_login_template("info.ftl")
-    text = tpl.read_text(encoding="utf-8")
+    text = _theme_text(tpl)
     for marker in [
-        'class="kc-gustav"',
-        'class="kc-card"',
+        'class="kc-gustav kc-auth-shell"',
+        'class="kc-card kc-auth-card"',
         "gustav.css",
         "auth-theme.css",
     ]:
@@ -277,10 +286,10 @@ def test_error_templates_use_gustav_layout_and_deemphasized_locale_links():
     """Error pages should be branded and use shared helper macros for footer actions."""
     for name in ["error.ftl", "login-page-expired.ftl"]:
         tpl = _resolve_login_template(name)
-        text = tpl.read_text(encoding="utf-8")
+        text = _theme_text(tpl)
         for marker in [
-            'class="kc-gustav"',
-            'class="kc-card"',
+            'class="kc-gustav kc-auth-shell"',
+            'class="kc-card kc-auth-card"',
             "gustav.css",
             "auth-theme.css",
             '<#import "_gustav_error_components.ftl" as gustav_error>',
@@ -294,10 +303,10 @@ def test_error_templates_use_gustav_layout_and_deemphasized_locale_links():
 def test_logout_confirm_template_uses_gustav_layout_and_footer_links():
     """Logout confirmation should keep the GUSTAV auth shell instead of the parent Keycloak theme."""
     tpl = _resolve_login_template("logout-confirm.ftl")
-    text = tpl.read_text(encoding="utf-8")
+    text = _theme_text(tpl)
     for marker in [
-        'class="kc-gustav"',
-        'class="kc-card"',
+        'class="kc-gustav kc-auth-shell"',
+        'class="kc-card kc-auth-card"',
         "gustav.css",
         "auth-theme.css",
         '<#import "_gustav_error_components.ftl" as gustav_error>',
@@ -310,7 +319,7 @@ def test_logout_confirm_template_uses_gustav_layout_and_footer_links():
 def test_logout_confirm_template_references_logout_i18n_keys():
     """Logout confirmation should use explicit i18n keys for title, hint and CTAs."""
     tpl = _resolve_login_template("logout-confirm.ftl")
-    text = tpl.read_text(encoding="utf-8")
+    text = _theme_text(tpl)
     for key in [
         "gustavLogoutConfirmTitle",
         "gustavLogoutConfirmHint",
@@ -325,13 +334,11 @@ def test_error_templates_expose_context_specific_guidance_and_i18n_keys():
     helper_text = (THEME_ROOT / "_gustav_error_components.ftl").read_text(encoding="utf-8")
     expected = {
         "error.ftl": [
-            "gustavBackToApp",
             "gustavTryLoginAgain",
             "gustavAuthErrorTitle",
             "gustavAuthErrorGeneralHint",
         ],
         "login-page-expired.ftl": [
-            "gustavBackToApp",
             "gustavTryLoginAgain",
             "gustavAuthExpiredTitle",
             "gustavAuthErrorTokenHint",
@@ -339,11 +346,11 @@ def test_error_templates_expose_context_specific_guidance_and_i18n_keys():
     }
     for name, keys in expected.items():
         tpl = _resolve_login_template(name)
-        text = tpl.read_text(encoding="utf-8")
+        text = _theme_text(tpl)
         combined = text + "\n" + helper_text
         for key in keys:
             assert key in combined, f"{name} should reference i18n key {key}"
-        assert "pageRedirectUri" in text or "client.baseUrl" in text, f"{name} should include app-link fallback"
+        assert "pageRedirectUri" not in text and "client.baseUrl" not in text
         # Avoid text-parsing heuristics that are brittle across locale/version changes.
         assert "raw_summary" not in text, f"{name} should not parse message summary text"
         assert '?contains("cookie")' not in text, f"{name} should not infer state from text contains()"
@@ -464,33 +471,30 @@ def test_error_template_helper_guards_idp_account_target_edge_shapes():
         assert marker in text, f"_gustav_error_components.ftl should guard edge shape {marker}"
 
 
-def test_error_template_helper_suppresses_login_action_recovery_loops():
-    """Cookie-less error pages must not link back to login-actions URLs that recreate the same error."""
-    helper = THEME_ROOT / "_gustav_error_components.ftl"
-    text = helper.read_text(encoding="utf-8")
-
-    for marker in [
-        "<#function is_login_action_link",
-        'normalized?contains("/login-actions/")',
-        "!is_login_action_link(login_url)",
-        "!is_login_action_link(registration_url)",
-    ]:
-        assert marker in text, f"_gustav_error_components.ftl should include loop guard marker {marker}"
+def test_error_recovery_uses_only_the_trusted_app_origin():
+    """A fresh app login works without auth cookies and cannot be redirected by a request."""
+    text = (THEME_ROOT / "_gustav_error_components.ftl").read_text(encoding="utf-8")
+    recovery = text.split("<#macro render_recovery_links>", 1)[1].split("</#macro>", 1)[0]
+    assert '${properties.gustavAppOrigin?remove_ending("/")}/auth/login' in recovery
+    assert "pageRedirectUri" not in recovery
+    assert "url.loginUrl" not in recovery
+    assert "registrationUrl" not in recovery
+    properties = (THEME_ROOT / "theme.properties").read_text(encoding="utf-8")
+    assert "gustavAppOrigin=${env.ORIGIN:https://app.localhost}" in properties
 
 
-def test_error_templates_use_shared_primary_app_link_resolver():
-    """Error templates should use shared resolver instead of duplicated inline fallback chains."""
+def test_error_templates_use_shared_fixed_recovery():
     for name in ["error.ftl", "login-page-expired.ftl"]:
-        tpl = _resolve_login_template(name)
-        text = tpl.read_text(encoding="utf-8")
-        assert "resolve_primary_app_link" in text, f"{name} should use shared app-link resolver"
-        assert "<#if pageRedirectUri?has_content>" not in text, f"{name} should not duplicate inline app-link selection"
+        text = _theme_text(_resolve_login_template(name))
+        assert "<@gustav_error.render_recovery_links />" in text
+        assert "resolve_primary_app_link" not in text
+        assert "pageRedirectUri" not in text
 
 
 def test_info_template_uses_shared_primary_app_link_resolver_and_keeps_action_fallback():
     """Info template should use shared app-link resolver and keep actionUri recovery option."""
     tpl = _resolve_login_template("info.ftl")
-    text = tpl.read_text(encoding="utf-8")
+    text = _theme_text(tpl)
     assert '<#import "_gustav_error_components.ftl" as gustav_error>' in text
     assert "resolve_primary_app_link" in text, "info.ftl should use shared app-link resolver"
     assert "actionUri" in text, "info.ftl should keep actionUri fallback behavior"
@@ -498,9 +502,9 @@ def test_info_template_uses_shared_primary_app_link_resolver_and_keeps_action_fa
 
 def test_error_templates_normalize_optional_redirect_context_before_helper_call():
     """Keycloak may omit pageRedirectUri in error/info/expired contexts; templates must normalize it locally."""
-    for name in ["error.ftl", "info.ftl", "login-page-expired.ftl", "logout-confirm.ftl"]:
+    for name in ["info.ftl", "logout-confirm.ftl"]:
         tpl = _resolve_login_template(name)
-        text = tpl.read_text(encoding="utf-8")
+        text = _theme_text(tpl)
 
         assert '<#assign safe_page_redirect_uri = (pageRedirectUri)!""' in text, (
             f"{name} should define a safe redirect default with a parenthesized missing-value guard"
@@ -519,7 +523,7 @@ def test_error_templates_normalize_optional_redirect_context_before_helper_call(
 def test_info_template_enforces_exclusive_link_priority():
     """Info template should render one primary CTA with required-action safety priority."""
     tpl = _resolve_login_template("info.ftl")
-    text = tpl.read_text(encoding="utf-8")
+    text = _theme_text(tpl)
     for marker in [
         "<#assign safe_required_actions = (requiredActions)![]>",
         "<#assign has_required_actions = safe_required_actions?size gt 0>",
@@ -624,8 +628,22 @@ def test_email_templates_present_for_verification_and_reset():
 
 
 def test_keycloak_theme_copies_shared_auth_stylesheet():
-    css = THEME_ROOT / "resources" / "css" / "auth-theme.css"
+    css = Path("frontend/src/lib/styles/auth-theme.css")
     assert css.exists(), "Expected shared auth stylesheet for Keycloak theme"
+    dockerfile = Path("keycloak/Dockerfile").read_text(encoding="utf-8")
+    for name in ["auth-theme.css", "theme-tokens.css"]:
+        assert f"COPY frontend/src/lib/styles/{name} /opt/keycloak/themes/gustav/login/resources/css/{name}" in dockerfile
+    assert not (THEME_ROOT / "resources/css/auth-theme.css").exists(), "Do not maintain a second token source"
+
+
+def test_keycloak_ships_existing_platform_fonts_without_runtime_requests_to_the_app():
+    dockerfile = Path("keycloak/Dockerfile").read_text(encoding="utf-8")
+    layout = (THEME_ROOT / "_gustav_layout.ftl").read_text(encoding="utf-8")
+    for family in ["inter", "space-grotesk"]:
+        assert f"/node_modules/@fontsource/{family}" in dockerfile
+        assert f"fonts/{family}/latin-400.css" in layout
+        assert f"fonts/{family}/latin-700.css" in layout
+    assert "npm ci --omit=dev --ignore-scripts" in dockerfile
 
 
 def test_keycloak_templates_use_versioned_theme_stylesheet_links():
@@ -641,7 +659,7 @@ def test_keycloak_templates_use_versioned_theme_stylesheet_links():
         "login-page-expired.ftl",
     ]:
         tpl = _resolve_login_template(name)
-        text = tpl.read_text(encoding="utf-8")
+        text = _theme_text(tpl)
         assert 'css/auth-theme.css?v=${properties.gustavThemeVersion!"dev"}' in text, (
             f"{name} should version auth-theme.css for cache busting"
         )

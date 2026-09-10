@@ -40,7 +40,9 @@ import {
   handleAuthCallback,
   handleLogout,
   startContinuationFlow,
+  startForgotFlow,
   startLoginFlow,
+  startPasswordFlow,
   startRegisterFlow
 } from "./backend-auth";
 
@@ -133,6 +135,23 @@ describe("startRegisterFlow", () => {
     expect(location.searchParams.get("code_challenge_method")).toBe("S256");
     expect(flow.redirectPath).toBe("/invite/complete");
   });
+});
+
+describe("auth appearance hint", () => {
+  it.each([startLoginFlow, startRegisterFlow, startForgotFlow, startPasswordFlow])(
+    "passes only the validated appearance without weakening flow cookies",
+    (start) => {
+      for (const [cookie, expected] of [["dark", "dark"], ["light", "light"], ["https://evil.example", "light"]]) {
+        const cookies = new MemoryCookies();
+        cookies.store.set("gustav_theme", cookie);
+        const response = start(createEvent("https://app.localhost/auth/login", cookies, vi.fn() as never));
+        const target = new URL(response.headers.get("location") || "");
+        expect(target.searchParams.get("gustav_theme")).toBe(expected);
+        expect(target.origin).toBe("https://id.localhost");
+        for (const [, , options] of cookies.setCalls) expect(options).toMatchObject({ httpOnly: true, secure: true });
+      }
+    }
+  );
 });
 
 describe("handleAuthCallback", () => {

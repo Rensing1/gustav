@@ -49,9 +49,9 @@
   <meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<main class="invite-page">
-  <section class="invite-card" aria-live="polite">
-    <p class="invite-eyebrow">GUSTAV-Kurseinladung</p>
+<div class="invite-page">
+  <section class="invite-card design-auth-frame" aria-live="polite">
+    <p class="design-auth-frame__eyebrow">GUSTAV-Kurseinladung</p>
     {#if status === "loading"}
       <h1>Einladung wird geprüft …</h1>
       <p>Bitte warte einen Moment.</p>
@@ -65,27 +65,23 @@
         Gültig bis {new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeStyle: "short" }).format(new Date(preview.expires_at))}
       </p>
       <div class="invite-actions">
-        <button type="button" disabled={accepting} onclick={() => void accept("register")}>
+        <button class="workspace-link-action workspace-link-action--primary" type="button" disabled={accepting} onclick={() => void accept("register")}>
           Registrieren und beitreten
         </button>
-        <button class="secondary" type="button" disabled={accepting} onclick={() => void accept("login")}>
+        <button class="workspace-link-action" type="button" disabled={accepting} onclick={() => void accept("login")}>
           Anmelden und beitreten
         </button>
       </div>
       <p class="invite-privacy">Es werden keine Mitglieder-, Lehrkraft- oder E-Mail-Daten angezeigt.</p>
     {/if}
   </section>
-</main>
+</div>
 
 <style>
   .invite-page { align-items: center; display: flex; justify-content: center; min-height: 70vh; padding: 2rem 1rem; }
-  .invite-card { background: var(--color-surface, #fff); border: 1px solid var(--color-border, #ddd); border-radius: 1.25rem; box-shadow: 0 1rem 3rem rgb(0 0 0 / 8%); display: grid; gap: 1rem; max-width: 38rem; padding: clamp(1.5rem, 5vw, 3rem); width: 100%; }
+  .invite-card { display: grid; gap: var(--space-4); color: var(--color-text); overflow-wrap: anywhere; }
   .invite-card h1, .invite-card p { margin: 0; }
-  .invite-eyebrow { font-size: 0.8rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
   .invite-expiry { font-weight: 700; }
   .invite-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-  .invite-actions button { background: #111; border: 2px solid #111; border-radius: 999px; color: #fff; cursor: pointer; font: inherit; font-weight: 750; padding: 0.8rem 1.2rem; }
-  .invite-actions button:disabled { cursor: wait; opacity: 0.65; }
-  .invite-actions .secondary { background: transparent; color: var(--color-text, #111); }
-  .invite-privacy { color: var(--color-text-muted, #555); font-size: 0.9rem; }
+  .invite-privacy { color: var(--color-text-muted); font-size: 0.9rem; }
 </style>

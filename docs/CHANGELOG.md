@@ -2,6 +2,13 @@
 
 ## 2026-09-10
 
+### Designreparatur – Anmeldung und Einladungen
+
+- fix(auth): Gemeinsamer Keycloak-Rahmen und zentrale, beim Build übernommene Designwerte statt separat gepflegter CSS-Kopie. E-Mail-Beschriftung, passende Feldgrößen und sichtbare Darstellungsauswahl in den Auth-Schritten.
+- fix(auth): Ausschließlich validierter Light-/Dark-Hinweis aus GUSTAV; direkte Mailaufrufe berücksichtigen die Auth-Auswahl und Systemeinstellung. Fehlerseiten führen über eine feste GUSTAV-Anmeldung zurück, nicht über frei übergebene Adressen.
+- fix(invite): Gültige und ungültige Einladungen verwenden denselben kantigen, in beiden Darstellungen lesbaren Rahmen.
+- test: Beide vollständigen Feature-Gates mit lokalen Mailrundläufen und 64 gesichteten Bildern bestanden. Aktive lokale persönliche Konten besitzen eindeutige E-Mail-Adressen; keine Kontoumbenennung, IServ-, Cookie-, TLS- oder Schemaänderung.
+
 ### Designreparatur – gemeinsame Bedienelemente
 
 - fix(ui): Practice, Kataloge, Kurserstellung, Profilfelder und Mitgliederverwaltung verwenden gemeinsame Feld- und Aktionsgrößen. Normale Aktionen sind mindestens 44 px hoch; Checkboxen und Radiofelder behalten kompakte Auswahlflächen neben ihrer Beschriftung.

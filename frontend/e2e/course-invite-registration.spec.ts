@@ -7,10 +7,12 @@ import { e2eEmail, e2ePassword, emailDomain, webBase } from "./support/e2e-env";
 import { registerE2EUser } from "./support/e2e-run-state";
 import { ensureTeacherUser, useTemporaryRealmSmtp } from "./support/keycloak";
 import { startSmtpCapture } from "./support/smtp-capture";
+import { authPictures } from "./support/auth-design";
+import { contrastRatio, expectNoViewportOverflow } from "./support/layout-sanity";
 
 const password = e2ePassword;
 
-test("@feature-acceptance a new learner registers from the fullscreen QR link and joins the course", async ({ browser }) => {
+test("@feature-acceptance a new learner registers from the fullscreen QR link and joins the course", async ({ browser }, testInfo) => {
   test.setTimeout(120_000);
   const unique = Date.now();
   const teacherEmail = e2eEmail("teacher");
@@ -80,8 +82,30 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
     await teacher.keyboard.press("Escape");
     await expect(fullscreen).toBeHidden();
 
-    learnerContext = await newBrowserContext(browser, { baseURL: webBase });
+    learnerContext = await newBrowserContext(browser, { baseURL: webBase, locale: "de-DE" });
     const learner = await learnerContext.newPage();
+    for (const state of ["invalid", "valid"]) {
+      for (const theme of ["light", "dark"] as const) {
+        for (const width of [1440, 1024, 390, 320]) {
+          await learner.setViewportSize({ width, height: 900 });
+          // A hash-only transition does not remount Svelte's invitation capability reader.
+          await learner.goto("/");
+          await learner.goto(state === "valid" ? inviteUrl : "/invite#invalid");
+          await expect(learner.getByRole("heading", { name: state === "valid" ? courseTitle : "Diese Einladung ist nicht mehr gültig" })).toBeVisible();
+          await expect(learner.locator(".app-shell")).toHaveClass(/app-shell--auth-route/);
+          const toggle = learner.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
+          if (await toggle.count()) await toggle.click();
+          await expect(learner.locator(".app-shell")).toHaveAttribute("data-theme", theme);
+          const card = learner.locator(".invite-card");
+          await expect(card).toHaveCSS("border-radius", "0px");
+          await expectNoViewportOverflow(learner);
+          const palette = await card.evaluate((node) => ({ color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor }));
+          expect(contrastRatio(palette.color, palette.background)).toBeGreaterThanOrEqual(4.5);
+          await learner.screenshot({ path: testInfo.outputPath(`invite-${state}-${theme}-${width}.png`), fullPage: true });
+        }
+      }
+    }
+    await learner.goto("/");
     const invitePageResponse = await learner.goto(inviteUrl);
     expect(invitePageResponse?.headers()["cache-control"]).toBe("private, no-store");
     expect(invitePageResponse?.headers()["referrer-policy"]).toBe("no-referrer");
@@ -94,11 +118,17 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
     await expect(learner.getByRole("heading", { name: /Registrieren|Register/i })).toBeVisible();
     await expect(learner.locator("#kc-register-form")).toBeVisible();
     await expect(learner.locator("#kc-form-login")).toHaveCount(0);
+    await expect(learner.getByRole("textbox", { name: "Schul-E-Mail", exact: true })).toHaveAttribute("autocomplete", "email");
+    await authPictures(learner, testInfo, "registration");
     await learner.locator("#display_name").fill("E2E QR Lernender");
     await learner.locator("#email").fill(learnerEmail);
     await learner.locator("#password").fill(password);
     await learner.locator("#password-confirm").fill(password);
     await learner.locator("#kc-register-form button[type=submit]").click();
+
+    await expect(learner.getByRole("heading", { name: /E-Mail.*bestätigen|E-Mail.*verifizieren/i })).toBeVisible();
+    // Keep configured school addresses out of the public screenshot catalogue.
+    await authPictures(learner, testInfo, "verification-request", [learner.locator(".kc-hint")]);
 
     const verificationUrl = await smtp.verificationUrl(learnerEmail);
     await learner.goto(verificationUrl);
@@ -120,7 +150,6 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
   } finally {
     await learnerContext?.close().catch(() => undefined);
     await teacherContext?.close().catch(() => undefined);
-    await restoreSmtp().catch(() => undefined);
-    await smtp.close().catch(() => undefined);
+    try { await restoreSmtp(); } finally { await smtp.close(); }
   }
 });

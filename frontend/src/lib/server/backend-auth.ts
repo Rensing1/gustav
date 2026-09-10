@@ -6,6 +6,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { env } from "$env/dynamic/private";
 import { buildApiUrl } from "$lib/server/api";
 import { clearTokenSession, createTokenSession, readTokenSession } from "$lib/server/session";
+import { parseThemePreference, THEME_COOKIE_NAME } from "$lib/server/theme";
 
 const DEFAULT_KC_BASE_URL = "http://keycloak:8080";
 const DEFAULT_KC_PUBLIC_BASE_URL = "https://id.localhost";
@@ -357,7 +358,9 @@ async function exchangeCodeForTokens(code: string, redirectUri: string, codeVeri
 export function startLoginFlow(event: RequestEvent): Response {
   const flow = createFlow(event.url, safeRedirectPath(event.url.searchParams.get("redirect")));
   addFlowCookie(event, flow);
-  return createRedirectResponse(buildOidcFlowUrl(authEndpoint(), flow));
+  return createRedirectResponse(buildOidcFlowUrl(authEndpoint(), flow, {
+    gustav_theme: parseThemePreference(event.cookies.get(THEME_COOKIE_NAME))
+  }));
 }
 
 export function startContinuationFlow(event: RequestEvent): Response {
@@ -405,12 +408,16 @@ export function startRegisterFlow(event: RequestEvent): Response {
 
   const flow = createFlow(event.url, safeRedirectPath(event.url.searchParams.get("redirect")));
   addFlowCookie(event, flow);
-  const extraParams = loginHint ? { login_hint: loginHint } : undefined;
+  const extraParams = {
+    ...(loginHint ? { login_hint: loginHint } : {}),
+    gustav_theme: parseThemePreference(event.cookies.get(THEME_COOKIE_NAME))
+  };
   return createRedirectResponse(buildOidcFlowUrl(registrationEndpoint(), flow, extraParams));
 }
 
 export function startForgotFlow(event: RequestEvent): Response {
   const url = new URL(forgotEndpoint());
+  url.searchParams.set("gustav_theme", parseThemePreference(event.cookies.get(THEME_COOKIE_NAME)));
   const loginHint = event.url.searchParams.get("login_hint");
   if (loginHint) {
     url.searchParams.set("login_hint", loginHint);
@@ -422,7 +429,10 @@ export function startPasswordFlow(event: RequestEvent): Response {
   const redirectPath = safeRedirectPath(event.url.searchParams.get("redirect")) || "/profile";
   const flow = createFlow(event.url, redirectPath);
   addFlowCookie(event, flow);
-  return createRedirectResponse(buildOidcFlowUrl(authEndpoint(), flow, { kc_action: "UPDATE_PASSWORD" }));
+  return createRedirectResponse(buildOidcFlowUrl(authEndpoint(), flow, {
+    kc_action: "UPDATE_PASSWORD",
+    gustav_theme: parseThemePreference(event.cookies.get(THEME_COOKIE_NAME))
+  }));
 }
 
 export async function handleAuthCallback(event: RequestEvent): Promise<Response> {

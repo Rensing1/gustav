@@ -243,7 +243,12 @@ def test_fastapi_static_gustav_css_references_are_documented_active_surfaces() -
 
     assert 'href="/static/css/gustav.css?v=' in layout_source
     assert 'href="/static/css/gustav.css"' in auth_source
-    assert len(keycloak_templates) >= 5
+    assert [path.name for path in keycloak_templates] == ["_gustav_layout.ftl"]
+    consumers = [
+        path for path in keycloak_templates[0].parent.glob("*.ftl")
+        if '<#import "_gustav_layout.ftl" as layout>' in path.read_text(encoding="utf-8")
+    ]
+    assert len(consumers) >= 5
     for template_path in keycloak_templates:
         template_source = template_path.read_text(encoding="utf-8")
         assert 'gustav.css?v=${properties.gustavThemeVersion!"dev"}' in template_source

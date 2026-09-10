@@ -2,6 +2,12 @@
 
 ## 2026-09-10
 
+### Designreparatur – Graphansichten
+
+- fix(graph): Beide Rollen teilen deutsche Werkzeugbeschriftungen, kontrastreiche Zustände und bildschirmabhängige Graphhöhe. Mobile Symbolaktionen mindestens 44 × 44 px.
+- fix(graph): Gesperrte Module benennen Sperre und vorhandene Voraussetzungen. Koordinaten, Größen, Verbindungen und Berechtigungen bleiben erhalten; Kamera übersteht Neuladen und Rückkehr.
+- test: Vollständiges `graph-role-parity`-Gate und 32 gesichtete Bilder mit Fokus/Gesamtansicht bei vier Breiten in Light/Dark. Keine automatische Umordnung.
+
 ### Designreparatur – H5P
 
 - fix(h5p): Player und Editor erhalten zentrale Designwerte und lokale Schriften beim Build; vollständig aufgelöste Theme-Variablen und deutsche Standardbedienung bei unveränderten Autorentexten.

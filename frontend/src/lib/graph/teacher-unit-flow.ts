@@ -411,6 +411,7 @@ function buildLinearEdges(items: TeacherUnitWorkspaceSectionItem[]): TeacherFlow
     id: `linear:${items[index].id}->${item.id}`,
     source: items[index].id,
     target: item.id,
+    ariaLabel: `Verbindung von ${items[index].title} nach ${item.title}`,
     type: "smoothstep",
     selectable: false,
     focusable: false,
@@ -585,6 +586,7 @@ function buildModularEdges(
   selection: TeacherUnitWorkspaceSelection
 ): TeacherFlowEdge[] {
   type RoutedModularEdge = { edge: TeacherFlowEdge; routeBucket: string; category: "same-row" | "same-phase" | "cross-phase" };
+  const moduleTitles = new Map((workspace.graph.phases ?? []).flatMap((phase) => phase.modules.map((module) => [module.id, module.title] as const)));
   const activeEdge = selectedEdge(selection);
   const activeModuleId = selectedModuleId(selection);
   const hasFocusedSelection =
@@ -617,6 +619,7 @@ function buildModularEdges(
       id: `edge:${edge.from}->${edge.to}`,
       source: edge.from,
       target: edge.to,
+      ariaLabel: `Verbindung von ${moduleTitles.get(edge.from) ?? "Modul"} nach ${moduleTitles.get(edge.to) ?? "Modul"}`,
       sourceHandle: route.sourceHandle,
       targetHandle: route.targetHandle,
       type: "teacherEdge",

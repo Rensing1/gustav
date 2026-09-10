@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { graphAriaLabels } from "$lib/graph/graph-presentation";
   import { enhance } from "$app/forms";
   import { goto, invalidateAll, pushState, replaceState } from "$app/navigation";
   import { page } from "$app/state";
@@ -1158,6 +1159,7 @@
 >
   {#snippet canvas()}
     <SvelteFlow
+      ariaLabelConfig={graphAriaLabels}
       bind:nodes={flowNodes}
       bind:edges={flowEdges}
       bind:viewport={flowViewport}

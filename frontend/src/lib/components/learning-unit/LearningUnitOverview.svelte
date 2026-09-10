@@ -1,5 +1,6 @@
 <script lang="ts">
   import { SvelteFlow } from "@xyflow/svelte";
+  import { fitGraphToScreen, graphAriaLabels } from "$lib/graph/graph-presentation";
   import "@xyflow/svelte/dist/style.css";
 
   import GraphPhaseBand from "$lib/components/teacher-unit-graph/GraphPhaseBand.svelte";
@@ -31,11 +32,12 @@
   };
 </script>
 
-<GraphStageFrame chromeless eyebrow="Graph-Stage" title="Lernpfad" copy="Taskfläche zuerst, Graph daraus abgeleitet.">
+<GraphStageFrame chromeless eyebrow="Lernpfad" title="Lernpfad">
   {#snippet children()}
-    <section class="learning-unit-stage learning-unit-stage--graph teacher-flow-workspace teacher-flow-shell learning-flow-shell">
+    <section use:fitGraphToScreen class="learning-unit-stage learning-unit-stage--graph teacher-flow-workspace teacher-flow-shell learning-flow-shell">
       {#if graph}
         <SvelteFlow
+          ariaLabelConfig={graphAriaLabels}
           bind:nodes={nodes}
           bind:edges={edges}
           class="teacher-flow-canvas"
@@ -51,6 +53,7 @@
           nodesConnectable={false}
         >
           <GraphViewportControls
+            storageKey={`gustav:learner-graph:${graph.unit.id}:viewport`}
             initialNodeId={nodes.find((node) => node.selected)?.id ?? nodes.find((node) => node.type === "phaseBand")?.id ?? null}
             showInteractionToggle={false}
           />

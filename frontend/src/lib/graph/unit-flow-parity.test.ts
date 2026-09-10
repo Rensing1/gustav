@@ -56,6 +56,18 @@ function geometry(flow: { nodes: TeacherFlowNode[]; edges: TeacherFlowEdge[] }) 
 }
 
 describe("one graph geometry for both roles", () => {
+  it("explains locked prerequisites without inventing missing conditions", async () => {
+    const graph = graphFixture();
+    const locked = graph.modules.find((module) => module.id === "d")!;
+    locked.prereq_required = 2;
+    locked.prereq_done = 1;
+    const flow = await buildLearningUnitFlow(graph, user, [], vi.fn());
+    expect(flow.nodes.find((node) => node.id === "d")!.data.progressLabel).toBe("Gesperrt");
+    expect(flow.nodes.find((node) => node.id === "d")!.data.materialsLabel).toBe("1/2 Voraussetzungen erfüllt");
+    locked.prereq_required = 0;
+    const unknown = await buildLearningUnitFlow(graph, user, [], vi.fn());
+    expect(unknown.nodes.find((node) => node.id === "d")!.data.materialsLabel).toBe("Freischaltbedingungen nicht verfügbar");
+  });
   it("preserves branches, joins, cross-phase edges, practice modules and empty phases", async () => {
     const graph = graphFixture();
     const teacher = await buildTeacherUnitFlow(teacherFixture(graph));
@@ -63,6 +75,7 @@ describe("one graph geometry for both roles", () => {
     expect(geometry(learner)).toEqual(geometry(teacher));
     expect(learner.nodes).toHaveLength(9);
     expect(learner.edges).toHaveLength(6);
+    expect(teacher.edges[0].ariaLabel).toMatch(/^Verbindung von .+ nach .+$/);
   });
 
   it("uses stored positions and stable edge lanes, not incoming array order", async () => {

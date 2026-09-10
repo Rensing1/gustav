@@ -142,10 +142,14 @@ export async function buildLearningUnitFlow(
         createLabel: null,
         connectable: false,
         status: module?.status ?? "locked",
-        progressLabel: module?.module_kind === "practice"
+        progressLabel: !openable ? "Gesperrt" : module?.module_kind === "practice"
           ? `${module.due_tasks_count} fällig`
           : `${module?.tasks_done ?? 0}/${module?.tasks_total ?? 0} Aufgaben`,
-        materialsLabel: module?.module_kind === "practice"
+        materialsLabel: !openable
+          ? module && module.prereq_required > 0 && Number.isFinite(module.prereq_done)
+            ? `${module.prereq_done}/${module.prereq_required} Voraussetzungen erfüllt`
+            : "Freischaltbedingungen nicht verfügbar"
+          : module?.module_kind === "practice"
           ? "Übungsstapel"
           : `${module?.materials_count ?? 0} Materialien`,
         openable,

@@ -18,7 +18,9 @@ describe("LearningGraphNode contract", () => {
     expect(css).toMatch(/\.teacher-flow-unit-node--learner-open\s*\{[^}]*border-color:\s*var\(--color-border\);/s);
     expect(css).toMatch(/\.teacher-flow-unit-node--learner-done\s*\{[^}]*border-color:\s*var\(--color-success\);/s);
     expect(css).toMatch(/\.teacher-flow-unit-node--learner-done[\s\S]*box-shadow:\s*var\(--color-shadow\);/s);
-    expect(css).toMatch(/\.teacher-flow-unit-node--learner-locked[\s\S]*opacity:\s*0\.56;/s);
+    expect(css).not.toMatch(/\.teacher-flow-unit-node--learner-locked[^{]*\{[^}]*opacity:\s*0\.56;/s);
+    expect(css).toContain("height: var(--graph-available-height, 65dvh)");
+    expect(css).toContain("min-width: var(--layout-control-min)");
     expect(css).toMatch(/\.teacher-flow-unit-node--selected\.teacher-flow-unit-node--learner[\s\S]*border-color:\s*var\(--color-accent\);/s);
     expect(css).toMatch(/\.teacher-flow-unit-node--learner-done \.teacher-flow-unit-node__copy strong[\s\S]*var\(--color-success\)/s);
   });

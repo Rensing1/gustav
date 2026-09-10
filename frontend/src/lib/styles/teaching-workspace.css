@@ -1838,8 +1838,8 @@
 /* Match the frame primitive's specificity so this later context rule keeps priority. */
 .teacher-flow-shell,
 .graph-stage-frame .teacher-flow-shell {
-  height: min(80vh, 56rem);
-  min-height: 44rem;
+  height: var(--graph-available-height, 65dvh);
+  min-height: 15rem;
   --background-color: transparent;
   --xy-background-color: transparent;
   --xy-background-color-props: transparent;
@@ -2305,16 +2305,39 @@
 }
 
 .teacher-flow-shell .svelte-flow__controls {
-  box-shadow: 0 10px 20px rgba(35, 41, 45, 0.08);
-  border-radius: 0.8rem;
-  overflow: hidden;
+  box-shadow: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  overflow: visible;
 }
 
 .teacher-flow-shell .svelte-flow__controls-button {
-  background: color-mix(in srgb, var(--color-bg-elevated) 92%, white 8%);
+  background: var(--color-bg-surface);
   color: var(--color-text);
   width: 1.8rem;
   height: 1.8rem;
+}
+
+.teacher-flow-shell .svelte-flow__controls-button:hover,
+.teacher-flow-shell .svelte-flow__controls-button:focus-visible {
+  background: var(--color-bg-muted);
+  color: var(--color-text);
+}
+.teacher-flow-shell .svelte-flow__controls-button:focus-visible {
+  outline: 2px solid var(--color-link);
+  outline-offset: 2px;
+}
+.teacher-flow-shell .svelte-flow__controls-button:disabled {
+  color: var(--color-text-muted);
+  opacity: 1;
+  cursor: not-allowed;
+}
+@media (max-width: 640px) {
+  .teacher-flow-shell .svelte-flow__controls-button {
+    min-width: var(--layout-control-min);
+    min-height: var(--layout-control-min);
+    box-sizing: border-box;
+  }
 }
 
 .teacher-flow-edge-chip {
@@ -2730,7 +2753,7 @@
   border-color: color-mix(in srgb, var(--color-border) 84%, transparent 16%);
   background: color-mix(in srgb, var(--color-bg-surface) 80%, var(--color-bg-base) 20%);
   box-shadow: 1px 1px 0 0 rgba(27, 27, 27, 0.18);
-  opacity: 0.56;
+  opacity: 1;
 }
 
 .teacher-flow-unit-node--learner-open {
@@ -2769,13 +2792,7 @@
 .teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__meta small,
 .teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__header-main span,
 .teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__copy {
-  color: color-mix(in srgb, var(--color-text-muted) 82%, transparent 18%);
-}
-
-.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__copy strong,
-.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__meta small,
-.teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__header-main span {
-  color: color-mix(in srgb, var(--color-text-muted) 82%, transparent 18%);
+  color: var(--color-text-muted);
 }
 
 .teacher-flow-unit-node__editor,

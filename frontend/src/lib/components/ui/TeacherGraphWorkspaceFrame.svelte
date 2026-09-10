@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { fitGraphToScreen } from "$lib/graph/graph-presentation";
 
   import TeacherGraphCommandBar, {
     type TeacherGraphCommandBarAction
@@ -53,6 +54,7 @@
 {/if}
 
 <section
+  use:fitGraphToScreen
   class:teacher-flow-workspace--with-inspector={inspectorOpen}
   class:teacher-flow-workspace--embedded={embedded}
   class="teacher-flow-workspace teacher-flow-shell"

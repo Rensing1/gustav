@@ -6,6 +6,7 @@ import { expect, test, type Page } from "./support/feature-test";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { expectNoViewportOverflow } from "./support/layout-sanity";
 import { createFileMaterial } from "./support/seed-data";
+import { expectDesignContrast } from "./support/design-contrast";
 
 async function create(page: Page, url: string, data: Record<string, unknown>) {
   const response = await page.request.post(`${webBase}${url}`, { headers: apiHeaders(), data });
@@ -31,6 +32,13 @@ async function geometry(page: Page) {
       id: edge.getAttribute("data-id"), path: edge.querySelector(".svelte-flow__edge-path")?.getAttribute("d")
     })).sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""))
   }));
+}
+
+async function camera(page: Page) {
+  return page.locator(".svelte-flow__viewport").evaluate((element) => {
+    const matrix = new DOMMatrix(getComputedStyle(element).transform);
+    return [matrix.a, matrix.e, matrix.f].map((value) => Math.round(value * 100) / 100);
+  });
 }
 
 test("@feature-acceptance both roles share graph geometry and controls while learner permissions stay restricted", async ({ browser }, testInfo) => {
@@ -98,6 +106,8 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     }
 
     await expect(learner.getByRole("button", { name: /Zusammenführen/ })).toBeDisabled();
+    await expect(learner.getByRole("button", { name: /Zusammenführen/ })).toContainText("Gesperrt");
+    await expect(learner.getByRole("button", { name: /Zusammenführen/ })).toContainText("Voraussetzungen erfüllt");
     await expect(learner.getByRole("toolbar", { name: "Graphwerkzeuge" })).toHaveCount(0);
     await expect(learner.locator(".svelte-flow__controls-interactive")).toHaveCount(0);
     await expect(learner.locator('.svelte-flow__handle:not([aria-hidden="true"])')).toHaveCount(0);
@@ -111,12 +121,45 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     for (const [label, viewport] of [
       ["desktop", { width: 1440, height: 900 }],
       ["tablet", { width: 1024, height: 768 }],
-      ["mobile", { width: 390, height: 844 }]
+      ["mobile", { width: 390, height: 844 }],
+      ["narrow", { width: 320, height: 844 }]
     ] as const) {
       for (const theme of ["light", "dark"]) {
         for (const [role, page] of [["teacher", teacher], ["learner", learner]] as const) {
           await page.setViewportSize(viewport);
-          await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), theme);
+          const toggle = page.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
+          if (await toggle.count()) await toggle.click();
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await expect(page.getByRole("button", { name: "Vergrößern", exact: true })).toBeVisible();
+          await expect(page.getByRole("button", { name: "Verkleinern", exact: true })).toBeVisible();
+          const controls = page.locator(".svelte-flow__controls");
+          // Long mobile command/context bars may precede the graph. Ordinary
+          // page scrolling brings the canvas into view; its tools must then fit.
+          await page.locator(".teacher-flow-shell").evaluate((shell) => shell.scrollIntoView({ block: "start" }));
+          await expect.poll(() => controls.evaluate((node) => {
+            const shell = node.closest(".teacher-flow-shell")!;
+            const box = node.getBoundingClientRect();
+            return box.bottom <= innerHeight ? null : JSON.stringify({ bottom: box.bottom, viewport: innerHeight, top: shell.getBoundingClientRect().top, height: shell.getBoundingClientRect().height, available: getComputedStyle(shell).getPropertyValue("--graph-available-height") });
+          }), { message: `${role} ${label} controls remain on screen` }).toBeNull();
+          for (const button of await controls.getByRole("button").all()) {
+            if (viewport.width <= 640) {
+              const box = (await button.boundingBox())!;
+              expect(box.width).toBeGreaterThanOrEqual(44);
+              expect(box.height).toBeGreaterThanOrEqual(44);
+            }
+            if (await button.isDisabled()) continue;
+            await button.hover();
+            await button.focus();
+            await page.keyboard.press("Tab");
+            await page.keyboard.press("Shift+Tab");
+            await expect(button).toBeFocused();
+            await expect(button).not.toHaveCSS("outline-style", "none");
+            await expectDesignContrast(button);
+          }
+          await expectDesignContrast(page.locator(".teacher-flow-unit-node--learner-locked strong, .teacher-flow-unit-node--learner-locked small"), true);
+          await page.getByRole("button", { name: "Auswahl fokussieren", exact: true }).last().click();
+          await expect.poll(() => page.locator(".svelte-flow__viewport").evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a)).toBeGreaterThanOrEqual(0.819);
+          await page.locator(".teacher-flow-shell").screenshot({ path: testInfo.outputPath(`${role}-${label}-${theme}-focus.png`), animations: "disabled" });
           await expect(page.getByRole("button", { name: "Gesamtansicht", exact: true })).toBeVisible();
           await page.getByRole("button", { name: "Gesamtansicht", exact: true }).click();
           await expect.poll(() => page.locator(".svelte-flow").evaluate((root) => {
@@ -136,11 +179,14 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
         await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
       }
     }
+    const teacherCamera = await camera(teacher), learnerCamera = await camera(learner);
     await teacher.reload();
     await learner.reload();
     await expect(teacher.locator(".svelte-flow__node")).toHaveCount(9);
     await expect(learner.locator(".svelte-flow__node")).toHaveCount(9);
     await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
+    await expect.poll(() => camera(teacher)).toEqual(teacherCamera);
+    await expect.poll(() => camera(learner)).toEqual(learnerCamera);
     await learner.getByRole("button", { name: /Modul 01 Start/ }).click();
     await expect(learner).toHaveURL(new RegExp(`module=${modules[0].id}`));
     await expect(learner.getByRole("button", { name: "Aufgabe 1 beginnen" })).toBeVisible();
@@ -155,6 +201,7 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     expect(await imageResponse.body()).toEqual(imageBytes);
     await learner.goBack();
     await expect(learner.getByRole("button", { name: "Gesamtansicht", exact: true })).toBeVisible();
+    await expect.poll(() => camera(learner)).toEqual(learnerCamera);
     const removeMember = await teacher.request.delete(`${webBase}/api/teaching/courses/${course.id}/members/${await currentUserSub(learner)}`, { headers: apiHeaders() });
     await expectApiOk(removeMember, 204);
     expect((await learner.request.get(fileUrl(visibleFile))).status()).toBe(404);

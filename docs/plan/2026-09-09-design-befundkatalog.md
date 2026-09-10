@@ -146,6 +146,8 @@ Nachweis: Screenshot unter DS-04. Quelle: `frontend/src/routes/teaching/units/+p
 
 ### DS-07 · P2 · Graph-Bedienelemente bleiben sprachlich uneinheitlich
 
+**Behoben und lokal abgenommen am 10. September 2026:** Gemeinsame deutsche Werkzeug-, Knoten- und Verbindungsbeschriftungen ohne technische IDs. Vollständiges Gate `graph-role-parity` bestanden. Rollenvergleich bei vier Breiten in Light/Dark; [Lehrkraft](assets/2026-09-10-designreparatur-paket5/teacher-mobile-dark-focus.png), [Lernende](assets/2026-09-10-designreparatur-paket5/learner-mobile-dark-focus.png). Folgend der historische Befund.
+
 Die Lehrkraftansicht enthält „Zoom In“, „Zoom Out“ und „Toggle Interactivity“ neben „Gesamtansicht“ und „Auswahl fokussieren“ im zugänglichen DOM. Verbindungen tragen technische IDs. Das bestätigt den älteren Befund UI-06 nun auch für die Lehrkraftrolle. Die kompakte Symbolwerkzeugleiste ist als funktionale Variante sinnvoll; uneinheitliche Sprache und technische Beschriftungen sind es nicht. Keine neue Behauptung, die Knotengeometrie beider Rollen sei heute vollständig verglichen worden.
 
 ## Weitere Gestaltungsvorschläge, noch keine Fehlerentscheidung
@@ -301,11 +303,15 @@ Bediennachweise: In beiden Rollen Zoom hinein/heraus und „Gesamtansicht“ gek
 
 #### DS-23 · P2 · Graphwerkzeug verliert im Dark Mode beim Hover sein Symbol
 
+**Behoben und lokal abgenommen am 10. September 2026:** Hover und Tastaturfokus verwenden zentrale kontrastgeprüfte Flächen und Symbole; mobile Werkzeuge mindestens 44 × 44 px. [Fokussiertes Werkzeug beider Rollen](assets/2026-09-10-designreparatur-paket5/teacher-mobile-dark-focus.png). Vollständiges `graph-role-parity`-Gate einschließlich echter Hover-/Fokusprüfung bestanden.
+
 „Gesamtansicht“ zeigt unter dem Mauszeiger einen nahezu weißen Hintergrund bei fast weißem Symbol. Am Lernendenbutton gemessen: Text-/Symbolfarbe `rgb(240, 241, 241)`, Hintergrund `rgb(244, 244, 244)`. Derselbe sichtbare Effekt trat bei der Lehrkraft auf. Der Button ist aktiv und funktioniert. Reproduktion: Dark Mode → Maus auf „Gesamtansicht“. Quelle zur Integration: `frontend/src/lib/components/ui/GraphViewportControls.svelte`; die Basisgestaltung in `frontend/src/lib/styles/teaching-workspace.css:2298` reicht für diesen Hover-Zustand nicht aus. Keine vollständige CSS-Kaskadenanalyse aller Werkzeugzustände. Ergänzt DS-07 um einen konkreten visuellen Fehler; die englischen Zoom-Bezeichnungen bestehen weiterhin.
 
 ![Aktives Graphwerkzeug mit kaum sichtbarem Hover-Symbol](assets/2026-09-09-graphvergleich/student-mobile-hover-dark.png)
 
 #### DS-24 · P2 · Graph-Startausschnitt und verfügbare Bildschirmhöhe passen nicht zusammen
+
+**Behoben und lokal abgenommen am 10. September 2026:** Graphhöhe wird aus verbleibendem Bildschirmplatz bestimmt, mit normalem Seitenscrollen bei langen mobilen Kopf-/Kontextleisten. Lesbarer Fokus und ausdrückliche Gesamtansicht bleiben getrennt; Kamera bleibt bei Neuladen und Rückkehr erhalten. [Desktopfokus](assets/2026-09-10-designreparatur-paket5/teacher-desktop-light-focus.png), [mobile Gesamtansicht](assets/2026-09-10-designreparatur-paket5/teacher-mobile-light.png). Gleiche Rollen-Geometrie im vollständigen Gate nachgewiesen, keine Umordnung.
 
 Beim frischen Lehrkraftaufruf beginnt die 800 px hohe Graphfläche erst bei y ≈ 362 px. Auf dem 1000 px hohen Bildschirm liegen die unteren Phasen und die Werkzeuge daher außerhalb des ersten sichtbaren Bereichs. Zugleich nimmt Leerraum einen großen Teil der Fläche ein. Beim Lernenden ist initial ebenfalls nicht der gesamte Graph sichtbar; die Werkzeuge sind dort jedoch erreichbar. „Gesamtansicht“ korrigiert den Graphausschnitt, nicht die Höhe des umgebenden Seitenaufbaus. Der Klick auf die Lehrkraftwerkzeuge scrollt die Seite zu ihnen; die obige Vergleichsaufnahme ist deshalb ausdrücklich kein Startbild.
 
@@ -314,6 +320,8 @@ Quellhinweis: `.teacher-flow-shell` in `frontend/src/lib/styles/teaching-workspa
 ![Lehrkraft: tatsächlicher erster Bildschirmausschnitt](assets/2026-09-09-graphvergleich/teacher-light.png)
 
 #### DS-25 · P3 · Gesperrte Module und mobile Übersicht brauchen verständlichere Orientierung
+
+**Behoben und lokal abgenommen am 10. September 2026:** „Gesperrt“ und ausschließlich tatsächlich vorhandene Freischaltangaben sind ohne pauschales Ausblenden lesbar. Fehlende Angaben erhalten einen ehrlichen Hinweis, keine erfundenen Bedingungen. [Lernendenfokus dunkel](assets/2026-09-10-designreparatur-paket5/learner-mobile-dark-focus.png). Vollständiges Gate prüft weiterhin verweigerte Inhalte/Dateien. 32 Paketbilder tatsächlich gesichtet; vollständige Screenreader-Konformität und physische Geräte bleiben gesonderte Abnahmegrenzen.
 
 „Transferaufgabe“ und „Abschluss“ sind beim Lernenden tatsächlich deaktivierte Buttons, nicht bloß optisch blass. Ein Klick auf die umgebende Knotenfläche öffnet keine Erklärung. Die sichtbaren Knoten enthalten weder „Gesperrt“ noch eine Freischaltbedingung; der Button besitzt auch keinen erklärenden Titel. Anders als bei der aktiven H5P-Auswerten-Aktion ist der deaktivierte Zustand hier im DOM bestätigt. Die stark reduzierte Lesbarkeit betrifft aber die Orientierung über künftige Lernschritte und sollte nicht mit der deaktivierten Aktion gleichgesetzt werden. Quellen: `LearningGraphNode.svelte`, `disabled={!data.openable}`, und `teaching-workspace.css:2713`, zusätzliche Transparenz für gesperrte Knoten. Eine vollständige Screenreaderprüfung steht aus.
 

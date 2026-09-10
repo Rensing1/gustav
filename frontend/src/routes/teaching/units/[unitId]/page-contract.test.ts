@@ -201,7 +201,7 @@ describe("teacher unit graph route contract", () => {
     expect(serverSource).toContain('showDeleteDialog: url.searchParams.get("delete") == "1"');
     expect(serverSource).toContain('workspaceLayout: "wide"');
     expect(source).toContain("Lerneinheit bearbeiten");
-    expect(source).toContain('aria-label="Lerneinheitsaktionen"');
+    expect(source).toContain('<summary>Weitere Aktionen</summary>');
     expect(source).toContain('href={pageHref({ delete: "1" })}>Lerneinheit löschen</a>');
     expect(source).toContain('label: "Druckfassung erstellen"');
     expect(source).toContain('/print`');

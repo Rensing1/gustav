@@ -409,7 +409,7 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("`accent` für Primäraktionen");
     expect(designDoc).toContain("`quiet` für normale Sekundäraktionen");
     expect(designDoc).toContain("`subtle` für kleine, nicht-dominante Nebenaktionen");
-    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*min-height:\s*1\.72rem;/s);
+    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*min-height:\s*var\(--layout-control-min\);/s);
     expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*box-shadow:\s*1px 1px 0/s);
   });
 

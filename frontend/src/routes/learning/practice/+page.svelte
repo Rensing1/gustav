@@ -47,7 +47,7 @@
         <p>Sobald ein Übungsmodul freigeschaltet ist, erscheint es hier.</p>
       </header>
       <div class="practice-summary__actions">
-        <a class="practice-button practice-button--primary" href="/learning">Zum Lernraum</a>
+        <a class="workspace-link-action workspace-link-action--primary" href="/learning">Zum Lernraum</a>
       </div>
     </section>
   {/if}

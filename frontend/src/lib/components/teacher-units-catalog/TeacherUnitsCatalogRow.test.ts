@@ -1,10 +1,10 @@
-import { render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
 
 import TeacherUnitsCatalogRow from "./TeacherUnitsCatalogRow.svelte";
 
 describe("TeacherUnitsCatalogRow", () => {
-  it("renders a title link with course names shortened to the first token", () => {
+  it("keeps editing direct and deletion inside a labelled actions menu", async () => {
     render(TeacherUnitsCatalogRow, {
       props: {
         unit: {
@@ -28,6 +28,10 @@ describe("TeacherUnitsCatalogRow", () => {
       "href",
       "/teaching/units/unit-1"
     );
+    const menu = screen.getByText("Weitere Aktionen");
+    expect(menu.closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByRole("link", { name: "Bearbeiten" })).toHaveAttribute("href", "/teaching/units/unit-1");
+    await fireEvent.click(menu);
     expect(screen.getByRole("link", { name: "Löschen" })).toHaveAttribute(
       "href",
       "/teaching/units/unit-1?delete=1"

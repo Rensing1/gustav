@@ -140,10 +140,12 @@
   text-transform: uppercase;
 }
 
-.workspace-field input,
+.workspace-field input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
 .workspace-field select,
 .workspace-field textarea {
   width: 100%;
+  min-width: 0;
+  min-height: var(--layout-control-min);
   border: 1px solid var(--color-border);
   border-radius: 0;
   padding: 0.7rem 0.78rem;
@@ -156,6 +158,31 @@
 .workspace-field textarea {
   min-height: 6rem;
   resize: vertical;
+}
+
+.workspace-field :is(input[type="checkbox"], input[type="radio"]) {
+  width: 1.1rem;
+  height: 1.1rem;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--color-accent);
+  flex: none;
+}
+
+.workspace-choice,
+.workspace-field:has(> input[type="checkbox"]),
+.workspace-field:has(> input[type="radio"]) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--layout-control-min);
+}
+
+fieldset.workspace-field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
 }
 
 .workspace-field input:focus-visible,
@@ -226,7 +253,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.3rem;
-  min-height: 2.15rem;
+  min-height: var(--layout-control-min);
   padding: 0.42rem 0.82rem;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
@@ -281,7 +308,7 @@
 
 .workspace-top-action--subtle,
 .workspace-link-action--subtle {
-  min-height: 1.72rem;
+  min-height: var(--layout-control-min);
   padding: 0.24rem 0.58rem;
   font-size: 0.7rem;
   background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
@@ -300,8 +327,46 @@
 }
 
 .workspace-link-action--danger {
-  color: #ffffff;
-  background: var(--color-danger);
+  color: var(--color-danger);
+  background: var(--color-bg-surface);
+  border-color: var(--color-danger);
+}
+
+.workspace-button:not(.workspace-button--ghost),
+.workspace-top-action--accent,
+.workspace-link-action--primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.workspace-button:not(.workspace-button--ghost):is(:hover, :focus-visible),
+.workspace-top-action--accent:is(:hover, :focus-visible),
+.workspace-link-action--primary:is(:hover, :focus-visible) {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+:is(.workspace-link-action, .workspace-button, .workspace-text-button):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+:is(.workspace-link-action, .workspace-button, .workspace-text-button):disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.workspace-link-action--block {
+  width: 100%;
+}
+
+@media (max-width: 48rem) {
+  :is(.theme-toggle, .workspace-icon-button, .workspace-topbar-action) {
+    min-width: var(--layout-control-min);
+    min-height: var(--layout-control-min);
+  }
 }
 
 .quiet-list {

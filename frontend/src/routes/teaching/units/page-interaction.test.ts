@@ -105,7 +105,7 @@ describe("teacher units catalog page", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Neue Lerneinheit" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Dialog schließen" }));
+    await fireEvent.click(screen.getByRole("button", { name: /^Schließen$/ }));
 
     expect(screen.queryByRole("dialog", { name: "Neue Lerneinheit" })).not.toBeInTheDocument();
   });

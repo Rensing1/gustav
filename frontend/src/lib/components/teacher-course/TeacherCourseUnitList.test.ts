@@ -25,6 +25,7 @@ describe("TeacherCourseUnitList", () => {
     });
 
     expect(screen.getByRole("link", { name: "Erste Einheit" })).toBeInTheDocument();
+    expect(screen.getByText("Weitere Aktionen")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Reihenfolge von/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nach unten" })).not.toBeInTheDocument();
 

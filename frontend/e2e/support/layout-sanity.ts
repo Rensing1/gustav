@@ -97,7 +97,7 @@ function relativeLuminance(color: string): number {
   return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
 }
 
-function contrastRatio(foreground: string, background: string): number {
+export function contrastRatio(foreground: string, background: string): number {
   const light = Math.max(relativeLuminance(foreground), relativeLuminance(background));
   const dark = Math.min(relativeLuminance(foreground), relativeLuminance(background));
   return (light + 0.05) / (dark + 0.05);

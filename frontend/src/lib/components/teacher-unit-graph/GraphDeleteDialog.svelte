@@ -1,6 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
-  import { onMount } from "svelte";
+  import { modalFocus } from "$lib/components/ui/modal-focus";
   import type { SubmitFunction } from "@sveltejs/kit";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
 
@@ -20,8 +20,6 @@
     enhanceForm?: SubmitFunction;
   } = $props();
 
-  let dialogElement = $state<HTMLElement | null>(null);
-  let cancelButton = $state<HTMLButtonElement | null>(null);
   let pending = $state(false);
 
   const entityLabel = $derived(impact.kind === "phase" ? "Phase" : "Modul");
@@ -50,40 +48,7 @@
     }
   }
 
-  function handleWindowKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      cancel();
-      return;
-    }
-    if (event.key !== "Tab" || !dialogElement) {
-      return;
-    }
-    const focusable = Array.from(
-      dialogElement.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled])')
-    );
-    if (!focusable.length) {
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable.at(-1)!;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
-  onMount(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    cancelButton?.focus();
-    return () => previousFocus?.focus();
-  });
 </script>
-
-<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="dialog-backdrop graph-delete-dialog-backdrop">
   <button
@@ -94,7 +59,7 @@
     disabled={pending}
   ></button>
   <div
-    bind:this={dialogElement}
+    use:modalFocus={cancel}
     class="dialog-card graph-delete-dialog"
     role="dialog"
     aria-modal="true"
@@ -123,7 +88,7 @@
       <input type="hidden" name={impact.kind === "phase" ? "phase_id" : "module_id"} value={impact.id} />
       <input type="hidden" name="confirmed" value="1" />
       <div class="dialog-card__actions graph-delete-dialog__actions">
-        <button bind:this={cancelButton} class="workspace-link-action workspace-link-action--subtle" type="button" onclick={cancel} disabled={pending}>
+        <button data-modal-initial class="workspace-link-action workspace-link-action--subtle" type="button" onclick={cancel} disabled={pending}>
           Abbrechen
         </button>
         <button class="workspace-link-action workspace-link-action--danger" type="submit" disabled={pending}>

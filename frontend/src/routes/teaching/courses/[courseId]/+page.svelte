@@ -288,6 +288,8 @@
         <button class="workspace-link-action" type="submit">{readOnly ? "Wiederherstellen" : "Archivieren"}</button>
       </form>
 
+      <details class="workspace-row-menu" open={Boolean(form?.deleteCourse?.error)}>
+        <summary>Weitere Aktionen</summary>
       <form method="POST" action="?/deleteCourse" class="workspace-form workspace-danger-zone">
         <input name="expected_title" type="hidden" value={data.course.title} />
         <p class="workspace-label">Kurs löschen</p>
@@ -311,6 +313,7 @@
           <button class="workspace-text-button workspace-text-button--danger" type="submit">Kurs endgültig löschen</button>
         </div>
       </form>
+      </details>
   </WorkspaceDrawer>
 {/if}
 
@@ -331,7 +334,7 @@
         </div>
       {/if}
 
-      <label class="workspace-member-search">
+      <label class="workspace-member-search workspace-field">
         <span>Mitglieder durchsuchen</span>
         <input bind:value={memberFilter} name="member_filter" placeholder="Name eingeben" type="search" />
       </label>
@@ -355,9 +358,14 @@
                     <button class="workspace-text-button" type="button" onclick={() => (pendingMemberRemoval = null)}>Abbrechen</button>
                   </form>
                 {:else if canMutate}
-                  <button class="workspace-text-button workspace-text-button--danger" type="button" onclick={() => (pendingMemberRemoval = member.sub)}>
-                    Entfernen
-                  </button>
+                  <details class="workspace-row-menu">
+                    <summary>Weitere Aktionen</summary>
+                    <div class="workspace-row-menu__panel">
+                      <button class="workspace-row-menu__danger" type="button" onclick={() => (pendingMemberRemoval = member.sub)}>
+                        Entfernen
+                      </button>
+                    </div>
+                  </details>
                 {/if}
               </div>
             </div>

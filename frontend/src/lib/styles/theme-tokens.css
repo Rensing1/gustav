@@ -10,6 +10,7 @@
   --color-link: #b41f00;
   --color-link-hover: #da3717;
   --color-accent: #ff512f;
+  --color-on-accent: #1a1c1c;
   --color-accent-soft: rgba(255, 81, 47, 0.14);
   --color-border: #1b1b1b;
   --color-line: rgba(27, 27, 27, 0.14);
@@ -47,6 +48,7 @@
   --layout-canvas-max: 144rem;
   --layout-reading-max: 68ch;
   --layout-form-max: 52rem;
+  --layout-control-min: 2.75rem;
   --radius-s: 0;
   --radius-m: 0;
   --radius-l: 2px;

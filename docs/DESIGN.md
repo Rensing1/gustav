@@ -20,6 +20,20 @@ Markdown-Code (inline und als Block) ist darstellbarer Text, keine ausführbare 
 
 Die Auswahl eines linearen Abschnitts zeigt wie bei Modulen eine flache Kontextleiste mit „Inhalte bearbeiten“ und „Eigenschaften“. Nur die ausdrückliche Eigenschaften-Aktion öffnet das Formular. Rückkehr aus dem Inhaltseditor erhält Auswahl und Graphausschnitt; ältere Direktlinks bleiben gültig. Lernende sehen „Abschnitt 1 · Titel“, bei fehlendem Titel nur die Abschnittsnummer.
 
+### Reparaturvertrag: gemeinsame Aktionen, Felder und Dialoge
+
+Die bestehende Workspace-Aktionsbasis gilt auch für Practice, Kataloge, Profil und Verwaltungsdialoge. Primär, sekundär, dezent und destruktiv unterscheiden ihre Gewichtung, nicht Schriftfamilie oder Grundform. Normale Aktionen und einzeilige Felder sind mindestens 44 px hoch; mehrzeilige Beschriftungen dürfen wachsen. Kleinere Desktopwerkzeuge benötigen eine ausdrückliche kompakte Ausnahme; mobile Symbolaktionen haben mindestens 44 × 44 px Bedienfläche. Akzentflächen erhalten kontrastreiche dunkle Schrift. Navigationslinks bleiben Links, Zustandsänderungen Buttons.
+
+Radiofelder und Checkboxen stehen kompakt neben ihrer Beschriftung und werden von allgemeinen Vollbreitenregeln ausgenommen. Suchfelder verwenden dieselbe Feldbasis und Theme-Farben wie Formulare. Drawer ordnen ihren Inhalt oben an; freie Bildschirmhöhe streckt keine Eingabefelder.
+
+Dialoge und Drawer verwenden kantige Rahmen, gemeinsame Innenabstände und eine beschriftete Schließen-Aktion. Fokus wechselt hinein, Tab bleibt im obersten Dialog, Escape schließt nur diesen, danach kehrt der Fokus zum noch vorhandenen Auslöser zurück. Löschen liegt im sichtbar beschrifteten Menü „Weitere Aktionen“ und erfordert weiterhin die vorhandene Bestätigung. Öffnen und Bearbeiten bleiben direkt zugänglich.
+
+### Reparaturvertrag: Anmeldung und Einladungen
+
+Anmeldung und Passwort-Reset bezeichnen das normale Anmeldefeld als „E-Mail-Adresse“ und verwenden E-Mail-Autofill. Registrierung bleibt an die Schul-E-Mail gebunden; IServ und bestehende Kontonamen werden nicht verändert. Keycloak-Seiten teilen genau einen äußeren Rahmen sowie dieselbe Initialisierung und sichtbare Umschaltung von Hell/Dunkel. Felder passen einschließlich Innenabständen und Rahmen in ihre Fläche.
+
+Beim Einstieg über GUSTAV wird ausschließlich die validierte Darstellung `light` oder `dark` übergeben. Ohne diesen Hinweis gilt die auf der Auth-Domain gespeicherte Auswahl, danach die Systemeinstellung. Keine Sitzungs- oder Identitätsdaten werden dafür übergeben. Fehlerseiten bieten einen festen Rückweg zur Anmeldung über den konfigurierten GUSTAV-Ursprung; freie Rücksprungadressen sind dafür nicht zulässig. Gültige und ungültige Einladungen verwenden dieselbe kantige, kontrastreiche Gestaltung. Die Auth-Ressourcen erhalten ihre Grundwerte beim Build aus `theme-tokens.css`, ohne Abrufe zwischen den Oberflächen zur Laufzeit.
+
 GUSTAV folgt einer präzisen, kontrastreichen und technisch-scharfen
 Produktsprache. Es ist kein
 freundlich-rundes EdTech-Produkt und keine warme Editorial-Oberfläche mehr.

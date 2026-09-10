@@ -26,6 +26,7 @@
   import GraphInspectorPanel from "$lib/components/ui/GraphInspectorPanel.svelte";
   import TeacherGraphWorkspaceFrame from "$lib/components/ui/TeacherGraphWorkspaceFrame.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
+  import { modalFocus } from "$lib/components/ui/modal-focus";
   import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";
   import {
     buildTeacherUnitFlow,
@@ -1095,7 +1096,7 @@
     Lerneinheit bearbeiten
   </button>
   <details class="workspace-row-menu">
-    <summary aria-label="Lerneinheitsaktionen">•••</summary>
+    <summary>Weitere Aktionen</summary>
     <div class="workspace-row-menu__panel">
       <a class="workspace-row-menu__danger" href={pageHref({ delete: "1" })}>Lerneinheit löschen</a>
     </div>
@@ -1382,7 +1383,7 @@
 {#if unitEditOpen}
   <div class="dialog-backdrop">
     <button class="dialog-backdrop__dismiss" type="button" aria-label="Bearbeiten schließen" onclick={closeUnitEditDialog}></button>
-    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="edit-unit-title">
+    <div use:modalFocus={closeUnitEditDialog} class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="edit-unit-title">
       <div class="dialog-card__header">
         <div>
           <p class="workspace-label">Lerneinheit</p>
@@ -1413,7 +1414,7 @@
 
 {#if data.showDeleteDialog}
   <div class="dialog-backdrop">
-    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="delete-unit-title">
+    <div use:modalFocus={() => void goto(pageHref({ delete: null }))} class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="delete-unit-title">
       <div class="dialog-card__header">
         <div>
           <p class="workspace-label">Lerneinheit</p>

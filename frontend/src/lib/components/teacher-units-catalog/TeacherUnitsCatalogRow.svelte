@@ -59,7 +59,13 @@
     </div>
 
     <div class="teacher-units-catalog-row__actions">
-      <a class="workspace-link-action workspace-link-action--danger" href={`${unit.href}?delete=1`}>Löschen</a>
+      <a class="workspace-link-action" href={unit.href}>Bearbeiten</a>
+      <details class="workspace-row-menu">
+        <summary>Weitere Aktionen</summary>
+        <div class="workspace-row-menu__panel">
+          <a class="workspace-row-menu__danger" href={`${unit.href}?delete=1`}>Löschen</a>
+        </div>
+      </details>
     </div>
   </div>
 </li>

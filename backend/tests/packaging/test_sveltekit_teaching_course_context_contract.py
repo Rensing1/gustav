@@ -54,7 +54,10 @@ def test_frontend_contains_teacher_course_context_page() -> None:
     assert "Lerneinheit hinzufügen" in page_src
     assert "WorkspaceDrawer" in page_src
     assert "workspace-drawer-card" in drawer_src
-    assert 'event.key !== "Escape"' in drawer_src
+    assert 'use:modalFocus={onClose}' in drawer_src
+    focus_src = (drawer_path.parent / "modal-focus.ts").read_text(encoding="utf-8")
+    assert 'event.key === "Escape"' in focus_src
+    assert 'isTopmost()' in focus_src
     assert 'aria-label="Seitenleiste schließen"' in drawer_src
     assert "?/saveCourse" in page_src
     assert "?/deleteCourse" in page_src

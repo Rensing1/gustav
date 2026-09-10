@@ -51,7 +51,7 @@
           <progress max={session.total_items} value={visiblyHandledItems} aria-label={`${completedPercent} Prozent bearbeitet`}></progress>
           <span>{completedPercent} %</span>
         </div>
-        <button class="practice-text-action" type="button" onclick={openEndDialog}>Sitzung beenden</button>
+        <button class="practice-text-action workspace-link-action workspace-link-action--subtle" type="button" onclick={openEndDialog}>Sitzung beenden</button>
       </aside>
 
       <div class="practice-session__main">
@@ -80,12 +80,12 @@
                 </label>
                 <div class="practice-task-card__actions">
                   <button
-                    class="practice-button practice-button--secondary"
+                    class="workspace-link-action workspace-link-action--secondary"
                     type="submit"
                     formaction="?/skip"
                     formnovalidate
                   >Aufgabe überspringen</button>
-                  <button class="practice-button practice-button--primary" type="submit">Antwort prüfen</button>
+                  <button class="workspace-link-action workspace-link-action--primary" type="submit">Antwort prüfen</button>
                 </div>
               </form>
             {:else if item.h5p_content_id}
@@ -100,7 +100,7 @@
               <form method="POST" action="?/skip" class="practice-h5p-skip">
                 <input type="hidden" name="session_id" value={session.id} />
                 <input type="hidden" name="item_id" value={item.id} />
-                <button class="practice-button practice-button--secondary" type="submit">Aufgabe überspringen</button>
+                <button class="workspace-link-action workspace-link-action--secondary" type="submit">Aufgabe überspringen</button>
               </form>
             {/if}
           {:else if item.status === "feedback" && attempt?.status === "completed"}
@@ -132,8 +132,8 @@
       <h2 id="practice-end-dialog-title">Möchtest du die Übung jetzt beenden?</h2>
       <p>Noch offene Aufgaben werden nur für diese Sitzung übersprungen. Deine bisherigen Antworten bleiben erhalten.</p>
       <div class="practice-end-dialog__actions">
-        <button class="practice-button practice-button--secondary" type="button" onclick={() => endDialog?.close()}>Weiter üben</button>
-        <button class="practice-button practice-button--danger" type="submit">Sitzung beenden</button>
+        <button class="workspace-link-action workspace-link-action--secondary" type="button" onclick={() => endDialog?.close()}>Weiter üben</button>
+        <button class="workspace-link-action workspace-link-action--danger" type="submit">Sitzung beenden</button>
       </div>
     </form>
   </dialog>

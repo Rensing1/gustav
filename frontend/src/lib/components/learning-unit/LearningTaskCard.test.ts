@@ -848,7 +848,7 @@ describe("LearningTaskCard", () => {
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*padding:\s*0;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*border-left:\s*0;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*background:\s*transparent;/s);
-    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*min-height:\s*1\.72rem;[^}]*padding:\s*0\.24rem 0\.58rem;[^}]*font-size:\s*0\.7rem;/s);
+    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*min-height:\s*var\(--layout-control-min\);[^}]*padding:\s*0\.24rem 0\.58rem;[^}]*font-size:\s*0\.7rem;/s);
     expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*box-shadow:\s*1px 1px 0/s);
     expect(designSystemCss).toMatch(/\.workspace-top-action--subtle:hover,[^}]*\.workspace-link-action--subtle:hover,[^}]*transform:\s*none;/s);
     expect(readFileSync(path.resolve(currentDir, "LearningTaskCard.svelte"), "utf8")).toContain("workspace-top-action--subtle");

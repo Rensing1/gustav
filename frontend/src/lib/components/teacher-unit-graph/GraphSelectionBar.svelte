@@ -71,7 +71,7 @@
 
     {#if onRequestDelete}
     <details class="workspace-row-menu teacher-graph-selection-bar__menu">
-      <summary aria-label="Weitere Aktionen">•••</summary>
+      <summary>Weitere Aktionen</summary>
       <div class="workspace-row-menu__panel">
         <button class="workspace-row-menu__danger" type="button" onclick={onRequestDelete}>
           {selection.kind === "module" ? "Modul löschen" : "Phase löschen"}

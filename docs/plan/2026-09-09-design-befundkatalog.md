@@ -59,6 +59,8 @@ P2 = regulär zu behebende Inkonsistenz oder Darstellungsfehler. Die Reihenfolge
 
 ### DS-01 · P2 · Mitgliedersuche im Dark Mode kaum lesbar
 
+**Behoben und lokal abgenommen am 10. September 2026:** Gemeinsame Feldfarben mit gemessenem Textkontrast von mindestens 4,5:1. Nachweis: `make verify-feature FEATURE=teacher-course-detail`; [Dark, 390 px](assets/2026-09-10-designreparatur-paket2/members-dark-390.png). Die ursprüngliche Reproduktion folgt zur Nachvollziehbarkeit.
+
 Reproduktion: Kurs öffnen → „Mitglieder verwalten“ → Dark Mode → Suchtext eingeben. Der Text ist `rgb(240, 241, 241)`, der Hintergrund bleibt `rgba(255, 252, 247, 0.92)`. Die Eingabe ist dadurch fast weiß auf fast weiß. Vergleich: Die Kursauswahl auf `/teaching` wechselt passend auf eine dunkle Fläche.
 
 Quelle: `frontend/src/lib/styles/teaching-workspace.css`, `.workspace-member-search input` (ab Zeile 368), fest eingetragener heller Hintergrund statt Theme-Fläche. Ziel: passende gemeinsame Feldfarben in beiden Modi; Lesbarkeit mit eingegebenem Text testen, nicht nur mit Platzhalter.
@@ -67,6 +69,8 @@ Quelle: `frontend/src/lib/styles/teaching-workspace.css`, `.workspace-member-sea
 
 ### DS-02 · P2 · Mitgliederverwaltung streckt Felder und Abstände
 
+**Behoben und lokal abgenommen am 10. September 2026:** Inhalt beginnt oben, einzeilige Suche bleibt 44 px hoch, Aktionen behalten ihre eigene Größe. Nachweis: `make verify-feature FEATURE=teacher-course-detail`; [Desktop](assets/2026-09-10-designreparatur-paket2/members-light-1440.png), [320 px](assets/2026-09-10-designreparatur-paket2/members-light-320.png).
+
 Bei einem Mitglied und Desktophöhe 1000 px misst das Suchfeld rund 128 px Höhe und 15,2 px Eckenradius. Zwischen Kopf, Aktionen und Suche entstehen große Leerflächen; auch „Profil“ wird unüblich hoch und schmal. Nach erneutem Öffnen reproduziert. Das ist nicht nur eine andere Dichte: Ein einzeiliges Suchfeld nimmt die Form eines großen Textkastens an. Vergleich: 44 px Suchfeld im Lerneinheitenkatalog.
 
 Quelle: `frontend/src/routes/teaching/courses/[courseId]/+page.svelte`, Mitgliederbereich; `teaching-workspace.css`, `.workspace-modal-card`, `.workspace-drawer-card`, `.workspace-member-search`. Das Zusammenspiel aus vollhohem Drawer und Grid-Streckung ist ein Ursachenverdacht, noch kein isoliert getesteter Fix. Ziel: Inhalt am Anfang anordnen, Feldhöhe unabhängig von freier Drawerhöhe halten.
@@ -74,6 +78,8 @@ Quelle: `frontend/src/routes/teaching/courses/[courseId]/+page.svelte`, Mitglied
 ![Gestreckte Mitgliederverwaltung](assets/2026-09-09-designvergleich/members-drawer-light.png)
 
 ### DS-03 · P2 · Üben verwendet eine eigene Buttonfamilie
+
+**Behoben und lokal abgenommen am 10. September 2026:** Die eigene Practice-Buttonfamilie entfällt; vorhandene Workspace-Varianten tragen primäre, sekundäre und destruktive Aktionen. Aktiver Start einschließlich Hover/Fokus erreicht mindestens 4,5:1 Textkontrast. Nachweis: `make verify-feature FEATURE=design-system-consistency`; [Light](assets/2026-09-10-designreparatur-paket2/practice-controls-light-390.png), [Dark](assets/2026-09-10-designreparatur-paket2/practice-controls-dark-390.png).
 
 Vergleich im gleichen Desktop-/Light-Zustand:
 
@@ -94,6 +100,8 @@ Quelle: `frontend/src/lib/styles/practice.css:265`, `.practice-button`; `Practic
 
 ### DS-04 · P2 · Erstellungsdialoge mischen unterschiedliche Gestaltungen
 
+**Behoben und lokal abgenommen am 10. September 2026:** Kantige Rahmen, gemeinsame Aktionen und Schließen-Beschriftung; geteilte Fokusführung einschließlich Escape und Rückgabe an den Auslöser. Nachweis: beide Paket-2-Gates; [Kurs](assets/2026-09-10-designreparatur-paket2/course-dialog-light-390.png), [Lerneinheit](assets/2026-09-10-designreparatur-paket2/unit-dialog-dark-390.png).
+
 „Neuer Kurs“ öffnet einen Dialog mit runden `primary-button`-/`ghost-button`-Aktionen, normaler Schrift und Textbutton „Schließen“. „Neue Lerneinheit“ nutzt für das Anlegen einen kantigen Workspace-Button, aber ein rundes Dialoggehäuse und ein Kreuz zum Schließen. Beide Dialoggehäuse haben etwa 16,8 px Radius und einen weichen Schatten. Die Mitgliederschublade verwendet wiederum einen kantigen „Schließen“-Button.
 
 Quellen: `frontend/src/routes/teaching/courses/+page.svelte:120`, `frontend/src/routes/teaching/units/+page.svelte:92`, `frontend/src/lib/styles/app.css:331`, `teaching-workspace.css:278`. Ziel: gemeinsame Dialog- und Aktionsregeln; Größe und Modal-vs-Drawer dürfen fachlich variieren, die Grundsprache und Schließbedienung sollen nachvollziehbar einheitlich sein.
@@ -104,6 +112,8 @@ Quellen: `frontend/src/routes/teaching/courses/+page.svelte:120`, `frontend/src/
 
 ### DS-05 · P2 · Suchfelder der beiden Kataloge sind nicht gleich gestaltet
 
+**Behoben und lokal abgenommen am 10. September 2026:** Gemeinsame Feldbasis und Mindesthöhe 44 px, Suche mit und ohne Treffer geprüft. Nachweis: `make verify-feature FEATURE=design-system-consistency`; [Kurse](assets/2026-09-10-designreparatur-paket2/course-catalog-dark-320.png), [Lerneinheiten](assets/2026-09-10-designreparatur-paket2/unit-catalog-dark-320.png).
+
 Im Kurskatalog: Suche 26 px hoch, Innenabstand 1 × 2 px, schmaler Standardrahmen. Im Lerneinheitenkatalog: Suche 44 px hoch, horizontal 12 px Innenabstand. Damit unterscheiden sich direkt benachbarte Verwaltungslisten bei derselben Grundfunktion deutlich. Die zusätzliche Filteraktion im Kurskatalog kann fachlich begründet sein; die Feldgestaltung ist davon unabhängig vereinheitlichbar.
 
 Quellen: `frontend/src/routes/teaching/courses/+page.svelte`, Filterformular; `frontend/src/routes/teaching/units/+page.svelte`, Suchbereich. Ziel: eine Feldbasis, konsistente Beschriftungen und bewusst definierte Dichte.
@@ -113,6 +123,8 @@ Quellen: `frontend/src/routes/teaching/courses/+page.svelte`, Filterformular; `f
 ![Lerneinheitenkatalog](assets/2026-09-09-designvergleich/units-light.png)
 
 ### DS-06 · P2 · Radioauswahl im Lerneinheitendialog ist falsch angeordnet
+
+**Behoben und lokal abgenommen am 10. September 2026:** Auswahlkreise stehen neben ihrer Beschriftung, sind von Vollbreiten-/Mindesthöhenregeln ausgenommen und verwenden den Plattformakzent. Nachweis: `make verify-feature FEATURE=design-system-consistency`; [Light, 320 px](assets/2026-09-10-designreparatur-paket2/unit-dialog-light-320.png), [Dark, 1024 px](assets/2026-09-10-designreparatur-paket2/unit-dialog-dark-1024.png).
 
 „Neue Lerneinheit“ → Typ: Die nativen Auswahlkreise stehen mittig oberhalb der linksbündigen Texte „Modular“ und „Linear“, statt jeweils eine kompakte Auswahlzeile mit ihnen zu bilden. Zusätzlich ist die Auswahl blau, während Practice und der Kummerkasten den Plattformakzent verwenden. Die starke räumliche Trennung ist der wichtigere Fehler; eine aufwendige Practice-Karte muss deshalb nicht in ein kleines Formular übernommen werden.
 
@@ -125,6 +137,8 @@ Die Lehrkraftansicht enthält „Zoom In“, „Zoom Out“ und „Toggle Intera
 ## Weitere Gestaltungsvorschläge, noch keine Fehlerentscheidung
 
 - DS-08 / P3: Aktionsgewichtung prüfen. Im Lerneinheitenkatalog ist „Löschen“ die auffällige rote Zeilenaktion; im Kurskatalog steht dort „Kurs verwalten“. Die unterschiedlichen Funktionen sind legitim. Dennoch sollte die normale Weiterarbeit visuell Vorrang haben und Destruktives nach einer gemeinsamen Regel platziert werden. Nicht ohne Beratung verschieben.
+
+**DS-08 behoben und lokal abgenommen am 10. September 2026:** Gemäß freigegebener Entscheidung bleibt Bearbeiten direkt erreichbar; Löschen beziehungsweise Entfernen liegt unter dem sichtbar beschrifteten Menü „Weitere Aktionen“. Bestätigungen und Abbruch bleiben erhalten. Nachweis: beide Paket-2-Gates mit Menü-/Abbruchprüfung; [Katalog](assets/2026-09-10-designreparatur-paket2/unit-catalog-light-390.png), [Mitglieder](assets/2026-09-10-designreparatur-paket2/members-dark-390.png).
 - DS-09 / P3: `/diagnostics` zeigt eine runde Karte, „GUSTAV“ als Haupttitel und erklärenden Text über die interne Aufteilung der Arbeitsflächen statt einer direkten Diagnosehandlung. Die Einstiegsseite wirkt gegenüber `/teaching` wie ein älterer Entwurf. Zielrichtung: sinnvoller Einstieg mit gemeinsamer Seitenüberschrift; Inhalt und Navigation zuerst beraten, nicht bloß CSS austauschen.
 
 ## Ergänzung: H5P und Auth

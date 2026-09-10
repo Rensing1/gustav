@@ -53,13 +53,13 @@
 
   <div class="practice-summary__actions">
     {#if endReason === "empty"}
-      <a class="practice-button practice-button--primary" href="/learning/practice?mode=exam">Alle Aufgaben üben</a>
-      <a class="practice-button practice-button--secondary" href="/learning">Zum Lernraum</a>
+      <a class="workspace-link-action workspace-link-action--primary" href="/learning/practice?mode=exam">Alle Aufgaben üben</a>
+      <a class="workspace-link-action workspace-link-action--secondary" href="/learning">Zum Lernraum</a>
     {:else}
-      <a class="practice-button practice-button--primary" href="/learning/practice">
+      <a class="workspace-link-action workspace-link-action--primary" href="/learning/practice">
         {endReason === "stopped" ? "Neue Übung auswählen" : "Weitere Themen üben"}
       </a>
-      <a class="practice-button practice-button--secondary" href="/learning">Zum Lernraum</a>
+      <a class="workspace-link-action workspace-link-action--secondary" href="/learning">Zum Lernraum</a>
     {/if}
   </div>
 </section>

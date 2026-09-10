@@ -104,7 +104,7 @@
         </div>
 
         <details class="workspace-row-menu">
-          <summary aria-label={`Aktionen für ${unit.title}`}><span aria-hidden="true">⋯</span></summary>
+          <summary aria-label={`Weitere Aktionen für ${unit.title}`}>Weitere Aktionen</summary>
           <div class="workspace-row-menu-popover">
             <a class="workspace-link-action" href={unit.href}>Öffnen</a>
             {#if orderingEnabled}

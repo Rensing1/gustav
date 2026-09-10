@@ -28,7 +28,7 @@
 <section class="teacher-units-catalog-toolbar teacher-catalog__toolbar">
   <div class="teacher-units-catalog-toolbar__controls teacher-catalog__toolbar-controls">
     <div class="teacher-units-catalog-toolbar__search">
-      <label>
+      <label class="workspace-field">
         <span>Suche</span>
         <input
           type="search"
@@ -42,7 +42,7 @@
     </div>
 
     <div class="teacher-units-catalog-toolbar__sort">
-      <label>
+      <label class="workspace-field">
         <span>Sortierung</span>
         <select
           name="sort"

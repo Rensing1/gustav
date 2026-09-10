@@ -101,7 +101,7 @@
 
       <footer class="practice-selection__footer">
         <p>{selectedKeys.length} {selectedKeys.length === 1 ? "Thema ausgewählt" : "Themen ausgewählt"}</p>
-        <button class="practice-button practice-button--primary" type="submit" disabled={!canStart}>
+        <button class="workspace-link-action workspace-link-action--primary" type="submit" disabled={!canStart}>
           {startLabel}
           <span aria-hidden="true">→</span>
         </button>

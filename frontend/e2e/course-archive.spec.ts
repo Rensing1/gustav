@@ -120,6 +120,7 @@ test("@feature-detail teacher permanently deletes only an isolated test course a
 
     await teacher.page.goto(`/teaching/courses/${seeded.courseId}?course=1`);
     const drawer = teacher.page.getByRole("dialog", { name: "Kurs bearbeiten" });
+    await drawer.locator("summary").filter({ hasText: "Weitere Aktionen" }).click();
     await drawer.getByLabel("Bestätigung").fill("falscher Titel");
     await drawer.getByLabel(/unwiderruflichen Verlust/).check();
     await drawer.getByRole("button", { name: "Kurs endgültig löschen" }).click();

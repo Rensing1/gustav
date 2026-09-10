@@ -1,6 +1,7 @@
 <script lang="ts">
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
+  import { modalFocus } from "$lib/components/ui/modal-focus";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -46,9 +47,9 @@
 
   <form method="GET" class="workspace-course-catalog__filters teacher-catalog__toolbar" aria-label="Kurse filtern">
     {#if data.status === "archived"}<input type="hidden" name="status" value="archived" />{/if}
-    <label><span>Suche</span><input name="q" value={data.filters.query} placeholder="Titel oder Fach" /></label>
-    <label><span>Fach</span><input name="subject" value={data.filters.subject} placeholder="Alle Fächer" /></label>
-    <label><span>Schuljahr</span><input name="school_year_start" type="number" min="2000" max="2200" value={data.filters.schoolYearStart ?? ""} placeholder="Alle" /></label>
+    <label class="workspace-field"><span>Suche</span><input name="q" value={data.filters.query} placeholder="Titel oder Fach" /></label>
+    <label class="workspace-field"><span>Fach</span><input name="subject" value={data.filters.subject} placeholder="Alle Fächer" /></label>
+    <label class="workspace-field"><span>Schuljahr</span><input name="school_year_start" type="number" min="2000" max="2200" value={data.filters.schoolYearStart ?? ""} placeholder="Alle" /></label>
     <button class="workspace-text-button" type="submit">Filtern</button>
   </form>
 
@@ -119,8 +120,8 @@
 {#if createDialogOpen}
   <div class="workspace-modal">
     <button class="workspace-modal-backdrop" type="button" aria-label="Dialog schließen" onclick={() => (createDialogOpen = false)}></button>
-    <div class="workspace-modal-card" role="dialog" aria-modal="true" aria-labelledby="create-course-title">
-      <div class="workspace-modal-header"><div><p class="workspace-modal-eyebrow">Neuer Kurs</p><h2 id="create-course-title">Kurs erstellen</h2></div><button class="ghost-button" type="button" onclick={() => (createDialogOpen = false)}>Schließen</button></div>
+    <div use:modalFocus={() => (createDialogOpen = false)} class="workspace-modal-card" role="dialog" aria-modal="true" aria-labelledby="create-course-title">
+      <div class="workspace-modal-header"><div><p class="workspace-modal-eyebrow">Neuer Kurs</p><h2 id="create-course-title">Kurs erstellen</h2></div><button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={() => (createDialogOpen = false)}>Schließen</button></div>
       <form method="POST" action="?/createCourse" class="workspace-form">
         <label class="workspace-field"><span>Titel</span><input name="title" value={form?.createCourse?.values?.title ?? ""} maxlength="200" required /></label>
         <div class="workspace-form-grid">
@@ -132,7 +133,7 @@
         <datalist id="course-subjects"><option value="Informatik"></option><option value="Politik-Wirtschaft"></option><option value="Mathematik"></option><option value="Deutsch"></option></datalist>
         <datalist id="course-grades"><option value="5"></option><option value="6"></option><option value="7"></option><option value="8"></option><option value="9"></option><option value="10"></option><option value="Jahrgangsübergreifend"></option></datalist>
         {#if form?.createCourse?.error}<StatusMessage tone="error" title="Kurs nicht erstellt" description={form.createCourse.error} focusOnMount={true} />{/if}
-        <div class="workspace-inline-actions"><button class="primary-button" type="submit">Kurs anlegen</button><button class="ghost-button" type="button" onclick={() => (createDialogOpen = false)}>Abbrechen</button></div>
+        <div class="workspace-inline-actions"><button class="workspace-link-action workspace-link-action--primary" type="submit">Kurs anlegen</button><button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={() => (createDialogOpen = false)}>Abbrechen</button></div>
       </form>
     </div>
   </div>

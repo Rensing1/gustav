@@ -5,6 +5,7 @@ import { login } from "./support/auth";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { addUnitToCourse, seedLearnerVisualSmokeCourse } from "./support/seed-data";
+import { contrastRatio, expectNoViewportOverflow } from "./support/layout-sanity";
 
 const password = e2ePassword;
 
@@ -13,7 +14,7 @@ async function authenticatedPage(browser: Browser): Promise<{ context: BrowserCo
   return { context, page: await context.newPage() };
 }
 
-test("@feature-acceptance teacher manages a course in the flat detail workspace", async ({ browser }) => {
+test("@feature-acceptance teacher manages a course in the flat detail workspace", async ({ browser }, testInfo) => {
   test.setTimeout(90_000);
   const unique = Date.now();
   const teacherEmail = e2eEmail("teacher");
@@ -56,8 +57,37 @@ test("@feature-acceptance teacher manages a course in the flat detail workspace"
     await teacher.page.getByRole("button", { name: "Mitglieder verwalten" }).click();
     const membersDrawer = teacher.page.getByRole("dialog", { name: "Mitglieder verwalten" });
     await expect(membersDrawer).toBeVisible();
+    const search = membersDrawer.getByRole("searchbox", { name: "Mitglieder durchsuchen" });
+    expect((await search.boundingBox())!.height).toBeLessThanOrEqual(60);
     await teacher.page.keyboard.press("Escape");
     await expect(membersDrawer).toBeHidden();
+
+    for (const theme of ["light", "dark"] as const) {
+      const themeButton = teacher.page.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
+      if (await themeButton.count()) await themeButton.click();
+      for (const width of [1440, 1024, 390, 320]) {
+        await teacher.page.setViewportSize({ width, height: 900 });
+        await teacher.page.getByRole("button", { name: "Mitglieder verwalten" }).click();
+        await search.fill("E2E");
+        const palette = await search.evaluate((node) => ({ color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor, height: node.getBoundingClientRect().height }));
+        expect(palette.height).toBeGreaterThanOrEqual(44);
+        expect(palette.height).toBeLessThanOrEqual(60);
+        expect(contrastRatio(palette.color, palette.background)).toBeGreaterThanOrEqual(4.5);
+        await expect(membersDrawer.getByRole("link", { name: "Profil", exact: true }).first()).toBeVisible();
+        const memberRow = membersDrawer.getByRole("listitem").first();
+        await expect(memberRow.getByRole("button", { name: "Entfernen", exact: true })).toBeHidden();
+        await memberRow.locator("summary").filter({ hasText: "Weitere Aktionen" }).click();
+        await memberRow.getByRole("button", { name: "Entfernen", exact: true }).click();
+        await expect(memberRow.getByRole("button", { name: "Entfernen bestätigen", exact: true })).toBeVisible();
+        await memberRow.getByRole("button", { name: "Abbrechen", exact: true }).click();
+        await expect(memberRow.getByRole("link", { name: "Profil", exact: true })).toBeVisible();
+        await expectNoViewportOverflow(teacher.page);
+        await teacher.page.screenshot({ path: testInfo.outputPath(`members-${theme}-${width}.png`) });
+        await teacher.page.keyboard.press("Escape");
+        await expect(teacher.page.getByRole("button", { name: "Mitglieder verwalten" })).toBeFocused();
+      }
+    }
+    await teacher.page.setViewportSize({ width: 1440, height: 900 });
 
     await teacher.page.getByRole("button", { name: "Mitglieder verwalten" }).click();
     const outsideSurface = teacher.page.getByRole("button", { name: "Seitenleiste schließen" });
@@ -67,7 +97,10 @@ test("@feature-acceptance teacher manages a course in the flat detail workspace"
     await teacher.page.getByRole("link", { name: "Kurs bearbeiten" }).click();
     await expect(teacher.page).toHaveURL(new RegExp(`/teaching/courses/${seeded.courseId}\\?course=1$`));
     let courseDrawer = teacher.page.getByRole("dialog", { name: "Kurs bearbeiten" });
+    await expect(courseDrawer.getByRole("button", { name: "Kurs endgültig löschen" })).toBeHidden();
+    await courseDrawer.locator("summary").filter({ hasText: "Weitere Aktionen" }).click();
     await expect(courseDrawer).toContainText("Mitgliedschaften");
+    await expect(courseDrawer.getByRole("button", { name: "Kurs endgültig löschen" })).toBeVisible();
     await teacher.page.keyboard.press("Escape");
     await expect(courseDrawer).toBeHidden();
     await expect(teacher.page).toHaveURL(new RegExp(`/teaching/courses/${seeded.courseId}$`));

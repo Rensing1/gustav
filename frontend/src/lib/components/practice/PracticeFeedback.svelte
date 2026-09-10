@@ -56,14 +56,14 @@
       <form method="POST" action="?/solution">
         <input type="hidden" name="session_id" value={sessionId} />
         <input type="hidden" name="item_id" value={itemId} />
-        <button class="practice-button practice-button--secondary" type="submit">Musterlösung ansehen</button>
+        <button class="workspace-link-action workspace-link-action--secondary" type="submit">Musterlösung ansehen</button>
       </form>
     {/if}
   {/if}
 
   <form method="POST" action="?/continue" class="practice-feedback__continue">
     <input type="hidden" name="session_id" value={sessionId} />
-    <button class="practice-button practice-button--primary practice-button--block" type="submit">
+    <button class="workspace-link-action workspace-link-action--primary workspace-link-action--block" type="submit">
       Nächste Aufgabe <span aria-hidden="true">→</span>
     </button>
   </form>

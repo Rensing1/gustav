@@ -2,6 +2,13 @@
 
 ## 2026-09-10
 
+### Designreparatur – gemeinsame Bedienelemente
+
+- fix(ui): Practice, Kataloge, Kurserstellung, Profilfelder und Mitgliederverwaltung verwenden gemeinsame Feld- und Aktionsgrößen. Normale Aktionen sind mindestens 44 px hoch; Checkboxen und Radiofelder behalten kompakte Auswahlflächen neben ihrer Beschriftung.
+- fix(ui): Dialoge und Drawer teilen eine Fokussteuerung mit Escape, Tab-Begrenzung auf den obersten Dialog und Rückgabe an den Auslöser. Kantige Rahmen, gemeinsame Innenabstände und beschriftete Schließen-Aktionen ersetzen abweichende Varianten.
+- fix(teaching): Destruktive Aktionen liegen unter „Weitere Aktionen“; direkte Bearbeitung, Berechtigungen und bestehende Bestätigungen bleiben erhalten.
+- test: Beide Paket-Gates einschließlich authentifizierter Browserabläufe bestanden; 48 gesichtete Bilder decken 1440/1024/390/320 px in Light/Dark ab. Keine API- oder Schemaänderung.
+
 ### Designreparatur – Inhaltserhalt und lineare Abschnitte
 
 - fix(editor): Der visuelle Markdown-Editor erhält Inline-Code und Codeblöcke als Text beim Speichern und erneuten Laden. Code wird nicht ausgeführt; die sichere Markdown-Ausgabe bleibt unverändert.

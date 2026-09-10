@@ -4,6 +4,7 @@
   import TeacherUnitsCatalogToolbar from "$lib/components/teacher-units-catalog/TeacherUnitsCatalogToolbar.svelte";
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
+  import { modalFocus } from "$lib/components/ui/modal-focus";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -18,12 +19,6 @@
 
   function closeCreateDialog(): void {
     createDialogOpen = false;
-  }
-
-  function handleDialogKeydown(event: KeyboardEvent): void {
-    if (event.key === "Escape") {
-      closeCreateDialog();
-    }
   }
 
   function scheduleLiveSearch(nextQuery: string): void {
@@ -65,8 +60,6 @@
   <title>Lerneinheiten | GUSTAV</title>
 </svelte:head>
 
-<svelte:window onkeydown={handleDialogKeydown} />
-
 <div class="workspace-page workspace-units-catalog teacher-catalog">
   <PageActionHead title={data.pageTitle}>
     {#snippet actions()}
@@ -97,6 +90,7 @@
       onclick={closeCreateDialog}
     ></div>
     <div
+      use:modalFocus={closeCreateDialog}
       class="workspace-modal-card"
       role="dialog"
       tabindex="-1"
@@ -110,7 +104,7 @@
           <p class="workspace-label">Lerneinheiten</p>
           <h2 id="create-unit-title">Neue Lerneinheit</h2>
         </div>
-        <button class="workspace-icon-button" type="button" aria-label="Dialog schließen" onclick={closeCreateDialog}>✕</button>
+        <button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={closeCreateDialog}>Schließen</button>
       </div>
 
       <form method="POST" class="workspace-form">
@@ -125,12 +119,12 @@
         </label>
 
         <fieldset class="workspace-field">
-          <span>Typ</span>
-          <label>
+          <legend>Typ</legend>
+          <label class="workspace-choice">
             <input name="unit_type" type="radio" value="modular" checked={createUnitType() === "modular"} />
             Modular
           </label>
-          <label>
+          <label class="workspace-choice">
             <input name="unit_type" type="radio" value="linear" checked={createUnitType() === "linear"} />
             Linear
           </label>
@@ -141,7 +135,7 @@
         {/if}
 
         <div class="workspace-form-actions">
-          <button class="workspace-link-action" type="submit">Lerneinheit anlegen</button>
+          <button class="workspace-link-action workspace-link-action--primary" type="submit">Lerneinheit anlegen</button>
         </div>
       </form>
     </div>

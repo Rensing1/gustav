@@ -40,6 +40,10 @@
       <header class="practice-session__topline">
         <p class="practice-eyebrow">{item.module_title}</p>
         <h2 id="practice-session-title">Aufgabe {item.position} von {session.total_items}</h2>
+        {#if item.presentation_number > 1}
+          <p class="practice-eyebrow">Wiederholung</p>
+          <p class="workspace-note">Du übst diese Aufgabe erneut. Deine bisherigen Antworten bleiben erhalten.</p>
+        {/if}
       </header>
 
       <aside class="practice-session__rail" aria-label="Sitzungsfortschritt">

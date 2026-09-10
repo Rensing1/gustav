@@ -39,7 +39,7 @@
 
 .practice-eyebrow {
   margin: 0;
-  color: var(--color-accent);
+  color: var(--color-link);
   font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 700;

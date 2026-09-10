@@ -32,6 +32,20 @@ const session = {
 };
 
 describe("PracticeSessionWorkspace", () => {
+  it.each([1, 2] as const)("explains only repeated presentation %s without changing progress", (presentationNumber) => {
+    render(PracticeSessionWorkspace, { props: {
+      session: { ...session, current_item: { ...session.current_item, presentation_number: presentationNumber } },
+      attempt: null, attemptKey: "same-key", solution: null, nowIso: "2026-08-12T12:00:00Z"
+    } });
+    if (presentationNumber === 2) {
+      expect(screen.getByText("Wiederholung", { exact: true })).toBeVisible();
+      expect(screen.getByText("Du übst diese Aufgabe erneut. Deine bisherigen Antworten bleiben erhalten.")).toBeVisible();
+    } else {
+      expect(screen.queryByText("Wiederholung", { exact: true })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole("progressbar", { name: "50 Prozent bearbeitet" })).toHaveValue(1);
+    expect(screen.getByRole("heading", { name: "Aufgabe 1 von 2" })).toBeVisible();
+  });
   it("counts the current answered item in visible progress while feedback is shown", () => {
     render(PracticeSessionWorkspace, {
       props: {

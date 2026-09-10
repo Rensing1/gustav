@@ -1,5 +1,7 @@
 # Designaudit: zusätzliche Testlandschaft und lokale Mailprüfung
 
+**Reparaturstand · 10. September 2026:** DS-33–35 sind im [freigegebenen Reparaturplan](2026-09-10-designkonsistenz-reparatur.md) lokal abgenommen. Jeder Eintrag enthält den aktuellen Reparaturnachweis; die anschließenden Untersuchungsprotokolle beschreiben den historischen Zustand vor der Umsetzung. Externe Abnahmegrenzen bleiben bestehen.
+
 Felix hat die isolierte zusätzliche Testlandschaft und einen lokalen Mailfänger ausdrücklich freigegeben. Ziel bleibt die Untersuchung, nicht die Reparatur der Designbefunde.
 
 ## Plan und Sicherheitsnachweise vor Änderungen

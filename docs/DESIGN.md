@@ -726,6 +726,12 @@ Verbindliche Regeln:
 - Das UI-Labor zeigt Gespräch und Abschluss jeweils als vollwertige
   Referenzfläche in Light und Dark sowie auf Desktop, Tablet und Smartphone.
 
+### Reparaturvertrag: Wiederholung und Druckfassung
+
+Eine Aufgabenpräsentation mit `presentation_number > 1` trägt sichtbar „Wiederholung“. Ein kurzer Text erklärt, dass dieselbe Aufgabe erneut geübt wird und die bisherigen Antworten erhalten bleiben. Der Hinweis bleibt bei Antwort und Rückmeldung sichtbar; die erste Präsentation erhält ihn nicht. Zähler, Bewertungslogik und gespeicherte Antworten werden dafür nicht verändert. Darstellung und Abstände nutzen die vorhandenen Practice- und Textbausteine.
+
+In der Druckfassung erhalten Abschnitts-/Modulüberschriften einen einheitlichen Abstand zum vorherigen Inhalt. Überschriften bleiben mit dem Beginn des nächsten Inhalts zusammen; lange Inhalte dürfen regulär über mehrere Seiten laufen. Die bestehende sichere Markdown-Ausgabe, Bildprüfung, importierten PDF-Seiten, A4-Ränder und Seitenzählung bleiben erhalten. Der Abstand zwischen Inhaltsüberschrift und Text wird nicht mit dem größeren Abstand zwischen Abschnitten verwechselt.
+
 ## 12. Auth und Preview
 
 - Auth gehört sichtbar in dieselbe Produktsprache

@@ -5,7 +5,8 @@ import { resolve } from "node:path";
 import { apiHeaders } from "./support/api";
 import { currentUserSub, login } from "./support/auth";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
-import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
+import { expect, test, type Browser, type BrowserContext, type Page, type TestInfo } from "./support/feature-test";
+import { expectDesignContrast } from "./support/design-contrast";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { registerE2EH5PContent } from "./support/e2e-run-state";
 import { seedLearnerPracticeCourse } from "./support/seed-data";
@@ -20,12 +21,13 @@ const projectRoot = resolve(process.cwd(), "..");
 const python = resolve(projectRoot, ".venv/bin/python");
 
 async function pageFor(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await newBrowserContext(browser, { baseURL: webBase });
+  const context = await newBrowserContext(browser, { baseURL: webBase, locale: "de-DE" });
+  context.setDefaultTimeout(15_000);
   return { context, page: await context.newPage() };
 }
 
-function minimalH5pPackage(): Buffer {
-  const fixture = resolve(projectRoot, "backend/tests_e2e/fixtures/h5p/minimal");
+function practiceH5pPackage(): Buffer {
+  const fixture = resolve(projectRoot, "frontend/e2e/fixtures/h5p-multichoice-design");
   const program = [
     "import io, pathlib, sys, zipfile",
     "source = pathlib.Path(sys.argv[1])",
@@ -38,8 +40,22 @@ function minimalH5pPackage(): Buffer {
   return execFileSync(python, ["-c", program, fixture], { cwd: projectRoot });
 }
 
-test("@feature-acceptance teacher authors and learner completes deterministic native and H5P practice", async ({ browser }) => {
-  test.setTimeout(180_000);
+async function pictures(page: Page, info: TestInfo, state: string) {
+  for (const theme of ["light", "dark"]) {
+    const toggle = page.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
+    if (await toggle.count()) await toggle.click();
+    for (const width of [1440, 1024, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+      await expect(async () => expectDesignContrast(page.locator(".practice-eyebrow, .practice-session__topline p, .practice-session h2, .practice-feedback h3, .workspace-link-action"))).toPass({ timeout: 2000 });
+      await page.screenshot({ path: info.outputPath(`${state}-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
+    }
+  }
+}
+
+test("@feature-acceptance teacher authors and learner completes native repetition and real H5P practice", async ({ browser }, info) => {
+  test.setTimeout(240_000);
   const unique = Date.now();
   const teacherEmail = e2eEmail("teacher");
   const learnerEmail = e2eEmail("learner");
@@ -90,9 +106,9 @@ test("@feature-acceptance teacher authors and learner completes deterministic na
         headers,
         multipart: {
           file: {
-            name: "minimal.h5p",
+            name: "multiple-choice.h5p",
             mimeType: "application/zip",
-            buffer: minimalH5pPackage()
+            buffer: practiceH5pPackage()
           }
         }
       }
@@ -102,6 +118,11 @@ test("@feature-acceptance teacher authors and learner completes deterministic na
     const contentId = String(imported.h5p?.content_id ?? "");
     expect(contentId).toMatch(/^[1-9][0-9]*$/);
     registerE2EH5PContent(contentId, teacherEmail);
+    await teacher.page.reload();
+    await teacher.page.getByRole("button", { name: /H5P-Aufgabe/ }).click();
+    await expect(teacher.page.locator('[data-role="h5p-status"]')).toHaveText(/Editor geladen/, { timeout: 30_000 });
+    await teacher.page.getByRole("button", { name: "H5P speichern", exact: true }).click();
+    await expect(teacher.page.getByText("H5P-Inhalt gespeichert.").filter({ visible: true })).toBeVisible();
 
     const accessPath = `${webBase}/api/learning/courses/${seeded.courseId}/h5p/contents/${contentId}/access`;
     const playerPath = `${webBase}/h5p/player/model?course_id=${seeded.courseId}&content_id=${contentId}`;
@@ -116,6 +137,9 @@ test("@feature-acceptance teacher authors and learner completes deterministic na
 
     let sawNative = false;
     let sawH5p = false;
+    let sawRepetition = false;
+    let firstAttemptId = "";
+    let firstAttempt: unknown;
     for (let step = 0; step < 6; step += 1) {
       const activeResponse = await learner.page.request.get(
         `${webBase}/api/learning/practice/sessions/active`
@@ -123,8 +147,18 @@ test("@feature-acceptance teacher authors and learner completes deterministic na
       if (activeResponse.status() === 204) break;
       expect(activeResponse.ok(), await activeResponse.text()).toBe(true);
       const active = await activeResponse.json() as {
-        current_item: { kind: "native" | "h5p"; task_id: string; presentation_number: number };
+        current_item: { kind: "native" | "h5p"; task_id: string; presentation_number: number; latest_attempt_id: string };
       };
+
+      if (active.current_item.presentation_number === 2) {
+        sawRepetition = true;
+        await expect(learner.page.getByText("Wiederholung", { exact: true })).toBeVisible();
+        await expect(learner.page.getByText("Du übst diese Aufgabe erneut. Deine bisherigen Antworten bleiben erhalten.")).toBeVisible();
+        await pictures(learner.page, info, "repetition");
+      } else {
+        await expect(learner.page.getByText("Wiederholung", { exact: true })).toHaveCount(0);
+        if (active.current_item.kind === "native") await pictures(learner.page, info, "first-presentation");
+      }
 
       if (active.current_item.kind === "native") {
         sawNative = true;
@@ -145,31 +179,36 @@ test("@feature-acceptance teacher authors and learner completes deterministic na
         await learner.page.reload();
       } else {
         sawH5p = true;
-        const player = learner.page.locator("h5p-player");
-        await expect(player).toBeVisible({ timeout: 30_000 });
-        await player.evaluate((element, id) => {
-          element.dispatchEvent(new CustomEvent("xAPI", {
-            detail: {
-              statement: {
-                id,
-                verb: { id: "http://adlnet.gov/expapi/verbs/completed" },
-                result: { completion: true, score: { raw: 2, max: 2 } }
-              }
-            }
-          }));
-        }, `practice-h5p-deterministic-${step}`);
+        await expect(learner.page.locator(".h5p-multichoice")).toBeVisible({ timeout: 30_000 });
+        await learner.page.getByRole("radio", { name: /Vier/ }).press("Space");
+        await learner.page.getByRole("button", { name: /Die Antworten überprüfen/ }).click();
       }
 
       await expect(
         learner.page.getByRole("heading", { name: /Sicher beantwortet|Teilweise beantwortet|Noch nicht sicher/ })
       ).toBeVisible({ timeout: 30_000 });
+      if (active.current_item.kind === "native" && active.current_item.presentation_number === 1) {
+        await learner.page.getByRole("button", { name: "Musterlösung ansehen" }).click();
+        await expect(learner.page.getByRole("heading", { name: "Musterlösung", exact: true })).toBeVisible();
+        await pictures(learner.page, info, "model-solution");
+        const current = await (await learner.page.request.get(`${webBase}/api/learning/practice/sessions/active`)).json();
+        firstAttemptId = current.current_item.latest_attempt_id;
+        const response = await learner.page.request.get(`${webBase}/api/learning/practice/attempts/${firstAttemptId}`);
+        expect(response.status()).toBe(200);
+        firstAttempt = await response.json();
+      }
       await learner.page.getByRole("button", { name: "Nächste Aufgabe" }).click();
       if (await learner.page.getByRole("heading", { name: "Übung geschafft" }).isVisible()) break;
     }
 
     expect(sawNative).toBe(true);
     expect(sawH5p).toBe(true);
+    expect(sawRepetition).toBe(true);
     await expect(learner.page.getByRole("heading", { name: "Übung geschafft" })).toBeVisible();
+    await pictures(learner.page, info, "completed");
+    const retained = await learner.page.request.get(`${webBase}/api/learning/practice/attempts/${firstAttemptId}`);
+    expect(retained.status()).toBe(200);
+    expect(await retained.json()).toEqual(firstAttempt);
 
     const removed = await teacher.page.request.delete(
       `${webBase}/api/teaching/courses/${seeded.courseId}/members/${learnerSub}`,

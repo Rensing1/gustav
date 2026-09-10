@@ -106,10 +106,13 @@ def test_visual_smoke_has_reproducible_browser_bootstrap_and_preflight() -> None
     assert "make playwright-bootstrap" in source
 
 
-def test_practice_acceptance_uses_deterministic_h5p_instead_of_visual_feedback_details() -> None:
+def test_practice_acceptance_uses_real_h5p_actions_and_preserves_native_attempts() -> None:
     source = (REPO_ROOT / "frontend" / "e2e" / "practice-session.spec.ts").read_text(encoding="utf-8")
 
     assert 'learner.page.locator(".practice-session__main")' not in source
     assert 'learner.page.locator(".practice-feedback__body")' not in source
-    assert 'learner.page.locator("h5p-player")' in source
-    assert "practice-h5p-deterministic" in source
+    assert 'getByRole("radio", { name: /Vier/ }).press("Space")' in source
+    assert 'name: /Die Antworten überprüfen/' in source
+    assert 'new CustomEvent("xAPI"' not in source
+    assert 'name: "Musterlösung ansehen"' in source
+    assert 'expect(await retained.json()).toEqual(firstAttempt)' in source

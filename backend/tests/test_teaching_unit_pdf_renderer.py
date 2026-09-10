@@ -56,6 +56,62 @@ def test_renderer_creates_a4_student_copy_with_header_footer_and_visible_link_ur
     assert "Seite 1 / 1" in text
 
 
+@pytest.mark.parametrize("paragraphs", [10, 14, 18, 22])
+def test_section_heading_stays_with_following_content_across_page_breaks(paragraphs: int) -> None:
+    from pypdf import PdfReader
+
+    content = LearningUnitPdfRenderer().render({
+        "title": "Abschnittswechsel",
+        "nodes": [
+            {"title": "Vorbereitung", "items": [{"type": "markdown", "title": "Lesetext", "body_md": "\n\n".join(["Ein nachvollziehbarer Beleg unterstützt die Aussage. " * 4] * paragraphs)}]},
+            {"title": "Programme entwickeln", "items": [{"type": "task", "title": "Erste Programmieraufgabe", "body_md": "ENTWICKLUNGSSTART: Beschreibe die Eingabe, Verarbeitung und Ausgabe.\n\n" + "\n\n".join(["Prüfe das Ergebnis und begründe Deine Entscheidung. " * 4] * 12)}]},
+        ],
+    }, policy=PrintPolicy())
+    pages = [page.extract_text() for page in PdfReader(BytesIO(content)).pages]
+    assert len(pages) >= 2
+    heading_page = next(text for text in pages if "Programme entwickeln" in text)
+    assert "Erste Programmieraufgabe" in heading_page
+    assert "ENTWICKLUNGSSTART" in heading_page
+
+
+def test_print_section_spacing_cannot_collapse_into_the_previous_item(monkeypatch: pytest.MonkeyPatch) -> None:
+    from weasyprint import HTML
+
+    from backend.teaching import printouts_pdf
+
+    markup: list[str] = []
+    monkeypatch.setattr(printouts_pdf, "_weasyprint_pdf", lambda source, **kwargs: markup.append(source) or b"%PDF")
+    printouts_pdf._content_pdf({"title": "Abstände"}, [
+        ("Erster Abschnitt", {"type": "markdown", "title": "Erstes Material", "body_md": "Letzter Satz."}),
+        ("Zweiter Abschnitt", {"type": "task", "title": "Zweite Aufgabe", "body_md": "Nächster Inhalt."}),
+    ], show_header=True)
+    # Inspect actual layout boxes, not the mere presence of a CSS declaration.
+    boxes = list(HTML(string=markup[0]).render().pages[0]._page_box.descendants())
+    headings = [box for box in boxes if box.element_tag == "h2" and box.__class__.__name__ == "BlockBox"]
+    articles = [box for box in boxes if box.element_tag == "article" and box.__class__.__name__ == "BlockBox"]
+    previous_bottom = articles[0].border_box_y() + articles[0].border_height()
+    actual_gap = headings[1].border_box_y() - previous_bottom
+    # Internal spacing remains intact even when a page boundary discards an
+    # adjoining vertical margin; the renderer must not rely on UA defaults.
+    assert headings[1].margin_top == 0
+    assert headings[1].padding_top == pytest.approx(8 * 96 / 25.4)
+    assert actual_gap + headings[1].padding_top >= 8 * 96 / 25.4 - 0.5
+    assert headings[1].style["break_after"] == "avoid"
+    assert headings[1].element.get("class") == "section-heading"
+
+
+def test_long_material_starts_in_the_available_space_instead_of_leaving_a_blank_page() -> None:
+    from pypdf import PdfReader
+
+    content = LearningUnitPdfRenderer().render(_document(
+        {"type": "markdown", "title": "Kurze Einführung", "body_md": "## Leitfragen\n\nEin kurzer Einstieg."},
+        {"type": "markdown", "title": "Langer Lesetext", "body_md": "TEXTANFANG: Ein zusammenhängender Text.\n\n" + "\n\n".join(["Lerne, prüfe und begründe Deine Entscheidung. " * 5] * 28)},
+    ), policy=PrintPolicy())
+    pages = PdfReader(BytesIO(content)).pages
+    assert len(pages) > 1
+    assert "TEXTANFANG" in pages[0].extract_text()
+
+
 def test_renderer_inserts_source_pdf_as_fitted_a4_page_and_removes_annotations() -> None:
     from pypdf import PdfReader, PdfWriter
     from pypdf.generic import ArrayObject, NameObject

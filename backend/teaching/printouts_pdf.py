@@ -63,14 +63,17 @@ def _weasyprint_pdf(markup: str, *, assets: dict[str, tuple[bytes, str]] | None 
 
 
 def _base_styles(*, landscape: bool = False) -> str:
+    """Keep section spacing inside the heading so adjacent margins cannot collapse it."""
     orientation = "landscape" if landscape else "portrait"
     return f"""
       @page {{ size: A4 {orientation}; margin: 16mm 15mm 18mm; }}
       * {{ box-sizing: border-box; }}
       body {{ font-family: 'DejaVu Sans', sans-serif; font-size: 10.5pt; line-height: 1.42; color: #111; }}
       h1 {{ font-size: 20pt; margin: 0 0 5mm; }}
-      h2 {{ font-size: 15pt; border-bottom: 1pt solid #222; margin: 8mm 0 4mm; padding-bottom: 1.5mm; }}
+      h2 {{ font-size: 13pt; margin: 4mm 0 2mm; }}
+      .section-heading {{ font-size: 15pt; border-bottom: 1pt solid #222; margin: 0 0 4mm; padding: 8mm 0 1.5mm; }}
       h3 {{ font-size: 12pt; margin: 5mm 0 2mm; }}
+      h1, h2, h3, h4, h5, h6 {{ break-after: avoid; }}
       p, ul, ol, pre, blockquote, table {{ margin: 0 0 3mm; }}
       table {{ border-collapse: collapse; width: 100%; }}
       th, td {{ border: .6pt solid #555; padding: 1.5mm; vertical-align: top; }}
@@ -78,7 +81,7 @@ def _base_styles(*, landscape: bool = False) -> str:
       img {{ display: block; max-width: 100%; max-height: 190mm; object-fit: contain; margin: 3mm auto; }}
       .student-fields {{ display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 5mm; margin-bottom: 8mm; }}
       .student-field {{ border-bottom: .7pt solid #222; height: 8mm; }}
-      .item {{ break-inside: avoid; margin-bottom: 5mm; }}
+      .item {{ margin-bottom: 5mm; }}
       .hint {{ border: .8pt solid #222; padding: 2.5mm; font-size: 9pt; }}
       .filename {{ font-size: 8.5pt; color: #333; margin-top: -1mm; }}
     """
@@ -142,7 +145,7 @@ def _content_pdf(document: object, items: list[tuple[str, object]], *, show_head
     current_node = None
     for index, (node_title, item) in enumerate(items):
         if node_title != current_node:
-            body.append(f"<h2>{html.escape(node_title)}</h2>")
+            body.append(f'<h2 class="section-heading">{html.escape(node_title)}</h2>')
             current_node = node_title
         body.append(_html_item(item, asset_number=index, assets=assets))
     markup = "<!doctype html><html lang=" + '"de"><head><meta charset="utf-8"><style>' + _base_styles() + "</style></head><body>" + "".join(body) + "</body></html>"

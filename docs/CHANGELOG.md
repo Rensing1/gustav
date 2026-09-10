@@ -2,6 +2,12 @@
 
 ## 2026-09-10
 
+### Designreparatur – Übungswiederholung und Druckfassung
+
+- fix(practice): Zweite Präsentation ausdrücklich als „Wiederholung“ erklären; bisherige Antworten und vorhandene Zähl-/Bewertungslogik bleiben unverändert. Lesbare zentrale Farbe für kleine Practice-Beschriftungen.
+- fix(print): Einheitliche Abschnittsabstände, Überschriften beim Folgeinhalt und lange Materialien ohne vermeidbaren Leerraum; Inhaltsüberschriften von Modulüberschriften unterscheiden.
+- test: Beide vollständigen Paket-Gates bestanden. Echte native/H5P-Antworten, Musterlösung, Wiederholung und Abschluss; erste Antwort unverändert nachgelesen. 32 Übungsbilder und sechs Druckseiten mit echten Text-/Bild-/PDF-Materialien tatsächlich gesichtet.
+
 ### Designreparatur – Live, Diagnostik und Mitglieder
 
 - fix(teaching): Gemeinsame kantige Flächen, Reiter und Kontraste; lange Auswahlwerte bleiben innerhalb der Seite, breite Tabellen erhalten einen beschrifteten Tastatur-Scrollbereich.

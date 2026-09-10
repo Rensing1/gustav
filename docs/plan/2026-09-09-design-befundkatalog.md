@@ -6,6 +6,21 @@ Stand: 9. September 2026. Ergänzt um H5P und Auth auf ausdrücklichen Folgeauft
 
 ## Ergebnis in verständlicher Form
 
+### Reparaturabnahme Live und Diagnostik · 10. September 2026
+
+Beide vollständigen Gates `live-summary` und `teaching-overview-consistency` bestanden. 64 Bilder bei 1440/1024/390/320 px in Light/Dark tatsächlich gesichtet, einschließlich 24 Lernenden, letzter Zeile, leerer und vorhandener Abgabe sowie aller drei Live-Reiter. Die folgenden Statusangaben ersetzen die historischen Befunde weiter unten.
+
+| Befund | Status und Nachweis |
+| --- | --- |
+| DS-09 | Behoben: konkrete Kursauswahl mit „Kursmatrix öffnen“, ohne interne Architekturtexte; [Einstieg mobil dunkel](assets/2026-09-10-designreparatur-paket6/entry-390-dark.png). Diagnostik bleibt aus der Hauptnavigation verborgen. |
+| DS-18 | Behoben: gemeinsame Reiterfarben mit tatsächlicher Hover-/Tastaturfokus- und Kontrastprüfung; [Rückmeldung](assets/2026-09-10-designreparatur-paket6/live-feedback-390-dark.png), [Auswertung](assets/2026-09-10-designreparatur-paket6/live-evaluation-320-light.png). |
+| DS-19 | Behoben: zentrale Farben, kantige Rahmen und gemeinsame Aktionen; [Kursmatrix](assets/2026-09-10-designreparatur-paket6/matrix-1024-dark.png), [Lernendenprofil](assets/2026-09-10-designreparatur-paket6/profile-390-dark.png). |
+| DS-20 | Behoben: kein horizontaler Seitenüberlauf, eigener beschrifteter und per Tastatur verschiebbarer Tabellenbereich; [320 px](assets/2026-09-10-designreparatur-paket6/matrix-320-light.png). Letzte der 24 Zeilen tatsächlich geöffnet. |
+| DS-21 | Behoben: Aufgaben nach tatsächlichem Abschnitts-/Modultitel gruppiert, lokale Nummern dadurch eindeutig; [leere Abgabe](assets/2026-09-10-designreparatur-paket6/live-empty-390-dark.png). Vorhandene Farbsemantik und Bewertungsschwellen unverändert, keine zusätzlichen Abschnittsabfragen. |
+| DS-22 | Behoben: Profil- und Matrixverweise führen zur vorhandenen Live-Ansicht mit Kurs, Einheit und Lernendem; echter Klick-Rundlauf und Datenbanktests für erlaubten/verweigerten Zugriff bestanden. [Erreichte Abgabe](assets/2026-09-10-designreparatur-paket6/live-submission-1440-light.png). |
+
+DS-30 und DS-35 sind mit demselben Paket in den beiden ergänzenden Katalogen abgenommen. Keine zweite Diagnostik-Detailoberfläche, neue fachliche Endpunkte oder Schemaänderungen.
+
 ### Reparaturabnahme H5P · 10. September 2026
 
 Die folgenden Statusangaben ersetzen für diese Befunde die historischen offenen Aussagen weiter unten. Beide vollständigen Gates `h5p-drag-layout` und `h5p-design-consistency` sowie `make docker-validate` bestanden. 45 Bildnachweise bei 1440/1024/390/320 px in Light/Dark tatsächlich gesichtet; lokale synthetische Testdaten bereinigt. Keine Bibliotheksaktualisierung, Inhaltsmigration oder Änderung der Bewertungslogik.

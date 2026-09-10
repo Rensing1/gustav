@@ -70,13 +70,13 @@ async def test_diagnostics_course_matrix_returns_course_units_and_rows(
                         "unit_id": "unit-1",
                         "submitted_tasks": 1,
                         "total_tasks": 2,
-                        "href": f"/live/courses/{course_id}/units/unit-1",
+                        "href": f"/live?course_id={course_id}&unit_id=unit-1&student_sub=student-1",
                     },
                     {
                         "unit_id": "unit-2",
                         "submitted_tasks": 0,
                         "total_tasks": 3,
-                        "href": f"/live/courses/{course_id}/units/unit-2",
+                        "href": f"/live?course_id={course_id}&unit_id=unit-2&student_sub=student-1",
                     },
                 ],
             }
@@ -127,13 +127,13 @@ async def test_diagnostics_course_matrix_returns_course_units_and_rows(
                         "unit_id": "unit-1",
                         "submitted_tasks": 1,
                         "total_tasks": 2,
-                        "href": "/live/courses/course-1/units/unit-1",
+                        "href": "/live?course_id=course-1&unit_id=unit-1&student_sub=student-1",
                     },
                     {
                         "unit_id": "unit-2",
                         "submitted_tasks": 0,
                         "total_tasks": 3,
-                        "href": "/live/courses/course-1/units/unit-2",
+                        "href": "/live?course_id=course-1&unit_id=unit-2&student_sub=student-1",
                     },
                 ],
             }

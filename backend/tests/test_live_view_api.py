@@ -341,7 +341,7 @@ async def test_live_dashboard_returns_rows_summary_and_selected_panel(monkeypatc
                 "latest_submission": {
                     "task_id": "task-1",
                     "task_position": 1,
-                    "task_label": "1. Aufgabe",
+                    "task_label": "Aufgabe 1",
                     "created_at": "2026-03-23T10:00:00+00:00",
                     "average_score": 4.0,
                 },
@@ -354,7 +354,7 @@ async def test_live_dashboard_returns_rows_summary_and_selected_panel(monkeypatc
                 "latest_submission": {
                     "task_id": "task-2",
                     "task_position": 2,
-                    "task_label": "2. Aufgabe",
+                    "task_label": "Aufgabe 2",
                     "created_at": "2026-03-24T08:30:00+00:00",
                     "average_score": 6.0,
                 },
@@ -371,7 +371,9 @@ async def test_live_dashboard_returns_rows_summary_and_selected_panel(monkeypatc
                 {
                     "task_id": "task-1",
                     "task_position": 1,
-                    "task_label": "1. Aufgabe",
+                    "task_label": "Aufgabe 1",
+                    "section_id": "",
+                    "section_title": "",
                     "has_submission": True,
                     "average_score": 4.0,
                     "is_latest_submission": True,
@@ -380,7 +382,9 @@ async def test_live_dashboard_returns_rows_summary_and_selected_panel(monkeypatc
                 {
                     "task_id": "task-2",
                     "task_position": 2,
-                    "task_label": "2. Aufgabe",
+                    "task_label": "Aufgabe 2",
+                    "section_id": "",
+                    "section_title": "",
                     "has_submission": False,
                     "average_score": None,
                     "is_latest_submission": False,
@@ -401,6 +405,18 @@ async def test_live_dashboard_returns_rows_summary_and_selected_panel(monkeypatc
                 "files": [],
             },
         },
+    }
+
+
+def test_live_task_labels_preserve_the_section_group_without_inventing_titles() -> None:
+    _live_task_meta_by_id = importlib.import_module("backend.web.routes.app_live_routes")._live_task_meta_by_id
+
+    assert _live_task_meta_by_id([
+        {"id": "task-1", "position": 1, "section_id": "section-1", "section_title": "Grundlagen"},
+        {"id": "task-2", "position": 1},
+    ]) == {
+        "task-1": {"task_position": 1, "task_label": "Grundlagen · Aufgabe 1", "section_id": "section-1", "section_title": "Grundlagen"},
+        "task-2": {"task_position": 1, "task_label": "Aufgabe 1", "section_id": "", "section_title": ""},
     }
 
 

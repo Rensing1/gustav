@@ -221,6 +221,8 @@ def _build_unit_live_summary(
                         "instruction_md": td.instruction_md or "",
                         "position": int(td.position),
                         "kind": str(getattr(td, "kind", "native") or "native"),
+                        "section_id": sid,
+                        "section_title": str(repo.sections[sid].title or ""),
                     })
     except TeachingRepositoryUnavailable:
         raise

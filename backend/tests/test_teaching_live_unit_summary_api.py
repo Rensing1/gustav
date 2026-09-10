@@ -88,6 +88,53 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
     assert r.status_code in (201, 204)
 
 
+async def test_diagnostics_links_keep_course_unit_and_learner_scope(monkeypatch):
+    """Real persisted course membership determines both Live targets and access."""
+    from urllib.parse import parse_qs, urlsplit
+
+    _require_db_or_skip()
+    owner = _session_store().create(sub=f"t-diagnostic-link-{uuid.uuid4()}", name="Owner", roles=["teacher"])
+    learner = _session_store().create(sub=f"s-diagnostic-link-{uuid.uuid4()}", name="Learner", roles=["student"])
+    stranger = _session_store().create(sub=f"t-diagnostic-other-{uuid.uuid4()}", name="Other", roles=["teacher"])
+    identities = {"owner.jwt": owner, "learner.jwt": learner, "stranger.jwt": stranger}
+    monkeypatch.setattr(main, "verify_bearer_token", lambda token, cfg: {
+        "sub": identities[token].sub, "name": identities[token].name,
+        "realm_access": {"roles": identities[token].roles}, "exp": 4102444800,
+    })
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        client.headers["Authorization"] = "Bearer owner.jwt"
+        course_id = await _create_course(client)
+        unit = await _create_unit(client)
+        try:
+            await _attach_unit(client, course_id, unit["id"])
+            await _add_member(client, course_id, learner.sub)
+            profile_path = f"/api/diagnostics/views/learners/{learner.sub}/profile"
+            matrix_path = f"/api/diagnostics/views/courses/{course_id}/matrix"
+            profile = await client.get(profile_path)
+            matrix = await client.get(matrix_path)
+            assert profile.status_code == matrix.status_code == 200
+            links = [profile.json()["courses"][0]["units"][0]["href"], matrix.json()["rows"][0]["cells"][0]["href"]]
+            for href in links:
+                target = urlsplit(href)
+                assert target.path == "/live"
+                assert not target.netloc
+                assert parse_qs(target.query) == {"course_id": [course_id], "unit_id": [unit["id"]], "student_sub": [learner.sub]}
+            client.cookies.set(main.SESSION_COOKIE_NAME, learner.session_id)
+            client.headers["Authorization"] = "Bearer learner.jwt"
+            assert (await client.get(profile_path)).status_code == 403
+            assert (await client.get(matrix_path)).status_code == 403
+            client.cookies.set(main.SESSION_COOKIE_NAME, stranger.session_id)
+            client.headers["Authorization"] = "Bearer stranger.jwt"
+            assert (await client.get(profile_path)).status_code == 404
+            assert (await client.get(matrix_path)).status_code in (403, 404)
+        finally:
+            client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+            client.headers["Authorization"] = "Bearer owner.jwt"
+            await client.delete(f"/api/teaching/courses/{course_id}")
+            await client.delete(f"/api/teaching/units/{unit['id']}")
+
+
 @pytest.mark.parametrize("section_count", [0, 1, 20])
 async def test_summary_loads_tasks_once_in_didactic_order(monkeypatch, section_count):
     """Adding sections must not add task queries or reorder the lesson."""
@@ -101,6 +148,7 @@ async def test_summary_loads_tasks_once_in_didactic_order(monkeypatch, section_c
         unit = await _create_unit(client)
         try:
             expected = []
+            expected_groups = []
             for index in range(section_count):
                 section = await _create_section(client, unit["id"], f"Abschnitt {index}")
                 # Include empty sections and multiple tasks in the same section.
@@ -108,6 +156,7 @@ async def test_summary_loads_tasks_once_in_didactic_order(monkeypatch, section_c
                     for number in range(2):
                         task = await _create_task(client, unit["id"], section["id"], f"Aufgabe {index}.{number}")
                         expected.append(task["id"])
+                        expected_groups.append((section["id"], section["title"]))
             await _attach_unit(client, course_id, unit["id"])
             calls = []
             original = DBTeachingRepo.list_tasks_for_unit_owned
@@ -128,6 +177,7 @@ async def test_summary_loads_tasks_once_in_didactic_order(monkeypatch, section_c
             )
             assert response.status_code == 200
             assert [task["id"] for task in response.json()["tasks"]] == expected
+            assert [(task.get("section_id"), task.get("section_title")) for task in response.json()["tasks"]] == expected_groups
             assert calls == [(unit["id"], owner.sub)]
         finally:
             await client.delete(f"/api/teaching/courses/{course_id}")

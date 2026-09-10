@@ -14,6 +14,7 @@
     buildLivePageHref,
     buildLiveSummaryPath,
     createLiveWorkspaceController,
+    taskGroups,
     navigateWithLiveSelectionFallback,
     type SortDirection,
     type SortKey
@@ -622,7 +623,8 @@
             </div>
           </div>
 
-          <div class="workspace-data-table-wrap">
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex (The native scroll region must be keyboard reachable.) -->
+          <div class="workspace-data-table-wrap" role="region" aria-label="Klassenübersicht" tabindex="0">
           <table class="workspace-data-table">
             <thead>
               <tr>
@@ -672,7 +674,11 @@
             </header>
 
             <nav class="live-task-strip" aria-label="Aufgaben der Lerneinheit">
-              {#each dashboardState.selected_student_panel.tasks as task}
+              {#each taskGroups(dashboardState.selected_student_panel.tasks) as group}
+                <section class="live-task-group" aria-label={group.title}>
+                  <p class="workspace-label">{group.title}</p>
+                  <div class="live-task-group__actions">
+                  {#each group.tasks as task}
                 <a
                   href={task.href}
                   class={`live-task-strip__item live-task-strip__item--${taskStripTone(task.average_score, task.has_submission)}`}
@@ -682,7 +688,11 @@
                   title={`${task.task_label}: ${task.has_submission ? formatScore(task.average_score) : "Noch offen"}`}
                   onclick={(event) => void openTask(task.task_id, event)}
                 >
+                  Aufgabe {task.task_position}
                 </a>
+                  {/each}
+                  </div>
+                </section>
               {/each}
             </nav>
 
@@ -793,7 +803,7 @@
                       {:else}
                         <p class="learning-task-submission-summary__plain">Keine Vorschau für diese Abgabe verfügbar.</p>
                         <p class="learning-task-submission-summary__plain">
-                          Die Submission wurde erkannt, aber für diesen Typ steht hier aktuell keine direkt lesbare Darstellung bereit.
+                          Die Abgabe wurde erkannt, aber für diesen Typ steht hier aktuell keine direkt lesbare Darstellung bereit.
                         </p>
                       {/if}
                     </section>
@@ -900,6 +910,7 @@
 
   .live-selection__field {
     display: grid;
+    min-width: 0;
     gap: var(--space-2);
   }
 
@@ -920,6 +931,10 @@
   }
 
   .live-selection__field select {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     min-height: 2.75rem;
     padding: 0 var(--space-3);
     background: var(--color-bg-surface, #fff);
@@ -977,14 +992,12 @@
     font: inherit;
     font-weight: inherit;
     cursor: pointer;
+    min-height: var(--layout-control-min);
   }
 
   .live-table-panel {
     min-width: 0;
-    background: color-mix(in srgb, var(--color-bg-surface, #fff) 97%, var(--color-border, #1b1b1b) 3%);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--color-border, #1b1b1b) 24%, transparent 76%),
-      0 18px 36px color-mix(in srgb, var(--color-shadow, rgba(0, 0, 0, 0.18)) 42%, transparent 58%);
+    box-shadow: none;
   }
 
   .live-panel {
@@ -993,16 +1006,7 @@
     min-width: 0;
     position: sticky;
     top: calc(var(--space-5) + 4rem);
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--color-bg-surface, #fff) 94%, var(--color-accent, #ff512f) 6%) 0%,
-        var(--color-bg-surface, #fff) 18%
-      );
-    border-color: color-mix(in srgb, var(--color-accent, #ff512f) 24%, var(--color-border, #1b1b1b) 76%);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--color-accent, #ff512f) 14%, transparent 86%),
-      0 24px 44px color-mix(in srgb, var(--color-shadow, rgba(0, 0, 0, 0.18)) 52%, transparent 48%);
+    box-shadow: none;
   }
 
   .live-panel__header,
@@ -1043,117 +1047,42 @@
 
   .live-task-strip {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(0.7rem, 0.9rem));
-    gap: 0.28rem;
-    justify-content: start;
+    gap: var(--space-3);
+    min-width: 0;
   }
 
+  .live-task-group { min-width: 0; }
+  .live-task-group__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .live-panel__copy h3 { overflow-wrap: anywhere; }
+  .workspace-data-table-wrap { max-width: 100%; }
+  .workspace-data-table-wrap:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
+
   .live-task-strip__item {
-    width: 0.85rem;
-    min-height: 1.15rem;
+    min-height: var(--layout-control-min);
+    box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--color-border, #1b1b1b) 72%, transparent 28%);
     text-decoration: none;
     color: inherit;
-    display: block;
-    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
     transition:
       transform 120ms ease,
       background 120ms ease,
       border-color 120ms ease;
   }
 
-  .live-task-strip__item:hover,
-  .live-task-strip__item:focus-visible {
-    transform: translateY(-1px);
-  }
-
-  .live-task-strip__item--empty {
-    background: color-mix(in srgb, var(--color-bg-muted, #f3f3f4) 92%, white 8%);
-    border-color: color-mix(in srgb, var(--color-border, #1b1b1b) 20%, transparent 80%);
-  }
-
-  .live-task-strip__item--submitted-unscored {
-    background: color-mix(in srgb, var(--color-border, #1b1b1b) 72%, white 28%);
-    border-color: color-mix(in srgb, var(--color-border, #1b1b1b) 84%, transparent 16%);
-  }
-
-  .live-task-strip__item--score-zero {
-    background: #7a0000;
-    border-color: #7a0000;
-  }
-
-  .live-task-strip__item--score-low {
-    background: #c62828;
-    border-color: #c62828;
-  }
-
-  .live-task-strip__item--score-mid {
-    background: #d87a00;
-    border-color: #d87a00;
-  }
-
-  .live-task-strip__item--score-high {
-    background: #2f8f5b;
-    border-color: #2f8f5b;
-  }
-
-  .live-task-strip__item.is-active {
-    outline: 2px solid var(--color-accent, #ff512f);
-    outline-offset: -2px;
-  }
-
-  .live-task-strip__item.is-latest::after {
-    content: "";
-    display: block;
-    width: 100%;
-    height: 2px;
-    background: var(--color-accent, #ff512f);
-    margin-top: calc(1.15rem - 2px);
-  }
-
-  :global(.dark) .live-task-strip__item--empty {
-    background: #4a4f54;
-    border-color: color-mix(in srgb, white 26%, transparent 74%);
-  }
-
-  :global(.dark) .live-task-strip__item--submitted-unscored {
-    background: #7b8288;
-    border-color: #7b8288;
-  }
-
-  :global(.dark) .live-task-strip__item--score-zero {
-    background: #ff4d4d;
-    border-color: #ff4d4d;
-  }
-
-  :global(.dark) .live-task-strip__item--score-low {
-    background: #ff6b57;
-    border-color: #ff6b57;
-  }
-
-  :global(.dark) .live-task-strip__item--score-mid {
-    background: #ff9a2f;
-    border-color: #ff9a2f;
-  }
-
-  :global(.dark) .live-task-strip__item--score-high {
-    background: #49b36f;
-    border-color: #49b36f;
-  }
-
-  :global(.dark) .live-table-panel {
-    background: color-mix(in srgb, var(--color-bg-surface, #171717) 94%, white 6%);
-  }
-
-  :global(.dark) .live-panel {
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--color-bg-surface, #171717) 90%, var(--color-accent, #ff866b) 10%) 0%,
-        var(--color-bg-surface, #171717) 18%
-      );
-    border-color: color-mix(in srgb, var(--color-accent, #ff866b) 24%, white 76%);
-  }
+  .live-task-strip__item:hover { background: var(--color-bg-muted); }
+  .live-task-strip__item:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
+  .live-task-strip__item--empty,
+  .live-task-strip__item--submitted-unscored { background: var(--color-bg-muted); }
+  .live-task-strip__item--submitted-unscored { border-style: double; }
+  .live-task-strip__item--score-zero { background: color-mix(in srgb, var(--color-danger) 20%, var(--color-bg-surface)); border-color: var(--color-danger); }
+  .live-task-strip__item--score-low { background: var(--color-danger-soft); border-color: var(--color-danger); }
+  .live-task-strip__item--score-mid { background: var(--color-warning-soft); border-color: var(--color-warning); }
+  .live-task-strip__item--score-high { background: var(--color-success-soft); border-color: var(--color-success); }
+  .live-task-strip__item.is-active { outline: 2px solid var(--color-link); outline-offset: -2px; }
+  .live-task-strip__item.is-latest { border-bottom: 3px solid var(--color-accent); }
 
   .live-panel-summary {
     border: 1px solid var(--color-line, rgba(27, 27, 27, 0.14));

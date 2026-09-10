@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
   return {
     breadcrumbs,
     home,
-    pageCopy: "Mitgliedschaft bleibt als eigene ruhige Detailfläche innerhalb des Kurskontexts erreichbar.",
+    pageCopy: "Öffne ein Lernendenprofil oder verwalte die Mitgliedschaften des Kurses.",
     pageTitle: "Mitglieder",
     workspaceLayout: "compact"
   };

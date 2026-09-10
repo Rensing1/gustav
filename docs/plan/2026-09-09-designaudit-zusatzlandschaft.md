@@ -38,7 +38,7 @@ Konkreter Quellhinweis: `frontend/src/lib/learning-unit/workspace.ts`, `contentG
 
 ### DS-34 · P1 · Lineare Abschnittsauswahl bietet keinen sichtbaren Weg zum Inhaltseditor
 
-**Reparaturstatus 10. September 2026: behoben.** Die gemeinsame Kontextleiste bietet „Inhalte bearbeiten“ und ausdrückliche „Eigenschaften“. Rückkehr bewahrt Auswahl und Kamera; alte Direktlinks und Zugriffsschutz sind geprüft. Nachweis: `make verify-feature FEATURE=teacher-linear-section-actions`, bestehender modularer Rückfalltest `teacher-graph-module-actions`, [Desktop](assets/2026-09-10-designreparatur-paket1/linear-light-1440.png) und [mobile Dunkelansicht](assets/2026-09-10-designreparatur-paket1/linear-dark-390.png). Die Graphhöhen-/Werkzeugbefunde aus Paket 5 bleiben davon unabhängig offen. Der folgende Text dokumentiert den ursprünglichen Befund.
+**Reparaturstatus 10. September 2026: behoben.** Die gemeinsame Kontextleiste bietet „Inhalte bearbeiten“ und ausdrückliche „Eigenschaften“. Rückkehr bewahrt Auswahl und Kamera; alte Direktlinks und Zugriffsschutz sind geprüft. Nachweis: `make verify-feature FEATURE=teacher-linear-section-actions`, bestehender modularer Rückfalltest `teacher-graph-module-actions`, [Desktop](assets/2026-09-10-designreparatur-paket1/linear-light-1440.png) und [mobile Dunkelansicht](assets/2026-09-10-designreparatur-paket1/linear-dark-390.png). Die Graphhöhen-/Werkzeugbefunde wurden anschließend separat in Paket 5 mit dem vollständigen Gate `graph-role-parity` abgenommen. Der folgende Text dokumentiert den ursprünglichen Befund.
 
 Bei einer linearen Einheit ändert das Anklicken eines Abschnitts die Auswahl und den URL-Parameter `section`, öffnet aber weder den Abschnittsinspektor noch eine sichtbare Aktion zum Bearbeiten seiner Inhalte. Einfacher Klick und Doppelklick wurden geprüft; die Auswahl ist am orangefarbenen Rahmen erkennbar. „Lerneinheit bearbeiten“ öffnet lediglich den Dialog für die Stammdaten der Einheit. Dieser wurde ohne Änderung per Escape geschlossen. Das Problem tritt auch am Desktop auf und ist deshalb nicht nur ein abgeschnittener mobiler Inspektor.
 
@@ -47,6 +47,8 @@ Der vorhandene Inhaltseditor unter `/teaching/units/[unitId]/nodes/[sectionId]` 
 ![Ausgewählter linearer Abschnitt ohne Inhaltsaktion](assets/2026-09-09-zusatzpruefung/linear-section-selected-desktop-dark.png)
 
 ### DS-35 · P2 · Live wird bei langer Kurs-/Einheitsbezeichnung mobil überbreit
+
+**Reparaturstatus 10. September 2026: behoben.** Lange Auswahlwerte verbreitern die Seite nicht; Klassenübersicht und Details stehen mobil untereinander. Eigener beschrifteter Tabellenbereich mit tatsächlicher Tastatur-Scrollprüfung, letzter Zeile und leerer/vorhandener Abgabe. Beide vollständigen Paket-6-Gates bestanden; [320 px hell](assets/2026-09-10-designreparatur-paket6/live-submission-320-light.png) und [390 px dunkel](assets/2026-09-10-designreparatur-paket6/live-empty-390-dark.png) gesichtet. Der folgende Text dokumentiert die ursprüngliche Überbreite.
 
 Mit 24 Lernenden, einer langen Kursbezeichnung und einer langen linearen Einheit misst die tatsächliche Dokumentbreite bei 390 px Viewport ungefähr **535 px**. Auswahlfelder, Kennzahlen und Übersicht reichen rechts aus dem sichtbaren Bereich. Die letzte Tabellenzeile ist durch Scrollen erreichbar; ihre Auswahl führt nach dem Laden tatsächlich zum Zustand „Keine Abgabe“. Der Lernende mit echten Abgaben ist ebenfalls auswählbar. Damit ist nicht die Anzahl der Lernenden als Ursache bewiesen; die Kombination aus schmaler Breite und langen Inhalten reproduziert den Fehler.
 

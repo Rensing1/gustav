@@ -1323,6 +1323,7 @@ components:
           type: integer
         href:
           type: string
+          description: Relative Live-Adresse mit course_id, unit_id und student_sub; öffnet die vorhandene Detailansicht des Lernenden.
     DiagnosticsCourseMatrixRow:
       type: object
       required: [student, cells]
@@ -1381,6 +1382,8 @@ components:
           type: integer
         href:
           type: string
+          description: Relative Live-Adresse mit course_id, unit_id und student_sub; keine separate Diagnostik-Einheitenroute.
+          example: /live?course_id=00000000-0000-4000-8000-000000000001&unit_id=00000000-0000-4000-8000-000000000002&student_sub=student-example
         submitted_tasks:
           type: integer
         total_tasks:
@@ -1451,6 +1454,12 @@ components:
           type: integer
         kind:
           type: string
+        section_id:
+          type: string
+          description: Bestehender Abschnitt beziehungsweise Inhaltsabschnitt des Moduls, zur Gruppierung der Aufgaben.
+        section_title:
+          type: string
+          description: Tatsächlicher Abschnitts- beziehungsweise Modultitel; leer, falls kein Titel vorliegt.
     LiveMatrixStudent:
       type: object
       required: [sub, name, href]
@@ -1564,6 +1573,10 @@ components:
         task_position:
           type: integer
         task_label:
+          type: string
+        section_id:
+          type: string
+        section_title:
           type: string
         has_submission:
           type: boolean
@@ -14687,6 +14700,8 @@ paths:
                         id: { type: string, format: uuid }
                         instruction_md: { type: string, description: Task instruction (Markdown) }
                         position: { type: integer }
+                        section_id: { type: string, description: Existing backing section identifier for grouping tasks. }
+                        section_title: { type: string, description: Actual section or module title; no inferred title. }
                         kind:
                           type: string
                           enum: [native, h5p, visual, scratch, calliope, filius, dialog]

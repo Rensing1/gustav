@@ -31,6 +31,9 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
 
     const taskLinks = teacher.getByRole("navigation", { name: "Aufgaben der Lerneinheit" }).getByRole("link");
     await expect(taskLinks).toHaveCount(3);
+    await expect(teacher.getByRole("region", { name: "Grundlagen", exact: true })).toContainText("Aufgabe 1");
+    await expect(teacher.getByRole("region", { name: "Grundlagen", exact: true })).toContainText("Aufgabe 2");
+    await expect(teacher.getByRole("region", { name: "Quellen", exact: true })).toContainText("Aufgabe 1");
     for (const [index, id] of [seeded.taskId, seeded.secondTaskId, seeded.contextTaskId].entries()) {
       await expect(taskLinks.nth(index)).toHaveAttribute("href", new RegExp(`task_id=${id}`));
     }

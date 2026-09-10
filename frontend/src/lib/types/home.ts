@@ -475,6 +475,8 @@ export type LiveTask = {
   instruction_md: string;
   position: number;
   kind: string;
+  section_id?: string;
+  section_title?: string;
 };
 
 export type LiveSummaryStudent = {
@@ -553,6 +555,8 @@ export type LiveStudentPanelTask = {
   task_id: string;
   task_position: number;
   task_label: string;
+  section_id?: string;
+  section_title?: string;
   has_submission: boolean;
   average_score: number | null;
   is_latest_submission: boolean;

@@ -20,6 +20,7 @@ def load_live_tasks(repo: LiveTaskReader, unit_id: str, author_id: str) -> list[
     """
     sections = sorted(repo.list_sections_for_author(unit_id, author_id), key=lambda section: (section["position"], section["id"]))
     positions = {section["id"]: index for index, section in enumerate(sections)}
+    titles = {section["id"]: str(section.get("title") or "") for section in sections}
     tasks = repo.list_tasks_for_unit_owned(unit_id, author_id)
     ordered = sorted(
         (task for task in tasks if task["section_id"] in positions),
@@ -31,6 +32,8 @@ def load_live_tasks(repo: LiveTaskReader, unit_id: str, author_id: str) -> list[
             "instruction_md": task.get("instruction_md") or "",
             "position": int(task.get("position") or 0),
             "kind": str(task.get("kind") or "native"),
+            "section_id": task["section_id"],
+            "section_title": titles[task["section_id"]],
         }
         for task in ordered
     ]

@@ -113,17 +113,19 @@
   gap: 0.2rem;
   padding: 0.2rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.92rem;
-  background: color-mix(in srgb, var(--color-bg-surface) 88%, white 12%);
+  border-radius: var(--radius-m);
+  background: var(--color-bg-surface);
 }
 
 .workspace-tab {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.2rem;
+  min-height: var(--layout-control-min);
   padding: 0.4rem 0.8rem;
-  border-radius: 0.72rem;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
   text-decoration: none;
   color: var(--color-text-muted);
   background: transparent;
@@ -133,9 +135,45 @@
 
 .workspace-tab--active {
   color: var(--color-text);
-  background: rgba(255, 250, 243, 0.96);
-  box-shadow: 0 1px 2px rgba(35, 41, 45, 0.06);
+  background: var(--color-bg-muted);
+  border-bottom-color: var(--color-accent);
+  box-shadow: none;
 }
+
+.workspace-tab:hover { background: var(--color-bg-muted); color: var(--color-text); }
+.workspace-tab:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
+
+.workspace-panel.workspace-panel--flat {
+  min-width: 0;
+  max-width: 100%;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+  overflow-wrap: anywhere;
+}
+.diagnostics-panel .workspace-section-heading { min-width: 0; }
+.diagnostics-table { max-width: 100%; margin-top: var(--space-4); }
+.diagnostics-table table { min-width: 44rem; }
+.diagnostics-table th { max-width: 28rem; }
+.diagnostics-summary, .diagnostics-units {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.diagnostics-summary article, .diagnostics-course, .diagnostics-cell {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+}
+.diagnostics-summary article, .diagnostics-cell { display: grid; gap: var(--space-2); }
+.diagnostics-summary strong { font-size: 1.5rem; }
+.diagnostics-courses { display: grid; gap: var(--space-4); margin-top: var(--space-4); }
+.diagnostics-cell { text-decoration: none; min-height: var(--layout-control-min); }
+.diagnostics-cell:hover { background: var(--color-bg-muted); }
+.diagnostics-cell:focus-visible, .diagnostics-table:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
 
 .workspace-overview-grid {
   display: grid;

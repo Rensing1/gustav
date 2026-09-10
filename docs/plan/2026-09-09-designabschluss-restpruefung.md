@@ -56,6 +56,8 @@ Die zweite Antwort, erneute Rückmeldung und anschließende Zusammenfassung wurd
 
 ### DS-30 · P2 · Separate Mitgliederseite zeigt Entwicklungsformulierungen und interne Kennung
 
+**Reparaturstatus 10. September 2026: behoben.** Verständliche Mitgliedertexte ohne technische Personenkennungen, gemeinsamer kantiger Rahmen und weiterhin erreichbare Verwaltung. Vollständiges Gate `teaching-overview-consistency` mit 24 synthetischen Lernenden bestanden; alle vier Breiten in beiden Modi gesichtet, etwa [390 px dunkel](assets/2026-09-10-designreparatur-paket6/members-390-dark.png). Der folgende Text dokumentiert den historischen Befund.
+
 `/teaching/courses/[courseId]/members` ist keine identische Kopie des Mitgliederdrawers: Sie zeigt Texte wie „eigene SvelteKit-Detailfläche“ und die technische Personenkennung unter dem Lernendennamen. Die Darstellung wurde tatsächlich geöffnet, auch mobil dunkel. Quelle: zugehörige `+page.svelte`, Ausgabe von `member.sub`. Das ist ein Verständlichkeits- und Präsentationsbefund, keine Behauptung einer unerlaubten Datenfreigabe: Der Aufruf erfolgte als berechtigte Lehrkraft. Die Personenkennung wird nicht als Screenshot ins öffentliche Repo übernommen.
 
 Zusätzlicher kleiner Befund am Profil: Die Berechtigungscheckboxen für CLI-Tokens stehen räumlich von den Beschriftungen getrennt; „read“, „write“, „delete“ bleiben englisch. Dies erweitert das bereits bekannte Problem generischer Auswahlfeldgestaltung aus DS-06. Profiltextfelder, Namensspalten und Hauptaktionen sind ansonsten in den betrachteten Desktop-/Mobil-Dark-Ansichten lesbar und konsistent. Kein Token erstellt oder widerrufen.

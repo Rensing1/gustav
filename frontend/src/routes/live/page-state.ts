@@ -1,4 +1,4 @@
-import type { LiveDetailSubmission, LiveSummaryPayload, LiveTask, LiveUnitDashboardView } from "$lib/types/home";
+import type { LiveDetailSubmission, LiveStudentPanelTask, LiveSummaryPayload, LiveTask, LiveUnitDashboardView } from "$lib/types/home";
 
 export type SortKey = "student" | "progress" | "average" | "latest";
 export type SortDirection = "asc" | "desc";
@@ -171,6 +171,22 @@ function taskMetaById(tasks: LiveTask[]) {
   return new Map(tasks.map((task) => [task.id, task]));
 }
 
+function liveTaskLabel(task: LiveTask): string {
+  const title = task.section_title?.trim();
+  return title ? `${title} · Aufgabe ${task.position}` : `Aufgabe ${task.position}`;
+}
+
+/** Retain teaching order and keep equally named sections distinct. */
+export function taskGroups(tasks: LiveStudentPanelTask[]) {
+  const groups = new Map<string, { title: string; tasks: LiveStudentPanelTask[] }>();
+  for (const task of tasks) {
+    const key = task.section_id || "ungrouped";
+    if (!groups.has(key)) groups.set(key, { title: task.section_title?.trim() || "Aufgaben", tasks: [] });
+    groups.get(key)!.tasks.push(task);
+  }
+  return [...groups.values()];
+}
+
 export function buildDashboardViewModel(args: {
   summary: LiveSummaryPayload | null;
   selection: Pick<LiveWorkspaceSelection, "courseId" | "unitId" | "studentSub" | "taskId">;
@@ -232,7 +248,7 @@ export function buildDashboardViewModel(args: {
         ? {
             task_id: latestTaskId,
             task_position: latestTask.position,
-            task_label: `${latestTask.position}. Aufgabe`,
+            task_label: liveTaskLabel(latestTask),
             created_at: latestCreatedAt,
             average_score: latestAverageScore
           }
@@ -261,7 +277,9 @@ export function buildDashboardViewModel(args: {
           return {
             task_id: task.id,
             task_position: task.position,
-            task_label: `${task.position}. Aufgabe`,
+            task_label: liveTaskLabel(task),
+            section_id: task.section_id,
+            section_title: task.section_title,
             has_submission: Boolean(cell?.has_submission),
             average_score: typeof cell?.average_score === "number" ? cell.average_score : null,
             is_latest_submission: task.id === latestTaskId,

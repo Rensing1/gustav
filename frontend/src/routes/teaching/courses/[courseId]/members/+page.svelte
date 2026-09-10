@@ -12,19 +12,20 @@
   <section class="workspace-panel workspace-panel--plain workspace-section workspace-intro">
     <p class="workspace-kicker">{data.home?.course?.title ?? "Kurs"}</p>
     <p class="workspace-lead">
-      Die Kursmitgliedschaft ist als eigene SvelteKit-Detailfläche erreichbar und bleibt nah am Kurskontext.
+      Öffne einen Namen, um das Lernendenprofil anzusehen. Mitgliedschaften verwaltest Du in der Kursübersicht.
     </p>
   </section>
 
-  <section class="workspace-panel workspace-section">
+  <a class="workspace-link-action" href={data.home.course.href}>Mitglieder verwalten</a>
+
+  <section class="workspace-panel workspace-panel--flat workspace-section">
     <p class="workspace-label">Mitgliederliste</p>
     {#if data.home?.members?.length}
       <div class="workspace-list">
         {#each data.home.members as member}
           <a href={member.href}>
             <strong>{member.name}</strong>
-            <p class="workspace-note">Diagnostik und Lernendenprofil bleiben direkt erreichbar.</p>
-            <span class="workspace-meta">{member.sub}</span>
+            <p class="workspace-note">Lernendenprofil öffnen</p>
           </a>
         {/each}
       </div>

@@ -16,6 +16,8 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
   );
 
   return {
-    matrix
+    matrix,
+    hidePageHeading: true,
+    pageTitle: "Kursmatrix"
   };
 };

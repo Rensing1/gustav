@@ -247,14 +247,17 @@ def _round_live_average(values: list[float | None]) -> float | None:
 
 
 def _live_task_meta_by_id(tasks: list[dict[str, object]]) -> dict[str, dict[str, object]]:
-    """Map task ids to lightweight label metadata for dashboard rendering."""
+    """Keep actual section titles in labels so equal task numbers remain distinct."""
     out: dict[str, dict[str, object]] = {}
     for task in tasks:
         task_id = str(task.get("id") or "")
         position = int(task.get("position") or 0)
+        section_title = str(task.get("section_title") or "").strip()
         out[task_id] = {
             "task_position": position,
-            "task_label": f"{position}. Aufgabe",
+            "task_label": f"{section_title} · Aufgabe {position}" if section_title else f"Aufgabe {position}",
+            "section_id": str(task.get("section_id") or ""),
+            "section_title": section_title,
         }
     return out
 
@@ -403,6 +406,8 @@ async def get_live_unit_dashboard(
                         "task_id": current_task_id,
                         "task_position": int(meta["task_position"]),
                         "task_label": str(meta["task_label"]),
+                        "section_id": str(meta.get("section_id") or ""),
+                        "section_title": str(meta.get("section_title") or ""),
                         "has_submission": bool(matching_cell.get("has_submission")),
                         "average_score": matching_cell.get("average_score"),
                         "is_latest_submission": current_task_id == latest_task_id,

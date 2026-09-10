@@ -7,6 +7,7 @@ import type { LiveSummaryPayload } from "$lib/types/home";
 import {
   buildDashboardViewModel,
   createLiveWorkspaceController,
+  taskGroups,
   navigateWithLiveSelectionFallback
 } from "./page-state";
 
@@ -88,6 +89,19 @@ function summary(studentName = "Anna"): LiveSummaryPayload {
 }
 
 describe("live workspace controller", () => {
+  it("groups empty, first and last task sections without merging equal titles", () => {
+    const task = { task_id: "a", task_position: 1, task_label: "Aufgabe 1", has_submission: false, average_score: null, is_latest_submission: false, href: "/live" };
+    expect(taskGroups([])).toEqual([]);
+    const groups = taskGroups([
+      { ...task, section_id: "first", section_title: "Thema" },
+      { ...task, task_id: "b", section_id: "first", section_title: "Thema" },
+      { ...task, task_id: "c", section_id: "last", section_title: "Thema" },
+      { ...task, task_id: "d" }
+    ]);
+    expect(groups.map((group) => [group.title, group.tasks.map((item) => item.task_id)])).toEqual([
+      ["Thema", ["a", "b"]], ["Thema", ["c"]], ["Aufgaben", ["d"]]
+    ]);
+  });
   it("routes browser fetch 401 responses through shared auth recovery before live errors", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
@@ -112,8 +126,10 @@ describe("live workspace controller", () => {
   });
 
   it("derives row and task links locally from the current live selection", () => {
+    const groupedSummary = summary();
+    groupedSummary.tasks = groupedSummary.tasks.map((task) => ({ ...task, section_id: "section-1", section_title: "Grundlagen" }));
     const dashboard = buildDashboardViewModel({
-      summary: summary(),
+      summary: groupedSummary,
       selection: {
         courseId: "course-1",
         unitId: "unit-1",
@@ -138,6 +154,9 @@ describe("live workspace controller", () => {
         role: "teacher",
         roles: ["teacher"]
       }
+    });
+    expect(dashboard?.selected_student_panel?.tasks[0]).toMatchObject({
+      section_id: "section-1", section_title: "Grundlagen", task_label: "Grundlagen · Aufgabe 1"
     });
 
     expect(dashboard?.rows[0]?.href).toBe("/live?course_id=course-1&unit_id=unit-1&student_sub=student-1");

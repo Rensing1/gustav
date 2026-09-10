@@ -9,6 +9,7 @@ Why:
 from __future__ import annotations
 
 import sys as _sys
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -97,7 +98,7 @@ def _build_diagnostics_course_matrix_rows(
                     "unit_id": unit_id,
                     "submitted_tasks": submitted_tasks,
                     "total_tasks": len(unit_task_ids),
-                    "href": f"/live/courses/{course_id}/units/{unit_id}",
+                    "href": _diagnostics_live_href(course_id, unit_id, student_sub),
                 }
             )
         rows.append(
@@ -118,6 +119,11 @@ def _teacher_course_has_member(course_id: str, owner_sub: str, student_sub: str)
 
     repo = teaching_routes._get_repo()  # type: ignore[attr-defined]
     return bool(repo.course_has_member(course_id, owner_sub, student_sub))
+
+
+def _diagnostics_live_href(course_id: str, unit_id: str, student_sub: str) -> str:
+    """Link authorized diagnostic rows to the existing Live surface, never a host supplied by the caller."""
+    return "/live?" + urlencode({"course_id": course_id, "unit_id": unit_id, "student_sub": student_sub})
 
 
 def _build_diagnostics_learner_profile_courses(
@@ -145,7 +151,7 @@ def _build_diagnostics_learner_profile_courses(
                 "id": str(item.get("id") or ""),
                 "title": str(item.get("title") or ""),
                 "position": int(item.get("position") or 0),
-                "href": f"/diagnostics/courses/{course_id}/units/{item.get('id')}",
+                "href": _diagnostics_live_href(course_id, str(item.get("id") or ""), student_sub),
             }
             for item in _app_helper("_list_teacher_course_units", _list_teacher_course_units)(course_id, owner_sub)
             if isinstance(item, dict)

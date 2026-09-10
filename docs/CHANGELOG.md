@@ -2,6 +2,13 @@
 
 ## 2026-09-10
 
+### Designreparatur – Live, Diagnostik und Mitglieder
+
+- fix(teaching): Gemeinsame kantige Flächen, Reiter und Kontraste; lange Auswahlwerte bleiben innerhalb der Seite, breite Tabellen erhalten einen beschrifteten Tastatur-Scrollbereich.
+- fix(live): Aufgaben nach vorhandenem Abschnitts-/Modultitel gruppieren, ohne weitere Datenbankabfragen oder geänderte Bewertungsregeln.
+- fix(diagnostics): Konkrete Kursauswahl; vertragsgemäße Links führen mit Kurs, Einheit und Lernendem zur vorhandenen Live-Ansicht. Mitgliedertexte zeigen keine internen Personenkennungen oder Entwicklungsformulierungen.
+- test: Beide vollständigen Paket-Gates bestanden, 64 Bilder bei vier Breiten in Light/Dark gesichtet; 24 Lernende, letzte Zeile, echte Abgabe und unveränderter Zugriffsschutz geprüft. Keine neuen Endpunkte oder Migrationen.
+
 ### Designreparatur – Graphansichten
 
 - fix(graph): Beide Rollen teilen deutsche Werkzeugbeschriftungen, kontrastreiche Zustände und bildschirmabhängige Graphhöhe. Mobile Symbolaktionen mindestens 44 × 44 px.

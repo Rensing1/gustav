@@ -14,6 +14,12 @@ Die Prüfung `frontend/src/lib/styles/token-ownership.test.ts` sichert für die 
 
 ## 1. Produktbild
 
+### Reparaturvertrag: Inhalte und lineare Abschnitte
+
+Markdown-Code (inline und als Block) ist darstellbarer Text, keine ausführbare Funktion. Der visuelle Editor muss diese Inhalte beim Öffnen, unveränderten Speichern und erneuten Laden erhalten; die zentrale sichere Markdown-Ausgabe bleibt verbindlich.
+
+Die Auswahl eines linearen Abschnitts zeigt wie bei Modulen eine flache Kontextleiste mit „Inhalte bearbeiten“ und „Eigenschaften“. Nur die ausdrückliche Eigenschaften-Aktion öffnet das Formular. Rückkehr aus dem Inhaltseditor erhält Auswahl und Graphausschnitt; ältere Direktlinks bleiben gültig. Lernende sehen „Abschnitt 1 · Titel“, bei fehlendem Titel nur die Abschnittsnummer.
+
 GUSTAV folgt einer präzisen, kontrastreichen und technisch-scharfen
 Produktsprache. Es ist kein
 freundlich-rundes EdTech-Produkt und keine warme Editorial-Oberfläche mehr.

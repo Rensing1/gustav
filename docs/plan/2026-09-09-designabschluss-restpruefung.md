@@ -16,6 +16,8 @@ Felix hat während dieses Durchgangs ausdrücklich Übungs-Testdaten und lokale 
 
 ### DS-26 · P1 · Rich-Text-Editor lässt vorhandene Inline-Code-Inhalte weg
 
+**Reparaturstatus 10. September 2026: behoben.** Öffnen, unverändert speichern und erneut laden erhält Inline-Code und Codeblöcke. Nachweis: `make verify-feature FEATURE=editor-content-integrity`, ergänzende Adaptertests und gesichtete [Desktopansicht](assets/2026-09-10-designreparatur-paket1/editor-light-1440.png) / [mobile Dunkelansicht](assets/2026-09-10-designreparatur-paket1/editor-dark-390.png). Der folgende Text dokumentiert den ursprünglichen Befund.
+
 In allen drei Lehrkraftformularen für Scratch, Calliope und Filius enthält die seitliche Aufgabenliste weiterhin die Dateiendung `.sb3`, `.hex` beziehungsweise `.fls`. Im geladenen Editor steht dagegen sinngemäß „lade die -Datei hoch“. Beim Filius-Editor wurde zusätzlich der tatsächliche Inhalt des `contenteditable` gelesen: Die Endung fehlt, es existiert auch kein verstecktes `code`-Element. Die Lernendenansicht und die erzeugte Druckfassung zeigen die Endungen korrekt. Das grenzt den Befund auf die Bearbeitungsdarstellung ein.
 
 Quellhinweis: `frontend/src/lib/components/learning-unit/tiptap-markdown-editor.ts`, `StarterKit.configure({ code: false, codeBlock: false, ... })` bei Markdown-Import. Das ist ein konkreter Ursachenhinweis, keine abgeschlossene Reparaturanalyse. **Es wurde nicht gespeichert; ein persistierter Datenverlust ist deshalb nicht behauptet.** Die Priorität ergibt sich aus dem Risiko, bestehende Inhalte beim Bearbeiten unbemerkt zu verlieren. Vor einer Reparatur einen Roundtrip-Test mit vorhandenen Inline-Code-Fragmenten entwerfen.

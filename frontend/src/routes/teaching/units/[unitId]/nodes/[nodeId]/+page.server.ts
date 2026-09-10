@@ -1,7 +1,7 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { error, fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
-import { backendRequest, requireBackendJson } from "$lib/server/api";
+import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
 import {
   graphDeletionFallback,
@@ -102,9 +102,18 @@ async function readEditor(
   nodeId: string,
   authRedirectPath: string
 ): Promise<TeacherUnitNodeEditorView> {
-  return await requireBackendJson<TeacherUnitNodeEditorView>(fetchFn, cookies, editorHref(unitId, nodeId), {
-    authRedirectPath
-  });
+  try {
+    return await requireBackendJson<TeacherUnitNodeEditorView>(fetchFn, cookies, editorHref(unitId, nodeId), {
+      authRedirectPath
+    });
+  } catch (cause) {
+    // Preserve the backend's access decision without exposing internal errors.
+    if (cause instanceof BackendRequestError) {
+      if (cause.response.status === 403) error(403, "Du darfst diese Inhalte nicht bearbeiten.");
+      if (cause.response.status === 404) error(404, "Diese Inhalte wurden nicht gefunden.");
+    }
+    throw cause;
+  }
 }
 
 async function success<K extends EditorActionName>(

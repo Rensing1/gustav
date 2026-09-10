@@ -14,6 +14,13 @@
         materialsCount: number;
         tasksCount: number;
         editorHref: string;
+      }
+    | {
+        kind: "section";
+        title: string;
+        materialsCount: number;
+        tasksCount: number;
+        editorHref: string;
       };
 
   let {
@@ -27,27 +34,27 @@
     onOpenProperties: () => void;
     onAddModule?: (() => void) | null;
     onFocusSelection?: (() => void) | null;
-    onRequestDelete: () => void;
+    onRequestDelete?: (() => void) | null;
   } = $props();
 </script>
 
 <section
   class="teacher-graph-selection-bar"
-  aria-label={selection.kind === "module" ? "Ausgewähltes Modul" : "Ausgewählte Phase"}
+  aria-label={selection.kind === "section" ? "Ausgewählter Abschnitt" : selection.kind === "module" ? "Ausgewähltes Modul" : "Ausgewählte Phase"}
 >
   <div class="teacher-graph-selection-bar__copy">
-    <span>{selection.kind === "module" ? `Modul · ${selection.phaseTitle}` : "Phase"}</span>
+    <span>{selection.kind === "section" ? "Abschnitt" : selection.kind === "module" ? `Modul · ${selection.phaseTitle}` : "Phase"}</span>
     <strong>{selection.title}</strong>
     <small>
-      {selection.kind === "module"
+      {selection.kind !== "phase"
         ? formatGraphCounts(selection.materialsCount, selection.tasksCount)
         : formatGraphCount(selection.moduleCount, "Modul", "Module")}
     </small>
   </div>
 
   <div class="teacher-graph-selection-bar__actions">
-    {#if selection.kind === "module"}
-      <a class="workspace-link-action" href={selection.editorHref}>Inhalt bearbeiten</a>
+    {#if selection.kind !== "phase"}
+      <a class="workspace-link-action" href={selection.editorHref}>{selection.kind === "section" ? "Inhalte bearbeiten" : "Inhalt bearbeiten"}</a>
     {:else if onAddModule}
       <button class="workspace-link-action" type="button" onclick={onAddModule}>Modul hinzufügen</button>
     {/if}
@@ -62,6 +69,7 @@
       </button>
     {/if}
 
+    {#if onRequestDelete}
     <details class="workspace-row-menu teacher-graph-selection-bar__menu">
       <summary aria-label="Weitere Aktionen">•••</summary>
       <div class="workspace-row-menu__panel">
@@ -70,5 +78,6 @@
         </button>
       </div>
     </details>
+    {/if}
   </div>
 </section>

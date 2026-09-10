@@ -31,7 +31,7 @@ describe("teacher unit graph route contract", () => {
     expect(source).toContain('class="workspace-field"');
     expect(source).toContain("<GraphDeleteDialog");
     expect(source).toContain("GraphSelectionBar");
-    expect(source).toContain('type StructurePanelMode = "create-phase" | "create-module" | "phase-properties" | "module-properties" | null');
+    expect(source).toContain('type StructurePanelMode = "create-phase" | "create-module" | "phase-properties" | "module-properties" | "section-properties" | null');
     expect(graphNodeSource).not.toContain("teacher-flow-unit-node__quickedit");
     expect(appCss).not.toContain(".workspace-unit-commandbar-popover {");
     expect(appCss).not.toContain(".teacher-flow-unit-node__quickedit {");

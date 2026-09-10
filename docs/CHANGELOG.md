@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-10
+
+### Designreparatur – Inhaltserhalt und lineare Abschnitte
+
+- fix(editor): Der visuelle Markdown-Editor erhält Inline-Code und Codeblöcke als Text beim Speichern und erneuten Laden. Code wird nicht ausgeführt; die sichere Markdown-Ausgabe bleibt unverändert.
+- fix(teaching): Lineare Abschnitte verwenden die gemeinsame Kontextleiste mit ausdrücklicher Inhalts- und Eigenschaftenaktion. Auswahl allein öffnet kein Formular. Alte Eigenschaftenlinks bleiben gültig; Rückkehr aus dem Editor erhält Abschnittsauswahl und tabbezogenen Graphausschnitt.
+- fix(learning): Inhaltsübersichten zeigen neben der Abschnittsnummer den vorhandenen Titel; bei leerem Titel bleibt der Nummern-Fallback bestehen.
+- fix(web): Verweigerter beziehungsweise nicht gefundener Inhaltseditor wird mit 403/404 statt technischem 500 gemeldet, ohne die Berechtigungsentscheidung zu ändern.
+- test: Neue authentifizierte Rundläufe `editor-content-integrity` und `teacher-linear-section-actions`, ergänzende Adapter-/Projektions-/Kamera-/Loader-Tests und Bildnachweise. Keine API-, Schema- oder DSPy-Änderung.
+
 ## 2026-09-08
 
 ### Technische Schulden – Speicher, Katalog, Dialoge und Verarbeitungsgrenzen

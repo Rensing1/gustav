@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$lib/server/api", () => ({
+vi.mock("$lib/server/api", async (importOriginal) => ({
+  ...await importOriginal<typeof import("$lib/server/api")>(),
   backendRequest: vi.fn(),
   buildApiUrl: vi.fn((path: string) => `https://app.localhost${path}`),
   requireBackendJson: vi.fn()
@@ -14,7 +15,7 @@ vi.mock("$lib/server/guards", () => ({
 }));
 
 import { actions, __testables, load } from "./+page.server";
-import { backendRequest, requireBackendJson } from "$lib/server/api";
+import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
 
 const backendRequestMock = vi.mocked(backendRequest);
 const requireBackendJsonMock = vi.mocked(requireBackendJson);
@@ -26,6 +27,13 @@ function requestWithFormData(formData: FormData): Parameters<typeof actions.crea
 }
 
 describe("teacher node editor server helpers", () => {
+  it.each([403, 404])("preserves a denied or missing editor HTTP status (%s)", async (status) => {
+    requireBackendJsonMock.mockRejectedValueOnce(new BackendRequestError(new Response(null, { status })));
+    await expect(load({
+      fetch: vi.fn(), cookies: {}, params: { unitId: "unit-1", nodeId: "section-1" },
+      parent: vi.fn(async () => ({})), url: new URL("https://app.localhost/teaching/units/unit-1/nodes/section-1")
+    } as never)).rejects.toMatchObject({ status });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     const editor = {

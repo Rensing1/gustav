@@ -3,6 +3,19 @@ import { describe, expect, it, vi } from "vitest";
 import { createTiptapMarkdownEditor } from "./tiptap-markdown-editor";
 
 describe("Tiptap Markdown adapter", () => {
+  it("preserves inline code and inert code blocks through save and reload", () => {
+    const host = document.createElement("div");
+    const content = 'Dateien: `.sb3`, `.hex` und `.fls`.\n\n```js\nwindow.__executed = true;\n<script>alert(1)</script>\n```';
+    const options = { element: host, content, placeholder: "Material", onUpdate: vi.fn() };
+    const editor = createTiptapMarkdownEditor(options);
+    const saved = editor.getMarkdown();
+    editor.destroy();
+    const reopened = createTiptapMarkdownEditor({ ...options, content: saved });
+    expect(reopened.getMarkdown()).toBe(content);
+    expect(host.querySelectorAll("code")).toHaveLength(4);
+    expect(host.querySelector("script")).toBeNull();
+    reopened.destroy();
+  });
   it("round-trips the supported Markdown without changing the storage contract", () => {
     const onUpdate = vi.fn();
     const editor = createTiptapMarkdownEditor({
@@ -36,7 +49,7 @@ describe("Tiptap Markdown adapter", () => {
     editor.destroy();
   });
 
-  it("does not enable image or code-block nodes", () => {
+  it("does not enable embedded image nodes", () => {
     const editor = createTiptapMarkdownEditor({
       element: document.createElement("div"),
       content: "plain text",
@@ -45,7 +58,6 @@ describe("Tiptap Markdown adapter", () => {
     });
 
     expect(editor.hasNode("image")).toBe(false);
-    expect(editor.hasNode("codeBlock")).toBe(false);
     editor.destroy();
   });
 

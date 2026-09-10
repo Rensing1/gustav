@@ -28,6 +28,8 @@ Die nachträgliche Freigabe wurde genutzt, um genau die zuvor fehlenden Vorausse
 
 ### DS-33 · P2 · Lineare Inhaltsübersicht unterschlägt die vergebenen Abschnittstitel
 
+**Reparaturstatus 10. September 2026: behoben.** Abschnittsnummer und vorhandener Titel erscheinen gemeinsam, bei leerem Titel bleibt die Nummer. Nachweis: Projektionstest, authentifizierter Lernenden-Rundlauf in `make verify-feature FEATURE=teacher-linear-section-actions` und [gesichtete Inhaltsübersicht](assets/2026-09-10-designreparatur-paket1/learner-section-titles.png). Der folgende Text dokumentiert den ursprünglichen Befund.
+
 Die Lehrkraft sieht die beiden tatsächlichen Titel „Grundlagen verstehen und anhand eines anschaulichen Beispiels erklären“ und „Ergebnisse prüfen und den eigenen Lösungsweg kritisch beurteilen“. In der Lernenden-Inhaltsübersicht und ihrem Inhaltsverzeichnis stehen dagegen nur „Abschnitt 1“ und „Abschnitt 2“. Der lange Einheitentitel selbst wird angezeigt und umgebrochen. Es handelt sich nicht um fehlende Testdaten: Auch die Druckfassung verwendet die gespeicherten Abschnittstitel.
 
 Konkreter Quellhinweis: `frontend/src/lib/learning-unit/workspace.ts`, `contentGroupsForSections`, setzt den Gruppentitel ausschließlich aus der Position zusammen. Empfehlung: Abschnittsnummer und fachlichen Titel gemeinsam anzeigen. Dieser Unterschied ist ein Orientierungsproblem, kein Argument für identische Bearbeitungs- und Lernoberflächen.
@@ -35,6 +37,8 @@ Konkreter Quellhinweis: `frontend/src/lib/learning-unit/workspace.ts`, `contentG
 ![Lineare Lernendenansicht mit bloßen Abschnittsnummern](assets/2026-09-09-zusatzpruefung/linear-learner-mobile-dark.png)
 
 ### DS-34 · P1 · Lineare Abschnittsauswahl bietet keinen sichtbaren Weg zum Inhaltseditor
+
+**Reparaturstatus 10. September 2026: behoben.** Die gemeinsame Kontextleiste bietet „Inhalte bearbeiten“ und ausdrückliche „Eigenschaften“. Rückkehr bewahrt Auswahl und Kamera; alte Direktlinks und Zugriffsschutz sind geprüft. Nachweis: `make verify-feature FEATURE=teacher-linear-section-actions`, bestehender modularer Rückfalltest `teacher-graph-module-actions`, [Desktop](assets/2026-09-10-designreparatur-paket1/linear-light-1440.png) und [mobile Dunkelansicht](assets/2026-09-10-designreparatur-paket1/linear-dark-390.png). Die Graphhöhen-/Werkzeugbefunde aus Paket 5 bleiben davon unabhängig offen. Der folgende Text dokumentiert den ursprünglichen Befund.
 
 Bei einer linearen Einheit ändert das Anklicken eines Abschnitts die Auswahl und den URL-Parameter `section`, öffnet aber weder den Abschnittsinspektor noch eine sichtbare Aktion zum Bearbeiten seiner Inhalte. Einfacher Klick und Doppelklick wurden geprüft; die Auswahl ist am orangefarbenen Rahmen erkennbar. „Lerneinheit bearbeiten“ öffnet lediglich den Dialog für die Stammdaten der Einheit. Dieser wurde ohne Änderung per Escape geschlossen. Das Problem tritt auch am Desktop auf und ist deshalb nicht nur ein abgeschnittener mobiler Inspektor.
 

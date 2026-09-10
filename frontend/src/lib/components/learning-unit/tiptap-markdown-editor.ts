@@ -40,8 +40,8 @@ type CreateEditorOptions = {
 
 /**
  * Adapt Tiptap's document model to GUSTAV's existing Markdown form contract.
- * The schema deliberately excludes executable/code and image nodes; callers
- * must still render persisted Markdown through the central sanitizer.
+ * Code marks and blocks preserve authored text; they never execute it. Image
+ * nodes remain excluded. Callers must render through the central sanitizer.
  */
 export function createTiptapMarkdownEditor(options: CreateEditorOptions): TiptapMarkdownEditor {
   const editor = new Editor({
@@ -52,8 +52,6 @@ export function createTiptapMarkdownEditor(options: CreateEditorOptions): Tiptap
     extensions: [
       StarterKit.configure({
         blockquote: false,
-        code: false,
-        codeBlock: false,
         horizontalRule: false,
         strike: false,
         link: {

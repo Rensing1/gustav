@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { ControlButton, Controls, useNodesInitialized, useSvelteFlow, useViewportInitialized } from "@xyflow/svelte";
+  import { ControlButton, Controls, useNodesInitialized, useSvelteFlow, useViewportInitialized, useViewport } from "@xyflow/svelte";
+  import { readViewport, writeViewport } from "$lib/graph/viewport-memory";
 
   export type GraphViewportController = {
     focusNode: (nodeId?: string | null) => void;
@@ -10,16 +11,19 @@
   let {
     initialNodeId = null,
     onControllerReady,
-    showInteractionToggle = true
+    showInteractionToggle = true,
+    storageKey = null
   }: {
     initialNodeId?: string | null;
     onControllerReady?: ((controller: GraphViewportController) => void) | null;
     showInteractionToggle?: boolean;
+    storageKey?: string | null;
   } = $props();
 
   const flow = useSvelteFlow();
   const nodesInitialized = useNodesInitialized();
   const viewportInitialized = useViewportInitialized();
+  const viewport = useViewport();
   let initialFocusApplied = $state(false);
 
   function focusNode(nodeId: string | null = initialNodeId, attempt = 0) {
@@ -56,8 +60,16 @@
   $effect(() => {
     if (!initialFocusApplied && initialNodeId && nodesInitialized.current && viewportInitialized.current) {
       initialFocusApplied = true;
-      untrack(() => focusNode(initialNodeId));
+      untrack(() => {
+        const saved = storageKey ? readViewport(sessionStorage, storageKey) : null;
+        if (saved) void flow.setViewport(saved);
+        else focusNode(initialNodeId);
+      });
     }
+  });
+
+  $effect(() => {
+    if (storageKey && initialFocusApplied) writeViewport(sessionStorage, storageKey, viewport.current);
   });
 </script>
 

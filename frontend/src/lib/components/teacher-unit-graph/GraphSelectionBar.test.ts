@@ -4,6 +4,19 @@ import { describe, expect, it, vi } from "vitest";
 import GraphSelectionBar from "./GraphSelectionBar.svelte";
 
 describe("GraphSelectionBar", () => {
+  it("offers explicit content and properties actions for linear sections", async () => {
+    const openProperties = vi.fn();
+    render(GraphSelectionBar, { props: {
+      selection: { kind: "section", title: "Grundlagen", materialsCount: 1, tasksCount: 2,
+        editorHref: "/teaching/units/unit-1/nodes/section-1" },
+      onOpenProperties: openProperties
+    } });
+    expect(screen.getByRole("region", { name: "Ausgewählter Abschnitt" })).toHaveTextContent("Grundlagen");
+    expect(screen.getByRole("link", { name: "Inhalte bearbeiten" })).toHaveAttribute("href", "/teaching/units/unit-1/nodes/section-1");
+    expect(openProperties).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole("button", { name: "Eigenschaften" }));
+    expect(openProperties).toHaveBeenCalledTimes(1);
+  });
   it("shows module context and keeps editing actions explicit", async () => {
     const openProperties = vi.fn();
     const requestDelete = vi.fn();

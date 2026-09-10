@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  contentGroupsForSections,
   emptyReviewFocus,
   emptySubmissionFocus,
   reconcileModularWorkspaceState,
@@ -15,6 +16,13 @@ import {
 } from "./workspace";
 
 describe("workspace helpers", () => {
+  it("labels linear sections with their titles and falls back for blank titles", () => {
+    const groups = contentGroupsForSections(["Grundlagen", " "].map((title, index) => ({
+      section: { id: `section-${index}`, unit_id: "unit-1", title, position: index + 1 },
+      materials: [{ id: `material-${index}`, title: "Quelle", kind: "markdown" as const, body_md: "Text" }], tasks: []
+    })));
+    expect(groups.map((group) => group.title)).toEqual(["Abschnitt 1 · Grundlagen", "Abschnitt 2"]);
+  });
   it("reopens only material entries for the targeted modules", () => {
     const entries: PaneStackEntry[] = [
       { key: "material:1", expanded: false },

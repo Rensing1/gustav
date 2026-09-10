@@ -337,7 +337,7 @@ export function contentGroupsForSections(sections: LearningSection[]): ContentGr
   return sections
     .map((section) => ({
       id: section.section.id,
-      title: `Abschnitt ${section.section.position}`,
+      title: `Abschnitt ${section.section.position}${section.section.title?.trim() ? ` · ${section.section.title.trim()}` : ""}`,
       items: sectionContentItems(section)
     }))
     .filter((group) => group.items.length > 0);

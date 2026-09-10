@@ -72,7 +72,7 @@
   let localSelection = $state<TeacherUnitWorkspaceSelection>(initialWorkspace().selection);
   let handledForm: ActionData | undefined = undefined;
   let initialPanelStateApplied = $state(false);
-  type StructurePanelMode = "create-phase" | "create-module" | "phase-properties" | "module-properties" | null;
+  type StructurePanelMode = "create-phase" | "create-module" | "phase-properties" | "module-properties" | "section-properties" | null;
   let structurePanelMode = $state<StructurePanelMode>(null);
   let unitEditOpen = $state(false);
   let deleteTarget = $state<GraphDeletionTarget | null>(null);
@@ -184,10 +184,6 @@
     return query ? `${baseUrl.pathname}?${query}` : baseUrl.pathname;
   }
 
-  function quickEditOpen(): boolean {
-    return currentUrl().searchParams.get("quick") === "1";
-  }
-
   function panelParam(mode: StructurePanelMode): string | null {
     if (mode === "phase-properties" || mode === "module-properties") {
       return mode;
@@ -237,6 +233,9 @@
     if (panel === "module-properties" && selection.kind === "module") {
       return panel;
     }
+    if (panel === "section-properties" && selection.kind === "section") {
+      return panel;
+    }
 
     if (url.searchParams.get("create-phase") === "1" || form?.createPhase) {
       return "create-phase";
@@ -245,6 +244,7 @@
       return "create-module";
     }
     if (url.searchParams.get("quick") === "1") {
+      if (selection.kind === "section") return "section-properties";
       if (selection.kind === "phase") return "phase-properties";
       if (selection.kind === "module") return "module-properties";
     }
@@ -370,7 +370,7 @@
             ? { module: localSelection.module.id }
             : localSelection.kind === "phase"
               ? { phase: localSelection.phase.id }
-              : undefined
+              : localSelection.kind === "section" ? { section: localSelection.section.id } : undefined
         );
       });
     }
@@ -405,8 +405,8 @@
   }
 
   function focusGraphTarget(next: Record<string, string | null> | undefined) {
-    const targetId = next?.module ?? next?.phase ?? null;
-    const flowNodeId = next?.phase ? `phase:${next.phase}` : next?.module ?? null;
+    const targetId = next?.module ?? next?.phase ?? next?.section ?? null;
+    const flowNodeId = next?.phase ? `phase:${next.phase}` : next?.module ?? next?.section ?? null;
     const selector = targetId && flowNodeId
       ? `.svelte-flow__node[data-id="${flowNodeId}"]`
       : ".teacher-flow-workspace__canvas";
@@ -570,7 +570,7 @@
 
   function applyRouteState(url: URL) {
     const selection = selectionFromUrl(url);
-    const mode = workspaceState.graph.kind === "modular" ? panelModeFromUrl(url, selection) : null;
+    const mode = panelModeFromUrl(url, selection);
     localSelection = selection;
     structurePanelMode = mode;
     unitEditOpen = url.searchParams.get("edit") === "1" || Boolean(form?.saveUnit);
@@ -865,7 +865,7 @@
   function selectGraphNode(node: TeacherFlowNode) {
     const nodeData = flowNodeData(node);
     if (nodeData.kind === "section") {
-      void applyLocalSelection(deriveSectionSelection(node.id));
+      setSelectionAndPanel(deriveSectionSelection(node.id), null);
       return;
     }
     if (nodeData.kind === "phase") {
@@ -944,9 +944,6 @@
   }
 
   function inspectorOpen(): boolean {
-    if (workspaceState.graph.kind === "linear") {
-      return quickEditOpen() && localSelection.kind === "section";
-    }
     return structurePanelMode !== null;
   }
 
@@ -959,11 +956,7 @@
   }
 
   function closeInspector() {
-    if (workspaceState.graph.kind === "modular") {
-      setStructurePanelMode(null);
-      return;
-    }
-    syncUrlPatch({ quick: null });
+    setStructurePanelMode(null);
   }
 
   function phaseInsertionAnchor(): string {
@@ -980,6 +973,12 @@
 
   function selectionBarSelection(): GraphSelectionBarSelection | null {
     const selection = localSelection;
+    if (selection.kind === "section") {
+      const section = workspaceState.graph.nodes?.find((item) => item.id === selection.section.id);
+      return { kind: "section", title: selection.section.title,
+        materialsCount: section?.materials_count ?? 0, tasksCount: section?.tasks_count ?? 0,
+        editorHref: selection.section.editor_href };
+    }
     if (selection.kind === "phase") {
       const phase = modularPhases().find((item) => item.id === selection.phase.id);
       return {
@@ -1003,7 +1002,9 @@
   }
 
   function openSelectedProperties() {
-    if (localSelection.kind === "phase") {
+    if (localSelection.kind === "section") {
+      setStructurePanelMode("section-properties");
+    } else if (localSelection.kind === "phase") {
       setStructurePanelMode("phase-properties");
     } else if (localSelection.kind === "module") {
       setStructurePanelMode("module-properties");
@@ -1025,7 +1026,10 @@
   }
 
   function focusSelectedGraphItem() {
-    if (localSelection.kind === "phase") {
+    if (localSelection.kind === "section") {
+      focusGraphTarget({ section: localSelection.section.id });
+      graphViewportController?.focusNode(localSelection.section.id);
+    } else if (localSelection.kind === "phase") {
       focusGraphTarget({ phase: localSelection.phase.id });
       graphViewportController?.focusNode(`phase:${localSelection.phase.id}`);
     } else if (localSelection.kind === "module") {
@@ -1035,6 +1039,7 @@
   }
 
   function initialGraphFocusNodeId(): string | null {
+    if (localSelection.kind === "section") return localSelection.section.id;
     if (localSelection.kind === "phase") return `phase:${localSelection.phase.id}`;
     if (localSelection.kind === "module") return localSelection.module.id;
     return modularPhases()[0] ? `phase:${modularPhases()[0].id}` : flowNodes[0]?.id ?? null;
@@ -1126,13 +1131,13 @@
 {/snippet}
 
 {#snippet selectionContext()}
-  {#if workspaceState.graph.kind === "modular" && selectionBarSelection()}
+  {#if selectionBarSelection()}
     <GraphSelectionBar
       selection={selectionBarSelection()!}
       onOpenProperties={openSelectedProperties}
       onAddModule={localSelection.kind === "phase" ? addModuleToSelectedPhase : null}
       onFocusSelection={focusSelectedGraphItem}
-      onRequestDelete={requestSelectedDeletion}
+      onRequestDelete={localSelection.kind === "section" ? null : requestSelectedDeletion}
     />
   {/if}
 {/snippet}
@@ -1172,6 +1177,7 @@
       onnodedragstop={handleNodeDragStop}
     >
       <GraphViewportControls
+        storageKey={`gustav:teacher-graph:${workspaceState.unit.id}:viewport`}
         initialNodeId={initialGraphFocusNodeId()}
         onControllerReady={registerGraphViewportController}
       />

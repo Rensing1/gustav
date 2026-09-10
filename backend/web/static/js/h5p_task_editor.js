@@ -43,6 +43,13 @@
     if (!head) return;
 
     const selector = 'link[data-gustav-h5p-theme="true"]';
+    if (!head.querySelector('link[data-gustav-h5p-tokens]')) {
+      const tokens = iframeDoc.createElement('link');
+      tokens.rel = 'stylesheet';
+      tokens.href = '/h5p/theme/theme-tokens.css';
+      tokens.dataset.gustavH5pTokens = 'true';
+      head.appendChild(tokens);
+    }
     const existing = head.querySelector(selector);
     if (existing) {
       // Move to the end of <head> to keep it last (override order matters).

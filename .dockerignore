@@ -1,11 +1,7 @@
 # Keep Docker build contexts small and avoid accidentally copying local artefacts.
 #
-# This repo uses two build contexts:
-# - `.`               (web, learning-worker, keycloak)
-# - `./h5p-service`   (H5P sidecar)
-#
-# The sidecar has its own `.dockerignore`; keep this file focused on the root
-# context.
+# Services share the root build context so Keycloak and H5P can copy the
+# canonical design tokens and locked font packages at build time.
 
 # VCS
 .git/

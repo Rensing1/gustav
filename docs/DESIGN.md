@@ -14,6 +14,12 @@ Die Prüfung `frontend/src/lib/styles/token-ownership.test.ts` sichert für die 
 
 ## 1. Produktbild
 
+### Reparaturvertrag: rollenübergreifende Graphbedienung
+
+Beide Rollen verwenden dieselben deutschen Werkzeugnamen, kontrastreichen Zustände und geometrisch identischen Knoten und Kanten. Die Graphfläche nutzt die nach Kopf- und Kontextleisten verbleibende Bildschirmhöhe; mobile Symbolaktionen bleiben mindestens 44 × 44 px groß. Der lesbare Startfokus bleibt erhalten, Gesamtansicht ist eine ausdrückliche Übersicht. Ein selbst gewählter Ausschnitt bleibt bei Aktualisierung und Rückkehr im selben Tab erhalten.
+
+Gesperrte Lernendenmodule tragen ausdrücklich „Gesperrt“ und die tatsächlich gelieferten Freischaltangaben. Fehlen diese, wird dies verständlich benannt; es werden keine Bedingungen aus Vermutungen abgeleitet. Sperren ändern weder Knotenmaße noch Koordinaten und bleiben serverseitig durchgesetzt.
+
 ### Reparaturvertrag: Inhalte und lineare Abschnitte
 
 Markdown-Code (inline und als Block) ist darstellbarer Text, keine ausführbare Funktion. Der visuelle Editor muss diese Inhalte beim Öffnen, unveränderten Speichern und erneuten Laden erhalten; die zentrale sichere Markdown-Ausgabe bleibt verbindlich.
@@ -33,6 +39,20 @@ Dialoge und Drawer verwenden kantige Rahmen, gemeinsame Innenabstände und eine 
 Anmeldung und Passwort-Reset bezeichnen das normale Anmeldefeld als „E-Mail-Adresse“ und verwenden E-Mail-Autofill. Registrierung bleibt an die Schul-E-Mail gebunden; IServ und bestehende Kontonamen werden nicht verändert. Keycloak-Seiten teilen genau einen äußeren Rahmen sowie dieselbe Initialisierung und sichtbare Umschaltung von Hell/Dunkel. Felder passen einschließlich Innenabständen und Rahmen in ihre Fläche.
 
 Beim Einstieg über GUSTAV wird ausschließlich die validierte Darstellung `light` oder `dark` übergeben. Ohne diesen Hinweis gilt die auf der Auth-Domain gespeicherte Auswahl, danach die Systemeinstellung. Keine Sitzungs- oder Identitätsdaten werden dafür übergeben. Fehlerseiten bieten einen festen Rückweg zur Anmeldung über den konfigurierten GUSTAV-Ursprung; freie Rücksprungadressen sind dafür nicht zulässig. Gültige und ungültige Einladungen verwenden dieselbe kantige, kontrastreiche Gestaltung. Die Auth-Ressourcen erhalten ihre Grundwerte beim Build aus `theme-tokens.css`, ohne Abrufe zwischen den Oberflächen zur Laufzeit.
+
+### Reparaturvertrag: H5P-Arbeitsflächen
+
+H5P übernimmt beim Build die zentralen Designwerte. Player und Editor verwenden dieselben auflösbaren Farben, Schriften und Zustände; die Standardbedienung ist deutsch, gespeicherte Autorentexte bleiben unverändert. Äußere GUSTAV-Rahmen und innere Bibliotheksflächen werden getrennt gestaltet. Es gibt keine neue Bibliothek und keinen Fork.
+
+DragQuestion startet in „Lesbare Ansicht“: Die tatsächliche Renderbreite wird aus den gemessenen Karten- und Beschriftungsschriften berechnet, sodass diese mindestens 16 px erreichen. Die Originalgeometrie bleibt unverändert. „Gesamtansicht“ passt die vollständige Aufgabe in die verfügbare Breite; Vergrößern und Verkleinern ändern die echte Renderbreite und lösen das reguläre H5P-Resize aus. Keine optische Skalierung mit abweichenden Ziehkoordinaten.
+
+Nur die beschriftete Aufgabenfläche scrollt horizontal. Native Scrollbedienung bleibt erhalten; zusätzliche Ziehgesten zum Verschieben dürfen das Antwortziehen nicht überlagern. Tastaturfokus macht das aktive Aufgabenelement innerhalb der Arbeitsfläche sichtbar. Ansichtssteuerung und H5P-Auswertung bleiben voneinander unabhängig; Zoomen erzeugt weder Antworten noch Bewertungen.
+
+### Reparaturvertrag: Live, Diagnostik und Mitglieder
+
+Live und Diagnostik verwenden die vorhandenen Workspace-Flächen, Felder und Aktionsvarianten. Lange Kurs-, Einheiten- und Personennamen dürfen nur innerhalb dafür vorgesehener Tabellenbereiche horizontales Scrollen erfordern, niemals für die ganze Seite. Tabellenbereiche sind beschriftet und per Tastatur erreichbar; schmale Ansichten ordnen Übersicht und Details untereinander an. Reiter besitzen lesbare aktive, Hover- und Fokuszustände in beiden Darstellungen.
+
+Die Live-Aufgabenleiste gruppiert nach tatsächlichem Abschnitt beziehungsweise Modul. Gruppentitel und sichtbare Aufgabennummern ersetzen unbeschriftete Miniaturfelder; die Bewertungslogik bleibt erhalten. Diagnostik beginnt mit einer konkreten Kursauswahl und „Kursmatrix öffnen“, bleibt aber aus der Hauptnavigation verborgen. Profil- und Matrixverweise öffnen die vorhandene Live-Ansicht mit Kurs, Lerneinheit und Lernendem. Mitgliederansichten zeigen verständliche Namen und Aktionen, keine technischen Personenkennungen oder Entwicklungsformulierungen.
 
 GUSTAV folgt einer präzisen, kontrastreichen und technisch-scharfen
 Produktsprache. Es ist kein

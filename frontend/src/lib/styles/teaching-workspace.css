@@ -1362,9 +1362,10 @@
   display: grid;
   gap: 0.9rem;
   padding: 1rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 82%, white 18%);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.7);
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  background: var(--color-bg-surface);
 }
 
 .teacher-h5p-editor__toolbar {

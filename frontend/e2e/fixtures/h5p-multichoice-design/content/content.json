@@ -1,0 +1,8 @@
+{
+  "question": "<p>Keep this author text: Welche Zahl ist gerade?</p>",
+  "answers": [
+    {"text": "<p>Drei</p>", "correct": false, "tipsAndFeedback": {"tip": "", "chosenFeedback": "Drei ist ungerade.", "notChosenFeedback": ""}},
+    {"text": "<p>Vier</p>", "correct": true, "tipsAndFeedback": {"tip": "", "chosenFeedback": "Vier ist gerade.", "notChosenFeedback": ""}}
+  ],
+  "behaviour": {"type": "single", "randomAnswers": false, "enableRetry": true, "enableSolutionsButton": true, "autoCheck": false, "passPercentage": 100}
+}

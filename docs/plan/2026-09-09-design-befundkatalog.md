@@ -6,6 +6,20 @@ Stand: 9. September 2026. Ergänzt um H5P und Auth auf ausdrücklichen Folgeauft
 
 ## Ergebnis in verständlicher Form
 
+### Reparaturabnahme H5P · 10. September 2026
+
+Die folgenden Statusangaben ersetzen für diese Befunde die historischen offenen Aussagen weiter unten. Beide vollständigen Gates `h5p-drag-layout` und `h5p-design-consistency` sowie `make docker-validate` bestanden. 45 Bildnachweise bei 1440/1024/390/320 px in Light/Dark tatsächlich gesichtet; lokale synthetische Testdaten bereinigt. Keine Bibliotheksaktualisierung, Inhaltsmigration oder Änderung der Bewertungslogik.
+
+| Befund | Status und Nachweis |
+| --- | --- |
+| DS-13 | Behoben: kantige zentrale Außenrahmen für [Player](assets/2026-09-10-designreparatur-paket4/choice-ready-390-dark.png) und [Editor](assets/2026-09-10-designreparatur-paket4/editor-390-dark.png). |
+| DS-14 | Behoben: deutsche Standardbedienung, [Editor speichern/neuladen](assets/2026-09-10-designreparatur-paket4/editor-1440-light.png) und [echte Auswertung/Wiederholung](assets/2026-09-10-designreparatur-paket4/choice-wrong-390-dark.png). Gespeicherter englischer Autorentext bleibt absichtlich unverändert. |
+| DS-15 | Behoben: aktive Auswertungsaktion und Antwortzustände kontrastgeprüft; [lesbare Zuordnung](assets/2026-09-10-designreparatur-paket4/drag-readable-390-dark.png), echte Maus-/Tastaturbedienung und gespeichertes Ergebnis. |
+| DS-16 | Behoben: [Editorbeschriftungen und Felder](assets/2026-09-10-designreparatur-paket4/editor-320-dark.png) sowie [Bestätigungsdialog](assets/2026-09-10-designreparatur-paket4/editor-confirmation-dark.png) im dunklen Modus lesbar und erreichbar. Mehrzeilige Titel wachsen mit. |
+| DS-17 | Behoben: alle H5P-Variablen auf zentrale Tokens abgebildet, Referenztest ohne undefinierte Werte; Player und Editor erhalten dieselben lokalen Build-Ressourcen. [Helle](assets/2026-09-10-designreparatur-paket4/choice-correct-1024-light.png) und [dunkle Auswertung](assets/2026-09-10-designreparatur-paket4/choice-correct-1024-dark.png). |
+
+DS-32 ist in der Restprüfung mit demselben Reparaturpaket abgenommen. Nachweise gelten für die repräsentativen geprüften Interaktionsfamilien, nicht für jede H5P-Hub-Bibliothek, physische Geräte oder vollständige Screenreader-Konformität.
+
 GUSTAV hat bereits eine erkennbare gemeinsame Gestaltung: kantige Flächen, klare Rahmen, Monospace-Beschriftungen für Aktionen und harte Schatten. Diese Sprache tragen die Lehrkraft-Startseite, die Katalogaktionen, der Kursbereich und auch der Kummerkasten für Lernende. Daneben bestehen andere Gestaltungen fort: die Übungsbuttons, die Kurserstellung, Teile der Dialoge und die Mitgliedersuche. Es geht deshalb nicht um ein neues Design für jede Rolle, sondern um das konsequente Anwenden derselben Regeln auf vergleichbare Elemente.
 
 Die frühere Prüfung hat diesen Vergleich nicht ausreichend durchgeführt. `/learning/practice` hätte als offensichtlicher Gegenvergleich aufgenommen werden müssen. Dieser Katalog ergänzt die [Aufgabenraum-Stichprobe vom 8. September](2026-09-08-lernenden-ui-befundkatalog.md), ohne deren Reichweite nachträglich größer darzustellen.

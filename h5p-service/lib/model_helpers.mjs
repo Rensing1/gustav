@@ -1,9 +1,10 @@
 export const H5P_THEME_STYLESHEET_PATH = "/h5p/theme/h5p-gustav.css";
+export const H5P_TOKEN_STYLESHEET_PATH = "/h5p/theme/theme-tokens.css";
 
 
 export function ensureThemeStylesLast(styles) {
-  const arr = Array.isArray(styles) ? styles.filter((style) => style !== H5P_THEME_STYLESHEET_PATH) : [];
-  arr.push(H5P_THEME_STYLESHEET_PATH);
+  const arr = Array.isArray(styles) ? styles.filter((style) => ![H5P_TOKEN_STYLESHEET_PATH, H5P_THEME_STYLESHEET_PATH].includes(style)) : [];
+  arr.push(H5P_TOKEN_STYLESHEET_PATH, H5P_THEME_STYLESHEET_PATH);
   return arr;
 }
 

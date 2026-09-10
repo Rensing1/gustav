@@ -33,6 +33,7 @@ import path from "node:path";
 import { access, readdir, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import express from "express";
+import { translateH5p } from "./lib/translations.mjs";
 import multer from "multer";
 import { debugPagesEnabled, isProdLikeEnv } from "./lib/env.mjs";
 import { createFinishedForwardingMetrics } from "./lib/finished_forwarding.mjs";
@@ -247,7 +248,7 @@ async function main() {
     libraryStorage,
     contentStorage,
     tmpStorage,
-    undefined,
+    translateH5p,
     undefined,
     undefined,
     userDataStorage,
@@ -258,7 +259,7 @@ async function main() {
     h5pConfig,
     undefined,
     undefined,
-    undefined,
+    translateH5p,
     undefined,
     userDataStorage,
   );

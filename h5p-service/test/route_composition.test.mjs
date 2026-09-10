@@ -33,7 +33,8 @@ async function withServer(mount, dependencies, run) {
 const pass = (_req, _res, next) => next();
 
 test("the production image includes all composed routes", () => {
-  assert.match(readFileSync("Dockerfile", "utf8"), /COPY routes \/app\/routes/);
+  assert.match(readFileSync("Dockerfile", "utf8"), /COPY h5p-service\/routes \/app\/routes/);
+  assert.match(readFileSync("Dockerfile", "utf8"), /COPY frontend\/src\/lib\/styles\/theme-tokens.css \/app\/vendor\/theme\/theme-tokens.css/);
 });
 
 test("authoring keeps role and CSRF checks ahead of mutation", async () => {

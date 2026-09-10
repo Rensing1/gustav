@@ -1914,11 +1914,17 @@
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 92%, white 8%);
-  border: 1px solid color-mix(in srgb, var(--color-border) 84%, white 16%);
-  box-shadow: 0 10px 24px rgba(35, 41, 45, 0.04);
+  border-radius: var(--radius-m);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: none;
 }
+
+.h5p-task-viewport { min-width: 0; max-width: 100%; }
+.h5p-task-viewport--scrollable { overflow: auto; max-height: 65dvh; overscroll-behavior: contain; }
+.h5p-view-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.h5p-view-controls .workspace-button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-on-accent); }
+.h5p-view-hint { margin: 0; color: var(--color-text-muted); }
 
 .h5p-status {
   margin: 0;

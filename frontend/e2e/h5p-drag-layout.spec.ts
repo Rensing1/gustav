@@ -16,24 +16,20 @@ const root = resolve(process.cwd(), "..");
 async function checkLayout(page: Page) {
   const board = page.locator(".h5p-dragquestion > .h5p-question-content > .h5p-inner");
   await expect(board).toBeVisible();
-  await expect.poll(async () => board.evaluate((element) => {
-    const box = element.getBoundingClientRect();
-    return box.right <= document.documentElement.clientWidth + 1;
-  })).toBe(true);
+  await expect(page.getByRole("button", { name: "Lesbare Ansicht", exact: true })).toHaveAttribute("aria-pressed", "true");
   const boxes = await page.locator(".h5p-dragquestion .h5p-draggable").evaluateAll((elements) =>
     elements.map((element) => {
       const b = element.getBoundingClientRect();
       return { x: b.x, y: b.y, right: b.right, bottom: b.bottom };
     })
   );
-  const readable = await page.locator(".h5p-dragquestion .h5p-draggable").evaluateAll((elements) => elements.every((element) => {
+  await expect.poll(() => page.locator(".h5p-dragquestion .h5p-draggable").evaluateAll((elements) => elements.every((element) => {
     const box = element.getBoundingClientRect();
-    return parseFloat(getComputedStyle(element).fontSize) >= 14 && [...element.querySelectorAll("p")].every((p) => {
+    return parseFloat(getComputedStyle(element).fontSize) >= 16 && [...element.querySelectorAll("p")].every((p) => {
       const text = p.getBoundingClientRect();
-      return text.top >= box.top - 1 && text.bottom <= box.bottom + 1 && p.scrollWidth <= p.clientWidth + 1;
+      return parseFloat(getComputedStyle(p).fontSize) >= 16 && text.top >= box.top - 1 && text.bottom <= box.bottom + 1 && p.scrollWidth <= p.clientWidth + 1;
     });
-  }));
-  expect(readable).toBe(true);
+  }))).toBe(true);
   const area = await board.boundingBox();
   for (let i = 0; i < boxes.length; i += 1) {
     expect(boxes[i].right).toBeLessThanOrEqual(area!.x + area!.width + 1);
@@ -86,6 +82,7 @@ test("@feature-acceptance H5P drag cards remain readable and usable across theme
     await form.getByLabel("Aufgabentyp").selectOption("h5p");
     await form.getByRole("button", { name: /^Aufgabe hinzufügen$/i }).click();
     await expect(teacher.getByText("Aufgabe angelegt.")).toBeVisible();
+    await expect(teacher.locator('[data-role="h5p-status"]')).toHaveText(/Bereit\.|Editor geladen/, { timeout: 30_000 });
     const source = resolve(root, "frontend/e2e/fixtures/h5p-drag-layout");
     const pkg = process.env.H5P_LAYOUT_PACKAGE ? readFileSync(process.env.H5P_LAYOUT_PACKAGE) : execFileSync(resolve(root, ".venv/bin/python"), ["-c", "import io,pathlib,sys,zipfile\nb=io.BytesIO()\nwith zipfile.ZipFile(b,'w',zipfile.ZIP_DEFLATED) as z:\n for p in pathlib.Path(sys.argv[1]).rglob('*'):\n  if p.is_file(): z.write(p,p.relative_to(sys.argv[1]))\nsys.stdout.buffer.write(b.getvalue())", source]);
     const content = JSON.parse(execFileSync(resolve(root, ".venv/bin/python"), ["-c", "import io,json,sys,zipfile; print(zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())).read('content/content.json').decode())"], { input: pkg }).toString());
@@ -107,13 +104,31 @@ test("@feature-acceptance H5P drag cards remain readable and usable across theme
     await learner.getByRole("checkbox", { name: /Wiederholen/ }).locator("..").click();
     await learner.getByRole("button", { name: /Aufgabe.*starten/ }).click();
     await expect(learner.locator(".h5p-dragquestion .h5p-draggable")).toHaveCount(6, { timeout: 30_000 });
-    await checkLayout(learner);
-    await checkContrast(learner);
-    await learner.getByRole("button", { name: "Dark Mode aktivieren" }).click();
-    await checkContrast(learner);
-    await learner.setViewportSize({ width: 768, height: 1024 });
-    await checkLayout(learner);
-    await learner.screenshot({ path: testInfo.outputPath("tablet-dark.png"), fullPage: true });
+    for (const theme of ["light", "dark"] as const) {
+      if (theme === "dark") await learner.getByRole("button", { name: "Dark Mode aktivieren" }).click();
+      for (const width of [1440, 1024, 390, 320]) {
+        await learner.setViewportSize({ width, height: 900 });
+        await checkLayout(learner);
+        await checkContrast(learner);
+        await learner.screenshot({ path: testInfo.outputPath(`drag-readable-${width}-${theme}.png`), fullPage: true });
+        const stage = learner.locator(".h5p-task-viewport > div");
+        const before = (await stage.boundingBox())!.width;
+        await learner.getByRole("button", { name: "Vergrößern", exact: true }).click();
+        await expect.poll(async () => (await stage.boundingBox())!.width).toBeGreaterThan(before);
+        await learner.getByRole("button", { name: "Verkleinern", exact: true }).click();
+        await expect.poll(async () => (await stage.boundingBox())!.width).toBeLessThanOrEqual(before + 2);
+        await learner.getByRole("button", { name: "Gesamtansicht", exact: true }).click();
+        await expect.poll(() => learner.locator(".h5p-task-viewport").evaluate((region) => region.scrollWidth <= region.clientWidth + 1)).toBe(true);
+        if (width === 390) await learner.screenshot({ path: testInfo.outputPath(`drag-overview-${width}-${theme}.png`), fullPage: true });
+        await learner.getByRole("button", { name: "Lesbare Ansicht", exact: true }).click();
+      }
+    }
+    const lastCard = learner.getByRole("button", { name: /Ziehbares Element 6 von 6/ });
+    await lastCard.focus();
+    await expect.poll(async () => {
+      const item = await lastCard.boundingBox(), region = await learner.locator(".h5p-task-viewport").boundingBox();
+      return item!.y >= region!.y - 1 && item!.y + item!.height <= region!.y + region!.height + 1;
+    }).toBe(true);
     await learner.setViewportSize({ width: 1280, height: 900 });
     await checkLayout(learner);
 

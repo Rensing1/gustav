@@ -55,7 +55,7 @@ test("authenticateInternalTeacher: sets sanitized internal teacher context", () 
     email: "teacher-1@local.invalid",
     type: "local",
   });
-  assert.equal(req.language, "en");
+  assert.equal(req.language, "de");
 });
 
 test("rolesAllowTeacher: internal auth still requires teacher or admin role", () => {

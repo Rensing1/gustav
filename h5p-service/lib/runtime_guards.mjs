@@ -160,7 +160,7 @@ export function createRequireAuth({
         email: `${cached.payload.sub}@local.invalid`,
         type: "local",
       };
-      req.language = "en";
+      req.language = "de";
       next();
       return;
     }
@@ -186,7 +186,7 @@ export function createRequireAuth({
         email: `${me.payload.sub}@local.invalid`,
         type: "local",
       };
-      req.language = "en";
+      req.language = "de";
       next();
       return;
     } catch {

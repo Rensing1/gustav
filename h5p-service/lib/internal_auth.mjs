@@ -32,7 +32,7 @@ export function authenticateInternalTeacher(req, sharedSecret) {
     email: `${sub}@local.invalid`,
     type: "local",
   };
-  req.language = "en";
+  req.language = "de";
   return true;
 }
 

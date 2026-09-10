@@ -41,6 +41,10 @@
   --space-8: 4rem;
   --space-9: 6rem;
   --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
   --border-width: 1px;
   --layout-compact-max: 42rem;
   --layout-content-max: 80rem;

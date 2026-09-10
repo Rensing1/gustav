@@ -2,6 +2,13 @@
 
 ## 2026-09-10
 
+### Designreparatur – H5P
+
+- fix(h5p): Player und Editor erhalten zentrale Designwerte und lokale Schriften beim Build; vollständig aufgelöste Theme-Variablen und deutsche Standardbedienung bei unveränderten Autorentexten.
+- fix(h5p): DragQuestion mit lesbarer, scrollbarer Arbeitsfläche, mindestens 16 px Kartenschrift, regulärem Größenabgleich und getrennten Ansichtsaktionen. Keine Änderung der Geometrie oder Bewertung.
+- fix(h5p): Kantige Außenrahmen, kontrastreiche aktive Aktionen, erreichbare mobile Bestätigungsdialoge, mitwachsende Editorüberschriften und eigene Scrollbereiche für breite Editortabellen.
+- test: Beide vollständigen H5P-Gates und Containerprüfung bestanden, 45 Bilder tatsächlich gesichtet. Reale Maus-/Tastaturantworten, Fehler, Wiederholung, Ergebnis und Speichern/Neuladen statt synthetischer Bewertungsereignisse.
+
 ### Designreparatur – Anmeldung und Einladungen
 
 - fix(auth): Gemeinsamer Keycloak-Rahmen und zentrale, beim Build übernommene Designwerte statt separat gepflegter CSS-Kopie. E-Mail-Beschriftung, passende Feldgrößen und sichtbare Darstellungsauswahl in den Auth-Schritten.

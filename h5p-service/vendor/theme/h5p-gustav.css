@@ -19,6 +19,11 @@
  *   because the goal is a native GUSTAV look.
  */
 
+@import url("./fonts/inter/latin-400.css");
+@import url("./fonts/inter/latin-700.css");
+@import url("./fonts/space-grotesk/latin-400.css");
+@import url("./fonts/space-grotesk/latin-700.css");
+
 :root {
   /* Debug marker: useful for verifying that the theme is loaded. */
   --gustav-h5p-theme-loaded: 1;
@@ -30,7 +35,7 @@
 
 .h5p-container,
 .h5p-content {
-  font-family: var(--font-base);
+  font-family: var(--font-reading);
   color: var(--color-text);
 }
 
@@ -40,21 +45,21 @@
 }
 
 .h5p-content a {
-  color: var(--color-primary);
+  color: var(--color-link);
 }
 
 .h5p-content :focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline: var(--focus-ring-width) solid var(--color-link);
   outline-offset: var(--focus-ring-offset);
 }
 
 button.h5p-core-button:visited,
 button.h5p-core-button:link,
 button.h5p-core-button {
-  font-family: var(--font-base);
-  background: var(--color-primary);
+  font-family: var(--font-reading);
+  background: var(--color-link);
   color: var(--color-bg-base);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-s);
 }
 
 button.h5p-core-button:hover {
@@ -66,23 +71,85 @@ button.h5p-core-button:active {
 }
 
 button.h5p-core-button:focus {
-  background: var(--color-primary);
+  background: var(--color-link);
 }
 
 button.h5p-core-cancel-button:visited,
 button.h5p-core-cancel-button:link,
 button.h5p-core-cancel-button {
-  color: var(--color-error);
+  color: var(--color-danger);
 }
+
+button.h5p-core-button,
+button.h5p-core-cancel-button {
+  min-height: var(--layout-control-min);
+  padding: var(--space-2) var(--space-4);
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+}
+button.h5p-core-button {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+button.h5p-core-cancel-button {
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+}
+button.h5p-core-button:focus,
+button.h5p-core-button:hover { background: var(--color-accent); color: var(--color-on-accent); }
+button.h5p-core-cancel-button:focus,
+button.h5p-core-cancel-button:hover { background: var(--color-bg-muted); color: var(--color-text); }
+button.h5p-core-button:focus-visible,
+button.h5p-core-cancel-button:focus-visible,
+button.h5p-confirmation-dialog-exit:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-link) !important;
+  outline-offset: var(--focus-ring-offset);
+}
+
+.h5p-confirmation-dialog-popup {
+  min-width: 0;
+  width: calc(100% - 1rem);
+  max-width: 35rem;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  box-shadow: none;
+}
+/* The editor iframe grows with its document. A fixed overlay prevents the
+   outer page from scrolling its focused dialog buttons into view. */
+body:has(.h5peditor) .h5p-confirmation-dialog-background { position: absolute; }
+.h5p-confirmation-dialog-header,
+.h5p-confirmation-dialog-body {
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+  padding: var(--space-5);
+}
+.h5p-confirmation-dialog-header { padding-right: calc(var(--layout-control-min) + var(--space-3)); }
+.h5p-confirmation-dialog-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+button.h5p-confirmation-dialog-exit {
+  top: 0;
+  right: 0;
+  min-width: var(--layout-control-min);
+  min-height: var(--layout-control-min);
+  color: var(--color-text);
+  font-size: 1.5rem;
+}
+button.h5p-confirmation-dialog-exit:hover,
+button.h5p-confirmation-dialog-exit:focus { color: var(--color-link); }
 
 /* H5P.JoubelUI (shared UI for many question types) */
 .h5p-joubelui-button,
 .h5peditor .h5p-joubelui-button {
-  font-family: var(--font-base) !important;
-  border-radius: var(--radius-full) !important;
-  background: var(--color-link, var(--color-primary)) !important;
-  color: var(--color-bg-base) !important;
+  font-family: var(--font-reading) !important;
+  border-radius: var(--radius-s) !important;
+  background: var(--color-accent) !important;
+  color: var(--color-on-accent) !important;
+  min-height: var(--layout-control-min);
+  box-sizing: border-box;
   border: 1px solid var(--color-border) !important;
+  min-width: var(--layout-control-min);
   box-shadow: none !important;
 }
 
@@ -101,15 +168,19 @@ button.h5p-core-cancel-button {
 
 .h5p-joubelui-button:focus-visible,
 .h5peditor .h5p-joubelui-button:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline: var(--focus-ring-width) solid var(--color-link);
   outline-offset: var(--focus-ring-offset);
 }
 
 /* H5P.MultiChoice (autoscorable) */
 .h5p-multichoice .h5p-alternative-container {
-  background: var(--color-bg-overlay) !important;
+  min-height: var(--layout-control-min);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  background: var(--color-bg-elevated) !important;
   border: 1px solid var(--color-border) !important;
-  border-radius: var(--radius-md) !important;
+  border-radius: var(--radius-m) !important;
   box-shadow: none !important;
   color: var(--color-text) !important;
 }
@@ -119,17 +190,17 @@ button.h5p-core-cancel-button {
 }
 
 .h5p-multichoice .h5p-answer:not([aria-disabled="true"]):hover .h5p-alternative-container {
-  background: var(--color-bg-hover) !important;
+  background: var(--color-bg-muted) !important;
 }
 
 .h5p-multichoice .h5p-answer:not([aria-disabled="true"]):focus .h5p-alternative-container {
-  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline: var(--focus-ring-width) solid var(--color-link);
   outline-offset: var(--focus-ring-offset);
 }
 
 .h5p-multichoice .h5p-answer[aria-checked="true"] .h5p-alternative-container {
-  background: var(--color-bg-focus) !important;
-  border-color: var(--color-border-focus) !important;
+  background: var(--color-bg-soft) !important;
+  border-color: var(--color-link) !important;
   box-shadow: none !important;
   color: var(--color-text) !important;
 }
@@ -144,8 +215,8 @@ button.h5p-core-cancel-button {
 
 .h5p-multichoice .h5p-answer.h5p-wrong .h5p-alternative-container,
 .h5p-multichoice .h5p-answer.h5p-wrong:hover .h5p-alternative-container {
-  background: color-mix(in oklab, var(--color-error) 18%, var(--color-bg-base)) !important;
-  border-color: var(--color-error) !important;
+  background: color-mix(in oklab, var(--color-danger) 18%, var(--color-bg-base)) !important;
+  border-color: var(--color-danger) !important;
   color: var(--color-text) !important;
   box-shadow: none !important;
 }
@@ -155,7 +226,7 @@ button.h5p-core-cancel-button {
 }
 
 .h5p-multichoice .h5p-wrong .h5p-answer-icon:before {
-  color: var(--color-error) !important;
+  color: var(--color-danger) !important;
 }
 
 .h5p-multichoice .feedback-text {
@@ -163,7 +234,7 @@ button.h5p-core-cancel-button {
 }
 
 .h5p-multichoice .feedback-text.h5p-failed {
-  color: var(--color-error) !important;
+  color: var(--color-danger) !important;
 }
 
 .h5p-multichoice .feedback-text.h5p-almost {
@@ -173,6 +244,28 @@ button.h5p-core-cancel-button {
 .h5p-multichoice .feedback-text.h5p-passed {
   color: var(--color-success) !important;
 }
+
+.h5p-multichoice .h5p-answer .h5p-feedback-inner,
+.h5p-multichoice .h5p-feedback-inner:before {
+  background: var(--color-bg-surface) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+  box-shadow: none;
+}
+.h5p-multichoice .h5p-feedback-text,
+.h5p-multichoice .h5p-feedback-text p {
+  color: var(--color-text) !important;
+}
+.h5p-joubelui-score-bar {
+  background: var(--color-bg-surface) !important;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+}
+.h5p-joubelui-score-bar-progress-wrapper { background: var(--color-bg-muted); border-radius: var(--radius-m); }
+.h5p-joubelui-score-bar-progress { background: var(--color-success); border-radius: var(--radius-m); }
+.h5p-joubelui-score-number,
+.h5p-joubelui-score-number-separator { color: var(--color-text); }
 
 /* H5P.Question (shared wrapper for many autoscorable question types) */
 /*
@@ -188,7 +281,7 @@ button.h5p-core-cancel-button {
 }
 
 .h5p-question-feedback {
-  color: var(--color-primary) !important;
+  color: var(--color-link) !important;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -197,40 +290,50 @@ button.h5p-core-cancel-button {
 
 /* H5P Hub (library selection / install UI used by the editor) */
 .h5p-hub {
-  font-family: var(--font-base);
+  font-family: var(--font-reading);
   color: var(--color-text);
 }
 
 .h5p-hub a {
-  color: var(--color-primary);
+  color: var(--color-link);
+}
+
+.h5p-hub .h5p-hub-client-drop-down {
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  min-height: var(--layout-control-min);
+}
+.h5p-hub .h5p-hub-client-drop-down .icon-hub-icon,
+.h5p-hub .h5p-hub-client-drop-down .h5p-hub-selected {
+  color: var(--color-text);
 }
 
 .h5p-hub .panel {
   background: var(--color-bg-surface) !important;
   border: 1px solid var(--color-border) !important;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-m);
 }
 
 .h5p-hub button,
 .h5p-hub .button {
-  font-family: var(--font-base);
-  border-radius: var(--radius-md);
+  font-family: var(--font-reading);
+  border-radius: var(--radius-m);
   border: 1px solid var(--color-border);
-  background: var(--color-bg-overlay);
+  background: var(--color-bg-elevated);
   color: var(--color-text);
 }
 
 .h5p-hub button:hover,
 .h5p-hub .button:hover {
-  background: var(--color-bg-hover);
+  background: var(--color-bg-muted);
 }
 
 .h5p-hub button:focus-visible,
 .h5p-hub .button:focus-visible {
-  border-color: var(--color-border-focus);
+  border-color: var(--color-link);
   box-shadow:
-    0 0 0 1px var(--color-border-focus),
-    0 0 0 4px var(--color-bg-focus);
+    0 0 0 1px var(--color-link),
+    0 0 0 4px var(--color-bg-soft);
 }
 
 .h5p-hub input,
@@ -238,29 +341,33 @@ button.h5p-core-cancel-button {
 .h5p-hub select {
   background: var(--color-bg-base);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-m);
   color: var(--color-text);
 }
 
 /* Library selector extras (rendered by H5PEditor.LibrarySelector) */
 .h5p-tutorial-url,
 .h5p-example-url {
+  min-height: var(--layout-control-min);
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
   margin-right: var(--space-2);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-s);
   background: var(--color-bg-surface);
   color: var(--color-text);
   text-decoration: none;
-  font-size: var(--text-sm);
+  font-size: var(--font-size-sm);
 }
+.h5p-tutorial-url-label,
+.h5p-example-url-label { color: var(--color-link) !important; }
 
 .h5p-tutorial-url:hover,
 .h5p-example-url:hover {
-  background: var(--color-bg-hover);
+  background: var(--color-bg-muted);
 }
 
 .h5peditor-copypaste-wrap {
@@ -271,23 +378,71 @@ button.h5p-core-cancel-button {
 
 .h5peditor-copy-button,
 .h5peditor-paste-button {
-  border-radius: var(--radius-full) !important;
+  min-height: var(--layout-control-min);
+  height: auto !important;
+  box-sizing: border-box;
+  display: inline-flex !important;
+  align-items: center;
+  line-height: 1.2 !important;
+  white-space: normal;
+  border-radius: var(--radius-s) !important;
   border: 1px solid var(--color-border) !important;
   background: var(--color-bg-surface) !important;
   color: var(--color-text) !important;
-  font-family: var(--font-base) !important;
+  font-family: var(--font-reading) !important;
 }
 
 .h5peditor-copy-button:hover,
 .h5peditor-paste-button:hover {
-  background: var(--color-bg-hover) !important;
+  background: var(--color-bg-muted) !important;
 }
 
 .h5peditor-form {
   background: var(--color-bg-surface) !important;
   border: 1px solid var(--color-border) !important;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-m);
 }
+
+/* Fieldsets otherwise retain their intrinsic minimum width on narrow editors. */
+.h5peditor fieldset,
+.h5peditor .field,
+.h5peditor .content {
+  min-width: 0;
+  box-sizing: border-box;
+}
+.h5peditor .h5peditor-button-textual {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Range feedback is a real table; keep its columns usable in an inner scroller. */
+.h5peditor .h5peditor-widget-wrapper:has(> .h5p-editor-table-list) {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.h5peditor .h5p-editor-table-list { min-width: 30rem; }
+.h5peditor .group > .title,
+.h5peditor .h5p-editor-table-list th {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.h5peditor .group > .title,
+.h5peditor .common > .h5peditor-label {
+  height: auto;
+  min-height: var(--layout-control-min);
+  box-sizing: border-box;
+  line-height: 1.4;
+  padding: var(--space-2) var(--space-4);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.h5peditor .common { background: var(--color-bg-surface); }
+.h5peditor .list-actions { box-sizing: border-box; }
+.h5peditor .list-actions .h5peditor-button { box-sizing: border-box; }
+.h5peditor .h5peditor-label,
+.h5peditor .h5peditor-field-description { overflow-wrap: anywhere; }
+.h5peditor .h5p-editor-flex-wrapper { flex-wrap: wrap; }
+.h5peditor .list-actions { right: 0; }
 
 .h5peditor-form.h5peditor-form-manager > .tree,
 .h5peditor-form.h5peditor-form-manager > .common,
@@ -302,7 +457,7 @@ button.h5p-core-cancel-button {
 }
 
 .h5peditor {
-  font-family: var(--font-base);
+  font-family: var(--font-reading);
   color: var(--color-text);
 }
 
@@ -312,7 +467,7 @@ button.h5p-core-cancel-button {
 }
 
 .h5peditor a {
-  color: var(--color-primary);
+  color: var(--color-link);
 }
 
 .h5peditor input,
@@ -323,10 +478,10 @@ button.h5p-core-cancel-button {
   width: 100%;
   background-color: var(--color-bg-base);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-m);
   color: var(--color-text);
   box-shadow: none;
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   padding: var(--space-2) var(--space-3);
 }
 
@@ -336,6 +491,14 @@ button.h5p-core-cancel-button {
   padding: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.h5peditor input:not([type="checkbox"]):not([type="radio"]),
+.h5peditor select,
+.h5peditor .h5peditor-button-textual {
+  min-height: var(--layout-control-min);
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .h5peditor input::placeholder,
@@ -348,29 +511,29 @@ button.h5p-core-cancel-button {
 .h5peditor select:focus-visible,
 .h5peditor .h5peditor-text:focus-visible,
 .h5peditor .ckeditor:focus-visible {
-  border-color: var(--color-border-focus);
+  border-color: var(--color-link);
   box-shadow:
-    0 0 0 1px var(--color-border-focus),
-    0 0 0 4px var(--color-bg-focus);
+    0 0 0 1px var(--color-link),
+    0 0 0 4px var(--color-bg-soft);
 }
 
 .h5peditor button,
 .h5peditor input[type="button"],
 .h5peditor input[type="submit"] {
-  font-family: var(--font-base);
-  border-radius: var(--radius-md);
+  font-family: var(--font-reading);
+  border-radius: var(--radius-m);
 }
 
 .h5p-hub .h5peditor-copy-button,
 .h5p-hub .h5peditor-paste-button,
 .h5peditor button:not(.h5p-core-button) {
-  background-color: var(--color-bg-overlay);
+  background-color: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   color: var(--color-text);
 }
 
 .h5peditor button:not(.h5p-core-button):hover {
-  background-color: var(--color-bg-hover);
+  background-color: var(--color-bg-muted);
 }
 
 /*
@@ -383,7 +546,7 @@ button.h5p-core-cancel-button {
  * (gray/blue) palette and look foreign in GUSTAV.
  */
 .h5peditor .h5peditor-button {
-  font-family: var(--font-base);
+  font-family: var(--font-reading);
   user-select: none;
 }
 
@@ -399,11 +562,11 @@ button.h5p-core-cancel-button {
   justify-content: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4) !important;
-  border-radius: var(--radius-md) !important;
+  border-radius: var(--radius-m) !important;
   border: 1px solid var(--color-border) !important;
-  background: var(--color-bg-overlay) !important;
+  background: var(--color-bg-elevated) !important;
   color: var(--color-text) !important;
-  font-size: var(--text-base) !important;
+  font-size: var(--font-size-base) !important;
   font-weight: 600 !important;
   line-height: 1.2 !important;
   text-transform: none !important;
@@ -411,49 +574,67 @@ button.h5p-core-cancel-button {
 }
 
 .h5peditor .h5peditor-button-textual:hover {
-  background: var(--color-bg-hover) !important;
+  background: var(--color-bg-muted) !important;
 }
 
 .h5peditor .h5peditor-button-textual:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-focus-ring) !important;
+  outline: var(--focus-ring-width) solid var(--color-link) !important;
   outline-offset: var(--focus-ring-offset);
 }
 
 .h5peditor .h5peditor-button-collapse {
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-s);
   border-color: var(--color-border);
   background-color: var(--color-bg-surface);
   color: var(--color-text);
 }
 
 .h5peditor .h5peditor-button-collapse:hover:not([disabled]) {
-  background-color: var(--color-bg-hover);
+  background-color: var(--color-bg-muted);
 }
 
 .h5peditor .h5p-editor-flex-wrapper .h5peditor-button-collapse {
   border-color: var(--color-border) !important;
-  background: var(--color-bg-overlay) !important;
+  background: var(--color-bg-elevated) !important;
   color: var(--color-text) !important;
   box-shadow: none !important;
 }
 
 .h5peditor .h5p-editor-flex-wrapper .h5peditor-button-collapse:hover:not([disabled]) {
-  background: var(--color-bg-hover) !important;
+  background: var(--color-bg-muted) !important;
 }
 
 .h5peditor .group > .title,
 .h5peditor .h5p-li > .list-item-title-bar,
 .h5peditor .common > .h5peditor-label {
-  background-color: var(--color-bg-overlay);
+  background-color: var(--color-bg-elevated);
   border-color: var(--color-border);
-  color: var(--color-text-heading);
+  color: var(--color-text);
 }
 
 .h5peditor .group.importance-high > .title,
 .h5peditor .h5p-li > .list-item-title-bar.importance-high {
-  background-color: var(--color-primary);
-  border-color: var(--color-border-focus);
-  color: var(--color-bg-base);
+  background-color: var(--color-accent);
+  border-color: var(--color-link);
+  color: var(--color-on-accent);
+}
+
+/* Upstream labels and helper text specify dark text instead of inheriting it. */
+.h5peditor .h5peditor-label,
+.h5peditor label {
+  color: var(--color-text) !important;
+}
+.h5peditor .h5peditor-field-description {
+  color: var(--color-text-muted) !important;
+}
+.h5peditor .list-item-title-bar.importance-high .h5peditor-label {
+  color: var(--color-on-accent) !important;
+}
+.h5peditor .h5p-editor-table-list tbody td {
+  background: var(--color-bg-muted);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  border-radius: var(--radius-m);
 }
 
 /*
@@ -475,7 +656,7 @@ button.h5p-core-cancel-button {
 .h5peditor .h5p-li > .list-item-title-bar .remove {
   background: transparent !important;
   color: inherit;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-m);
 }
 
 .h5peditor .h5p-li > .list-item-title-bar .order-up:hover,
@@ -493,7 +674,7 @@ button.h5p-core-cancel-button {
 .h5peditor .h5p-li > .list-item-title-bar .order-up:focus-visible,
 .h5peditor .h5p-li > .list-item-title-bar .order-down:focus-visible,
 .h5peditor .h5p-li > .list-item-title-bar .remove:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-focus-ring) !important;
+  outline: var(--focus-ring-width) solid var(--color-link) !important;
   outline-offset: var(--focus-ring-offset);
 }
 
@@ -521,15 +702,15 @@ button.h5p-core-cancel-button {
 
 .h5peditor .ck,
 .ck {
-  font-family: var(--font-base) !important;
+  font-family: var(--font-reading) !important;
   color: var(--color-text) !important;
 }
 
 .h5peditor .ck.ck-toolbar,
 .ck.ck-toolbar {
-  background: var(--color-bg-overlay) !important;
+  background: var(--color-bg-elevated) !important;
   border: 1px solid var(--color-border) !important;
-  border-radius: var(--radius-md) !important;
+  border-radius: var(--radius-m) !important;
   box-shadow: none !important;
 }
 
@@ -539,21 +720,21 @@ button.h5p-core-cancel-button {
 .ck.ck-toolbar .ck.ck-dropdown__button {
   background: transparent !important;
   color: var(--color-text) !important;
-  border-radius: var(--radius-md) !important;
+  border-radius: var(--radius-m) !important;
 }
 
 .h5peditor .ck.ck-toolbar .ck.ck-button:hover,
 .h5peditor .ck.ck-toolbar .ck.ck-dropdown__button:hover,
 .ck.ck-toolbar .ck.ck-button:hover,
 .ck.ck-toolbar .ck.ck-dropdown__button:hover {
-  background: var(--color-bg-hover) !important;
+  background: var(--color-bg-muted) !important;
 }
 
 .h5peditor .ck.ck-toolbar .ck.ck-button.ck-on,
 .h5peditor .ck.ck-toolbar .ck.ck-dropdown__button.ck-on,
 .ck.ck-toolbar .ck.ck-button.ck-on,
 .ck.ck-toolbar .ck.ck-dropdown__button.ck-on {
-  background: var(--color-bg-focus) !important;
+  background: var(--color-bg-soft) !important;
 }
 
 .h5peditor .ck.ck-editor__main > .ck.ck-editor__editable,
@@ -561,16 +742,16 @@ button.h5p-core-cancel-button {
   background: var(--color-bg-base) !important;
   color: var(--color-text) !important;
   border: 1px solid var(--color-border) !important;
-  border-radius: var(--radius-md) !important;
+  border-radius: var(--radius-m) !important;
   box-shadow: none !important;
 }
 
 .h5peditor .ck.ck-editor__main > .ck.ck-editor__editable.ck-focused,
 .ck.ck-editor__main > .ck.ck-editor__editable.ck-focused {
-  border-color: var(--color-border-focus) !important;
+  border-color: var(--color-link) !important;
   box-shadow:
-    0 0 0 1px var(--color-border-focus),
-    0 0 0 4px var(--color-bg-focus) !important;
+    0 0 0 1px var(--color-link),
+    0 0 0 4px var(--color-bg-soft) !important;
 }
 
 .h5peditor .ck.ck-editor__main > .ck.ck-editor__editable .ck-placeholder:before,
@@ -602,7 +783,7 @@ button.h5p-core-cancel-button {
 .h5peditor .ck.ck-list .ck.ck-button:focus,
 .ck.ck-list .ck.ck-button:hover,
 .ck.ck-list .ck.ck-button:focus {
-  background: var(--color-bg-hover) !important;
+  background: var(--color-bg-muted) !important;
 }
 
 /*
@@ -625,12 +806,12 @@ button.h5p-core-cancel-button {
 }
 
 .h5peditor :focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline: var(--focus-ring-width) solid var(--color-link);
   outline-offset: var(--focus-ring-offset);
 }
 
 .h5peditor .h5peditor-form-manager-head {
-  background: var(--color-bg-overlay);
+  background: var(--color-bg-elevated);
   color: var(--color-text);
   border-bottom-color: var(--color-border);
 }
@@ -640,13 +821,13 @@ button.h5p-core-cancel-button {
 }
 
 .h5peditor .h5peditor-form-manager-proceed {
-  background: var(--color-primary);
+  background: var(--color-link);
   color: var(--color-bg-base);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-m);
 }
 
 .h5peditor .field.importance-high > .h5peditor-label-wrapper > .h5peditor-label {
-  color: var(--color-primary);
+  color: var(--color-link);
 }
 
 /* DragQuestion owns its em-based geometry; theme only surfaces and states. */
@@ -678,7 +859,7 @@ button.h5p-core-cancel-button {
 .h5p-dragquestion .h5p-dropzone > .h5p-inner.h5p-over {
   background: var(--color-bg-muted, var(--color-bg-surface)) !important;
   color: var(--color-text) !important;
-  border-color: var(--color-link, var(--color-primary)) !important;
+  border-color: var(--color-link) !important;
 }
 
 .h5p-dragquestion .h5p-draggable.h5p-correct,
@@ -689,12 +870,12 @@ button.h5p-core-cancel-button {
 }
 
 .h5p-dragquestion .h5p-draggable.h5p-wrong {
-  border-color: var(--color-danger, var(--color-error)) !important;
-  color: var(--color-danger, var(--color-error)) !important;
+  border-color: var(--color-danger) !important;
+  color: var(--color-danger) !important;
   background: var(--color-bg-surface) !important;
 }
 
 .h5p-dragquestion [role="button"]:focus-visible {
-  outline: 3px solid var(--color-link, var(--color-primary));
+  outline: 3px solid var(--color-link);
   outline-offset: 2px;
 }

@@ -124,7 +124,8 @@ services:
 
   h5p:
     build:
-      context: ./h5p-service
+      context: .
+      dockerfile: h5p-service/Dockerfile
     container_name: gustav-h5p
     # behind proxy; no direct host port mapping
     depends_on:

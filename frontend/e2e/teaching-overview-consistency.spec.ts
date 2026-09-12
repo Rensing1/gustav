@@ -16,14 +16,27 @@ async function pictures(page: Page, info: TestInfo, name: string) {
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(() => window.scrollTo(0, 0));
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
-      // Measure settled theme/hover colors, not an intermediate CSS transition.
-      await expect(async () => expectDesignContrast(page.locator("main h2, main h3, main .workspace-note, main .workspace-link-action, .live-task-strip__item, .workspace-tab"))).toPass({ timeout: 2000 });
+      // Measure settled text colors. Empty task rectangles have no text;
+      // their shared caption is covered by workspace-note instead.
+      await expect(async () => expectDesignContrast(page.locator("main h2, main h3, main .workspace-note, main .workspace-link-action, .workspace-tab"))).toPass({ timeout: 2000 });
       for (const panel of await page.locator(".workspace-panel--flat, .live-panel, .live-table-panel").all()) {
         await expect(panel).toHaveCSS("box-shadow", "none");
         await expect(panel).toHaveCSS("border-top-left-radius", "0px");
       }
       for (const action of await page.locator(".live-task-strip__item").all()) {
-        expect((await action.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        const box = (await action.boundingBox())!;
+        // The original latest-submission marker can add two border pixels
+        // to its row; it must never expand into a full-sized action again.
+        expect(box.height).toBeGreaterThanOrEqual(18);
+        expect(box.height).toBeLessThan(21);
+        expect(box.width).toBeCloseTo(13.6, 0);
+        await expect(action).toHaveText("");
+      }
+      const strip = page.getByRole("navigation", { name: "Aufgaben der Lerneinheit" });
+      if (await strip.count()) {
+        const rows = await strip.locator("a").evaluateAll((nodes) => new Set(nodes.map((node) => (node as HTMLElement).offsetTop)).size);
+        expect(rows).toBeLessThanOrEqual(2);
+        await expect(strip.locator("section")).toHaveCount(0);
       }
       for (const tab of await page.getByRole("tab").all()) {
         await tab.hover();
@@ -38,6 +51,9 @@ async function pictures(page: Page, info: TestInfo, name: string) {
       // full-page evidence so the sticky header is captured at the page top.
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: info.outputPath(`${name}-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
+      if (name.startsWith("live-")) {
+        await page.getByRole("complementary", { name: "Schülerdetail" }).screenshot({ path: info.outputPath(`${name}-panel-${width}-${theme}.png`), animations: "disabled" });
+      }
     }
   }
 }
@@ -54,6 +70,23 @@ test("@feature-acceptance teacher follows diagnostics to live with 24 learners a
     await login(teacher, teacherEmail, e2ePassword);
     await login(learner, learnerEmail, e2ePassword);
     const seeded = await seedLearnerNavigationCourse(teacher, learner, "Digitale Systeme und demokratische Grundrechte mit sehr ausführlicher Bezeichnung");
+    const phases = await teacher.request.get(`${webBase}/api/teaching/units/${seeded.unitId}/phases`);
+    await expectApiOk(phases);
+    const phaseId = (await phases.json())[0].id;
+    // Thirteen single-task modules plus the existing two-task module reproduce
+    // the user's dense overview without changing any existing teaching data.
+    for (let number = 1; number <= 12; number++) {
+      const created = await teacher.request.post(`${webBase}/api/teaching/units/${seeded.unitId}/modules`, {
+        headers: apiHeaders(), data: { title: `Modul ${number}`, phase_id: phaseId }
+      });
+      await expectApiOk(created, 201);
+      const moduleId = (await created.json()).id;
+      const target = await teacher.request.get(`${webBase}/api/teaching/units/${seeded.unitId}/modules/${moduleId}/content-target`);
+      await expectApiOk(target);
+      await expectApiOk(await teacher.request.post(`${webBase}/api/teaching/units/${seeded.unitId}/sections/${(await target.json()).section_id}/tasks`, {
+        headers: apiHeaders(), data: { instruction_md: `Untersuche das Beispiel aus Modul ${number}.`, criteria: [] }
+      }), 201);
+    }
     const learnerSub = await currentUserSub(learner);
     await teacher.goto("/diagnostics");
     await expect(teacher.getByRole("combobox", { name: "Kurs", exact: true })).toBeVisible();
@@ -101,9 +134,32 @@ test("@feature-acceptance teacher follows diagnostics to live with 24 learners a
     await lastRow.getByRole("link").first().click();
     await expect(details).toContainText("Keine Abgabe");
     await teacher.goto(target.toString());
-    await expect(teacher.getByRole("navigation", { name: "Aufgaben der Lerneinheit" })).toContainText("Grundlagen");
-    await expect(teacher.getByRole("navigation", { name: "Aufgaben der Lerneinheit" })).toContainText("Quellen");
+    const taskStrip = teacher.getByRole("navigation", { name: "Aufgaben der Lerneinheit" });
+    await expect(taskStrip.getByRole("link")).toHaveCount(15);
+    await expect(taskStrip.getByRole("link", { name: /^Quellen · Aufgabe 1:/ })).toHaveCount(1);
     await pictures(teacher, info, "live-empty");
+    const caption = teacher.locator(".live-task-strip__caption");
+    const firstTask = taskStrip.getByRole("link").first();
+    const lastTask = taskStrip.getByRole("link").last();
+    await lastTask.hover();
+    await expect(caption).toContainText("Modul 12 · Aufgabe 1");
+    await firstTask.focus();
+    await teacher.keyboard.press("Tab");
+    await teacher.keyboard.press("Shift+Tab");
+    await expect(firstTask).toBeFocused();
+    await expect(caption).toContainText("Grundlagen · Aufgabe 1");
+    await lastTask.hover();
+    await expect(caption).toContainText("Grundlagen · Aufgabe 1");
+    await lastTask.focus();
+    await teacher.keyboard.press("Enter");
+    await expect(lastTask).toHaveAttribute("aria-current", "true");
+    await teacher.reload();
+    await expect(lastTask).toHaveAttribute("aria-current", "true");
+    await expect(caption).toContainText("Modul 12 · Aufgabe 1");
+    await firstTask.click();
+    await lastTask.hover();
+    await expect(caption).toContainText("Modul 12 · Aufgabe 1");
+    await teacher.goto(target.toString());
     const liveTable = teacher.getByRole("region", { name: "Klassenübersicht" });
     await liveTable.focus();
     await teacher.keyboard.press("ArrowRight");
@@ -132,6 +188,28 @@ test("@feature-acceptance teacher follows diagnostics to live with 24 learners a
     for (const sub of subjects) await expect(teacher.locator("main")).not.toContainText(sub);
     await expect(teacher.locator("main")).not.toContainText("SvelteKit");
     await pictures(teacher, info, "members");
+    const touchContext = await newBrowserContext(browser, { hasTouch: true, viewport: { width: 1024, height: 900 } });
+    try {
+      const touch = await touchContext.newPage();
+      await login(touch, teacherEmail, e2ePassword);
+      await touch.goto(target.toString());
+      expect(await touch.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+      const touchTasks = touch.getByRole("navigation", { name: "Aufgaben der Lerneinheit" }).getByRole("link");
+      for (const task of await touchTasks.all()) {
+        const box = (await task.boundingBox())!;
+        expect(box.width).toBeCloseTo(13.6, 0);
+        expect(box.height).toBeGreaterThanOrEqual(18); expect(box.height).toBeLessThan(21);
+      }
+      await touchTasks.last().tap();
+      await expect(touchTasks.last()).toHaveAttribute("aria-current", "true");
+      await expect(touch.locator(".live-task-strip__caption")).toContainText("Modul 12 · Aufgabe 1");
+      await touchTasks.first().tap();
+      await expect(touchTasks.first()).toHaveAttribute("aria-current", "true");
+      for (const theme of ["dark", "light"]) {
+        await touch.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true }).click();
+        await touch.getByRole("complementary", { name: "Schülerdetail" }).screenshot({ path: info.outputPath(`live-touch-1024-${theme}.png`), animations: "disabled" });
+      }
+    } finally { await touchContext.close(); }
     // These BFF endpoints require server-side bearer transport, not browser
     // cookies. Check the real learner UI guard; API role denial has DB coverage.
     expect(await currentUserSub(learner)).toBe(learnerSub);

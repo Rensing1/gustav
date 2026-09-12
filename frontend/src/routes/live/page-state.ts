@@ -1,4 +1,4 @@
-import type { LiveDetailSubmission, LiveStudentPanelTask, LiveSummaryPayload, LiveTask, LiveUnitDashboardView } from "$lib/types/home";
+import type { LiveDetailSubmission, LiveSummaryPayload, LiveTask, LiveUnitDashboardView } from "$lib/types/home";
 
 export type SortKey = "student" | "progress" | "average" | "latest";
 export type SortDirection = "asc" | "desc";
@@ -174,17 +174,6 @@ function taskMetaById(tasks: LiveTask[]) {
 function liveTaskLabel(task: LiveTask): string {
   const title = task.section_title?.trim();
   return title ? `${title} · Aufgabe ${task.position}` : `Aufgabe ${task.position}`;
-}
-
-/** Retain teaching order and keep equally named sections distinct. */
-export function taskGroups(tasks: LiveStudentPanelTask[]) {
-  const groups = new Map<string, { title: string; tasks: LiveStudentPanelTask[] }>();
-  for (const task of tasks) {
-    const key = task.section_id || "ungrouped";
-    if (!groups.has(key)) groups.set(key, { title: task.section_title?.trim() || "Aufgaben", tasks: [] });
-    groups.get(key)!.tasks.push(task);
-  }
-  return [...groups.values()];
 }
 
 export function buildDashboardViewModel(args: {

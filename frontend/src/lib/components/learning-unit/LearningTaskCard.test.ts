@@ -9,6 +9,7 @@ import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
 
 import LearningTaskCard from "./LearningTaskCard.svelte";
 import type { LearningTask } from "$lib/types/learning";
+import type { SubmitFunction } from "@sveltejs/kit";
 
 const task: LearningTask = {
   id: "task-1",
@@ -18,10 +19,29 @@ const task: LearningTask = {
   kind: "native"
 };
 const validReviewedSubmissionId = "123e4567-e89b-42d3-a456-426614174099";
+// Unit checks exercise local form decisions; real transport has browser coverage.
+const stopFormTransport: SubmitFunction = ({ cancel }) => cancel();
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 describe("LearningTaskCard", () => {
+  it.each([true, false])("weights new and draft actions equally (compact=%s)", (compactLayout) => {
+    for (const intent of [null, "feedback", "submit"] as const) {
+      const label = intent === null ? "Aufgabe 3 beginnen" : intent === "feedback" ? "Entwurf weiterbearbeiten" : "Erneut bearbeiten";
+      render(LearningTaskCard, { props: {
+        courseId: "course-1", task: { ...task, has_submission: intent !== null, latest_submission_intent: intent,
+          latest_submission_analysis_status: intent ? "completed" : null,
+          latest_submission_created_at: intent ? "2026-09-12T10:00:00Z" : null,
+          latest_final_submission_at: intent === "submit" ? "2026-09-12T10:00:00Z" : null },
+        taskTitle: "Aufgabe 3", unitType: "modular", compactLayout, expanded: true, history: []
+      } });
+      const action = screen.getByRole("button", { name: label });
+      expect(action).toHaveClass(intent === "submit" ? "workspace-top-action--quiet" : "workspace-top-action--accent");
+      expect(action).not.toHaveClass(intent === "submit" ? "workspace-top-action--accent" : "workspace-top-action--quiet");
+      cleanup();
+    }
+  });
+
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
@@ -114,6 +134,7 @@ describe("LearningTaskCard", () => {
     const scopedKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";
     render(LearningTaskCard, {
       props: {
+        enhanceSubmit: stopFormTransport,
         learnerSub: "student-2",
         courseId: "course-1",
         task: { ...task, has_submission: true },
@@ -1528,6 +1549,7 @@ describe("LearningTaskCard", () => {
   it("submits the unchanged reviewed text without showing the warning", async () => {
     render(LearningTaskCard, {
       props: {
+        enhanceSubmit: stopFormTransport,
         courseId: "course-1",
         task: { ...task, has_submission: true },
         taskTitle: "Aufgabe 1",
@@ -1567,6 +1589,7 @@ describe("LearningTaskCard", () => {
     window.sessionStorage.setItem(scopedKey, "  Geprüfter Entwurf\n\n");
     render(LearningTaskCard, {
       props: {
+        enhanceSubmit: stopFormTransport,
         learnerSub: "student-2",
         courseId: "course-1",
         task: { ...task, has_submission: true },

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-12
+
+### Gezielte Designnachbesserung
+
+- fix(header): Theme- und Benutzeraktion teilen mobil dieselbe zentrale Höhe von 44 px; die Desktopgestaltung bleibt erhalten.
+- fix(learning): Neue Aufgabe und gespeicherter Entwurf verwenden in beiden Aufgabenlayouts dieselbe orange Hauptaktion. „Erneut bearbeiten“ nach endgültiger Abgabe bleibt dezent.
+- fix(live): Ursprüngliche dicht angeordnete Rechtecke aus `origin/master` statt großer Aufgabenbuttons und vertikaler Modulgruppen wiederhergestellt. Die restliche rechte Spalte bleibt unverändert; gemeinsame Beschriftung für Fokus, Hover und Auswahl ergänzt. Die zunächst vorgesehene Vergrößerung der Live-Touch-Ziele entfällt auf ausdrücklichen Wunsch.
+- docs: Frühere Header-/Aktionsabdeckung und die misslungene DS-21-Abnahme berichtigt. Separaten mobilen Materialüberlauf als offen dokumentiert; keine pauschale Freigabe der Modulseite.
+- test: Beide vollständigen Gates `design-system-consistency` und `teaching-overview-consistency` bestanden; beide Rollen, unveränderter Entwurf, 15 Aufgaben aus 14 Modulen, Klick/Hover/Tastatur, Neuladen und Touch-Navigation. 58 gezielte Header-/Modul-/Live-Bilder gesichtet. Kleine Live-Touch-Ziele bleiben die ausdrücklich gewünschte Originalgestaltung, keine vollständige Geräte- oder Screenreader-Abnahme.
+
 ## 2026-09-10
 
 ### Designreparatur – Übungswiederholung und Druckfassung

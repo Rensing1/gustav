@@ -859,8 +859,8 @@
       <div class="learning-task-row__actions">
         <button
           class:workspace-top-action--active={submissionFocused}
-          class:workspace-top-action--accent={!hasSubmission()}
-          class:workspace-top-action--quiet={hasSubmission()}
+          class:workspace-top-action--accent={!hasFinalSubmission()}
+          class:workspace-top-action--quiet={hasFinalSubmission()}
           class="workspace-top-action"
           type="button"
           onclick={() => {
@@ -1279,8 +1279,8 @@
           {#if !usesCompactTaskLayout()}
             <div class="learning-task-cta-row">
               <button
-                class:workspace-top-action--accent={!hasSubmission()}
-                class:workspace-top-action--quiet={hasSubmission()}
+                class:workspace-top-action--accent={!hasFinalSubmission()}
+                class:workspace-top-action--quiet={hasFinalSubmission()}
                 class="workspace-top-action"
                 type="button"
                 onclick={() => {

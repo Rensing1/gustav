@@ -6,6 +6,18 @@ Stand: 9. September 2026. Ergänzt um H5P und Auth auf ausdrücklichen Folgeauft
 
 ## Ergebnis in verständlicher Form
 
+### Berichtigung der Abnahme · 12. September 2026
+
+**Nachbesserung lokal abgenommen:** Beide vollständigen Gates `design-system-consistency` und `teaching-overview-consistency` bestanden. Diese Berichtigung hat für die folgenden Teilbereiche Vorrang vor den historischen Abnahmen vom 10. September:
+
+- Header: gleiche Höhe und Ausrichtung beider Aktionen bei beiden Rollen, mobil mindestens 44 × 44 px; [Lernendenheader](assets/2026-09-12-design-nachbesserung/header-learner-390-dark.png).
+- DS-03-Erweiterung: neue Modulaufgabe und gespeicherter Entwurf teilen die orange Hauptaktionsvariante in beiden Layouts. Entwurf nach Öffnen, Themewechsel und Neuladen unverändert; [Modulaktionen](assets/2026-09-12-design-nachbesserung/module-actions-1440-light.png).
+- DS-21: ursprüngliche kompakte Rechtecke wiederhergestellt. 15 Aufgaben aus 14 Modulen benötigen bei 320 px zwei Reihen, ansonsten eine. Gemeinsame Beschriftung und zugängliche Namen ersetzen die permanenten Modulüberschriften; [Desktop](assets/2026-09-12-design-nachbesserung/live-empty-panel-1440-dark.png), [schmale Ansicht](assets/2026-09-12-design-nachbesserung/live-empty-panel-320-light.png). Kleine Touch-Ziele sind eine bewusste Ausnahme nach Felix’ Korrekturentscheidung. Die restliche rechte Spalte bleibt unverändert.
+
+Die Abnahme vom 10. September war für drei Fälle unzureichend: Sie verglich die benachbarten mobilen Headerhöhen nicht, prüfte bei DS-03 keinen gespeicherten Entwurf neben einer neuen Modulaufgabe und erkannte bei DS-21 nicht den Verlust der kompakten Übersicht durch viele einzeln beschriftete Modulgruppen. Die damalige DS-21-Umsetzung ist damit ausdrücklich eine Designverschlechterung und keine gelungene Abnahme der Aufgabendichte. Die [gezielte Nachbesserung](2026-09-12-design-nachbesserung.md) ersetzt diese Teilabnahmen; ihr Prüfstatus wird dort separat dokumentiert. Felix hat für die Aufgabenleiste inzwischen ausdrücklich die ursprüngliche kompakte Darstellung aus `origin/master` gewählt, nicht eine neue Gestaltung der rechten Spalte.
+
+Zusätzlich sichtbar gewordener, separater Befund: Materialkarten auf der mobilen Modulseite laufen über die Seitenbreite hinaus. Dieser Befund liegt außerhalb der drei beauftragten Korrekturen und bleibt offen; die neuen Aktionsprüfungen sind keine vollständige Überlauffreigabe dieser Modulseite.
+
 ### Reparaturabnahme Live und Diagnostik · 10. September 2026
 
 Beide vollständigen Gates `live-summary` und `teaching-overview-consistency` bestanden. 64 Bilder bei 1440/1024/390/320 px in Light/Dark tatsächlich gesichtet, einschließlich 24 Lernenden, letzter Zeile, leerer und vorhandener Abgabe sowie aller drei Live-Reiter. Die folgenden Statusangaben ersetzen die historischen Befunde weiter unten.

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import LiveTaskStrip from "./LiveTaskStrip.svelte";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import type { LearningSubmission } from "$lib/types/learning";
   import type { LiveDetailSubmission, LiveDialogTranscript, LiveSummaryPayload, LiveUnitDashboardRow, LiveUnitDashboardView } from "$lib/types/home";
@@ -14,7 +15,6 @@
     buildLivePageHref,
     buildLiveSummaryPath,
     createLiveWorkspaceController,
-    taskGroups,
     navigateWithLiveSelectionFallback,
     type SortDirection,
     type SortKey
@@ -87,25 +87,6 @@
       raw.startsWith("# makecode.evidence.v1") ||
       raw.startsWith("# filius.evidence.v1")
     );
-  }
-
-  function taskStripTone(score: number | null, hasSubmission: boolean): string {
-    if (!hasSubmission) {
-      return "empty";
-    }
-    if (typeof score !== "number") {
-      return "submitted-unscored";
-    }
-    if (score <= 0) {
-      return "score-zero";
-    }
-    if (score >= 8) {
-      return "score-high";
-    }
-    if (score >= 4) {
-      return "score-mid";
-    }
-    return "score-low";
   }
 
   function detailToLearningSubmission(submission: LiveDetailSubmission): LearningSubmission {
@@ -673,28 +654,8 @@
               </div>
             </header>
 
-            <nav class="live-task-strip" aria-label="Aufgaben der Lerneinheit">
-              {#each taskGroups(dashboardState.selected_student_panel.tasks) as group}
-                <section class="live-task-group" aria-label={group.title}>
-                  <p class="workspace-label">{group.title}</p>
-                  <div class="live-task-group__actions">
-                  {#each group.tasks as task}
-                <a
-                  href={task.href}
-                  class={`live-task-strip__item live-task-strip__item--${taskStripTone(task.average_score, task.has_submission)}`}
-                  class:is-active={selectedTaskIdState === task.task_id}
-                  class:is-latest={task.is_latest_submission}
-                  aria-label={`${task.task_label}: ${task.has_submission ? formatScore(task.average_score) : "Noch offen"}`}
-                  title={`${task.task_label}: ${task.has_submission ? formatScore(task.average_score) : "Noch offen"}`}
-                  onclick={(event) => void openTask(task.task_id, event)}
-                >
-                  Aufgabe {task.task_position}
-                </a>
-                  {/each}
-                  </div>
-                </section>
-              {/each}
-            </nav>
+            <LiveTaskStrip tasks={dashboardState.selected_student_panel.tasks} selectedTaskId={selectedTaskIdState}
+              onOpen={(taskId, event) => void openTask(taskId, event)} />
 
             {#if dashboardState.selected_student_panel.selected_task_detail}
               {@const selectedSubmission = dashboardState.selected_student_panel.selected_task_detail}
@@ -1040,49 +1001,13 @@
     border-left: 3px solid var(--color-accent, #ff512f);
   }
 
-  .live-panel__copy h3,
-  .live-panel-summary__title {
+  .live-panel__copy h3 {
     margin: 0;
   }
 
-  .live-task-strip {
-    display: grid;
-    gap: var(--space-3);
-    min-width: 0;
-  }
-
-  .live-task-group { min-width: 0; }
-  .live-task-group__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .live-panel__copy h3 { overflow-wrap: anywhere; }
   .workspace-data-table-wrap { max-width: 100%; }
   .workspace-data-table-wrap:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
-
-  .live-task-strip__item {
-    min-height: var(--layout-control-min);
-    box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, var(--color-border, #1b1b1b) 72%, transparent 28%);
-    text-decoration: none;
-    color: inherit;
-    display: inline-flex;
-    align-items: center;
-    padding: var(--space-2) var(--space-3);
-    transition:
-      transform 120ms ease,
-      background 120ms ease,
-      border-color 120ms ease;
-  }
-
-  .live-task-strip__item:hover { background: var(--color-bg-muted); }
-  .live-task-strip__item:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
-  .live-task-strip__item--empty,
-  .live-task-strip__item--submitted-unscored { background: var(--color-bg-muted); }
-  .live-task-strip__item--submitted-unscored { border-style: double; }
-  .live-task-strip__item--score-zero { background: color-mix(in srgb, var(--color-danger) 20%, var(--color-bg-surface)); border-color: var(--color-danger); }
-  .live-task-strip__item--score-low { background: var(--color-danger-soft); border-color: var(--color-danger); }
-  .live-task-strip__item--score-mid { background: var(--color-warning-soft); border-color: var(--color-warning); }
-  .live-task-strip__item--score-high { background: var(--color-success-soft); border-color: var(--color-success); }
-  .live-task-strip__item.is-active { outline: 2px solid var(--color-link); outline-offset: -2px; }
-  .live-task-strip__item.is-latest { border-bottom: 3px solid var(--color-accent); }
 
   .live-panel-summary {
     border: 1px solid var(--color-line, rgba(27, 27, 27, 0.14));

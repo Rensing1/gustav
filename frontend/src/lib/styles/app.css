@@ -218,6 +218,16 @@ select {
   flex: 0 0 var(--topbar-tool-height);
 }
 
+@media (max-width: 48rem) {
+  .app-topbar-tools { --topbar-tool-height: var(--layout-control-min); }
+  .app-topbar-tools :is(.theme-toggle, .account-trigger) {
+    box-sizing: border-box;
+    min-width: var(--topbar-tool-height);
+    height: var(--topbar-tool-height);
+  }
+  .app-topbar-tools .account-trigger__initial { height: 100%; }
+}
+
 .account-menu summary {
   list-style: none;
 }

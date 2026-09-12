@@ -1,7 +1,9 @@
 import { login } from "./support/auth";
 import { newBrowserContext } from "./support/browser-context";
 import { e2eEmail, e2ePassword } from "./support/e2e-env";
-import { expect, test, type Browser, type Page } from "./support/feature-test";
+import { expect, test, type Browser, type Page, type TestInfo } from "./support/feature-test";
+import { currentUserSub } from "./support/auth";
+import { prepareCompletedFeedbackDraft } from "./support/submission-finalization-fixture";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerNavigationCourse, seedLearnerPracticeCourse } from "./support/seed-data";
 import { contrastRatio, expectNoViewportOverflow } from "./support/layout-sanity";
@@ -13,7 +15,27 @@ async function toggleTheme(page: Page, theme: "light" | "dark"): Promise<void> {
   await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", theme);
 }
 
-async function verifyDraftSurvivesThemeChanges(browser: Browser): Promise<void> {
+async function verifyHeader(page: Page, info: TestInfo, role: string): Promise<void> {
+  for (const width of [1440, 1024, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ["dark", "light"] as const) {
+      await toggleTheme(page, theme);
+      const themeBox = (await page.locator(".app-topbar-tools .theme-toggle").boundingBox())!;
+      const accountBox = (await page.locator(".account-trigger").boundingBox())!;
+      expect(Math.abs(themeBox.height - accountBox.height)).toBeLessThanOrEqual(1);
+      expect(Math.abs(themeBox.y - accountBox.y)).toBeLessThanOrEqual(1);
+      if (width <= 768) {
+        for (const box of [themeBox, accountBox]) {
+          expect(box.height).toBeGreaterThanOrEqual(44);
+          expect(box.width).toBeGreaterThanOrEqual(44);
+        }
+      }
+      await page.locator(".app-topbar").screenshot({ path: info.outputPath(`header-${role}-${width}-${theme}.png`), animations: "disabled" });
+    }
+  }
+}
+
+async function verifyDraftSurvivesThemeChanges(browser: Browser, info: TestInfo): Promise<void> {
   const teacherEmail = e2eEmail("design-teacher");
   const learnerEmail = e2eEmail("design-learner");
   await ensureTeacherUser(teacherEmail, e2ePassword);
@@ -26,6 +48,8 @@ async function verifyDraftSurvivesThemeChanges(browser: Browser): Promise<void> 
     await login(teacher, teacherEmail, e2ePassword);
     await login(learner, learnerEmail, e2ePassword);
     const seeded = await seedLearnerNavigationCourse(teacher, learner, "Designkonsistenz");
+    await verifyHeader(teacher, info, "teacher");
+    await verifyHeader(learner, info, "learner");
 
     await teacher.goto("/ui-lab");
     const conversation = teacher.getByTestId("preview-dialog-conversation");
@@ -51,6 +75,34 @@ async function verifyDraftSurvivesThemeChanges(browser: Browser): Promise<void> 
     }
     await learner.reload();
     await expect(editor).toContainText(draft);
+
+    // Only the external feedback output is prepared; opening the persisted
+    // draft and retaining it use the real application and authenticated user.
+    await prepareCompletedFeedbackDraft({ courseId: seeded.courseId, taskId: seeded.taskId,
+      learnerSub: await currentUserSub(learner), textBody: draft });
+    const moduleUrl = `/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}`;
+    for (const width of [1440, 1024, 390, 320]) {
+      await learner.setViewportSize({ width, height: 900 });
+      for (const theme of ["dark", "light"] as const) {
+        await learner.goto(moduleUrl);
+        await toggleTheme(learner, theme);
+        const resume = learner.getByRole("button", { name: "Entwurf weiterbearbeiten", exact: true });
+        const begin = learner.getByRole("button", { name: "Aufgabe 2 beginnen", exact: true });
+        for (const action of [resume, begin]) await expect(action).toHaveClass(/workspace-top-action--accent/);
+        await expect.poll(async () => (await resume.evaluate((node) => getComputedStyle(node).backgroundColor)) === (await begin.evaluate((node) => getComputedStyle(node).backgroundColor))).toBe(true);
+        await learner.evaluate(() => scrollTo(0, 0));
+        await learner.screenshot({ path: info.outputPath(`module-actions-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
+        // Material cards have a separately recorded pre-existing mobile
+        // overflow. This regression check claims fit only for these actions.
+        for (const action of [resume, begin]) {
+          const box = (await action.boundingBox())!;
+          expect(box.x).toBeGreaterThanOrEqual(0);
+          expect(box.x + box.width).toBeLessThanOrEqual(width);
+        }
+        await resume.click();
+        await expect(editor).toContainText(draft);
+      }
+    }
   } finally {
     await Promise.allSettled([learnerContext.close(), teacherContext.close()]);
   }
@@ -58,7 +110,7 @@ async function verifyDraftSurvivesThemeChanges(browser: Browser): Promise<void> 
 
 test("@feature-acceptance catalogs practice profile and creation dialogs share accessible controls", async ({ browser }, testInfo) => {
   test.setTimeout(180_000);
-  await test.step("Both roles keep the learner draft across theme and viewport changes", () => verifyDraftSurvivesThemeChanges(browser));
+  await test.step("Both roles keep aligned headers and consistent draft actions", () => verifyDraftSurvivesThemeChanges(browser, testInfo));
   const teacherEmail = e2eEmail("controls-teacher");
   const learnerEmail = e2eEmail("controls-learner");
   await ensureTeacherUser(teacherEmail, e2ePassword);

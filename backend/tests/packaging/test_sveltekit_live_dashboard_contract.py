@@ -11,13 +11,15 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     live_loader_path = REPO_ROOT / "frontend" / "src" / "routes" / "live" / "+page.server.ts"
     live_page_path = REPO_ROOT / "frontend" / "src" / "routes" / "live" / "+page.svelte"
     live_state_path = REPO_ROOT / "frontend" / "src" / "routes" / "live" / "page-state.ts"
+    live_strip_path = live_page_path.with_name("LiveTaskStrip.svelte")
 
-    for path in (live_loader_path, live_page_path, live_state_path):
+    for path in (live_loader_path, live_page_path, live_state_path, live_strip_path):
         assert path.is_file(), f"Missing live dashboard page: {path}"
 
     loader_source = live_loader_path.read_text(encoding="utf-8")
     page_source = live_page_path.read_text(encoding="utf-8")
     helper_source = live_state_path.read_text(encoding="utf-8")
+    strip_source = live_strip_path.read_text(encoding="utf-8")
 
     assert "/api/live/views/courses/" in loader_source
     assert "/units" in loader_source
@@ -72,8 +74,11 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     assert 'role="tablist"' in page_source
     assert "selected_task_detail" in page_source
     assert "selectedTaskIdState" in page_source
-    assert "score-zero" in page_source
-    assert "submitted-unscored" in page_source
+    assert '<LiveTaskStrip tasks={dashboardState.selected_student_panel.tasks}' in page_source
+    assert 'selectedTaskId={selectedTaskIdState}' in page_source
+    assert 'void openTask(taskId, event)' in page_source
+    assert "score-zero" in strip_source
+    assert "submitted-unscored" in strip_source
     assert "<pre>{data.dashboard.selected_student_panel" not in page_source
     assert "Detailpanel" not in page_source
     assert "Aufgabe wählen, dann zwischen Abgabe, Bewertung und Rückmeldung wechseln." not in page_source

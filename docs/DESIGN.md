@@ -732,6 +732,12 @@ Eine Aufgabenpräsentation mit `presentation_number > 1` trägt sichtbar „Wied
 
 In der Druckfassung erhalten Abschnitts-/Modulüberschriften einen einheitlichen Abstand zum vorherigen Inhalt. Überschriften bleiben mit dem Beginn des nächsten Inhalts zusammen; lange Inhalte dürfen regulär über mehrere Seiten laufen. Die bestehende sichere Markdown-Ausgabe, Bildprüfung, importierten PDF-Seiten, A4-Ränder und Seitenzählung bleiben erhalten. Der Abstand zwischen Inhaltsüberschrift und Text wird nicht mit dem größeren Abstand zwischen Abschnitten verwechselt.
 
+### Übergreifende Nachbesserung vom 12. September 2026
+
+- Mobile Headeraktionen bilden ein Paar: Theme-Schalter und Benutzerbutton teilen dieselbe Höhe von 44 px und mindestens 44 × 44 px Bedienfläche. Die Desktophöhe bleibt unverändert.
+- „Aufgabe beginnen“ und „Entwurf weiterbearbeiten“ sind gleich gewichtete orange Hauptaktionen. Erst „Erneut bearbeiten“ nach endgültiger Abgabe bleibt dezent; die Zustandsmarkierung der Aufgabenzeile ist davon unabhängig.
+- Die Live-Aufgabenübersicht übernimmt auf ausdrücklichen Wunsch wieder das dichte ursprüngliche Raster aus `origin/master` (`3edfcc26`): 0,85 rem breite, mindestens 1,15 rem hohe farbige Rechtecke mit 0,28 rem Rasterabstand. Keine großen Buttons, zusätzlichen Zielbereichsabstände oder dauerhaften Modulüberschriften. Die zuerst geplante 24-/44-px-Aufweitung entfällt auch mobil; kleine Touch-Ziele bleiben damit eine bekannte Ausnahme. Die ursprüngliche Light-/Dark-Zustandspalette sowie Auswahl- und Letztabgabemarkierungen bleiben erhalten. Eine gemeinsame Beschriftung zeigt Modul, Nummer und Zustand bei Tastaturfokus, sonst Hover, sonst Auswahl. Reihenfolge und Bewertungssemantik bleiben unverändert. Diese Ausnahme betrifft nur die Leiste, nicht die übrige rechte Spalte.
+
 ## 12. Auth und Preview
 
 - Auth gehört sichtbar in dieselbe Produktsprache

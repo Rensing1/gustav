@@ -27,10 +27,11 @@ describe("teaching overview design contract", () => {
     expect(members).not.toContain("SvelteKit");
     expect(members).toContain("workspace-panel--flat");
   });
-  it("keeps live tables in a named scroll region and actions at touch size", () => {
+  it("keeps live tables named, task labels accessible and tabs at touch size", () => {
     const live = source("../live/+page.svelte");
     expect(live).toContain('role="region" aria-label="Klassenübersicht"');
-    expect(live).toContain("task.task_position");
+    expect(live).toContain("<LiveTaskStrip");
+    expect(source("../live/LiveTaskStrip.svelte")).toContain("task.task_label");
     const styles = source("../../lib/styles/teaching-workspace.css");
     const tab = styles.slice(styles.indexOf(".workspace-tab {"), styles.indexOf(".workspace-overview-grid"));
     expect(tab).toContain("var(--layout-control-min)");

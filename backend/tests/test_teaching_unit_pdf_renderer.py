@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
@@ -22,6 +23,142 @@ def _blank_pdf(width: float, height: float) -> bytes:
 
 def _document(*items: dict[str, object]) -> dict[str, object]:
     return {"title": "Netzwerke verstehen", "nodes": [{"title": "Einstieg", "items": list(items)}]}
+
+
+def _image_material(*, width: int = 480, height: int = 240) -> dict[str, object]:
+    from PIL import Image, ImageDraw, ImageFont
+
+    stream = BytesIO()
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype("DejaVuSans.ttf", max(16, width // 28))
+    for left, text in [(0.05, "Eingabe"), (0.55, "Ausgabe")]:
+        draw.rectangle((width * left, height * .15, width * (left + .4), height * .85), outline="black", width=max(1, width // 350))
+        draw.text((width * (left + .2), height * .5), text, font=font, fill="black", anchor="mm")
+    image.save(stream, format="PNG")
+    return {"type": "image", "title": "Netzwerkdiagramm", "body_md": "Beachte die Datei `beispiel.fls`.",
+            "filename": "original-upload-123.png", "mime_type": "image/png", "content": stream.getvalue()}
+
+
+def test_image_filename_is_not_printed_but_authored_text_and_image_remain() -> None:
+    from pypdf import PdfReader
+
+    page = PdfReader(BytesIO(LearningUnitPdfRenderer().render(_document(_image_material()), policy=PrintPolicy()))).pages[0]
+    text = page.extract_text()
+    assert "original-upload-123.png" not in text
+    assert "Datei:" not in text
+    assert "Netzwerkdiagramm" in text and "beispiel.fls" in text
+    assert len(page.images) == 1
+
+
+def test_print_typography_and_compact_wrapping_header_use_actual_layout(monkeypatch: pytest.MonkeyPatch) -> None:
+    from weasyprint import HTML
+
+    from backend.teaching import printouts_pdf
+
+    markup: list[str] = []
+    monkeypatch.setattr(printouts_pdf, "_weasyprint_pdf", lambda source, **kwargs: markup.append(source) or b"%PDF")
+    title = "Digitale Systeme verstehen und verantwortungsvoll gestalten: Eingabe, Verarbeitung und Ausgabe"
+    printouts_pdf._content_pdf({"title": title}, [("Untersuchen", {
+        "type": "markdown", "title": "Materialüberschrift", "body_md": "# Inhaltsebene eins\n\n## Inhaltsebene zwei\n\n### Inhaltsebene drei\n\nFließtext mit Umlauten: ä, ö, ü und ß."
+    })], show_header=True)
+    pages = HTML(string=markup[0]).render().pages
+    assert len(pages) == 1
+    boxes = list(pages[0]._page_box.descendants())
+    blocks = [box for box in boxes if box.__class__.__name__ == "BlockBox"]
+    heading = next(box for box in blocks if box.element_tag == "h1")
+    section = next(box for box in blocks if box.element.get("class") == "section-heading")
+    item_title = next(box for box in blocks if box.element_tag == "h3" and box.element.text == "Materialüberschrift")
+    paragraph = next(box for box in blocks if box.element_tag == "p")
+    assert heading.style["font_size"] == pytest.approx(18 * 96 / 72)
+    assert section.style["font_size"] == pytest.approx(14 * 96 / 72)
+    assert item_title.style["font_size"] == pytest.approx(12 * 96 / 72)
+    assert paragraph.style["font_size"] == pytest.approx(11 * 96 / 72)
+    assert paragraph.style["line_height"] == ("NUMBER", 1.45)
+    assert paragraph.style["orphans"] == paragraph.style["widows"] == 3
+    authored_headings = [box for box in blocks if box.element_tag in {"h1", "h2", "h3"} and (box.element.text or "").startswith("Inhaltsebene")]
+    assert len(authored_headings) == 3
+    assert all(box.style["font_size"] < item_title.style["font_size"] for box in authored_headings)
+    fields = [box for box in blocks if box.element.get("class") == "student-field"]
+    assert len(fields) == 3
+    assert len(heading.children) >= 2  # Long titles wrap, rather than disappear behind ellipses.
+    assert heading.border_box_y() + heading.border_height() <= fields[0].border_box_y()
+    assert fields[0].border_box_y() + fields[0].border_height() < section.border_box_y() + section.padding_top
+    assert fields[0].border_box_y() - heading.border_box_y() - heading.border_height() <= 4 * 96 / 25.4 + .5
+
+
+@pytest.mark.parametrize("item_type", ["pdf", "markdown"])
+def test_long_title_is_complete_and_above_source_content(tmp_path: Path, item_type: str) -> None:
+    from pypdf import PdfReader
+
+    from backend.teaching.printouts_pdf import _weasyprint_pdf
+
+    title = "Digitale Systeme verstehen und verantwortungsvoll gestalten: Eingabe, Verarbeitung und Ausgabe im Alltag"
+    source = _weasyprint_pdf('<style>@page { size:A4; margin:0; } body { margin:0; }</style><p>QUELLENANFANG</p>')
+    document = _document({"type": item_type, "title": "Quellenblatt", "filename": "blatt.pdf", "content": source, "body_md": "QUELLENANFANG"})
+    document["title"] = title
+    pdf = LearningUnitPdfRenderer().render(document, policy=PrintPolicy())
+    (tmp_path / f"long-title-{item_type}.pdf").write_bytes(pdf)
+    page = PdfReader(BytesIO(pdf)).pages[0]
+    assert " ".join(title.split()) in " ".join(page.extract_text().split())
+    assert "QUELLENANFANG" in page.extract_text()
+    runs: list[tuple[str, float, float]] = []
+    page.extract_text(visitor_text=lambda text, cm, tm, font, size: runs.append((text, cm[5] + tm[5] * cm[3], abs(size * cm[3]))))
+    title_lines = [(text, y) for text, y, size in runs if text.strip() and size == pytest.approx(18)]
+    assert len(title_lines) >= 2
+    name_y = next(y for text, y, size in runs if "Name:" in text)
+    source_y = next(y for text, y, size in runs if "QUELLENANFANG" in text)
+    assert min(y for text, y in title_lines) > name_y > source_y
+
+
+@pytest.mark.parametrize("width,height", [(240, 120), (1400, 1000)])
+def test_image_and_material_heading_stay_together_without_distortion(width: int, height: int, tmp_path: Path) -> None:
+    from pypdf import PdfReader
+
+    document = _document(
+        {"type": "markdown", "title": "Vorbereitung", "body_md": "\n\n".join(["Lies und begründe Deine Beobachtung. " * 5] * 9)},
+        _image_material(width=width, height=height),
+    )
+    pdf = LearningUnitPdfRenderer().render(document, policy=PrintPolicy())
+    (tmp_path / f"image-{width}.pdf").write_bytes(pdf)
+    pages = PdfReader(BytesIO(pdf)).pages
+    # A shared PDF resource may list an image on pages that do not paint it.
+    image_page = next(page for page in pages if any(op == b"Do" for args, op in page.get_contents().operations))
+    assert "Netzwerkdiagramm" in image_page.extract_text()
+    assert image_page.images[0].image.size == (width, height)
+    placements: list[list[float]] = []
+    image_page.extract_text(visitor_operand_before=lambda op, args, cm, tm: placements.append(cm) if op == b"Do" else None)
+    matrix = placements[0]
+    assert abs(matrix[0] / matrix[3]) == pytest.approx(width / height, rel=.001)
+    assert abs(matrix[0]) <= 180 * 72 / 25.4 + .5
+    assert abs(matrix[3]) <= 190 * 72 / 25.4 + .5
+
+
+def test_all_imported_pages_reserve_footer_space_and_header_is_not_repeated(tmp_path: Path) -> None:
+    from pypdf import PdfReader
+
+    from backend.teaching.printouts_pdf import _weasyprint_pdf
+
+    source = _weasyprint_pdf('''<style>
+      @page { size:A4; margin:0; } body { margin:0; }
+      .edge { position:fixed; bottom:0; margin:0; }
+      </style><p>QUELLENSEITE EINS</p><p style="break-before:page">QUELLENSEITE ZWEI</p>
+      <p class="edge">QUELLENUNTERKANTE</p>''')
+    pdf = LearningUnitPdfRenderer().render(_document(
+        {"type": "pdf", "title": "Quellenblatt", "filename": "blatt.pdf", "content": source},
+        {"type": "task", "title": "Abschluss", "body_md": "Begründe Deine Beobachtung."},
+    ), policy=PrintPolicy())
+    (tmp_path / "source-footer-clearance.pdf").write_bytes(pdf)
+    pages = PdfReader(BytesIO(pdf)).pages
+    assert len(pages) == 3
+    assert sum(page.extract_text().count("Name:") for page in pages) == 1
+    for page in pages[:2]:
+        runs: list[tuple[str, float]] = []
+        page.extract_text(visitor_text=lambda text, cm, tm, font, size: runs.append((text, cm[5] + tm[5] * cm[3])))
+        source_y = next(y for text, y in runs if "QUELLENUNTERKANTE" in text)
+        footer_y = next(y for text, y in runs if "Seite " in text)
+        assert source_y >= 18 * 72 / 25.4
+        assert source_y - footer_y >= 15
 
 
 def test_renderer_creates_a4_student_copy_with_header_footer_and_visible_link_url() -> None:

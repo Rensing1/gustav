@@ -38,8 +38,8 @@ def _markdown_for_print(source: object) -> str:
     return re.sub(r'<a href="([^"]+)"(?: title="[^"]*")?>(.*?)</a>', replace_link, rendered, flags=re.DOTALL)
 
 
-def _weasyprint_pdf(markup: str, *, assets: dict[str, tuple[bytes, str]] | None = None) -> bytes:
-    """Render trusted template HTML while denying all external resource URLs."""
+def _weasyprint_document(markup: str, *, assets: dict[str, tuple[bytes, str]] | None = None) -> Any:
+    """Lay out trusted template HTML while denying all external resource URLs."""
 
     try:
         from weasyprint import HTML
@@ -55,11 +55,23 @@ def _weasyprint_pdf(markup: str, *, assets: dict[str, tuple[bytes, str]] | None 
         return {"string": content, "mime_type": mime_type}
 
     try:
-        return HTML(string=markup, url_fetcher=fetch_asset).write_pdf()
+        return HTML(string=markup, url_fetcher=fetch_asset).render()
     except PrintExportError:
         raise
     except Exception as exc:
         raise PrintExportError("pdf_render_failed", 503) from exc
+
+
+def _write_pdf(rendered: Any) -> bytes:
+    """Keep layout and serialization failures behind the same safe error boundary."""
+    try:
+        return rendered.write_pdf()
+    except Exception as exc:
+        raise PrintExportError("pdf_render_failed", 503) from exc
+
+
+def _weasyprint_pdf(markup: str, *, assets: dict[str, tuple[bytes, str]] | None = None) -> bytes:
+    return _write_pdf(_weasyprint_document(markup, assets=assets))
 
 
 def _base_styles(*, landscape: bool = False) -> str:
@@ -68,28 +80,36 @@ def _base_styles(*, landscape: bool = False) -> str:
     return f"""
       @page {{ size: A4 {orientation}; margin: 16mm 15mm 18mm; }}
       * {{ box-sizing: border-box; }}
-      body {{ font-family: 'DejaVu Sans', sans-serif; font-size: 10.5pt; line-height: 1.42; color: #111; }}
-      h1 {{ font-size: 20pt; margin: 0 0 5mm; }}
-      h2 {{ font-size: 13pt; margin: 4mm 0 2mm; }}
-      .section-heading {{ font-size: 15pt; border-bottom: 1pt solid #222; margin: 0 0 4mm; padding: 8mm 0 1.5mm; }}
-      h3 {{ font-size: 12pt; margin: 5mm 0 2mm; }}
+      body {{ margin: 0; font-family: 'DejaVu Sans', sans-serif; font-size: 11pt; line-height: 1.45; color: #111; }}
+      h1 {{ font-size: 18pt; line-height: 1.25; margin: 0 0 4mm; overflow-wrap: anywhere; }}
+      .section-heading {{ font-size: 14pt; line-height: 1.3; border-bottom: .5pt solid #222; margin: 0 0 3mm; padding: 8mm 0 2mm; }}
+      h3 {{ font-size: 12pt; line-height: 1.35; margin: 0 0 2mm; }}
       h1, h2, h3, h4, h5, h6 {{ break-after: avoid; }}
-      p, ul, ol, pre, blockquote, table {{ margin: 0 0 3mm; }}
+      .item-body h1, .item-body h2, .item-body h3,
+      .item-body h4, .item-body h5, .item-body h6 {{ font-size: 11pt; line-height: 1.45; margin: 3mm 0 1.5mm; }}
+      .item-body h3, .item-body h4, .item-body h5, .item-body h6 {{ font-weight: normal; font-style: italic; }}
+      .item-body > :first-child {{ margin-top: 0; }}
+      p, ul, ol, pre, blockquote, table {{ margin: 0 0 3mm; orphans: 3; widows: 3; }}
+      ul, ol {{ padding-left: 6mm; }}
+      li {{ margin-bottom: 1mm; }}
       table {{ border-collapse: collapse; width: 100%; }}
-      th, td {{ border: .6pt solid #555; padding: 1.5mm; vertical-align: top; }}
-      pre {{ white-space: pre-wrap; border: .6pt solid #777; padding: 2mm; }}
+      th, td {{ border: .5pt solid #555; padding: 2mm; vertical-align: top; }}
+      tr {{ break-inside: avoid; }}
+      pre {{ white-space: pre-wrap; overflow-wrap: anywhere; border-left: .5pt solid #555; padding: 1mm 3mm; font-size: 10pt; }}
+      code {{ font-family: 'DejaVu Sans Mono', monospace; }}
       img {{ display: block; max-width: 100%; max-height: 190mm; object-fit: contain; margin: 3mm auto; }}
-      .student-fields {{ display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 5mm; margin-bottom: 8mm; }}
-      .student-field {{ border-bottom: .7pt solid #222; height: 8mm; }}
+      .print-header {{ break-inside: avoid; break-after: avoid; }}
+      .student-fields {{ display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 5mm; font-size: 9pt; }}
+      .student-field {{ border-bottom: .5pt solid #222; height: 8mm; }}
       .item {{ margin-bottom: 5mm; }}
-      .hint {{ border: .8pt solid #222; padding: 2.5mm; font-size: 9pt; }}
-      .filename {{ font-size: 8.5pt; color: #333; margin-top: -1mm; }}
+      .image-item {{ break-inside: avoid; }}
+      .hint {{ border-left: .5pt solid #555; padding: 1mm 3mm; font-size: 9pt; }}
     """
 
 
 def _header(title: str) -> str:
     return f"""
-      <header>
+      <header class="print-header">
         <h1>{html.escape(title)}</h1>
         <div class="student-fields">
           <div class="student-field">Name:</div>
@@ -118,7 +138,8 @@ def _html_item(item: object, *, asset_number: int, assets: dict[str, tuple[bytes
     item_type = str(_value(item, "type", "") or "")
     body = _markdown_for_print(_value(item, "body_md", ""))
     hint = str(_value(item, "digital_hint", "") or "")
-    parts = [f'<article class="item"><h3>{html.escape(title)}</h3>', body]
+    item_class = "item image-item" if item_type == "image" else "item"
+    parts = [f'<article class="{item_class}"><h3>{html.escape(title)}</h3>', f'<div class="item-body">{body}</div>']
     if item_type == "image":
         content = _value(item, "content", b"")
         mime_type = str(_value(item, "mime_type", "") or "")
@@ -128,10 +149,7 @@ def _html_item(item: object, *, asset_number: int, assets: dict[str, tuple[bytes
         asset_url = f"print-asset:{asset_number}"
         assets[asset_url] = (content, mime_type)
         alt_text = str(_value(item, "alt_text", "") or "")
-        filename = str(_value(item, "filename", "") or "")
         parts.append(f'<img src="{asset_url}" alt="{html.escape(alt_text)}">')
-        if filename:
-            parts.append(f'<p class="filename">Datei: {html.escape(filename)}</p>')
     if hint:
         parts.append(f'<p class="hint">{html.escape(hint)}</p>')
     parts.append("</article>")
@@ -160,31 +178,33 @@ def _overlay_pdf(
     landscape: bool,
     divider: str = "",
     show_student_header: bool = False,
-) -> bytes:
+) -> tuple[bytes, float]:
+    """Return the overlay and its actual top reservation in PDF points.
+
+    The source label flows below the same wrapping header used by text pages.
+    Measuring its laid-out bottom prevents long titles from covering an imported
+    worksheet. This uses the existing render pass, not a second layout engine.
+    """
     divider_html = f'<div class="divider">{html.escape(divider)}</div>' if divider else ""
-    student_header = (
-        f'<div class="source-header"><strong>{html.escape(title)}</strong>'
-        '<div class="source-fields"><span>Name:</span><span>Kurs:</span><span>Datum:</span></div></div>'
-        if show_student_header
-        else ""
-    )
-    divider_top = "28mm" if show_student_header else "0"
+    student_header = _header(title) if show_student_header else ""
     markup = f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><style>
       {_base_styles(landscape=landscape)}
-      @page {{ margin: 10mm 12mm; }}
-      .source-header {{ position: fixed; top: 0; left: 0; right: 0; height: 25mm; }}
-      .source-header > strong {{ display: block; font-size: 15pt; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
-      .source-fields {{ display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 5mm; margin-top: 4mm; font-size: 9pt; }}
-      .source-fields span {{ border-bottom: .7pt solid #222; height: 7mm; }}
-      .divider {{ position: fixed; top: {divider_top}; left: 0; right: 0; height: 8mm; border-bottom: .7pt solid #222; font-size: 9pt; }}
-      .footer {{ position: fixed; bottom: -7mm; font-size: 8pt; white-space: nowrap; }}
+      .source-label {{ display: flow-root; }}
+      .divider {{ padding: 0 0 2mm; border-bottom: .5pt solid #222; font-size: 9pt; overflow-wrap: anywhere; }}
+      .print-header + .divider {{ margin-top: 5mm; }}
+      .footer {{ position: fixed; bottom: -10mm; font-size: 8pt; white-space: nowrap; }}
       .footer-title {{ left: 0; max-width: 75%; overflow: hidden; text-overflow: ellipsis; }}
       .footer-page {{ right: 0; }}
-    </style></head><body>{student_header}{divider_html}
+    </style></head><body><div class="source-label">{student_header}{divider_html}</div>
       <div class="footer footer-title">{html.escape(title)}</div>
       <div class="footer footer-page">Seite {page_number} / {total_pages}</div>
     </body></html>"""
-    return _weasyprint_pdf(markup)
+    rendered = _weasyprint_document(markup)
+    # Layout boxes use CSS pixels; PDF placement uses points (72 / 96).
+    label = next(box for box in rendered.pages[0]._page_box.descendants()
+                 if box.element is not None and box.element.get("class") == "source-label")
+    reserved_top = (label.border_box_y() + label.border_height()) * 72 / 96 + 4 * 72 / 25.4
+    return _write_pdf(rendered), reserved_top
 
 
 class LearningUnitPdfRenderer:
@@ -200,7 +220,7 @@ class LearningUnitPdfRenderer:
         except Exception as exc:  # pragma: no cover - deployment dependency guard
             raise PrintExportError("pdf_renderer_unavailable", 503) from exc
 
-        page_specs: list[tuple[object, bool, str]] = []
+        page_specs: list[tuple[object, bool, str, bool]] = []
         pending: list[tuple[str, object]] = []
         show_header = True
 
@@ -210,7 +230,7 @@ class LearningUnitPdfRenderer:
                 return
             generated = PdfReader(BytesIO(_content_pdf(document, pending, show_header=show_header)), strict=True)
             for generated_page in generated.pages:
-                page_specs.append((generated_page, False, ""))
+                page_specs.append((generated_page, False, "", False))
             pending.clear()
             show_header = False
 
@@ -238,8 +258,9 @@ class LearningUnitPdfRenderer:
                         if width <= 0 or height <= 0:
                             raise ValueError("invalid_page_size")
                         page_specs.append(
-                            (source_page, width > height, f"{item_title} · {filename}" if index == 0 else "")
+                            (source_page, width > height, f"{item_title} · {filename}" if index == 0 else "", True)
                         )
+                    show_header = False
                 except PrintExportError:
                     raise
                 except Exception as exc:
@@ -254,40 +275,31 @@ class LearningUnitPdfRenderer:
         writer = PdfWriter()
         title = str(_value(document, "title", "Lerneinheit") or "Lerneinheit")
         total_pages = len(page_specs)
-        for page_number, (source_page, landscape, divider) in enumerate(page_specs, start=1):
+        for page_number, (source_page, landscape, divider, imported) in enumerate(page_specs, start=1):
             page_width, page_height = _A4_LANDSCAPE if landscape else _A4_PORTRAIT
             target = writer.add_blank_page(width=page_width, height=page_height)
             source_width = float(source_page.mediabox.width)
             source_height = float(source_page.mediabox.height)
-            if divider:
-                # Source worksheets get their own page with room for a short label.
-                left = right = 34.0
-                bottom = 38.0
-                top = 112.0 if page_number == 1 else 36.0
-                banner = 28.0
+            overlay, reserved_top = _overlay_pdf(
+                title=title, page_number=page_number, total_pages=total_pages,
+                landscape=landscape, divider=divider,
+                show_student_header=bool(imported and page_number == 1),
+            )
+            if imported:
+                # Reserve footer space on every source page, not only its first.
+                left = right = 15 * 72 / 25.4
+                bottom = 18 * 72 / 25.4
+                top = reserved_top if divider else 16 * 72 / 25.4
             else:
                 left = right = bottom = top = 0.0
-                banner = 0.0
             available_width = page_width - left - right
-            available_height = page_height - bottom - top - banner
+            available_height = page_height - bottom - top
             scale = min(available_width / source_width, available_height / source_height)
             x = left + (available_width - source_width * scale) / 2
             y = bottom + (available_height - source_height * scale) / 2
             target.merge_transformed_page(source_page, Transformation().scale(scale).translate(x, y))
 
-            overlay_reader = PdfReader(
-                BytesIO(
-                    _overlay_pdf(
-                        title=title,
-                        page_number=page_number,
-                        total_pages=total_pages,
-                        landscape=landscape,
-                        divider=divider,
-                        show_student_header=bool(divider and page_number == 1),
-                    )
-                ),
-                strict=True,
-            )
+            overlay_reader = PdfReader(BytesIO(overlay), strict=True)
             target.merge_page(overlay_reader.pages[0])
             if "/Annots" in target:
                 del target["/Annots"]

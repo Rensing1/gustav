@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-13
+
+### Ruhigere Druckfassungen
+
+- fix(print): Klare Überschriftenhierarchie, 11-pt-Fließtext mit Zeilenhöhe 1,45, kompakter gemeinsamer Kopf und dünne Abschnittslinien. Markdown-Überschriften bleiben unterhalb der Materialüberschrift; Listen, Tabellen und Code sind kopierfreundlich gegliedert.
+- fix(print): Automatisch angehängte Grafikdateinamen entfallen. Materialtitel, Beschreibungen, verfasste Dateinamen und vollständige Grafiken bleiben erhalten; keine pauschale Verkleinerung großer Bilder.
+- fix(print): Lange Titel umbrechen auch vor eingebundenen PDFs. Die tatsächlich gerenderte Kopfhöhe bestimmt den freien Bereich; importierte Folgeseiten lassen Platz für die Fußzeile. Kein wiederholter Schülerkopf beim anschließenden Text.
+- scope: Keine Änderung an API, Datenbank, Auswahloberfläche, Abhängigkeiten oder Berechtigungen. Eingebundene PDFs behalten ihre Gestaltung und Ausrichtung.
+- test: Vollständiges Gate `teacher-unit-print` bestanden (3051 Backend-Tests, 742 Frontend-Tests, Build und authentifizierter Download). 19 gezielte Renderer-Tests und 17 einzeln gesichtete Druckseiten sichern Typografie, Dateinamen, Bildgeometrie, Umbrüche und Kopf-/Fußbereiche ab.
+
 ## 2026-09-12
 
 ### Gezielte Designnachbesserung

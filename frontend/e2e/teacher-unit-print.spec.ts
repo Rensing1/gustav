@@ -25,6 +25,7 @@ test("@feature-acceptance teacher selects mixed materials and downloads a multi-
     targets.push((await response.json()).section_id);
   }
   for (const [sectionId, materialTitle, body] of [
+    [targets[0], "Ein digitales Thermometer", readFileSync(resolve(root, "frontend/e2e/fixtures/print-worksheet.md"), "utf8")],
     [targets[0], "Ausführliches Lesematerial", Array.from({ length: 28 }, (_, index) => `Absatz ${index + 1}: Ein digitales System erfasst Eingaben, verarbeitet sie nach klaren Regeln und stellt Ergebnisse dar. Ein nachvollziehbarer Test verwendet unterschiedliche Werte und prüft auch die Grenzen. Dateiendungen wie \`.sb3\`, \`.hex\` und \`.fls\` gehören zum Material.`).join("\n\n")],
     [targets[1], "Programme entwickeln", "ENTWICKLUNGSSTART: Beschreibe Eingabe, Verarbeitung und Ausgabe eines selbst gewählten Systems."],
   ]) {
@@ -33,8 +34,9 @@ test("@feature-acceptance teacher selects mixed materials and downloads a multi-
     }), 201);
   }
   await createFileMaterial(page, seeded.unitId, targets[0], {
-    filename: "gustav-illustration.png", mimeType: "image/png", title: "GUSTAV-Illustration",
-    altText: "GUSTAV mit Zauberhut", bytes: readFileSync(resolve(root, "frontend/static/gustav-logo.png"))
+    filename: "original-diagram-upload.png", mimeType: "image/png", title: "Eingabe, Verarbeitung und Ausgabe",
+    altText: "Ein Sensor liefert einen Wert an ein Programm; das Ergebnis erscheint auf einer Anzeige.",
+    bytes: execFileSync(python, [resolve(root, "frontend/e2e/fixtures/print-diagram.py")], { cwd: root })
   });
   const sourcePdf = execFileSync(python, ["-c", "import sys\nfrom backend.teaching.printouts_pdf import _weasyprint_pdf\nsys.stdout.buffer.write(_weasyprint_pdf(sys.stdin.read()))"], {
     cwd: root, input: readFileSync(resolve(root, "frontend/e2e/fixtures/print-source.html"))
@@ -46,12 +48,18 @@ test("@feature-acceptance teacher selects mixed materials and downloads a multi-
   await page.goto(`/teaching/units/${seeded.unitId}`);
   await page.getByRole("link", { name: "Druckfassung erstellen" }).click();
   await expect(page.getByRole("heading", { name: "Druckfassung erstellen" })).toBeVisible();
-  await expect(page.getByText("0 von 6 Inhalten ausgewählt")).toBeVisible();
+  await expect(page.getByText("0 von 7 Inhalten ausgewählt")).toBeVisible();
 
   await page.getByRole("checkbox", { name: "Argumentationshilfe" }).check();
-  await expect(page.getByText("1 von 6 Inhalten ausgewählt")).toBeVisible();
+  await expect(page.getByText("1 von 7 Inhalten ausgewählt")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Argumentationshilfe" }).uncheck();
+  await page.getByRole("checkbox", { name: "Ein digitales Thermometer" }).check();
+  await page.getByRole("checkbox", { name: "Eingabe, Verarbeitung und Ausgabe", exact: false }).check();
+  const compactDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "PDF herunterladen" }).click();
+  await (await compactDownloadPromise).saveAs(info.outputPath("compact-worksheet.pdf"));
   await page.getByRole("checkbox", { name: "Alle Inhalte auswählen" }).check();
-  await expect(page.getByText("6 von 6 Inhalten ausgewählt")).toBeVisible();
+  await expect(page.getByText("7 von 7 Inhalten ausgewählt")).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "PDF herunterladen" }).click();
@@ -72,11 +80,18 @@ test("@feature-acceptance teacher selects mixed materials and downloads a multi-
     "print(json.dumps({'texts':[p.extract_text() for p in pages], 'landscape':any(float(p.mediabox.width)>float(p.mediabox.height) for p in pages), 'images':sum(len(p.images) for p in pages)}))"
   ].join("\n")], { cwd: root, input: pdf }).toString());
   expect(inspected.texts.length).toBeGreaterThanOrEqual(5);
-  expect(inspected.texts[0]).toContain("Absatz 1:");
+  expect(inspected.texts[0]).toContain("Ein digitales Thermometer");
+  expect(inspected.texts.join("\n")).toContain("Absatz 1:");
+  expect(inspected.texts.join("\n")).toContain("Absatz 28:");
   expect(inspected.landscape).toBe(true);
   expect(inspected.images).toBeGreaterThan(0);
   expect(inspected.texts.join("\n")).toContain("QUERFORMAT-NACHWEIS");
   expect(inspected.texts.join("\n")).toContain(".sb3");
+  expect(inspected.texts.join("\n")).toContain(".hex");
+  expect(inspected.texts.join("\n")).toContain(".fls");
+  expect(inspected.texts.join("\n")).toContain("Eingabe, Verarbeitung und Ausgabe");
+  expect(inspected.texts.join("\n")).not.toContain("original-diagram-upload.png");
+  expect(inspected.texts.join("\n")).not.toContain("Datei:");
   const nextSection = inspected.texts.find((text: string) => text.includes("Zielmodul"));
   expect(nextSection).toContain("ENTWICKLUNGSSTART");
   for (const [index, text] of inspected.texts.entries()) expect(text).toContain(`Seite ${index + 1} / ${inspected.texts.length}`);

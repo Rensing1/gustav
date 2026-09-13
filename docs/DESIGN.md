@@ -732,6 +732,14 @@ Eine Aufgabenpräsentation mit `presentation_number > 1` trägt sichtbar „Wied
 
 In der Druckfassung erhalten Abschnitts-/Modulüberschriften einen einheitlichen Abstand zum vorherigen Inhalt. Überschriften bleiben mit dem Beginn des nächsten Inhalts zusammen; lange Inhalte dürfen regulär über mehrere Seiten laufen. Die bestehende sichere Markdown-Ausgabe, Bildprüfung, importierten PDF-Seiten, A4-Ränder und Seitenzählung bleiben erhalten. Der Abstand zwischen Inhaltsüberschrift und Text wird nicht mit dem größeren Abstand zwischen Abschnitten verwechselt.
 
+### Druckgestaltung vom 13. September 2026
+
+- Arbeitsblätter sind ruhig und schwarz-weiß kopierbar: vorhandene lokale Schrift, Fließtext 11 pt mit Zeilenhöhe 1,45, Titel 18 pt, Abschnitt/Modul 14 pt und Material/Aufgabe 12 pt. Überschriften innerhalb des verfassten Markdown-Inhalts sind kleiner als die Materialüberschrift.
+- Ein kompakter Kopf enthält den umbrechenden Einheitstitel und Name/Kurs/Datum. Dünne schwarze Abschnittslinien und einheitliche Abstände gliedern die Inhalte. Keine zusätzlichen Logos, Farbflächen, Antwortflächen oder Druckoptionen.
+- Überschriften bleiben beim Folgeinhalt; lange Texte dürfen Seiten wechseln. Fußzeilen bleiben klar vom Inhalt getrennt, auch bei eingebundenen PDF-Seiten.
+- Bei Grafiken entfällt die automatisch angehängte Dateinamenzeile. Materialtitel, Beschreibung, Bild und bewusst verfasste Dateinamen bleiben unverändert. Lesbarkeit geht vor Platzersparnis: keine pauschale Verkleinerung, kein Beschnitt und keine Verzerrung; bisherige Größenbegrenzungen bleiben bestehen.
+- Importierte PDFs behalten Gestaltung und Ausrichtung. Nur die von GUSTAV ergänzten Kopf-/Fußbereiche werden vereinheitlicht; die Dateinamenregel gilt zunächst ausschließlich für Grafiken.
+
 ### Übergreifende Nachbesserung vom 12. September 2026
 
 - Mobile Headeraktionen bilden ein Paar: Theme-Schalter und Benutzerbutton teilen dieselbe Höhe von 44 px und mindestens 44 × 44 px Bedienfläche. Die Desktophöhe bleibt unverändert.

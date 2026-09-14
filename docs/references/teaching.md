@@ -95,6 +95,8 @@ Die erzeugte PDF-Datei ist eine Schülerfassung. Sie enthält Titel, freie Felde
 
 Auswahl und PDF bleiben flüchtig. GUSTAV speichert keine Exporthistorie und liest keine handschriftlichen Ergebnisse zurück. Pro Export gelten höchstens 200 Inhalte, 50 MiB Quelldaten, 200 Seiten und 50 MiB Ausgabe. Eine fehlende, beschädigte, verschlüsselte oder nicht druckbare Datei bricht den vollständigen Export ab.
 
+Synchrone Datenbank-, Datei- und Renderarbeit läuft in Worker-Threads mit höchstens zwei aktiven Exporten je Webprozess; weitere Exporte warten, ohne den Event-Loop zu blockieren. Gespeicherte PDF-Seitendrehungen bleiben beim Einpassen erhalten. Gedruckte Linkadressen behalten ihre Query-Parameter ohne zusätzliche HTML-Maskierung.
+
 ## Materialien
 
 Materialien gehören zu einem Abschnitt oder Modul. Unterstützte Arten:

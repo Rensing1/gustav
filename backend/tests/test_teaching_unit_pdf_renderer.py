@@ -316,6 +316,56 @@ def test_renderer_rejects_corrupt_and_encrypted_source_pdfs() -> None:
         assert error.value.material_title == "Defektes Blatt"
 
 
+@pytest.mark.parametrize("rotation", [90, 180, 270])
+def test_import_preserves_stored_page_rotation(rotation: int, tmp_path: Path) -> None:
+    from math import hypot
+
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import DecodedStreamObject, NameObject
+
+    source = PdfWriter()
+    page = source.add_blank_page(width=595, height=842)
+    drawing = DecodedStreamObject()
+    # An asymmetric marker makes both orientation and position visible in QA.
+    drawing.set_data(b"0 0 0 rg 20 30 40 10 re f 20 30 10 60 re f")
+    page[NameObject("/Contents")] = source._add_object(drawing)
+    page.rotate(rotation)
+    stream = BytesIO()
+    source.write(stream)
+    (tmp_path / f"source-{rotation}.pdf").write_bytes(stream.getvalue())
+    content = LearningUnitPdfRenderer().render(_document({
+        "type": "pdf", "title": "Gedrehtes Arbeitsblatt", "filename": "blatt.pdf",
+        "content": stream.getvalue(),
+    }), policy=PrintPolicy())
+    (tmp_path / f"result-{rotation}.pdf").write_bytes(content)
+    result = PdfReader(BytesIO(content)).pages[0]
+    assert (float(result.mediabox.width) > float(result.mediabox.height)) == (rotation != 180)
+    matrices: list[list[float]] = []
+    result.extract_text(visitor_operand_before=lambda op, args, cm, tm:
+                        matrices.append(cm) if op == b"re" and list(args) == [20, 30, 40, 10] else None)
+    assert len(matrices) == 1
+    a, b, c, d = matrices[0][:4]
+    scale = hypot(a, b)
+    expected = {90: (0, -1, 1, 0), 180: (-1, 0, 0, -1), 270: (0, 1, -1, 0)}
+    assert (a / scale, b / scale, c / scale, d / scale) == pytest.approx(expected[rotation], abs=1e-6)
+
+
+@pytest.mark.parametrize("url", [
+    "https://school.example/suche?a=1&b=2",
+    "https://school.example/suche?a=1&amp;b=2",
+])
+def test_printed_link_preserves_query_parameters(url: str) -> None:
+    from pypdf import PdfReader
+
+    # Escape a literal ampersand for Markdown so even literal entity text survives.
+    markdown_url = url.replace("&", "&amp;")
+    content = LearningUnitPdfRenderer().render(_document({
+        "type": "markdown", "title": "Recherche", "body_md": f"[Arbeitsblatt]({markdown_url})",
+    }), policy=PrintPolicy())
+    text = PdfReader(BytesIO(content)).pages[0].extract_text()
+    assert f"Arbeitsblatt ({url})" in text
+
+
 def test_renderer_enforces_page_limit_before_returning_output() -> None:
     renderer = LearningUnitPdfRenderer()
     source = _blank_pdf(595, 842)

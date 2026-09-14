@@ -32,7 +32,8 @@ def _markdown_for_print(source: object) -> str:
     rendered = render_markdown_safe(str(source or ""))
 
     def replace_link(match: re.Match[str]) -> str:
-        label, url = match.group(2), html.escape(match.group(1), quote=False)
+        # href is already HTML-escaped; decode that layer before rendering text.
+        label, url = match.group(2), html.escape(html.unescape(match.group(1)), quote=False)
         return f"{label} ({url})"
 
     return re.sub(r'<a href="([^"]+)"(?: title="[^"]*")?>(.*?)</a>', replace_link, rendered, flags=re.DOTALL)
@@ -253,6 +254,11 @@ class LearningUnitPdfRenderer:
                         raise ValueError("empty_pdf")
                     filename = str(_value(item, "filename", "Datei") or "Datei")
                     for index, source_page in enumerate(source.pages):
+                        # Merging copies content, not the viewer's /Rotate flag.
+                        # Normalize both the drawing and boxes before fitting A4.
+                        if source_page.rotation:
+                            source_page = PdfWriter().add_page(source_page)
+                            source_page.transfer_rotation_to_content()
                         width = float(source_page.mediabox.width)
                         height = float(source_page.mediabox.height)
                         if width <= 0 or height <= 0:

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib
+import threading
 from pathlib import Path
 
 import httpx
@@ -234,3 +236,68 @@ async def test_printable_pdf_returns_transient_binary_and_rejects_foreign_item(
     assert exported.headers["content-disposition"] == 'attachment; filename="gustav-netzwerke-verstehen-druckfassung.pdf"'
     assert foreign.status_code == 400
     assert foreign.json() == {"error": "bad_request", "detail": "invalid_print_selection"}
+
+
+@pytest.mark.parametrize("render_error", [False, True])
+async def test_exports_leave_other_requests_responsive_and_bound_concurrency(
+    monkeypatch: pytest.MonkeyPatch, render_error: bool,
+) -> None:
+    """Hold real HTTP exports at the renderer boundary, then release them safely."""
+    from backend.teaching.printouts import PrintExportError
+
+    print_routes = importlib.import_module("backend.web.routes.teaching_unit_prints")
+    two_entered, three_entered, release = threading.Event(), threading.Event(), threading.Event()
+    lock = threading.Lock()
+    active = peak = 0
+    released: list[bool] = []
+
+    class Renderer:
+        def render(self, document, *, policy):  # type: ignore[no-untyped-def]
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+                if active == 2:
+                    two_entered.set()
+                if active == 3:
+                    three_entered.set()
+            try:
+                # A timeout lets the test fail cleanly if the event loop blocks.
+                released.append(release.wait(timeout=3))
+                if render_error:
+                    raise PrintExportError("pdf_render_failed", 503)
+                return b"%PDF-1.7\nstudent-copy"
+            finally:
+                with lock:
+                    active -= 1
+
+    store = install_session_store(monkeypatch, main)
+    teaching_routes.set_repo(teaching_routes._Repo())
+    monkeypatch.setattr(print_routes, "PDF_RENDERER", Renderer())
+    session = store.create(sub="print-author", roles=["teacher"], name="Ada", ttl_seconds=60)
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", session.session_id)
+        unit_id, _, material_id, _ = await _create_linear_content(client)
+
+        async def export() -> httpx.Response:
+            return await client.post(
+                f"/api/teaching/units/{unit_id}/printable-pdf",
+                json={"material_ids": [material_id], "task_ids": []},
+                headers={"Origin": "http://test"},
+            )
+
+        pending = [asyncio.create_task(export()) for _ in range(3)]
+        try:
+            assert await asyncio.to_thread(two_entered.wait, 3)
+            assert not await asyncio.to_thread(three_entered.wait, .2)
+            response = await client.get(f"/api/teaching/units/{unit_id}/printable-content")
+            assert response.status_code == 200
+        finally:
+            release.set()
+            responses = await asyncio.gather(*pending)
+        # Another export proves that both success and failure release capacity.
+        responses.append(await export())
+
+    assert all(response.status_code == (503 if render_error else 200) for response in responses)
+    assert released == [True] * 4
+    assert peak == 2

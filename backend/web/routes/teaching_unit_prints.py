@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from anyio import CapacityLimiter, to_thread
 from fastapi import APIRouter, Request, Response
 
 from backend.teaching.printouts import (
@@ -27,6 +28,9 @@ from backend.web.routes.teaching_unit_materials import _material_file_settings, 
 
 teaching_unit_prints_router = APIRouter(tags=["Teaching"])
 PDF_RENDERER = IsolatedLearningUnitPdfRenderer()
+# Each renderer can use substantial memory; waiting exports must not occupy
+# ordinary request threads or launch an unbounded number of child processes.
+_EXPORT_LIMITER = CapacityLimiter(2)
 
 
 @teaching_unit_prints_router.get("/api/teaching/units/{unit_id}/printable-content")
@@ -50,7 +54,18 @@ async def get_printable_content(request: Request, unit_id: str):
 
 @teaching_unit_prints_router.post("/api/teaching/units/{unit_id}/printable-pdf")
 async def create_printable_pdf(request: Request, unit_id: str, payload: TeachingUnitPrintPayload):
-    """Validate an author-only PDF request before resource-intensive rendering."""
+    """Keep HTTP responsive while at most two exports run per web process."""
+
+    return await to_thread.run_sync(_create_printable_pdf, request, unit_id, payload, limiter=_EXPORT_LIMITER)
+
+
+def _create_printable_pdf(request: Request, unit_id: str, payload: TeachingUnitPrintPayload):
+    """Export selected content only for its author after role and CSRF checks.
+
+    The request supplies the identity and origin; the unit and selection identify
+    the content. All synchronous DB, storage and render waits stay in this worker
+    thread. Return a private PDF response or the existing public error contract.
+    """
 
     user, error = _require_teacher(request)
     if error:

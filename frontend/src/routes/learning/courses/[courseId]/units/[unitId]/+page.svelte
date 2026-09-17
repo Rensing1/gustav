@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createSubmissionPreviewLoader, type SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
   import { applyAction } from "$app/forms";
   import { browser } from "$app/environment";
   import { onMount, tick, untrack } from "svelte";
@@ -142,6 +143,29 @@
   let submissionHistoryStateByTask = $state.raw<Record<string, SubmissionHistoryLoadState>>(
     untrack(() => initialSubmissionHistoryStateByTask(data.historyTaskId, data.historyLoadState))
   );
+  let submissionPreviews = $state.raw<Record<string, SubmissionPreviewState>>({});
+  let previewLoader = $state<ReturnType<typeof createSubmissionPreviewLoader> | null>(null);
+
+  $effect(() => {
+    // Reset the memory-only preview cache when learner/course/unit scope changes.
+    const courseId = data.courseId;
+    const scope = `${data.user?.sub}:${courseId}:${data.unitId}`;
+    void scope;
+    submissionPreviews = {};
+    const loader = createSubmissionPreviewLoader({
+      courseId,
+      fetcher: fetch,
+      onChange: (taskId, state) => { submissionPreviews = { ...submissionPreviews, [taskId]: state }; },
+      onDenied: (taskId) => {
+        submissionHistoryByTask = { ...submissionHistoryByTask, [taskId]: [] };
+        setTaskHistoryState(taskId, "unavailable");
+      },
+      recoverAuth: handleRecoverableAuthResponse
+    });
+    previewLoader = loader;
+    return () => loader.dispose();
+  });
+
   const pendingSubmissionHistoryLoads = new Map<string, Promise<LearningSubmission[]>>();
   let submissionMessageState = $state<string | null>(null);
   let clientSubmissionErrorTaskId = $state<string | null>(null);
@@ -686,6 +710,7 @@
       [taskId]: entries
     };
     setTaskHistoryState(taskId, state);
+    void previewLoader?.invalidate(taskId);
   }
 
   function setTaskHistoryState(taskId: string, state: SubmissionHistoryLoadState) {
@@ -1879,6 +1904,8 @@
                 readerScrollTop={learnerWorkspace.context.readerScrollTop}
                 taskColumnRatio={taskColumnRatio}
                 historyByTask={submissionHistoryByTask}
+                previewByTask={submissionPreviews}
+                onLoadSubmissionPreview={(taskId) => previewLoader?.load(taskId)}
                 historyStateByTask={submissionHistoryStateByTask}
                 submittedTaskId={data.submittedTaskId}
                 submissionMessage={submissionMessageState}
@@ -1945,6 +1972,8 @@
             readerScrollTop={learnerWorkspace.context.readerScrollTop}
             taskColumnRatio={taskColumnRatio}
             historyByTask={submissionHistoryByTask}
+            previewByTask={submissionPreviews}
+            onLoadSubmissionPreview={(taskId) => previewLoader?.load(taskId)}
             historyStateByTask={submissionHistoryStateByTask}
             submittedTaskId={data.submittedTaskId}
             submissionMessage={submissionMessageState}

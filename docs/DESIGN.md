@@ -537,6 +537,18 @@ Lehrkraft- und Schüleransicht verwenden für dieselbe modulare Lerneinheit dies
   nicht nur in `app.css`, damit Surface-, Spacing- und Typografie-Regeln im
   Lernraum wirksam bleiben
 
+#### Eigene Abgaben in der Leseansicht
+
+In Modulen und linearen Abschnitten bleibt die kompakte Aufgabenstellung sichtbar und erhält keine Offenlegung. Direkt darunter steht die eigene Abgabe: zunächst höchstens drei gerenderte Zeilen einer lesbaren Textvorschau. Nur die Abgabe wird über die dezente Aktion „Ausklappen“ verlängert. „Meine Abgabe“ und Zeitpunkt benennen den Snapshot; „Abgegeben“ beschreibt ausschließlich den Abgabestatus. Ohne endgültige Abgabe heißt der gespeicherte Feedback-Stand „Mein Entwurf · Noch nicht abgegeben“. Eine endgültige Abgabe hat Vorrang; ein neuerer gespeicherter Entwurf erhält einen eigenen Hinweis und die Aktion „Entwurf weiterbearbeiten“.
+
+Aufgabe und Abgabe bilden einen zusammenhängenden Lesebereich. Die eigene Antwort steht leicht eingerückt und ohne eigenständige Karte, Außenrahmen oder abgetrennte Tabellenkopfzeile darunter. Die Aufgabenstellung bleibt in normaler Leseschriftgröße erkennbar, Metadaten treten zurück. Drei Vorschauzeilen sind eine Obergrenze: Kurze Antworten erzeugen keine künstliche Leerfläche. Bearbeitungsaktionen für bestehende Abgaben sind nachgeordnet und verzichten hier auf Schatten und Versalschreibung.
+
+Der gemeinsame Lesebereich von Aufgabe und Antwort besitzt einen ruhigen Hintergrund ohne durchscheinendes Punktraster. Die Einrückungen folgen festen Achsen; Antworttext und Beschriftungen der zugehörigen Offenlegungen stehen bündig. Metadaten bleiben klar getrennt und nachgeordnet. Auf breiten Flächen kann die dezente Aufklappaktion neben der geschlossenen Antwort am unteren rechten Rand stehen; auf schmalen Flächen folgt sie darunter. Lesetext bleibt auf ungefähr `68ch` begrenzt.
+
+Am Ende der verlängerten Abgabe stehen „Rückmeldung“ und „Auswertung“ als getrennte, zunächst geschlossene Offenlegungen innerhalb derselben Abgabefläche. Beide Aufklappzeilen verwenden dieselbe Leseschrift, links platzierte Chevrons und je eine feine Trennlinie. Die Auswertung verwendet die bestehenden qualitativen Kriterien und anfangs geschlossene Kriterienbegründungen. Fehlende Inhalte erzeugen keine leeren Bereiche. „Einklappen“ schließt die untergeordneten Offenlegungen. Kurze Antworten benötigen „Ausklappen“ nur bei zusätzlichen Inhalten oder Verarbeitungszuständen. Diese Anordnung gilt ausschließlich für die Leseansicht; Aufgabenraum und Materialkontext behalten ihre eigene Hierarchie.
+
+Bilder erscheinen klein und unverzerrt; PDFs und andere Dateien beginnen mit tatsächlich verfügbaren Metadaten. Umfangreiche Datei-, Code- und Dialogdarstellungen werden erst beim Öffnen eingebunden. Die Vorschau verwendet zentrale Farben, Typografie und Abstände in Hell und Dunkel. Die dezenten Textbuttons besitzen mindestens 44 Pixel Bedienhöhe, sichtbaren Fokus und aria-expanded/aria-controls. Öffnen verändert weder URL noch Browserhistorie; Abgabetexte werden nicht zusätzlich lokal gespeichert.
+
 ### 11.4 Aufgabe und Kontext
 
 - Ein sticky Aufgabenkopf zeigt `← Zurück zu Modul …`, Aufgabenbezeichnung und

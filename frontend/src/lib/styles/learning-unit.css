@@ -3675,6 +3675,7 @@
 .learner-orientation__materials,
 .learner-orientation__tasks {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
 }
 
@@ -3683,6 +3684,8 @@
 }
 
 .learner-orientation__materials .learning-work-item--material {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   border: 0;
   border-block-end: 1px solid var(--color-line);
   background: transparent;
@@ -5133,4 +5136,288 @@ button.learner-material-context__module-toggle:focus-visible,
 
 .h5p-task-player .h5p-content {
   max-width: 100%;
+}
+
+/* A reading preview extends the answer, never the task or its editor. */
+.learner-task-reading {
+  --submission-reading-inset: var(--space-5);
+  min-width: 0;
+  padding-block-end: var(--space-4);
+  border-block-end: 1px solid var(--color-line);
+  background: var(--color-bg-base);
+}
+
+.learner-task-reading > .learning-work-item--task {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Compact task cards retain an empty editor body; it must not add reading space. */
+.learner-task-reading > .learning-work-item--task > .learning-work-item__body {
+  padding: 0;
+}
+
+.learner-task-reading .learning-task-row {
+  /* The existing status rail occupies 3px of the shared material/text inset. */
+  padding: var(--space-3) var(--submission-reading-inset) var(--space-3) calc(var(--submission-reading-inset) - 3px);
+  border-block: 0;
+  border-inline-end: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.learner-task-reading .learning-task-row__actions .workspace-top-action {
+  min-height: var(--layout-control-min);
+}
+
+.learner-task-reading .learning-task-row__preview {
+  font-size: calc(var(--font-size-base) * var(--learning-unit-font-scale));
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.learner-task-reading .learning-task-row__more {
+  margin-block-start: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.learner-task-reading .learning-task-row--final .workspace-top-action,
+.learner-task-reading .learning-task-row--draft .workspace-top-action,
+.learning-submission-preview__draft .workspace-top-action {
+  border-color: var(--color-line);
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.learning-submission-preview-anchor {
+  min-width: 0;
+}
+
+.learning-submission-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  column-gap: var(--space-4);
+  margin: var(--space-2) var(--submission-reading-inset) 0 calc(var(--submission-reading-inset) + var(--space-4));
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.learning-submission-preview__header {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-start;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  padding: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.learning-submission-preview__header > strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.learning-submission-preview__header .learning-submission-preview__meta {
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+}
+
+.learning-submission-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+}
+
+.learning-submission-preview__body {
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  align-self: center;
+}
+
+.learning-submission-preview--expanded .learning-submission-preview__body { grid-column: 1 / -1; }
+
+.learning-submission-preview__text,
+.learning-submission-preview__body > .markdown-prose {
+  max-width: var(--layout-reading-max);
+  margin: 0;
+  font-family: var(--font-reading);
+  font-size: calc(var(--font-size-base) * var(--learning-unit-font-scale));
+  line-height: 1.6;
+}
+
+.learning-submission-preview__text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.learning-submission-preview__actions {
+  grid-column: 2;
+  align-self: end;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.learning-submission-preview__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--layout-control-min);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+  text-underline-offset: var(--space-1);
+  cursor: pointer;
+}
+
+.learning-submission-preview__toggle:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.learning-submission-preview__toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-text);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.learning-submission-preview__toggle svg {
+  width: var(--space-4);
+  height: var(--space-4);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.learning-submission-preview__chevron--open { transform: rotate(180deg); }
+
+.learning-submission-preview__image {
+  display: block;
+  max-width: 100%;
+  max-height: 32rem;
+  width: auto;
+  object-fit: contain;
+}
+
+.learning-submission-preview__image--compact { max-height: 8rem; }
+
+.learning-submission-preview__pdf {
+  width: 100%;
+  height: 28rem;
+  max-height: 60vh;
+  border: 1px solid var(--color-line);
+}
+
+.learning-submission-preview__draft {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: var(--space-3) var(--submission-reading-inset) 0 calc(var(--submission-reading-inset) + var(--space-4));
+}
+
+/* The two reading disclosures share one rhythm; editor styling stays separate. */
+.learning-submission-preview__details { margin-block-start: var(--space-2); }
+
+.learning-submission-preview__details > details {
+  margin: 0;
+  border: 0;
+  border-block-end: 1px solid var(--color-line);
+  background: transparent;
+  box-shadow: none;
+}
+
+.learning-submission-preview__details > details > summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: var(--layout-control-min);
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: calc(var(--font-size-base) * var(--learning-unit-font-scale));
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.learning-submission-preview__details > details > summary::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(-1 * var(--space-4));
+  width: var(--space-2);
+  height: var(--space-2);
+  margin-inline: 0;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  flex-shrink: 0;
+}
+
+.learning-submission-preview__details > details[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.learning-submission-preview__details > details > summary::after { content: none; }
+
+.learning-submission-preview__details > details > summary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-text);
+  outline-offset: var(--focus-ring-offset);
+  box-shadow: none;
+}
+
+.learning-submission-preview__details .learning-criteria-details__summary-copy {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.learning-submission-preview__details .learning-criteria-details__count {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.learning-submission-preview__details .learning-response-panel__body {
+  max-width: var(--layout-reading-max);
+  padding: var(--space-2) 0 var(--space-4);
+}
+
+@media (max-width: 48rem) {
+  .learner-task-reading { --submission-reading-inset: var(--space-4); }
+  .learning-submission-preview { grid-template-columns: minmax(0, 1fr); }
+  .learning-submission-preview__actions { grid-column: 1; }
+  .learning-submission-preview__draft { flex-direction: column; align-items: stretch; }
+  .learning-submission-preview__draft .workspace-top-action { width: 100%; }
 }

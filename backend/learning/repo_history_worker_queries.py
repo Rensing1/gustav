@@ -20,6 +20,8 @@ def list_submissions(
     task_id: str,
     limit: int,
     offset: int,
+    intent: str | None = None,
+    submission_id: str | None = None,
 ) -> list[dict]:
     """Fetch the caller's submission history for a task.
 
@@ -32,6 +34,8 @@ def list_submissions(
         course_id: Course scope for the task, UUID string.
         task_id: Target task UUID.
         limit/offset: Pagination parameters (already clamped by use case).
+        intent: Optional filter applied before pagination for reading previews.
+        submission_id: Internal exact lookup, including files beyond the first page.
 
     Permissions:
         Caller must be enrolled in the course and the section must be
@@ -103,10 +107,12 @@ def list_submissions(
                  where course_id = %s
                    and task_id = %s
                    and student_sub = %s
+                   and (%s::text is null or intent = %s)
+                   and (%s::uuid is null or id = %s::uuid)
                  order by created_at desc, attempt_nr desc
                  limit %s offset %s
                 """,
-                (course_uuid, task_uuid, student_sub, int(limit), int(offset)),
+                (course_uuid, task_uuid, student_sub, intent, intent, submission_id, submission_id, int(limit), int(offset)),
             )
             rows = cur.fetchall()
 

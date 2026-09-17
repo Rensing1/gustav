@@ -6878,6 +6878,13 @@ paths:
             type: string
             format: uuid
         - in: query
+          name: intent
+          required: false
+          description: Optional intent filter, applied before ordering and pagination. Omission returns all submissions; invalid values return 400 with detail invalid_intent.
+          schema:
+            type: string
+            enum: [submit, feedback]
+        - in: query
           name: limit
           schema:
             type: integer

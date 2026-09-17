@@ -1,5 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
+  import LearningSubmissionPreview from "./LearningSubmissionPreview.svelte";
+  import type { SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
   import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
   import LearnerTaskContext from "$lib/components/learning-unit/LearnerTaskContext.svelte";
   import LearningReferenceDocument from "$lib/components/learning-unit/LearningReferenceDocument.svelte";
@@ -56,6 +58,8 @@
     readerScrollTop = 0,
     taskColumnRatio = null,
     historyByTask,
+    previewByTask = {},
+    onLoadSubmissionPreview = null,
     historyStateByTask = {},
     submittedTaskId = null,
     submissionMessage = null,
@@ -113,6 +117,8 @@
     readerScrollTop?: number;
     taskColumnRatio?: number | null;
     historyByTask: Record<string, LearningSubmission[]>;
+    previewByTask?: Record<string, SubmissionPreviewState>;
+    onLoadSubmissionPreview?: ((taskId: string) => void | Promise<void>) | null;
     historyStateByTask?: Record<string, SubmissionHistoryLoadState>;
     submittedTaskId?: string | null;
     submissionMessage?: string | null;
@@ -165,6 +171,17 @@
     // Reapplying stored props while WebKit is momentum-scrolling cancels the user's touch movement.
     restoredScrollSurfaces.add(surface);
     surface.scrollTop = scrollTop;
+  }
+
+  function hasNewerDraft(task: LearningTask): boolean {
+    const final = previewByTask[task.id]?.submission;
+    if (final?.intent !== "submit") return false;
+    const latest = historyByTask[task.id]?.[0];
+    // API timestamps have second precision; attempt numbers settle ties.
+    if (latest) return latest.intent === "feedback" && latest.attempt_nr > final.attempt_nr;
+    const intent = task.latest_submission_intent;
+    const createdAt = task.latest_submission_created_at;
+    return intent === "feedback" && Boolean(createdAt) && Date.parse(createdAt!) >= Date.parse(final.created_at);
   }
 
   function taskReturnDestination(): LearnerReturnDestination {
@@ -378,39 +395,52 @@
           {/if}
 
           <div class="learner-orientation__tasks" aria-label="Aufgaben">
-            {#each group.items.filter((item) => item.kind === "task") as item}
+            {#each group.items.filter((item) => item.kind === "task") as item (item.key)}
               {#if item.task}
                 {@const task = item.task}
-                <LearningTaskCard
-                  {learnerSub}
-                  {courseId}
-                  {task}
-                  taskTitle={item.title}
-                  contextLabel={null}
-                  {unitType}
-                  moduleId={item.moduleId ?? null}
-                  history={taskHistory(task.id)}
-                  historyState={taskHistoryState(task.id)}
-                  domId={`task-row-${task.id}`}
-                  expanded={true}
-                  compactLayout={true}
-                  submitted={submittedTaskId === task.id}
-                  message={submissionMessage}
-                  errorMessage={submissionErrorTaskId === task.id ? submissionErrorMessage : null}
-                  feedbackPending={feedbackPendingTaskId === task.id}
-                  feedbackStatusMessage={mode === "orienting" && feedbackStatusTaskId === task.id
-                    ? feedbackStatusMessage
-                    : null}
-                  pendingIntent={feedbackPendingTaskId === task.id ? pendingSubmissionIntent : null}
-                  submissionFocused={false}
-                  reviewPanelOpen={false}
-                  enhanceSubmit={enhanceTaskForm?.(task.id)}
-                  onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
-                  onRetryHistory={() => onRetryTaskHistory?.(task.id)}
-                  onEnterSubmissionWorkspace={() => onBeginTask(item.key, "text")}
-                  onEnterUploadWorkspace={() => onBeginTask(item.key, preferredMode(task))}
-                  onProgressPersisted={(submission) => onProgressPersisted?.(task.id, submission)}
-                />
+                <div class="learner-task-reading">
+                  <LearningTaskCard
+                    {learnerSub}
+                    {courseId}
+                    {task}
+                    taskTitle={item.title}
+                    contextLabel={null}
+                    {unitType}
+                    moduleId={item.moduleId ?? null}
+                    history={taskHistory(task.id)}
+                    historyState={taskHistoryState(task.id)}
+                    domId={`task-row-${task.id}`}
+                    expanded={true}
+                    compactLayout={true}
+                    submitted={submittedTaskId === task.id}
+                    message={submissionMessage}
+                    errorMessage={submissionErrorTaskId === task.id ? submissionErrorMessage : null}
+                    feedbackPending={feedbackPendingTaskId === task.id}
+                    feedbackStatusMessage={mode === "orienting" && feedbackStatusTaskId === task.id
+                      ? feedbackStatusMessage
+                      : null}
+                    pendingIntent={feedbackPendingTaskId === task.id ? pendingSubmissionIntent : null}
+                    submissionFocused={false}
+                    reviewPanelOpen={false}
+                    enhanceSubmit={enhanceTaskForm?.(task.id)}
+                    onDismissFeedbackStatus={() => onDismissFeedbackStatus?.(task.id)}
+                    onRetryHistory={() => onRetryTaskHistory?.(task.id)}
+                    onEnterSubmissionWorkspace={() => onBeginTask(item.key, "text")}
+                    onEnterUploadWorkspace={() => onBeginTask(item.key, preferredMode(task))}
+                    onProgressPersisted={(submission) => onProgressPersisted?.(task.id, submission)}
+                  />
+                  <LearningSubmissionPreview
+                    {courseId}
+                    taskId={task.id}
+                    taskTitle={item.title}
+                    hasSubmission={Boolean(task.has_submission || taskHistory(task.id).length || submittedTaskId === task.id)}
+                    state={previewByTask[task.id]}
+                    active={mode === "orienting"}
+                    newerDraft={hasNewerDraft(task)}
+                    onLoad={() => onLoadSubmissionPreview?.(task.id)}
+                    onContinueDraft={() => onBeginTask(item.key, preferredMode(task))}
+                  />
+                </div>
               {/if}
             {/each}
           </div>

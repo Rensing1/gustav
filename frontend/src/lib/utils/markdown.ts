@@ -75,3 +75,17 @@ export function renderMarkdown(raw: string | null | undefined): string {
     ALLOWED_ATTR: [...ALLOWED_ATTR]
   });
 }
+
+/** Readable noninteractive preview using the same grammar as the full renderer. */
+export function markdownPlainText(raw: string | null | undefined): string {
+  const tokens = markdown.parse(normalizeRawHtml(String(raw ?? "")), {});
+  function text(tokens: Token[]): string {
+    return tokens.map((token) => {
+      if (token.children) return text(token.children);
+      if (["text", "code_inline", "code_block", "fence", "image"].includes(token.type)) return token.content;
+      if (token.block || ["softbreak", "hardbreak"].includes(token.type)) return " ";
+      return "";
+    }).join("");
+  }
+  return text(tokens).replaceAll(EXPLICIT_BREAK_TOKEN, " ").replace(/\s+/g, " ").trim();
+}

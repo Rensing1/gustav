@@ -136,8 +136,13 @@ async def list_submissions(
     task_id: str,
     limit: int = 20,
     offset: int = 0,
+    intent: str | None = None,
 ):
-    """Return the caller's submission history for a task."""
+    """Read only the caller's visible snapshots, optionally filtered by intent.
+
+    Filtering precedes pagination so old final submissions remain discoverable.
+    Membership and release permissions are enforced by the use case/repository.
+    """
 
     user, error = _require_student(request)
     if error:
@@ -155,10 +160,13 @@ async def list_submissions(
         student_sub=str(user.get("sub", "")),
         limit=limit,
         offset=offset,
+        intent=intent,
     )
 
     try:
         submissions = _list_submissions_use_case()(_get_repo()).execute(input_data)
+    except ValueError:
+        return JSONResponse({"error": "bad_request", "detail": "invalid_intent"}, status_code=400, headers=_cache_headers_error())
     except PermissionError:
         return JSONResponse({"error": "forbidden"}, status_code=403, headers=_cache_headers_error())
     except LookupError:
@@ -202,8 +210,9 @@ async def get_submission_file(
                 course_id=course_id,
                 task_id=task_id,
                 student_sub=str(user.get("sub", "")),
-                limit=100,
+                limit=1,
                 offset=0,
+                submission_id=submission_id,
             )
         )
     except PermissionError:

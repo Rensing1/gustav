@@ -512,6 +512,8 @@ class DBLearningRepo:
         task_id: str,
         limit: int,
         offset: int,
+        intent: str | None = None,
+        submission_id: str | None = None,
     ) -> List[dict]:
         """Fetch the caller's submission history for a task."""
         return _repo_history_worker_queries.list_submissions(
@@ -522,6 +524,8 @@ class DBLearningRepo:
             task_id=task_id,
             limit=limit,
             offset=offset,
+            intent=intent,
+            submission_id=submission_id,
         )
 
     def get_task_kind_for_student(

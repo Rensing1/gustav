@@ -551,6 +551,8 @@ class _LearningRepoCombined(Protocol):  # pragma: no cover - typing aid
         task_id: str,
         limit: int,
         offset: int,
+        intent: str | None = None,
+        submission_id: str | None = None,
     ) -> list[dict]:
         ...
 

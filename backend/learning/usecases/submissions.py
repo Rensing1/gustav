@@ -29,6 +29,8 @@ class LearningSubmissionRepoProtocol(Protocol):
         task_id: str,
         limit: int,
         offset: int,
+        intent: str | None = None,
+        submission_id: str | None = None,
     ) -> list[dict]:
         ...
 
@@ -102,6 +104,9 @@ class ListSubmissionsInput:
     student_sub: str
     limit: int
     offset: int
+    intent: str | None = None
+    # Internal exact lookup for file routes, never a public list parameter.
+    submission_id: str | None = None
 
 
 class ListSubmissionsUseCase:
@@ -122,6 +127,13 @@ class ListSubmissionsUseCase:
             Same as create: caller must be an enrolled student with visibility
             to the released task. Violations surface as PermissionError/LookupError.
         """
+        if req.intent is not None and req.intent not in {"submit", "feedback"}:
+            raise ValueError("invalid_intent")
+        filters = {}
+        if req.intent is not None:
+            filters["intent"] = req.intent
+        if req.submission_id is not None:
+            filters["submission_id"] = req.submission_id
         limit = max(1, min(req.limit, 100))
         offset = max(0, req.offset)
         return self._repo.list_submissions(
@@ -130,6 +142,7 @@ class ListSubmissionsUseCase:
             task_id=req.task_id,
             limit=limit,
             offset=offset,
+            **filters,
         )
 
 

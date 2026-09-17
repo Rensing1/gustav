@@ -2,6 +2,14 @@
 
 ## 2026-09-17
 
+### Eigene Abgaben in der Leseansicht
+
+- feat(learning): Module und lineare Abschnitte zeigen eigene Abgaben direkt unter der Aufgabe. Drei Vorschauzeilen lassen sich dezent verlängern; Rückmeldung und qualitative Auswertung öffnen sich getrennt am Ende der Abgabe.
+- design(learning): Eigene Antworten erscheinen leicht eingerückt ohne zusätzliche Karte. Der gemeinsame Lesebereich erhält einen ruhigen Hintergrund, konsistente Ausrichtungen und abgestufte Metadaten. Aufgabenstellung und Offenlegungen sind besser lesbar; kurze Antworten vermeiden Leerflächen und bestehende Bearbeitungsaktionen treten zurück. Materialspalten bleiben auch auf schmalen Bildschirmen innerhalb der Lesebreite.
+- fix(learning): Die endgültige Abgabe bleibt neben neueren gespeicherten Entwürfen eindeutig erkennbar. Vorschauen laden bedarfsgerecht und unabhängig vom Bearbeitungsverlauf; lokale Editorentwürfe werden nicht als Abgabe angezeigt.
+- api(learning): Optionaler Intent-Filter vor der Pagination; authentifizierte Dateiabrufe finden auch ältere Abgaben außerhalb der ersten 100 Versuche. Keine Schemaänderung.
+
+
 ### Abmeldung und laufende Auth-Vorgänge
 
 - security(auth): Abmelden widerruft auch vorher gestartete und bereits beanspruchte OIDC-Vorgänge sowie noch nicht ausgelieferte Sitzungen des Browsers. Ein verspätetes Callback-Cookie kann die Abmeldung nicht rückgängig machen; neue ausdrückliche Anmeldungen bleiben möglich.

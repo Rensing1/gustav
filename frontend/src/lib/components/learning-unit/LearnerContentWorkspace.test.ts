@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import LearnerContentWorkspace from "./LearnerContentWorkspace.svelte";
 import type { ContentGroup } from "$lib/learning-unit/workspace";
+import type { LearningSubmission } from "$lib/types/learning";
 
 const groups: ContentGroup[] = [
   {
@@ -147,6 +148,16 @@ function baseProps() {
 }
 
 describe("LearnerContentWorkspace", () => {
+  it("recognizes a newer saved draft even when timestamps share the same second", () => {
+    const final: LearningSubmission = { id: "final", intent: "submit", kind: "text", text_body: "Endgültige Antwort.",
+      attempt_nr: 1, created_at: "2026-09-17T10:00:00Z", analysis_status: "completed" };
+    render(LearnerContentWorkspace, { ...baseProps(),
+      previewByTask: { "task-1": { status: "loaded", submission: final } },
+      historyByTask: { "task-1": [{ ...final, id: "draft", intent: "feedback", attempt_nr: 2 }, final] }
+    });
+    expect(screen.getByText("Neuerer Entwurf vorhanden")).toBeVisible();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });

@@ -2,6 +2,13 @@
 
 ## 2026-09-17
 
+### Abmeldung und laufende Auth-Vorgänge
+
+- security(auth): Abmelden widerruft auch vorher gestartete und bereits beanspruchte OIDC-Vorgänge sowie noch nicht ausgelieferte Sitzungen des Browsers. Ein verspätetes Callback-Cookie kann die Abmeldung nicht rückgängig machen; neue ausdrückliche Anmeldungen bleiben möglich.
+- fix(auth): Eine abgelaufene Sitzung wird während einer aktiven Refresh-Reservierung nicht vorzeitig gelöscht. Die Auflösung wartet begrenzt auf das Ergebnis oder liefert `503`; abgelaufene Tokens werden nicht verwendet.
+- db(auth): Additive Migration für beanspruchte Vorgänge und Browserbindung. Ersetzte Sitzungsschlüssel bleiben kurzzeitig als Zuordnung für verspätete Abmeldeanfragen erhalten, ohne Tokens und ohne Authentifizierungsrecht.
+- test(auth): Vollständiges Gate `auth-session-continuity` bestanden: 3.024 Backend- und 736 Frontend-Tests sowie echter Browser-Rundlauf mit verspätetem Callback, Abmeldung und Neuanmeldung. Zusätzlicher Registrierungs-/Reset-Rundlauf und Containerprüfung ebenfalls bestanden.
+
 ### Reparaturen aus dem Auth-Review
 
 - fix(auth): Auch ein abgeschlossener Refresh erhöht die Sitzungsversion. Veraltete Anfragen können dadurch keine verlängerte Sitzung löschen oder alte Tokens erneut verwenden; der Erneuerungsbedarf wird atomar geprüft.

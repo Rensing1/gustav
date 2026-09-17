@@ -93,4 +93,58 @@ test("@feature-acceptance shared sessions survive service and browser restarts w
   const context = await newBrowserContext(browser);
   try { await test.step("Neutraler Einstieg ohne SSO", async () => neutralJourney(await context.newPage())); }
   finally { await context.close(); }
+  await test.step("Abmeldung vor verspäteter Callback-Antwort", () => lateCallbackJourney(browser));
 });
+
+async function lateCallbackJourney(browser: Browser) {
+  const { login } = await import('./support/auth');
+  const email = e2eEmail('auth.late-callback');
+  await ensureLearnerUser(email, e2ePassword);
+  const context = await newBrowserContext(browser);
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  try {
+    const main = await context.newPage();
+    await login(main, email, e2ePassword);
+    const oldCookie = (await context.cookies()).find(cookie => cookie.name === 'gustav_session')!;
+    const late = await context.newPage();
+    let captured!: () => void;
+    const ready = new Promise<void>(resolve => { captured = resolve; });
+    await late.route('**/auth/login', async route => {
+      // Playwright intercepts only the first URL of a redirect chain. Follow
+      // the real SSO redirects manually so we can hold the callback response.
+      const start = await route.fetch({ maxRedirects: 0 });
+      const authorization = await context.request.get(start.headers().location, { maxRedirects: 0 });
+      expect(new URL(authorization.headers().location).pathname).toBe('/auth/callback');
+      const response = await context.request.get(authorization.headers().location, { maxRedirects: 0 });
+      expect(response.status()).toBe(302);
+      // route.fetch may update the shared cookie jar. Model the actual browser
+      // retaining its old cookie until the held response is delivered.
+      await context.addCookies([oldCookie]);
+      captured();
+      await held;
+      await route.fulfill({ response });
+    });
+    const navigation = late.goto('/auth/login');
+    await ready;
+    await main.goto('/auth/logout');
+    await main.getByRole('button', { name: 'Abmelden', exact: true }).click();
+    release();
+    await navigation;
+    await expect.poll(async () => (await main.request.get('/api/me')).status()).toBe(401);
+    // Finish the real IdP logout, including its confirmation when required.
+    const confirmation = main.locator('#kc-logout-confirm button[type=submit]');
+    if (await confirmation.isVisible()) await confirmation.click();
+    await expect(main).toHaveURL(/\/auth\/logout\/success/);
+    expect((await main.request.get('/api/me')).status()).toBe(401);
+    await late.unrouteAll({ behavior: 'wait' });
+    await main.getByRole('link', { name: 'Erneut anmelden' }).click();
+    await main.locator('input[name=username]').fill(email);
+    await main.locator('input[name=password]').fill(e2ePassword);
+    await main.locator('button[type=submit]').click();
+    await expect.poll(async () => (await main.request.get('/api/me')).status()).toBe(200);
+  } finally {
+    release();
+    await context.close();
+  }
+}

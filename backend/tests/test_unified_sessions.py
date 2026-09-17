@@ -282,8 +282,142 @@ def test_fresh_access_token_cannot_be_reserved_for_refresh(repo):
     assert repo.reserve_refresh(rec.session_id, rec.refresh_version) is None
 
 
-def test_expired_session_is_removed_without_refresh(repo, monkeypatch):
+def test_expired_session_is_removed_without_refresh(repo):
+    from backend.identity_access.unified_store import digest
     rec = record(repo)
-    monkeypatch.setattr(time, 'time', lambda: rec.expires_at + 1)
+    with repo.connect() as conn:
+        conn.execute("update public.app_sessions set expires_at=now()-interval '1 second' where session_id=%s", (digest(rec.session_id),))
     assert service(repo, lambda _: pytest.fail('Expired sessions must not refresh')).get(rec.session_id) is None
     assert repo.get(rec.session_id) is None
+
+
+def claimed_flow(repo, browser):
+    flow = repo.create_flow(browser=browser, mode='login', redirect='/learning', code_verifier='test', nonce='test')
+    assert repo.consume_flow(flow.state, browser)
+    return flow
+
+
+def test_logout_prevents_completion_of_already_claimed_flow(repo):
+    flow = claimed_flow(repo, 'revoked-browser')
+    repo.revoke_browser(None, 'revoked-browser')
+    values = service(repo, None).validate_tokens({}, SimpleNamespace(sub='synthetic-student'))
+    assert repo.complete_flow(flow.state, 'revoked-browser', values) is None
+
+
+@pytest.mark.parametrize('browser_cookie', ['response-browser', None, 'renewed-browser-cookie'])
+def test_logout_revokes_completed_callback_even_before_cookie_delivery(repo, browser_cookie):
+    old_flow = claimed_flow(repo, 'response-browser')
+    values = service(repo, None).validate_tokens({}, SimpleNamespace(sub='synthetic-student'))
+    old = repo.complete_flow(old_flow.state, 'response-browser', values)
+    flow = claimed_flow(repo, 'response-browser')
+    pending = repo.complete_flow(flow.state, 'response-browser', values, old.session_id)
+    assert repo.get(old.session_id) is None
+    try:
+        repo.revoke_browser(old.session_id, browser_cookie)
+        assert repo.get(pending.session_id) is None
+    finally:
+        repo.delete(old.session_id)
+        repo.delete(pending.session_id)
+
+
+def test_logout_leaves_other_browsers_and_allows_new_explicit_flow(repo):
+    values = service(repo, None).validate_tokens({}, SimpleNamespace(sub='synthetic-student'))
+    foreign_flow = claimed_flow(repo, 'other-browser')
+    foreign = repo.complete_flow(foreign_flow.state, 'other-browser', values)
+    fresh = None
+    try:
+        repo.revoke_browser(None, 'local-browser')
+        assert repo.get(foreign.session_id)
+        new_flow = claimed_flow(repo, 'local-browser')
+        fresh = repo.complete_flow(new_flow.state, 'local-browser', values)
+        assert fresh is not None
+        assert repo.complete_flow(new_flow.state, 'local-browser', values) is None
+    finally:
+        repo.delete(foreign.session_id)
+        if fresh:
+            repo.delete(fresh.session_id)
+
+
+def test_completion_requires_claim_and_same_browser(repo):
+    flow = repo.create_flow(browser='owner-browser', mode='login', redirect='/', code_verifier='test', nonce='test')
+    values = service(repo, None).validate_tokens({}, SimpleNamespace(sub='synthetic-student'))
+    assert repo.complete_flow(flow.state, 'owner-browser', values) is None
+    assert repo.consume_flow(flow.state, 'owner-browser')
+    assert repo.complete_flow(flow.state, 'foreign-browser', values) is None
+
+
+def test_expiry_reader_waits_for_active_refresh_and_uses_extended_session(repo, monkeypatch):
+    from backend.identity_access.unified_store import digest
+    rec = record(repo)
+    version = repo.reserve_refresh(rec.session_id, rec.refresh_version)
+    with repo.connect() as conn:
+        conn.execute('update public.app_sessions set expires_at=now()-interval \'1 second\' where session_id=%s', (digest(rec.session_id),))
+    values = service(repo, None).validate_tokens({}, rec)
+    def complete(_seconds):
+        assert repo.finish_refresh(rec.session_id, version, values)
+    monkeypatch.setattr(time, 'sleep', complete)
+    result = service(repo, None).get(rec.session_id)
+    assert result is not None
+    assert result.access_token == 'fresh-access'
+
+
+def test_expiry_during_stalled_refresh_returns_503_then_expires_after_lease(repo, monkeypatch):
+    from backend.identity_access.unified_store import digest
+    rec = record(repo)
+    repo.reserve_refresh(rec.session_id, rec.refresh_version)
+    with repo.connect() as conn:
+        conn.execute('update public.app_sessions set expires_at=now()-interval \'1 second\' where session_id=%s', (digest(rec.session_id),))
+    clock = [0.0]
+    monkeypatch.setattr(time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(time, 'sleep', lambda seconds: clock.__setitem__(0, clock[0]+1))
+    with pytest.raises(SessionUnavailable):
+        service(repo, None).get(rec.session_id)
+    assert repo.get(rec.session_id)
+    with repo.connect() as conn:
+        conn.execute('update public.app_sessions set refresh_locked_until=now()-interval \'1 second\' where session_id=%s', (digest(rec.session_id),))
+    assert service(repo, None).get(rec.session_id) is None
+
+
+def test_concurrent_callback_commit_and_logout_never_leave_usable_credentials(repo):
+    values = service(repo, None).validate_tokens({}, SimpleNamespace(sub='synthetic-student'))
+    for index in range(6):
+        browser = f'commit-logout-race-{index}'
+        first = claimed_flow(repo, browser)
+        old = repo.complete_flow(first.state, browser, values)
+        flow = claimed_flow(repo, browser)
+        barrier = threading.Barrier(2)
+        def complete():
+            barrier.wait(timeout=5)
+            return repo.complete_flow(flow.state, browser, values, old.session_id)
+        def logout():
+            barrier.wait(timeout=5)
+            repo.revoke_browser(old.session_id, browser)
+        result = None
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                completed, revoked = pool.submit(complete), pool.submit(logout)
+                result = completed.result(timeout=5)
+                revoked.result(timeout=5)
+            assert repo.get(old.session_id) is None
+            assert result is None or repo.get(result.session_id) is None
+        finally:
+            repo.delete(old.session_id)
+            if result:
+                repo.delete(result.session_id)
+
+
+def test_replaced_cookie_cannot_be_restored_by_its_old_refresh(repo):
+    from backend.identity_access.unified_store import digest
+    rec = record(repo)
+    version = repo.reserve_refresh(rec.session_id, rec.refresh_version)
+    flow = claimed_flow(repo, 'replacement-browser')
+    values = service(repo, None).validate_tokens({}, rec)
+    replacement = repo.complete_flow(flow.state, 'replacement-browser', values, rec.session_id)
+    try:
+        assert repo.get(rec.session_id) is None
+        assert not repo.finish_refresh(rec.session_id, version, values)
+        with repo.connect() as conn:
+            row = conn.execute('select access_token,refresh_token,id_token from public.app_sessions where session_id=%s', (digest(rec.session_id),)).fetchone()
+        assert row == dict(access_token=None, refresh_token=None, id_token=None)
+    finally:
+        repo.delete(replacement.session_id)

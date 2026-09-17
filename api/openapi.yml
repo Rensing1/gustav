@@ -7610,6 +7610,8 @@ paths:
       - Auth
       operationId: authCallback
       summary: Consume browser-bound state and create the shared backend session
+      x-security-notes:
+        - "Logout revokes pending and claimed browser flows and their sessions, including sessions whose callback response is still in flight."
       security: []
       parameters:
       - in: query
@@ -7648,7 +7650,7 @@ paths:
           description: Authentication infrastructure temporarily unavailable
       description: Consume a browser-bound, single-use state within 15 minutes. Success requires code and state; an OIDC error callback requires error and state. Validate
         PKCE, nonce, issuer, ID-token audience gustav-web, access-token audience gustav-api and signature/time claims. Set one host-only Secure HttpOnly SameSite=Lax
-        browser-session cookie.
+        browser-session cookie. Session creation is atomic with a final check that the claimed flow has not been revoked by logout. A revoked flow receives 400 (or the existing safe HTML error redirect), never a new usable session.
   /auth/problem:
     get:
       tags: [Auth]

@@ -52,15 +52,85 @@ class UnifiedSessionRepository:
     def connect(self):
         return psycopg.connect(self.dsn, connect_timeout=5, row_factory=dict_row)
 
+    @staticmethod
+    def _insert_session(conn, sid: str, values: dict, browser_hash: str | None = None):
+        conn.execute(
+            "insert into public.app_sessions (session_id,sub,roles,name,id_token,access_token,refresh_token,access_expires_at,expires_at,browser_hash) "
+            "values (%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),to_timestamp(%s),%s)",
+            (digest(sid), values['sub'], Json(values['roles']), values['name'], values['id_token'],
+             values['access_token'], values['refresh_token'], values['access_expires_at'], values['expires_at'], browser_hash),
+        )
+
     def create(self, *, sub, roles, name, id_token, access_token, refresh_token, access_expires_at, expires_at):
         sid = secrets.token_urlsafe(32)
+        values = dict(sub=sub, roles=roles, name=name, id_token=id_token, access_token=access_token,
+                      refresh_token=refresh_token, access_expires_at=access_expires_at, expires_at=expires_at)
         with self.connect() as conn:
-            conn.execute(
-                "insert into public.app_sessions (session_id,sub,roles,name,id_token,access_token,refresh_token,access_expires_at,expires_at) "
-                "values (%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),to_timestamp(%s))",
-                (digest(sid), sub, Json(roles), name, id_token, access_token, refresh_token, access_expires_at, expires_at),
-            )
+            self._insert_session(conn, sid, values)
         return self.get(sid)
+
+    def complete_flow(self, state: str, browser: str, values: dict, old_sid: str | None = None):
+        """Issue credentials only while the claimed browser flow is still live.
+
+        Share the short browser lock with logout. No token I/O occurs here.
+        A logout that wins afterwards also removes this new session, even if
+        its Set-Cookie response has not reached the browser yet.
+        """
+        sid, binding = secrets.token_urlsafe(32), digest(browser)
+        with self.connect() as conn:
+            if old_sid:
+                conn.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))", ('session:' + digest(old_sid),))
+            conn.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))", (binding,))
+            flow = conn.execute(
+                "delete from public.auth_flows where state_hash=%s and browser_hash=%s "
+                "and claimed_at is not null and expires_at>now() and mode!='logout' returning state_hash",
+                (digest(state), binding),
+            ).fetchone()
+            if not flow:
+                return None
+            self._insert_session(conn, sid, values, binding)
+            if old_sid:
+                # Retain only a short revocation link for requests carrying the old
+                # cookie. Clear credentials; this row can no longer authenticate.
+                conn.execute(
+                    "update public.app_sessions set access_token=null,refresh_token=null,id_token=null,"
+                    "browser_hash=%s,expires_at=now()+interval '15 minutes',"
+                    "refresh_version=refresh_version+1,refresh_locked_until=null,retry_after=null where session_id=%s",
+                    (binding, digest(old_sid)),
+                )
+        return self.get(sid)
+
+    def revoke_browser(self, sid: str | None, browser: str | None):
+        """Revoke flows and issued sessions, including undelivered replacements.
+
+        The old session's binding covers an expired/replaced browser cookie.
+        Ordered locks prevent deadlocks when those two bindings differ.
+        """
+        with self.connect() as conn:
+            # Freeze the old-cookie revocation link before resolving browser locks.
+            if sid:
+                conn.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))", ('session:' + digest(sid),))
+            row = conn.execute("select browser_hash from public.app_sessions where session_id=%s",
+                               (digest(sid or ''),)).fetchone()
+            bindings = {digest(browser)} if browser else set()
+            if row and row['browser_hash']:
+                bindings.add(row['browser_hash'])
+            for binding in sorted(bindings):
+                conn.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))", (binding,))
+            conn.execute("delete from public.auth_flows where browser_hash=any(%s)", (list(bindings),))
+            conn.execute("delete from public.app_sessions where browser_hash=any(%s) or session_id=%s",
+                         (list(bindings), digest(sid or '')))
+
+    def delete_expired(self, sid: str, version: int) -> bool:
+        """Expire only an unchanged row without an active token renewal owner."""
+        with self.connect() as conn:
+            result = conn.execute(
+                "delete from public.app_sessions where session_id=%s and refresh_version=%s "
+                "and expires_at<=clock_timestamp() "
+                "and (refresh_locked_until is null or refresh_locked_until<=clock_timestamp())",
+                (digest(sid), version),
+            )
+            return result.rowcount == 1
 
     def get(self, sid: str) -> TokenSession | None:
         with self.connect() as conn:
@@ -133,6 +203,7 @@ class UnifiedSessionRepository:
             # A short per-browser lock bounds parallel flow creation, not token HTTP calls.
             conn.execute("select pg_advisory_xact_lock(hashtextextended(%s,0))", (binding,))
             conn.execute("delete from public.auth_flows where expires_at<now()")
+            conn.execute("delete from public.app_sessions where access_token is null and expires_at<now()")
             conn.execute(
                 "delete from public.auth_flows where state_hash in (select state_hash from public.auth_flows "
                 "where browser_hash=%s order by created_at desc offset 2)", (binding,),
@@ -146,7 +217,8 @@ class UnifiedSessionRepository:
     def consume_flow(self, state: str, browser: str) -> AuthFlow | None:
         with self.connect() as conn:
             row = conn.execute(
-                "delete from public.auth_flows where state_hash=%s and browser_hash=%s and expires_at>now() "
+                "update public.auth_flows set claimed_at=now() where state_hash=%s and browser_hash=%s "
+                "and expires_at>now() and claimed_at is null "
                 "returning mode,redirect_path,code_verifier,nonce", (digest(state), digest(browser)),
             ).fetchone()
         return AuthFlow(state, row['mode'], row['redirect_path'], row['code_verifier'], row['nonce']) if row else None

@@ -133,10 +133,9 @@ def auth_callback(request: Request, state: str | None = None, code: str | None =
     try:
         tokens = runtime.oidc_client.exchange_code_for_tokens(code=code, code_verifier=flow.code_verifier)
         values = session_values(tokens, runtime.oidc_config, nonce=flow.nonce)
-        session = runtime.session_repository.create(**values)
-        old = request.cookies.get(SESSION_COOKIE_NAME)
-        if old:
-            runtime.session_repository.delete(old)
+        session = runtime.session_repository.complete_flow(state, browser, values, request.cookies.get(SESSION_COOKIE_NAME))
+        if session is None:
+            return _error(request, 400, 'invalid_code_or_state')
     except SessionInvalid:
         return _error(request, 400, 'invalid_token')
     except Exception:
@@ -162,8 +161,7 @@ def auth_logout(request: Request):
     sid = request.cookies.get(SESSION_COOKIE_NAME)
     try:
         session = runtime.session_repository.get(sid) if sid else None
-        if sid:
-            runtime.session_repository.delete(sid)
+        runtime.session_repository.revoke_browser(sid, request.cookies.get(BROWSER_COOKIE))
     except Exception:
         return _error(request, 503, 'auth_unavailable')
     browser = request.cookies.get(BROWSER_COOKIE) or secrets.token_urlsafe(32)

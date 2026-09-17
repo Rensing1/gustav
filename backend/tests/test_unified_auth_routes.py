@@ -167,3 +167,23 @@ def test_failed_idp_logout_preserves_local_revocation_and_never_claims_success(c
     assert response.headers['location'] == '/auth/problem?reason=local_logout_only'
     assert repo.get(rec.session_id) is None
     assert client.get('/auth/continue').headers['location'].startswith('/?')
+
+
+def test_logout_during_callback_prevents_new_cookie(client, repo, monkeypatch):
+    from backend.tests.test_unified_sessions import service
+    module = importlib.import_module('backend.web.routes.auth')
+    old = record(repo, expired=False)
+    client.cookies.set('gustav_session', old.session_id)
+    response = client.get('/auth/login')
+    state = parse_qs(urlsplit(response.headers['location']).query)['state'][0]
+    values = service(repo, None).validate_tokens({}, old)
+    def exchange(**kwargs):
+        logout = client.post('/auth/logout', headers={'origin':'https://app.localhost'})
+        assert logout.status_code == 302
+        return {}
+    monkeypatch.setattr(client.app.state.runtime.oidc_client, 'exchange_code_for_tokens', exchange)
+    monkeypatch.setattr(module, 'session_values', lambda *args, **kwargs: values)
+    result = client.get('/auth/callback', params={'state':state, 'code':'synthetic'})
+    assert result.status_code == 400
+    assert 'gustav_session=' not in result.headers.get('set-cookie', '')
+    assert repo.get(old.session_id) is None

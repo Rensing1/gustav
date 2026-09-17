@@ -58,11 +58,8 @@ import { mountAjaxRoutes } from "./routes/ajax.mjs";
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const gustavWebInternalBase = process.env.GUSTAV_WEB_INTERNAL_BASE || "http://web:8000";
-const gustavFrontendInternalBase = process.env.GUSTAV_FRONTEND_INTERNAL_BASE || "http://gustav-frontend:3000";
 const sessionCookieName = process.env.SESSION_COOKIE_NAME || "gustav_session";
-const frontendSessionCookieName = process.env.FRONTEND_SESSION_COOKIE_NAME || "gustav_bff_session";
 const authCacheTtlSeconds = Number.parseInt(process.env.AUTH_CACHE_TTL_SECONDS || "30", 10);
-const AUTH_CACHE_MAX_ENTRIES = parseMaxEntries(process.env.AUTH_CACHE_MAX_ENTRIES, 1000);
 const H5P_AUTH_CACHE_MAX_ENTRIES = parseMaxEntries(process.env.H5P_AUTH_CACHE_MAX_ENTRIES, 5000);
 const storageRoot = process.env.H5P_STORAGE_ROOT || "/data/h5p";
 const uploadMaxBytes = Number.parseInt(
@@ -78,9 +75,7 @@ const upstreamFetchTimeoutMs =
   Number.isFinite(upstreamFetchTimeoutMsRaw) && upstreamFetchTimeoutMsRaw > 0 ? upstreamFetchTimeoutMsRaw : 5000;
 const authForwardingOptions = {
   gustavWebInternalBase,
-  gustavFrontendInternalBase,
   sessionCookieName,
-  frontendSessionCookieName,
   timeoutMs: upstreamFetchTimeoutMs,
 };
 const debugHtmlEnabled = debugPagesEnabled({
@@ -108,15 +103,10 @@ const storageDirs = buildStorageDirs(storageRoot);
  * Cache auth lookups for short bursts (editor/player loads many assets quickly).
  * Key: session id. Value: { expiresAtMs, payload }
  */
-const authCache = new Map();
 const requireAuth = createRequireAuth({
   h5pInternalSharedSecret,
   sessionCookieName,
-  frontendSessionCookieName,
-  authCacheTtlSeconds,
-  authCacheMaxEntries: AUTH_CACHE_MAX_ENTRIES,
   authForwardingOptions,
-  authCache,
 });
 
 /**
@@ -331,11 +321,11 @@ async function main() {
   });
 
   mountPlayerRoutes(app, {
-    h5pPlayer, requireDebugHtmlEnabled, reviewTokenSecret, sessionCookieName, frontendSessionCookieName, h5pContentAccessCache, authCacheTtlSeconds, H5P_AUTH_CACHE_MAX_ENTRIES, authForwardingOptions,
+    h5pPlayer, requireDebugHtmlEnabled, reviewTokenSecret, sessionCookieName, h5pContentAccessCache, authCacheTtlSeconds, H5P_AUTH_CACHE_MAX_ENTRIES, authForwardingOptions,
   });
 
   mountAjaxRoutes(app, {
-    h5pAjax, h5pEditor, maybeParseAjaxFiles, h5pAjaxExpressRouter, sessionCookieName, frontendSessionCookieName, gustavWebInternalBase, gustavFrontendInternalBase, upstreamFetchTimeoutMs, finishedForwardingMetrics,
+    h5pAjax, h5pEditor, maybeParseAjaxFiles, h5pAjaxExpressRouter, sessionCookieName, gustavWebInternalBase, upstreamFetchTimeoutMs, finishedForwardingMetrics,
   });
 
   // Central error handler (defense-in-depth).

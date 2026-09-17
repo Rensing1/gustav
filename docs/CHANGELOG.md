@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-17
+
+### Gemeinsame Authentifizierung
+
+- refactor(auth): FastAPI übernimmt OIDC, eine gemeinsame PostgreSQL-Sitzung, koordinierten Refresh und geschützte Abmeldung. SvelteKit und H5P verwenden dieselbe Sitzung; Tokenverwaltung und Synchronisation im Frontend entfallen.
+- fix(auth): Temporäre Infrastrukturfehler erhalten Sitzungen und liefern `503`. Parallele Prozesse teilen einen Refresh; verspätete Antworten können eine Abmeldung nicht rückgängig machen. Homepage und geschützte Seiten stellen gültiges SSO automatisch und begrenzt wieder her.
+- feat(auth): Direkte Registrierung mit vollständigen aktiven Passwortanforderungen und erhaltenen sicheren Eingaben. Remember-me erlaubt freiwillig bis zu 30 Tage. Passwort-Reset verwendet den unterstützten OIDC-Einstieg.
+- security(auth): Browsergebundene einmalige Vorgänge, verpflichtende API-Audience, strenger Herkunftsschutz für Cookie-Schreibzugriffe und geschützte POST-Abmeldung. Auch beim Abmelden bleiben Tokens im Backend; ein IdP-Ausfall wird als unvollständige Abmeldung mit ausdrücklicher Wiederholung angezeigt.
+- upgrade(keycloak): Version 26.7.3 mit angepasstem BCrypt-Provider und persistenten Sitzungen; getrennte lokale Upgrade-Abnahme mit geprüfter Sicherung und Wiederherstellungsprobe.
+- test(auth): Alle fünf gezielten Feature-Gates und die Containerprüfung bestanden. Letzte gemeinsame Basis: 2.998 Backend-Tests und 735 Frontend-Tests. Echte Registrierung, Passwort-Reset, Dienst-/Browserneustarts, Abmeldung bei Ausfall, Einladung sowie Entwurf-/Upload-/H5P-Erhalt geprüft.
+
 ## 2026-09-13
 
 ### Ruhigere Druckfassungen

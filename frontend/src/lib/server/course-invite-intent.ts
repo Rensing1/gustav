@@ -13,7 +13,7 @@ export type CourseInviteIntent = {
 
 function signature(payload: string, secret: string): string {
   if (Buffer.byteLength(secret || "", "utf8") < 32 || secret.startsWith("CHANGE_ME")) {
-    throw new Error("frontend_session_secret_invalid");
+    throw new Error("course_invite_intent_secret_invalid");
   }
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
@@ -56,7 +56,7 @@ export function parseCourseInviteIntent(
 }
 
 function secret(): string {
-  return env.FRONTEND_SESSION_SECRET || "";
+  return env.COURSE_INVITE_INTENT_SECRET || "";
 }
 
 function secureCookie(): boolean {

@@ -61,7 +61,7 @@ def test_h5p_student_visibility_check_uses_access_check_endpoint() -> None:
 
     block = _extract_block(
         js,
-        start_token="export async function checkLearningH5PContentAccess(",
+        start_token="export function checkLearningH5PContentAccess(",
         end_token="",
     )
 

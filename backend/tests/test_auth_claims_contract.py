@@ -86,4 +86,4 @@ def test_main_delegates_pure_claim_mapping_to_auth_claims_module() -> None:
     assert "from backend.web.auth_claims import" in auth_middleware_source
     assert "primary_role(" in auth_middleware_source
     assert "user_context_from_claims(" in auth_middleware_source
-    assert "from backend.web.auth_claims import" in auth_bridge_source
+    assert "id_token" not in auth_bridge_source

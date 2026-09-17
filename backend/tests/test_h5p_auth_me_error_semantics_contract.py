@@ -24,7 +24,7 @@ def _extract_block(src: str, *, start_token: str, end_token: str) -> str:
     return src[start:end]
 
 
-def test_h5p_auth_me_upstream_unavailable_has_distinct_error() -> None:
+def test_h5p_auth_me_auth_unavailable_has_distinct_error() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     guards_path = repo_root / "h5p-service" / "lib" / "runtime_guards.mjs"
     assert guards_path.is_file(), f"Missing H5P runtime guards helper: {guards_path}"
@@ -33,5 +33,5 @@ def test_h5p_auth_me_upstream_unavailable_has_distinct_error() -> None:
     block = _extract_block(js, start_token="if (!me.ok)", end_token="req.gustavMe = me.payload;")
 
     assert 'error: "unauthenticated"' in block
-    assert 'error: "upstream_unavailable"' in block
+    assert 'error: "auth_unavailable"' in block
     assert '502, { error: "unauthenticated" }' not in block

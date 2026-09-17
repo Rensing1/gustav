@@ -45,7 +45,7 @@ Learning-Worker --> Learning Use Cases --> DSPy-Adapter --> konfigurierter KI-An
 
 - App-Shell, Navigation und rollenbezogene Arbeitsräume;
 - serverseitige Seitenkomposition und View Models;
-- kurzlebige Browser-BFF-Sessions und Token-Aktualisierung;
+- Weiterleitung des gemeinsamen Sitzungscookies ohne eigene Tokens oder Sitzungsverwaltung;
 - sichere Weiterleitung von Lese- und Schreibzugriffen an FastAPI;
 - UI-Zustände, Formulare, barrierefreie Rückmeldungen und progressive Interaktion.
 
@@ -56,7 +56,7 @@ Die Produkträume `learning`, `teaching`, `diagnostics` und `live` werden aussch
 `backend/web/` ist der HTTP- und Kompositionsadapter. FastAPI übernimmt:
 
 - öffentliche, durch OpenAPI beschriebene Fachendpunkte;
-- interne Browser-BFF-Endpunkte und den Auth-Bridge-Vertrag;
+- OIDC-Anmeldung, gemeinsame Sitzungen, Token-Erneuerung und geschützte Abmeldung;
 - Authentifizierungs- und Autorisierungsgrenzen;
 - DTO-Validierung, HTTP-Fehlerabbildung und sichere Cache-Header;
 - Wiring von Repositories, Storage, Workern und Laufzeitkonfiguration.
@@ -109,7 +109,7 @@ Die Namenssperre benötigt das explizit verwaltete Keycloak-Profilattribut `name
 
 Die fachliche Verantwortung ist in vier Bounded Contexts aufgeteilt:
 
-- `identity_access`: Keycloak, Identität, Rollen, App- und BFF-Sessions sowie CLI-Tokens;
+- `identity_access`: Keycloak, Identität, Rollen, gemeinsame GUSTAV-Sitzungen sowie CLI-Tokens;
 - `teaching`: Kurse, Mitgliedschaften, Kurseinladungen, Lerneinheiten, Modulgraphen, Inhalte und Freigaben;
 - `learning`: Lernwege, Abgaben, Dialoge, KI-Verarbeitung, Portfolio, Exporte und Übungssitzungen;
 - `diagnostics`: lesende, datensparsame Projektionen für Unterrichtsdiagnostik und Live-Begleitung.
@@ -147,8 +147,8 @@ Direkte Datenbankverbindungen oder Supabase-Client-Erzeugung aus Routen sind ver
 ### Authentifizierter Browserzugriff
 
 1. Der Browser ruft eine SvelteKit-Seite auf.
-2. SvelteKit liest die serverseitige BFF-Session und erneuert Tokens bei Bedarf.
-3. Der Browser-BFF ruft FastAPI mit der dafür vorgesehenen internen oder öffentlichen Authentifizierung auf.
+2. SvelteKit leitet das Cookie `gustav_session` beim serverseitigen Backend-Aufruf weiter.
+3. FastAPI prüft die gemeinsame PostgreSQL-Sitzung und erneuert Tokens bei Bedarf koordiniert. Cookie-Schreibzugriffe benötigen eine geprüfte Browserherkunft.
 4. FastAPI bildet die Identität auf einen minimalen User Context aus `sub`, Rollen und Anzeigename ab.
 5. Repository und Datenbank erzwingen Ownership, Mitgliedschaft, Sichtbarkeit und RLS.
 6. SvelteKit rendert das View Model; private Antworten bleiben `private, no-store`.

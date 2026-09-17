@@ -42,18 +42,10 @@ def test_auth_login_redirect_pattern_rejects_double_slash_and_traversal() -> Non
     assert rx.fullmatch("/a/../b") is None
 
 
-def test_auth_logout_redirect_pattern_rejects_double_slash_and_traversal() -> None:
-    spec = _load_spec()
-    pattern = _redirect_pattern(spec, path="/auth/logout")
-    rx = re.compile(pattern)
-
-    assert rx.fullmatch("/") is not None
-    assert rx.fullmatch("/auth/logout/success") is not None
-
-    assert rx.fullmatch("//") is None
-    assert rx.fullmatch("/a//b") is None
-    assert rx.fullmatch("/..") is None
-    assert rx.fullmatch("/a/../b") is None
+def test_logout_callback_target_is_not_user_selectable() -> None:
+    item = _load_spec()["paths"]["/auth/logout"]
+    assert not item["get"].get("parameters")
+    assert "post" in item
 
 
 def test_auth_register_redirect_pattern_rejects_double_slash_and_traversal() -> None:

@@ -57,7 +57,7 @@ class StubSubmissionRepo:
 
 
 async def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://local")
+    return httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test")
 
 
 @pytest.mark.anyio
@@ -74,7 +74,7 @@ async def test_internal_upload_stub_writes_file_and_returns_sha(tmp_path: Path, 
 
     async with (await _client()) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, student.session_id)
-        r = await c.put(url, content=data, headers={"Content-Type": "image/png", "Origin": "http://local"})
+        r = await c.put(url, content=data, headers={"Content-Type": "image/png", "Origin": "http://test"})
 
     assert r.status_code == 200
     body = r.json()
@@ -111,7 +111,7 @@ async def test_internal_upload_stub_default_root_is_read_by_submission_validatio
         upload = await c.put(
             f"/api/learning/internal/upload-stub?storage_key={storage_key}",
             content=payload,
-            headers={"Content-Type": "image/png", "Origin": "http://local"},
+            headers={"Content-Type": "image/png", "Origin": "http://test"},
         )
         assert upload.status_code == 200
 
@@ -124,7 +124,7 @@ async def test_internal_upload_stub_default_root_is_read_by_submission_validatio
                 "size_bytes": len(payload),
                 "sha256": sha256(payload).hexdigest(),
             },
-            headers={"Origin": "http://local", "Idempotency-Key": f"stub-{uuid.uuid4().hex[:12]}"},
+            headers={"Origin": "http://test", "Idempotency-Key": f"stub-{uuid.uuid4().hex[:12]}"},
         )
 
     assert response.status_code == 202
@@ -163,6 +163,6 @@ async def test_internal_upload_stub_returns_404_when_disabled(monkeypatch: pytes
         res = await c.put(
             "/api/learning/internal/upload-stub?storage_key=submissions/test/file.png",
             content=b"x",
-            headers={"Origin": "http://local", "Content-Type": "image/png"},
+            headers={"Origin": "http://test", "Content-Type": "image/png"},
         )
     assert res.status_code == 404

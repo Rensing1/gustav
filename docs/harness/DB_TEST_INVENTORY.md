@@ -11,9 +11,9 @@ Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Te
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 147
+- Inventarisierte Dateien: 146
 - Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 0
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 105
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 104
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 14
 - Statische Migrationstests ohne echte DB-Verbindung: 11
@@ -65,7 +65,6 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/migration/test_unit_module_edges_update_hardening.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_verify_db_preflight.py | migration-static | - | no-db-marker-needed | migration | Keep static migration contract unless it opens a DB connection |
 | backend/tests/test_api_cache_headers_materials_tasks.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
-| backend/tests/test_api_me_with_db_session_store.py | real-db | db_write | marked-db | env:SESSION_TEST_DSN | Keep marker and isolation visible |
 | backend/tests/test_app_sessions_rls_live.py | real-db | db_write | marked-db | env:RLS_TEST_DSN, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, rls | Keep marker and isolation visible |
 | backend/tests/test_app_storage_wiring.py | storage-or-config | - | no-db-marker-needed | supabase | Keep service-free unless it reaches the real DB |
 | backend/tests/test_cli_diagnostics_api.py | real-db | db_write | marked-db | requires-db, rls | Keep marker and isolation visible |
@@ -74,7 +73,6 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/test_course_invitations_api.py | real-db | db_write | marked-db | psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/test_db_required_gate_contract.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_db_security_roles.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_DSN, psycopg-connect, psycopg-import | Keep marker and isolation visible |
-| backend/tests/test_db_session_store.py | real-db | db_write | marked-db | env:SESSION_TEST_DSN | Keep marker and isolation visible |
 | backend/tests/test_feature_acceptance_tool.py | storage-or-config | - | no-db-marker-needed | supabase | Keep service-free unless it reaches the real DB |
 | backend/tests/test_filius_migrations_contract.py | migration-static | - | no-db-marker-needed | migration, supabase | Keep static migration contract unless it opens a DB connection |
 | backend/tests/test_gustav_cli_sync_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
@@ -164,6 +162,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/test_teaching_visibility_csrf.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_teaching_visibility_db_constraints.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_DSN, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/test_testing_environment_guards.py | real-db | db_write | marked-db | env:SERVICE_ROLE_DSN, supabase | Keep marker and isolation visible |
+| backend/tests/test_unified_sessions.py | real-db | db_write | marked-db | env:SESSION_TEST_DSN, psycopg-connect, psycopg-import | Keep marker and isolation visible |
 | backend/tests/utils/__init__.py | test-infra | - | no-db-marker-needed | - | Keep pytest infrastructure marker-free |
 | backend/tests/utils/db.py | test-infra | - | no-db-marker-needed | env:DATABASE_URL, psycopg-connect, psycopg-import | Keep pytest infrastructure marker-free |
 | backend/tests/utils/db_isolation.py | test-infra | - | no-db-marker-needed | - | Keep pytest infrastructure marker-free |

@@ -47,7 +47,7 @@ def test_openapi_documents_cli_token_profile_endpoints() -> None:
         ("/api/app/profile/cli-tokens/{token_id}", "delete"),
     ):
         op = spec["paths"][path][method]
-        assert op["security"] == [{"bearerAuth": []}]
+        assert op["security"] == [{"cookieAuth": []}, {"bearerAuth": []}]
         assert op["x-permissions"] == {"requiredRole": "teacher"}
         assert "403" in op["responses"]
         assert {"cliTokenAuth": []} not in op["security"]

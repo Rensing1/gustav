@@ -185,6 +185,7 @@ async def test_upload_intent_forbidden_for_teacher(monkeypatch: pytest.MonkeyPat
         r = await c.post(
             f"/api/learning/courses/{uuid.uuid4()}/tasks/{uuid.uuid4()}/upload-intents",
             json={"kind": "image", "filename": "x.png", "mime_type": "image/png", "size_bytes": 128},
+            headers={"Origin": "http://test"},
         )
     assert r.status_code == 404
 

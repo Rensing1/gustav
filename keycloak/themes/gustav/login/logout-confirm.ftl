@@ -8,6 +8,7 @@
   </#if>
 
   <form id="kc-logout-confirm" class="kc-form" action="${url.logoutConfirmAction}" method="post">
+    <input type="hidden" name="session_code" value="${logoutConfirm.code}">
     <button class="btn btn-primary kc-submit workspace-button" type="submit">
       ${msg("gustavLogoutConfirmSubmit")}
     </button>

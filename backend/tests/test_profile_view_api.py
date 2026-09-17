@@ -460,3 +460,14 @@ async def test_profile_cli_token_create_invalid_payload_returns_contract_400(
     assert body["error"] == "bad_request"
     assert "detail" in body
     assert store.list_tokens("teacher-cli-profile") == []
+
+
+async def test_display_name_update_refreshes_shared_session_projection(app, monkeypatch):
+    _install_identity(monkeypatch, app, {'attributes': {'display_name': ['Vorher']}})
+    store = app.state.runtime.session_store
+    session = store.create(sub='student-profile', roles=['student'], name='Vorher')
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        client.cookies.set('gustav_session', session.session_id)
+        response = await client.patch('/api/app/profile/display-name', headers={'Origin':'http://test'}, json={'display_name':'Nachher'})
+        assert response.status_code == 204
+        assert (await client.get('/api/me')).json()['name'] == 'Nachher'

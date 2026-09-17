@@ -2,8 +2,7 @@
 Render the public Keycloak realm template with deployment-specific registration domains.
 
 Why:
-    FastAPI, the SvelteKit BFF and the IdP must enforce the same self-registration
-    domain policy. The public repo keeps a neutral placeholder domain in the
+    Keycloak is the sole authority for the self-registration domain policy. The public repo keeps a neutral placeholder domain in the
     template, while deployments derive the concrete regex from
     `ALLOWED_REGISTRATION_DOMAINS` during the Keycloak image build.
 """

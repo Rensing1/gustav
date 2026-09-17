@@ -56,7 +56,7 @@ TEST_JWKS = {
 def _make_bearer_token(
     claim_overrides: dict[str, object] | None = None,
     *,
-    audience: object = TEST_AUDIENCE,
+    audience: object = "gustav-api",
 ) -> str:
     now = int(time.time())
     claims: dict[str, object] = {
@@ -118,7 +118,7 @@ async def test_api_me_accepts_access_token_style_bearer_with_azp(monkeypatch: py
             "sub": "student-bearer",
             "realm_access": {"roles": ["student"]},
         },
-        audience=["account"],
+        audience=["account", "gustav-api"],
     )
 
     async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:

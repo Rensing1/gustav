@@ -683,3 +683,9 @@ def test_email_templates_reference_support_contact():
         text = tpl.read_text(encoding="utf-8")
         assert "support@school.example" not in text, f"{name} must not contain placeholder support email"
         assert "${properties.supportEmail!" in text, f"{name} should read support contact from theme.properties"
+
+
+def test_logout_confirmation_submits_keycloak_session_code():
+    """Keycloak binds confirmation to its browser logout session with this code."""
+    template = _resolve_login_template("logout-confirm.ftl").read_text()
+    assert 'name="session_code" value="${logoutConfirm.code}"' in template

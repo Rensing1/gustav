@@ -37,9 +37,9 @@ def test_csrf_ttl_seconds_defaults_clamps_and_ignores_invalid_env(monkeypatch) -
 def test_csrf_signing_secret_uses_explicit_secret_and_fails_closed_in_prod(monkeypatch) -> None:
     """Prod-like environments must not silently use a process-random CSRF secret."""
 
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     monkeypatch.setenv("GUSTAV_ENV", "prod")
-    assert csrf_signing_secret() == b"real-csrf-secret"
+    assert csrf_signing_secret() == b"synthetic-csrf-secret-with-at-least-32-characters"
 
     monkeypatch.delenv("APP_CSRF_TOKEN_SECRET", raising=False)
     monkeypatch.delenv("H5P_REVIEW_TOKEN_SECRET", raising=False)
@@ -50,7 +50,7 @@ def test_csrf_signing_secret_uses_explicit_secret_and_fails_closed_in_prod(monke
 def test_csrf_token_roundtrip_rejects_wrong_session_and_expired_token(monkeypatch) -> None:
     """A token is bound to session id and expiry timestamp."""
 
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     token = get_or_create_csrf_token("session-a")
 
     assert validate_csrf("session-a", token)

@@ -14,7 +14,6 @@ Security:
 from __future__ import annotations
 
 import argparse
-import base64
 import fcntl
 import json
 import os
@@ -116,7 +115,7 @@ def _assert_runtime_stack_safe(
 
     url_variables = {
         "gustav-alpha2": ("WEB_BASE", "KC_PUBLIC_BASE_URL"),
-        "gustav-frontend": ("ORIGIN", "KC_PUBLIC_BASE_URL"),
+        "gustav-frontend": ("ORIGIN",),
         "gustav-learning-worker": ("WEB_BASE",),
     }
     for container, variables in url_variables.items():
@@ -126,6 +125,10 @@ def _assert_runtime_stack_safe(
                 _require_local_url(value, label=variable)
             except RuntimeError as exc:
                 raise RuntimeError(f"{container} has unsafe {variable}") from exc
+
+    # The frontend no longer talks to Keycloak; its only upstream must be local FastAPI.
+    if environments["gustav-frontend"].get("API_INTERNAL_BASE_URL", "").rstrip("/") != "http://gustav-alpha2:8000":
+        raise RuntimeError("gustav-frontend has unsafe API_INTERNAL_BASE_URL")
 
     for container, variables in RUNTIME_DATABASE_VARIABLES.items():
         for variable in variables:
@@ -435,41 +438,8 @@ def _delete_registered_h5p_contents(session: BrowserSession, content_ids: list[s
         )
 
 
-def _jwt_subject(token: str) -> str | None:
-    """Read a JWT subject for exact cleanup matching without verifying or logging it.
-
-    Signature verification is unnecessary here because the token is never
-    trusted for authorization. It is only used to narrow deletion of rows from
-    the already local, privileged session store to known Keycloak subjects.
-    """
-
-    parts = (token or "").split(".")
-    if len(parts) != 3:
-        return None
-    try:
-        payload = parts[1] + "=" * (-len(parts[1]) % 4)
-        decoded = json.loads(base64.urlsafe_b64decode(payload).decode("utf-8"))
-    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    subject = decoded.get("sub") if isinstance(decoded, dict) else None
-    return subject if isinstance(subject, str) and subject else None
-
-
-def _bff_session_ids_for_subjects(
-    rows: Sequence[tuple[Any, Any, Any]], user_ids: set[str]
-) -> list[str]:
-    """Return only opaque session ids whose access or ID token has an exact subject."""
-
-    return [
-        str(session_id)
-        for session_id, access_token, id_token in rows
-        if _jwt_subject(str(id_token or "")) in user_ids
-        or _jwt_subject(str(access_token or "")) in user_ids
-    ]
-
-
 def _delete_run_sessions(database_url: str, user_ids: set[str]) -> None:
-    """Delete exact app and BFF sessions belonging to resolved run identities."""
+    """Delete only shared sessions belonging to resolved run identities."""
 
     if not user_ids:
         return
@@ -478,27 +448,16 @@ def _delete_run_sessions(database_url: str, user_ids: set[str]) -> None:
 
     with psycopg.connect(database_url) as connection:
         with connection.cursor() as cursor:
-            cursor.execute("select session_id, access_token, id_token from public.bff_sessions")
-            bff_session_ids = _bff_session_ids_for_subjects(cursor.fetchall(), user_ids)
             cursor.execute(
                 "delete from public.app_sessions where sub = any(%s)",
                 (sorted(user_ids),),
             )
-            if bff_session_ids:
-                cursor.execute(
-                    "delete from public.bff_sessions where session_id = any(%s)",
-                    (sorted(set(bff_session_ids)),),
-                )
             cursor.execute(
                 "select count(*) from public.app_sessions where sub = any(%s)",
                 (sorted(user_ids),),
             )
             if int(cursor.fetchone()[0]) != 0:
                 raise RuntimeError("run-owned application sessions remain")
-            cursor.execute("select session_id, access_token, id_token from public.bff_sessions")
-            remaining = cursor.fetchall()
-            if _bff_session_ids_for_subjects(remaining, user_ids):
-                raise RuntimeError("run-owned BFF sessions remain")
 
 
 def _restore_realm_smtp(admin: KeycloakAdmin, token: str, smtp_server: dict[str, str]) -> None:

@@ -36,7 +36,7 @@ USER app
 EXPOSE 8000
 
 # Start server (no reload to keep in-memory state stable during E2E tests)
-CMD ["uvicorn", "backend.web.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.web.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
 
 # Lightweight healthcheck hitting the app's health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \

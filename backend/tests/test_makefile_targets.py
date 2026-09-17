@@ -58,8 +58,8 @@ def test_test_db_security_runs_csrf_and_session_baseline_regressions() -> None:
     body = _target_body("test-db-security")
 
     for required_test in (
-        "backend/tests/test_auth_cookie_policies.py",
-        "backend/tests/test_session_sync_api.py",
+        "backend/tests/test_unified_auth_routes.py",
+        "backend/tests/test_unified_sessions.py",
         "backend/tests/test_learning_submissions_default_strict_csrf.py",
         "backend/tests/test_learning_submissions_prod_csrf.py",
         "backend/tests/test_learning_csrf_trust_proxy.py",
@@ -284,3 +284,10 @@ def test_frontend_vitest_uses_numeric_loopback_host() -> None:
     config = FRONTEND_VITEST_CONFIG.read_text(encoding="utf-8")
 
     assert 'host: "127.0.0.1"' in config
+
+
+def test_named_test_targets_do_not_reference_retired_test_files() -> None:
+    """Keep focused maintenance commands usable after test-suite consolidation."""
+    paths = re.findall(r"backend/tests/[A-Za-z0-9_./-]+\.py", MAKEFILE.read_text())
+    missing = sorted({path for path in paths if not (PROJECT_ROOT / path).is_file()})
+    assert missing == []

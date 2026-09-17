@@ -111,8 +111,6 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
     expect(invitePageResponse?.headers()["referrer-policy"]).toBe("no-referrer");
     await expect(learner.getByRole("heading", { name: courseTitle })).toBeVisible();
     await learner.getByRole("button", { name: "Registrieren und beitreten" }).click();
-    await learner.getByLabel("Schul-E-Mail").fill(learnerEmail);
-    await learner.getByRole("button", { name: "Registrieren" }).click();
 
     await expect(learner).toHaveURL(/https:\/\/id\.localhost\/realms\/gustav\/protocol\/openid-connect\/registrations/);
     await expect(learner.getByRole("heading", { name: /Registrieren|Register/i })).toBeVisible();
@@ -138,6 +136,7 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
     if (await backToApplication.isVisible().catch(() => false)) {
       await backToApplication.click();
     }
+    await learner.getByRole("button", { name: "Kurs beitreten", exact: true }).click();
     await expect(learner).toHaveURL(new RegExp(`/learning/courses/${courseId}$`), {
       timeout: 30_000
     });

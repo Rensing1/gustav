@@ -35,7 +35,7 @@ def test_frontend_uses_the_maintained_markdown_editor_and_exact_security_pins() 
     assert dependencies["@xyflow/svelte"] == "1.6.2"
     assert dependencies["isomorphic-dompurify"] == "3.19.0"
     assert dependencies["markdown-it"] == "14.3.0"
-    assert dependencies["jose"] == "6.2.3"
+    assert "jose" not in dependencies
     assert dev_dependencies["@sveltejs/adapter-node"] == "5.5.7"
     assert dev_dependencies["@sveltejs/kit"] == "2.70.3"
     assert dev_dependencies["svelte"] == "5.56.6"

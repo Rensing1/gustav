@@ -50,6 +50,7 @@
           class:workspace-button--ghost={action.variant === "secondary"}
           class="design-auth-frame__action workspace-button"
           href={action.href}
+          data-sveltekit-reload
         >
           {action.label}
         </a>

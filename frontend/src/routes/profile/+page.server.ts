@@ -3,7 +3,6 @@ import type { Actions, PageServerLoad } from "./$types";
 
 import { backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSessionBootstrap } from "$lib/server/guards";
-import { readFreshTokenSession } from "$lib/server/session";
 import type { BreadcrumbItem } from "$lib/types/navigation";
 import type { AppProfileCliToken, AppProfileView } from "$lib/types/profile";
 
@@ -72,7 +71,6 @@ export const actions: Actions = {
       });
     }
 
-    await readFreshTokenSession(cookies, fetch, { forceRefresh: true });
     throw redirect(303, "/profile?saved=display-name");
   },
 

@@ -31,7 +31,7 @@ def test_openapi_documents_teacher_course_ai_usage_view() -> None:
     path = "/api/teaching/views/courses/{course_id}/ai-usage"
     assert path in spec["paths"]
     operation = spec["paths"][path]["get"]
-    assert operation["security"] == [{"bearerAuth": []}]
+    assert operation["security"] == [{"cookieAuth": []}, {"bearerAuth": []}]
 
     param_names = {item["name"] for item in operation["parameters"]}
     assert {"course_id", "from", "to", "unit_id", "task_id", "student_sub", "limit", "offset"} <= param_names

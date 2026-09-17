@@ -17,7 +17,7 @@ import hashlib
 import os
 from dataclasses import dataclass
 from typing import Dict, Optional
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 # Small indirection to ease monkeypatching in tests
 import requests as http
@@ -56,6 +56,28 @@ class OIDCConfig:
 class OIDCClient:
     def __init__(self, config: OIDCConfig):
         self.cfg = config
+
+    def end_session(self, *, id_token: str, callback: str, state: str) -> None:
+        """End the IdP session without exposing its ID token to the browser.
+
+        A confirmed RP redirect proves completion. Do not follow it: the bound
+        browser must consume our callback state after clearing its IdP cookies.
+        """
+        from .unified_sessions import SessionUnavailable
+
+        url = f"{self.cfg.base_url}/realms/{self.cfg.realm}/protocol/openid-connect/logout"
+        try:
+            response = http.post(url, data={
+                "id_token_hint": id_token, "client_id": self.cfg.client_id,
+                "post_logout_redirect_uri": callback, "state": state,
+            }, timeout=5, allow_redirects=False)
+        except http.RequestException as exc:
+            raise SessionUnavailable() from exc
+        actual = urlsplit(response.headers.get("Location", ""))
+        expected = urlsplit(callback)
+        if (response.status_code != 302 or actual[:3] != expected[:3]
+                or parse_qs(actual.query).get("state") != [state] or actual.fragment):
+            raise SessionUnavailable()
 
     @staticmethod
     def generate_code_verifier(length: int = 64) -> str:
@@ -143,8 +165,29 @@ class OIDCClient:
             "redirect_uri": self.cfg.redirect_uri,
             "code_verifier": code_verifier,
         }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        resp = http_post(self.cfg.token_endpoint, data=data, headers=headers)
-        if resp.status_code != 200:
-            raise ValueError("token_exchange_failed")
-        return resp.json()
+        return self._token_request(data)
+
+    def refresh_tokens(self, refresh_token: str) -> dict:
+        """Refresh using a bounded network call outside database transactions."""
+        return self._token_request({
+            "grant_type": "refresh_token", "refresh_token": refresh_token,
+            "client_id": self.cfg.client_id,
+        })
+
+    def _token_request(self, data: dict) -> dict:
+        from .unified_sessions import SessionInvalid, SessionUnavailable
+
+        secret = os.getenv("KC_CLIENT_SECRET")
+        if secret:
+            data["client_secret"] = secret
+        try:
+            resp = http_post(self.cfg.token_endpoint, data=data,
+                             headers={"Content-Type": "application/x-www-form-urlencoded"})
+            payload = resp.json()
+        except (http.RequestException, ValueError) as exc:
+            raise SessionUnavailable() from exc
+        if resp.status_code == 400 and isinstance(payload, dict) and payload.get("error") == "invalid_grant":
+            raise SessionInvalid()
+        if resp.status_code != 200 or not isinstance(payload, dict):
+            raise SessionUnavailable()
+        return payload

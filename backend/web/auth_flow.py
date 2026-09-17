@@ -3,30 +3,12 @@
 from __future__ import annotations
 
 
-def requires_bff_bearer_auth(path: str) -> bool:
-    """Return whether a path belongs to the BFF-owned read-model surface."""
-
-    return path in ("/api/app/session-bootstrap", "/api/app/session-sync") or path.startswith(
-        (
-            "/api/app/profile",
-            "/api/learning/concern-box/",
-            "/api/learning/views/",
-            "/api/teaching/concern-box/",
-            "/api/teaching/views/",
-            "/api/diagnostics/views/",
-            "/api/live/views/",
-        )
-    )
-
-
 def auth_failure_reason(auth_source: str) -> str:
     """Return a low-cardinality auth failure reason for logs."""
 
-    if auth_source == "missing_bearer":
-        return "session_bootstrap_missing_bearer"
     if auth_source == "bearer":
-        return "session_bootstrap_invalid_bearer"
-    return "bff_session_missing"
+        return "token_invalid"
+    return "session_missing"
 
 
 def auth_failure_path_class(path: str) -> str:

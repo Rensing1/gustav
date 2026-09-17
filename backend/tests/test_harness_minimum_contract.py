@@ -242,7 +242,7 @@ def test_fastapi_static_gustav_css_references_are_documented_active_surfaces() -
     ]
 
     assert 'href="/static/css/gustav.css?v=' in layout_source
-    assert 'href="/static/css/gustav.css"' in auth_source
+    assert 'href="/static/css/gustav.css"' not in auth_source
     assert [path.name for path in keycloak_templates] == ["_gustav_layout.ftl"]
     consumers = [
         path for path in keycloak_templates[0].parent.glob("*.ftl")
@@ -443,10 +443,10 @@ def test_harness_minimum_runs_makefile_target_contracts() -> None:
     assert "backend/tests/test_route_map_inventory_contract.py" in body
     assert "backend/tests/test_web_security_guards_contract.py" in body
     assert "backend/tests/test_auth_flow_contract.py" in body
-    assert "backend/tests/test_auth_smoke_tool_contract.py" in body
+    assert "backend/tests/test_unified_token_adapter.py" in body
     assert "backend/tests/test_runtime_auth_helpers_contract.py" in body
     assert "backend/tests/test_auth_claims_contract.py" in body
-    assert "backend/tests/test_auth_session_contract.py" in body
+    assert "backend/tests/test_unified_auth_contract.py" in body
     assert "backend/tests/test_csrf_tokens_contract.py" in body
     assert "backend/tests/test_internal_api_client_contract.py" in body
     assert "backend/tests/test_ssr_helpers_contract.py" in body

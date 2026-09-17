@@ -226,3 +226,24 @@ export async function useTemporaryRealmSmtp(
     }
   };
 }
+
+/** Import a run-owned legacy hash without resetting it through the password API. */
+export async function ensureImportedBcryptLearner(email: string, hash: string): Promise<void> {
+  registerE2EUser({ email, role: 'student' });
+  const kc = await keycloakAdminContext();
+  try {
+    const token = await adminToken(kc);
+    const created = await kc.post(`/admin/realms/${realm}/users`, {
+      headers: adminHeaders(token),
+      data: {
+        username: email, email, enabled: true, emailVerified: true,
+        attributes: { display_name: ['Importierter Schüler'] },
+        credentials: [{ type: 'password', algorithm: 'bcrypt', hashIterations: -1, hashedSaltedValue: hash, temporary: false }]
+      }
+    });
+    expect(created.status()).toBe(201);
+    const id = await findUserId(kc, token, email);
+    expect(id).toBeTruthy();
+    registerE2EUser({ email, role: 'student', keycloak_id: id! });
+  } finally { await kc.dispose(); }
+}

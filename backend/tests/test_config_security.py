@@ -21,7 +21,7 @@ def _set_minimal_prod_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "real-bff-secret")
     monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
     monkeypatch.setenv("H5P_INTERNAL_SHARED_SECRET", "real-internal-h5p-secret")
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     monkeypatch.setenv("KC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
@@ -78,7 +78,7 @@ async def test_dsn_user_guard_prod_raises_if_limited_user(monkeypatch: pytest.Mo
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
     monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     # Valid TLS setting
     monkeypatch.setenv(
         "DATABASE_URL",
@@ -106,7 +106,7 @@ async def test_dsn_user_guard_prod_allows_nonlimited_user(monkeypatch: pytest.Mo
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
     monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -165,7 +165,7 @@ async def test_kc_admin_client_secret_guard_prod_raises(monkeypatch: pytest.Monk
     # Arrange: prod with valid Supabase key so that only KC secret is tested
     monkeypatch.setenv("GUSTAV_ENV", "prod")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "REAL_NON_DUMMY")
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
     monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "real-bff-secret")
     # Placeholder secret must be rejected
@@ -179,29 +179,13 @@ async def test_kc_admin_client_secret_guard_prod_raises(monkeypatch: pytest.Monk
 
 
 @pytest.mark.anyio
-async def test_bff_internal_shared_secret_guard_prod_raises_when_missing(monkeypatch: pytest.MonkeyPatch):
-    """In prod-like env, BFF_INTERNAL_SHARED_SECRET must be configured explicitly."""
+async def test_obsolete_bff_secret_is_not_required(monkeypatch: pytest.MonkeyPatch):
+    """The single-session runtime has no internal BFF token bridge."""
     _set_minimal_prod_env(monkeypatch)
     monkeypatch.delenv("BFF_INTERNAL_SHARED_SECRET", raising=False)
-
-    from backend.web import config as cfg  # type: ignore
-
+    from backend.web import config as cfg
     importlib.reload(cfg)
-    with pytest.raises(SystemExit):
-        cfg.ensure_secure_config_on_startup()
-
-
-@pytest.mark.anyio
-async def test_bff_internal_shared_secret_guard_prod_rejects_placeholder(monkeypatch: pytest.MonkeyPatch):
-    """In prod-like env, placeholder BFF_INTERNAL_SHARED_SECRET values must be rejected."""
-    _set_minimal_prod_env(monkeypatch)
-    monkeypatch.setenv("BFF_INTERNAL_SHARED_SECRET", "CHANGE_ME_DEV")
-
-    from backend.web import config as cfg  # type: ignore
-
-    importlib.reload(cfg)
-    with pytest.raises(SystemExit):
-        cfg.ensure_secure_config_on_startup()
+    cfg.ensure_secure_config_on_startup()
 
 
 @pytest.mark.anyio
@@ -232,7 +216,7 @@ async def test_prod_requires_storage_verify_and_disables_proxy(monkeypatch: pyte
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
     monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -280,7 +264,7 @@ async def test_prod_forbids_auto_create_storage_buckets(monkeypatch: pytest.Monk
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
     monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -307,7 +291,7 @@ async def test_h5p_review_token_secret_guard_prod_raises(monkeypatch: pytest.Mon
     monkeypatch.setenv("KC_PUBLIC_BASE_URL", "https://id.example.com")
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -336,7 +320,7 @@ async def test_h5p_review_token_secret_guard_prod_allows_real_secret(monkeypatch
     monkeypatch.setenv("REQUIRE_STORAGE_VERIFY", "true")
     monkeypatch.setenv("AUTO_CREATE_STORAGE_BUCKETS", "false")
     monkeypatch.setenv("H5P_REVIEW_TOKEN_SECRET", "real-secret")
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://gustav_app:strong@db.example.com:5432/postgres?sslmode=require",
@@ -404,9 +388,17 @@ async def test_app_csrf_token_secret_guard_prod_rejects_placeholder(monkeypatch:
 async def test_app_csrf_token_secret_guard_prod_allows_real_secret(monkeypatch: pytest.MonkeyPatch):
     """In prod-like env, a non-placeholder APP_CSRF_TOKEN_SECRET is allowed."""
     _set_minimal_prod_env(monkeypatch)
-    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "real-csrf-secret")
+    monkeypatch.setenv("APP_CSRF_TOKEN_SECRET", "synthetic-csrf-secret-with-at-least-32-characters")
 
     from backend.web import config as cfg  # type: ignore
 
     importlib.reload(cfg)
     cfg.ensure_secure_config_on_startup()
+
+
+def test_auth_marker_secret_requires_at_least_32_characters(monkeypatch):
+    _set_minimal_prod_env(monkeypatch)
+    monkeypatch.setenv('APP_CSRF_TOKEN_SECRET', 'too-short')
+    from backend.web.config import ensure_secure_config_on_startup
+    with pytest.raises(SystemExit):
+        ensure_secure_config_on_startup()

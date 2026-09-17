@@ -21,14 +21,14 @@ class FailingCache:
         raise IDTokenVerificationError("jwks_fetch_failed")
 
 
-def test_verify_bearer_token_accepts_azp_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_bearer_token_accepts_explicit_api_audience(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1"})
     monkeypatch.setattr(
         tokens_mod.jwt,
         "decode",
         lambda token, key, algorithms=None, **kwargs: {
             "iss": "http://kc.example/realms/gustav",
-            "aud": ["account"],
+            "aud": ["gustav-api"],
             "azp": "gustav-web",
             "sub": "teacher-1",
             "exp": 4102444800,
@@ -71,7 +71,8 @@ def test_verify_bearer_token_rejects_wrong_audience_and_azp(monkeypatch: pytest.
         verify_bearer_token(token="dummy", cfg=cfg, cache=FakeCache())
 
 
-def test_verify_bearer_token_maps_jwks_fetch_failures_to_bearer_error() -> None:
+def test_verify_bearer_token_maps_jwks_fetch_failures_to_bearer_error(monkeypatch) -> None:
+    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1"})
     cfg = OIDCConfig(
         base_url="http://kc.example",
         realm="gustav",

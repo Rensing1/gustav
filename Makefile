@@ -177,8 +177,8 @@ test-db-security:
 	  backend/tests/test_privacy_logging_contract.py \
 	  backend/tests/test_testing_environment_guards.py \
 	  backend/tests/test_db_required_gate_contract.py \
-	  backend/tests/test_auth_cookie_policies.py \
-	  backend/tests/test_session_sync_api.py \
+	  backend/tests/test_unified_auth_routes.py \
+	  backend/tests/test_unified_sessions.py \
 	  backend/tests/test_learning_submissions_default_strict_csrf.py \
 	  backend/tests/test_learning_submissions_prod_csrf.py \
 	  backend/tests/test_learning_csrf_trust_proxy.py \
@@ -339,10 +339,10 @@ harness-minimum:
 	  backend/tests/test_route_map_inventory_contract.py \
 	  backend/tests/test_web_security_guards_contract.py \
 	  backend/tests/test_auth_flow_contract.py \
-	  backend/tests/test_auth_smoke_tool_contract.py \
+	  backend/tests/test_unified_token_adapter.py \
 	  backend/tests/test_runtime_auth_helpers_contract.py \
 	  backend/tests/test_auth_claims_contract.py \
-	  backend/tests/test_auth_session_contract.py \
+	  backend/tests/test_unified_auth_contract.py \
 	  backend/tests/test_csrf_tokens_contract.py \
 	  backend/tests/test_internal_api_client_contract.py \
 	  backend/tests/test_ssr_helpers_contract.py \

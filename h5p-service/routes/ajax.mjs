@@ -7,14 +7,14 @@ import { unlink } from "node:fs/promises";
 import { normalizeH5PAjaxBody } from "../lib/ajax_body.mjs";
 import { buildSessionCookieHeader } from "../lib/cookies.mjs";
 import { forwardLearningSubmission } from "../lib/finished_forwarding.mjs";
-import { buildFinishedSubmissionIdempotencyKey, parseOriginForForwarding } from "../lib/finished_submission_context.mjs";
+import { buildFinishedSubmissionIdempotencyKey } from "../lib/finished_submission_context.mjs";
 import { rolesAllowTeacher } from "../lib/internal_auth.mjs";
 import { sendJson } from "../lib/response_helpers.mjs";
 import { requireSameOrigin } from "../lib/runtime_guards.mjs";
 import { asyncHandler } from "../lib/route_helpers.mjs";
 
 export function mountAjaxRoutes(app, {
-  h5pAjax, h5pEditor, maybeParseAjaxFiles, h5pAjaxExpressRouter, sessionCookieName, frontendSessionCookieName, gustavWebInternalBase, gustavFrontendInternalBase, upstreamFetchTimeoutMs, finishedForwardingMetrics,
+  h5pAjax, h5pEditor, maybeParseAjaxFiles, h5pAjaxExpressRouter, sessionCookieName, gustavWebInternalBase, upstreamFetchTimeoutMs, finishedForwardingMetrics,
 }) {
   // POST /ajax is required for player translations; treat unsafe actions as writes.
   app.post("/ajax", maybeParseAjaxFiles, asyncHandler(async (req, res) => {
@@ -148,7 +148,6 @@ export function mountAjaxRoutes(app, {
           const scoreMax = Math.max(0, Math.trunc(maxNum));
           if (scoreRaw <= scoreMax) {
             const cookieHeader = req.get("cookie") || "";
-            const originInfo = parseOriginForForwarding(req);
             const idem = buildFinishedSubmissionIdempotencyKey({
               userId: req.user?.id,
               courseId,
@@ -170,44 +169,20 @@ export function mountAjaxRoutes(app, {
               : { kind: "h5p", score_raw: scoreRaw, score_max: scoreMax };
 
             const sessionCookieHeader = buildSessionCookieHeader(cookieHeader, sessionCookieName);
-            const frontendCookieHeader = buildSessionCookieHeader(cookieHeader, frontendSessionCookieName);
 
             let result;
             if (sessionCookieHeader) {
               const headers = {
                 "content-type": "application/json",
                 "idempotency-key": idem,
-                ...(originInfo
-                  ? {
-                      origin: originInfo.origin,
-                      "x-forwarded-proto": originInfo.scheme,
-                      "x-forwarded-host": originInfo.host,
-                      "x-forwarded-port": originInfo.port,
-                    }
-                  : {}),
+                ...(req.get("origin") ? { origin: req.get("origin") } : {}),
+                ...(req.get("referer") ? { referer: req.get("referer") } : {}),
                 cookie: sessionCookieHeader,
               };
 
               result = await forwardLearningSubmission({
                 url,
                 headers,
-                body: JSON.stringify(submissionBody),
-                timeoutMs: upstreamFetchTimeoutMs,
-                maxAttempts: 2,
-                baseBackoffMs: 100,
-                metrics: finishedForwardingMetrics,
-              });
-            } else if (frontendCookieHeader) {
-              const frontendUrl = isPractice
-                ? `${gustavFrontendInternalBase.replace(/\/+$/, "")}/internal/h5p/practice-attempts?session_id=${encodeURIComponent(practiceSessionId)}&item_id=${encodeURIComponent(practiceItemId)}`
-                : `${gustavFrontendInternalBase.replace(/\/+$/, "")}/internal/h5p/submissions?course_id=${encodeURIComponent(courseId)}&task_id=${encodeURIComponent(taskId)}`;
-              result = await forwardLearningSubmission({
-                url: frontendUrl,
-                headers: {
-                  "content-type": "application/json",
-                  "idempotency-key": idem,
-                  cookie: frontendCookieHeader,
-                },
                 body: JSON.stringify(submissionBody),
                 timeoutMs: upstreamFetchTimeoutMs,
                 maxAttempts: 2,

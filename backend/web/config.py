@@ -50,13 +50,6 @@ def ensure_secure_config_on_startup() -> None:
             "Refusing to start: KC_ADMIN_CLIENT_SECRET is unset or a placeholder in production."
         )
 
-    # 1c) Internal BFF shared secret must be configured for the frontend-backend bridge.
-    bff_secret = (os.getenv("BFF_INTERNAL_SHARED_SECRET", "") or "").strip()
-    if not bff_secret or bff_secret.upper().startswith("CHANGE_ME"):
-        raise SystemExit(
-            "Refusing to start: BFF_INTERNAL_SHARED_SECRET is unset or a placeholder in production."
-        )
-
     # 1d) H5P teacher review capability token secret must be configured.
     # Used to sign short-lived review tokens consumed by the H5P sidecar.
     h5p_review_secret = (os.getenv("H5P_REVIEW_TOKEN_SECRET", "") or "").strip()
@@ -76,12 +69,12 @@ def ensure_secure_config_on_startup() -> None:
     # Keep secrets separated so rotation/leak blast radius stays minimal.
     csrf_secret = (os.getenv("APP_CSRF_TOKEN_SECRET", "") or "").strip()
     if (
-        not csrf_secret
+        len(csrf_secret) < 32
         or csrf_secret.upper().startswith("CHANGE_ME")
         or csrf_secret.upper() == "DUMMY_DO_NOT_USE"
     ):
         raise SystemExit(
-            "Refusing to start: APP_CSRF_TOKEN_SECRET is unset or a placeholder in production."
+            "Refusing to start: APP_CSRF_TOKEN_SECRET must contain at least 32 characters and must not be a placeholder."
         )
 
     # 2) Postgres TLS: forbid explicit disable in all configured DSNs

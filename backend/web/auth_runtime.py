@@ -7,10 +7,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from backend.identity_access.bff_sessions import BFFSessionStore
 from backend.identity_access.cli_tokens import DBCLITokenStore, InMemoryCLITokenStore
 from backend.identity_access.oidc import OIDCClient, OIDCConfig
-from backend.identity_access.stores import SessionStore, StateStore
+from backend.identity_access.stores import SessionStore
 
 
 class AuthSettings:
@@ -50,10 +49,9 @@ class AuthRuntime:
     settings: AuthSettings
     oidc_config: OIDCConfig
     oidc_client: OIDCClient
-    state_store: Any
     session_store: Any
-    bff_session_store: Any
     cli_token_store: Any
+    session_repository: Any
 
 
 def load_oidc_config(environ: Mapping[str, str] | None = None) -> OIDCConfig:
@@ -74,40 +72,21 @@ def load_oidc_config(environ: Mapping[str, str] | None = None) -> OIDCConfig:
     )
 
 
-def create_session_store(
-    *,
-    running_under_pytest: bool,
-    backend: str | None = None,
-) -> Any:
-    """Create the browser session store with DB backend when configured."""
+def create_session_store(*, running_under_pytest: bool) -> Any:
+    """Use PostgreSQL in the application; isolated tests inject a session double."""
 
-    selected = (backend or os.getenv("SESSIONS_BACKEND", "memory")).lower()
-    if (not running_under_pytest) and selected == "db":
-        try:
-            from backend.identity_access.stores_db import DBSessionStore
+    if running_under_pytest:
+        return SessionStore()
+    from backend.identity_access.session_tokens import session_values
+    from backend.identity_access.unified_sessions import SessionService
+    from backend.identity_access.unified_store import UnifiedSessionRepository
 
-            return DBSessionStore()
-        except ImportError:
-            return SessionStore()
-    return SessionStore()
-
-
-def create_bff_session_store(
-    *,
-    running_under_pytest: bool,
-    backend: str | None = None,
-) -> Any:
-    """Create the BFF session store with DB backend when configured."""
-
-    selected = (backend or os.getenv("SESSIONS_BACKEND", "memory")).lower()
-    if (not running_under_pytest) and selected == "db":
-        try:
-            from backend.identity_access.bff_sessions_db import DBBFFSessionStore
-
-            return DBBFFSessionStore()
-        except ImportError:
-            return BFFSessionStore()
-    return BFFSessionStore()
+    dsn = os.getenv("SESSION_DATABASE_URL") or os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL")
+    if not dsn:
+        raise RuntimeError("SESSION_DATABASE_URL is required")
+    cfg = load_oidc_config()
+    return SessionService(UnifiedSessionRepository(dsn), OIDCClient(cfg),
+                          lambda tokens, current: session_values(tokens, cfg, current))
 
 
 def build_cli_token_store(
@@ -124,7 +103,7 @@ def build_cli_token_store(
     a restart and could hide a broken production deployment.
     """
 
-    selected = (backend or os.getenv("CLI_TOKENS_BACKEND", os.getenv("SESSIONS_BACKEND", "memory"))).lower()
+    selected = (backend or os.getenv("CLI_TOKENS_BACKEND", "db")).lower()
     if running_under_pytest and "CLI_TOKENS_BACKEND" not in os.environ and backend is None:
         return memory_cli_token_store()
     if selected == "db":
@@ -143,12 +122,15 @@ def create_auth_runtime(*, running_under_pytest: bool) -> AuthRuntime:
     """
 
     oidc_config = load_oidc_config()
+    from backend.identity_access.unified_store import UnifiedSessionRepository
+    session_store = create_session_store(running_under_pytest=running_under_pytest)
+    repository = getattr(session_store, 'repository', None) or UnifiedSessionRepository(
+        os.getenv('SESSION_TEST_DSN') or os.getenv('SESSION_DATABASE_URL') or os.getenv('DATABASE_URL', ''))
     return AuthRuntime(
+        session_repository=repository,
         settings=AuthSettings(),
         oidc_config=oidc_config,
         oidc_client=OIDCClient(oidc_config),
-        state_store=StateStore(),
-        session_store=create_session_store(running_under_pytest=running_under_pytest),
-        bff_session_store=create_bff_session_store(running_under_pytest=running_under_pytest),
+        session_store=session_store,
         cli_token_store=build_cli_token_store(running_under_pytest=running_under_pytest),
     )

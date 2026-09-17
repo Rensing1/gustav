@@ -6,7 +6,7 @@ Why:
     This must never become an open redirect (external URL) or a traversal
     vector. We therefore only allow absolute in-app paths and reject:
       - URLs with scheme/host
-      - query strings / fragments
+      - fragments and unsafe query characters
       - double slashes ("//")
       - traversal segments ("..")
 
@@ -20,16 +20,16 @@ from __future__ import annotations
 import re
 
 MAX_INAPP_REDIRECT_LEN = 256
-INAPP_PATH_PATTERN = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$")
+INAPP_PATH_PATTERN = re.compile(r"^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*(?:\?[A-Za-z0-9._~%&=+\-/:@]*)?$")
 
 
 def safe_inapp_path(value: str | None) -> str | None:
     """Return a safe absolute in-app path or None.
 
     Examples (accepted):
-        "/", "/courses", "/courses/1", "/courses/list_all"
+        "/", "/courses", "/courses/1", "/courses/list_all", "/learning?module=one"
     Examples (rejected):
-        "courses" (not absolute), "https://evil.com", "/a?b", "/a#b", "/..", "//"
+        "courses" (not absolute), "https://evil.com", "/a#b", "/..", "//"
     """
     if not value or not isinstance(value, str):
         return None

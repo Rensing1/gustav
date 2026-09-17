@@ -72,7 +72,7 @@ async def test_session_bootstrap_returns_teacher_spaces(monkeypatch: pytest.Monk
 
 
 @pytest.mark.anyio
-async def test_session_bootstrap_requires_bearer_even_with_cookie_session(
+async def test_session_bootstrap_accepts_shared_cookie_session(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -84,11 +84,10 @@ async def test_session_bootstrap_requires_bearer_even_with_cookie_session(
         client.cookies.set("gustav_session", rec.session_id)
         response = await client.get("/api/app/session-bootstrap")
 
-    assert response.status_code == 401
+    assert response.status_code == 200
     assert response.headers.get("Cache-Control") == "private, no-store"
-    assert response.json() == {"error": "unauthenticated"}
-    logs = "\n".join(record.getMessage() for record in caplog.records)
-    assert "auth_failure reason=session_bootstrap_missing_bearer path_class=api.app" in logs
+    assert response.json()["user"]["sub"] == "student-cookie"
+    assert not any("auth_failure" in record.getMessage() for record in caplog.records)
 
 
 @pytest.mark.anyio
@@ -106,7 +105,7 @@ async def test_session_bootstrap_logs_low_cardinality_auth_reason_without_sensit
 
     assert response.status_code == 401
     logs = "\n".join(record.getMessage() for record in caplog.records)
-    assert "auth_failure reason=session_bootstrap_invalid_bearer path_class=api.app" in logs
+    assert "auth_failure reason=token_invalid path_class=api.app" in logs
     assert "path=/api/app/session-bootstrap" not in logs
     assert "sensitive.jwt" not in logs
     assert "sensitive-session" not in logs
@@ -128,8 +127,19 @@ async def test_auth_failure_logs_path_class_without_dynamic_identifiers(
 
     assert response.status_code == 401
     logs = "\n".join(record.getMessage() for record in caplog.records)
-    assert "auth_failure reason=session_bootstrap_invalid_bearer path_class=api.teaching" in logs
+    assert "auth_failure reason=token_invalid path_class=api.teaching" in logs
     assert dynamic_path not in logs
     assert "student@example.com" not in logs
     assert "sensitive.jwt" not in logs
     assert "sensitive-session" not in logs
+
+
+@pytest.mark.parametrize("authorization", ["Bearer broken.jwt", "Basic invalid"])
+async def test_explicit_invalid_authorization_never_falls_back_to_valid_cookie(monkeypatch, authorization):
+    store = install_session_store(monkeypatch, main)
+    rec = store.create(sub="synthetic-student", roles=["student"], name="Test", ttl_seconds=60)
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        client.cookies.set("gustav_session", rec.session_id)
+        response = await client.get("/api/app/session-bootstrap", headers={"Authorization": authorization})
+    assert response.status_code == 401
+    assert store.get(rec.session_id) is not None

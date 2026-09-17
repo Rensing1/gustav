@@ -13,7 +13,7 @@ import { pruneCacheToMaxEntries, requireTeacher, requireAdmin } from "../lib/run
 import { asyncHandler } from "../lib/route_helpers.mjs";
 
 export function mountPlayerRoutes(app, {
-  h5pPlayer, requireDebugHtmlEnabled, reviewTokenSecret, sessionCookieName, frontendSessionCookieName, h5pContentAccessCache, authCacheTtlSeconds, H5P_AUTH_CACHE_MAX_ENTRIES, authForwardingOptions, checkLearningH5PContentAccess = defaultContentAccess,
+  h5pPlayer, requireDebugHtmlEnabled, reviewTokenSecret, sessionCookieName, h5pContentAccessCache, authCacheTtlSeconds, H5P_AUTH_CACHE_MAX_ENTRIES, authForwardingOptions, checkLearningH5PContentAccess = defaultContentAccess,
 }) {
   app.get("/player/model", asyncHandler(async (req, res) => {
     const contentId =
@@ -52,7 +52,7 @@ export function mountPlayerRoutes(app, {
       const cookieHeader = req.get("cookie") || "";
       const cookies = parseCookies(cookieHeader);
       const authCookie =
-        cookies[sessionCookieName] || (cookies[frontendSessionCookieName] ? `bff:${cookies[frontendSessionCookieName]}` : "");
+        cookies[sessionCookieName] || "";
       const cacheKey = `${authCookie}|${courseId}|${contentId}`;
       const now = Date.now();
       let allowed = null;

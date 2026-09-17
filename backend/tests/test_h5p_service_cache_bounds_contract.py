@@ -47,12 +47,10 @@ def test_h5p_auth_caches_are_bounded_and_swept() -> None:
     js = _load_h5p_server_source()
 
     # Contract: explicit max-size knobs exist and are used for pruning.
-    assert "AUTH_CACHE_MAX_ENTRIES" in js
     assert "H5P_AUTH_CACHE_MAX_ENTRIES" in js
     assert "export function pruneCacheToMaxEntries" in guards_js
 
-    # Both caches must be pruned (TTL sweep + max-size cap).
-    assert "pruneCacheToMaxEntries(authCache" in guards_js
-    assert "authCacheMaxEntries" in guards_js
-    assert "authCacheMaxEntries: AUTH_CACHE_MAX_ENTRIES" in js
+    # Session revocation must be observed on every request; only content access is cached.
+    assert "authCache.get(" not in guards_js
+    assert "authCache.set(" not in guards_js
     assert "pruneCacheToMaxEntries(h5pContentAccessCache" in js

@@ -8,7 +8,9 @@ export type SmtpCapture = {
 };
 
 function decodeMessage(raw: string): string {
+  // SMTP dot-stuffing must be undone before joining quoted-printable lines.
   return raw
+    .replace(/(^|\r?\n)\.\./g, "$1.")
     .replace(/=\r?\n/g, "")
     .replace(/=3D/gi, "=")
     .replace(/&amp;/g, "&");

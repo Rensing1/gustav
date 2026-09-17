@@ -35,17 +35,11 @@ class MainAuthWiring:
 
 def create_main_auth_wiring(
     *,
-    state_store: Callable[[], Any],
     session_store: Callable[[], Any],
     cli_token_store: Callable[[], Any],
-    oidc_client: Callable[[], Any],
     oidc_config: Callable[[], Any],
     verify_bearer_token: Callable[[str, Any], Mapping[str, object]],
     bearer_token_error_type: type[Exception],
-    verify_id_token: Callable[[str, Any], Mapping[str, object]],
-    id_token_error_type: type[Exception],
-    internal_bff_secret: Callable[[], str],
-    environment: Callable[[], str],
     logger: logging.Logger,
 ) -> MainAuthWiring:
     """Create auth middleware and bridge dependencies for the main app.
@@ -58,14 +52,14 @@ def create_main_auth_wiring(
     roles_for_cli_sub = default_roles_for_cli_sub
     def bound_roles_for_cli_sub(sub):
         return roles_for_cli_sub(sub, oidc_config=oidc_config, logger=logger)
+
     auth_middleware_dependencies = AuthMiddlewareDependencies(
         session_store=session_store,
-        cli_token_store=cli_token_store,
         oidc_config=oidc_config,
+        cli_token_store=cli_token_store,
         verify_bearer_token=verify_bearer_token,
         bearer_token_error_type=bearer_token_error_type,
         roles_for_cli_sub=bound_roles_for_cli_sub,
-        internal_bff_secret=internal_bff_secret,
         environment_logger=logger,
     )
     auth_context_from_request = create_auth_context_resolver(auth_middleware_dependencies)
@@ -74,14 +68,6 @@ def create_main_auth_wiring(
         auth_middleware_dependencies=auth_middleware_dependencies,
         auth_context_from_request=auth_context_from_request,
         auth_bridge_dependencies=AuthBridgeDependencies(
-            state_store=state_store,
-            session_store=session_store,
-            oidc_client=oidc_client,
-            oidc_config=oidc_config,
-            verify_id_token=verify_id_token,
-            id_token_error_type=id_token_error_type,
-            environment=environment,
             auth_context_from_request=auth_context_from_request,
-            logger=logger,
         ),
     )

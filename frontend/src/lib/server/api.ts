@@ -1,69 +1,10 @@
 import { env } from "$env/dynamic/private";
-import {
-  buildBackendAuthorizationHeader,
-  readFreshTokenSession,
-  readFrontendSessionCookie
-} from "$lib/server/session";
-import { redirect } from "@sveltejs/kit";
+import { getRequestEvent } from "$app/server";
+import { error, redirect } from "@sveltejs/kit";
 import type { Cookies } from "@sveltejs/kit";
 
-const DEFAULT_API_INTERNAL_BASE_URL = "http://gustav-alpha2:8000";
-const APP_SESSION_COOKIE_NAME = "gustav_session";
-
 export function buildApiUrl(path: string): string {
-  const baseUrl = env.API_INTERNAL_BASE_URL || DEFAULT_API_INTERNAL_BASE_URL;
-  return new URL(path, baseUrl).toString();
-}
-
-export async function readAppSessionActive(fetchFn: typeof fetch, cookies: Cookies): Promise<boolean> {
-  const sessionId = cookies.get(APP_SESSION_COOKIE_NAME);
-  if (!sessionId) {
-    return false;
-  }
-  try {
-    const response = await fetchFn(buildApiUrl("/api/me"), {
-      method: "GET",
-      headers: {
-        cookie: `${APP_SESSION_COOKIE_NAME}=${encodeURIComponent(sessionId)}`
-      }
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-function internalOrigin(): string {
-  const apiBaseUrl = env.API_INTERNAL_BASE_URL || DEFAULT_API_INTERNAL_BASE_URL;
-  try {
-    return new URL(apiBaseUrl).origin;
-  } catch {
-    return DEFAULT_API_INTERNAL_BASE_URL;
-  }
-}
-
-async function createAuthHeaders(
-  fetchFn: typeof fetch,
-  cookies: Cookies,
-  options?: {
-    forceRefresh?: boolean;
-    includeSameOrigin?: boolean;
-    headers?: HeadersInit;
-  }
-): Promise<Headers> {
-  const headers = new Headers(options?.headers);
-  const tokenSession = await readFreshTokenSession(cookies, fetchFn, {
-    forceRefresh: options?.forceRefresh
-  });
-  const backendAuthorization = buildBackendAuthorizationHeader(tokenSession?.accessToken);
-  if (backendAuthorization) {
-    headers.set("authorization", backendAuthorization);
-  }
-  if (options?.includeSameOrigin) {
-    headers.set("origin", internalOrigin());
-    headers.set("referer", internalOrigin());
-  }
-  return headers;
+  return new URL(path, env.API_INTERNAL_BASE_URL || "http://gustav-alpha2:8000").toString();
 }
 
 export class BackendRequestError extends Error {
@@ -83,63 +24,33 @@ type BackendRequestOptions = {
   authRedirectPath?: string;
 };
 
-function continuationHref(path: string): string {
-  return `/auth/continue?redirect=${encodeURIComponent(path || "/")}`;
-}
-
-async function handleFinalUnauthorizedResponse(
-  fetchFn: typeof fetch,
-  cookies: Cookies,
-  response: Response,
-  authRedirectPath?: string
+export async function backendRequest(
+  fetchFn: typeof fetch, cookies: Cookies, path: string, options?: BackendRequestOptions
 ): Promise<Response> {
-  if (!authRedirectPath) {
-    return response;
+  const headers = new Headers(options?.headers);
+  const session = cookies.get("gustav_session");
+  if (session) headers.set("cookie", `gustav_session=${encodeURIComponent(session)}`);
+  // Forward provenance verbatim. Only FastAPI decides whether this origin is trusted.
+  const request = getRequestEvent().request;
+  for (const name of ["origin", "referer"]) {
+    const value = request.headers.get(name);
+    if (value !== null) headers.set(name, value);
   }
-
-  const hasFrontendSession = Boolean(readFrontendSessionCookie(cookies));
-  const hasAppSession = hasFrontendSession ? false : await readAppSessionActive(fetchFn, cookies);
-  if (!hasFrontendSession && hasAppSession) {
-    console.info("auth.continuity", {
-      reason: "app_session_active_without_bearer"
+  const method = (options?.method || "GET").toUpperCase();
+  let response: Response;
+  try {
+    response = await fetchFn(buildApiUrl(path), { method, body: options?.body, headers });
+  } catch {
+    // Preserve drafts and authentication when the backend cannot be reached.
+    return new Response(JSON.stringify({ error: "service_unavailable" }), {
+      status: 503, headers: { "content-type": "application/json", "cache-control": "private, no-store" }
     });
   }
-  throw redirect(302, continuationHref(authRedirectPath));
-}
-
-export async function backendRequest(
-  fetchFn: typeof fetch,
-  cookies: Cookies,
-  path: string,
-  options?: BackendRequestOptions
-): Promise<Response> {
-  const requestInit = {
-    method: options?.method || "GET",
-    body: options?.body,
-    headers: await createAuthHeaders(fetchFn, cookies, {
-      headers: options?.headers,
-      includeSameOrigin: options?.includeSameOrigin
-    })
-  };
-
-  let response = await fetchFn(buildApiUrl(path), requestInit);
-  if (response.status !== 401) {
-    return response;
+  if (response.status === 401 && options?.authRedirectPath && (method === "GET" || method === "HEAD")) {
+    throw redirect(302, `/auth/continue?redirect=${encodeURIComponent(options.authRedirectPath)}`);
   }
-
-  response = await fetchFn(buildApiUrl(path), {
-    ...requestInit,
-    headers: await createAuthHeaders(fetchFn, cookies, {
-      forceRefresh: true,
-      headers: options?.headers,
-      includeSameOrigin: options?.includeSameOrigin
-    })
-  });
-  if (response.status !== 401) {
-    return response;
-  }
-
-  return await handleFinalUnauthorizedResponse(fetchFn, cookies, response, options?.authRedirectPath);
+  // A write is never retried or redirected here: its caller retains the draft.
+  return response;
 }
 
 export async function requireBackendJson<T>(
@@ -169,7 +80,7 @@ export async function readJsonOrNull(
     return null;
   }
   if (!response.ok) {
-    throw new Error(`Backend bootstrap request failed with ${response.status}`);
+    throw error(response.status, response.status === 503 ? "Die Anmeldung kann gerade nicht geprüft werden. Bitte versuche es gleich erneut." : "Die Anfrage konnte nicht abgeschlossen werden.");
   }
   return await response.json();
 }

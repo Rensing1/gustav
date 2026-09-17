@@ -99,14 +99,10 @@ def test_keycloak_uses_explicit_xforwarded_proxy_headers():
     assert environment.get("KC_HTTP_ENABLED") == "true"
 
 
-def test_caddy_hardens_keycloak_set_cookie_headers():
-    """The IdP reverse proxy should enforce the same cookie flags as the app stack."""
-    caddyfile = Path("reverse-proxy/Caddyfile").read_text(encoding="utf-8")
-
-    assert "id.localhost:443" in caddyfile
-    assert "header_down Set-Cookie" in caddyfile
-    assert "Secure; SameSite=Lax" in caddyfile
-
+def test_keycloak_owns_its_secure_cookie_attributes():
+    """Modern Keycloak emits correct cookies; the proxy must not duplicate attributes."""
+    caddyfile = Path("reverse-proxy/Caddyfile").read_text()
+    assert "header_down Set-Cookie" not in caddyfile
 
 def test_caddy_uses_one_shared_72_hour_local_tls_policy():
     """Local hosts should renew one consistent certificate policy less often."""
@@ -195,3 +191,12 @@ def test_keycloak_build_receives_registration_domain_whitelist():
     build = keycloak.get("build", {})
     args = build.get("args", {})
     assert args.get("ALLOWED_REGISTRATION_DOMAINS") == "${ALLOWED_REGISTRATION_DOMAINS:-}"
+
+
+def test_auth_infrastructure_does_not_log_browser_credentials_or_idp_personal_events():
+    keycloak_env = load_compose()['services']['keycloak']['environment']
+    assert keycloak_env['KC_HTTP_ACCESS_LOG_ENABLED'] == 'false'
+    assert 'org.keycloak.events:off' in keycloak_env['KC_LOG_LEVEL']
+    caddyfile = Path('reverse-proxy/Caddyfile').read_text()
+    assert 'request delete' in caddyfile
+    assert 'format filter' in caddyfile

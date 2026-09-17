@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import logging
-import os
 import sys as _sys
 from collections.abc import Callable, Mapping
-from functools import partial
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -14,9 +12,7 @@ from fastapi import FastAPI
 from backend.identity_access.oidc import OIDCConfig
 from backend.identity_access.tokens import (
     BearerTokenVerificationError,
-    IDTokenVerificationError,
     verify_bearer_token,
-    verify_id_token,
 )
 from backend.web import auth_runtime
 from backend.web.app_composition import (
@@ -27,7 +23,6 @@ from backend.web.app_composition import (
 from backend.web.app_composition import (
     running_under_pytest as _running_under_pytest,
 )
-from backend.web.auth_only_app import create_app_auth_only as _create_app_auth_only
 from backend.web.auth_session import SESSION_COOKIE_NAME  # noqa: F401
 from backend.web.concern_box_providers import ConcernBoxProviders, create_concern_box_providers
 from backend.web.layout_response import render_layout_response
@@ -146,17 +141,11 @@ def create_app(
     created_app.state.profile_providers = profile_providers if profile_providers is not None else create_profile_providers(runtime)
     initialize_main_storage()
     auth_wiring = create_main_auth_wiring(
-        state_store=lambda: runtime.state_store,
         session_store=lambda: runtime.session_store,
         cli_token_store=lambda: runtime.cli_token_store,
-        oidc_client=lambda: runtime.oidc_client,
         oidc_config=lambda: runtime.oidc_config,
         verify_bearer_token=access_token_verifier if access_token_verifier is not None else lambda token, cfg: verify_bearer_token(token=token, cfg=cfg),
         bearer_token_error_type=BearerTokenVerificationError,
-        verify_id_token=lambda id_token, cfg: verify_id_token(id_token=id_token, cfg=cfg),
-        id_token_error_type=IDTokenVerificationError,
-        internal_bff_secret=lambda: os.getenv("BFF_INTERNAL_SHARED_SECRET", ""),
-        environment=lambda: runtime.settings.environment,
         logger=logger,
     )
     created_app.state.auth_wiring = auth_wiring
@@ -182,6 +171,3 @@ AUTH_WIRING = app.state.auth_wiring
 # Derived from environment so ops can tune the interval without code
 # changes. Tests may override this constant directly on the main module.
 TEACHING_LIVE_POLL_INTERVAL_SECONDS = load_teaching_live_poll_interval_seconds()
-
-
-create_app_auth_only = partial(_create_app_auth_only, environment_provider=lambda: RUNTIME.settings.environment)

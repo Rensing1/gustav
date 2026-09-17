@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from backend.identity_access.stores import SessionStore, StateStore
+from backend.identity_access.stores import SessionStore
 
 
 def _runtime_from(main_module: Any) -> Any:
@@ -44,21 +44,6 @@ def install_session_store(
     store_factory = current_store.__class__ if current_store is not None else SessionStore
     installed = store or store_factory()
     monkeypatch.setattr(runtime, "session_store", installed, raising=False)
-    return installed
-
-
-def install_state_store(
-    monkeypatch: pytest.MonkeyPatch,
-    main_module: Any,
-    store: StateStore | None = None,
-) -> StateStore:
-    """Install one OIDC state store through the app runtime test surface."""
-
-    runtime = _runtime_from(main_module)
-    current_store = getattr(runtime, "state_store", None)
-    store_factory = current_store.__class__ if current_store is not None else StateStore
-    installed = store or store_factory()
-    monkeypatch.setattr(runtime, "state_store", installed, raising=False)
     return installed
 
 

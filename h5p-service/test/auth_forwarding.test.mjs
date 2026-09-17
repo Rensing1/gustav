@@ -17,9 +17,7 @@ function jsonResponse(status, payload) {
 
 const options = {
   gustavWebInternalBase: "http://web:8000/",
-  gustavFrontendInternalBase: "http://frontend:3000/",
   sessionCookieName: "gustav_session",
-  frontendSessionCookieName: "gustav_bff_session",
   timeoutMs: 123,
 };
 
@@ -45,7 +43,7 @@ test("fetchGustavMe authenticates through backend session cookies first", async 
 });
 
 
-test("fetchGustavMe falls back to the frontend BFF when backend session is unauthenticated", async () => {
+test("fetchGustavMe keeps backend 401 without a second authentication source", async () => {
   const calls = [];
   const result = await fetchGustavMe("gustav_session=expired; gustav_bff_session=bff", {
     ...options,
@@ -56,13 +54,8 @@ test("fetchGustavMe falls back to the frontend BFF when backend session is unaut
     },
   });
 
-  assert.deepEqual(result, { ok: true, payload: { sub: "student-bff", roles: ["student"] } });
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1].url, "http://frontend:3000/internal/h5p/me");
-  assert.deepEqual(calls[1].init.headers, {
-    "cache-control": "no-store",
-    cookie: "gustav_bff_session=bff",
-  });
+  assert.deepEqual(result, { ok: false, status: 401 });
+  assert.equal(calls.length, 1);
 });
 
 
@@ -86,7 +79,7 @@ test("checkLearningH5PContentAccess encodes ids and accepts backend 204", async 
 });
 
 
-test("checkLearningH5PContentAccess falls back to BFF access checks after backend 401", async () => {
+test("checkLearningH5PContentAccess keeps backend access denial without a fallback", async () => {
   const calls = [];
   const result = await checkLearningH5PContentAccess("course/id", "content id", "gustav_session=expired; gustav_bff_session=bff", {
     ...options,
@@ -97,13 +90,8 @@ test("checkLearningH5PContentAccess falls back to BFF access checks after backen
     },
   });
 
-  assert.deepEqual(result, { ok: true, status: 204 });
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1].url, "http://frontend:3000/internal/h5p/access?course_id=course%2Fid&content_id=content%20id");
-  assert.deepEqual(calls[1].init.headers, {
-    "cache-control": "no-store",
-    cookie: "gustav_bff_session=bff",
-  });
+  assert.deepEqual(result, { ok: false, status: 401 });
+  assert.equal(calls.length, 1);
 });
 
 

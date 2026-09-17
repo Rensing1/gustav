@@ -48,7 +48,7 @@ describe("protected Svelte page bootstrap contract", () => {
 
     expect(guardSource).toContain("/auth/continue");
     expect(guardSource).toContain("appSessionActive");
-    expect(layoutSource).toContain("readAppSessionActive");
+    expect(layoutSource).not.toContain("readAppSessionActive");
     expect(layoutSource).toContain("appSessionActive");
   });
 

@@ -356,18 +356,11 @@ def test_service_dsn_falls_back_to_postgres_when_supabase_admin_unreachable(monk
     assert service_dsn.startswith("postgresql://postgres:postgres@127.0.0.1:54322/postgres")
 
 
-def test_state_store_reset_fixture_creates_session_state():
-    # Sanity: a test can create login state via Runtime state storage.
+def test_auth_runtime_keeps_flows_in_postgres_while_isolating_test_sessions():
     import backend.web.main as main
+    from backend.identity_access.stores import SessionStore
+    from backend.identity_access.unified_store import UnifiedSessionRepository
 
-    rec = main.RUNTIME.state_store.create(code_verifier="verifier")
-    assert rec.state, "Runtime state store should allow creating records inside a test"
-    getattr(main.RUNTIME.state_store, "_data", {}).clear()
-
-
-def test_state_store_reset_fixture_provides_fresh_store():
-    import backend.web.main as main
-
-    # The autouse fixture should ensure the store has no leftover data.
-    data = getattr(main.RUNTIME.state_store, "_data", {})
-    assert not data, "Runtime state store must be cleared between tests to avoid 400 callbacks"
+    assert not hasattr(main.RUNTIME, "state_store")
+    assert isinstance(main.RUNTIME.session_repository, UnifiedSessionRepository)
+    assert isinstance(main.RUNTIME.session_store, SessionStore)

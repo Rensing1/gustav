@@ -182,26 +182,9 @@ def test_main_delegates_router_wiring_to_dedicated_module() -> None:
         assert expected in operations
 
 
-def test_main_delegates_auth_only_test_app_to_dedicated_module() -> None:
-    """The lightweight auth test app should not be implemented in main.py."""
-
-    import backend.web.main as main
-
-    auth_only_app = importlib.import_module("backend.web.auth_only_app")
-    source = MAIN_SOURCE.read_text(encoding="utf-8")
-    module_source = (PROJECT_ROOT / "backend/web/auth_only_app.py").read_text(encoding="utf-8")
-
-    assert hasattr(auth_only_app, "create_app_auth_only")
-    assert callable(main.create_app_auth_only)
-    assert "backend.web.auth_only_app" in source
-    assert "def create_app_auth_only" not in source
-    assert "import secrets" not in source
-    assert "from fastapi.staticfiles import StaticFiles" not in source
-    assert "backend.web.main" not in module_source
-
-    auth_test_app = auth_only_app.create_app_auth_only()
-    assert auth_test_app.title == "GUSTAV (auth-only)"
-    assert auth_test_app.version == "0.0.4"
+def test_no_unverified_auth_callback_stub_is_packaged() -> None:
+    assert not (PROJECT_ROOT / "backend/web/auth_only_app.py").exists()
+    assert "create_app_auth_only" not in MAIN_SOURCE.read_text()
 
 
 def test_main_delegates_auth_bridge_routes_to_dedicated_router() -> None:
@@ -324,14 +307,13 @@ def test_main_delegates_auth_runtime_store_wiring_to_dedicated_module() -> None:
         "AuthSettings",
         "load_oidc_config",
         "create_session_store",
-        "create_bff_session_store",
         "build_cli_token_store",
     ):
         assert hasattr(auth_runtime, expected)
 
     assert hasattr(main, "RUNTIME")
     assert hasattr(main.RUNTIME, "session_store")
-    assert hasattr(main.RUNTIME, "bff_session_store")
+    assert not hasattr(main.RUNTIME, "bff_session_store")
     assert hasattr(main.RUNTIME, "cli_token_store")
     assert not hasattr(main, "_build_cli_token_store")
     assert not hasattr(main, "_is_public_path")

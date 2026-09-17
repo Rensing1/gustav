@@ -31,7 +31,6 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | DELETE /api/teaching/units/{unit_id}/sections/{section_id} | public API | teacher | teaching repo | empty/redirect | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
 | DELETE /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id} | public API | teacher | teaching/learning repo + storage | empty/redirect | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
 | DELETE /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id} | public API | teacher | teaching repo | empty/redirect | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
-| DELETE /backend-internal/app/bff-session | BFF/internal | authenticated BFF | identity/session | unspecified | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
 | DELETE /h5p/contents/{content_id} | H5P service | teacher | H5P storage/service | empty/redirect | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | GET /api/app/profile | BFF/internal | authenticated BFF | identity/session | AppProfileView | backend/tests/test_app_*, test_session_* | medium | active | retain | SvelteKit BFF/view model |
 | GET /api/app/profile/cli-tokens | BFF/internal | authenticated BFF | identity/session | array | backend/tests/test_app_*, test_session_* | medium | active | retain | SvelteKit BFF/view model |
@@ -110,12 +109,13 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | GET /auth/callback | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
 | GET /auth/continue | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
 | GET /auth/forgot | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
-| GET /auth/login | auth bridge | public/authenticated | identity/session | empty/redirect | backend/tests/test_auth_* | high | active | retain | identity adapter |
-| GET /auth/logout | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
-| GET /auth/logout/success | auth bridge | public/authenticated | identity/session | HTML | backend/tests/test_auth_* | high | active | retain | identity adapter |
-| GET /auth/password | auth bridge | public/authenticated | identity/session | empty/redirect | backend/tests/test_auth_* | high | active | retain | identity adapter |
-| GET /auth/register | auth bridge | public/authenticated | identity/session | empty/redirect | backend/tests/test_auth_* | high | active | retain | identity adapter |
-| GET /backend-internal/app/bff-session | BFF/internal | authenticated BFF | identity/session | unspecified | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
+| GET /auth/login | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
+| GET /auth/logout | auth bridge | public/authenticated | identity/session | empty/redirect | backend/tests/test_auth_* | high | active | retain | identity adapter |
+| GET /auth/logout/callback | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
+| GET /auth/logout/success | auth bridge | public/authenticated | identity/session | empty/redirect | backend/tests/test_auth_* | high | active | retain | identity adapter |
+| GET /auth/password | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
+| GET /auth/problem | auth bridge | public/authenticated | identity/session | empty/redirect | backend/tests/test_auth_* | high | active | retain | identity adapter |
+| GET /auth/register | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
 | GET /h5p/auth/me | H5P service | authenticated principal bridge | web /api/me principal bridge | Me | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | GET /h5p/contents/{content_id}/export | H5P service | teacher | H5P storage/service | application/zip | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
 | GET /h5p/editor | H5P service | admin | H5P storage/service | HTML | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
@@ -128,6 +128,7 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | GET /health | health/ops | ops | service status | HealthStatus | backend/tests/test_*health* | low | active | retain | ops adapter |
 | GET /internal/health/learning-worker | health/ops | ops | service status | LearningWorkerHealth | backend/tests/test_*health* | low | active | retain | ops adapter |
 | GET /internal/health/openai | health/ops | ops | service status | OpenAIHealth | backend/tests/test_*health* | low | active | retain | ops adapter |
+| GET /invite/complete | retired legacy UI | authenticated | none | empty/redirect | characterization pending | medium | retired legacy UI | remove/410 with tests | removed route |
 | PATCH /api/app/profile/display-name | BFF/internal | authenticated BFF | identity/session | empty/redirect | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
 | PATCH /api/app/profile/name | BFF/internal | authenticated BFF | identity/session | empty/redirect | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
 | PATCH /api/teaching/courses/{course_id} | public API | teacher | teaching repo | Course | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
@@ -140,10 +141,8 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | PATCH /api/teaching/units/{unit_id}/sections/{section_id} | public API | teacher | teaching repo | Section | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
 | PATCH /api/teaching/units/{unit_id}/sections/{section_id}/materials/{material_id} | public API | teacher | teaching/learning repo + storage | Material | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
 | PATCH /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id} | public API | teacher | teaching repo | Task | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
-| PATCH /backend-internal/app/bff-session | BFF/internal | authenticated BFF | identity/session | unspecified | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
 | PATCH /h5p/contents/{content_id} | H5P service | teacher | H5P storage/service | H5PContentSaveResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | POST /api/app/profile/cli-tokens | BFF/internal | authenticated BFF | identity/session | CLITokenCreated | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
-| POST /api/app/session-sync | BFF/internal | authenticated BFF | identity/session | empty/redirect | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
 | POST /api/course-invitations/preview | public API | authenticated | none | CourseInvitationPreview | characterization pending | high | active | retain | OpenAPI + use case adapter |
 | POST /api/course-invitations/redeem | public API | authenticated | none | CourseInvitationRedemption | characterization pending | high | active | retain | OpenAPI + use case adapter |
 | POST /api/learning/concern-box/entries | BFF/internal | student | learning repo | ConcernBoxEntryCreated | backend/tests/test_learning_*, test_openapi_learning_* | high | active | retain | SvelteKit BFF/view model |
@@ -203,14 +202,15 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/reset | public API | teacher | teaching repo | Task | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
 | POST /api/teaching/units/{unit_id}/sections/{section_id}/tasks/{task_id}/h5p/save | public API | teacher | teaching repo | H5PContentSaveResponse | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
 | POST /api/teaching/units/{unit_id}/tasks/{task_id}/dialog-preview | public API | teacher | teaching repo | DialogGeneration | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
+| POST /auth/logout | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
 | POST /h5p/ajax | H5P service | service | H5P storage + learning forwarding | object | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | POST /h5p/contents | H5P service | teacher | H5P storage/service | H5PContentSaveResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | POST /h5p/contents/import | H5P service | teacher | H5P storage/service | H5PContentImportResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | POST /h5p/finishedData | H5P service | student/teacher | H5P storage + learning forwarding | object | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | POST /h5p/libraries/import | H5P service | teacher | H5P storage/service | H5PLibraryImportResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
+| POST /invite/complete | retired legacy UI | authenticated | none | unspecified | characterization pending | high | retired legacy UI | remove/410 with tests | removed route |
 | PUT /api/learning/internal/upload-proxy | BFF/internal | student | teaching/learning repo + storage | object | backend/tests/test_learning_*, test_openapi_learning_* | high | active | retain | SvelteKit BFF/view model |
 | PUT /api/learning/internal/upload-stub | BFF/internal | student | teaching/learning repo + storage | object | backend/tests/test_learning_*, test_openapi_learning_* | high | active | retain | SvelteKit BFF/view model |
-| PUT /backend-internal/app/bff-session | BFF/internal | authenticated BFF | identity/session | unspecified | backend/tests/test_app_*, test_session_* | high | active | retain | SvelteKit BFF/view model |
 
 <!-- route-map:generated:end -->
 

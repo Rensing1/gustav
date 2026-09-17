@@ -1,223 +1,75 @@
-# Auth, Sessions und Cookies — Referenz
+# Authentifizierung, Sitzungen und Cookies
 
-Ziel: Eine kanonische technische Referenz für den aktuellen Auth-Stack von GUSTAV. Dieses Dokument erklärt Zuständigkeiten, Flows, Cookies, Session-TTLs, interne Grenzen und typische Fehlerbilder.
+Stand: 17. September 2026. Diese Referenz beschreibt die gemeinsame GUSTAV-Sitzung und ersetzt die frühere Doppelarchitektur.
 
-## Überblick
+## Zuständigkeit
 
-GUSTAV verwendet drei klar getrennte Schichten:
+Keycloak 26.7.3 verwaltet Passwörter, E-Mail-Verifikation, Remember-me und verbindliche Sitzungsfristen. FastAPI führt OIDC, Tokenprüfung, Sitzungsauflösung, Refresh und Abmeldung aus. SvelteKit rendert Seiten und leitet das gemeinsame Cookie bei Backend-Aufrufen weiter. Es besitzt keine OIDC-Tokens, Client-Geheimnisse oder eigene Anmeldesitzung. H5P prüft dieselbe Sitzung über FastAPI; interne, ausdrücklich authentifizierte Dienstaufrufe bleiben getrennt.
 
-- Keycloak ist der Identity Provider (IdP) für Login, Registrierung, Passwort-Reset und Remember-me.
-- SvelteKit in `frontend/` ist der Browser-BFF. Diese Schicht verarbeitet den öffentlichen `/auth/*`-Flow des Browsers und hält Token-Material vom Browser fern.
-- FastAPI in `backend/web` mintet und validiert die stabile App-Session `gustav_session` für bestehende cookie-authentifizierte APIs und interne Server-Flows.
+## Login und Registrierung
 
-Wichtig: Der Browser arbeitet nicht direkt mit OIDC-Tokens. Er hält nur opake Cookies. Access- und Refresh-Token liegen serverseitig in der BFF-Session.
+1. `/auth/login`, `/auth/register`, `/auth/password` und `/auth/forgot` werden durch Caddy an FastAPI geleitet. `/register` führt unmittelbar zum Registrierungsformular bei Keycloak.
+2. FastAPI erzeugt State, Nonce und PKCE-Verifier. PostgreSQL speichert den Vorgang für 15 Minuten in `auth_flows`, gebunden an ein separates Browser-Cookie. State und Browserbindung werden nur als Hash gespeichert. Pro Browser bleiben höchstens drei Vorgänge erhalten.
+3. Der Callback konsumiert genau einen passenden Vorgang atomar. Falsche Browserbindung, Replay, abgelaufener State und widersprüchliche Callback-Parameter werden abgelehnt.
+4. FastAPI tauscht den Code mit dem PKCE-Verifier ein und prüft Signatur, Issuer, zeitliche Gültigkeit, Subject, Nonce und beide Audiences: ID-Tokens gehören zu `gustav-web`, Access-Tokens ausdrücklich zu `gustav-api`. `azp` ersetzt die Audience nicht.
+5. Nach erfolgreicher Prüfung entsteht eine zufällige GUSTAV-Sitzung. Der Browser erhält ausschließlich ihren opaken Schlüssel. Ein vorhandener alter Schlüssel wird widerrufen. Rücksprungziele sind zentral geprüfte lokale Pfade mit begrenzten Queryparametern; Callback-Adressen stammen aus der Konfiguration.
 
-## Zuständigkeiten
+Die Registrierung fragt Anzeigename, Schul-E-Mail und Passwort einmal ab. Die verbindliche Domain-Prüfung liegt in Keycloak und gilt auch bei direktem Aufruf. Der Realm-Renderer übernimmt `ALLOWED_REGISTRATION_DOMAINS` für neue Realms; bestehende Realms werden gezielt über die Admin-API aktualisiert.
 
-- Keycloak:
-  - zeigt Login-, Registrierungs- und Passwort-Reset-Seiten,
-  - führt den Authorization-Code-Flow mit PKCE aus,
-  - verwaltet IdP-Session und optional Remember-me.
-- SvelteKit-BFF:
-  - startet `/auth/login`, `/auth/register`, `/auth/password`, `/auth/forgot`,
-  - verarbeitet `/auth/callback`,
-  - speichert OIDC-Tokens serverseitig als BFF-Session,
-  - synchronisiert nach erfolgreichem Callback die stabile App-Session im Backend.
-- FastAPI:
-  - mintet `gustav_session` über `/api/app/session-sync`,
-  - validiert `gustav_session` für `/api/*`,
-  - verwendet die App-Session für bestehende APIs, SSR-nahe Guards und H5P.
+Registrierung, Zurücksetzen und Passwortänderung zeigen die aktive Passwortpolicy gemeinsam vor der Eingabe: mindestens acht Zeichen, Großbuchstabe, Kleinbuchstabe, Zahl und Sonderzeichen. Es gibt keine abweichende Browservalidierung. E-Mail und Anzeigename bleiben nach Fehlern erhalten, Passwörter werden nicht erneut ausgegeben. Bestehende Konten müssen ihr Passwort nicht vorsorglich ändern.
 
-## Login-Flow
+Keycloak 26 verschiebt die Passwortanlage standardmäßig hinter die E-Mail-Verifikation. Die Flow-Konfiguration `always_set_password_on_register_form=true` erhält den vereinbarten Ein-Formular-Ablauf mit anschließender Verifikation. Diese unterstützte, upstream bereits als veraltet markierte Option muss beim nächsten Upgrade erneut geprüft werden. Der Reset verwendet `/protocol/openid-connect/forgot-credentials`; ein direkter Einstieg unter `login-actions` verliert OIDC-Kontext und ist kein unterstützter Client-Einstieg. Siehe [Keycloak-Administration](https://www.keycloak.org/docs/26.7.3/server_admin/#_registration-rc-client-flows) und [RegistrationPassword](https://github.com/keycloak/keycloak/blob/26.7.3/services/src/main/java/org/keycloak/authentication/forms/RegistrationPassword.java).
 
-1. Browser ruft `GET /auth/login` auf `app.localhost` auf.
-2. SvelteKit erzeugt PKCE-Daten, `state` und `nonce`.
-3. SvelteKit speichert den Flow serverseitig über das Cookie `gustav_bff_oidc_flow`.
-4. Browser wird zu Keycloak (`id.localhost`) umgeleitet.
-5. Nach erfolgreichem Login ruft Keycloak `GET /auth/callback` auf `app.localhost` auf.
-6. SvelteKit tauscht den Code gegen Tokens, prüft `iss`, `aud` und `nonce` und legt die BFF-Session an.
-7. SvelteKit ruft `POST /api/app/session-sync` im Backend auf, damit FastAPI die stabile App-Session mintet.
-8. Der Callback setzt zwei Cookies:
-   - `gustav_bff_session`
-   - `gustav_session`
-9. Danach arbeitet der Browser nur noch mit diesen opaken Cookies.
+## Cookie-Vertrag
 
-## Logout-Flow
+Alle folgenden Cookies sind host-only, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`.
 
-1. Browser ruft `GET /auth/logout` auf.
-2. SvelteKit löscht zuerst die BFF-Session.
-3. SvelteKit ruft das Backend-Logout an, damit `gustav_session` gelöscht wird.
-4. Anschließend erfolgt die Weiterleitung zum Keycloak-End-Session-Endpoint.
-5. Keycloak beendet die IdP-Session und leitet zurück zu `/auth/logout/success`.
+| Cookie | Zweck | Lebensdauer |
+|---|---|---|
+| `gustav_session` | Einzige GUSTAV-Anmeldesitzung; zufälliger Schlüssel | Browser-Sitzungscookie, ohne `Max-Age` |
+| `gustav_auth_browser` | Bindung eines OIDC-Vorgangs an den Browser | 15 Minuten |
+| `gustav_auth_attempt` | Signierte Begrenzung automatischer SSO-Versuche | 60 Sekunden |
+| `gustav_auth_logged_out` | Signierter Schutz vor automatischer Wiederanmeldung nach Logout | 30 Tage, bis zur ausdrücklichen Anmeldung |
 
-Wenn verfügbar, wird `id_token_hint` genutzt. Das verbessert die Kompatibilität mit dem IdP-Logout und verhindert unnötige Fallbacks auf `client_id`-only.
+Keycloak setzt seine eigenen Cookies auf dem IdP-Host. Kurs-Einladungen und andere fachliche Cookies sind keine Anmeldesitzungen. Cookie-Inhalte dürfen nicht in Logs erscheinen. HTTP-Zugriffslogs und personenbezogene Keycloak-Ereignislogs sind deaktiviert; der Proxy entfernt das Anfrageobjekt aus Fehlerlogs.
 
-## Cookies
+## Fristen und Remember-me
 
-### `gustav_bff_oidc_flow`
+| Einstellung | Ohne Remember-me | Mit Remember-me |
+|---|---:|---:|
+| SSO-Inaktivität | 24 Stunden | 30 Tage |
+| Maximale SSO-Laufzeit | 7 Tage | 30 Tage |
+| Access-Token | 5 Minuten | 5 Minuten |
+| Client-Sitzungsfristen | Von SSO geerbt | Von SSO geerbt |
 
-- Besitzer: SvelteKit-BFF
-- Zweck: temporärer OIDC-Flow-Speicher für `state`, PKCE-`code_verifier`, `nonce` und sicheren Redirect-Pfad
-- Lebensdauer: kurzlebig nur für den laufenden Login-/Register-/Password-Flow
-- Flags: `HttpOnly; Secure; SameSite=lax`
-- Sichtbarkeit: host-only auf `app.localhost`, Pfad `/auth`
+Die freiwillige Checkbox ist zunächst leer. Sie eignet sich für persönliche Geräte. Die GUSTAV-Sitzung übernimmt `refresh_expires_in` aus der erfolgreichen Token-Antwort und aktualisiert ihre Gültigkeit nach jedem Refresh. Es gibt keine zusätzliche unabhängige Abmeldung nach 24 Stunden.
 
-Wichtig: Dieses Cookie ist kein Login-Cookie. Es dient nur dazu, den Redirect-basierten OIDC-Flow sicher zu korrelieren.
+Nach einem Browser-Neustart fehlt das GUSTAV-Sitzungscookie. Eine persistente Keycloak-Remember-me-Sitzung kann die Anmeldung automatisch wiederherstellen. Startseite und geschützte Seiten verwenden dafür `/auth/continue` mit `prompt=none`. Ein signierter Marker erlaubt höchstens einen automatischen Versuch innerhalb von 60 Sekunden und bleibt nach dem Callback wirksam. Neue Besucher sehen nach erfolgloser Prüfung eine neutrale Anmeldung; abgelaufene Sitzungen und technische Störungen haben unterschiedliche Fehlerzustände.
 
-### `gustav_bff_session`
+## Persistenz und Refresh
 
-- Besitzer: SvelteKit-BFF
-- Zweck: opaker Schlüssel auf serverseitig gespeicherte OIDC-Tokens
-- Lebensdauer: BFF-Session-TTL
-- Flags: `HttpOnly; Secure; SameSite=lax`
-- Sichtbarkeit: host-only auf `app.localhost`
+`public.app_sessions` enthält den SHA-256-Hash des zufälligen Sitzungsschlüssels, Subject, Rollen, Anzeigename, ID-/Access-/Refresh-Token, Ablaufzeiten und die Refresh-Koordination. Nur serverseitige Datenbankrollen erhalten Zugriff; RLS und eingeschränkte Tabellenrechte schützen Browserrollen. Konten und Lerndaten liegen getrennt davon.
 
-Die eigentlichen Tokens liegen serverseitig in `public.bff_sessions`.
+Der frameworkunabhängige `SessionService` liefert eine gültige Sitzung, keine Sitzung oder `SessionUnavailable`. Der HTTP-Adapter übersetzt die letzten beiden Ergebnisse in `401` beziehungsweise `503`. Infrastrukturfehler löschen keine wiederherstellbare Sitzung.
 
-### `gustav_session`
+30 Sekunden vor Access-Token-Ablauf versucht ein Prozess, den Refresh atomar für zehn Sekunden zu reservieren. Dabei steigt eine Versionsnummer. Erst nach Abschluss dieser kurzen Transaktion erfolgt der Token-Netzaufruf mit fünf Sekunden Timeout. Nur die unveränderte Reservierung derselben Version darf das Ergebnis speichern. Eine abgelaufene Reservierung erlaubt die Übernahme durch einen anderen Prozess; solange niemand sie übernommen hat, darf ihr bisheriger Besitzer ein erfolgreich rotiertes Token noch sicher speichern. Ein spätes Ergebnis überschreibt weder neuere Tokens noch stellt es eine gelöschte Sitzung wieder her.
 
-- Besitzer: FastAPI
-- Zweck: stabile App-Session für bestehende cookie-authentifizierte APIs
-- Lebensdauer: App-Session-TTL
-- Flags: `HttpOnly; Secure; SameSite=lax`
-- Sichtbarkeit: host-only auf `app.localhost`
+Parallel eintreffende Anfragen verwenden ein noch gültiges Token oder warten begrenzt auf das gemeinsame Ergebnis. Nach spätestens sechs Sekunden Wartebudget liefern sie `503`. Netzwerkfehler, `429` und `5xx` führen zu einer fünfsekündigen Wiederholungssperre. `invalid_grant` und endgültiger Ablauf führen zur Ablehnung. Ein Prozessabbruch hinterlässt höchstens die befristete Reservierung.
 
-Dieses Cookie ist die Quelle der Authentifizierung für `/api/me`, viele Teaching-/Learning-APIs und den H5P-Service.
+Ein unbekannter Signaturschlüssel löst einmalig einen erneuten JWKS-Abruf aus. Ein Ausfall dieses Abrufs ist ein Infrastrukturfehler; eine überprüfbar ungültige Signatur ist eine ungültige Anmeldung. Offensichtlich fehlerhafte JWTs werden bereits vor dem Netzaufruf abgelehnt. Rollen werden bei erfolgreichem Refresh aus den neuen verifizierten Tokens übernommen. Administrative Keycloak-Widerrufe greifen spätestens bei der nächsten Erneuerung; bis dahin gilt das begrenzte Restfenster des fünfminütigen Access-Tokens.
 
-## Warum gibt es zwei Sessions?
+## Schreibzugriffe und Abmeldung
 
-Die Trennung ist absichtlich:
+Cookie-authentifizierte Schreibzugriffe benötigen einen passenden `Origin`; nur bei fehlendem `Origin` ist ein passender `Referer` zulässig. Maßgeblich ist die konfigurierte öffentliche Callback-Origin. Fremde, fehlende oder ungültige Herkunft wird mit `403` abgelehnt. Zusätzliche fachliche CSRF-Token-Prüfungen bleiben erhalten. SvelteKit und H5P reichen die tatsächliche Browserherkunft weiter. Sie erzeugen keine vertrauenswürdigen Origin-Header für ungeprüfte Anfragen.
 
-- Die BFF-Session kapselt OIDC-Tokens und Refresh-Logik.
-- Die App-Session hält die bestehende Backend- und API-Semantik stabil.
+Ein ausdrücklich übermittelter ungültiger Bearer-Token kann nicht durch ein gültiges Cookie ersetzt werden. CLI-Tokens behalten eigene Scopes und ausschließlich dafür freigegebene Routen. Schreibzugriffe werden nach einer Wiederanmeldung niemals automatisch erneut gesendet. Lernentwürfe überstehen eine notwendige Wiederherstellung; Dateiauswahl und Übermittlung müssen bewusst erfolgen.
 
-Dadurch kann GUSTAV browserseitig sichere Cookies behalten, ohne Access- oder Refresh-Token an den Browser auszugeben, und gleichzeitig bestehende cookie-authentifizierte Backend-Endpunkte weiterverwenden.
+`GET /auth/logout` zeigt eine Bestätigung. Erst `POST /auth/logout` widerruft die lokale Sitzung und führt zunächst die Keycloak-Abmeldung serverseitig mit browsergebundenem State aus. Auch das ID-Token bleibt dabei im Backend. Nach bestätigter IdP-Antwort wird der Browser ohne Tokens zu Keycloak weitergeleitet, damit dessen Cookies entfernt und der State-Callback abgeschlossen werden. Der Logout-Marker unterbindet anschließende automatische SSO-Anmeldung. Erst eine ausdrückliche Anmeldung hebt ihn auf. Ein Ausfall beim IdP ändert die lokale Abmeldung nicht, darf aber nicht als vollständige Abmeldung bestätigt werden. `/auth/logout/callback` bestätigt nur einen passenden, einmalig konsumierten Logout-Vorgang. Eine unvollständige Abmeldung bietet eine ausdrückliche Wiederholung an. Fehlt bereits die lokale Sitzung, kann Keycloak die Abmeldung selbst bestätigen lassen.
 
-## Session-Speicher und TTLs
+## Konfiguration, Migration und Nachweise
 
-### BFF-Session
+Das Backend verwendet `KC_BASE_URL`, `KC_PUBLIC_BASE_URL`, `KC_REALM`, `KC_CLIENT_ID`, `REDIRECT_URI`, optional `KC_CLIENT_SECRET`, `SESSION_DATABASE_URL` und `APP_CSRF_TOKEN_SECRET`. Der Signaturschlüssel für die Marker muss mindestens 32 Zeichen lang sein. Für die Anmeldung benötigt das Frontend nur seine öffentliche `ORIGIN` und `API_INTERNAL_BASE_URL`. Der getrennte `COURSE_INVITE_INTENT_SECRET` signiert ausschließlich fachliche Einladungswünsche; er ist kein OIDC- oder Sitzungsgeheimnis. Nach einer Registrierung wird ein Kursbeitritt ausdrücklich per Formular bestätigt, niemals durch einen lesenden Seitenaufruf. Alte BFF-Sitzungsvariablen und Synchronisationsschnittstellen entfallen.
 
-Die BFF-Session speichert zwei verschiedene Zeiten:
+Die additive Migration erweitert `app_sessions` und legt `auth_flows` an. Alte Sitzungen ohne Tokens werden nicht übernommen; die einmalige Neuanmeldung ist beabsichtigt. Die abschließende Bereinigung der alten BFF-Tabelle erfolgt separat nach der lokalen Abnahme und Rückfallentscheidung. Supabase-Schemaänderungen erfolgen ausschließlich über Migrationen. Keycloak migriert sein eigenes Schema; nach einem Upgrade erfordert ein Rückwechsel die geprüfte Datenbanksicherung, nicht nur das alte Image. Referenz: [Upgrade-Anleitung](https://www.keycloak.org/docs/26.7.3/upgrading/).
 
-- `access_token_expires_at`
-- `session_expires_at`
-
-Das ist wichtig:
-
-- Ein abgelaufener Access-Token bedeutet nicht automatisch Logout.
-- Solange `session_expires_at` noch nicht erreicht ist, kann der BFF den Access-Token über den Refresh-Token erneuern.
-
-Standardwerte:
-
-- `BFF_SESSION_TTL_SECONDS` steuert die Lebensdauer der BFF-Session.
-- Wenn nicht gesetzt, wird `APP_SESSION_TTL_SECONDS` als Fallback verwendet.
-- In GUSTAV ist der aktuelle Default 24 Stunden.
-
-### App-Session
-
-Die App-Session lebt unabhängig von der OIDC-Access-Token-Lebensdauer.
-
-- TTL-Quelle: `APP_SESSION_TTL_SECONDS`
-- aktueller Default: 24 Stunden
-- Speicherung:
-  - DEV typischerweise In-Memory
-  - prod-nah und PROD in `public.app_sessions`
-
-### Remember-me
-
-Remember-me in Keycloak verlängert nur die IdP-Session. Es verändert nicht die Semantik von `gustav_bff_session` oder `gustav_session`. In der Praxis kann eine verlängerte Keycloak-Session dazu führen, dass spätere Re-Authentifizierung weniger Reibung erzeugt, aber die App- und BFF-TTL bleiben eigenständige GUSTAV-Entscheidungen.
-
-## Interne Grenzen
-
-### `/backend-internal/app/bff-session`
-
-Diese Route ist rein intern.
-
-- Sie ist nicht Teil des öffentlichen Browser-Vertrags.
-- Sie wird vom SvelteKit-BFF verwendet, um BFF-Sessions anzulegen, zu lesen, zu aktualisieren und zu löschen.
-- Zugriffsschutz erfolgt über `BFF_INTERNAL_SHARED_SECRET`.
-
-Wichtig: Diese Route darf nie auf Browser-Redirect- oder Public-Allowlist-Semantik angewiesen sein. Ein Request ohne Shared Secret muss API-artig fehlschlagen, nicht als HTML-Login-Redirect enden.
-
-## Relevante ENV-Variablen
-
-- `KC_BASE_URL`: interner Keycloak-Endpoint für Server-zu-Server-Aufrufe
-- `KC_PUBLIC_BASE_URL`: browserseitiger Keycloak-Host
-- `KC_REALM`
-- `KC_CLIENT_ID`
-- `WEB_BASE` / `ORIGIN`
-- `FRONTEND_SESSION_SECRET`: Signatur für BFF-Flow-Cookies
-- `BFF_INTERNAL_SHARED_SECRET`: Schutz der internen BFF-Session-Route
-- `APP_SESSION_TTL_SECONDS`
-- `BFF_SESSION_TTL_SECONDS`
-- `FRONTEND_SESSION_COOKIE_NAME`
-
-In prod-artigen Umgebungen müssen `FRONTEND_SESSION_SECRET` und `BFF_INTERNAL_SHARED_SECRET` gesetzt sein. Platzhalter oder leere Werte sind Konfigurationsfehler.
-
-## Typische Fehlerbilder
-
-### `400 invalid_code_or_state`
-
-Typische Ursachen:
-
-- abgelaufener oder fehlender Flow
-- parallele Login-Flows mit ungültigem `state`
-- beschädigtes oder ungültig signiertes Flow-Cookie
-
-### `400 invalid_nonce` oder `400 invalid_id_token`
-
-Typische Ursachen:
-
-- `nonce`-Mismatch
-- ungültiges ID-Token
-- falscher IdP- oder Client-Kontext
-
-### `502 session_setup_failed`
-
-Typische Ursachen:
-
-- BFF-Session konnte nicht angelegt werden
-- `/api/app/session-sync` konnte keine App-Session minten
-- fehlendes oder falsches `BFF_INTERNAL_SHARED_SECRET`
-- Datenbankschema und Laufzeitmodell der BFF-Session sind nicht kompatibel
-
-### `/api/me` liefert `401` direkt nach erfolgreichem Login
-
-Typische Ursachen:
-
-- `gustav_session` wurde im Callback nicht gesetzt
-- der Callback war in Wahrheit ein `502 session_setup_failed`
-- App-Session wurde nicht im Backend synchronisiert
-
-### `/api/app/session-bootstrap` liefert `401`
-
-Der öffentliche Backend-Vertrag bleibt beim Response-Body `{"error": "unauthenticated"}`. Für die Diagnose werden niedrig-kardinale Gründe ohne Token, Cookies, Session-IDs oder personenbezogene Daten dokumentiert: `session_bootstrap_missing_bearer`, `session_bootstrap_invalid_bearer`, `bff_session_missing`, `bff_session_read_empty`, `bff_session_token_refresh_failed` und `continuation_loop_guard_triggered`. Browser-Recovery ist nur erlaubt, wenn der Redirect ein lokaler In-App-Pfad aus dem aktuellen Pfad oder einem geprüften same-origin Referer ist. H5P-, Maschinen- und interne Routen ohne sicheren Browser-Kontext behalten ihre API-artige `401`-Semantik. Geschützte Browser-Routen probieren bei einem finalen `401` zuerst `/auth/continue`, damit eine noch aktive Keycloak-SSO-Sitzung die BFF- und App-Session ohne sichtbaren Login-Bounce reparieren kann. Wenn `/auth/continue` für denselben Redirect erneut gestartet würde, greift der Loop-Guard und fällt kontrolliert zum sichtbaren Login zurück.
-
-### Logout endet ohne Redirect zum IdP
-
-Typische Ursachen:
-
-- Backend-Logout liefert keinen `location`-Header
-- `id_token_hint` ist nicht mehr verfügbar und der Fallback ist defekt
-
-## Debugging-Reihenfolge
-
-Wenn Auth im prod-nahen Stack kaputt wirkt, ist die schnellste Prüfreihenfolge:
-
-1. Kommt `/auth/callback` wirklich mit `302` zurück oder liefert es `400/502`?
-2. Werden im Callback beide Cookies gesetzt?
-3. Funktioniert `PUT /backend-internal/app/bff-session` intern mit Shared Secret?
-4. Funktioniert `POST /api/app/session-sync`?
-5. Liefert `/api/me` nach dem Callback `200`?
-
-Bei E2E-Fehlern ist häufig nicht das Cookie-Transportverhalten kaputt, sondern ein früherer Callback-Fehler, der das Setzen von `gustav_session` verhindert.
-
-## Source of truth
-
-- Öffentlicher Vertrag: `api/openapi.yml`
-- BFF-Implementierung: `frontend/src/lib/server/backend-auth.ts`
-- BFF-Session-Verwaltung: `frontend/src/lib/server/session.ts`
-- Backend-App-Session und interne BFF-Route: `backend/web/routes/app.py`
-- Architekturelle Entscheidung für den Browser-BFF: `docs/adr/2026-03-23-sveltekit-browser-bff.md`
-
-Diese Referenz erklärt den aktuellen Stand. Verhalten und Verträge werden letztlich durch Code, Tests und OpenAPI festgelegt.
+Automatisierte Nachweise: `test_unified_auth_routes.py`, `test_unified_sessions.py`, `test_session_token_validation.py`, `test_unified_token_adapter.py`; Browser-Specs `auth-platform`, `auth-registration`, `auth-session-continuity`, `auth-unified-session` und `course-invite-registration`. Die Browserprüfung nutzt den freigegebenen lokalen Stack mit aktiver TLS-Prüfung. Der Stand der einzelnen Gates ist im [Implementierungsplan](../plan/2026-09-16-unified-auth.md) dokumentiert.

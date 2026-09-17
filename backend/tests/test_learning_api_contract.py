@@ -1910,8 +1910,8 @@ async def test_create_submission_rejects_cross_site_via_referer_when_origin_miss
 
 
 @pytest.mark.anyio
-async def test_create_submission_allows_same_origin_via_forwarded_when_trust_proxy_true(monkeypatch: pytest.MonkeyPatch):
-    """CSRF: when proxy is trusted, X-Forwarded-* defines the server origin."""
+async def test_create_submission_rejects_unconfigured_origin_despite_forwarded_headers(monkeypatch: pytest.MonkeyPatch):
+    """CSRF: forwarded headers cannot authorize an unconfigured browser origin."""
 
     fixture = await _prepare_learning_fixture(monkeypatch)
 
@@ -1935,7 +1935,8 @@ async def test_create_submission_allows_same_origin_via_forwarded_when_trust_pro
         else:
             os.environ["GUSTAV_TRUST_PROXY"] = prev
 
-        assert resp.status_code == 202
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "csrf_violation"
 
 
 @pytest.mark.anyio

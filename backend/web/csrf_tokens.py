@@ -8,8 +8,6 @@ import os
 import secrets
 import time
 
-from backend.web.auth_session import app_session_ttl_seconds
-
 _CSRF_BY_SESSION: dict[str, str] = {}
 _DEV_CSRF_SIGNING_SECRET = secrets.token_bytes(32)
 
@@ -27,7 +25,7 @@ def csrf_ttl_seconds() -> int:
     """
 
     raw = (os.getenv("APP_CSRF_TTL_SECONDS") or "").strip()
-    default_seconds = app_session_ttl_seconds()
+    default_seconds = 86400
     try:
         value = int(raw) if raw else default_seconds
     except ValueError:

@@ -5,8 +5,7 @@ Why: Keep cryptographic validation of ID tokens outside the web adapter so we
 can unit test it independently and swap the persistence/cache later on.
 
 Security: Validates the ID token signature with the realm's JWKS, ensures issuer,
-audience, and expiration are respected. This is a minimal implementation suited
-for development; in production we may want to back the cache with Redis.
+audience, and expiration are respected. A bounded per-process cache supports Keycloak signing-key rotation.
 """
 from __future__ import annotations
 
@@ -46,7 +45,7 @@ class _CacheEntry:
 
 
 class JWKSCache:
-    """Very small in-memory cache for JWKS responses (development use)."""
+    """Bounded per-process cache for public realm signing keys."""
 
     def __init__(self, ttl_seconds: int = 300):
         self.ttl_seconds = ttl_seconds
@@ -55,11 +54,11 @@ class JWKSCache:
     def _cache_key(self, cfg: OIDCConfig) -> Tuple[str, str]:
         return (cfg.base_url, cfg.realm)
 
-    def get(self, cfg: OIDCConfig) -> Dict[str, object]:
+    def get(self, cfg: OIDCConfig, *, force: bool = False) -> Dict[str, object]:
         key = self._cache_key(cfg)
         now = time.time()
         entry = self._entries.get(key)
-        if entry and entry.expires_at > now:
+        if not force and entry and entry.expires_at > now:
             return entry.jwks
 
         jwks = self._fetch(cfg)
@@ -119,12 +118,17 @@ def verify_id_token(
         When the token is invalid (signature, issuer, audience, expiry, kid).
     """
     cache = cache or JWKS_CACHE
-    jwks = cache.get(cfg)
-    header = jwt.get_unverified_header(id_token)
+    try:
+        header = jwt.get_unverified_header(id_token)
+    except JOSEError as exc:
+        raise IDTokenVerificationError("invalid_id_token") from exc
     kid = header.get("kid")
     if not kid:
         raise IDTokenVerificationError("missing_kid")
+    jwks = cache.get(cfg)
     key_dict = _find_key(jwks, kid)
+    if not key_dict:
+        key_dict = _find_key(cache.get(cfg, force=True), kid)
     if not key_dict:
         raise IDTokenVerificationError("unknown_kid")
 
@@ -140,6 +144,8 @@ def verify_id_token(
             options={
                 "verify_signature": True,
                 "verify_aud": True,
+                "require_aud": True,
+                "require_iat": True,
                 "verify_exp": False,
                 "verify_iat": False,
                 "verify_nbf": False,
@@ -161,19 +167,8 @@ def verify_bearer_token(
     cfg: OIDCConfig,
     cache: JWKSCache | None = None,
 ) -> Dict[str, object]:
-    """Validate a bearer JWT for backend API authentication.
-
-    Why:
-        The SvelteKit BFF should be able to call FastAPI with a real JWT instead
-        of the transitional session-id transport. Keycloak may issue bearer
-        tokens where `aud` contains the client id directly or where the client
-        is represented via `azp`, so this verifier accepts both patterns.
-    """
+    """Validate a signed access token explicitly addressed to the GUSTAV API."""
     cache = cache or JWKS_CACHE
-    try:
-        jwks = cache.get(cfg)
-    except IDTokenVerificationError as exc:
-        raise BearerTokenVerificationError(exc.code) from exc
     try:
         header = jwt.get_unverified_header(token)
     except JOSEError as exc:
@@ -182,7 +177,16 @@ def verify_bearer_token(
     kid = header.get("kid")
     if not kid:
         raise BearerTokenVerificationError("missing_kid")
+    try:
+        jwks = cache.get(cfg)
+    except IDTokenVerificationError as exc:
+        raise BearerTokenVerificationError(exc.code) from exc
     key_dict = _find_key(jwks, kid)
+    if not key_dict:
+        try:
+            key_dict = _find_key(cache.get(cfg, force=True), kid)
+        except IDTokenVerificationError as exc:
+            raise BearerTokenVerificationError(exc.code) from exc
     if not key_dict:
         raise BearerTokenVerificationError("unknown_kid")
 
@@ -209,7 +213,7 @@ def verify_bearer_token(
         _validate_temporal_claims(claims)
     except IDTokenVerificationError as exc:
         raise BearerTokenVerificationError("invalid_bearer_token") from exc
-    _validate_bearer_audience(claims, cfg.client_id)
+    _validate_bearer_audience(claims, "gustav-api")
     return claims
 
 
@@ -246,7 +250,5 @@ def _validate_bearer_audience(claims: Dict[str, object], client_id: str) -> None
     if isinstance(aud, str) and aud == client_id:
         return
     if isinstance(aud, list) and client_id in [str(item) for item in aud]:
-        return
-    if str(claims.get("azp") or "") == client_id:
         return
     raise BearerTokenVerificationError("invalid_bearer_token")

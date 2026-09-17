@@ -1,4 +1,29 @@
+{
+  # Error logs retain status/category but omit URI, cookies and personal request data.
+  log {
+    format filter {
+      wrap json
+      fields {
+        request delete
+      }
+    }
+  }
+}
+
 (app_proxy) {
+  @auth_flow {
+    path /auth/login /auth/register /auth/forgot /auth/password /auth/continue /auth/callback /auth/logout/callback
+  }
+  handle @auth_flow {
+    reverse_proxy gustav-alpha2:8000
+  }
+  @logout_post {
+    path /auth/logout
+    method POST
+  }
+  handle @logout_post {
+    reverse_proxy gustav-alpha2:8000
+  }
   @api_path path /api/* /internal/* /health
   handle @api_path {
     reverse_proxy gustav-alpha2:8000
@@ -22,7 +47,7 @@
     }
   }
 
-  # Default app backend is the SvelteKit Browser-BFF.
+  # SvelteKit renders pages; authentication is owned by FastAPI.
   reverse_proxy gustav-frontend:3000
 }
 
@@ -48,11 +73,8 @@ localhost:443 {
 
 id.localhost:443 {
   import local_tls
-  reverse_proxy keycloak:8080 {
-    # Keycloak 24 does not add all cookie flags on detached error flows.
-    # The IdP is always served over HTTPS here, so enforce the GUSTAV cookie floor at the proxy boundary.
-    header_down Set-Cookie "^(.*)$" "$1; Secure; SameSite=Lax"
-  }
+  reverse_proxy keycloak:8080
+
 }
 
 # Public Supabase gateway for browser access to Storage API (dev = prod)

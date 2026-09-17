@@ -63,7 +63,6 @@ services:
       # Trust reverse-proxy headers for Same-Origin checks in CSRF logic
       - GUSTAV_TRUST_PROXY=true
       # Enable DB-backed sessions inside the container; connect to local Supabase via host gateway
-      - SESSIONS_BACKEND=db
       - AUTO_CREATE_STORAGE_BUCKETS=false
       # Allow storage3 fallback in container even when using host.docker.internal
       - SUPABASE_FALLBACK_STORAGE3=true
@@ -98,24 +97,16 @@ services:
     build:
       context: ./frontend
     container_name: gustav-frontend
-    env_file:
-      - .env
     environment:
       - ORIGIN=${WEB_BASE:-https://app.localhost}
       - API_INTERNAL_BASE_URL=http://gustav-alpha2:8000
+      - COURSE_INVITE_INTENT_SECRET=${COURSE_INVITE_INTENT_SECRET}
+      - GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS=${GUSTAV_TEACHING_LIVE_POLL_INTERVAL_SECONDS:-3}
       # Learning uploads still enter the SvelteKit action as multipart/form-data.
       # Keep the transport limit slightly above the 10 MiB product contract so
       # multipart overhead does not trigger adapter-node's 512K default.
       - BODY_SIZE_LIMIT=11M
-      - KC_BASE_URL=http://keycloak:8080
-      - KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost}
-      - KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}
-      - KC_REALM=${KC_REALM:-gustav}
-      - ALLOWED_REGISTRATION_DOMAINS=${ALLOWED_REGISTRATION_DOMAINS:-}
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
-      - FRONTEND_SESSION_SECRET=${FRONTEND_SESSION_SECRET}
-      - BFF_INTERNAL_SHARED_SECRET=${BFF_INTERNAL_SHARED_SECRET}
-      - FRONTEND_SESSION_COOKIE_NAME=${FRONTEND_SESSION_COOKIE_NAME:-gustav_bff_session}
     depends_on:
       - web
     restart: unless-stopped
@@ -129,7 +120,7 @@ services:
     container_name: gustav-h5p
     # behind proxy; no direct host port mapping
     depends_on:
-      - frontend
+      - web
     volumes:
       # H5P content/libraries (single-host dev bind mount)
       - ./supabase/storage/h5p:/data/h5p:z
@@ -139,9 +130,7 @@ services:
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       # Internal URL to validate gustav_session via /api/me (cookie forwarded)
       - GUSTAV_WEB_INTERNAL_BASE=http://gustav-alpha2:8000
-      - GUSTAV_FRONTEND_INTERNAL_BASE=http://gustav-frontend:3000
       - SESSION_COOKIE_NAME=gustav_session
-      - FRONTEND_SESSION_COOKIE_NAME=${FRONTEND_SESSION_COOKIE_NAME:-gustav_bff_session}
       # Small cache to reduce load on /api/me during editor/player asset bursts
       - AUTH_CACHE_TTL_SECONDS=30
       # Filesystem-based storage root (mounted from repo under supabase/storage)
@@ -270,6 +259,9 @@ services:
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Never log browser queries or personal authentication events.
+      KC_HTTP_ACCESS_LOG_ENABLED: "false"
+      KC_LOG_LEVEL: "info,org.keycloak.events:off"
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
@@ -277,8 +269,8 @@ services:
       KC_DB_URL_PROPERTIES: ${KC_DB_URL_PROPERTIES:-sslmode=disable}
       KC_HTTP_ENABLED: "true"
       KC_PROXY_HEADERS: xforwarded
-      KC_HOSTNAME_URL: ${KC_HOSTNAME_URL:-https://id.localhost}
-      KC_HOSTNAME_ADMIN_URL: ${KC_HOSTNAME_ADMIN_URL:-https://id.localhost}
+      KC_HOSTNAME: ${KC_PUBLIC_BASE_URL:-https://id.localhost}
+      KC_HOSTNAME_ADMIN: ${KC_PUBLIC_BASE_URL:-https://id.localhost}
       # Email sender configuration (Quarkus-based) for verification + reset mails
       KC_SPI_EMAIL_SENDER_DEFAULT_HOST: ${KC_SMTP_HOST:-}
       KC_SPI_EMAIL_SENDER_DEFAULT_PORT: ${KC_SMTP_PORT:-587}

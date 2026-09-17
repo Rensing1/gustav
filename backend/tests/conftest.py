@@ -7,7 +7,6 @@ that can affect the Trio backend (e.g., socketpair permission errors).
 import importlib
 import os
 import re
-import sys
 from pathlib import Path
 
 import pytest
@@ -268,51 +267,6 @@ def _reset_teaching_route_globals_between_tests():
 
 
 @pytest.fixture(autouse=True)
-def _reset_auth_state_store():
-    """
-    Reset the global OIDC state store before each pytest case.
-
-    Why:
-        Auth tests share the `backend.web.main.RUNTIME.state_store` singleton; without a reset,
-        PKCE state/nonce entries leak across tests and trigger 400 callbacks.
-    Parameters:
-        (autouse fixture) – no caller-supplied parameters; executes for every test.
-    Behavior:
-        - Re-imports `backend.web.main` if necessary.
-        - Replaces their Runtime state store with a fresh in-memory `StateStore`.
-    Permissions:
-        Internal test helper; no runtime permissions required.
-    """
-    try:
-        from backend.identity_access.stores import StateStore
-    except Exception:
-        yield
-        return
-
-    def _replace_state_store() -> None:
-        modules = []
-        for name in ("backend.web.main",):
-            mod = sys.modules.get(name)
-            if mod is None:
-                try:
-                    mod = importlib.import_module(name)  # type: ignore[assignment]
-                except Exception:
-                    continue
-            modules.append(mod)
-
-        # Use a single shared instance for the package-oriented runtime module.
-        shared_state = StateStore()
-        for mod in modules:
-            runtime = getattr(mod, "RUNTIME", None)
-            if runtime is not None:
-                runtime.state_store = shared_state
-
-    _replace_state_store()
-    yield
-    _replace_state_store()
-
-
-@pytest.fixture(autouse=True)
 def _force_prod_env_and_clear_feature_flags(monkeypatch: pytest.MonkeyPatch):
     """Ensure a consistent prod-like environment and clear toggles per test.
 
@@ -362,6 +316,7 @@ def _reset_session_store_and_oidc(monkeypatch: pytest.MonkeyPatch):
         yield
         return
 
+    monkeypatch.setenv("REDIRECT_URI", "http://test/auth/callback")
     shared_session = install_session_store(monkeypatch, main)
     try:
         bwm = importlib.import_module("backend.web.main")  # type: ignore
@@ -372,9 +327,12 @@ def _reset_session_store_and_oidc(monkeypatch: pytest.MonkeyPatch):
         # Recreate a fresh OIDC client bound to current config
         # Reset OIDC config to defaults to avoid cross-test pollution
         try:
-            from backend.web.auth_runtime import load_oidc_config
+            from dataclasses import replace
 
-            cfg = load_oidc_config()
+            from backend.web.auth_runtime import load_oidc_config
+            # ASGI clients use this explicit browser origin. Production origin
+            # checks stay configuration-based and never trust a request Host.
+            cfg = replace(load_oidc_config(), redirect_uri="http://test/auth/callback")
             runtime = getattr(main, "RUNTIME", None)
             if runtime is not None:
                 runtime.oidc_config = cfg

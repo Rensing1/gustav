@@ -23,6 +23,8 @@ def _is_same_origin(request: Request) -> bool:
       rare mismatches in test transports where `request.url.hostname` may be
       unset while `Host` is provided.
     """
+    if getattr(request.state, "auth_source", None) == "session":
+        return cookie_origin_allowed(request, request.app.state.runtime.oidc_config.redirect_uri)
     origin_val = request.headers.get("origin")
     try:
         import os
@@ -96,4 +98,27 @@ def _is_same_origin(request: Request) -> bool:
 
         return True
     except Exception:
+        return False
+
+
+def cookie_origin_allowed(request: Request, callback_uri: str) -> bool:
+    """Check browser provenance against configuration, never a forwarded Host.
+
+    An explicitly invalid Origin cannot be rescued by a valid Referer.
+    Bearer-only service/CLI requests are handled separately by middleware.
+    """
+    from urllib.parse import urlsplit
+    try:
+        supplied = request.headers.get('origin')
+        if supplied is None:
+            supplied = request.headers.get('referer')
+        if not supplied:
+            return False
+        actual, expected = urlsplit(supplied), urlsplit(callback_uri)
+        if request.headers.get('origin') is not None and (actual.path or actual.query or actual.fragment):
+            return False
+        def origin(value):
+            return (value.scheme, value.hostname, value.port or (443 if value.scheme == 'https' else 80))
+        return actual.scheme in ('http', 'https') and not actual.username and not actual.password and origin(actual) == origin(expected)
+    except ValueError:
         return False

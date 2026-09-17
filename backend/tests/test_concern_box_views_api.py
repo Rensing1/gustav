@@ -207,7 +207,7 @@ async def test_learner_concern_box_rejects_course_without_membership(app) -> Non
 
 
 @pytest.mark.anyio
-async def test_learner_concern_box_write_requires_bearer_even_with_cookie_session(
+async def test_learner_concern_box_shared_cookie_still_requires_course_membership(
     app,
 ) -> None:
     store = app.state.runtime.session_store
@@ -224,14 +224,14 @@ async def test_learner_concern_box_write_requires_bearer_even_with_cookie_sessio
             headers={"Origin": "http://test"},
             json={
                 "course_id": "11111111-1111-1111-1111-111111111111",
-                "message_text": "Nur Cookie darf hier nicht reichen.",
+                "message_text": "Die Kursmitgliedschaft muss geprüft werden.",
                 "anonymous": True,
             },
         )
 
-    assert response.status_code == 401
+    assert response.status_code == 403
     assert response.headers.get("Cache-Control") == "private, no-store"
-    assert response.json() == {"error": "unauthenticated"}
+    assert response.json()["error"] == "forbidden"
 
 
 @pytest.mark.anyio

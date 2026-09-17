@@ -36,23 +36,11 @@ def test_h5p_service_upstream_fetches_use_fetch_with_timeout() -> None:
     js = server_path.read_text(encoding="utf-8")
     auth_forwarding_js = auth_forwarding_path.read_text(encoding="utf-8")
 
-    # fetchGustavMe: should not use unbounded `fetch(...)`.
-    me_block = _extract_block(
-        auth_forwarding_js,
-        start_token="export async function fetchGustavMe(cookieHeader",
-        end_token="export async function checkLearningH5PContentAccess",
-    )
-    assert "fetchWithTimeoutImpl" in me_block
-    assert "await fetch(" not in me_block
-
-    # Access-check: same.
-    access_block = _extract_block(
-        auth_forwarding_js,
-        start_token="export async function checkLearningH5PContentAccess(",
-        end_token="",
-    )
-    assert "fetchWithTimeoutImpl" in access_block
-    assert "await fetch(" not in access_block
+    # Both reads share one bounded backend transport.
+    assert "options.fetchWithTimeoutImpl || fetchWithTimeout" in auth_forwarding_js
+    assert "return backendRead('/api/me'" in auth_forwarding_js
+    assert "return backendRead(`/api/learning/courses/" in auth_forwarding_js
+    assert "await fetch(" not in auth_forwarding_js
 
     # finishedData → Learning submission: same.
     finished_block = _extract_block(

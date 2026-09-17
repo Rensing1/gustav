@@ -20,6 +20,13 @@ describe("AuthFrame", () => {
     expect(screen.getByRole("link", { name: "Erneut anmelden" })).toHaveAttribute("href", "/auth/login");
   });
 
+  it("reloads the logout document so its origin policy applies after an auth error", () => {
+    render(AuthFrame, { props: {
+      title: "Anmeldung prüfen", actionHref: "/auth/logout", actionLabel: "Abmeldung erneut versuchen"
+    } });
+    expect(screen.getByRole("link", { name: "Abmeldung erneut versuchen" })).toHaveAttribute("data-sveltekit-reload");
+  });
+
   it("renders the auth frame without optional copy blocks", () => {
     render(AuthFrame, {
       props: {

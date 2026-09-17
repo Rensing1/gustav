@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from backend.identity_access.cli_tokens import CLITokenRecord, ProfileCLITokenStore
 from backend.identity_access.profile import ProfileNameLockedError, ProfileService
+from backend.identity_access.unified_sessions import SessionUnavailable
 from backend.web.profile_providers import profile_providers
 from backend.web.routes.app_session_helpers import current_user as _current_user
 from backend.web.routes.app_session_helpers import private_headers as _private_headers
@@ -132,6 +133,10 @@ def patch_profile_display_name(request: Request, payload: ProfileDisplayNameUpda
         return JSONResponse({"error": "bad_request", "detail": "invalid_display_name"}, status_code=400, headers=_private_headers())
 
     _profile_service(request).update_display_name(str(user.get("sub") or ""), display_name)
+    try:
+        request.app.state.runtime.session_store.update_display_name(str(user["sub"]), display_name)
+    except SessionUnavailable:
+        return JSONResponse({"error": "auth_unavailable"}, status_code=503, headers=_private_headers())
     return Response(status_code=204, headers=_private_headers())
 
 

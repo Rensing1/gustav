@@ -1,29 +1,25 @@
 # Benutzerverwaltung (Identity & Access) — Referenz
 
-Stand: Version 0.0.4, zuletzt geprüft am 2026-08-16.
+Stand: gemeinsame Auth-Architektur, zuletzt geprüft am 2026-09-16.
 
 Ziel: Übersicht über Authentifizierung, Session-Handling und den UserContextDTO, damit nachgelagerte Kontexte (z. B. „Unterrichten“) Nutzer stabil und datenschutzfreundlich adressieren.
 
-Für die kanonische technische Referenz zu Login-Flow, Cookies, BFF-Session,
-App-Session und Fehlerbildern siehe:
-`docs/references/auth_sessions_and_cookies.md`.
+Die technische Referenz zu OIDC, Cookies, Fristen und Fehlerzuständen steht in [Auth-Sitzungen und Cookies](auth_sessions_and_cookies.md).
 
 ## Überblick
-- IdP: Keycloak (Realm `gustav`), OIDC Authorization Code Flow mit PKCE.
-- GUSTAV verwendet zusätzlich zum IdP eine Browser-BFF-Session und eine
-  stabile App-Session.
-- Die eigentlichen Auth- und Cookie-Details sind in
-  `docs/references/auth_sessions_and_cookies.md` beschrieben.
-- Anzeigename: Bei Registrierung optionales Feld „Wie möchtest du genannt werden?“ → Keycloak User-Attribut `display_name` → Token-Claim `gustav_display_name`.
+
+- Keycloak verwaltet Passwörter, Verifikation, Rollen und SSO-Fristen.
+- FastAPI verwaltet den vollständigen OIDC-Ablauf und die einzige GUSTAV-Sitzung. SvelteKit und H5P verwenden das gemeinsame Cookie.
+- Der Anzeigename wird bei der Registrierung einmal erfasst und als Keycloak-Attribut `display_name` beziehungsweise Token-Claim `gustav_display_name` übertragen.
 
 ## API
-- `GET /auth/login` → Redirect zu IdP.
-- `GET /auth/callback` → Code-Exchange, ID-Token verifizieren, BFF-Session und
-  App-Session synchronisieren.
-- `GET /auth/logout` → App-Session löschen, Redirect zu IdP End-Session (`id_token_hint` wenn vorhanden).
-- `GET /auth/forgot` → Redirect zur IdP-Passwort-Reset-Seite (Keycloak verschickt die E-Mails).
-- `GET /auth/register` → Redirect zur IdP-Registrierung; Domain-Whitelist kann `login_hint` vorab validieren.
-- `GET /api/me` → 200 `{ sub, roles, name, expires_at }` oder 401 `{ error }` (mit `Cache-Control: private, no-store`).
+
+- `GET /auth/login`, `/auth/register`, `/auth/forgot`, `/auth/password`: browsergebundener OIDC-Einstieg mit PKCE und Nonce.
+- `GET /auth/continue`: begrenzte automatische Wiederanmeldung über bestehendes Keycloak-SSO.
+- `GET /auth/callback`: einmalige State-Prüfung, Tokenprüfung und gemeinsame Sitzung.
+- `GET /auth/logout`: Bestätigung ohne Abmeldung. `POST /auth/logout`: lokale Sitzung widerrufen und Keycloak-Abmeldung beginnen.
+- `GET /auth/logout/callback`: browsergebundene Bestätigung der IdP-Abmeldung.
+- `GET /api/me`: `{ sub, roles, name, expires_at }`, `401` bei fehlender Anmeldung oder `503` bei vorübergehender Nichtprüfbarkeit. Antworten bleiben `private, no-store`.
 
 ## UserContextDTO
 Minimaler, kontextübergreifender Nutzerdatensatz:
@@ -54,62 +50,25 @@ Bezeichnung entsteht im Identity-Adapter; Frontends formatieren sie nicht neu.
 - Rollen: `realm_access.roles`
 - Optional: `gustav_display_name` (User-Attribut `display_name`, als OIDC Protocol‑Mapper im Client `gustav-web` konfiguriert)
 
-## Session-Speicher
-- App-Session:
-  - DEV: In‑Memory (schnell, aber flüchtig)
-  - PROD: Postgres/Supabase (Tabelle `public.app_sessions`)
-  - Spalten: `session_id` (PK), `sub`, `roles` (JSONB), `name`, `id_token`, `expires_at`
-  - RLS aktiviert; Zugriffe nur mit Service‑Rolle (Clients greifen nicht direkt zu)
-  - Migration: `supabase/migrations/20251019135804_persistent_app_sessions.sql`
-- BFF-Session:
-  - speichert OIDC-Tokens serverseitig getrennt von der App-Session
-  - Details zu TTL und Speichersemantik siehe
-    `docs/references/auth_sessions_and_cookies.md`
+## Sitzung und Sicherheit
 
-## Sicherheit
-- Signaturprüfung ID‑Token über JWKS; Fehlerfälle mit 400 und `Cache-Control: private, no-store`.
-- `state` und `nonce` im Login‑Flow; `nonce` wird gegen ID‑Token geprüft.
-- Cookies sind host-only und verwenden `HttpOnly; Secure; SameSite=lax`.
-- Die genaue Rolle von `gustav_bff_oidc_flow`, `gustav_bff_session` und
-  `gustav_session` ist in `docs/references/auth_sessions_and_cookies.md`
-  beschrieben.
-- Open Redirects verhindert: In‑App‑Pfadprüfung für Redirect‑Parameter.
-- Keycloak-Client `gustav-web`:
-  - `webOrigins` soll nur explizite Origins (z. B. `https://app.gustav.example`, `https://localhost/*`, `https://app.localhost/*`) enthalten – niemals `*`.
-  - Das Plan-Dokument `docs/plan/2025-11-30-PR-fix.md` dokumentiert den Must-Fix, die Referenz-`realm-gustav.json` an dieser Stelle auf konkrete Origins umzustellen.
+Lokal und produktiv verwendet FastAPI `public.app_sessions` und `public.auth_flows`. Zufällige Sitzungs-, State- und Browserbindungsschlüssel werden nur als Hash gespeichert. Tokens und PKCE-Verifier bleiben serverseitig; RLS und Tabellenrechte sperren Browserrollen aus. In-Memory-Sitzungen dienen ausschließlich als Test-Doubles für isolierte Fachtests.
 
-## Remember-me (IdP-Session vs. App-Session)
+ID-Tokens benötigen die Audience `gustav-web`, Access-Tokens die ausdrückliche Audience `gustav-api`. Signatur, Issuer, zeitliche Gültigkeit, Subject, Nonce, State, Browserbindung und PKCE werden geprüft. Sichere lokale Rücksprungziele werden zentral validiert. Cookies sind host-only mit `HttpOnly; Secure; SameSite=Lax`.
 
-- Keycloak-Feature „Remember me“:
-  - Wird im Realm `gustav` optional aktiviert und steuert eine verlängerte IdP-Session (Keycloak-Sitzung).
-  - In der Referenzrealm `gustav` ist Remember-me aktuell aktiviert; andere Deployments können das Feature in Keycloak nach Bedarf ein- oder ausschalten.
-  - Die GUSTAV-Login-Seite zeigt in diesem Fall eine Checkbox „Angemeldet bleiben“ unterhalb des Passwortfeldes.
-  - Standardzustand: Die Checkbox ist nicht vorausgewählt, insbesondere um sichere Defaults auf gemeinsam genutzten Geräten zu wahren.
-- Policy-Hinweis:
-  - Empfehlung: Nur auf privaten Geräten aktivieren; auf Schul-/Shared-Geräten deaktiviert lassen.
-  - Admins können das Feature im Realm abschalten, falls das Sicherheitskonzept kürzere Sitzungen erzwingt.
-- Wirkung auf Sessions:
-  - „Angemeldet bleiben“ verlängert ausschließlich die IdP-Session nach Keycloak-Konfiguration (z. B. `SSO Session Max` vs. `SSO Session Idle` mit Remember-me-Werten).
-  - Die GUSTAV-BFF-Session und App-Session behalten ihre eigene TTL; sie können
-    unabhängig von der IdP-Session auslaufen.
-  - Praktisch bedeutet das: Auf privaten Geräten führt Remember-me dazu, dass der erneute Login seltener nötig ist; auf geteilten Geräten sollte die Option nicht genutzt werden.
-- UX-Hinweis:
-  - In der UI kann ein kurzer Text unter der Checkbox darauf hinweisen, dass „Angemeldet bleiben“ nur auf privaten Geräten verwendet werden sollte.
-  - Lehrkräfte können diesen Unterschied (IdP-Session vs. App-Session) im Support-Kontext erklären, ohne technische Details zur Token-Lebensdauer kennen zu müssen.
+Cookie-Schreibzugriffe benötigen passende Browserherkunft, ergänzende CSRF-Token-Prüfungen bleiben aktiv. Ein übermittelter ungültiger Bearer-Token wird nicht durch ein Cookie ersetzt. Administrative Widerrufe wirken spätestens bei der nächsten Erneuerung des fünfminütigen Zugriffstokens.
 
-## Registrierung & Domain-Whitelist
+## Angemeldet bleiben
 
-- Registrierung findet ausschließlich bei Keycloak statt (`/auth/register` → OIDC-Registrierungsendpunkt `/protocol/openid-connect/registrations`). GUSTAV ändert dabei nicht die Sicherheitsparameter des Authorization-Code-Flows: `state`, `nonce`, PKCE und die geprüfte Callback-URL bleiben erhalten.
-- Optionaler Query-Parameter `login_hint`:
-  - Wird als vorausgefüllte E-Mail im Registrierungsformular verwendet.
-  - Vor dem Redirect prüft GUSTAV optional die Domain:
-    - Env-Variable `ALLOWED_REGISTRATION_DOMAINS` (kommagetrennt, z. B. `@school.example`)
-    - Bei erlaubter Domain → normaler OIDC-Registrierungsstart über den SvelteKit-Browser-BFF.
-    - Bei nicht erlaubter oder offensichtlich ungültiger E-Mail → `400` mit JSON  
-      `{ error: "invalid_email_domain", detail: "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: <Liste aus ALLOWED_REGISTRATION_DOMAINS>" }`.
-- Dieselbe Env-Variable steuert auch den Keycloak-Realm-Import beim Image-Build (`docker compose up -d --build`); damit lesen App, Browser-BFF und IdP dieselbe Quelle der Wahrheit.
-- Wenn sich die Policy in einer bereits laufenden Installation ändert, muss der bestehende Realm anschließend gezielt neu importiert oder synchronisiert werden; der Importpfad ist weiterhin ein Bootstrap-Schritt.
-- Die eigentliche, verbindliche Domain-Policy wird in Keycloak erzwungen; GUSTAV bleibt die vorgeschaltete, nutzerfreundliche Guardrail.
+Die Checkbox ist freiwillig und zunächst leer. Auf persönlichen Geräten ermöglicht sie eine Keycloak-Sitzung mit bis zu 30 Tagen Gesamtlaufzeit und Inaktivität. Ohne Remember-me gelten 24 Stunden Inaktivität und maximal sieben Tage. GUSTAV übernimmt die vom Token-Endpunkt bestätigte Refresh-Gültigkeit und führt keine unabhängige 24-Stunden-Grenze ein.
+
+Das GUSTAV-Cookie bleibt ein Browser-Sitzungscookie. Nach einem Browser-Neustart kann Keycloak es über seine persistente Remember-me-Sitzung wiederherstellen. Ein signierter Marker begrenzt automatische Versuche auf einen pro Minute. Nach ausdrücklicher Abmeldung wird automatische Wiederanmeldung unterdrückt.
+
+## Registrierung und Domain-Prüfung
+
+`/register` führt direkt zu Keycloak. Anzeigename, Schul-E-Mail und Passwort werden einmal eingegeben; alle fünf aktiven Passwortanforderungen stehen vor der Eingabe zusammen sichtbar. Fehler bleiben Feldern zugeordnet, sichere Eingaben erhalten; Passwörter werden nicht erneut ausgegeben.
+
+`ALLOWED_REGISTRATION_DOMAINS` steuert die verbindliche Keycloak-Profilvalidierung. Ein direkter IdP-Aufruf umgeht sie nicht. Der Realm-Import ist nur für neue Installationen bestimmt; bestehende Realms werden gezielt über die Admin-API aktualisiert. Eine zweite Domain- oder Passwortvalidierung im Frontend entfällt.
 
 ## E-Mail-Verifikation
 
@@ -184,11 +143,10 @@ Der Worker akzeptiert für Kurs-Einladungen ausschließlich `KC_SMTP_STARTTLS=tr
 
 ## Integration in UI
 - Die SvelteKit-Top-Bar zeigt den Anzeigenamen (`name`) und ausschließlich die für die aktuellen Rollen erlaubten Produkträume.
-- Geschützte SvelteKit-Seiten lesen die gemeinsame Session-Projektion im Root-Layout. Fehlt oder verfällt die BFF-Session, wird der sichere OIDC-Wiederanmeldungsfluss gestartet.
-- Der Browser spricht für komplexe Seiten primär mit SvelteKit. FastAPI bleibt Auth-Bridge und API-Adapter; ehemalige HTMX-Produktpfade sind nicht mehr aktiv.
+- Geschützte SvelteKit-Seiten lesen die gemeinsame Session-Projektion im Root-Layout. Fehlt oder verfällt die gemeinsame Sitzung, wird der sichere OIDC-Wiederanmeldungsfluss gestartet.
+- Der Browser spricht für komplexe Seiten primär mit SvelteKit. FastAPI bleibt OIDC-/Sitzungsverantwortlicher und API-Adapter; ehemalige HTMX-Produktpfade sind nicht mehr aktiv.
 
 ## Aktueller Betriebsstand und Ausblick
-- Das verbindliche Compose-Profil verwendet mit `SESSIONS_BACKEND=db` persistente App-Sessions. In-Memory-Stores sind explizite Test-Doubles und kein produktiver Fallback.
-- Auch BFF-Sessions und CLI-Tokens werden im normalen Compose-Betrieb datenbankgestützt und fail-closed betrieben.
+- Das verbindliche Compose-Profil verwendet persistente gemeinsame Sitzungen und gesonderte CLI-Tokens. Infrastrukturfehler erhalten die Sitzung und liefern `503`; bestätigte ungültige Anmeldung wird abgelehnt.
 - Rollen- und Ownership-Guards sind als wiederverwendbare Policies beziehungsweise zentrale Adaptergrenzen etabliert.
 - Eine IServ-Anbindung und ein dafür geprüftes Account-Linking sind weiterhin geplant.

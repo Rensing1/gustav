@@ -22,6 +22,9 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 
   const redirectPath = safeRedirectPath(url.searchParams.get("redirect"));
   const reason = url.searchParams.get("reason") || null;
+  if (!reason) {
+    throw redirect(303, `/auth/continue?redirect=${encodeURIComponent(redirectPath || "/")}`);
+  }
 
   return {
     hidePageHeading: true,

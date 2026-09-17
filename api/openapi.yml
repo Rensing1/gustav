@@ -197,16 +197,6 @@ components:
           type: boolean
         password_change_href:
           type: string
-    AppSessionSyncRequest:
-      type: object
-      properties:
-        id_token:
-          type: string
-          description: >-
-            Optional OIDC ID token from the Svelte BFF login flow. When
-            provided, the backend stores it with the app session so logout can
-            complete the Keycloak end-session flow without falling back to a
-            confirmation page.
     ProfileDisplayNameUpdate:
       type: object
       required: [display_name]
@@ -4183,6 +4173,31 @@ components:
           format: date-time
 
 paths:
+  /invite/complete:
+    get:
+      summary: Bestätigung für einen Kursbeitritt nach der Anmeldung anzeigen
+      description: Liest den signierten Einladungswunsch; verändert keine Kursmitgliedschaft.
+      responses:
+        '200':
+          description: Formular zum ausdrücklichen Kursbeitritt
+        '303':
+          description: Ungültige Einladung oder notwendige Anmeldung
+    post:
+      summary: Den bestätigten Kursbeitritt absenden
+      x-security-notes:
+        - "CSRF: Require matching Origin, or Referer only when Origin is absent. Never replay after reauthentication."
+      description: Cookie-authentifizierte Formularaktion mit Origin-/Referer-Prüfung. Kein automatisches Wiederholen nach einer erneuten Anmeldung.
+      security:
+        - cookieAuth: []
+      responses:
+        '303':
+          description: Kurs oder verständliches Einladungsergebnis
+        '401':
+          description: Anmeldung abgelaufen; Einladung bleibt erhalten
+        '403':
+          description: Fehlende oder fremde Herkunft
+        '503':
+          description: Vorübergehender Fehler; Einladung bleibt erhalten
   /health:
     get:
       tags: [Operations]
@@ -7525,43 +7540,23 @@ paths:
 
   /auth/login:
     get:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Redirect to IdP login (Authorization Code Flow with PKCE)
-      description: >-
-        Redirects to the Keycloak authorization endpoint with PKCE. The server
-        generates and manages the opaque `state` (CSRF) and a `nonce` (replay
-        protection) for the OIDC flow; clients MUST NOT provide these values.
+      description: Redirects to the Keycloak authorization endpoint with PKCE. The server generates and manages the opaque `state` (CSRF) and a `nonce` (replay protection)
+        for the OIDC flow; clients MUST NOT provide these values.
       operationId: startLogin
       security: []
       parameters:
-        - in: query
-          name: redirect
-          schema:
-            type: string
-            maxLength: 256
-            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
-          description: >-
-            Optional in-app absolute path to navigate to after login. External
-            URLs are rejected; invalid values are ignored. Disallows double-slash
-            and path traversal segments.
+      - in: query
+        name: redirect
+        schema:
+          type: string
+          maxLength: 256
+          pattern: ^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*(?:\?[A-Za-z0-9._~%&=+\-/:@]*)?$
+        description: Optional in-app absolute path to navigate to after login. External URLs are rejected; invalid values are ignored. Disallows double-slash and path
+          traversal segments.
       responses:
-        '204':
-          description: HTMX request — instruct the browser to redirect via header
-          headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: private, no-store
-            Vary:
-              description: Ensure caches vary on HTMX usage
-              schema:
-                type: string
-              example: HX-Request
-            HX-Redirect:
-              description: Target authorization URL for client-side redirect
-              schema:
-                type: string
         '302':
           description: Redirect to Keycloak authorization endpoint
           headers:
@@ -7570,11 +7565,6 @@ paths:
               schema:
                 type: string
               example: private, no-store
-            Vary:
-              description: Ensure caches vary on HTMX usage
-              schema:
-                type: string
-              example: HX-Request
             Location:
               description: Authorization URL at Keycloak
               schema:
@@ -7591,69 +7581,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-
+        '503':
+          description: Authentication infrastructure temporarily unavailable; existing session retained.
   /auth/continue:
     get:
-      tags: [Auth]
-      summary: Continue an active SSO session without visible login
-      description: >-
-        Starts a SvelteKit Browser-BFF continuity flow for protected page reloads
-        where the stable app session is still valid but the BFF bootstrap is
-        missing. The route redirects to Keycloak with `prompt=none`, PKCE,
-        server-generated `state`, and `nonce`. It must not authenticate backend
-        Bearer-only APIs via `gustav_session`; the callback recreates the BFF
-        token session only if Keycloak confirms an active SSO session.
+      tags:
+      - Auth
       operationId: continueSession
+      description: Use prompt=none once within 60 seconds; keep the signed attempt marker across the callback.
+      summary: Restore the shared session through a bounded silent OIDC flow
       security: []
       parameters:
-        - in: query
-          name: redirect
-          schema:
-            type: string
-            maxLength: 256
-            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*(?:\?[A-Za-z0-9._~%&=+\-/:@]*)?$'
-          description: Optional safe in-app path to return to after continuity.
+      - in: query
+        name: redirect
+        required: false
+        schema:
+          type: string
+          maxLength: 256
+          pattern: ^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*(?:\?[A-Za-z0-9._~%&=+\-/:@]*)?$
       responses:
         '302':
-          description: Redirect to Keycloak authorization endpoint with prompt=none
-          headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: private, no-store
-            Location:
-              description: Silent authorization URL at Keycloak
-              schema:
-                type: string
-        '400':
-          description: Invalid or expired request
-          headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: private, no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-
+          description: Silent authorization or controlled login fallback
+        '503':
+          description: Authentication infrastructure temporarily unavailable
   /auth/callback:
     get:
-      tags: [Auth]
-      summary: OAuth2/OIDC callback from Keycloak
-      description: >-
-        Handles the public SvelteKit Browser-BFF callback from Keycloak. On
-        success the route persists the opaque frontend BFF session cookie
-        `gustav_bff_session`, synchronizes the stable backend app session cookie
-        `gustav_session`, and redirects to the stored in-app target. Silent
-        continuity callbacks may return Keycloak errors such as `login_required`;
-        those are handled by returning to the normal login entry with the stored
-        in-app redirect.
+      tags:
+      - Auth
       operationId: authCallback
+      summary: Consume browser-bound state and create the shared backend session
       security: []
+      parameters:
+      - in: query
+        name: state
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: code
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: error
+        required: false
+        schema:
+          type: string
       x-gustav-query-contract:
         required: [state]
         oneOf:
@@ -7661,151 +7634,103 @@ paths:
           - required: [error]
         not:
           required: [code, error]
-      parameters:
-        - in: query
-          name: code
-          required: false
-          schema:
-            type: string
-        - in: query
-          name: state
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: error
-          required: false
-          schema:
-            type: string
-          description: Keycloak error for silent continuity callbacks.
       responses:
         '302':
-          description: Session established, redirect to application page
+          description: Verified callback; redirect with one opaque session cookie
           headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: private, no-store
             Set-Cookie:
-              description: >-
-                Sets the opaque frontend BFF cookie `gustav_bff_session` and the
-                stable backend app cookie `gustav_session`. Both remain host-only
-                `HttpOnly; Secure; SameSite=lax` cookies. `gustav_session`
-                `Max-Age` matches the server session TTL (default 86400 seconds);
-                `gustav_bff_session` follows the BFF session TTL.
-              schema:
-                type: string
-            Location:
-              description: In-app destination (e.g., "/" or a course page)
+              description: gustav_session; HttpOnly; Secure; SameSite=Lax; Path=/; host-only browser-session cookie
               schema:
                 type: string
         '400':
-          description: Invalid or expired callback input, state, nonce, or ID token
-          headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: private, no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '502':
-          description: Session bridge failed while establishing app or BFF session
-          headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: private, no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /auth/logout:
+          description: Invalid state, browser binding, nonce, code or token
+        '503':
+          description: Authentication infrastructure temporarily unavailable
+      description: Consume a browser-bound, single-use state within 15 minutes. Success requires code and state; an OIDC error callback requires error and state. Validate
+        PKCE, nonce, issuer, ID-token audience gustav-web, access-token audience gustav-api and signature/time claims. Set one host-only Secure HttpOnly SameSite=Lax
+        browser-session cookie.
+  /auth/problem:
     get:
       tags: [Auth]
-      summary: Logout (App session + IdP end-session)
-      description: >-
-        Clears the application session cookie and redirects to the Identity Provider's
-        end-session endpoint. After IdP logout, the browser returns to the app start page.
-      operationId: logoutUnified
-      security: []
-      parameters:
-        - in: query
-          name: redirect
-          required: false
-          schema:
-            type: string
-            maxLength: 256
-            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
-            default: "/auth/logout/success"
-          description: >-
-            App-relative absolute path (e.g., "/courses") to redirect to after IdP logout.
-            External URLs are rejected and ignored. Disallows double-slash and path traversal.
-            Defaults to "/auth/logout/success". Server enforces the same regex pattern.
-      responses:
-        '302':
-          description: Redirect to IdP end-session endpoint (then back to the app)
-          headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: private, no-store
-            Set-Cookie:
-              description: >-
-                Clears the httpOnly session cookie `gustav_session` (expires it).
-                All environments: `HttpOnly; Secure; SameSite=lax; Max-Age=0`,
-                ohne `Domain`‑Attribut (host‑only cookie).
-              schema:
-                type: string
-            Location:
-              description: IdP end-session endpoint URL
-              schema:
-                type: string
-
-  /auth/logout/success:
-    get:
-      tags: [Auth]
-      summary: Logout success page
-      description: Shows a confirmation that the user has been logged out and links to /auth/login.
+      operationId: showAuthProblem
+      summary: Show a safe frontend explanation of an authentication problem
+      description: Browser requests for HTML may be redirected here without codes, tokens or private query parameters. JSON API clients retain the original error status.
       security: []
       responses:
         '200':
-          description: HTML page confirming logout
-          headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: private, no-store
-          content:
-            text/html:
-              schema:
-                type: string
-
+          description: Public SvelteKit error presentation; no authentication or automatic retry
+  /auth/logout:
+    get:
+      tags:
+      - Auth
+      operationId: confirmLogout
+      summary: Show logout confirmation without changing authentication state
+      security: []
+      responses:
+        '200':
+          description: HTML confirmation form
+        '503':
+          description: Authentication infrastructure temporarily unavailable; existing session retained.
+    post:
+      tags:
+      - Auth
+      operationId: logoutUnified
+      summary: Revoke the local session and initiate state-bound IdP logout
+      description: Requires same-origin Origin or Referer. Revoke locally, then terminate the Keycloak session server-to-server. No ID/access/refresh token is sent to the browser. A token-free browser redirect clears IdP cookies and completes the state-bound callback. Suppress automatic reauthentication until explicit login.
+      security: []
+      responses:
+        '302':
+          description: Local session revoked; continue to IdP logout
+        '403':
+          description: Invalid or missing browser origin
+        '503':
+          description: Logout could not be completed
+      x-security-notes:
+      - 'CSRF: require matching Origin, or matching Referer only when Origin is absent. The local session is revoked before IdP logout begins.'
+  /auth/logout/callback:
+    get:
+      tags:
+      - Auth
+      operationId: completeLogout
+      summary: Verify browser-bound logout state and show confirmation
+      security: []
+      parameters:
+      - in: query
+        name: state
+        required: true
+        schema:
+          type: string
+      responses:
+        '302':
+          description: Redirect to logout success
+        '400':
+          description: Invalid logout state or browser binding
+        '503':
+          description: Authentication infrastructure temporarily unavailable; existing session retained.
+  /auth/logout/success:
+    get:
+      tags: [Auth]
+      summary: Show completed logout
+      security: []
+      responses:
+        '200': { description: Logout confirmation page }
 
   /auth/forgot:
     get:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Redirect to IdP forgot password page
-      description: >-
-        Redirect to the Keycloak password reset page. GUSTAV does not send
-        password reset emails itself; the Identity Provider (Keycloak) is
-        responsible for email delivery and rate limiting.
+      description: Redirect to the Keycloak password reset page. GUSTAV does not send password reset emails itself; the Identity Provider (Keycloak) is responsible
+        for email delivery and rate limiting.
       operationId: forgotPassword
       security: []
       parameters:
-        - in: query
-          name: login_hint
-          schema:
-            type: string
-            format: email
-          description: Optional email to prefill on the reset page.
+      - in: query
+        name: login_hint
+        schema:
+          type: string
+          format: email
+        description: Optional email to prefill on the reset page.
       responses:
         '302':
           description: Redirect to Keycloak password reset page
@@ -7816,50 +7741,28 @@ paths:
                 type: string
               example: private, no-store
             Vary:
-              description: Ensure caches vary on HTMX usage
+              Location:
               schema:
                 type: string
-              example: HX-Request
-            Location:
-              schema:
-                type: string
-
+        '503':
+          description: Authentication infrastructure temporarily unavailable; existing session retained.
   /auth/password:
     get:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Redirect to IdP password update page
-      description: >-
-        Redirects to Keycloak with `kc_action=UPDATE_PASSWORD` so the current
-        user can change the account password in the Identity Provider.
+      description: Redirects to Keycloak with `kc_action=UPDATE_PASSWORD` so the current user can change the account password in the Identity Provider.
       operationId: startPasswordChange
       security: []
       parameters:
-        - in: query
-          name: redirect
-          schema:
-            type: string
-            maxLength: 256
-            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
-            default: "/profile"
-          description: Optional in-app target after the password flow completes.
+      - in: query
+        name: redirect
+        schema:
+          type: string
+          maxLength: 256
+          pattern: ^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*(?:\?[A-Za-z0-9._~%&=+\-/:@]*)?$
+        description: Optional in-app target after the password flow completes.
       responses:
-        '204':
-          description: HTMX request — instruct the browser to redirect via header
-          headers:
-            Cache-Control:
-              description: Security — responses must not be cached.
-              schema:
-                type: string
-              example: private, no-store
-            Vary:
-              description: Ensure caches vary on HTMX usage
-              schema:
-                type: string
-              example: HX-Request
-            HX-Redirect:
-              description: Target authorization URL for client-side redirect
-              schema:
-                type: string
         '302':
           description: Redirect to Keycloak password update page
           headers:
@@ -7868,64 +7771,29 @@ paths:
               schema:
                 type: string
               example: private, no-store
-            Vary:
-              description: Ensure caches vary on HTMX usage
-              schema:
-                type: string
-              example: HX-Request
             Location:
               schema:
                 type: string
-
-
+        '503':
+          description: Authentication infrastructure temporarily unavailable; existing session retained.
   /auth/register:
     get:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Redirect to IdP registration
-      description: >-
-        Redirects directly to Keycloak's OIDC registration endpoint
-        `/realms/{realm}/protocol/openid-connect/registrations`. The server generates
-        and includes a `nonce` parameter (replay protection) in the authorization
-        request, analogous to `/auth/login`. When `ALLOWED_REGISTRATION_DOMAINS` is
-        configured in the environment, the server MAY reject `login_hint` values whose
-        email domain is not on the allow-list and respond with `400` instead of redirecting.
+      description: Redirect directly to /protocol/openid-connect/registrations. Keycloak alone validates the domain and active password policy.
       operationId: startRegistration
       security: []
       parameters:
-        - in: query
-          name: login_hint
-          schema:
-            type: string
-            format: email
-          description: Optional email to prefill in the registration form.
-        - in: query
-          name: redirect
-          schema:
-            type: string
-            maxLength: 256
-            pattern: '^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*$'
-          description: >-
-            Optional in-app absolute path to navigate to after registration.
-            External URLs are rejected; invalid values are ignored. Disallows
-            double-slash and path traversal segments.
+      - in: query
+        name: redirect
+        schema:
+          type: string
+          maxLength: 256
+          pattern: ^(?!.*//)(?!.*\.\.)/[A-Za-z0-9._\-/]*(?:\?[A-Za-z0-9._~%&=+\-/:@]*)?$
+        description: Optional in-app absolute path to navigate to after registration. External URLs are rejected; invalid values are ignored. Disallows double-slash
+          and path traversal segments.
       responses:
-        '204':
-          description: HTMX request — instruct the browser to redirect via header
-          headers:
-            Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
-              schema:
-                type: string
-              example: private, no-store
-            Vary:
-              description: Ensure caches vary on HTMX usage
-              schema:
-                type: string
-              example: HX-Request
-            HX-Redirect:
-              description: Target authorization URL for client-side redirect
-              schema:
-                type: string
         '302':
           description: Redirect to Keycloak registration page
           headers:
@@ -7934,39 +7802,11 @@ paths:
               schema:
                 type: string
               example: private, no-store
-            Vary:
-              description: Ensure caches vary on HTMX usage
-              schema:
-                type: string
-              example: HX-Request
             Location:
               schema:
                 type: string
-        '400':
-          description: Invalid or disallowed registration email hint
-          headers:
-            Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
-              schema:
-                type: string
-              example: private, no-store
-            Vary:
-              description: Ensure caches vary on HTMX usage
-              schema:
-                type: string
-              example: HX-Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              examples:
-                invalid_email_domain:
-                  summary: Email domain not allowed for self-service registration
-                  value:
-                    error: invalid_email_domain
-                    detail: "Die Registrierung ist nur mit einer Schul-E-Mail-Adresse erlaubt. Erlaubte Domains: @school.example"
-
-
+        '503':
+          description: Authentication infrastructure temporarily unavailable; existing session retained.
   /api/app/session-bootstrap:
     get:
       tags: [App]
@@ -7976,6 +7816,7 @@ paths:
         spaces for the new SvelteKit application shell.
       operationId: getSessionBootstrap
       security:
+        - cookieAuth: []
         - bearerAuth: []
       responses:
         '200':
@@ -7992,11 +7833,8 @@ paths:
         '401':
           description: Unauthenticated
           x-gustav-auth-failure-reason-codes:
-            - session_bootstrap_missing_bearer
-            - session_bootstrap_invalid_bearer
-            - bff_session_missing
-            - bff_session_read_empty
-            - bff_session_token_refresh_failed
+            - session_missing
+            - token_invalid
             - continuation_loop_guard_triggered
           headers:
             Cache-Control:
@@ -8008,51 +7846,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /api/app/session-sync:
-    post:
-      tags: [App]
-      summary: Create or refresh the stable app session for the current BFF login
-      description: >-
-        Mints a normal `gustav_session` cookie from the authenticated bearer
-        context of the SvelteKit BFF. This keeps legacy cookie-authenticated
-        integrations such as H5P stable across frontend restarts.
-      operationId: postSessionSync
-      security:
-        - bearerAuth: []
-      x-security-notes:
-        - "CSRF: Endpoint is intended for the authenticated same-origin BFF bridge, not cross-site browser forms."
-        - "Auth: requires a valid bearer-authenticated BFF context before minting the app cookie."
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AppSessionSyncRequest'
-      responses:
-        '204':
-          description: App session synchronized successfully
-          headers:
-            Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
-              schema:
-                type: string
-            Set-Cookie:
-              description: >-
-                Sets or replaces the httpOnly app session cookie `gustav_session`
-                as a host-only cookie.
-              schema:
-                type: string
-        '401':
-          description: Unauthenticated
-          headers:
-            Cache-Control:
-              description: Security — responses are private and not cacheable by shared caches.
-              schema:
-                type: string
+        '503':
+          description: Session store or identity provider temporarily unavailable; retain session
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+              schema: { $ref: '#/components/schemas/Error' }
 
   /api/app/profile:
     get:
@@ -8060,6 +7858,7 @@ paths:
       summary: Return the current user's profile read-model
       operationId: getAppProfile
       security:
+        - cookieAuth: []
         - bearerAuth: []
       responses:
         '200':
@@ -8089,9 +7888,10 @@ paths:
       summary: Update the current user's display name
       operationId: patchAppProfileDisplayName
       security:
+        - cookieAuth: []
         - bearerAuth: []
       x-security-notes:
-        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "CSRF: Cookie-authenticated writes require a matching Origin, or Referer when Origin is absent."
         - "Auth: updates only the current authenticated user's profile attributes."
       requestBody:
         required: true
@@ -8125,9 +7925,10 @@ paths:
       summary: Update the current user's first and last name
       operationId: patchAppProfileName
       security:
+        - cookieAuth: []
         - bearerAuth: []
       x-security-notes:
-        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "CSRF: Cookie-authenticated writes require a matching Origin, or Referer when Origin is absent."
         - "Auth: updates only the current authenticated user's profile attributes."
       requestBody:
         required: true
@@ -8167,6 +7968,7 @@ paths:
       summary: List CLI token metadata for the current user
       operationId: listAppProfileCliTokens
       security:
+        - cookieAuth: []
         - bearerAuth: []
       x-permissions:
         requiredRole: teacher
@@ -8189,11 +7991,12 @@ paths:
       summary: Create a CLI token for the current user
       operationId: createAppProfileCliToken
       security:
+        - cookieAuth: []
         - bearerAuth: []
       x-permissions:
         requiredRole: teacher
       x-security-notes:
-        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "CSRF: Cookie-authenticated writes require a matching Origin, or Referer when Origin is absent."
         - "CLI bearer tokens are rejected for token-management endpoints."
         - "Auth: raw token is returned exactly once and is never returned by list endpoints."
       requestBody:
@@ -8224,11 +8027,12 @@ paths:
       summary: Revoke one CLI token for the current user
       operationId: revokeAppProfileCliToken
       security:
+        - cookieAuth: []
         - bearerAuth: []
       x-permissions:
         requiredRole: teacher
       x-security-notes:
-        - "CSRF: same-origin browser requests must pass the bearer-authenticated BFF boundary."
+        - "CSRF: Cookie-authenticated writes require a matching Origin, or Referer when Origin is absent."
         - "CLI bearer tokens are rejected for token-management endpoints."
         - "Auth: users can revoke only their own CLI tokens."
       parameters:
@@ -8265,6 +8069,7 @@ paths:
         course list for the new SvelteKit home page.
       operationId: getLearnerHome
       security:
+        - cookieAuth: []
         - bearerAuth: []
       responses:
         '200':
@@ -8310,6 +8115,7 @@ paths:
         the concern box form.
       operationId: getLearnerConcernBox
       security:
+        - cookieAuth: []
         - bearerAuth: []
       responses:
         '200':
@@ -8355,9 +8161,10 @@ paths:
         to. The learner may choose whether the teacher sees the name.
       operationId: createLearnerConcernBoxEntry
       security:
+        - cookieAuth: []
         - bearerAuth: []
       x-security-notes:
-        - "CSRF: same-origin browser requests must pass the bearer-authenticated app/BFF boundary."
+        - "CSRF: Cookie-authenticated writes require a matching Origin, or Referer when Origin is absent."
         - "Auth: only enrolled learners may create entries for their own courses."
       requestBody:
         required: true
@@ -8421,6 +8228,7 @@ paths:
         the SvelteKit teacher work starter.
       operationId: getTeacherHome
       security:
+        - cookieAuth: []
         - bearerAuth: []
       responses:
         '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
@@ -8467,6 +8275,7 @@ paths:
         teacher, filtered by inbox scope.
       operationId: getTeacherConcernBox
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: query
@@ -8518,9 +8327,10 @@ paths:
       description: Archives one teacher-visible concern box entry.
       operationId: archiveTeacherConcernBoxEntry
       security:
+        - cookieAuth: []
         - bearerAuth: []
       x-security-notes:
-        - "CSRF: same-origin browser requests must pass the bearer-authenticated app/BFF boundary."
+        - "CSRF: Cookie-authenticated writes require a matching Origin, or Referer when Origin is absent."
         - "Auth: only the owning teacher may archive the referenced entry."
       parameters:
         - in: path
@@ -8588,9 +8398,10 @@ paths:
       description: Restores one archived concern box entry into the open inbox.
       operationId: restoreTeacherConcernBoxEntry
       security:
+        - cookieAuth: []
         - bearerAuth: []
       x-security-notes:
-        - "CSRF: same-origin browser requests must pass the bearer-authenticated app/BFF boundary."
+        - "CSRF: Cookie-authenticated writes require a matching Origin, or Referer when Origin is absent."
         - "Auth: only the owning teacher may restore the referenced entry."
       parameters:
         - in: path
@@ -8661,6 +8472,7 @@ paths:
         learning units.
       operationId: getTeacherCourseList
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: query
@@ -8733,6 +8545,7 @@ paths:
         units, and member entries for the SvelteKit teaching room.
       operationId: getTeacherCourseContext
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path
@@ -8796,6 +8609,7 @@ paths:
         contains no prompts, answers, filenames, URLs or provider raw payloads.
       operationId: getTeacherCourseAiUsage
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path
@@ -8920,6 +8734,7 @@ paths:
         bestandsliste for the SvelteKit workspace.
       operationId: getTeacherUnitsCatalog
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: query
@@ -8976,6 +8791,7 @@ paths:
         phases, modules and edges.
       operationId: getTeacherUnitWorkspace
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path
@@ -9082,6 +8898,7 @@ paths:
         a module with a 1:1 backing section.
       operationId: getTeacherUnitNodeEditor
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path
@@ -9163,6 +8980,7 @@ paths:
         attached units, and per-student submission counts for each unit.
       operationId: getDiagnosticsCourseMatrix
       security:
+        - cookieAuth: []
         - bearerAuth: []
         - cliTokenAuth: []
       x-required-cli-scopes: [read]
@@ -9249,6 +9067,7 @@ paths:
         per-unit submission counts across the teacher-visible diagnostics scope.
       operationId: getDiagnosticsLearnerProfile
       security:
+        - cookieAuth: []
         - bearerAuth: []
         - cliTokenAuth: []
       x-required-cli-scopes: [read]
@@ -9340,6 +9159,7 @@ paths:
         columns and per-learner task cells for the SvelteKit live room.
       operationId: getLiveUnitMatrix
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path
@@ -9408,6 +9228,7 @@ paths:
         selection UI without loading the heavier teacher course context view.
       operationId: getLiveCourseUnits
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path
@@ -9471,6 +9292,7 @@ paths:
         compact per-learner KPIs and an optional detail panel for one learner.
       operationId: getLiveUnitDashboard
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path
@@ -9550,6 +9372,7 @@ paths:
         has not submitted yet.
       operationId: getLiveDetailSheet
       security:
+        - cookieAuth: []
         - bearerAuth: []
       parameters:
         - in: path
@@ -9626,6 +9449,7 @@ paths:
       description: Returns `sub`, `roles`, and display `name` if authenticated.
       operationId: getMe
       security:
+        - cookieAuth: []
         - cookieAuth: []
         - bearerAuth: []
         - cliTokenAuth: []

@@ -1,10 +1,6 @@
-"""
-In-memory stores for development: StateStore and SessionStore.
+"""In-memory session test double for isolated application tests.
 
-Why: Keep server-side state (CSRF/QR context, PKCE code_verifier) and sessions
-opaque to the client. For production, replace with Redis/DB-backed stores.
-
-Security: Cookies carry only an opaque session id. Session data stays server-side.
+Production session resolution always uses UnifiedSessionRepository and SessionService.
 """
 from __future__ import annotations
 
@@ -16,40 +12,6 @@ from typing import Dict, Optional
 
 def _now() -> int:
     return int(time.time())
-
-
-@dataclass
-class StateRecord:
-    state: str
-    code_verifier: str
-    redirect: Optional[str]
-    expires_at: int
-    nonce: Optional[str] = None
-
-
-class StateStore:
-    def __init__(self):
-        self._data: Dict[str, StateRecord] = {}
-
-    def create(self, *, code_verifier: str, ttl_seconds: int = 900, redirect: Optional[str] = None, nonce: Optional[str] = None) -> StateRecord:
-        state = secrets.token_urlsafe(24)
-        rec = StateRecord(
-            state=state,
-            code_verifier=code_verifier,
-            redirect=redirect,
-            expires_at=_now() + ttl_seconds,
-            nonce=nonce,
-        )
-        self._data[state] = rec
-        return rec
-
-    def pop_valid(self, state: str) -> Optional[StateRecord]:
-        rec = self._data.pop(state, None)
-        if not rec:
-            return None
-        if rec.expires_at < _now():
-            return None
-        return rec
 
 
 @dataclass
@@ -66,6 +28,11 @@ class SessionRecord:
 class SessionStore:
     def __init__(self):
         self._data: Dict[str, SessionRecord] = {}
+
+    def update_display_name(self, sub: str, name: str) -> None:
+        for record in self._data.values():
+            if record.sub == sub:
+                record.name = name
 
     def create(self, *, sub: str, roles: list[str], name: str, ttl_seconds: int = 3600, id_token: Optional[str] = None) -> SessionRecord:
         sid = secrets.token_urlsafe(24)

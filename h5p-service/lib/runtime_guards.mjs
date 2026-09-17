@@ -81,7 +81,6 @@ export function requireSameOrigin(req, res, next) {
     return;
   }
 
-  const originIsNull = origin.trim().toLowerCase() === "null";
   const originMatches = origin ? origin === expected : false;
   let refererMatches = false;
   if (referer) {
@@ -106,12 +105,12 @@ export function requireSameOrigin(req, res, next) {
 
   // Fail closed when a non-null Origin is present but mismatching.
   // (Browsers should not send a mismatching Origin for same-origin requests.)
-  if (origin && !originIsNull) {
+  if (origin) {
     sendJson(res, 403, { error: "csrf_violation" }, { Vary: "Origin" });
     return;
   }
 
-  // Fallback: accept same-origin Referer (important when Origin is `null`).
+  // Fallback: accept same-origin Referer only when Origin is absent.
   if (!refererMatches) {
     sendJson(res, 403, { error: "csrf_violation" }, { Vary: "Origin" });
     return;
@@ -124,11 +123,7 @@ export function requireSameOrigin(req, res, next) {
 export function createRequireAuth({
   h5pInternalSharedSecret,
   sessionCookieName,
-  frontendSessionCookieName,
-  authCacheTtlSeconds,
-  authCacheMaxEntries,
   authForwardingOptions,
-  authCache,
 }) {
   return async function requireAuth(req, res, next) {
     if (authenticateInternalTeacher(req, h5pInternalSharedSecret)) {
@@ -138,33 +133,12 @@ export function createRequireAuth({
 
     const cookieHeader = req.get("cookie") || "";
     const cookies = parseCookies(cookieHeader);
-    const legacySessionId = cookies[sessionCookieName];
-    const frontendSessionId = cookies[frontendSessionCookieName];
-    const authCacheKey = legacySessionId || (frontendSessionId ? `bff:${frontendSessionId}` : "");
-    if (!authCacheKey) {
+    const sessionId = cookies[sessionCookieName];
+    const sessionKey = sessionId;
+    if (!sessionKey) {
       sendJson(res, 401, { error: "unauthenticated" });
       return;
     }
-
-    const now = Date.now();
-    const cached = authCache.get(authCacheKey);
-    if (cached && cached.expiresAtMs > now) {
-      // LRU touch: move to end so pruning removes older entries first.
-      authCache.delete(authCacheKey);
-      authCache.set(authCacheKey, cached);
-
-      req.gustavMe = cached.payload;
-      req.user = {
-        id: cached.payload.sub,
-        name: cached.payload.name || cached.payload.sub,
-        email: `${cached.payload.sub}@local.invalid`,
-        type: "local",
-      };
-      req.language = "de";
-      next();
-      return;
-    }
-    if (cached) authCache.delete(authCacheKey);
 
     try {
       const me = await fetchGustavMe(cookieHeader, authForwardingOptions);
@@ -173,12 +147,9 @@ export function createRequireAuth({
           sendJson(res, 401, { error: "unauthenticated" });
           return;
         }
-        sendJson(res, 502, { error: "upstream_unavailable" });
+        sendJson(res, 503, { error: "auth_unavailable" });
         return;
       }
-      authCache.delete(authCacheKey);
-      authCache.set(authCacheKey, { expiresAtMs: now + authCacheTtlSeconds * 1000, payload: me.payload });
-      pruneCacheToMaxEntries(authCache, now, authCacheMaxEntries);
       req.gustavMe = me.payload;
       req.user = {
         id: me.payload.sub,
@@ -190,7 +161,7 @@ export function createRequireAuth({
       next();
       return;
     } catch {
-      sendJson(res, 502, { error: "upstream_unavailable" });
+      sendJson(res, 503, { error: "auth_unavailable" });
       return;
     }
   };

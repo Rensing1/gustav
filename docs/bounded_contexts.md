@@ -16,7 +16,7 @@ Dieses Dokument beschreibt die fachliche Aufteilung von GUSTAV. Die Kontexte sin
 ### Verantwortung
 
 - Login und Registrierung über Keycloak mit OIDC Authorization Code Flow und PKCE;
-- serverseitige App- und Browser-BFF-Sessions;
+- eine serverseitige GUSTAV-Sitzung mit PostgreSQL-Refresh-Koordination;
 - Rollen `student`, `teacher` und `admin`;
 - minimale Identitätsprojektion für andere Kontexte;
 - CLI-Tokens mit expliziten, eng begrenzten Capabilities;

@@ -3,10 +3,15 @@
   "enabled": true,
   "displayName": "GUSTAV Realm",
   "loginTheme": "gustav",
-  "defaultRoles": ["student"],
+  "defaultRoles": [
+    "student"
+  ],
   "internationalizationEnabled": true,
   "defaultLocale": "de",
-  "supportedLocales": ["de", "en"],
+  "supportedLocales": [
+    "de",
+    "en"
+  ],
   "registrationAllowed": true,
   "registrationEmailAsUsername": true,
   "loginWithEmailAllowed": true,
@@ -45,9 +50,18 @@
   },
   "roles": {
     "realm": [
-      { "name": "student", "description": "Student role" },
-      { "name": "teacher", "description": "Teacher role" },
-      { "name": "admin", "description": "Admin role" }
+      {
+        "name": "student",
+        "description": "Student role"
+      },
+      {
+        "name": "teacher",
+        "description": "Teacher role"
+      },
+      {
+        "name": "admin",
+        "description": "Admin role"
+      }
     ]
   },
   "clients": [
@@ -60,37 +74,48 @@
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
-  "protocolMappers": [
-    {
-      "name": "Display Name (gustav_display_name)",
-      "protocol": "openid-connect",
-      "protocolMapper": "oidc-usermodel-attribute-mapper",
-      "consentRequired": false,
-      "config": {
-        "user.attribute": "display_name",
-        "claim.name": "gustav_display_name",
-        "jsonType.label": "String",
-        "id.token.claim": "true",
-        "access.token.claim": "true",
-        "userinfo.token.claim": "true"
-      }
-    },
-    {
-      "name": "Realm Roles (ID token)",
-      "protocol": "openid-connect",
-      "protocolMapper": "oidc-usermodel-realm-role-mapper",
-      "consentRequired": false,
-      "config": {
-        "multivalued": "true",
-        "claim.name": "realm_access.roles",
-        "jsonType.label": "String",
-        "id.token.claim": "true",
-        "access.token.claim": "true",
-        "userinfo.token.claim": "false",
-        "introspection.token.claim": "true"
-      }
-    }
-  ],
+      "protocolMappers": [
+        {
+          "name": "Display Name (gustav_display_name)",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "display_name",
+            "claim.name": "gustav_display_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "Realm Roles (ID token)",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "GUSTAV API audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "gustav-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ],
       "redirectUris": [
         "https://app.gustav.example/*",
         "https://localhost/*",
@@ -115,6 +140,83 @@
       "defaultAction": false,
       "priority": 50,
       "config": {}
+    }
+  ],
+  "ssoSessionIdleTimeout": 86400,
+  "ssoSessionMaxLifespan": 604800,
+  "ssoSessionIdleTimeoutRememberMe": 2592000,
+  "ssoSessionMaxLifespanRememberMe": 2592000,
+  "accessTokenLifespan": 300,
+  "clientSessionIdleTimeout": 0,
+  "clientSessionMaxLifespan": 0,
+  "authenticationFlows": [
+    {
+      "alias": "registration",
+      "description": "registration flow",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": true,
+      "authenticationExecutions": [
+        {
+          "authenticator": "registration-page-form",
+          "authenticatorFlow": true,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "autheticatorFlow": true,
+          "flowAlias": "registration form",
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "registration form",
+      "description": "registration form",
+      "providerId": "form-flow",
+      "topLevel": false,
+      "builtIn": true,
+      "authenticationExecutions": [
+        {
+          "authenticator": "registration-user-creation",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticatorConfig": "gustav-registration-password",
+          "authenticator": "registration-password-action",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 50,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "registration-recaptcha-action",
+          "authenticatorFlow": false,
+          "requirement": "DISABLED",
+          "priority": 60,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "registration-terms-and-conditions",
+          "authenticatorFlow": false,
+          "requirement": "DISABLED",
+          "priority": 70,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "gustav-registration-password",
+      "config": {
+        "always_set_password_on_register_form": "true"
+      }
     }
   ]
 }

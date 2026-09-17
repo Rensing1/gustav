@@ -8,9 +8,6 @@ Why:
 
 from __future__ import annotations
 
-import hmac
-import os
-
 from fastapi import Request
 
 
@@ -22,15 +19,6 @@ def runtime_from_request(request: Request) -> object | None:
     except Exception:
         return None
     return runtime
-
-
-def bff_session_store(request: Request):
-    """Return the Browser-BFF session store from the explicit app runtime."""
-
-    runtime = runtime_from_request(request)
-    if runtime is not None and hasattr(runtime, "bff_session_store"):
-        return runtime.bff_session_store
-    raise RuntimeError("app runtime bff_session_store is not configured")
 
 
 def session_store(request: Request):
@@ -81,33 +69,6 @@ def private_headers() -> dict[str, str]:
     """Return cache headers for authenticated app responses."""
 
     return {"Cache-Control": "private, no-store"}
-
-
-def internal_bff_secret_configured() -> str:
-    """Return the configured shared secret for SvelteKit-to-FastAPI BFF calls."""
-
-    return str(os.getenv("BFF_INTERNAL_SHARED_SECRET") or "").strip()
-
-
-def require_internal_bff_secret(request: Request) -> bool:
-    """Validate the shared internal BFF secret without leaking timing signals."""
-
-    expected = internal_bff_secret_configured()
-    provided = str(request.headers.get("x-gustav-internal-secret") or "").strip()
-    return bool(expected) and bool(provided) and hmac.compare_digest(provided, expected)
-
-
-def bff_session_payload(session: object) -> dict[str, object]:
-    """Serialize the opaque Browser-BFF session record for the internal API."""
-
-    return {
-        "session_id": session.session_id,
-        "access_token": session.access_token,
-        "refresh_token": session.refresh_token,
-        "id_token": session.id_token,
-        "expires_at": session.expires_at,
-        "session_expires_at": session.session_expires_at,
-    }
 
 
 def current_user(request: Request) -> dict | None:

@@ -45,7 +45,7 @@ def test_frontend_contains_sveltekit_basics() -> None:
     assert "dev" in scripts
     assert "build" in scripts
     assert "check" in scripts
-    assert "jose" in deps
+    assert "jose" not in deps
     assert "svelte-kit sync" in scripts["build"]
 
     app_html = app_html_path.read_text(encoding="utf-8")
@@ -53,7 +53,7 @@ def test_frontend_contains_sveltekit_basics() -> None:
     assert "%sveltekit.body%" in app_html
 
     hooks_server_src = hooks_server_path.read_text(encoding="utf-8")
-    assert "assertSecureFrontendSessionConfig" in hooks_server_src
+    assert "assertSecureFrontendSessionConfig" not in hooks_server_src
 
     layout_server_src = layout_server_path.read_text(encoding="utf-8")
     assert "/api/app/session-bootstrap" in layout_server_src
@@ -99,8 +99,8 @@ def test_compose_and_caddy_route_app_to_frontend_and_api_to_fastapi() -> None:
     assert "KC_PUBLIC_BASE_URL=${KC_PUBLIC_BASE_URL:-https://id.localhost}" in compose_src
     assert "KC_CLIENT_ID=${KC_CLIENT_ID:-gustav-web}" in compose_src
     assert "KC_REALM=${KC_REALM:-gustav}" in compose_src
-    assert "FRONTEND_SESSION_SECRET=${FRONTEND_SESSION_SECRET}" in compose_src
-    assert "BFF_INTERNAL_SHARED_SECRET=${BFF_INTERNAL_SHARED_SECRET}" in compose_src
+    assert "FRONTEND_SESSION_SECRET=${FRONTEND_SESSION_SECRET}" not in compose_src
+    assert "BFF_INTERNAL_SHARED_SECRET=${BFF_INTERNAL_SHARED_SECRET}" not in compose_src
 
     assert "@api_path path /api/* /internal/*" in caddy_src
     assert "handle @api_path" in caddy_src

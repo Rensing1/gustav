@@ -7,8 +7,6 @@ import pytest
 from backend.tools.feature_acceptance import (
     FeatureAcceptanceConfig,
     _assert_runtime_stack_safe,
-    _bff_session_ids_for_subjects,
-    _jwt_subject,
     _revoke_cli_tokens,
     build_playwright_command,
     cleanup_manifest,
@@ -83,6 +81,7 @@ def test_preflight_accepts_the_normalized_local_supabase_service_name() -> None:
         ("gustav-alpha2", "TEACHING_DATABASE_URL"),
         ("gustav-alpha2", "LEARNING_DATABASE_URL"),
         ("gustav-alpha2", "SESSION_DATABASE_URL"),
+        ("gustav-frontend", "API_INTERNAL_BASE_URL"),
         ("gustav-learning-worker", "LEARNING_WORKER_DATABASE_URL"),
     ],
 )
@@ -104,6 +103,7 @@ def test_runtime_preflight_rejects_remote_database_used_by_a_running_container(
         "gustav-frontend": {
             "GUSTAV_ENV": "test",
             "ORIGIN": "https://app.localhost",
+            "API_INTERNAL_BASE_URL": "http://gustav-alpha2:8000",
             "KC_PUBLIC_BASE_URL": "https://id.localhost",
         },
         "gustav-h5p": {"GUSTAV_ENV": "test"},
@@ -137,6 +137,7 @@ def test_runtime_preflight_accepts_the_running_local_compose_stack() -> None:
             "gustav-frontend": {
                 "GUSTAV_ENV": "test",
                 "ORIGIN": "https://app.localhost",
+            "API_INTERNAL_BASE_URL": "http://gustav-alpha2:8000",
                 "KC_PUBLIC_BASE_URL": "https://id.localhost",
             },
             "gustav-h5p": {"GUSTAV_ENV": "test"},
@@ -148,39 +149,6 @@ def test_runtime_preflight_accepts_the_running_local_compose_stack() -> None:
             },
         }
     )
-
-
-def test_jwt_subject_is_decoded_without_exposing_or_accepting_malformed_tokens() -> None:
-    import base64
-    import json
-
-    payload = (
-        base64.urlsafe_b64encode(json.dumps({"sub": "e2e-user-id"}).encode()).decode().rstrip("=")
-    )
-    token = f"header.{payload}.signature"
-
-    assert _jwt_subject(token) == "e2e-user-id"
-    assert _jwt_subject("not-a-jwt") is None
-    assert _jwt_subject("header.%%%25.signature") is None
-
-
-def test_bff_session_matching_keeps_foreign_sessions_outside_cleanup() -> None:
-    import base64
-    import json
-
-    def token(subject: str) -> str:
-        payload = (
-            base64.urlsafe_b64encode(json.dumps({"sub": subject}).encode()).decode().rstrip("=")
-        )
-        return f"header.{payload}.signature"
-
-    rows = [
-        ("owned-session", token("owned-user"), token("owned-user")),
-        ("foreign-session", token("foreign-user"), token("foreign-user")),
-        ("malformed-session", "not-a-token", "not-a-token"),
-    ]
-
-    assert _bff_session_ids_for_subjects(rows, {"owned-user"}) == ["owned-session"]
 
 
 def test_targeted_command_selects_only_the_requested_marked_spec(tmp_path: Path) -> None:

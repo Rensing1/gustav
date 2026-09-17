@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.identity_access.stores import SessionStore, StateStore
+from backend.identity_access.stores import SessionStore
 
 
 def test_install_session_store_updates_runtime_without_main_alias(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -28,21 +28,6 @@ def test_install_session_store_updates_runtime_without_main_alias(monkeypatch: p
     assert installed is runtime_store
     assert main_module.RUNTIME.session_store is runtime_store
     assert not hasattr(main_module, "SESSION_STORE")
-
-
-def test_install_state_store_updates_runtime_without_main_alias(monkeypatch: pytest.MonkeyPatch) -> None:
-    from backend.tests.runtime_auth_helpers import install_state_store
-
-    runtime_store = StateStore()
-    main_module = SimpleNamespace(
-        RUNTIME=SimpleNamespace(state_store=StateStore()),
-    )
-
-    installed = install_state_store(monkeypatch, main_module, runtime_store)
-
-    assert installed is runtime_store
-    assert main_module.RUNTIME.state_store is runtime_store
-    assert not hasattr(main_module, "STATE_STORE")
 
 
 def test_install_oidc_client_updates_runtime_without_main_alias(monkeypatch: pytest.MonkeyPatch) -> None:

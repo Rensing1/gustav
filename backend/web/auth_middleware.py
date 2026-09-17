@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hmac
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -11,18 +10,20 @@ from urllib.parse import urlencode, urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
+from starlette.concurrency import run_in_threadpool
 
 from backend.identity_access.domain import ALLOWED_ROLES
+from backend.identity_access.unified_sessions import SessionUnavailable
 from backend.web.auth_claims import primary_role, user_context_from_claims
 from backend.web.auth_flow import (
     auth_failure_path_class,
     auth_failure_reason,
-    requires_bff_bearer_auth,
 )
 from backend.web.auth_session import SESSION_COOKIE_NAME
 from backend.web.cli_capabilities import cli_capability_for_request
 from backend.web.legacy_retirement import retired_legacy_product_response
 from backend.web.routes.redirects import safe_inapp_path
+from backend.web.routes.security import cookie_origin_allowed
 
 
 @dataclass
@@ -41,7 +42,6 @@ class AuthMiddlewareDependencies:
     verify_bearer_token: Callable[[str, Any], Mapping[str, object]]
     bearer_token_error_type: type[Exception]
     roles_for_cli_sub: Callable[[str], list[str]]
-    internal_bff_secret: Callable[[], str]
     environment_logger: logging.Logger
 
 
@@ -87,12 +87,6 @@ def default_roles_for_cli_sub(
     return [role for role in roles if role in ALLOWED_ROLES]
 
 
-def _has_valid_internal_bff_secret(request: Request, deps: AuthMiddlewareDependencies) -> bool:
-    expected = str(deps.internal_bff_secret() or "").strip()
-    provided = str(request.headers.get("x-gustav-internal-secret") or "").strip()
-    return bool(expected) and bool(provided) and hmac.compare_digest(provided, expected)
-
-
 def _bearer_token_from_authorization_header(request: Request) -> str | None:
     raw = request.headers.get("authorization") or ""
     prefix = "Bearer "
@@ -110,8 +104,7 @@ def create_auth_context_resolver(
     Behavior:
         - CLI bearer tokens are accepted only on CLI-enabled authoring routes.
         - JWT bearer tokens are verified against the configured OIDC settings.
-        - Browser sessions are used only when the path does not require BFF
-          bearer authentication.
+        - Browser sessions are accepted when no explicit authorization header exists.
 
     Permissions:
         Callers receive only compact server-side auth context. This resolver
@@ -149,7 +142,7 @@ def create_auth_context_resolver(
     def _bearer_auth_context_from_request(request: Request) -> tuple[bool, dict[str, object] | None]:
         token = _bearer_token_from_authorization_header(request)
         if not token:
-            return False, None
+            return bool(request.headers.get("authorization")), None
         if token.startswith("gustav_cli_"):
             raw_path = request.scope.get("raw_path")
             try:
@@ -167,6 +160,8 @@ def create_auth_context_resolver(
         try:
             claims = deps.verify_bearer_token(token, deps.oidc_config())
         except deps.bearer_token_error_type as exc:
+            if getattr(exc, "code", "") in ("jwks_fetch_failed", "jwks_invalid"):
+                raise SessionUnavailable() from exc
             deps.environment_logger.warning("Bearer token verification failed: %s", getattr(exc, "code", exc.__class__.__name__))
             return True, None
         exp = claims.get("exp")
@@ -180,7 +175,7 @@ def create_auth_context_resolver(
                 rec = deps.session_store().get(sid)
             except Exception as exc:
                 deps.environment_logger.warning("Session store get failed: %s", exc.__class__.__name__)
-                rec = None
+                raise SessionUnavailable() from exc
         else:
             rec = None
         if not rec:
@@ -197,8 +192,6 @@ def create_auth_context_resolver(
         bearer_attempted, bearer_context = _bearer_auth_context_from_request(request)
         if bearer_attempted:
             return bearer_context, "bearer"
-        if requires_bff_bearer_auth(request.url.path):
-            return None, "missing_bearer"
         return _session_auth_context_from_request(request), "session"
 
     return auth_context_from_request
@@ -219,10 +212,16 @@ def install_auth_middleware(
         path = request.url.path
         if is_public_path(path):
             return await call_next(request)
-        if path.startswith("/backend-internal/") and _has_valid_internal_bff_secret(request, deps):
-            return await call_next(request)
 
-        auth_context, auth_source = resolver(request)
+        try:
+            auth_context, auth_source = await run_in_threadpool(resolver, request)
+        except SessionUnavailable:
+            return JSONResponse({"error": "auth_unavailable"}, status_code=503,
+                                headers={"Cache-Control": "private, no-store", "Retry-After": "5"})
+        if auth_context and auth_source == "session" and request.method not in ("GET", "HEAD", "OPTIONS"):
+            if not cookie_origin_allowed(request, deps.oidc_config().redirect_uri):
+                return JSONResponse({"error": "forbidden", "detail": "csrf_violation"}, status_code=403,
+                                    headers={"Cache-Control": "private, no-store"})
 
         if not auth_context:
             if path.startswith("/api/") or path.startswith("/internal/") or path.startswith("/backend-internal/"):

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import os
 
 import httpx
 import pytest
@@ -35,26 +34,26 @@ async def _prepare_fixture(monkeypatch: pytest.MonkeyPatch):
     async with _client(main.app) as client:
         # Create course and learning items
         _set_session_cookie(client, teacher.session_id)
-        course = (await client.post("/api/teaching/courses", json={"title": "Kurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://internal"})).json()
-        unit = (await client.post("/api/teaching/units", json={"title": "Unit"}, headers={"Origin": "http://internal"})).json()
-        section = (await client.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "S"}, headers={"Origin": "http://internal"})).json()
+        course = (await client.post("/api/teaching/courses", json={"title": "Kurs", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://test"})).json()
+        unit = (await client.post("/api/teaching/units", json={"title": "Unit"}, headers={"Origin": "http://test"})).json()
+        section = (await client.post(f"/api/teaching/units/{unit['id']}/sections", json={"title": "S"}, headers={"Origin": "http://test"})).json()
         task = (
             await client.post(
                 f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks",
                 json={"instruction_md": "do", "max_attempts": 2},
-                headers={"Origin": "http://internal"},
+                headers={"Origin": "http://test"},
             )
         ).json()
-        module = (await client.post(f"/api/teaching/courses/{course['id']}/modules", json={"unit_id": unit["id"]}, headers={"Origin": "http://internal"})).json()
+        module = (await client.post(f"/api/teaching/courses/{course['id']}/modules", json={"unit_id": unit["id"]}, headers={"Origin": "http://test"})).json()
         await client.post(
             f"/api/teaching/courses/{course['id']}/modules/{module['id']}/sections/{section['id']}/visibility",
             json={"visible": True},
-            headers={"Origin": "http://internal"},
+            headers={"Origin": "http://test"},
         )
         await client.post(
             f"/api/teaching/courses/{course['id']}/members",
             json={"student_sub": student.sub, "name": "S"},
-            headers={"Origin": "http://internal"},
+            headers={"Origin": "http://test"},
         )
 
     return course["id"], task["id"], student.session_id, main.app
@@ -66,7 +65,7 @@ async def test_csrf_origin_rejects_when_not_trusting_proxy_headers(monkeypatch: 
     course_id, task_id, sid, app = await _prepare_fixture(monkeypatch)
 
     # Ensure proxy headers are not trusted by default
-    os.environ["GUSTAV_TRUST_PROXY"] = "false"
+    monkeypatch.setenv("GUSTAV_TRUST_PROXY", "false")
 
     async with _client(app) as client:
         _set_session_cookie(client, sid)
@@ -85,11 +84,11 @@ async def test_csrf_origin_rejects_when_not_trusting_proxy_headers(monkeypatch: 
 
 
 @pytest.mark.anyio
-async def test_csrf_origin_accepts_forwarded_headers_when_trust_proxy_true(monkeypatch: pytest.MonkeyPatch):
+async def test_csrf_origin_rejects_unconfigured_origin_even_when_trust_proxy_true(monkeypatch: pytest.MonkeyPatch):
     _require_db_or_skip()
     course_id, task_id, sid, app = await _prepare_fixture(monkeypatch)
 
-    os.environ["GUSTAV_TRUST_PROXY"] = "true"
+    monkeypatch.setenv("GUSTAV_TRUST_PROXY", "true")
 
     async with _client(app) as client:
         _set_session_cookie(client, sid)
@@ -103,8 +102,5 @@ async def test_csrf_origin_accepts_forwarded_headers_when_trust_proxy_true(monke
             json={"kind": "text", "text_body": "ok"},
         )
 
-    # With trusted proxy headers, CSRF check must not block the request.
-    # Downstream may still respond differently (e.g., 404/not_found) depending on DB state,
-    # but CSRF must not yield 403 csrf_violation.
-    if res.status_code == 403:
-        assert res.json().get("detail") != "csrf_violation", res.text
+    assert res.status_code == 403
+    assert res.json().get("detail") == "csrf_violation"

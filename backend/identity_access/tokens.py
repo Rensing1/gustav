@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from threading import Lock
 from typing import Dict, Tuple
 
 import requests
@@ -39,31 +40,60 @@ class BearerTokenVerificationError(Exception):
 
 
 @dataclass
-class _CacheEntry:
-    jwks: Dict[str, object]
-    expires_at: float
+class _RealmKeys:
+    lock: Lock = field(default_factory=Lock)
+    jwks: Dict[str, object] | None = None
+    expires_at: float = 0
+    retry_after: float = 0
+    error: str | None = None
 
 
 class JWKSCache:
-    """Bounded per-process cache for public realm signing keys."""
+    """Share key retrieval per realm/process and bound untrusted refresh requests."""
 
     def __init__(self, ttl_seconds: int = 300):
         self.ttl_seconds = ttl_seconds
-        self._entries: Dict[Tuple[str, str], _CacheEntry] = {}
+        self._states: Dict[Tuple[str, str], _RealmKeys] = {}
+        self._states_lock = Lock()
 
     def _cache_key(self, cfg: OIDCConfig) -> Tuple[str, str]:
         return (cfg.base_url, cfg.realm)
 
-    def get(self, cfg: OIDCConfig, *, force: bool = False) -> Dict[str, object]:
-        key = self._cache_key(cfg)
-        now = time.time()
-        entry = self._entries.get(key)
-        if not force and entry and entry.expires_at > now:
-            return entry.jwks
+    def get(self, cfg: OIDCConfig, *, force: bool = False,
+            previous: Dict[str, object] | None = None) -> Dict[str, object]:
+        """Return cached keys or make one bounded HTTP call under a realm lock.
 
-        jwks = self._fetch(cfg)
-        self._entries[key] = _CacheEntry(jwks=jwks, expires_at=now + self.ttl_seconds)
-        return jwks
+        `previous` identifies the snapshot that missed a key: a concurrent
+        caller's newer result suffices. During the five-second cooldown a new
+        unknown key is temporarily unverifiable, not definitively invalid.
+        Already cached valid keys remain usable even if a forced fetch failed.
+        """
+        key = self._cache_key(cfg)
+        with self._states_lock:
+            state = self._states.get(key)
+            if state is None:
+                state = self._states[key] = _RealmKeys()
+        # A forged unknown kid must not stall checks using already valid keys.
+        if not force and state.expires_at > time.monotonic() and state.jwks is not None:
+            return state.jwks
+        with state.lock:
+            now = time.monotonic()
+            if state.jwks is not None and state.expires_at > now:
+                if not force or (previous is not None and state.jwks is not previous):
+                    return state.jwks
+            if state.retry_after > now:
+                raise IDTokenVerificationError(state.error or 'jwks_refresh_deferred')
+            try:
+                jwks = self._fetch(cfg)
+            except IDTokenVerificationError as exc:
+                state.error = exc.code
+                state.retry_after = time.monotonic() + 5
+                raise
+            state.jwks = jwks
+            state.expires_at = time.monotonic() + self.ttl_seconds
+            state.error = None
+            state.retry_after = time.monotonic() + 5 if force else 0
+            return jwks
 
     def _fetch(self, cfg: OIDCConfig) -> Dict[str, object]:
         url = f"{cfg.base_url}/realms/{cfg.realm}/protocol/openid-connect/certs"
@@ -122,13 +152,15 @@ def verify_id_token(
         header = jwt.get_unverified_header(id_token)
     except JOSEError as exc:
         raise IDTokenVerificationError("invalid_id_token") from exc
+    if header.get('alg') != 'RS256':
+        raise IDTokenVerificationError('invalid_id_token')
     kid = header.get("kid")
     if not kid:
         raise IDTokenVerificationError("missing_kid")
     jwks = cache.get(cfg)
     key_dict = _find_key(jwks, kid)
     if not key_dict:
-        key_dict = _find_key(cache.get(cfg, force=True), kid)
+        key_dict = _find_key(cache.get(cfg, force=True, previous=jwks), kid)
     if not key_dict:
         raise IDTokenVerificationError("unknown_kid")
 
@@ -174,6 +206,8 @@ def verify_bearer_token(
     except JOSEError as exc:
         logger.warning("Bearer token header decode failed: %s", exc.__class__.__name__)
         raise BearerTokenVerificationError("invalid_bearer_token") from exc
+    if header.get('alg') != 'RS256':
+        raise BearerTokenVerificationError('invalid_bearer_token')
     kid = header.get("kid")
     if not kid:
         raise BearerTokenVerificationError("missing_kid")
@@ -184,7 +218,7 @@ def verify_bearer_token(
     key_dict = _find_key(jwks, kid)
     if not key_dict:
         try:
-            key_dict = _find_key(cache.get(cfg, force=True), kid)
+            key_dict = _find_key(cache.get(cfg, force=True, previous=jwks), kid)
         except IDTokenVerificationError as exc:
             raise BearerTokenVerificationError(exc.code) from exc
     if not key_dict:

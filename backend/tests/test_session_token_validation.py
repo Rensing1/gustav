@@ -59,10 +59,11 @@ def test_refresh_updates_roles_but_never_subject(signed_tokens):
         session_values(make(), cfg, current)
 
 
-def test_key_retrieval_outage_is_not_an_invalid_session(signed_tokens, monkeypatch):
+@pytest.mark.parametrize('code', ['jwks_fetch_failed', 'jwks_invalid', 'jwks_refresh_deferred'])
+def test_key_retrieval_outage_is_not_an_invalid_session(signed_tokens, monkeypatch, code):
     cfg, make = signed_tokens
     def fail(*args, **kwargs):
-        raise token_module.IDTokenVerificationError('jwks_fetch_failed')
+        raise token_module.IDTokenVerificationError(code)
     monkeypatch.setattr(token_module.JWKS_CACHE, 'get', fail)
     with pytest.raises(SessionUnavailable):
         session_values(make(), cfg, nonce='nonce')

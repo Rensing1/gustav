@@ -2,6 +2,14 @@
 
 ## 2026-09-17
 
+### Reparaturen aus dem Auth-Review
+
+- fix(auth): Auch ein abgeschlossener Refresh erhöht die Sitzungsversion. Veraltete Anfragen können dadurch keine verlängerte Sitzung löschen oder alte Tokens erneut verwenden; der Erneuerungsbedarf wird atomar geprüft.
+- fix(auth): Der sichtbare Passwort-Reset-Einstieg funktioniert mit nativen Formularen und ohne JavaScript bei unveränderter CSRF-Prüfung.
+- security(auth): JWKS-Abrufe werden je Realm und Backend-Prozess koordiniert und für fünf Sekunden gegen Wiederholungen geschützt. Nicht erlaubte Algorithmen werden vor Netzaufrufen abgelehnt; vorübergehend nicht prüfbare neue Schlüssel erhalten die Sitzung.
+- fix(api): Der Reset-Vertrag deklariert den Weiterleitungsheader korrekt.
+- test(auth): Beide vollständigen Feature-Gates `auth-registration` und `auth-session-continuity` sowie die Containerprüfung bestanden. Je Gate 3.013 Backend- und 736 Frontend-Tests erfolgreich; echte Browser-Rundläufe sichern den Reset-Einstieg ohne JavaScript und die Sitzungsfortsetzung nach Neustarts ab. Zusätzlich 80 gezielte Backend-Tests für die reparierten Randfälle bestanden.
+
 ### Gemeinsame Authentifizierung
 
 - refactor(auth): FastAPI übernimmt OIDC, eine gemeinsame PostgreSQL-Sitzung, koordinierten Refresh und geschützte Abmeldung. SvelteKit und H5P verwenden dieselbe Sitzung; Tokenverwaltung und Synchronisation im Frontend entfallen.

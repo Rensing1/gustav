@@ -81,3 +81,13 @@ def test_openapi_documents_direct_keycloak_registration_endpoint():
 
     assert "/protocol/openid-connect/registrations" in operation["description"]
     assert "kc_action=register" not in operation["description"]
+
+
+def test_password_reset_redirect_headers_have_valid_structure():
+    headers = _response(_load_spec(), "/auth/forgot", "get", "302")["headers"]
+    assert headers["Location"]["schema"]["type"] == "string"
+    # Header Objects describe one header; another header cannot be nested in them.
+    allowed = {"description", "required", "deprecated", "allowEmptyValue", "style",
+               "explode", "allowReserved", "schema", "example", "examples", "content", "$ref"}
+    for header in headers.values():
+        assert all(key in allowed or key.startswith("x-") for key in header)

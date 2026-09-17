@@ -40,8 +40,12 @@ class SessionService:
                 return None
             now = time.time()
             if current.expires_at <= now:
-                self.repository.delete(sid, current.refresh_version)
-                return None
+                if self.repository.delete(sid, current.refresh_version):
+                    return None
+                # A completed refresh may have extended this stale snapshot.
+                if time.monotonic() >= deadline:
+                    raise SessionUnavailable()
+                continue
             if current.access_expires_at > now + 30:
                 return current
             version = self.repository.reserve_refresh(sid, current.refresh_version)

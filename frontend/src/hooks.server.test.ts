@@ -16,8 +16,8 @@ it.each([
   expect(resolve).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
 });
 
-it("keeps a verifiable origin when submitting the logout form", async () => {
-  const event = { url: new URL(`${origin}/auth/logout`), request: new Request(`${origin}/auth/logout`) };
+it.each(["/auth/logout", "/forgot-password"])("keeps a verifiable origin for the native form at %s", async (path) => {
+  const event = { url: new URL(`${origin}${path}`), request: new Request(`${origin}${path}`) };
   const response = await handle({ event, resolve: async () => new Response("ok") } as never);
   expect(response.headers.get("referrer-policy")).toBe("same-origin");
 });

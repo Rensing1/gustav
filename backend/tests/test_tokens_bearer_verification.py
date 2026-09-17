@@ -22,7 +22,7 @@ class FailingCache:
 
 
 def test_verify_bearer_token_accepts_explicit_api_audience(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1"})
+    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1", "alg": "RS256"})
     monkeypatch.setattr(
         tokens_mod.jwt,
         "decode",
@@ -47,7 +47,7 @@ def test_verify_bearer_token_accepts_explicit_api_audience(monkeypatch: pytest.M
 
 
 def test_verify_bearer_token_rejects_wrong_audience_and_azp(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1"})
+    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1", "alg": "RS256"})
     monkeypatch.setattr(
         tokens_mod.jwt,
         "decode",
@@ -72,7 +72,7 @@ def test_verify_bearer_token_rejects_wrong_audience_and_azp(monkeypatch: pytest.
 
 
 def test_verify_bearer_token_maps_jwks_fetch_failures_to_bearer_error(monkeypatch) -> None:
-    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1"})
+    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1", "alg": "RS256"})
     cfg = OIDCConfig(
         base_url="http://kc.example",
         realm="gustav",
@@ -89,7 +89,7 @@ def test_verify_bearer_token_maps_jwks_fetch_failures_to_bearer_error(monkeypatc
 def test_verify_bearer_token_maps_expired_claims_to_bearer_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1"})
+    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1", "alg": "RS256"})
     monkeypatch.setattr(
         tokens_mod.jwt,
         "decode",

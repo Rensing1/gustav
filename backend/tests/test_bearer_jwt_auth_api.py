@@ -111,6 +111,19 @@ async def test_session_bootstrap_accepts_verified_bearer_jwt(monkeypatch: pytest
 
 
 @pytest.mark.anyio
+async def test_deferred_key_refresh_is_a_temporary_api_failure(monkeypatch):
+    from backend.identity_access.tokens import BearerTokenVerificationError
+    def deferred(token, cfg):
+        raise BearerTokenVerificationError('jwks_refresh_deferred')
+    monkeypatch.setattr(main, 'verify_bearer_token', deferred)
+    async with httpx.AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get('/api/me', headers={'Authorization': 'Bearer synthetic'})
+    assert response.status_code == 503
+    assert response.json() == {'error': 'auth_unavailable'}
+    assert response.headers['retry-after'] == '5'
+
+
+@pytest.mark.anyio
 async def test_api_me_accepts_access_token_style_bearer_with_azp(monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_jwks(monkeypatch)
     token = _make_bearer_token(

@@ -160,7 +160,7 @@ def create_auth_context_resolver(
         try:
             claims = deps.verify_bearer_token(token, deps.oidc_config())
         except deps.bearer_token_error_type as exc:
-            if getattr(exc, "code", "") in ("jwks_fetch_failed", "jwks_invalid"):
+            if getattr(exc, "code", "") in ("jwks_fetch_failed", "jwks_invalid", "jwks_refresh_deferred"):
                 raise SessionUnavailable() from exc
             deps.environment_logger.warning("Bearer token verification failed: %s", getattr(exc, "code", exc.__class__.__name__))
             return True, None

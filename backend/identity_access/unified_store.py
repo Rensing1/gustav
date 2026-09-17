@@ -76,10 +76,12 @@ class UnifiedSessionRepository:
         return TokenSession(session_id=sid, **row) if row else None
 
     def reserve_refresh(self, sid: str, version: int) -> int | None:
+        """Reserve only an unchanged session that still needs token renewal."""
         with self.connect() as conn:
             row = conn.execute(
                 "update public.app_sessions set refresh_version=refresh_version+1,refresh_locked_until=now()+interval '10 seconds' "
                 "where session_id=%s and refresh_version=%s and expires_at>now() "
+                "and access_expires_at<=now()+interval '30 seconds' "
                 "and (refresh_locked_until is null or refresh_locked_until<now()) "
                 "and (retry_after is null or retry_after<now()) returning refresh_version",
                 (digest(sid), version),
@@ -89,13 +91,15 @@ class UnifiedSessionRepository:
     def finish_refresh(self, sid: str, version: int, values: dict) -> bool:
         """Save only the unchanged reservation; expiry permits takeover, not token loss.
 
-        The version fences late owners after takeover or logout. If nobody has
-        reclaimed an expired lease, saving its rotated token is still safe.
+        Advance the version on completion too: readers during the network call
+        still hold old tokens and expiry. They must re-read before any mutation.
+        If nobody reclaimed an expired lease, saving its rotated token is safe.
         """
         with self.connect() as conn:
             result = conn.execute(
                 "update public.app_sessions set sub=%s,roles=%s,name=%s,id_token=%s,access_token=%s,refresh_token=%s,"
-                "access_expires_at=to_timestamp(%s),expires_at=to_timestamp(%s),refresh_locked_until=null,retry_after=null "
+                "access_expires_at=to_timestamp(%s),expires_at=to_timestamp(%s),refresh_locked_until=null,retry_after=null,"
+                "refresh_version=refresh_version+1 "
                 "where session_id=%s and refresh_version=%s and refresh_locked_until is not null",
                 (values['sub'], Json(values['roles']), values['name'], values['id_token'], values['access_token'],
                  values['refresh_token'], values['access_expires_at'], values['expires_at'], digest(sid), version),
@@ -114,11 +118,13 @@ class UnifiedSessionRepository:
         with self.connect() as conn:
             conn.execute("update public.app_sessions set name=%s where sub=%s", (name, sub))
 
-    def delete(self, sid: str, version: int | None = None):
+    def delete(self, sid: str, version: int | None = None) -> bool:
+        """Revoke a session; report whether an optional snapshot still owned it."""
         with self.connect() as conn:
-            conn.execute("delete from public.app_sessions where session_id=%s" +
+            result = conn.execute("delete from public.app_sessions where session_id=%s" +
                          (" and refresh_version=%s" if version is not None else ""),
                          (digest(sid), version) if version is not None else (digest(sid),))
+            return result.rowcount == 1
 
     def create_flow(self, *, browser: str, mode: str, redirect: str | None, code_verifier: str, nonce: str) -> AuthFlow:
         state = secrets.token_urlsafe(32)

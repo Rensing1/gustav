@@ -7740,8 +7740,7 @@ paths:
               schema:
                 type: string
               example: private, no-store
-            Vary:
-              Location:
+            Location:
               schema:
                 type: string
         '503':

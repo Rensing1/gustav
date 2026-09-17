@@ -198,7 +198,8 @@ def test_refresh_is_shared_across_independent_backend_processes(repo):
 def test_no_independent_one_day_expiry_when_provider_session_is_valid(repo, monkeypatch, age_days):
     """Controlled time advances within the provider-confirmed remember-me lifetime."""
     now = time.time()
-    rec = repo.create(sub='synthetic-student', roles=['student'], name='Test', id_token='id', access_token='access', refresh_token='refresh', access_expires_at=now+300, expires_at=now+30*86400)
+    # The token must also be expired for PostgreSQL's atomic renewal check.
+    rec = repo.create(sub='synthetic-student', roles=['student'], name='Test', id_token='id', access_token='access', refresh_token='refresh', access_expires_at=now-10, expires_at=now+30*86400)
     monkeypatch.setattr(time, 'time', lambda: now + age_days*86400)
     assert service(repo, lambda _: {}).get(rec.session_id) is not None
 
@@ -247,3 +248,42 @@ def test_auth_tables_are_restricted_to_server_roles(repo):
 def test_legacy_bff_session_table_is_retired(repo):
     with repo.connect() as conn:
         assert conn.execute("select to_regclass('public.bff_sessions') as relation").fetchone()['relation'] is None
+
+
+@pytest.mark.parametrize('past_old_expiry', [False, True])
+def test_reader_during_refresh_keeps_the_completed_session(repo, monkeypatch, past_old_expiry):
+    """Force read-before-finish, resume-after-finish with real committed DB writes."""
+    rec = record(repo)
+    owner = repo.reserve_refresh(rec.session_id, rec.refresh_version)
+    original_get = repo.get
+    stale = original_get(rec.session_id)
+    resumed_at = stale.expires_at + 1 if past_old_expiry else time.time()
+    values = service(repo, None).validate_tokens({}, stale)
+    values.update(access_expires_at=resumed_at + 300, expires_at=resumed_at + 3600)
+    assert repo.finish_refresh(rec.session_id, owner, values)
+
+    reads = iter([stale])
+    monkeypatch.setattr(repo, 'get', lambda sid: next(reads, None) or original_get(sid))
+    monkeypatch.setattr(time, 'time', lambda: resumed_at)
+    attempts = []
+    def refresh(token):
+        from backend.identity_access.unified_sessions import SessionInvalid
+        attempts.append(token)
+        raise SessionInvalid()
+    result = service(repo, refresh).get(rec.session_id)
+    assert result is not None
+    assert result.refresh_token == 'fresh-refresh'
+    assert attempts == []
+    assert original_get(rec.session_id) is not None
+
+
+def test_fresh_access_token_cannot_be_reserved_for_refresh(repo):
+    rec = record(repo, expired=False)
+    assert repo.reserve_refresh(rec.session_id, rec.refresh_version) is None
+
+
+def test_expired_session_is_removed_without_refresh(repo, monkeypatch):
+    rec = record(repo)
+    monkeypatch.setattr(time, 'time', lambda: rec.expires_at + 1)
+    assert service(repo, lambda _: pytest.fail('Expired sessions must not refresh')).get(rec.session_id) is None
+    assert repo.get(rec.session_id) is None

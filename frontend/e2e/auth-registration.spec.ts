@@ -54,10 +54,14 @@ async function passwordJourney(browser: Browser) {
   await ensureLearnerUser(email, e2ePassword);
   const smtp = await startSmtpCapture();
   const restore = await useTemporaryRealmSmtp({ host: smtp.host, port: String(smtp.port), from: `noreply@${emailDomain}`, auth: 'false', ssl: 'false', starttls: 'false' });
-  const context = await newBrowserContext(browser, { locale: 'de-DE' });
+  const context = await newBrowserContext(browser, { locale: 'de-DE', javaScriptEnabled: false });
   try {
     const page = await context.newPage();
-    await page.goto('/auth/forgot');
+    await page.goto('/');
+    await page.getByRole('link', { name: 'Passwort vergessen', exact: true }).click();
+    await expect(page).toHaveURL(/\/forgot-password/);
+    await page.getByRole('button', { name: 'Passwort vergessen', exact: true }).click();
+    await expect(page.locator('input[name=username]')).toBeVisible();
     await page.locator('input[name=username]').fill(email);
     await page.locator('button[type=submit]').click();
     await page.goto(await smtp.verificationUrl(email));

@@ -28,7 +28,7 @@ def test_unknown_signing_key_refreshes_cache_once(monkeypatch):
         calls.append(1)
         return {'keys': [{'kid': 'old' if len(calls) == 1 else 'new', 'kty': 'RSA'}]}
     monkeypatch.setattr(cache, '_fetch', fetch)
-    monkeypatch.setattr(tokens.jwt, 'get_unverified_header', lambda _: {'kid': 'new'})
+    monkeypatch.setattr(tokens.jwt, 'get_unverified_header', lambda _: {'kid': 'new', 'alg': 'RS256'})
     monkeypatch.setattr(tokens.jwt, 'decode', lambda *a, **k: {'sub': 'synthetic', 'aud': 'gustav-api', 'exp': 4102444800})
     assert tokens.verify_bearer_token(token='synthetic', cfg=CFG, cache=cache)['sub'] == 'synthetic'
     assert len(calls) == 2

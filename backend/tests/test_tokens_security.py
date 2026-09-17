@@ -21,7 +21,7 @@ def test_verify_enforces_rs256_alg(monkeypatch: pytest.MonkeyPatch):
             return {"keys": [{"kid": "kid1", "kty": "RSA"}]}
 
     # Ensure header returns a kid
-    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1"})
+    monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1", "alg": "RS256"})
 
     captured = {}
 

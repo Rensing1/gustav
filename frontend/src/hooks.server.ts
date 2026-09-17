@@ -15,7 +15,8 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (event.url.pathname.startsWith("/auth/") || ["/", "/register", "/forgot-password"].includes(event.url.pathname)) {
     response.headers.set("cache-control", "private, no-store");
     // Native form navigations need same-origin provenance; nothing is sent cross-origin.
-    response.headers.set("referrer-policy", event.url.pathname === "/auth/logout" ? "same-origin" : "no-referrer");
+    const nativeFormPage = ["/auth/logout", "/forgot-password"].includes(event.url.pathname);
+    response.headers.set("referrer-policy", nativeFormPage ? "same-origin" : "no-referrer");
   }
   return response;
 };

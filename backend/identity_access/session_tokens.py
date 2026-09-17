@@ -24,7 +24,7 @@ def session_values(tokens: dict, cfg, current=None, *, nonce: str | None = None)
         raw_id = tokens.get('id_token')
         identity = verify_id_token(id_token=raw_id, cfg=cfg) if raw_id else None
     except (BearerTokenVerificationError, IDTokenVerificationError) as exc:
-        if exc.code in ('jwks_fetch_failed', 'jwks_invalid'):
+        if exc.code in ('jwks_fetch_failed', 'jwks_invalid', 'jwks_refresh_deferred'):
             raise SessionUnavailable() from exc
         raise SessionInvalid() from exc
     except (KeyError, TypeError) as exc:

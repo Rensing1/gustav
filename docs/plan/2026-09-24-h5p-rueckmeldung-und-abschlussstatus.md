@@ -37,4 +37,3 @@ Es sind weder neue Endpunkte noch Schemaänderungen erforderlich. Daher wird kei
 - Frontend-Unit-Tests für Abschlusshelfer, Task-Zeile, Abgabenvorschau und Practice-Player-Lebenszyklus.
 - Authentifizierte Playwright-Spec `h5p-learner-feedback-progress.spec.ts` für Practice-Rückmeldung und modulare Freischaltung.
 - Abschluss mit `make verify-feature FEATURE=h5p-learner-feedback-progress`.
-

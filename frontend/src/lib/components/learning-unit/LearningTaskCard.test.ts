@@ -16,7 +16,10 @@ const task: LearningTask = {
   instruction_md:
     "## Arbeitsauftrag\n\n**Erkläre** den *Zusammenhang*.<br>Nutze den Text.\n\n- Aspekt eins\n- Aspekt zwei\n\n1. Schritt eins\n2. Schritt zwei\n\n[Quelle](https://example.com)\n\n| Kriterium | Gewicht |\n| --- | --- |\n| Klarheit | 2 |",
   criteria: ["Klarheit"],
-  kind: "native"
+  kind: "native",
+  h5p_completed: null,
+  score_raw: null,
+  score_max: null
 };
 const validReviewedSubmissionId = "123e4567-e89b-42d3-a456-426614174099";
 // Unit checks exercise local form decisions; real transport has browser coverage.

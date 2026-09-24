@@ -17,3 +17,17 @@ def test_learning_task_requires_h5p_completion_and_latest_score() -> None:
     assert properties["score_raw"]["minimum"] == 0
     assert properties["score_max"]["minimum"] == 0
     assert "including 0/0" in properties["h5p_completed"]["description"]
+
+
+def test_frontend_learning_task_requires_nullable_h5p_progress_fields() -> None:
+    source = (
+        Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "types" / "learning.ts"
+    ).read_text(encoding="utf-8")
+    learning_task = source.split("export type LearningTask = {", 1)[1].split("\n};", 1)[0]
+
+    assert "h5p_completed: boolean | null;" in learning_task
+    assert "score_raw: number | null;" in learning_task
+    assert "score_max: number | null;" in learning_task
+    assert "h5p_completed?:" not in learning_task
+    assert "score_raw?:" not in learning_task
+    assert "score_max?:" not in learning_task

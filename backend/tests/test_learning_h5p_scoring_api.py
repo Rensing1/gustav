@@ -98,7 +98,14 @@ async def _prepare_h5p_task_fixture(monkeypatch: pytest.MonkeyPatch, *, max_atte
         r = await c.post(f"/api/teaching/courses/{course_id}/members", json={"student_sub": student.sub})
         assert r.status_code in (201, 204)
 
-    return {"teacher": teacher, "student": student, "course_id": course_id, "task_id": task["id"]}
+    return {
+        "teacher": teacher,
+        "student": student,
+        "course_id": course_id,
+        "unit_id": unit["id"],
+        "section_id": section["id"],
+        "task_id": task["id"],
+    }
 
 
 async def _load_h5p_task(client: httpx.AsyncClient, *, course_id: str, task_id: str) -> dict:
@@ -215,3 +222,60 @@ async def test_learning_task_reports_h5p_completion_and_latest_score(monkeypatch
         assert after_later_partial["h5p_completed"] is True
         assert after_later_partial["score_raw"] == 0
         assert after_later_partial["score_max"] == 1
+
+
+@pytest.mark.anyio
+async def test_learning_task_projects_progress_from_current_kind_after_type_changes(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Historical submission kinds must not override the current Teaching task kind."""
+    fx = await _prepare_h5p_task_fixture(monkeypatch)
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", fx["student"].session_id)
+        completed = await c.post(
+            f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+            json={"kind": "h5p", "score_raw": 1, "score_max": 1},
+        )
+        assert completed.status_code in (201, 202)
+
+        c.cookies.set("gustav_session", fx["teacher"].session_id)
+        changed_to_native = await c.patch(
+            f"/api/teaching/units/{fx['unit_id']}/sections/{fx['section_id']}/tasks/{fx['task_id']}",
+            json={"h5p": None},
+        )
+        assert changed_to_native.status_code == 200
+        assert changed_to_native.json()["kind"] == "native"
+
+        c.cookies.set("gustav_session", fx["student"].session_id)
+        native_task = await _load_h5p_task(
+            c, course_id=fx["course_id"], task_id=fx["task_id"]
+        )
+        assert native_task["kind"] == "native"
+        assert native_task["h5p_completed"] is None
+        assert native_task["score_raw"] is None
+        assert native_task["score_max"] is None
+
+        native_submission = await c.post(
+            f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+            json={"intent": "submit", "kind": "text", "text_body": "Zwischenstand"},
+        )
+        assert native_submission.status_code in (201, 202)
+
+        c.cookies.set("gustav_session", fx["teacher"].session_id)
+        changed_back_to_h5p = await c.patch(
+            f"/api/teaching/units/{fx['unit_id']}/sections/{fx['section_id']}/tasks/{fx['task_id']}",
+            json={"h5p": {"content_id": "1", "display_options": {}}},
+        )
+        assert changed_back_to_h5p.status_code == 200
+        assert changed_back_to_h5p.json()["kind"] == "h5p"
+
+        c.cookies.set("gustav_session", fx["student"].session_id)
+        h5p_task = await _load_h5p_task(
+            c, course_id=fx["course_id"], task_id=fx["task_id"]
+        )
+        assert h5p_task["kind"] == "h5p"
+        assert h5p_task["h5p_completed"] is True
+        assert h5p_task["score_raw"] == 1
+        assert h5p_task["score_max"] == 1

@@ -16,6 +16,9 @@ const dialogTask: LearningTask = {
   instruction_md: "Untersuche die Quelle im Gespräch.",
   criteria: [],
   kind: "dialog",
+  h5p_completed: null,
+  score_raw: null,
+  score_max: null,
   dialog: {
     partner_name: "Archivarin",
     partner_description_md: "Eine sachkundige Gesprächspartnerin.",

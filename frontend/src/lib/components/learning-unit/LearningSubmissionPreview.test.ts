@@ -155,4 +155,37 @@ describe("LearningSubmissionPreview", () => {
     expect(screen.getByText("Abgeschlossen")).toBeVisible();
     expect(screen.getByText("Zuletzt 0/1 Punkte erreicht.")).toBeVisible();
   });
+
+  it("reacts to an earlier full score added to the live H5P history", async () => {
+    const partial = {
+      ...submission,
+      id: "h5p-partial",
+      kind: "h5p" as const,
+      text_body: null,
+      score_raw: 0,
+      score_max: 1,
+      feedback_md: null,
+      analysis_json: null
+    };
+    const full = {
+      ...partial,
+      id: "h5p-full",
+      attempt_nr: 2,
+      score_raw: 1
+    };
+    const view = render(LearningSubmissionPreview, props({
+      h5pCompleted: false,
+      h5pHistory: [partial],
+      state: { status: "loaded", submission: partial }
+    }));
+    expect(screen.getByText("Noch nicht abgeschlossen", { exact: true })).toBeVisible();
+
+    await view.rerender(props({
+      h5pCompleted: false,
+      h5pHistory: [partial, full],
+      state: { status: "loaded", submission: partial }
+    }));
+
+    expect(screen.getByText("Abgeschlossen", { exact: true })).toBeVisible();
+  });
 });

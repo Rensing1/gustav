@@ -50,7 +50,10 @@
     id: "preview-task-1",
     instruction_md: "## Arbeitsauftrag\n\nErkläre in zwei Sätzen, warum Module klar begrenzte Objekte bleiben sollen.",
     criteria: ["Klarheit"],
-    kind: "native"
+    kind: "native",
+    h5p_completed: null,
+    score_raw: null,
+    score_max: null
   };
 
   const previewMaterial: LearningMaterial = {

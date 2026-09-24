@@ -52,7 +52,10 @@ const groups: ContentGroup[] = [
           id: "task-1",
           instruction_md: "Begründe deine Position zur Chatkontrolle.",
           criteria: [],
-          kind: "native"
+          kind: "native",
+          h5p_completed: null,
+          score_raw: null,
+          score_max: null
         }
       }
     ]
@@ -81,6 +84,9 @@ const dialogGroups: ContentGroup[] = [
           instruction_md: "Untersuche die Quelle im Gespräch.",
           criteria: [],
           kind: "dialog",
+          h5p_completed: null,
+          score_raw: null,
+          score_max: null,
           dialog: {
             partner_name: "Archivarin Ada",
             partner_description_md: "Eine sachkundige Gesprächspartnerin.",
@@ -156,6 +162,72 @@ describe("LearnerContentWorkspace", () => {
       historyByTask: { "task-1": [{ ...final, id: "draft", intent: "feedback", attempt_nr: 2 }, final] }
     });
     expect(screen.getByText("Neuerer Entwurf vorhanden")).toBeVisible();
+  });
+
+  it("keeps the H5P preview complete after a newer partial attempt in the same session", async () => {
+    const full: LearningSubmission = {
+      id: "h5p-full",
+      intent: "submit",
+      kind: "h5p",
+      attempt_nr: 1,
+      created_at: "2026-09-24T10:00:00Z",
+      analysis_status: "completed",
+      score_raw: 1,
+      score_max: 1
+    };
+    const partial: LearningSubmission = {
+      ...full,
+      id: "h5p-partial",
+      attempt_nr: 2,
+      created_at: "2026-09-24T10:01:00Z",
+      score_raw: 0
+    };
+    const h5pGroups: ContentGroup[] = [{
+      id: "module-h5p",
+      title: "H5P",
+      items: [{
+        key: "task:task-h5p",
+        kind: "task",
+        title: "Aufgabe 1",
+        position: 1,
+        contextLabel: "H5P",
+        moduleId: "module-h5p",
+        task: {
+          id: "task-h5p",
+          instruction_md: "Wähle die richtige Antwort.",
+          criteria: [],
+          kind: "h5p",
+          h5p: { content_id: "1" },
+          has_submission: true,
+          h5p_completed: false,
+          score_raw: null,
+          score_max: null
+        }
+      }]
+    }];
+
+    const initialProps = {
+      ...baseProps(),
+      contentGroups: h5pGroups,
+      contextModules: [],
+      historyByTask: { "task-h5p": [partial] },
+      historyStateByTask: { "task-h5p": "loaded" as const },
+      previewByTask: { "task-h5p": { status: "loaded" as const, submission: partial } }
+    };
+    const view = render(LearnerContentWorkspace, initialProps);
+
+    expect(screen.getByText("Noch nicht abgeschlossen · zuletzt 0/1 Punkte")).toBeVisible();
+    const preview = screen.getByRole("region", { name: "Eigene Bearbeitung zu Aufgabe 1" });
+    expect(within(preview).getByText("Noch nicht abgeschlossen", { exact: true })).toBeVisible();
+
+    await view.rerender({
+      ...initialProps,
+      historyByTask: { "task-h5p": [partial, full] }
+    });
+
+    expect(screen.getByText("Abgeschlossen · zuletzt 0/1 Punkte")).toBeVisible();
+    expect(within(preview).getByText("Abgeschlossen", { exact: true })).toBeVisible();
+    expect(within(preview).getByText("Zuletzt 0/1 Punkte erreicht.")).toBeVisible();
   });
 
   afterEach(() => {
@@ -265,6 +337,9 @@ describe("LearnerContentWorkspace", () => {
         instruction_md: "Diese Aufgabe ist bereits abgeschlossen.",
         criteria: [],
         kind: "native" as const,
+        h5p_completed: null,
+        score_raw: null,
+        score_max: null,
         latest_final_submission_at: "2026-08-22T10:00:00Z"
       }
     };
@@ -279,7 +354,10 @@ describe("LearnerContentWorkspace", () => {
         id: "task-3",
         instruction_md: "Diese Aufgabe ist noch offen.",
         criteria: [],
-        kind: "native" as const
+        kind: "native" as const,
+        h5p_completed: null,
+        score_raw: null,
+        score_max: null
       }
     };
     const contentGroups: ContentGroup[] = [
@@ -340,6 +418,9 @@ describe("LearnerContentWorkspace", () => {
         instruction_md: "Diese Aufgabe ist abgeschlossen.",
         criteria: [],
         kind: "native" as const,
+        h5p_completed: null,
+        score_raw: null,
+        score_max: null,
         latest_final_submission_at: "2026-09-02T10:00:00Z"
       }
     };

@@ -32,15 +32,22 @@ export function taskIsComplete(
   history: LearningSubmission[] = []
 ): boolean {
   if (task.kind === "h5p") {
-    return task.h5p_completed === true || history.some((submission) => {
-      const score = submissionScore(submission);
-      return score !== null && score.raw === score.max;
-    });
+    return h5pCompletionReached(task.h5p_completed, history);
   }
   return Boolean(
     task.latest_final_submission_at ||
       history.some((submission) => submission.intent === "submit")
   );
+}
+
+export function h5pCompletionReached(
+  completed: boolean | null | undefined,
+  history: LearningSubmission[] = []
+): boolean {
+  return completed === true || history.some((submission) => {
+    const score = submissionScore(submission);
+    return score !== null && score.raw === score.max;
+  });
 }
 
 export function h5pProgressLabel(

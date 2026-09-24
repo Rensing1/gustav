@@ -31,12 +31,18 @@ def _apply_submission_summaries(tasks: list[dict], summaries: dict[str, dict[str
                     "latest_submission_analysis_status": None,
                     "latest_submission_created_at": None,
                     "latest_final_submission_at": None,
-                    "h5p_completed": False if is_h5p else None,
+                    "h5p_completed": False,
                     "score_raw": None,
                     "score_max": None,
                 },
             )
         )
+        if is_h5p:
+            task["h5p_completed"] = bool(task.get("h5p_completed"))
+        else:
+            task["h5p_completed"] = None
+            task["score_raw"] = None
+            task["score_max"] = None
 
 
 def get_modular_unit_graph(repo, *, psycopg_module, student_sub: str, course_id: str, unit_id: str) -> dict:

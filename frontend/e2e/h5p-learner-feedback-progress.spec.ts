@@ -213,6 +213,27 @@ test("@feature-acceptance H5P feedback remains readable and full score unlocks t
     await expect(learner.getByText("Gespeichert (1/1).")).toBeVisible();
     await learner.goBack();
     await expect(learner.getByText("Abgeschlossen · zuletzt 1/1 Punkte")).toBeVisible();
+
+    await learner.getByRole("button", { name: "Erneut bearbeiten" }).click();
+    const completedPlayer = learner.locator("h5p-player");
+    await expect(completedPlayer).toBeVisible({ timeout: 30_000 });
+    // MultiChoice intentionally offers no retry after a correct answer. Dispatching the
+    // same score-bearing xAPI event exercises GUSTAV's real browser/BFF/server path.
+    await completedPlayer.evaluate((player) => player.dispatchEvent(new CustomEvent("xAPI", {
+      detail: {
+        statement: {
+          id: `later-partial-${Date.now()}`,
+          verb: { id: "https://adlnet.gov/expapi/verbs/completed" },
+          result: { completion: true, score: { raw: 0, max: 1 } }
+        }
+      }
+    })));
+    await expect(learner.getByText("Gespeichert (0/1).")).toBeVisible();
+    await learner.getByRole("button", { name: "← Zurück zu Modul H5P Start" }).click();
+    await expect(learner.getByText("Abgeschlossen · zuletzt 0/1 Punkte")).toBeVisible();
+    const preview = learner.getByRole("region", { name: "Eigene Bearbeitung zu Aufgabe 1" });
+    await expect(preview.getByText("Abgeschlossen", { exact: true })).toBeVisible();
+    await expect(preview.getByText("Zuletzt 0/1 Punkte erreicht.")).toBeVisible();
     await learner.getByRole("button", { name: "← Zum Lernpfad" }).click();
     await expect(learner.getByRole("button", { name: /Freigeschaltetes Ziel/ })).toBeEnabled();
   } finally {

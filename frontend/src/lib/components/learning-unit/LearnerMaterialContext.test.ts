@@ -39,7 +39,16 @@ const modules: LearnerMaterialContextModule[] = [
         position: 3,
         contextLabel: "Grundlagen",
         moduleId: "module-current",
-        task: { id: "old", instruction_md: "Begründe.", criteria: [], kind: "native", has_submission: true }
+        task: {
+          id: "old",
+          instruction_md: "Begründe.",
+          criteria: [],
+          kind: "native",
+          has_submission: true,
+          h5p_completed: null,
+          score_raw: null,
+          score_max: null
+        }
       }
     ]
   },

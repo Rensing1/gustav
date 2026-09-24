@@ -65,6 +65,9 @@ describe("task completion", () => {
       instruction_md: "Erkläre.",
       criteria: [],
       kind: "native",
+      h5p_completed: null,
+      score_raw: null,
+      score_max: null,
       latest_final_submission_at: "2026-09-24T08:00:00Z"
     };
     expect(taskIsComplete(task, [])).toBe(true);

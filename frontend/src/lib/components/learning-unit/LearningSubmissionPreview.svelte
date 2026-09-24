@@ -7,11 +7,14 @@
   import { renderMarkdown } from "$lib/utils/markdown";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { submissionPreviewText, type SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
+  import { h5pCompletionReached } from "$lib/learning-unit/task-completion";
+  import type { LearningSubmission } from "$lib/types/learning";
 
-  let { courseId, taskId, taskTitle, hasSubmission, h5pCompleted = null, state: previewState, active = true, newerDraft = false,
+  let { courseId, taskId, taskTitle, hasSubmission, h5pCompleted = null, h5pHistory = [], state: previewState, active = true, newerDraft = false,
     onLoad = null, onContinueDraft = null }: {
     courseId: string; taskId: string; taskTitle: string; hasSubmission: boolean;
     h5pCompleted?: boolean | null;
+    h5pHistory?: LearningSubmission[];
     state?: SubmissionPreviewState; active?: boolean; newerDraft?: boolean;
     onLoad?: (() => void | Promise<void>) | null;
     onContinueDraft?: (() => void) | null;
@@ -34,10 +37,10 @@
     || submission?.analysis_json?.criteria_results?.length || processing || failed));
   const bodyId = $derived(`submission-preview-${taskId}`);
   const isH5P = $derived(submission?.kind === "h5p");
-  const h5pIsComplete = $derived(Boolean(
-    h5pCompleted === true ||
-    (isH5P && typeof submission?.score_raw === "number" && submission.score_raw === submission.score_max)
-  ));
+  const h5pIsComplete = $derived(Boolean(isH5P && h5pCompletionReached(
+    h5pCompleted,
+    submission ? [submission, ...h5pHistory] : h5pHistory
+  )));
 
   function h5pScoreText(): string {
     if (typeof submission?.score_raw !== "number" || typeof submission.score_max !== "number") {

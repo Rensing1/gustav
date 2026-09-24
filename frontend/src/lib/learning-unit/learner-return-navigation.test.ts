@@ -13,6 +13,9 @@ function task(id: string, latestFinalSubmissionAt: string | null = null): Learni
     instruction_md: `Bearbeite ${id}.`,
     criteria: [],
     kind: "native",
+    h5p_completed: null,
+    score_raw: null,
+    score_max: null,
     latest_final_submission_at: latestFinalSubmissionAt
   };
 }

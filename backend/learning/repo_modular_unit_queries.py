@@ -18,6 +18,27 @@ except Exception:  # pragma: no cover
     Connection = Any  # type: ignore
 
 
+def _apply_submission_summaries(tasks: list[dict], summaries: dict[str, dict[str, Any]]) -> None:
+    """Attach complete learner progress metadata to every returned task."""
+    for task in tasks:
+        is_h5p = task.get("kind") == "h5p"
+        task.update(
+            summaries.get(
+                str(task["id"]),
+                {
+                    "has_submission": False,
+                    "latest_submission_intent": None,
+                    "latest_submission_analysis_status": None,
+                    "latest_submission_created_at": None,
+                    "latest_final_submission_at": None,
+                    "h5p_completed": False if is_h5p else None,
+                    "score_raw": None,
+                    "score_max": None,
+                },
+            )
+        )
+
+
 def get_modular_unit_graph(repo, *, psycopg_module, student_sub: str, course_id: str, unit_id: str) -> dict:
     """Return a modular unit graph payload (phases/modules/edges) for a student.
 
@@ -466,19 +487,7 @@ def get_modular_module_content(
                     course_id=course_uuid,
                     task_ids=[str(task["id"]) for task in tasks],
                 )
-                for task in tasks:
-                    task.update(
-                        summaries.get(
-                            str(task["id"]),
-                            {
-                                "has_submission": False,
-                                "latest_submission_intent": None,
-                                "latest_submission_analysis_status": None,
-                                "latest_submission_created_at": None,
-                                "latest_final_submission_at": None,
-                            },
-                        )
-                    )
+                _apply_submission_summaries(tasks, summaries)
 
     return {"module": module, "materials": materials, "tasks": tasks}
 
@@ -652,19 +661,7 @@ def fetch_tasks(repo, conn: Connection, student_sub: str, course_id: str, sectio
             course_id=course_id,
             task_ids=[str(task["id"]) for task in tasks],
         )
-        for task in tasks:
-            task.update(
-                summaries.get(
-                    str(task["id"]),
-                    {
-                        "has_submission": False,
-                        "latest_submission_intent": None,
-                        "latest_submission_analysis_status": None,
-                        "latest_submission_created_at": None,
-                        "latest_final_submission_at": None,
-                    },
-                )
-            )
+        _apply_submission_summaries(tasks, summaries)
     return tasks
 
 def list_released_sections_by_unit(

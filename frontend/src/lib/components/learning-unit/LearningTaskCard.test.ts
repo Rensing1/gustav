@@ -2557,6 +2557,74 @@ describe("LearningTaskCard", () => {
     );
   });
 
+  it("shows a partial H5P attempt as unfinished in the compact module row", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          kind: "h5p",
+          h5p: { content_id: "content-1" },
+          has_submission: true,
+          h5p_completed: false,
+          score_raw: 0,
+          score_max: 1
+        },
+        taskTitle: "Aufgabe 2",
+        unitType: "modular",
+        compactLayout: true,
+        expanded: false,
+        history: [{
+          id: "submission-h5p-partial",
+          attempt_nr: 1,
+          kind: "h5p",
+          intent: "submit",
+          created_at: "2026-09-24T08:00:00Z",
+          analysis_status: "completed",
+          score_raw: 0,
+          score_max: 1
+        }]
+      }
+    });
+
+    expect(screen.getByText("Noch nicht abgeschlossen · zuletzt 0/1 Punkte")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Aufgabe fortsetzen" })).toBeVisible();
+  });
+
+  it("keeps H5P complete when the latest score is lower than an earlier full attempt", () => {
+    render(LearningTaskCard, {
+      props: {
+        courseId: "course-1",
+        task: {
+          ...task,
+          kind: "h5p",
+          h5p: { content_id: "content-1" },
+          has_submission: true,
+          h5p_completed: true,
+          score_raw: 0,
+          score_max: 1
+        },
+        taskTitle: "Aufgabe 2",
+        unitType: "modular",
+        compactLayout: true,
+        expanded: false,
+        history: [{
+          id: "submission-h5p-latest",
+          attempt_nr: 3,
+          kind: "h5p",
+          intent: "submit",
+          created_at: "2026-09-24T08:00:00Z",
+          analysis_status: "completed",
+          score_raw: 0,
+          score_max: 1
+        }]
+      }
+    });
+
+    expect(screen.getByText("Abgeschlossen · zuletzt 0/1 Punkte")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeVisible();
+  });
+
   it("uses a neutral theme surface for task prose instead of legacy intro panels", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readWorkspaceCssBundle(path.resolve(currentDir, "../../styles"));

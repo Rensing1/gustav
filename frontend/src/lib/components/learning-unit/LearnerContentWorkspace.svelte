@@ -434,6 +434,7 @@
                     taskId={task.id}
                     taskTitle={item.title}
                     hasSubmission={Boolean(task.has_submission || taskHistory(task.id).length || submittedTaskId === task.id)}
+                    h5pCompleted={task.h5p_completed ?? null}
                     state={previewByTask[task.id]}
                     active={mode === "orienting"}
                     newerDraft={hasNewerDraft(task)}

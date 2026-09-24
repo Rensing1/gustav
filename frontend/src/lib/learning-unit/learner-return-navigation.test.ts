@@ -56,6 +56,30 @@ describe("learner return navigation", () => {
     })).toBe("module");
   });
 
+  it("keeps a partially scored H5P task open despite its submit intent", () => {
+    expect(completionReturnDestination({
+      unitType: "modular",
+      currentTaskId: "task-1",
+      moduleTasks: [task("task-1"), {
+        ...task("task-h5p"),
+        kind: "h5p",
+        h5p_completed: false,
+        score_raw: 0,
+        score_max: 1
+      }],
+      historyByTask: { "task-h5p": [{
+        id: "submission-h5p",
+        attempt_nr: 1,
+        kind: "h5p",
+        intent: "submit",
+        created_at: "2026-09-24T08:00:00Z",
+        analysis_status: "completed",
+        score_raw: 0,
+        score_max: 1
+      }] }
+    })).toBe("module");
+  });
+
   it("uses the contents destination for linear units", () => {
     expect(completionReturnDestination({
       unitType: "linear",

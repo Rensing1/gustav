@@ -8,9 +8,10 @@
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { submissionPreviewText, type SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
 
-  let { courseId, taskId, taskTitle, hasSubmission, state: previewState, active = true, newerDraft = false,
+  let { courseId, taskId, taskTitle, hasSubmission, h5pCompleted = null, state: previewState, active = true, newerDraft = false,
     onLoad = null, onContinueDraft = null }: {
     courseId: string; taskId: string; taskTitle: string; hasSubmission: boolean;
+    h5pCompleted?: boolean | null;
     state?: SubmissionPreviewState; active?: boolean; newerDraft?: boolean;
     onLoad?: (() => void | Promise<void>) | null;
     onContinueDraft?: (() => void) | null;
@@ -32,6 +33,18 @@
   const canExpand = $derived(clipped || Boolean(file || submission?.dialog_session_id || submission?.feedback_md
     || submission?.analysis_json?.criteria_results?.length || processing || failed));
   const bodyId = $derived(`submission-preview-${taskId}`);
+  const isH5P = $derived(submission?.kind === "h5p");
+  const h5pIsComplete = $derived(Boolean(
+    h5pCompleted === true ||
+    (isH5P && typeof submission?.score_raw === "number" && submission.score_raw === submission.score_max)
+  ));
+
+  function h5pScoreText(): string {
+    if (typeof submission?.score_raw !== "number" || typeof submission.score_max !== "number") {
+      return "Bearbeitung gespeichert.";
+    }
+    return `Zuletzt ${submission.score_raw}/${submission.score_max} Punkte erreicht.`;
+  }
 
   $effect(() => {
     if (submission?.id !== previousId) {
@@ -89,11 +102,11 @@
   {:else if (previewState?.status === "loading" && !submission) || (hasSubmission && !previewState)}
     <p class="workspace-note" role="status">Abgabe wird geladen …</p>
   {:else if submission}
-    <section class="learning-submission-preview" class:learning-submission-preview--expanded={expanded} aria-label={`Eigene Abgabe zu ${taskTitle}`}>
+    <section class="learning-submission-preview" class:learning-submission-preview--expanded={expanded} aria-label={`${isH5P ? "Eigene Bearbeitung" : "Eigene Abgabe"} zu ${taskTitle}`}>
       <header class="learning-submission-preview__header">
-        <strong>{submission.intent === "submit" ? "Meine Abgabe" : "Mein Entwurf"}</strong>
+        <strong>{isH5P ? "Meine Bearbeitung" : submission.intent === "submit" ? "Meine Abgabe" : "Mein Entwurf"}</strong>
         <span class="learning-submission-preview__meta">
-          <span>{submission.intent === "submit" ? "Abgegeben" : "Noch nicht abgegeben"}</span>
+          <span>{isH5P ? h5pIsComplete ? "Abgeschlossen" : "Noch nicht abgeschlossen" : submission.intent === "submit" ? "Abgegeben" : "Noch nicht abgegeben"}</span>
           <span aria-hidden="true">·</span>
           <time datetime={submission.created_at}>{timestamp(submission.created_at)}</time>
         </span>
@@ -118,7 +131,7 @@
           {:else if submission.text_body}
             <div class="markdown-prose">{@html renderMarkdown(submission.text_body)}</div>
           {:else if submission.kind === "h5p"}
-            <p>Interaktive Bearbeitung gespeichert.</p>
+            <p>{h5pScoreText()}</p>
           {/if}
           {#if submission.kind === "dialog" && submission.dialog_session_id}
             <LearningDialogTranscriptDocument {courseId} {taskId} sessionId={submission.dialog_session_id} />
@@ -150,7 +163,7 @@
         {:else if plainText}
           <p class="learning-submission-preview__text" use:measurePreview={plainText}>{plainText}</p>
         {:else if submission.kind === "h5p"}
-          <p>Interaktive Bearbeitung gespeichert.</p>
+          <p>{h5pScoreText()}</p>
         {:else if submission.kind === "dialog"}
           <p>Dialog gespeichert.</p>
         {:else}

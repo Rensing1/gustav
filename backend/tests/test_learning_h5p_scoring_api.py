@@ -101,6 +101,16 @@ async def _prepare_h5p_task_fixture(monkeypatch: pytest.MonkeyPatch, *, max_atte
     return {"teacher": teacher, "student": student, "course_id": course_id, "task_id": task["id"]}
 
 
+async def _load_h5p_task(client: httpx.AsyncClient, *, course_id: str, task_id: str) -> dict:
+    """Read one released task through the learner-facing API."""
+    response = await client.get(
+        f"/api/learning/courses/{course_id}/sections?include=tasks&limit=50&offset=0"
+    )
+    assert response.status_code == 200
+    tasks = [task for section in response.json() for task in section.get("tasks") or []]
+    return next(task for task in tasks if task.get("id") == task_id)
+
+
 @pytest.mark.anyio
 async def test_create_h5p_submission_persists_score_and_completes(monkeypatch: pytest.MonkeyPatch):
     fx = await _prepare_h5p_task_fixture(monkeypatch)
@@ -159,3 +169,49 @@ async def test_learning_sections_include_h5p_task_kind_and_config(monkeypatch: p
         task = next(t for t in tasks if t.get("id") == fx["task_id"])
         assert task.get("kind") == "h5p"
         assert task.get("h5p", {}).get("content_id") == "1"
+
+
+@pytest.mark.anyio
+async def test_learning_task_reports_h5p_completion_and_latest_score(monkeypatch: pytest.MonkeyPatch):
+    """Completion stays true after a later partial attempt while the latest score changes."""
+    fx = await _prepare_h5p_task_fixture(monkeypatch)
+    async with (await _client()) as c:
+        c.cookies.set("gustav_session", fx["student"].session_id)
+
+        untouched = await _load_h5p_task(c, course_id=fx["course_id"], task_id=fx["task_id"])
+        assert untouched["h5p_completed"] is False
+        assert untouched["score_raw"] is None
+        assert untouched["score_max"] is None
+
+        partial = await c.post(
+            f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+        )
+        assert partial.status_code in (201, 202)
+        after_partial = await _load_h5p_task(
+            c, course_id=fx["course_id"], task_id=fx["task_id"]
+        )
+        assert after_partial["h5p_completed"] is False
+        assert after_partial["score_raw"] == 0
+        assert after_partial["score_max"] == 1
+
+        complete = await c.post(
+            f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+            json={"kind": "h5p", "score_raw": 1, "score_max": 1},
+        )
+        assert complete.status_code in (201, 202)
+        latest_partial = await c.post(
+            f"/api/learning/courses/{fx['course_id']}/tasks/{fx['task_id']}/submissions",
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+            json={"kind": "h5p", "score_raw": 0, "score_max": 1},
+        )
+        assert latest_partial.status_code in (201, 202)
+
+        after_later_partial = await _load_h5p_task(
+            c, course_id=fx["course_id"], task_id=fx["task_id"]
+        )
+        assert after_later_partial["h5p_completed"] is True
+        assert after_later_partial["score_raw"] == 0
+        assert after_later_partial["score_max"] == 1

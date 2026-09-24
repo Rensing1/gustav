@@ -26,7 +26,7 @@ describe("PracticeFeedback", () => {
     expect(screen.getByRole("heading", { name: "Sicher beantwortet" })).toBeVisible();
     expect(screen.getByText("Nächste Wiederholung in 2 Tagen")).toBeVisible();
     expect(screen.getByRole("button", { name: "Musterlösung ansehen" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Nächste Aufgabe" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Weiter zur nächsten Aufgabe" })).toBeVisible();
     expect(document.querySelector("script")).toBeNull();
     expect(document.body.textContent).not.toContain("Kriterien:");
   });

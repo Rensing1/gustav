@@ -1,7 +1,7 @@
 # Lernraum
 
 GUSTAV-Version: 0.0.4
-Zuletzt geprüft: 2026-08-20
+Zuletzt geprüft: 2026-09-24
 [English version](learner-workspace.en.md)
 
 ![Lernraum mit Material und Aufgabe](../assets/readme/learner-workspace.jpg)
@@ -32,6 +32,8 @@ Lernende sehen nur eigene aktive Kurse, zugeordnete Lerneinheiten und zugänglic
 
 Materialien, Aufgabe, eigene frühere Abgaben und Rückmeldungen werden kontextbezogen dargestellt. Interne technische IDs, Musterlösungen, Kriterien und Lehrkraft-Kontext werden nicht als versteckte Hilfen ausgeliefert.
 
+Bei H5P-Aufgaben unterscheidet GUSTAV ausdrücklich zwischen **„Noch nicht bearbeitet“**, **„Noch nicht abgeschlossen“** und **„Abgeschlossen“**. Abgeschlossen ist eine H5P-Aufgabe erst, wenn mindestens einmal die volle Punktzahl erreicht wurde. Der zusätzlich angezeigte Punktestand stammt immer aus dem neuesten Versuch; ein späterer Teilversuch nimmt einen früher erreichten Abschluss nicht zurück.
+
 ## So funktioniert es
 
 Zugriff wird nicht nur durch ausgeblendete Schaltflächen geschützt. Kursmitgliedschaft, Zuordnung und Freischaltung werden bei jedem geschützten Abruf erneut geprüft. Private Dateien und H5P-Inhalte erhalten nur kurzlebige, auf den konkreten Lernkontext begrenzte Zugriffe.
@@ -50,7 +52,7 @@ Bei modularen Einheiten berechnet GUSTAV für jede Person, welche Voraussetzunge
 ## Typische Probleme
 
 - **„Noch keine Lerneinheiten sichtbar“:** Prüfe Kursmitgliedschaft und Kurszuordnung der Lerneinheit.
-- **Modul bleibt gesperrt:** Prüfe im Authoring die gerichteten Voraussetzungen und deren benötigte Anzahl.
+- **Modul bleibt gesperrt:** Prüfe im Authoring die gerichteten Voraussetzungen und deren benötigte Anzahl. Bei einer vorausgesetzten H5P-Aufgabe muss mindestens einmal die volle Punktzahl erreicht worden sein.
 - **Datei oder H5P lädt nicht:** Prüfe, ob Inhalt und Kurszuordnung noch bestehen; ein alter kurzlebiger Link kann nicht dauerhaft wiederverwendet werden.
 - **Entwurf fehlt auf einem anderen Gerät:** Ungesendete Entwürfe werden nicht zwischen Geräten synchronisiert.
 - **Vergangener Kurs statt aktueller Kurs:** Der Kurs wurde archiviert und ist nicht mehr für aktive Bearbeitung vorgesehen.

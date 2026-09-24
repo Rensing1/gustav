@@ -1,5 +1,6 @@
 import type { LearningSubmission, LearningTask } from "$lib/types/learning";
 import type { LearnerNavigationTarget } from "$lib/learning-unit/learner-navigation";
+import { taskIsComplete } from "$lib/learning-unit/task-completion";
 
 export type LearnerReturnDestination = "module" | "learningPath" | "contents";
 
@@ -25,10 +26,7 @@ function isFinallySubmitted(
   task: LearningTask,
   history: LearningSubmission[] | undefined
 ): boolean {
-  return Boolean(
-    task.latest_final_submission_at ||
-      history?.some((submission) => submission.intent === "submit")
-  );
+  return taskIsComplete(task, history ?? []);
 }
 
 /**

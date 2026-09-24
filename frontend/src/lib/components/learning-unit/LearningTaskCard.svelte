@@ -23,6 +23,7 @@
     learnerReturnLabel,
     type LearnerReturnDestination
   } from "$lib/learning-unit/learner-return-navigation";
+  import { h5pProgressLabel, latestH5PScore, taskIsComplete } from "$lib/learning-unit/task-completion";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -217,7 +218,7 @@
   }
 
   function hasFinalSubmission(): boolean {
-    return Boolean(latestFinalSubmissionAt());
+    return taskIsComplete(task, history);
   }
 
   function submissionsAfterLatestFinalization(): LearningSubmission[] {
@@ -267,6 +268,12 @@
   }
 
   function actionLabel(): string {
+    if (task.kind === "h5p") {
+      if (!latestH5PScore(task, history)) {
+        return `${taskTitle} beginnen`;
+      }
+      return hasFinalSubmission() ? "Erneut bearbeiten" : "Aufgabe fortsetzen";
+    }
     if (!hasSubmission()) {
       return `${taskTitle} beginnen`;
     }
@@ -851,6 +858,9 @@
     >
       <div class="learning-task-row__copy">
         <p class="learning-task-row__preview" use:observeTaskPreview={taskPreview().text}>{taskPreview().text}</p>
+        {#if task.kind === "h5p"}
+          <p class="learning-task-row__more">{h5pProgressLabel(task, history)}</p>
+        {/if}
         {#if taskPreview().truncated || taskPreviewVisuallyClipped}
           <p class="learning-task-row__more">Weitere Angaben in der Aufgabe</p>
         {/if}
@@ -931,7 +941,12 @@
             {@html renderMarkdown(task.instruction_md)}
           </div>
 
-          {#if task.kind !== "h5p"}
+          {#if task.kind === "h5p"}
+            <section class="learning-task-status" aria-label="Aufgabenstatus">
+              <p class="workspace-label">Status</p>
+              <p class="learning-task-status__headline">{h5pProgressLabel(task, history)}</p>
+            </section>
+          {:else}
             <section class="learning-task-status" aria-label="Aufgabenstatus">
               <p class="workspace-label">Status</p>
               <p class="learning-task-status__headline">{statusHeadline()}</p>
@@ -1001,7 +1016,16 @@
               />
             {:else if task.kind === "h5p"}
               {#if task.h5p?.content_id}
-                <H5PTaskPlayer {courseId} taskId={task.id} contentId={task.h5p.content_id} {onProgressPersisted} />
+                <H5PTaskPlayer
+                  {courseId}
+                  taskId={task.id}
+                  contentId={task.h5p.content_id}
+                  onProgressPersisted={(result) => {
+                    if (result.kind === "learning") {
+                      return onProgressPersisted?.(result.submission);
+                    }
+                  }}
+                />
               {:else}
                 <p class="workspace-note">Diese H5P-Aufgabe ist noch nicht bereit.</p>
               {/if}

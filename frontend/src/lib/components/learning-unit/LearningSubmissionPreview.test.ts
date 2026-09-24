@@ -137,11 +137,22 @@ describe("LearningSubmissionPreview", () => {
     expect(screen.getByRole("link", { name: "Quelle" })).toBeVisible();
   });
 
-  it("does not invent answers or scores for an H5P snapshot", () => {
-    render(LearningSubmissionPreview, props({ state: { status: "loaded", submission: {
+  it("labels a partial H5P result as a saved but unfinished handling", () => {
+    render(LearningSubmissionPreview, props({ h5pCompleted: false, state: { status: "loaded", submission: {
       ...submission, kind: "h5p", text_body: null, score_raw: 4, score_max: 5, feedback_md: null, analysis_json: null
     } } }));
-    expect(screen.getByText("Interaktive Bearbeitung gespeichert.")).toBeVisible();
+    expect(screen.getByText("Meine Bearbeitung")).toBeVisible();
+    expect(screen.getByText("Noch nicht abgeschlossen")).toBeVisible();
+    expect(screen.getByText("Zuletzt 4/5 Punkte erreicht.")).toBeVisible();
+    expect(screen.queryByText("Meine Abgabe")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Ausklappen" })).not.toBeInTheDocument();
+  });
+
+  it("keeps an earlier H5P completion visible beside the latest lower score", () => {
+    render(LearningSubmissionPreview, props({ h5pCompleted: true, state: { status: "loaded", submission: {
+      ...submission, kind: "h5p", text_body: null, score_raw: 0, score_max: 1, feedback_md: null, analysis_json: null
+    } } }));
+    expect(screen.getByText("Abgeschlossen")).toBeVisible();
+    expect(screen.getByText("Zuletzt 0/1 Punkte erreicht.")).toBeVisible();
   });
 });

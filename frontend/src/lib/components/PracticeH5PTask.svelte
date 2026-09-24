@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import H5PTaskPlayer from "$lib/components/H5PTaskPlayer.svelte";
+  import type { H5PPersistedResult } from "$lib/types/h5p";
+  import type { LearningPracticeAttempt } from "$lib/types/practice";
 
   let { sessionId, itemId, courseId, taskId, contentId, onCompleted } = $props<{
     sessionId: string;
@@ -8,7 +10,7 @@
     courseId: string;
     taskId: string;
     contentId: string;
-    onCompleted: () => void | Promise<void>;
+    onCompleted: (attempt: LearningPracticeAttempt | null) => void | Promise<void>;
   }>();
 
   let context = $state<{
@@ -16,6 +18,26 @@
     context_id: string;
   } | null>(null);
   let error = $state("");
+
+  async function handlePersisted(result: H5PPersistedResult): Promise<void> {
+    if (result.kind !== "practice") {
+      return;
+    }
+    try {
+      const response = await fetch(
+        `/api/learning/practice/attempts/${encodeURIComponent(result.attemptId)}`,
+        { credentials: "include" }
+      );
+      if (!response.ok) {
+        await onCompleted(null);
+        return;
+      }
+      await onCompleted(await response.json() as LearningPracticeAttempt);
+    } catch {
+      // The score is already durable; missing detail must not trap the learner.
+      await onCompleted(null);
+    }
+  }
 
   onMount(async () => {
     const response = await fetch(
@@ -44,7 +66,7 @@
       completionToken: context.practice_completion_token,
       contextId: context.context_id
     }}
-    onProgressPersisted={onCompleted}
+    onProgressPersisted={handlePersisted}
   />
 {:else}
   <p>Die H5P-Aufgabe wird vorbereitet.</p>

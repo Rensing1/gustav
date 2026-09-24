@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { invalidateAll } from "$app/navigation";
   import PracticeH5PTask from "$lib/components/PracticeH5PTask.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -21,9 +20,11 @@
   } = $props();
 
   let endDialog = $state<HTMLDialogElement | null>(null);
+  let persistedH5PItemId = $state<string | null>(null);
+  let persistedH5PAttempt = $state<LearningPracticeAttempt | null>(null);
   const item = $derived(session.current_item);
   const visiblyHandledItems = $derived(
-    session.completed_items + (item && item.status !== "active" ? 1 : 0)
+    session.completed_items + (item && (item.status !== "active" || persistedH5PItemId === item.id) ? 1 : 0)
   );
   const completedPercent = $derived(
     session.total_items > 0 ? Math.round(visiblyHandledItems / session.total_items * 100) : 0
@@ -31,6 +32,14 @@
 
   function openEndDialog(): void {
     endDialog?.showModal();
+  }
+
+  function handleH5PCompleted(completedAttempt: LearningPracticeAttempt | null): void {
+    if (!item) {
+      return;
+    }
+    persistedH5PItemId = item.id;
+    persistedH5PAttempt = completedAttempt;
   }
 </script>
 
@@ -99,13 +108,40 @@
                 courseId={item.course_id}
                 taskId={item.task_id}
                 contentId={item.h5p_content_id}
-                onCompleted={invalidateAll}
+                onCompleted={handleH5PCompleted}
               />
-              <form method="POST" action="?/skip" class="practice-h5p-skip">
-                <input type="hidden" name="session_id" value={session.id} />
-                <input type="hidden" name="item_id" value={item.id} />
-                <button class="workspace-link-action workspace-link-action--secondary" type="submit">Aufgabe überspringen</button>
-              </form>
+              {#if persistedH5PItemId === item.id}
+                {#if persistedH5PAttempt}
+                  <PracticeFeedback
+                    attempt={persistedH5PAttempt}
+                    sessionId={session.id}
+                    itemId={item.id}
+                    kind={item.kind}
+                    solution={null}
+                    {nowIso}
+                  />
+                {:else}
+                  <section class="practice-feedback" aria-live="polite">
+                    <StatusMessage
+                      tone="success"
+                      title="Ergebnis gespeichert"
+                      description="Die ausführliche Einstufung konnte nicht geladen werden. Du kannst trotzdem weitergehen."
+                    />
+                    <form method="POST" action="?/continue" class="practice-feedback__continue">
+                      <input type="hidden" name="session_id" value={session.id} />
+                      <button class="workspace-link-action workspace-link-action--primary workspace-link-action--block" type="submit">
+                        Weiter zur nächsten Aufgabe <span aria-hidden="true">→</span>
+                      </button>
+                    </form>
+                  </section>
+                {/if}
+              {:else}
+                <form method="POST" action="?/skip" class="practice-h5p-skip">
+                  <input type="hidden" name="session_id" value={session.id} />
+                  <input type="hidden" name="item_id" value={item.id} />
+                  <button class="workspace-link-action workspace-link-action--secondary" type="submit">Aufgabe überspringen</button>
+                </form>
+              {/if}
             {/if}
           {:else if item.status === "feedback" && attempt?.status === "completed"}
             <PracticeFeedback

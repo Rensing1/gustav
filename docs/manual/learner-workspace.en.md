@@ -1,7 +1,7 @@
 # Learning workspace
 
 GUSTAV-Version: 0.0.4
-Last verified: 2026-08-20
+Last verified: 2026-09-24
 [Deutsche Version](learner-workspace.de.md)
 
 ![Learning workspace with material and task](../assets/readme/learner-workspace.jpg)
@@ -32,6 +32,8 @@ Learners see only their own active courses, assigned learning units, and accessi
 
 Materials, a task, the learner's own previous submissions, and feedback are displayed in context. Internal technical IDs, sample solutions, criteria, and teacher context are not delivered as hidden aids.
 
+For H5P tasks, GUSTAV explicitly distinguishes **“Not attempted”**, **“Not completed”**, and **“Completed”**. An H5P task is completed only after full points have been achieved at least once. The score shown with the status always belongs to the newest attempt; a later partial attempt does not revoke an earlier completion.
+
 ## How it works
 
 Access is not protected only by hidden buttons. Course membership, assignment, and release status are checked again with every protected request. Private files and H5P content receive only short-lived access limited to the specific learning context.
@@ -50,7 +52,7 @@ For modular units, GUSTAV calculates which prerequisites each person has fulfill
 ## Common problems
 
 - **„Noch keine Lerneinheiten sichtbar“** (“No learning units visible yet”): Check the course membership and whether the learning unit is assigned to the course.
-- **Module remains locked:** In the authoring view, check the directed prerequisites and the required number of prerequisites.
+- **Module remains locked:** In the authoring view, check the directed prerequisites and the required number of prerequisites. A prerequisite H5P task requires full points at least once.
 - **File or H5P content does not load:** Check whether the content and course assignment still exist; an old short-lived link cannot be reused permanently.
 - **Draft is missing on another device:** Unsent drafts are not synchronized between devices.
 - **Past course instead of current course:** The course has been archived and is no longer intended for active work.

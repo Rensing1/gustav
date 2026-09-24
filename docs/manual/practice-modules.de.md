@@ -1,7 +1,7 @@
 # Übungsmodule
 
 GUSTAV-Version: 0.0.4
-Zuletzt geprüft: 2026-08-20
+Zuletzt geprüft: 2026-09-24
 [English version](practice-modules.en.md)
 
 ![Auswahl von Übungsstapeln](../assets/readme/practice-progress.jpg)
@@ -33,7 +33,7 @@ Zuletzt geprüft: 2026-08-20
 
 Unter **„Üben“** sehen Lernende nur offene Übungsstapel mit gültigen Aufgaben. **„Fällige Wiederholungen“** enthält neue und aktuell anstehende Aufgaben; **„Alle Aufgaben üben“** dient der gezielten Prüfungsvorbereitung mit allen Aufgaben der gewählten Stapel.
 
-Native Antworten werden knapp ausgewertet. Sichtbar sind **„Sicher beantwortet“**, **„Teilweise beantwortet“** oder **„Noch nicht sicher“** sowie der nächste Wiederholungszeitpunkt. Nach dem ersten abgeschlossenen Versuch kann die Musterlösung bewusst geöffnet werden. H5P-Aufgaben verwenden ihr Punkteergebnis und zeigen keine separate Musterlösungsschaltfläche.
+Native Antworten werden knapp ausgewertet. Sichtbar sind **„Sicher beantwortet“**, **„Teilweise beantwortet“** oder **„Noch nicht sicher“** sowie der nächste Wiederholungszeitpunkt. Nach dem ersten abgeschlossenen Versuch kann die Musterlösung bewusst geöffnet werden. H5P-Aufgaben verwenden ihr Punkteergebnis und zeigen keine separate Musterlösungsschaltfläche. Nach dem Prüfen bleibt der H5P-Player mit seiner eigenen Rückmeldung und Lösung sichtbar. Erst **„Weiter zur nächsten Aufgabe“** verlässt diese Ansicht.
 
 ## So funktioniert es
 

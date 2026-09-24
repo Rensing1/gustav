@@ -64,7 +64,7 @@
   <form method="POST" action="?/continue" class="practice-feedback__continue">
     <input type="hidden" name="session_id" value={sessionId} />
     <button class="workspace-link-action workspace-link-action--primary workspace-link-action--block" type="submit">
-      Nächste Aufgabe <span aria-hidden="true">→</span>
+      Weiter zur nächsten Aufgabe <span aria-hidden="true">→</span>
     </button>
   </form>
 </section>

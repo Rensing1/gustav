@@ -1,7 +1,7 @@
 # Practice modules
 
 GUSTAV-Version: 0.0.4
-Last verified: 2026-08-20
+Last verified: 2026-09-24
 [Deutsche Version](practice-modules.de.md)
 
 ![Selection of practice stacks](../assets/readme/practice-progress.jpg)
@@ -33,7 +33,7 @@ Practice modules support active recall and spaced practice. A teacher assembles 
 
 Under **„Üben“**, learners see only open practice stacks containing valid tasks. **„Fällige Wiederholungen“** contains new tasks and tasks currently due; **„Alle Aufgaben üben“** supports targeted exam preparation with all tasks from the selected stacks.
 
-Native answers receive a concise evaluation. Learners see **„Sicher beantwortet“** (“Answered confidently”), **„Teilweise beantwortet“** (“Partially answered”), or **„Noch nicht sicher“** (“Not yet confident”), as well as the next review time. After the first completed attempt, the model answer can be opened deliberately. H5P tasks use their score and do not display a separate model-answer button.
+Native answers receive a concise evaluation. Learners see **„Sicher beantwortet“** (“Answered confidently”), **„Teilweise beantwortet“** (“Partially answered”), or **„Noch nicht sicher“** (“Not yet confident”), as well as the next review time. After the first completed attempt, the model answer can be opened deliberately. H5P tasks use their score and do not display a separate model-answer button. After checking an answer, the H5P player and its own feedback remain visible until the learner deliberately chooses **„Weiter zur nächsten Aufgabe“** (“Continue to the next task”).
 
 ## How it works
 

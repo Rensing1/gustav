@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-24
+
+### H5P-Rückmeldung und Abschlussstatus
+
+- fix(practice): Nach einem gespeicherten H5P-Ergebnis bleiben Player, interne Rückmeldung und Lösung sichtbar. Erst die bewusste Aktion **„Weiter zur nächsten Aufgabe“** setzt die Übung fort; weitere Abschlussereignisse derselben Präsentation erzeugen keinen zweiten Practice-Versuch.
+- fix(learning): H5P-Aufgaben unterscheiden jetzt eindeutig zwischen unbearbeitet, bearbeitet und mit voller Punktzahl abgeschlossen. Der neueste Punktestand bleibt sichtbar, während ein früher erreichter Abschluss durch spätere Teilversuche nicht verloren geht.
+- api(learning): `LearningTask` liefert `h5p_completed`, `score_raw` und `score_max`. Bestehende Daten reichen aus; es gibt keinen neuen Endpunkt und keine Datenbankmigration.
+- test(h5p): Vertrag, Datenaggregation, Komponenten und beide authentifizierten Lernendenabläufe werden durch das gezielte Feature-Gate `h5p-learner-feedback-progress` geprüft.
+
 ## 2026-09-17
 
 ### Eigene Abgaben in der Leseansicht

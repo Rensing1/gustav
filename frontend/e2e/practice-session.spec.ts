@@ -197,7 +197,7 @@ test("@feature-acceptance teacher authors and learner completes native repetitio
         expect(response.status()).toBe(200);
         firstAttempt = await response.json();
       }
-      await learner.page.getByRole("button", { name: "Nächste Aufgabe" }).click();
+      await learner.page.getByRole("button", { name: "Weiter zur nächsten Aufgabe" }).click();
       if (await learner.page.getByRole("heading", { name: "Übung geschafft" }).isVisible()) break;
     }
 

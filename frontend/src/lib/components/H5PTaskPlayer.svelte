@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import StatusMessage, { type StatusMessageTone } from "$lib/components/ui/StatusMessage.svelte";
   import { loadH5PWebcomponentsModule } from "$lib/runtime/h5p-webcomponents";
+  import type { H5PPersistedResult } from "$lib/types/h5p";
+  import type { LearningSubmission } from "$lib/types/learning";
   import { createReadableViewport } from "./h5p-readable-viewport";
 
   let {
@@ -20,7 +22,7 @@
       completionToken: string;
       contextId: string;
     } | null;
-    onProgressPersisted?: (() => void | Promise<void>) | null;
+    onProgressPersisted?: ((result: H5PPersistedResult) => void | Promise<void>) | null;
   } = $props();
 
   let root: HTMLDivElement | undefined;
@@ -95,6 +97,7 @@
 
     let disposed = false;
     const submittedStatementIds = new Set<string>();
+    let practiceAttemptLocked = false;
     let player:
       | (HTMLElement & {
           loadContentCallback?: (
@@ -107,21 +110,28 @@
       | undefined;
     let detachPlayerListeners: (() => void) | undefined;
 
-    async function submitAttempt(statementId: string, scoreRaw: number, scoreMax: number): Promise<void> {
+    async function submitAttempt(
+      statementId: string,
+      scoreRaw: number,
+      scoreMax: number
+    ): Promise<H5PPersistedResult | null> {
       const safeKey = /^[A-Za-z0-9_-]{1,64}$/.test(statementId)
         ? statementId
         : (crypto.randomUUID?.() || `h5p_${Date.now()}`);
-      if (submittedStatementIds.has(safeKey)) {
-        return;
+      if (submittedStatementIds.has(safeKey) || (practiceContext && practiceAttemptLocked)) {
+        return null;
       }
       submittedStatementIds.add(safeKey);
+      if (practiceContext) {
+        // One practice presentation represents exactly one spaced-repetition result.
+        practiceAttemptLocked = true;
+      }
 
       const target = practiceContext
         ? `/api/learning/practice/sessions/${encodeURIComponent(practiceContext.sessionId)}/items/${encodeURIComponent(practiceContext.itemId)}/attempts`
         : `/bff/h5p/submissions?course_id=${encodeURIComponent(courseId)}&task_id=${encodeURIComponent(taskId)}`;
-      const response = await fetch(
-        target,
-        {
+      try {
+        const response = await fetch(target, {
           method: "POST",
           credentials: "include",
           headers: {
@@ -137,12 +147,30 @@
                 }
               : { kind: "h5p", score_raw: scoreRaw, score_max: scoreMax }
           )
-        }
-      );
+        });
 
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { detail?: string; error?: string };
-        throw new Error(payload.detail || payload.error || `HTTP ${response.status}`);
+        const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.error || `HTTP ${response.status}`));
+        }
+        if (practiceContext) {
+          const attemptId = String(payload.attempt_id || "");
+          if (!attemptId) {
+            throw new Error("Gespeicherte Übungsbearbeitung konnte nicht zugeordnet werden.");
+          }
+          return {
+            kind: "practice",
+            attemptId,
+            status: String(payload.status || "completed")
+          };
+        }
+        return { kind: "learning", submission: payload as LearningSubmission };
+      } catch (error) {
+        submittedStatementIds.delete(safeKey);
+        if (practiceContext) {
+          practiceAttemptLocked = false;
+        }
+        throw error;
       }
     }
 
@@ -208,9 +236,14 @@
             return;
           }
           const statementId = String((statement as { id?: string }).id || "");
-          await submitAttempt(statementId, score.raw, score.max);
-          await onProgressPersisted?.();
-          status = `Gespeichert (${score.raw}/${score.max}).`;
+          const result = await submitAttempt(statementId, score.raw, score.max);
+          if (!result) {
+            return;
+          }
+          await onProgressPersisted?.(result);
+          status = practiceContext
+            ? `Gespeichert (${score.raw}/${score.max}). Lies die H5P-Rückmeldung in Ruhe.`
+            : `Gespeichert (${score.raw}/${score.max}).`;
         } catch (error) {
           status = toDisplayMessage(error) || "Abgabe fehlgeschlagen.";
         }

@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import LiveOverviewMatrix from "./LiveOverviewMatrix.svelte";
   import LiveTaskStrip from "./LiveTaskStrip.svelte";
   import LearningSubmissionArtifactView from "$lib/components/learning-unit/LearningSubmissionArtifactView.svelte";
   import type { LearningSubmission } from "$lib/types/learning";
-  import type { LiveDetailSubmission, LiveDialogTranscript, LiveSummaryPayload, LiveUnitDashboardRow, LiveUnitDashboardView } from "$lib/types/home";
+  import type { LiveDetailSubmission, LiveDialogTranscript, LiveSummaryPayload, LiveUnitDashboardView } from "$lib/types/home";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -15,18 +17,20 @@
     buildLivePageHref,
     buildLiveSummaryPath,
     createLiveWorkspaceController,
-    navigateWithLiveSelectionFallback,
-    type SortDirection,
-    type SortKey
+    navigateWithLiveSelectionFallback
   } from "./page-state";
+  import { buildLiveMatrixView } from "./live-matrix-view";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
-  type PanelTab = "submission" | "evaluation" | "feedback";
+  // Keep detail columns stable when tab content toggles the page scrollbar.
+  onMount(() => {
+    document.documentElement.classList.add("live-page-active");
+    return () => document.documentElement.classList.remove("live-page-active");
+  });
 
-  const formatScore = (value: number | null | undefined) =>
-    typeof value === "number" ? `Ø ${value.toFixed(1)}` : "Noch unbewertet";
+  type PanelTab = "submission" | "evaluation" | "feedback";
 
   const submissionTimestampFormatter = new Intl.DateTimeFormat("de-DE", {
     day: "2-digit",
@@ -134,42 +138,6 @@
 
   function primaryFile(submission: LiveDetailSubmission | null | undefined) {
     return submission?.files?.[0] ?? null;
-  }
-
-  function defaultRowSort(left: LiveUnitDashboardRow, right: LiveUnitDashboardRow): number {
-    return left.student.name.localeCompare(right.student.name, "de-DE", { sensitivity: "base" });
-  }
-
-  function compareNullableNumbers(left: number | null | undefined, right: number | null | undefined, direction: SortDirection): number {
-    const leftMissing = typeof left !== "number";
-    const rightMissing = typeof right !== "number";
-    if (leftMissing && rightMissing) {
-      return 0;
-    }
-    if (leftMissing) {
-      return 1;
-    }
-    if (rightMissing) {
-      return -1;
-    }
-    return direction === "asc" ? left - right : right - left;
-  }
-
-  function compareNullableDates(left: string | null | undefined, right: string | null | undefined, direction: SortDirection): number {
-    const leftMs = left ? new Date(left).getTime() : Number.NaN;
-    const rightMs = right ? new Date(right).getTime() : Number.NaN;
-    const leftMissing = Number.isNaN(leftMs);
-    const rightMissing = Number.isNaN(rightMs);
-    if (leftMissing && rightMissing) {
-      return 0;
-    }
-    if (leftMissing) {
-      return 1;
-    }
-    if (rightMissing) {
-      return -1;
-    }
-    return direction === "asc" ? leftMs - rightMs : rightMs - leftMs;
   }
 
   async function fetchSummaryState(args: {
@@ -293,8 +261,10 @@
   let selectedTaskIdState = $state<string | null>(null);
   let liveCursor = $state<string | null>(null);
   let activePanelTab = $state<PanelTab>("submission");
-  let activeSortKey = $state<SortKey | null>(null);
-  let activeSortDirection = $state<SortDirection | null>(null);
+  let activeMatrixView = $state<"learning" | "practice">("learning");
+  let mobileLearningGroupId = $state("");
+  let mobilePracticeModuleId = $state("");
+  let selectedPracticeModuleId = $state<string | null>(null);
 
   function syncWorkspaceState(): void {
     const state = workspaceController.getState();
@@ -302,8 +272,6 @@
     detailState = state.detail;
     selectedStudentSubState = state.studentSub;
     selectedTaskIdState = state.taskId;
-    activeSortKey = state.activeSortKey;
-    activeSortDirection = state.activeSortDirection;
     liveCursor = state.cursor;
   }
 
@@ -350,43 +318,30 @@
     })
   );
 
-  const sortedRows = $derived.by(() => {
-    const rows = [...(dashboardState?.rows ?? [])];
-    rows.sort((left, right) => {
-      if (!activeSortKey || !activeSortDirection) {
-        return defaultRowSort(left, right);
-      }
-      if (activeSortKey === "student") {
-        const compare = activeSortDirection === "asc"
-          ? left.student.name.localeCompare(right.student.name, "de-DE", { sensitivity: "base" })
-          : right.student.name.localeCompare(left.student.name, "de-DE", { sensitivity: "base" });
-        return compare || defaultRowSort(left, right);
-      }
-      if (activeSortKey === "progress") {
-        return compareNullableNumbers(left.progress_percent, right.progress_percent, activeSortDirection) || defaultRowSort(left, right);
-      }
-      if (activeSortKey === "average") {
-        return compareNullableNumbers(left.average_score, right.average_score, activeSortDirection) || defaultRowSort(left, right);
-      }
-      return (
-        compareNullableDates(left.latest_submission?.created_at, right.latest_submission?.created_at, activeSortDirection)
-        || defaultRowSort(left, right)
-      );
-    });
-    return rows;
+  const matrixState = $derived(summaryState ? buildLiveMatrixView(summaryState) : null);
+
+  const selectedPracticeContext = $derived.by(() => {
+    if (!summaryState || !selectedPracticeModuleId || !selectedStudentSubState) return null;
+    const module = summaryState.practice_modules.find((entry) => entry.id === selectedPracticeModuleId) ?? null;
+    const row = summaryState.rows.find((entry) => entry.student.sub === selectedStudentSubState) ?? null;
+    if (!module || !row) return null;
+    return {
+      module,
+      cell: row.practice.find((entry) => entry.module_id === module.id) ?? null
+    };
   });
 
-  function toggleSort(key: SortKey): void {
-    workspaceController.toggleSort(key);
-    syncWorkspaceState();
-  }
+  const selectedTaskMeta = $derived(summaryState?.tasks.find((task) => task.id === selectedTaskIdState) ?? null);
 
-  function ariaSortFor(key: SortKey): "ascending" | "descending" | "none" {
-    if (activeSortKey !== key || !activeSortDirection) {
-      return "none";
+  const selectedPanelTasks = $derived.by(() => {
+    const tasks = dashboardState?.selected_student_panel?.tasks ?? [];
+    if (activeMatrixView === "practice" && selectedPracticeContext) {
+      const ids = new Set(selectedPracticeContext.module.task_ids);
+      return tasks.filter((task) => ids.has(task.task_id));
     }
-    return activeSortDirection === "asc" ? "ascending" : "descending";
-  }
+    const learningIds = new Set(summaryState?.tasks.filter((task) => task.module_kind !== "practice").map((task) => task.id) ?? []);
+    return tasks.filter((task) => learningIds.has(task.task_id));
+  });
 
   async function updateCourse(nextCourseId: string): Promise<void> {
     unitsLoading = Boolean(nextCourseId);
@@ -421,25 +376,6 @@
     });
   }
 
-  async function openStudent(studentSub: string, event: MouseEvent): Promise<void> {
-    event.preventDefault();
-    const dashboard = dashboardState;
-    const row = dashboard?.rows.find((entry) => entry.student.sub === studentSub) ?? null;
-    await navigateWithLiveSelectionFallback({
-      href: row?.href ?? buildLivePageHref({
-        courseId: data.selectedCourseId ?? null,
-        unitId: data.selectedUnitId ?? null,
-        studentSub,
-        taskId: null
-      }),
-      trySelect: async () => {
-        await workspaceController.selectStudent(studentSub);
-        syncWorkspaceState();
-      },
-      goto
-    });
-  }
-
   async function openTask(taskId: string, event: MouseEvent): Promise<void> {
     event.preventDefault();
     const taskHref = dashboardState?.selected_student_panel?.tasks.find((entry) => entry.task_id === taskId)?.href
@@ -457,6 +393,53 @@
       },
       goto
     });
+  }
+
+  async function openMatrixStudent(studentSub: string): Promise<void> {
+    await workspaceController.selectStudent(studentSub);
+    syncWorkspaceState();
+  }
+
+  async function openMatrixTask(studentSub: string, taskId: string): Promise<void> {
+    selectedPracticeModuleId = null;
+    await workspaceController.selectCell(studentSub, taskId);
+    syncWorkspaceState();
+  }
+
+  async function openPracticeModule(studentSub: string, moduleId: string, taskId: string | null): Promise<void> {
+    activeMatrixView = "practice";
+    selectedPracticeModuleId = moduleId || null;
+    mobilePracticeModuleId = moduleId || mobilePracticeModuleId;
+    if (taskId) {
+      await workspaceController.selectCell(studentSub, taskId);
+    } else {
+      await workspaceController.selectStudent(studentSub);
+    }
+    syncWorkspaceState();
+  }
+
+  async function changeMatrixView(value: "learning" | "practice"): Promise<void> {
+    activeMatrixView = value;
+    if (!summaryState || !selectedStudentSubState) return;
+
+    if (value === "practice") {
+      const module = summaryState.practice_modules.find((entry) => entry.id === selectedPracticeModuleId)
+        ?? summaryState.practice_modules[0];
+      if (!module) return;
+      const currentTaskId = selectedTaskIdState && module.task_ids.includes(selectedTaskIdState)
+        ? selectedTaskIdState
+        : module.task_ids[0] ?? null;
+      await openPracticeModule(selectedStudentSubState, module.id, currentTaskId);
+      return;
+    }
+
+    selectedPracticeModuleId = null;
+    const learningTask = summaryState.tasks.find((task) => task.id === selectedTaskIdState && task.module_kind !== "practice")
+      ?? summaryState.tasks.find((task) => task.module_kind !== "practice");
+    if (learningTask) {
+      await workspaceController.selectCell(selectedStudentSubState, learningTask.id);
+      syncWorkspaceState();
+    }
   }
 
   $effect(() => {
@@ -483,6 +466,27 @@
   $effect(() => {
     selectedTaskIdState;
     activePanelTab = "submission";
+  });
+
+  $effect(() => {
+    const selectedTask = summaryState?.tasks.find((task) => task.id === selectedTaskIdState);
+    if (selectedTask?.module_kind === "practice") {
+      activeMatrixView = "practice";
+      selectedPracticeModuleId = selectedTask.module_id;
+    } else if (selectedTask && selectedPracticeModuleId === null) {
+      activeMatrixView = "learning";
+    }
+  });
+
+  $effect(() => {
+    if (matrixState) {
+      if (!matrixState.learningGroups.some((group) => group.id === mobileLearningGroupId)) {
+        mobileLearningGroupId = matrixState.learningGroups[0]?.id ?? "";
+      }
+      if (!matrixState.practiceModules.some((module) => module.id === mobilePracticeModuleId)) {
+        mobilePracticeModuleId = matrixState.practiceModules[0]?.id ?? "";
+      }
+    }
   });
 
   $effect(() => {
@@ -566,84 +570,26 @@
       {/if}
     </section>
 
-    {#if dashboardState}
-      <section class="workspace-section live-kpi-section">
-        <div class="live-summary-grid">
-          <article class="live-summary-card">
-            <span>Lernende</span>
-            <strong>{dashboardState.summary.learners_count}</strong>
-          </article>
-          <article class="live-summary-card">
-            <span>Aufgaben</span>
-            <strong>{dashboardState.summary.tasks_count}</strong>
-          </article>
-          <article class="live-summary-card">
-            <span>Bearbeitet</span>
-            <strong>{dashboardState.summary.completion_rate_percent}%</strong>
-          </article>
-          <article class="live-summary-card">
-            <span>Ø Bewertung</span>
-            <strong>{formatScore(dashboardState.summary.average_score)}</strong>
-          </article>
-        </div>
-      </section>
-    {/if}
   </div>
 
-  {#if dashboardState}
+  {#if dashboardState && matrixState}
     <section class="live-page__workspace" aria-label="Live-Arbeitsbereich">
       <div class="live-workspace">
         <section class="workspace-panel workspace-section live-table-panel">
-          <div class="workspace-section-header">
-            <div class="workspace-section-heading">
-              <p class="workspace-label">Klassenübersicht</p>
-              <h3>Lernstand in der gewählten Lerneinheit</h3>
-              <p class="workspace-note">
-                Fortschritt, Durchschnitt und letzte Abgabe bleiben in der gemeinsamen Arbeitsfläche sichtbar.
-              </p>
-            </div>
-          </div>
-
-          <!-- svelte-ignore a11y_no_noninteractive_tabindex (The native scroll region must be keyboard reachable.) -->
-          <div class="workspace-data-table-wrap" role="region" aria-label="Klassenübersicht" tabindex="0">
-          <table class="workspace-data-table">
-            <thead>
-              <tr>
-                <th aria-sort={ariaSortFor("student")}>
-                  <button class="live-sort-button" type="button" onclick={() => toggleSort("student")}>Schüler</button>
-                </th>
-                <th aria-sort={ariaSortFor("progress")}>
-                  <button class="live-sort-button" type="button" onclick={() => toggleSort("progress")}>Bearbeitet</button>
-                </th>
-                <th aria-sort={ariaSortFor("average")}>
-                  <button class="live-sort-button" type="button" onclick={() => toggleSort("average")}>Ø Bewertung</button>
-                </th>
-                <th aria-sort={ariaSortFor("latest")}>
-                  <button class="live-sort-button" type="button" onclick={() => toggleSort("latest")}>Letzte Abgabe</button>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each sortedRows as row}
-                <tr class:is-selected={selectedStudentSubState === row.student.sub}>
-                  <td><a href={row.href} onclick={(event) => void openStudent(row.student.sub, event)}>{row.student.name}</a></td>
-                  <td>{row.progress_percent}%</td>
-                  <td>{formatScore(row.average_score)}</td>
-                  <td>
-                    {#if row.latest_submission}
-                      <a href={row.href} class="live-latest-link" onclick={(event) => void openStudent(row.student.sub, event)}>
-                        <span class="live-latest-link__date">{formatSubmissionDate(row.latest_submission.created_at)}</span>
-                        <span class="live-latest-link__score">{formatScore(row.latest_submission.average_score)}</span>
-                      </a>
-                    {:else}
-                      <span class="workspace-empty">Noch keine Abgabe</span>
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-          </div>
+          <LiveOverviewMatrix
+            view={matrixState}
+            activeView={activeMatrixView}
+            selectedStudentSub={selectedStudentSubState}
+            selectedTaskId={selectedTaskIdState}
+            {mobileLearningGroupId}
+            {mobilePracticeModuleId}
+            onViewChange={(value) => void changeMatrixView(value)}
+            onMobileLearningGroupChange={(value) => (mobileLearningGroupId = value)}
+            onMobilePracticeModuleChange={(value) => (mobilePracticeModuleId = value)}
+            onOpenStudent={(studentSub) => void openMatrixStudent(studentSub)}
+            onOpenTask={(studentSub, taskId) => void openMatrixTask(studentSub, taskId)}
+            onOpenPracticeModule={(studentSub, moduleId, taskId) => void openPracticeModule(studentSub, moduleId, taskId)}
+          />
         </section>
 
         <aside class="workspace-panel live-panel" aria-label="Schülerdetail">
@@ -652,10 +598,27 @@
               <div class="live-panel__copy">
                 <h3>{dashboardState.selected_student_panel.student.name}</h3>
               </div>
+              <div class="live-panel__task-navigation">
+                <LiveTaskStrip tasks={selectedPanelTasks} selectedTaskId={selectedTaskIdState}
+                  onOpen={(taskId, event) => void openTask(taskId, event)} />
+              </div>
             </header>
 
-            <LiveTaskStrip tasks={dashboardState.selected_student_panel.tasks} selectedTaskId={selectedTaskIdState}
-              onOpen={(taskId, event) => void openTask(taskId, event)} />
+            {#if activeMatrixView === "practice" && selectedPracticeContext}
+              <section class="live-practice-detail" aria-label="Übungsmodul">
+                <p class="workspace-label">Übungsmodul</p>
+                <h4>{selectedPracticeContext.module.title}</h4>
+                {#if selectedPracticeContext.cell}
+                  <dl>
+                    <div><dt>Fällig</dt><dd>{selectedPracticeContext.cell.due_tasks_count}</dd></div>
+                    <div><dt>Sicher</dt><dd>{selectedPracticeContext.cell.secure_tasks_count}</dd></div>
+                    <div><dt>Letzte Aktivität</dt><dd>{selectedPracticeContext.cell.latest_activity_at ? formatSubmissionDate(selectedPracticeContext.cell.latest_activity_at) : "Noch keine"}</dd></div>
+                  </dl>
+                {:else}
+                  <p class="workspace-empty">Für dieses Modul liegen noch keine Übungsdaten vor.</p>
+                {/if}
+              </section>
+            {/if}
 
             {#if dashboardState.selected_student_panel.selected_task_detail}
               {@const selectedSubmission = dashboardState.selected_student_panel.selected_task_detail}
@@ -664,8 +627,9 @@
               {@const selectedArtifact = buildSubmissionArtifactView(artifactSubmission)}
 
               <section class="learning-task-submission-summary live-panel-summary" aria-label="Aufgabendetail">
-                <header class="learning-task-submission-summary__header">
+                <header class="learning-task-submission-summary__header live-panel-summary__context">
                   <div class="learning-task-submission-summary__copy">
+                    <p class="workspace-label">Aufgabenstellung</p>
                     <p class="learning-task-submission-summary__meta live-panel-summary__meta">
                       {formatSubmissionTimestamp(selectedSubmission.created_at)}
                     </p>
@@ -675,10 +639,10 @@
                   </div>
                 </header>
 
-                <div class="learning-task-submission-summary__tabs live-panel-summary__tabs" role="tablist" aria-label="Schülerdetail">
+                <div class="live-panel-summary__response">
+                <div class="choice-tabs" role="tablist" aria-label="Schülerdetail">
                   <button
-                    class="workspace-tab"
-                    class:workspace-tab--active={activePanelTab === "submission"}
+                    class="choice-tabs__tab"
                     role="tab"
                     type="button"
                     aria-selected={activePanelTab === "submission"}
@@ -687,8 +651,7 @@
                     Abgabe
                   </button>
                   <button
-                    class="workspace-tab"
-                    class:workspace-tab--active={activePanelTab === "feedback"}
+                    class="choice-tabs__tab"
                     role="tab"
                     type="button"
                     aria-selected={activePanelTab === "feedback"}
@@ -697,8 +660,7 @@
                     Rückmeldung
                   </button>
                   <button
-                    class="workspace-tab"
-                    class:workspace-tab--active={activePanelTab === "evaluation"}
+                    class="choice-tabs__tab"
                     role="tab"
                     type="button"
                     aria-selected={activePanelTab === "evaluation"}
@@ -711,7 +673,6 @@
                 <div class="learning-task-submission-summary__panel live-panel-summary__panel" role="tabpanel" aria-label={tabLabel(activePanelTab)}>
                   {#if activePanelTab === "submission"}
                     <section class="live-panel-block">
-                      <p class="workspace-label">Abgabe</p>
                       {#if selectedSubmission.kind === "dialog" && selectedSubmission.dialog}
                         <div class="live-dialog-transcript">
                           <article class="live-dialog-message live-dialog-message--ai">
@@ -771,7 +732,6 @@
 
                   {:else if activePanelTab === "feedback"}
                     <section class="live-panel-block">
-                      <p class="workspace-label">Rückmeldung</p>
                       {#if selectedSubmission.feedback_md}
                         <div class="markdown-prose">
                           {@html renderMarkdown(selectedSubmission.feedback_md)}
@@ -782,7 +742,6 @@
                     </section>
                   {:else}
                     <section class="live-panel-block">
-                      <p class="workspace-label">Auswertung</p>
                       {#if selectedSubmission.analysis_json?.criteria_results?.length}
                         <ul class="learning-unit-criteria">
                           {#each selectedSubmission.analysis_json.criteria_results as criterion}
@@ -809,12 +768,18 @@
                     </section>
                   {/if}
                 </div>
+                </div>
               </section>
             {:else}
               <section class="live-panel-empty">
                 <p class="workspace-label">Keine Abgabe</p>
+                {#if selectedTaskMeta?.instruction_md}
+                  <div class="markdown-prose live-panel-summary__instruction">
+                    {@html renderMarkdown(selectedTaskMeta.instruction_md)}
+                  </div>
+                {/if}
                 <p class="workspace-empty">
-                  Für die gewählte Aufgabe liegt noch keine Abgabe vor. Die Aufgabenleiste bleibt zum schnellen Wechsel sichtbar.
+                  Für die gewählte Aufgabe liegt noch keine Abgabe vor.
                 </p>
               </section>
             {/if}
@@ -832,6 +797,11 @@
 </div>
 
 <style>
+  /* Older browsers reserve the same space with an always-present scrollbar. */
+  :global(html.live-page-active) { overflow-y: scroll; }
+  @supports (scrollbar-gutter: stable) {
+    :global(html.live-page-active) { overflow-y: auto; scrollbar-gutter: stable; }
+  }
   .live-page {
     gap: 1.15rem;
   }
@@ -843,18 +813,11 @@
   }
 
   .live-page__intro {
-    max-width: 112rem;
+    max-width: 132rem;
   }
 
   .live-page__workspace {
     max-width: 132rem;
-  }
-
-  .live-kpi-section {
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-    padding: 0;
   }
 
   .live-selection-bar {
@@ -863,7 +826,7 @@
 
   .live-selection__stack {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(12rem, 20rem) minmax(16rem, 32rem);
     gap: var(--space-3);
     width: 100%;
     align-items: end;
@@ -875,8 +838,7 @@
     gap: var(--space-2);
   }
 
-  .live-selection__field span,
-  .live-summary-card span {
+  .live-selection__field span {
     font-family: var(--font-mono, monospace);
     font-size: 0.78rem;
     text-transform: uppercase;
@@ -884,7 +846,6 @@
   }
 
   .live-selection__field select,
-  .live-summary-card,
   .live-panel,
   .live-table-panel {
     border: 1px solid var(--color-border, #1b1b1b);
@@ -902,71 +863,31 @@
     color: var(--color-text, #1a1c1c);
   }
 
-  .live-summary-grid {
-    display: grid;
-    gap: var(--space-3);
-    grid-template-columns: repeat(auto-fit, minmax(clamp(11rem, 22vw, 15rem), 1fr));
-    margin-bottom: var(--space-5);
-  }
-
-  .live-summary-card,
   .live-panel,
   .live-table-panel {
     padding: var(--space-4);
     background: var(--color-bg-surface, #fff);
   }
 
-  .live-summary-card strong {
-    display: block;
-    margin-top: var(--space-2);
-    font-size: 1.25rem;
-  }
-
   .live-workspace {
     display: grid;
-    grid-template-columns:
-      minmax(0, 2.35fr)
-      minmax(22rem, 1fr);
-    gap: clamp(1.2rem, 1.8vw, 1.8rem);
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
     align-items: start;
-  }
-
-  .live-latest-link {
-    color: inherit;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .live-latest-link__date,
-  .live-latest-link__score {
-    white-space: nowrap;
-  }
-
-  .live-sort-button {
-    border: 0;
-    padding: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-weight: inherit;
-    cursor: pointer;
-    min-height: var(--layout-control-min);
   }
 
   .live-table-panel {
     min-width: 0;
     box-shadow: none;
+    padding: 0;
+    overflow: hidden;
   }
 
   .live-panel {
     display: grid;
-    gap: var(--space-4);
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
     min-width: 0;
-    position: sticky;
-    top: calc(var(--space-5) + 4rem);
     box-shadow: none;
   }
 
@@ -976,6 +897,8 @@
     display: grid;
     gap: var(--space-2);
   }
+
+  .live-panel__header { grid-template-columns: minmax(0, 1fr); align-items: start; gap: var(--space-2); }
 
   .live-panel-block,
   .live-panel-summary,
@@ -1006,16 +929,45 @@
   }
 
   .live-panel__copy h3 { overflow-wrap: anywhere; }
-  .workspace-data-table-wrap { max-width: 100%; }
-  .workspace-data-table-wrap:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
+
+  .live-practice-detail {
+    display: grid;
+    gap: var(--space-2);
+    border-block: 1px solid var(--color-line);
+    padding-block: var(--space-3);
+  }
+
+  .live-practice-detail h4 { margin: 0; }
+
+  .live-practice-detail dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: 0; }
+  .live-practice-detail dl div { min-width: 0; }
+  .live-practice-detail dt { color: var(--color-text-muted); font: .72rem var(--font-mono); text-transform: uppercase; }
+  .live-practice-detail dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-weight: 650; }
 
   .live-panel-summary {
-    border: 1px solid var(--color-line, rgba(27, 27, 27, 0.14));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: var(--space-4);
+    align-items: start;
+    border: 0;
+    border-top: 1px solid var(--color-line);
+    padding-top: var(--space-2);
   }
 
-  .live-panel-summary__tabs {
-    margin-top: var(--space-2);
-  }
+  .live-panel-summary__context,
+  .live-panel-summary__response { min-width: 0; }
+  .live-panel__task-navigation { min-width: 0; }
+  .live-panel-summary__context .learning-task-submission-summary__copy { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-3); }
+  .live-panel-summary__context .workspace-label { margin: 0; }
+  .live-panel-summary__response { border-left: 1px solid var(--color-line); padding-left: var(--space-4); }
+
+  .live-panel-summary__meta { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-xs); }
+  .live-panel-summary__instruction { flex-basis: 100%; min-width: 0; margin-block: var(--space-2) 0; }
+  .live-panel-summary__instruction :global(> :first-child),
+  .live-panel-summary__panel :global(.markdown-prose > :first-child) { margin-top: 0; }
+  .live-panel-summary__instruction :global(> :last-child),
+  .live-panel-summary__panel :global(.markdown-prose > :last-child) { margin-bottom: 0; }
+  .live-panel-summary__panel { padding-top: var(--space-2); }
 
   .live-panel-summary__panel {
     display: grid;
@@ -1023,8 +975,7 @@
     min-width: 0;
   }
 
-  @media (max-width: 960px) {
-    .live-summary-grid,
+  @media (max-width: 1100px) {
     .live-workspace,
     .live-selection__stack {
       grid-template-columns: 1fr;
@@ -1033,5 +984,12 @@
     .live-panel {
       position: static;
     }
+
+    .live-practice-detail dl { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 700px) {
+    .live-panel-summary { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+    .live-panel-summary__response { border-left: 0; border-top: 1px solid var(--color-line); padding-left: 0; padding-top: var(--space-2); }
   }
 </style>

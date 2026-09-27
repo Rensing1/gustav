@@ -29,7 +29,10 @@ describe("teaching overview design contract", () => {
   });
   it("keeps live tables named, task labels accessible and tabs at touch size", () => {
     const live = source("../live/+page.svelte");
-    expect(live).toContain('role="region" aria-label="Klassenübersicht"');
+    expect(live).toContain("<LiveOverviewMatrix");
+    const matrix = source("../live/LiveOverviewMatrix.svelte");
+    expect(matrix).toContain('role="region" aria-label="Lernaufgaben nach Schülern" tabindex="0"');
+    expect(matrix).toContain('role="region" aria-label="Übungsmodule nach Schülern" tabindex="0"');
     expect(live).toContain("<LiveTaskStrip");
     expect(source("../live/LiveTaskStrip.svelte")).toContain("task.task_label");
     const styles = source("../../lib/styles/teaching-workspace.css");

@@ -477,6 +477,27 @@ export type LiveTask = {
   kind: string;
   section_id?: string;
   section_title?: string;
+  module_id: string | null;
+  module_kind: "learning" | "practice";
+};
+
+export type LivePracticeModule = {
+  id: string;
+  section_id: string;
+  title: string;
+  task_ids: string[];
+};
+
+export type LivePracticeCell = {
+  module_id: string;
+  status: "locked" | "due" | "insufficient" | "partial" | "secure";
+  task_count: number;
+  due_tasks_count: number;
+  secure_tasks_count: number;
+  partial_tasks_count: number;
+  insufficient_tasks_count: number;
+  latest_activity_at: string | null;
+  next_due_at: string | null;
 };
 
 export type LiveSummaryStudent = {
@@ -497,11 +518,13 @@ export type LiveSummaryCell = {
 export type LiveSummaryRow = {
   student: LiveSummaryStudent;
   tasks: LiveSummaryCell[];
+  practice: LivePracticeCell[];
 };
 
 export type LiveSummaryPayload = {
   cursor: string;
   tasks: LiveTask[];
+  practice_modules: LivePracticeModule[];
   rows: LiveSummaryRow[];
 };
 

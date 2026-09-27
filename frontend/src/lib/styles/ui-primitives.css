@@ -486,7 +486,8 @@ fieldset.workspace-field {
   text-transform: uppercase;
 }
 
-.choice-switch__options {
+.choice-switch__options,
+.choice-tabs {
   display: inline-flex;
   max-width: 100%;
   gap: var(--space-4);
@@ -509,7 +510,8 @@ fieldset.workspace-field {
   pointer-events: none;
 }
 
-.choice-switch__option span {
+.choice-switch__option span,
+.choice-tabs__tab {
   display: inline-flex;
   min-height: 2.35rem;
   align-items: center;
@@ -524,19 +526,34 @@ fieldset.workspace-field {
   white-space: nowrap;
 }
 
-.choice-switch__option:hover {
+.choice-tabs__tab {
+  border-top: 0;
+  border-inline: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.choice-tabs { flex-wrap: wrap; }
+
+.choice-switch__option:hover,
+.choice-tabs__tab:hover {
   color: var(--color-text);
 }
 
-.choice-switch__option[data-current="true"] {
+.choice-switch__option[data-current="true"],
+.choice-tabs__tab[aria-selected="true"] {
   color: var(--color-text);
 }
 
-.choice-switch__option[data-current="true"] span {
+.choice-switch__option[data-current="true"] span,
+.choice-tabs__tab[aria-selected="true"] {
   border-bottom-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-border) 58%);
 }
 
-.choice-switch__option input:focus-visible + span {
+.choice-switch__option input:focus-visible + span,
+.choice-tabs__tab:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }

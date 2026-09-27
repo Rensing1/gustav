@@ -54,6 +54,26 @@ Live und Diagnostik verwenden die vorhandenen Workspace-Flächen, Felder und Akt
 
 Die Live-Aufgabenleiste gruppiert nach tatsächlichem Abschnitt beziehungsweise Modul. Gruppentitel und sichtbare Aufgabennummern ersetzen unbeschriftete Miniaturfelder; die Bewertungslogik bleibt erhalten. Diagnostik beginnt mit einer konkreten Kursauswahl und „Kursmatrix öffnen“, bleibt aber aus der Hauptnavigation verborgen. Profil- und Matrixverweise öffnen die vorhandene Live-Ansicht mit Kurs, Lerneinheit und Lernendem. Mitgliederansichten zeigen verständliche Namen und Aktionen, keine technischen Personenkennungen oder Entwicklungsformulierungen.
 
+Die kanonische Live-Hauptansicht ist eine Schüler-Aufgaben-Matrix. Lernaufgaben
+werden nach ihren tatsächlichen Lernmodulen gruppiert; die sticky Namensspalte
+enthält keine zusätzliche Bearbeitungsquote. Eine kompakte Spalte `Üben` zeigt
+ausschließlich zwei beschriftete Kennzahlen je Schüler: neue beziehungsweise
+fällige Übungsaufgaben und aktuell sichere, noch nicht wieder fällige
+Übungsaufgaben. Übungsaufgaben werden niemals zwischen den Lernaufgaben
+einsortiert. Die lokale Auswahl `Aufgaben | Üben` verwendet `ChoiceSwitch`.
+
+Die getrennte Übungsansicht ordnet je Übungsmodul eine Spalte an und unterscheidet
+`Gesperrt`, `Fällig`, `Noch nicht sicher`, `Teilweise sicher` und `Sicher`.
+Farbe unterstützt diese ausgeschriebenen Zustände, ersetzt sie aber nicht.
+Auf schmalen Flächen begrenzt eine Modulauswahl die sichtbaren Spalten; Tabelle
+und Detail stehen untereinander. Horizontaler Überlauf bleibt auf den
+beschrifteten Tabellenbereich begrenzt. Aufgabenstellung, Abgabe, Rückmeldung
+und Auswertung bleiben aus Lern- und Übungszellen über denselben Detailbereich
+erreichbar. Die ausdrücklich vereinbarte dichte `LiveTaskStrip`-Ausnahme im
+Detailpanel bleibt davon unberührt.
+
+Die Live-Tabelle und das Schülerdetail stehen auch auf großen Bildschirmen untereinander und nutzen dieselbe volle Arbeitsbreite. Innerhalb des Details stehen Aufgabenstellung und Antwortbereich auf breiten Flächen nebeneinander, auf schmalen untereinander. Die Aufgabenbreiten bleiben kompakt; zusätzliche Arbeitsbreite streckt die Bewertungszellen nicht.
+
 GUSTAV folgt einer präzisen, kontrastreichen und technisch-scharfen
 Produktsprache. Es ist kein
 freundlich-rundes EdTech-Produkt und keine warme Editorial-Oberfläche mehr.
@@ -386,6 +406,8 @@ diese Seite nicht vorgesehen. Alle Zustände verwenden die zentralen Theme-,
 Fokus- und Kontrastwerte.
 
 `ModeSwitch` verbindet Navigationsziele und markiert die aktuell geöffnete Ansicht. `ChoiceSwitch` bildet dagegen eine lokale, gegenseitig ausschließende Auswahl mit nativen Radiofeldern ab. Seine aktive Option bleibt transparent und wird nur durch kräftigeren Text sowie eine zurückhaltende Akzentlinie markiert. Gefüllte Signalfarben, Schatten und Pillenformen sind für diese Auswahl nicht vorgesehen.
+
+Die Detailreiter der Live-Ansicht teilen diese visuelle Basis über `choice-tabs`: identische Schrift, Grundlinie, Akzentlinie sowie Hover- und Fokuszustände, keine aktive Füllfläche. Die Semantik bleibt getrennt: native Radiofelder für die Auswahl, `tablist`/`tab`/`tabpanel` für Detailinhalte. Überflüssige Überschriften wie „Detail“ und Wiederholungen des aktiven Reiternamens im Inhalt entfallen; die zugängliche Panelbeschriftung bleibt erhalten.
 
 ### Lerneinheiten-Editor
 

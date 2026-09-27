@@ -406,6 +406,14 @@ export function createLiveWorkspaceController(options: LiveWorkspaceControllerOp
         taskId
       });
     },
+    async selectCell(studentSub: string, taskId: string): Promise<LiveWorkspaceControllerState> {
+      return applySelection({
+        courseId: state.courseId,
+        unitId: state.unitId,
+        studentSub,
+        taskId
+      });
+    },
     async poll(): Promise<boolean> {
       if (!state.courseId || !state.unitId || !state.cursor) {
         return false;

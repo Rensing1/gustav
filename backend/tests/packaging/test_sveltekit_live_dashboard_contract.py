@@ -20,6 +20,7 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     page_source = live_page_path.read_text(encoding="utf-8")
     helper_source = live_state_path.read_text(encoding="utf-8")
     strip_source = live_strip_path.read_text(encoding="utf-8")
+    matrix_source = live_page_path.with_name("LiveOverviewMatrix.svelte").read_text(encoding="utf-8")
 
     assert "/api/live/views/courses/" in loader_source
     assert "/units" in loader_source
@@ -35,18 +36,18 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     assert "wideWorkspaceShell" not in loader_source
     assert "liveWideWorkspaceShell" not in loader_source
     assert "selected_student_panel" in page_source
-    assert "live-kpi-section" in page_source
+    assert "live-kpi-section" not in page_source
+    assert "<LiveOverviewMatrix" in page_source
     assert "live-workspace" in page_source
     assert "live-page__intro" in page_source
     assert "live-page__workspace" in page_source
     assert "live-table-panel" in page_source
-    assert "workspace-data-table" in page_source
-    assert "workspace-section-header" in page_source
+    assert 'aria-label="Lernaufgaben nach Schülern"' in matrix_source
+    assert 'aria-label="Übungsmodule nach Schülern"' in matrix_source
+    assert 'scope="colgroup"' in matrix_source
     assert "workspace-label" in page_source
-    assert "workspace-tab" in page_source
-    assert 'aria-sort=' in page_source
-    assert "toggleSort(" in page_source
-    assert "sortedRows" in page_source
+    assert "choice-tabs__tab" in page_source
+    assert "buildLiveMatrixView" in page_source
     assert "goto(" in page_source
     assert 'onchange={(event)' in page_source
     assert 'type="submit"' not in page_source
@@ -74,7 +75,7 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     assert 'role="tablist"' in page_source
     assert "selected_task_detail" in page_source
     assert "selectedTaskIdState" in page_source
-    assert '<LiveTaskStrip tasks={dashboardState.selected_student_panel.tasks}' in page_source
+    assert '<LiveTaskStrip tasks={selectedPanelTasks}' in page_source
     assert 'selectedTaskId={selectedTaskIdState}' in page_source
     assert 'void openTask(taskId, event)' in page_source
     assert "score-zero" in strip_source
@@ -89,7 +90,7 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     assert "isSubmissionSchemaPayload" in page_source
     assert "ab " in page_source
     assert "Uhr" in page_source
-    assert ".live-panel {\n    display: grid;\n    gap: var(--space-4);\n    min-width: 0;" in page_source
+    assert ".live-panel {\n    display: grid;" in page_source
     assert ".live-panel-summary__panel {\n    display: grid;\n    gap: var(--space-4);\n    min-width: 0;" in page_source
     assert ".live-panel-block,\n  .live-panel-summary,\n  .live-panel-summary__panel {\n    min-width: 0;" in page_source
     assert page_source.index("live-panel-summary__meta") < page_source.index("live-panel-summary__instruction")
@@ -97,14 +98,12 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     assert page_source.index("Abgabe\n                  </button>") < page_source.index("Rückmeldung\n                  </button>")
     assert page_source.index("Rückmeldung\n                  </button>") < page_source.index("Auswertung\n                  </button>")
     assert "formatSubmissionDate" in page_source
-    assert "live-latest-link__date" in page_source
-    assert "live-latest-link__score" in page_source
     assert ".live-page__intro,\n  .live-page__workspace {\n    width: 100%;\n    margin-inline: auto;" in page_source
-    assert ".live-page__intro {\n    max-width: 112rem;" in page_source
+    assert ".live-page__intro {\n    max-width: 132rem;" in page_source
     assert ".live-page__workspace {\n    max-width: 132rem;" in page_source
     assert "100vw" not in page_source
     assert "50vw" not in page_source
-    assert "task_label" not in page_source[page_source.index('<table class="workspace-data-table">'):page_source.index("</table>")]
+    assert "task_label" not in matrix_source
     assert "Keine Vorschau" in page_source
     assert 'artifactSubmission.text_body && (artifactSubmission.text_body.startsWith("# makecode.evidence.v1")' not in page_source
     assert 'artifactSubmission.text_body.startsWith("# scratch.evidence.v2")' not in page_source

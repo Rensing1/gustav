@@ -28,18 +28,23 @@ function submission(taskId: string, textBody: string) {
 function summary(studentName = "Anna"): LiveSummaryPayload {
   return {
     cursor: "2026-04-13T10:00:00+00:00",
+    practice_modules: [],
     tasks: [
       {
         id: "task-1",
         instruction_md: "### Aufgabe",
         position: 1,
-        kind: "native"
+        kind: "native",
+        module_id: null,
+        module_kind: "learning"
       },
       {
         id: "task-2",
         instruction_md: "### Aufgabe",
         position: 2,
-        kind: "native"
+        kind: "native",
+        module_id: null,
+        module_kind: "learning"
       }
     ],
     rows: [
@@ -61,7 +66,8 @@ function summary(studentName = "Anna"): LiveSummaryPayload {
             average_score: 8.0,
             created_at: "2026-04-13T09:00:00+00:00"
           }
-        ]
+        ],
+        practice: []
       },
       {
         student: {
@@ -81,13 +87,67 @@ function summary(studentName = "Anna"): LiveSummaryPayload {
             average_score: 9.0,
             created_at: "2026-04-13T11:00:00+00:00"
           }
-        ]
+        ],
+        practice: []
       }
     ]
   };
 }
 
 describe("live workspace controller", () => {
+  it("reserves route-scoped scrollbar space and stacks the task toolbar", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    expect(source).toContain('classList.add("live-page-active")');
+    expect(source).toContain('classList.remove("live-page-active")');
+    expect(source).toContain('scrollbar-gutter: stable');
+    expect(source).not.toContain('minmax(9rem, 14rem)');
+  });
+
+  it("keeps student identity and task navigation in a compact detail toolbar", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const header = source.slice(source.indexOf('<header class="live-panel__header">'));
+    expect(header.slice(0, header.indexOf('</header>'))).toContain('<LiveTaskStrip');
+  });
+
+  it("groups the task strip and keeps the matrix switch legend visually quiet", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const matrix = readFileSync(path.resolve(currentDir, "LiveOverviewMatrix.svelte"), "utf8");
+    expect(source).toContain('class="live-panel__task-navigation"');
+    expect(matrix).toContain('legendHidden={true}');
+  });
+
+  it("avoids repeating the active detail tab label in the content", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    expect(source).not.toContain('<p class="choice-switch__legend">Detail</p>');
+    for (const label of ["Abgabe", "Rückmeldung", "Auswertung"]) {
+      expect(source).not.toContain(`<p class="workspace-label">${label}</p>`);
+    }
+    expect(source).toContain('role="tabpanel" aria-label={tabLabel(activePanelTab)}');
+  });
+
+  it("shares the transparent choice-switch styling with the detail tabs", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    const styles = readFileSync(path.resolve(currentDir, "../../lib/styles/ui-primitives.css"), "utf8");
+    expect(source).toContain('class="choice-tabs__tab"');
+    expect(source).not.toContain('class:workspace-tab--active');
+    expect(styles).toContain('.choice-switch__option span,\n.choice-tabs__tab');
+    expect(styles).toContain('.choice-tabs__tab[aria-selected="true"]');
+  });
+
+  it("separates the task context from the response in the detail below the matrix", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
+    expect(source.indexOf('<LiveOverviewMatrix')).toBeLessThan(source.indexOf('aria-label="Schülerdetail"'));
+    expect(source).toContain('live-panel-summary__context');
+    expect(source).toContain('live-panel-summary__response');
+    expect(source).toContain('Aufgabenstellung</p>');
+  });
+
   it("routes browser fetch 401 responses through shared auth recovery before live errors", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

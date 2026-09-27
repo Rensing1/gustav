@@ -95,6 +95,70 @@ function summary(studentName = "Anna"): LiveSummaryPayload {
 }
 
 describe("live workspace controller", () => {
+  it("refreshes practice after 30 seconds even on 204 without advancing the delta cursor", async () => {
+    const initial = summary();
+    initial.practice_modules = [{ id: "practice", section_id: "section", title: "Üben", task_ids: [] }];
+    initial.rows[0].practice = [{ module_id: "practice", status: "secure", task_count: 1, due_tasks_count: 0, secure_tasks_count: 1, partial_tasks_count: 0, insufficient_tasks_count: 0, latest_activity_at: null, next_due_at: "2026-04-13T10:00:30Z" }];
+    let now = 0;
+    const refreshed = structuredClone(initial);
+    refreshed.cursor = "2026-04-13T11:00:00+00:00";
+    refreshed.rows[0].practice[0] = { ...initial.rows[0].practice[0], status: "due", due_tasks_count: 1, secure_tasks_count: 0, next_due_at: null };
+    const fetchSummary = vi.fn().mockResolvedValue(refreshed);
+    const controller = createLiveWorkspaceController({
+      initialSummary: initial, initialDetail: null,
+      initialSelection: { courseId: "course-1", unitId: "unit-1", studentSub: "student-1", taskId: "task-1" },
+      initialCursor: initial.cursor, now: () => now,
+      fetchSummary, fetchDetail: vi.fn(), fetchDelta: vi.fn().mockResolvedValue({ status: 204 })
+    });
+    now = 29_999;
+    expect(await controller.poll()).toBe(false);
+    now = 30_000;
+    expect(await controller.poll()).toBe(true);
+    expect(fetchSummary).toHaveBeenCalledTimes(1);
+    expect(controller.getState().cursor).toBe(initial.cursor);
+    expect(controller.getState().summary).toEqual(refreshed);
+    now = 59_999;
+    expect(await controller.poll()).toBe(false);
+    fetchSummary.mockRejectedValueOnce(new Error("unavailable"));
+    now = 60_000;
+    await expect(controller.poll()).rejects.toThrow("unavailable");
+    expect(await controller.poll()).toBe(true);
+  });
+
+  it("does not periodically reload a learning-only summary on 204", async () => {
+    let now = 0;
+    const fetchSummary = vi.fn();
+    const controller = createLiveWorkspaceController({
+      initialSummary: summary(), initialDetail: null,
+      initialSelection: { courseId: "course-1", unitId: "unit-1", studentSub: null, taskId: null },
+      initialCursor: summary().cursor, now: () => now,
+      fetchSummary, fetchDetail: vi.fn(), fetchDelta: vi.fn().mockResolvedValue({ status: 204 })
+    });
+    now = 60_000;
+    expect(await controller.poll()).toBe(false);
+    expect(fetchSummary).not.toHaveBeenCalled();
+  });
+
+  it("keeps an empty practice module taskless across polling and URL normalization", async () => {
+    const initial = summary();
+    initial.practice_modules = [{ id: "empty", section_id: "section", title: "Leer", task_ids: [] }];
+    const fetchDetail = vi.fn();
+    const syncHref = vi.fn();
+    const controller = createLiveWorkspaceController({
+      initialSummary: initial, initialDetail: submission("task-1", "Vorherige Abgabe"),
+      initialSelection: { courseId: "course-1", unitId: "unit-1", studentSub: "student-1", taskId: "task-1" },
+      initialCursor: initial.cursor, syncHref, fetchDetail,
+      fetchSummary: vi.fn().mockResolvedValue(initial),
+      fetchDelta: vi.fn().mockResolvedValue({ status: 200, cursor: initial.cursor, cells: [] })
+    });
+    await controller.selectPracticeModule("student-1", "empty");
+    expect(controller.getState()).toMatchObject({ taskId: null, detail: null, practiceModuleId: "empty" });
+    expect(syncHref).toHaveBeenLastCalledWith("/live?course_id=course-1&unit_id=unit-1&student_sub=student-1&practice_module_id=empty");
+    await controller.poll();
+    expect(controller.getState()).toMatchObject({ taskId: null, detail: null, practiceModuleId: "empty" });
+    expect(fetchDetail).not.toHaveBeenCalled();
+  });
+
   it("reserves route-scoped scrollbar space and stacks the task toolbar", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const source = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");

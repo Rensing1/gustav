@@ -12,6 +12,8 @@ Eine kompakte Spalte „Üben“ zählt neue/fällige (blau) und aktuell sichere
 
 Das Schülerdetail steht unter der Tabelle. Aufgabenstellung und Abgabe/Rückmeldung/Auswertung sind auf breiten Bildschirmen nebeneinander, mobil untereinander angeordnet. Die kompakte Aufgabenleiste steht linksbündig unter dem Namen. Ein reservierter Scrollbalkenbereich verhindert wechselnde Spaltenbreiten beim Reiterwechsel. Die Auswahl bleibt in der URL erhalten.
 
+Die Auswahl eines Übungsmoduls wird über `practice_module_id` in der Live-URL erhalten. Bei einem leeren Modul bleiben Aufgaben-ID und Abgabedetail leer; es wird keine Aufgabe eines anderen Moduls als Ersatz geöffnet. Diese Auswahl bleibt auch nach Neuladen und Live-Aktualisierung erhalten.
+
 ## Endpunkte (API)
 
 - GET `/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary`
@@ -21,6 +23,7 @@ Das Schülerdetail steht unter der Tabelle. Aufgabenstellung und Abgabe/Rückmel
   - `practice_modules[]` enthält den geordneten Übungskatalog einschließlich leerer Module. Jede Schülerzeile enthält `practice[]` mit Modul-ID, Status, Aufgabenanzahl, disjunkten Anzahlen `due_tasks_count`, `secure_tasks_count`, `partial_tasks_count`, `insufficient_tasks_count` sowie `latest_activity_at` und `next_due_at`.
   - Statuspriorität: `locked` bei fehlender Freischaltung, sonst `due`, `insufficient`, `partial`, `secure`. Sichere Aufgaben zählen nur dann grün, wenn ihre Fälligkeit noch in der Zukunft liegt. Ein leeres zugängliches Modul wird nicht als sicher eingestuft.
   - Kann der DB-basierte Cursor-Seed nicht bestimmt werden, antwortet der Endpunkt fail-closed mit `503 service_unavailable` und `detail=summary_cursor_unavailable`, statt still auf die Host-Uhr zurückzufallen.
+  - Schlägt der erforderliche Übungsaggregatabruf fehl, folgt eine private `503 service_unavailable`-Antwort mit `detail=teaching_repository_unavailable` und `Vary: Origin`; fehlende Aggregate werden nicht als erfolgreiche Nullzählung ausgegeben.
   - `average_score` ist ein optionaler Float (0..10) für den Durchschnitt der Kriterien-Scores der
     neuesten Einreichung; `null` wenn keine abgeschlossene Auswertung vorliegt.
   - `created_at` ist der UTC-Zeitstempel der neuesten Abgabe in dieser Zelle; `null`, wenn noch keine Abgabe existiert.
@@ -73,7 +76,7 @@ OpenAPI: siehe `api/openapi.yml` (Schemas `TeachingUnitLiveRow`, `TeachingUnitTa
 3) Cursor setzen: `cursor = summary.cursor`
 4) Polling (alle 3–5 s): `GET …/delta?updated_since=cursor`
    - Bei `200`: Zellen in UI anwenden, `cursor = max(cells[].changed_at)`; ein anschließender Summary-Reload aktualisiert nur das UI-Read-Model, aber überschreibt diesen Delta-Cursor nicht
-   - Bei `204`: UI unverändert lassen
+   - Bei `204`: reine Lernansichten unverändert lassen. Bei vorhandenem Übungskatalog nach 30 Sekunden seit dem letzten erfolgreichen Summary-Abruf beim nächsten Poll die Summary erneut lesen, damit Fälligkeiten auch ohne neue Abgabe aktuell werden. Der Delta-Cursor bleibt unverändert; ein fehlgeschlagener Summary-Abruf wird beim nächsten Poll erneut versucht.
 
 Hinweis fuer das kanonische `/live`-Dashboard:
 

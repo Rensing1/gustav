@@ -4,6 +4,7 @@
 
 ### Live-Matrix für Lernaufgaben und Übungsmodule
 
+- fix(live): Ausgefallene Übungsaggregate liefern 503 statt falscher Nullwerte. Zeitabhängige Übungsstände werden auch ohne neue Abgaben regelmäßig aktualisiert. Leere Übungsmodule behalten eine ausdrückliche Auswahl ohne fremde Aufgabe, einschließlich Neuladen und Polling.
 - feat(teaching): Die Live-Ansicht zeigt Schülerzeilen und nach Modulen gruppierte Aufgabenspalten. Numerische Bewertungen und neutrale Zustände unterscheiden bewertete, eingereichte und offene Aufgaben.
 - feat(practice): Eine kompakte Übungszusammenfassung führt zur getrennten Übungsmatrix. Neue beziehungsweise fällige Aufgaben und aktuell sichere Aufgaben werden getrennt gezählt; gesperrte Module bleiben neutral.
 - design(live): Kompakte Werkzeugansicht mit Details unterhalb der Matrix, einheitlichen transparenten Umschaltern und mobiler Modulauswahl. Reservierter Scrollbalkenplatz hält die Detailspalten beim Reiterwechsel stabil.

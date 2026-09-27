@@ -8,6 +8,7 @@ export type LiveWorkspaceSelection = {
   unitId: string | null;
   studentSub: string | null;
   taskId: string | null;
+  practiceModuleId?: string | null;
 };
 
 type LiveWorkspaceResolvedSelection = {
@@ -40,6 +41,7 @@ type LiveDeltaResult =
     };
 
 type LiveWorkspaceControllerOptions = {
+  now?: () => number;
   initialSummary: LiveSummaryPayload | null;
   initialDetail: LiveDetailSubmission | null;
   initialSelection: LiveWorkspaceSelection;
@@ -69,6 +71,9 @@ export function buildLivePageHref(selection: LiveWorkspaceSelection): string {
   }
   if (selection.taskId) {
     params.set("task_id", selection.taskId);
+  }
+  if (selection.practiceModuleId) {
+    params.set("practice_module_id", selection.practiceModuleId);
   }
   return params.size ? `/live?${params.toString()}` : "/live";
 }
@@ -157,11 +162,22 @@ export function normalizeLiveSelection(
     };
   }
   const taskIds = new Set(row.tasks.map((cell) => cell.task_id));
+  const practiceModule = summary?.practice_modules?.find((module) => module.id === requested.practiceModuleId);
+  if (practiceModule) {
+    // An empty module is a valid selection, not a request for a default task.
+    return {
+      ...requested,
+      studentSub: row.student.sub,
+      taskId: requested.taskId && practiceModule.task_ids.includes(requested.taskId)
+        ? requested.taskId : practiceModule.task_ids[0] ?? null
+    };
+  }
   const taskId = requested.taskId && taskIds.has(requested.taskId)
     ? requested.taskId
     : defaultTaskIdForStudent(summary, requested.studentSub);
   return {
     ...requested,
+    ...(requested.practiceModuleId ? { practiceModuleId: null } : {}),
     studentSub: row.student.sub,
     taskId
   };
@@ -178,7 +194,7 @@ function liveTaskLabel(task: LiveTask): string {
 
 export function buildDashboardViewModel(args: {
   summary: LiveSummaryPayload | null;
-  selection: Pick<LiveWorkspaceSelection, "courseId" | "unitId" | "studentSub" | "taskId">;
+  selection: LiveWorkspaceSelection;
   detail: LiveDetailSubmission | null;
   course: { id: string; title: string; href: string };
   unit: { id: string; title: string; position: number; href: string };
@@ -310,11 +326,14 @@ export function createLiveWorkspaceController(options: LiveWorkspaceControllerOp
     unitId: options.initialSelection.unitId,
     studentSub: options.initialSelection.studentSub,
     taskId: options.initialSelection.taskId,
+    practiceModuleId: options.initialSelection.practiceModuleId,
     cursor: options.initialCursor,
     activeSortKey: null,
     activeSortDirection: null
   };
   let requestToken = 0;
+  const now = options.now ?? Date.now;
+  let lastSummaryRefresh = now();
 
   function syncHref(): void {
     if (typeof options.syncHref === "function") {
@@ -349,6 +368,7 @@ export function createLiveWorkspaceController(options: LiveWorkspaceControllerOp
     state.unitId = normalized.unitId;
     state.studentSub = normalized.studentSub;
     state.taskId = normalized.taskId;
+    state.practiceModuleId = normalized.practiceModuleId;
     state.detail = detail;
     syncHref();
     return { ...state };
@@ -370,7 +390,9 @@ export function createLiveWorkspaceController(options: LiveWorkspaceControllerOp
       state.unitId = args.selection.unitId;
       state.studentSub = args.selection.studentSub;
       state.taskId = args.selection.taskId;
+      state.practiceModuleId = args.selection.practiceModuleId;
       state.cursor = args.cursor;
+      lastSummaryRefresh = now();
       return { ...state };
     },
     toggleSort(key: SortKey): LiveWorkspaceControllerState {
@@ -406,6 +428,12 @@ export function createLiveWorkspaceController(options: LiveWorkspaceControllerOp
         taskId
       });
     },
+    async selectPracticeModule(studentSub: string, practiceModuleId: string, taskId: string | null = null): Promise<LiveWorkspaceControllerState> {
+      return applySelection({
+        courseId: state.courseId, unitId: state.unitId,
+        studentSub, taskId, practiceModuleId
+      });
+    },
     async selectCell(studentSub: string, taskId: string): Promise<LiveWorkspaceControllerState> {
       return applySelection({
         courseId: state.courseId,
@@ -429,15 +457,19 @@ export function createLiveWorkspaceController(options: LiveWorkspaceControllerOp
         unitId: state.unitId,
         cursor: state.cursor
       });
-      if (result.status !== 200) {
+      // Practice due dates can change without a submission event. Re-read the
+      // server projection at a bounded cadence; never classify in the browser.
+      const practiceRefreshDue = Boolean(state.summary?.practice_modules?.length)
+        && now() - lastSummaryRefresh >= 30_000;
+      if (result.status !== 200 && !practiceRefreshDue) {
         return false;
       }
       const nextSummary = await options.fetchSummary({
         courseId: state.courseId,
         unitId: state.unitId
       });
-      const nextCursor = result.cursor;
-      const activeCellChanged = result.cells.some(
+      const nextCursor = result.status === 200 ? result.cursor : state.cursor;
+      const activeCellChanged = result.status === 200 && result.cells.some(
         (cell) => cell.student_sub === state.studentSub && cell.task_id === state.taskId
       );
       const normalized = normalizeLiveSelection(nextSummary, state);
@@ -458,9 +490,11 @@ export function createLiveWorkspaceController(options: LiveWorkspaceControllerOp
         nextDetail = null;
       }
       state.summary = nextSummary;
+      lastSummaryRefresh = now();
       state.cursor = nextCursor;
       state.studentSub = normalized.studentSub;
       state.taskId = normalized.taskId;
+      state.practiceModuleId = normalized.practiceModuleId;
       state.detail = nextDetail;
       syncHref();
       return true;

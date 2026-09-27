@@ -37,6 +37,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
   const selectedUnitId = url.searchParams.get("unit_id");
   const selectedStudentSub = url.searchParams.get("student_sub");
   const selectedTaskId = url.searchParams.get("task_id");
+  const selectedPracticeModuleId = url.searchParams.get("practice_module_id");
 
   let courseUnits: LiveCourseUnitsView | null = null;
   let summary: LiveSummaryPayload | null = null;
@@ -63,14 +64,16 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
       courseId: selectedCourseId,
       unitId: selectedUnitId,
       studentSub: selectedStudentSub,
-      taskId: selectedTaskId
+      taskId: selectedTaskId,
+      practiceModuleId: selectedPracticeModuleId
     });
     const canonicalHref = buildLivePageHref(normalizedSelection);
     const requestedHref = buildLivePageHref({
       courseId: selectedCourseId,
       unitId: selectedUnitId,
       studentSub: selectedStudentSub,
-      taskId: selectedTaskId
+      taskId: selectedTaskId,
+      practiceModuleId: selectedPracticeModuleId
     });
     if (canonicalHref !== requestedHref) {
       throw redirect(302, canonicalHref);
@@ -112,6 +115,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     selectedCourseId,
     selectedStudentSub,
     selectedTaskId,
+    selectedPracticeModuleId,
     selectedUnitId,
     summary,
     workspaceLayout: "canvas"

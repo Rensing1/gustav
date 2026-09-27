@@ -272,6 +272,7 @@
     detailState = state.detail;
     selectedStudentSubState = state.studentSub;
     selectedTaskIdState = state.taskId;
+    selectedPracticeModuleId = state.practiceModuleId ?? null;
     liveCursor = state.cursor;
   }
 
@@ -304,7 +305,8 @@
         courseId: data.selectedCourseId ?? null,
         unitId: data.selectedUnitId ?? null,
         studentSub: selectedStudentSubState,
-        taskId: selectedTaskIdState
+        taskId: selectedTaskIdState,
+        practiceModuleId: selectedPracticeModuleId
       },
       detail: detailState,
       course: courseRef,
@@ -410,11 +412,7 @@
     activeMatrixView = "practice";
     selectedPracticeModuleId = moduleId || null;
     mobilePracticeModuleId = moduleId || mobilePracticeModuleId;
-    if (taskId) {
-      await workspaceController.selectCell(studentSub, taskId);
-    } else {
-      await workspaceController.selectStudent(studentSub);
-    }
+    await workspaceController.selectPracticeModule(studentSub, moduleId, taskId);
     syncWorkspaceState();
   }
 
@@ -457,9 +455,11 @@
         unitId: data.selectedUnitId ?? null,
         studentSub: data.selectedStudentSub ?? null,
         taskId: data.selectedTaskId ?? null,
+        practiceModuleId: data.selectedPracticeModuleId ?? null,
       },
       cursor: data.liveCursorSeed ?? null,
     });
+    mobilePracticeModuleId = data.selectedPracticeModuleId ?? "";
     syncWorkspaceState();
   });
 
@@ -470,7 +470,9 @@
 
   $effect(() => {
     const selectedTask = summaryState?.tasks.find((task) => task.id === selectedTaskIdState);
-    if (selectedTask?.module_kind === "practice") {
+    if (selectedPracticeModuleId && !selectedTask) {
+      activeMatrixView = "practice";
+    } else if (selectedTask?.module_kind === "practice") {
       activeMatrixView = "practice";
       selectedPracticeModuleId = selectedTask.module_id;
     } else if (selectedTask && selectedPracticeModuleId === null) {
@@ -620,7 +622,9 @@
               </section>
             {/if}
 
-            {#if dashboardState.selected_student_panel.selected_task_detail}
+            {#if selectedPracticeContext && selectedPracticeContext.module.task_ids.length === 0}
+              <p class="workspace-empty">Dieses Übungsmodul enthält noch keine Aufgaben.</p>
+            {:else if dashboardState.selected_student_panel.selected_task_detail}
               {@const selectedSubmission = dashboardState.selected_student_panel.selected_task_detail}
               {@const selectedFile = primaryFile(selectedSubmission)}
               {@const artifactSubmission = detailToLearningSubmission(selectedSubmission)}

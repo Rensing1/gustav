@@ -1,4 +1,5 @@
 import { currentUserSub, login } from "./support/auth";
+import { apiHeaders, expectApiOk } from "./support/api";
 import { newBrowserContext } from "./support/browser-context";
 import { e2eEmail, e2ePassword } from "./support/e2e-env";
 import { expect, test } from "./support/feature-test";
@@ -79,6 +80,14 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
 
     // Practice stays a separate matrix and supports the same detail navigation.
     const practice = await seedLearnerPracticeCourse(teacher, learner, "Live-Übungsmatrix");
+    const phases = await teacher.request.get(`/api/teaching/units/${practice.unitId}/phases`);
+    await expectApiOk(phases);
+    const emptyModule = await teacher.request.post(`/api/teaching/units/${practice.unitId}/modules`, {
+      headers: apiHeaders(`/teaching/units/${practice.unitId}`),
+      data: { title: "Leeres Übungsmodul", phase_id: (await phases.json())[0].id, module_kind: "practice" }
+    });
+    await expectApiOk(emptyModule, 201);
+    const emptyModuleId = (await emptyModule.json()).id;
     await teacher.getByRole("link", { name: "Live", exact: true }).click();
     await teacher.getByRole("combobox", { name: "Kurs", exact: true }).selectOption(practice.courseId);
     await teacher.getByRole("combobox", { name: "Lerneinheit", exact: true }).selectOption(practice.unitId);
@@ -96,6 +105,16 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
     const tableBounds = await practiceMatrix.boundingBox();
     const detailBounds = await detail.boundingBox();
     expect(detailBounds!.y).toBeGreaterThan(tableBounds!.y + tableBounds!.height);
+
+    // Empty modules must never borrow an instruction from another module.
+    await teacher.getByRole("combobox", { name: "Übungsmodul", exact: true }).selectOption(emptyModuleId);
+    await practiceMatrix.getByRole("button", { name: /Übungsmodul Leeres Übungsmodul:/ }).click();
+    await expect(detail).toContainText("Dieses Übungsmodul enthält noch keine Aufgaben.");
+    await expect(detail).not.toContainText("Erkläre, warum ein Test zuerst rot sein soll.");
+    expect(new URL(teacher.url()).searchParams.has("task_id")).toBe(false);
+    await teacher.reload();
+    await expect(detail).toContainText("Dieses Übungsmodul enthält noch keine Aufgaben.");
+    await expect(teacher.getByRole("radio", { name: "Üben", exact: true })).toBeChecked();
   } finally {
     await Promise.allSettled([learnerContext.close(), teacherContext.close()]);
   }

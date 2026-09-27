@@ -37,6 +37,21 @@ function summaryPayload() {
 }
 
 describe("live page load", () => {
+  it("restores an empty practice module without redirecting to a default task or fetching detail", async () => {
+    const payload = { ...summaryPayload(), practice_modules: [{ id: "empty", section_id: "section", title: "Leer", task_ids: [] }] };
+    requireBackendJsonMock.mockImplementation(async (_fetch, _cookies, path) => {
+      if (path.endsWith("/submissions/summary")) return payload;
+      if (path.endsWith("/units")) return { course: { id: "course-1" }, units: [] };
+      if (path.includes("/courses?")) return [];
+      throw new Error(`unexpected_detail_fetch:${path}`);
+    });
+    const result = await load({
+      fetch: vi.fn(), cookies: {}, parent: vi.fn(),
+      url: new URL("http://test.local/live?course_id=course-1&unit_id=unit-1&student_sub=student-1&practice_module_id=empty")
+    } as unknown as Parameters<typeof load>[0]);
+    expect(result).toMatchObject({ selectedPracticeModuleId: "empty", selectedTaskId: null, detail: null });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     requireParentSpaceBootstrapMock.mockResolvedValue({

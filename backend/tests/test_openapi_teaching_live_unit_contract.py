@@ -27,11 +27,13 @@ def test_openapi_has_unit_live_summary_path_and_cache_header():
     # Basic response shape
     schema = resp200["content"]["application/json"]["schema"]
     assert schema["type"] == "object"
-    assert set(schema["required"]) >= {"tasks", "rows", "cursor"}
+    assert set(schema["required"]) >= {"tasks", "practice_modules", "rows", "cursor"}
     # Task list in the summary must include the task kind so UIs can render
     # H5P cells differently from native/visual tasks.
     task_items = schema["properties"]["tasks"]["items"]
     assert "kind" in task_items.get("required", []), "summary tasks must include kind"
+    assert {"module_id", "module_kind"} <= set(task_items.get("properties", {}))
+    assert "module_kind" in task_items.get("required", [])
     assert schema["properties"]["cursor"]["type"] == "string"
     assert schema["properties"]["cursor"]["format"] == "date-time"
     cursor_description = schema["properties"]["cursor"]["description"]
@@ -63,6 +65,8 @@ def test_openapi_teaching_live_schemas_present():
     assert "TeachingStudentRef" in schemas
     assert "TeachingUnitTaskCell" in schemas
     assert "TeachingUnitLiveRow" in schemas
+    assert "TeachingLivePracticeModule" in schemas
+    assert "TeachingLivePracticeCell" in schemas
     assert "TeachingUnitDeltaCell" in schemas
 
     # H5P tasks keep `h5p_completed` but also expose the latest raw score.
@@ -71,6 +75,16 @@ def test_openapi_teaching_live_schemas_present():
     assert "score_raw" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose score_raw"
     assert "score_max" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose score_max"
     assert "created_at" in task_cell.get("properties", {}), "TeachingUnitTaskCell must expose created_at"
+    practice_cell = schemas["TeachingLivePracticeCell"]
+    assert practice_cell["properties"]["status"]["enum"] == [
+        "locked", "due", "insufficient", "partial", "secure"
+    ]
+    assert {
+        "due_tasks_count", "secure_tasks_count", "partial_tasks_count",
+        "insufficient_tasks_count", "latest_activity_at", "next_due_at",
+    } <= set(practice_cell["required"])
+    live_row = schemas["TeachingUnitLiveRow"]
+    assert "practice" in live_row["required"]
     delta_cell = schemas["TeachingUnitDeltaCell"]
     assert "h5p_completed" in delta_cell.get("properties", {}), "TeachingUnitDeltaCell must expose h5p_completed"
     assert "score_raw" in delta_cell.get("properties", {}), "TeachingUnitDeltaCell must expose score_raw"

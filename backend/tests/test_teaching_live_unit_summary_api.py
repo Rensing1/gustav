@@ -88,6 +88,53 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
     assert r.status_code in (201, 204)
 
 
+async def test_summary_exposes_practice_catalog_counts_and_membership_boundary():
+    """The limited app role reads real practice aggregates without leaking them."""
+    _require_db_or_skip()
+    owner = _session_store().create(sub=f"live-owner-{uuid.uuid4()}", name="Owner", roles=["teacher"])
+    learner = _session_store().create(sub=f"live-student-{uuid.uuid4()}", name="Learner", roles=["student"])
+    other = _session_store().create(sub=f"live-other-{uuid.uuid4()}", name="Other", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+        course = await _create_course(client)
+        unit = await _create_unit(client, unit_type="modular")
+        try:
+            await _attach_unit(client, course, unit["id"])
+            await _add_member(client, course, learner.sub)
+            phases = await client.get(f"/api/teaching/units/{unit['id']}/phases")
+            module = await client.post(f"/api/teaching/units/{unit['id']}/modules", json={"title": "Wiederholen", "phase_id": phases.json()[0]["id"], "module_kind": "practice"})
+            assert module.status_code == 201, module.text
+            module_id = module.json()["id"]
+            target = await client.get(f"/api/teaching/units/{unit['id']}/modules/{module_id}/content-target")
+            section = target.json()["section_id"]
+            task = await client.post(f"/api/teaching/units/{unit['id']}/sections/{section}/tasks", json={"instruction_md": "Übung", "criteria": ["Korrekt"], "teacher_context_md": "Kontext", "model_solution_md": "Lösung"})
+            assert task.status_code == 201, task.text
+            path = f"/api/teaching/courses/{course}/units/{unit['id']}/submissions/summary"
+            response = await client.get(path)
+            assert response.status_code == 200
+            assert response.headers["cache-control"] == "private, no-store"
+            assert "Origin" in response.headers["vary"]
+            payload = response.json()
+            assert payload["practice_modules"] == [{"id": module_id, "section_id": section, "title": "Wiederholen", "task_ids": [task.json()["id"]]}]
+            assert payload["tasks"][0]["module_kind"] == "practice"
+            assert payload["tasks"][0]["module_id"] == module_id
+            cell, = payload["rows"][0]["practice"]
+            assert cell["status"] == "due"
+            assert cell["due_tasks_count"] == cell["task_count"] == 1
+            assert cell["secure_tasks_count"] == 0
+            for session in (learner, other):
+                client.cookies.set(main.SESSION_COOKIE_NAME, session.session_id)
+                assert (await client.get(path)).status_code == 403
+            client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+            removed = await client.delete(f"/api/teaching/courses/{course}/members/{learner.sub}")
+            assert removed.status_code == 204
+            assert (await client.get(path)).json()["rows"] == []
+        finally:
+            client.cookies.set(main.SESSION_COOKIE_NAME, owner.session_id)
+            await client.delete(f"/api/teaching/courses/{course}")
+            await client.delete(f"/api/teaching/units/{unit['id']}")
+
+
 async def test_diagnostics_links_keep_course_unit_and_learner_scope(monkeypatch):
     """Real persisted course membership determines both Live targets and access."""
     from urllib.parse import parse_qs, urlsplit

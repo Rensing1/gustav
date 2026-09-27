@@ -90,6 +90,72 @@ def list_unit_latest_submission_aggregates_for_owner(
         )
     return aggregates
 
+
+def list_unit_live_practice_aggregates_for_owner(
+    *,
+    dsn: str,
+    psycopg_module,
+    course_id: str,
+    unit_id: str,
+    owner_sub: str,
+    student_subs: Sequence[str],
+) -> List[dict]:
+    """Return practice-module aggregates for an explicit learner page.
+
+    The database helper repeats ownership, course-unit, membership and modular
+    access checks. One call covers the already paginated roster and therefore
+    avoids a query per learner or practice module.
+    """
+    normalized_students = [str(student) for student in student_subs if str(student or "").strip()]
+    if not normalized_students:
+        return []
+
+    with psycopg_module.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select set_config('app.current_sub', %s, true)", (owner_sub,))
+            cur.execute(
+                """
+                select student_sub,
+                       module_id::text,
+                       section_id::text,
+                       module_title,
+                       module_position,
+                       access_status,
+                       task_count,
+                       due_tasks_count,
+                       secure_tasks_count,
+                       partial_tasks_count,
+                       insufficient_tasks_count,
+                       latest_activity_at,
+                       next_due_at
+                  from public.get_unit_live_practice_aggregates_for_owner(%s, %s, %s, %s)
+                """,
+                (owner_sub, course_id, unit_id, normalized_students),
+            )
+            rows = cur.fetchall() or []
+
+    def iso(value: object) -> str | None:
+        return value.astimezone(timezone.utc).isoformat() if isinstance(value, datetime) else None
+
+    return [
+        {
+            "student_sub": str(row[0] or ""),
+            "module_id": str(row[1] or ""),
+            "section_id": str(row[2] or ""),
+            "module_title": str(row[3] or ""),
+            "module_position": int(row[4] or 0),
+            "access_status": str(row[5] or "locked"),
+            "task_count": int(row[6] or 0),
+            "due_tasks_count": int(row[7] or 0),
+            "secure_tasks_count": int(row[8] or 0),
+            "partial_tasks_count": int(row[9] or 0),
+            "insufficient_tasks_count": int(row[10] or 0),
+            "latest_activity_at": iso(row[11]),
+            "next_due_at": iso(row[12]),
+        }
+        for row in rows
+    ]
+
 def list_unit_live_helper_rows(
     *,
     dsn: str,

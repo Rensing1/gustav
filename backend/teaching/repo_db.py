@@ -1105,6 +1105,23 @@ class DBTeachingRepo:
             student_subs=student_subs,
         )
 
+    def list_unit_live_practice_aggregates_for_owner(
+        self,
+        *,
+        course_id: str,
+        unit_id: str,
+        owner_sub: str,
+        student_subs: Sequence[str],
+    ) -> List[dict]:
+        return _repo_live_queries.list_unit_live_practice_aggregates_for_owner(
+            dsn=self._dsn,
+            psycopg_module=psycopg,
+            course_id=course_id,
+            unit_id=unit_id,
+            owner_sub=owner_sub,
+            student_subs=student_subs,
+        )
+
     def get_latest_submission_for_owner(
         self,
         *,

@@ -55,15 +55,18 @@ def list_sections_for_author(*, dsn: str, psycopg_module, unit_id: str, author_i
             cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
             cur.execute(
                 """
-                select id::text,
-                       unit_id::text,
-                       title,
-                       position,
-                       to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
-                       to_char(updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"')
-                from public.unit_sections
-                where unit_id = %s
-                order by position asc, id
+                select section.id::text,
+                       section.unit_id::text,
+                       section.title,
+                       section.position,
+                       to_char(section.created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                       to_char(section.updated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'),
+                       module.id::text,
+                       coalesce(module.module_kind, 'learning')
+                  from public.unit_sections section
+                  left join public.unit_modules module on module.section_id = section.id
+                 where section.unit_id = %s
+                 order by section.position asc, section.id
                 """,
                 (unit_id,),
             )
@@ -76,6 +79,8 @@ def list_sections_for_author(*, dsn: str, psycopg_module, unit_id: str, author_i
             "position": r[3],
             "created_at": r[4],
             "updated_at": r[5],
+            "module_id": r[6],
+            "module_kind": str(r[7] or "learning"),
         }
         for r in rows
     ]

@@ -24,6 +24,7 @@ from starlette.concurrency import run_in_threadpool
 from backend.storage.config import get_submissions_bucket
 from backend.teaching.errors import TeachingRepositoryUnavailable
 from backend.teaching.live_h5p_review import issue_h5p_review_token
+from backend.teaching.live_practice import build_practice_cells_by_student, build_practice_modules
 from backend.teaching.live_tasks import load_live_tasks
 from backend.teaching.storage import NullStorageAdapter
 from backend.web.query_validation import parse_bounded_pagination
@@ -207,7 +208,8 @@ def _build_unit_live_summary(
     try:
         from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
         if isinstance(repo, DBTeachingRepo):
-            tasks = load_live_tasks(repo, unit_id, sub)
+            sections = repo.list_sections_for_author(unit_id, sub)
+            tasks = load_live_tasks(repo, unit_id, sub, sections=sections)
         else:
             # In-memory repo fallback
             section_ids = [sid for sid, sd in repo.sections.items() if sd.unit_id == unit_id]
@@ -223,11 +225,30 @@ def _build_unit_live_summary(
                         "kind": str(getattr(td, "kind", "native") or "native"),
                         "section_id": sid,
                         "section_title": str(repo.sections[sid].title or ""),
+                        "module_id": None,
+                        "module_kind": "learning",
                     })
     except TeachingRepositoryUnavailable:
         raise
     except Exception:
         tasks = []
+
+    practice_modules: list[dict[str, Any]] = []
+    try:
+        from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+        if isinstance(repo, DBTeachingRepo):
+            practice_modules = build_practice_modules(
+                sections=sections,
+                tasks=tasks,
+            )
+    except TeachingRepositoryUnavailable:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "unit_summary_practice_catalog_unavailable error_type=%s",
+            exc.__class__.__name__,
+            extra={"course_id": course_id, "unit_id": unit_id},
+        )
 
     rows_out: list[dict] = []
     if include_students:
@@ -420,10 +441,34 @@ def _build_unit_live_summary(
             score_map=score_map,
             h5p_map=h5p_map,
         )
+        practice_by_student: dict[str, list[dict[str, Any]]] = {}
+        if member_subs:
+            try:
+                from backend.teaching.repo_db import DBTeachingRepo  # type: ignore
+                if isinstance(repo, DBTeachingRepo):
+                    practice_aggregates = repo.list_unit_live_practice_aggregates_for_owner(
+                        course_id=course_id,
+                        unit_id=unit_id,
+                        owner_sub=sub,
+                        student_subs=member_subs,
+                    )
+                    practice_by_student = build_practice_cells_by_student(practice_aggregates)
+            except TeachingRepositoryUnavailable:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "unit_summary_practice_unavailable error_type=%s",
+                    exc.__class__.__name__,
+                    extra={"course_id": course_id, "unit_id": unit_id},
+                )
+        for row in rows_out:
+            student_sub = str(row.get("student", {}).get("sub") or "")
+            row["practice"] = practice_by_student.get(student_sub, [])
 
     payload = {
         "cursor": snapshot_cursor,
         "tasks": tasks,
+        "practice_modules": practice_modules,
         "rows": rows_out,
     }
     # private + Vary: Origin per contract

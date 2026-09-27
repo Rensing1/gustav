@@ -1434,7 +1434,7 @@ components:
           type: string
     LiveTask:
       type: object
-      required: [id, instruction_md, position, kind]
+      required: [id, instruction_md, position, kind, module_kind]
       properties:
         id:
           type: string
@@ -1444,6 +1444,14 @@ components:
           type: integer
         kind:
           type: string
+        module_id:
+          type: string
+          nullable: true
+          description: Kennung des modularen Graphknotens; bei linearen Abschnitten null.
+        module_kind:
+          type: string
+          enum: [learning, practice]
+          description: Trennt reguläre Lernaufgaben von wiederholbaren Übungsaufgaben.
         section_id:
           type: string
           description: Bestehender Abschnitt beziehungsweise Inhaltsabschnitt des Moduls, zur Gruppierung der Aufgaben.
@@ -4014,9 +4022,71 @@ components:
           description: >
             UTC timestamp of the latest submission for this student/task cell.
             Null when no submission exists yet.
+    TeachingLivePracticeModule:
+      type: object
+      required: [id, section_id, title, task_ids]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        section_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        task_ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: Übungsaufgaben in ihrer fachlichen Modulreihenfolge.
+    TeachingLivePracticeCell:
+      type: object
+      required:
+        - module_id
+        - status
+        - task_count
+        - due_tasks_count
+        - secure_tasks_count
+        - partial_tasks_count
+        - insufficient_tasks_count
+        - latest_activity_at
+        - next_due_at
+      additionalProperties: false
+      properties:
+        module_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [locked, due, insufficient, partial, secure]
+        task_count:
+          type: integer
+          minimum: 0
+        due_tasks_count:
+          type: integer
+          minimum: 0
+          description: Neue oder zum Abfragezeitpunkt fällige zugängliche Aufgaben.
+        secure_tasks_count:
+          type: integer
+          minimum: 0
+          description: Sicher eingestufte Aufgaben mit einem zukünftigen Fälligkeitszeitpunkt.
+        partial_tasks_count:
+          type: integer
+          minimum: 0
+        insufficient_tasks_count:
+          type: integer
+          minimum: 0
+        latest_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_due_at:
+          type: string
+          format: date-time
+          nullable: true
     TeachingUnitLiveRow:
       type: object
-      required: [student, tasks]
+      required: [student, tasks, practice]
       additionalProperties: false
       properties:
         student:
@@ -4025,6 +4095,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TeachingUnitTaskCell'
+        practice:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeachingLivePracticeCell'
     TeachingUnitDeltaCell:
       type: object
       description: Single cell change in the live overview matrix.
@@ -14533,7 +14607,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [cursor, tasks, rows]
+                required: [cursor, tasks, practice_modules, rows]
                 properties:
                   cursor:
                     type: string
@@ -14543,7 +14617,7 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [id, instruction_md, position, kind]
+                      required: [id, instruction_md, position, kind, module_kind]
                       additionalProperties: false
                       properties:
                         id: { type: string, format: uuid }
@@ -14551,10 +14625,22 @@ paths:
                         position: { type: integer }
                         section_id: { type: string, description: Existing backing section identifier for grouping tasks. }
                         section_title: { type: string, description: Actual section or module title; no inferred title. }
+                        module_id:
+                          type: string
+                          format: uuid
+                          nullable: true
+                          description: Backing modular graph node; null for linear sections.
+                        module_kind:
+                          type: string
+                          enum: [learning, practice]
                         kind:
                           type: string
                           enum: [native, h5p, visual, scratch, calliope, filius, dialog]
                           description: Backend task type identifier.
+                  practice_modules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeachingLivePracticeModule'
                   rows:
                     type: array
                     items:

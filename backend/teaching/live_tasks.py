@@ -11,16 +11,19 @@ class LiveTaskReader(Protocol):
     def list_tasks_for_unit_owned(self, unit_id: str, author_id: str) -> list[dict[str, Any]]: ...
 
 
-def load_live_tasks(repo: LiveTaskReader, unit_id: str, author_id: str) -> list[dict[str, Any]]:
+def load_live_tasks(repo: LiveTaskReader, unit_id: str, author_id: str, *, sections: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Load a unit's public task columns with two bounded repository reads.
 
     The caller must own the course and be allowed to read this unit. Repository
     reads retain author-scoped authorization. Empty sections contribute no
     columns; UUID ordering must never replace the lesson's section positions.
     """
-    sections = sorted(repo.list_sections_for_author(unit_id, author_id), key=lambda section: (section["position"], section["id"]))
+    # A caller building both catalogs can reuse the same authorized section read.
+    sections = sorted(sections if sections is not None else repo.list_sections_for_author(unit_id, author_id), key=lambda section: (section["position"], section["id"]))
     positions = {section["id"]: index for index, section in enumerate(sections)}
     titles = {section["id"]: str(section.get("title") or "") for section in sections}
+    module_ids = {section["id"]: section.get("module_id") for section in sections}
+    module_kinds = {section["id"]: str(section.get("module_kind") or "learning") for section in sections}
     tasks = repo.list_tasks_for_unit_owned(unit_id, author_id)
     ordered = sorted(
         (task for task in tasks if task["section_id"] in positions),
@@ -34,6 +37,8 @@ def load_live_tasks(repo: LiveTaskReader, unit_id: str, author_id: str) -> list[
             "kind": str(task.get("kind") or "native"),
             "section_id": task["section_id"],
             "section_title": titles[task["section_id"]],
+            "module_id": module_ids[task["section_id"]],
+            "module_kind": module_kinds[task["section_id"]],
         }
         for task in ordered
     ]

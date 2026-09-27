@@ -11,12 +11,12 @@ Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Te
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 147
+- Inventarisierte Dateien: 149
 - Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 0
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 105
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 106
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 14
-- Statische Migrationstests ohne echte DB-Verbindung: 11
+- Statische Migrationstests ohne echte DB-Verbindung: 12
 
 ## Marker-Regel
 `missing-db-marker` ist ein Fehlerzustand: Jede echte DB/RLS-Testdatei braucht `db_read` oder `db_write`. Test-Infrastruktur wie `conftest.py` und `backend/tests/utils/*` bleibt bewusst markerfrei und wird als `test-infra` klassifiziert.
@@ -61,6 +61,8 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/migration/test_sub_mapping_sync.py | real-db | legacy_migration | covered-by-opt-in-marker | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, migration, psycopg-connect, psycopg-import | Keep existing opt-in gate |
 | backend/tests/migration/test_sub_mapping_sync_keycloak.py | real-db | legacy_migration | covered-by-opt-in-marker | env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, migration, psycopg-connect, psycopg-import | Keep existing opt-in gate |
 | backend/tests/migration/test_teaching_latest_submission_owner_helper_hardening.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
+| backend/tests/migration/test_teaching_live_practice_aggregates_contract.py | migration-static | - | no-db-marker-needed | migration | Keep static migration contract unless it opens a DB connection |
+| backend/tests/migration/test_teaching_live_practice_roundtrip.py | real-db | db_write | marked-db | migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_teaching_live_unit_summary_helper_hardening.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_unit_module_edges_update_hardening.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_verify_db_preflight.py | migration-static | - | no-db-marker-needed | migration | Keep static migration contract unless it opens a DB connection |

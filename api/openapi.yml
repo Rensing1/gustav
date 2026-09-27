@@ -14682,7 +14682,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Service unavailable (`summary_cursor_unavailable`)
+          description: Service unavailable (`summary_cursor_unavailable` or required practice aggregates unavailable); never return empty practice counts for a failed read.
           headers:
             Cache-Control: { description: Security — private, no-store, schema: { type: string, example: private, no-store } }
             Vary: { description: Security — responses vary by Origin, schema: { type: string, example: Origin } }

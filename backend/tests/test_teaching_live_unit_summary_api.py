@@ -88,7 +88,7 @@ async def _add_member(client: httpx.AsyncClient, course_id: str, student_sub: st
     assert r.status_code in (201, 204)
 
 
-async def test_summary_exposes_practice_catalog_counts_and_membership_boundary():
+async def test_summary_exposes_practice_catalog_counts_and_membership_boundary(monkeypatch):
     """The limited app role reads real practice aggregates without leaking them."""
     _require_db_or_skip()
     owner = _session_store().create(sub=f"live-owner-{uuid.uuid4()}", name="Owner", roles=["teacher"])
@@ -122,6 +122,19 @@ async def test_summary_exposes_practice_catalog_counts_and_membership_boundary()
             assert cell["status"] == "due"
             assert cell["due_tasks_count"] == cell["task_count"] == 1
             assert cell["secure_tasks_count"] == 0
+            from backend.teaching.repo_db import DBTeachingRepo
+
+            def unavailable(*_args, **_kwargs):
+                raise psycopg.OperationalError("synthetic read failure")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(DBTeachingRepo, "list_unit_live_practice_aggregates_for_owner", unavailable)
+                failed = await client.get(path)
+                assert failed.status_code == 503
+                assert failed.headers["cache-control"] == "private, no-store"
+                assert "Origin" in failed.headers["vary"]
+                assert failed.json()["error"] == "service_unavailable"
+                assert "synthetic read failure" not in failed.text
             for session in (learner, other):
                 client.cookies.set(main.SESSION_COOKIE_NAME, session.session_id)
                 assert (await client.get(path)).status_code == 403

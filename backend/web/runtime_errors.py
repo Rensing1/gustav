@@ -23,7 +23,7 @@ def _service_unavailable_response() -> JSONResponse:
             "detail": "teaching_repository_unavailable",
         },
         status_code=503,
-        headers={"Cache-Control": "private, no-store"},
+        headers={"Cache-Control": "private, no-store", "Vary": "Origin"},
     )
 
 

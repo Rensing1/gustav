@@ -151,6 +151,7 @@ async def test_repository_unavailable_handler_returns_contract_error() -> None:
     }
     assert response.headers["Cache-Control"] == "private, no-store"
     assert "secret database host" not in response.text
+    assert response.headers["Vary"] == "Origin"
 
 
 @pytest.mark.anyio

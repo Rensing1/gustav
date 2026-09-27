@@ -461,6 +461,8 @@ def _build_unit_live_summary(
                     exc.__class__.__name__,
                     extra={"course_id": course_id, "unit_id": unit_id},
                 )
+                # An unavailable read must not look like measured zero progress.
+                raise TeachingRepositoryUnavailable("practice_aggregates_unavailable") from exc
         for row in rows_out:
             student_sub = str(row.get("student", {}).get("sub") or "")
             row["practice"] = practice_by_student.get(student_sub, [])

@@ -4,17 +4,28 @@ Ziel: Lehrkräfte sehen in der Seite „Unterricht › Live“ für eine Lernein
 
 Begriffe: Abschnitt = Section, Aufgabe = Task, Einreichung = Submission.
 
+## Kanonische Oberfläche
+
+`/live` zeigt eine Schüler-Aufgaben-Matrix: Lernaufgaben sind nach ihren tatsächlichen Modulen beziehungsweise linearen Abschnitten gruppiert. Die Namensspalte bleibt beim horizontalen Scrollen stehen; numerische Bewertungen verwenden Grün ab 8, Orange ab 4 und Rot darunter. „–“ bezeichnet eine offene Aufgabe, „•“ eine noch unbewertete Abgabe. H5P-Punkte bleiben als erreichte/maximale Punkte sichtbar.
+
+Eine kompakte Spalte „Üben“ zählt neue/fällige (blau) und aktuell sichere (grün) Übungsaufgaben. Übungsmodule erscheinen ausschließlich in der getrennten Ansicht „Üben“, nicht zwischen den Lernaufgaben. Ein Modulwähler begrenzt auf schmalen Bildschirmen die Spalten. Nur der beschriftete Tabellenbereich darf horizontal scrollen.
+
+Das Schülerdetail steht unter der Tabelle. Aufgabenstellung und Abgabe/Rückmeldung/Auswertung sind auf breiten Bildschirmen nebeneinander, mobil untereinander angeordnet. Die kompakte Aufgabenleiste steht linksbündig unter dem Namen. Ein reservierter Scrollbalkenbereich verhindert wechselnde Spaltenbreiten beim Reiterwechsel. Die Auswahl bleibt in der URL erhalten.
+
 ## Endpunkte (API)
 
 - GET `/api/teaching/courses/{course_id}/units/{unit_id}/submissions/summary`
   - Liefert einen initialen Polling-Cursor (`cursor`) auf Basis der Datenbank-Uhr als robusten Seed für den nächsten Delta-Poll, die Aufgaben der Einheit (`tasks[]`) und optional die Schülerzeilen (`rows[]`) mit Minimalstatus je Zelle:
     `{ task_id, has_submission, average_score, created_at }`.
+  - Aufgaben enthalten `module_kind: learning | practice` und eine nullable `module_id`. Lineare Abschnitte gelten als `learning`.
+  - `practice_modules[]` enthält den geordneten Übungskatalog einschließlich leerer Module. Jede Schülerzeile enthält `practice[]` mit Modul-ID, Status, Aufgabenanzahl, disjunkten Anzahlen `due_tasks_count`, `secure_tasks_count`, `partial_tasks_count`, `insufficient_tasks_count` sowie `latest_activity_at` und `next_due_at`.
+  - Statuspriorität: `locked` bei fehlender Freischaltung, sonst `due`, `insufficient`, `partial`, `secure`. Sichere Aufgaben zählen nur dann grün, wenn ihre Fälligkeit noch in der Zukunft liegt. Ein leeres zugängliches Modul wird nicht als sicher eingestuft.
   - Kann der DB-basierte Cursor-Seed nicht bestimmt werden, antwortet der Endpunkt fail-closed mit `503 service_unavailable` und `detail=summary_cursor_unavailable`, statt still auf die Host-Uhr zurückzufallen.
   - `average_score` ist ein optionaler Float (0..10) für den Durchschnitt der Kriterien-Scores der
     neuesten Einreichung; `null` wenn keine abgeschlossene Auswertung vorliegt.
   - `created_at` ist der UTC-Zeitstempel der neuesten Abgabe in dieser Zelle; `null`, wenn noch keine Abgabe existiert.
   - Query:
-    - `include_students` (bool, default true): Wenn `false`, werden nur `tasks[]` geliefert (Startoptimierung in der UI).
+    - `include_students` (bool, default true): Wenn `false`, werden Aufgaben- und Übungskatalog, aber keine Schülerzeilen geliefert (Startoptimierung in der UI).
     - `limit`/`offset`: Paginierung der Schülerliste.
   - Sicherheit: Nur Owner (Lehrer) des Kurses; Einheit muss zum Kurs gehören. Browser-Cookies und CLI-Tokens mit `read`-Scope sind zulässig. `Cache-Control: private, no-store`, `Vary: Origin`.
 
@@ -86,9 +97,9 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
 - H5P-Review: `h5p.review_token` ist ein kurzlebiges AES-GCM-verschlüsseltes Credential mit minimalen Claims. Der Browser übermittelt es nur als `Authorization: Bearer` an `/h5p/player/review`; danach hält ein auf `/h5p` begrenztes `HttpOnly; Secure; SameSite=Strict`-Cookie pro Review den read-only User-State-Zugriff aufrecht. Die User-State-URL führt lediglich eine opake `review_id`, die aus dem zufälligen AES-GCM-Nonce abgeleitet wird und den passenden Cookie auswählt. Dadurch überschreiben sich parallele Reviews nicht. Credential und Personenkennungen werden nie in H5P-URLs geschrieben; fehlende, ungültige oder nicht zum Cookie passende Handles liefern fail-closed `403`. Review-Antworten setzen zusätzlich `Referrer-Policy: no-referrer`.
 - CLI-Grenze: Bei CLI-authentifizierten Detailaufrufen wird kein H5P-Review-Credential erzeugt oder ausgegeben. Die CLI zeigt ausschließlich Punkte und den daraus abgeleiteten Abschlussstatus; die interaktive Prüfung bleibt browsergebunden.
 - UI (Detail-Tab unter der Matrix):
-  - Oberhalb der Einreichung wird immer die Aufgabenstellung (`instruction_md`) angezeigt.
-  - Tabs für „Text“ (Auszug aus `text_body`) und bei Datei-Abgaben zusätzlich „Datei“ mit Inline-Vorschau.
-  - Wenn Analyse/Feedback vorliegen, erscheinen zusätzliche Tabs „Auswertung“ (Kriterienkarten aus `analysis_json`) und „Rückmeldung“ (Markdown aus `feedback_md`), in dieser Reihenfolge.
+  - Die Aufgabenstellung (`instruction_md`) bleibt unabhängig vom aktiven Detailreiter zugänglich, auch ohne Abgabe.
+  - Die Reiter heißen „Abgabe“, „Rückmeldung“ und „Auswertung“. Fehlende Rückmeldung/Auswertung wird als knapper Leerzustand angezeigt.
+  - „Abgabe“ verwendet die vorhandene sichere Darstellung für Text, Dateien, H5P und Dialoge; es gibt keinen neuen Upload- oder Schreibpfad.
 - Semantik:
   - `text_body`: Best‑Effort‑Textrepräsentation der Abgabe, wenn der jeweilige Submission-Pfad eine Textrepräsentation erzeugt. Text- und OCR-basierte Abgaben liefern hier denselben Text wie im Learning-Bereich; visuell direkt ausgewertete Datei-Abgaben können das Feld auch im Status `completed` leer lassen. Die Länge ist nur durch das globale `text_body`‑Limit (aktuell 65.536 Zeichen ≙ 64k) begrenzt.
   - `instruction_md`: Aufgabenstellung der Aufgabe; wird im API-Contract des Detailobjekts mitgeliefert und in SSR oberhalb der Einreichung gerendert.
@@ -102,6 +113,8 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
 - Der Teaching‑Adapter verwendet SECURITY‑DEFINER‑Helper:
   - `get_unit_latest_submissions_for_owner(…)` (Matrix/Delta)
   - `get_latest_submission_for_owner(p_owner_sub, p_course_id, p_unit_id, p_task_id, p_student_sub)` (Detail)
+  - `get_unit_live_practice_aggregates_for_owner(p_owner_sub, p_course_id, p_unit_id, p_student_subs)` (Übungsmatrix)
+- Der Übungshelper verarbeitet die bereits paginierte Schülerliste in einem Aufruf. Er bindet den Besitzerparameter an `app.current_sub`, prüft Kurs–Einheit-Zuordnung und Mitgliedschaft und verwendet die bestehende modulare Freischaltlogik. Die additive Migration erstellt keine Tabellen.
 - RLS bleibt aktiv; die Helper prüfen Ownership und Kurs/Unit/Task‑Relationen.
 - Fail-closed-Verhalten:
   - Der Detail- und der Datei-Endpunkt lesen die neueste Abgabe ausschließlich über `get_latest_submission_for_owner(…)`. Es gibt keinen direkten Fallback-SELECT gegen `public.learning_submissions`, weil dessen Sichtbarkeit von der aktiven Datenbankrolle abhängen würde.
@@ -112,6 +125,9 @@ Hinweis: Namen werden für Lehrkräfte angezeigt; Inhalte (Text/Bilder) müssen 
 ## Tests (pytest)
 
 - `backend/tests/test_teaching_live_unit_summary_api.py`: Vertrag/Fehlerfälle/`include_students`.
+- `backend/tests/migration/test_teaching_live_practice_roundtrip.py`: echte Datenbankprüfung der disjunkten Zählung, Bulk-Auswahl, Freischaltung und Besitzer-/Mitgliedschaftsgrenzen.
+- `frontend/src/routes/live/LiveOverviewMatrix.test.ts`, `live-matrix-view.test.ts` und `page-interaction.test.ts`: Komponenten, Statusdarstellung, Auswahl und Polling.
+- `frontend/e2e/live-summary.spec.ts`: authentifizierter Lern-/Übungsmatrix-Rundlauf; Abschlussgate `make verify-feature FEATURE=live-summary`.
 - `backend/tests/test_teaching_live_unit_delta_api.py`: 401/403/404/400 sowie Happy‑Path „200 dann 204“ mit neuem Cursor.
 - `backend/tests/test_teaching_live_detail_api.py`: Detail-Contract für `TeachingLatestSubmission` inklusive Feedback/Analysis, Relationsprüfung und fail-closed Helper-Verhalten.
 - `backend/tests/test_teaching_live_student_overview_api.py`: neuer Schueler-Ueberblick ueber Kurs-Lerneinheiten.

@@ -71,7 +71,7 @@ For teaching and course organization, GUSTAV can:
 - combine linear learning sequences with modular paths, phases, and dependency graphs;
 - release content step by step for a course or unlock modular content for individual students;
 - invite learners through a time-limited class link, QR code, or individual email;
-- show current progress and recent submission states during ongoing classroom work.
+- compare students and tasks in a module-grouped live matrix, inspect submissions and feedback, and review practice progress separately.
 
 For students, GUSTAV can:
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-27
+
+### Live-Matrix für Lernaufgaben und Übungsmodule
+
+- feat(teaching): Die Live-Ansicht zeigt Schülerzeilen und nach Modulen gruppierte Aufgabenspalten. Numerische Bewertungen und neutrale Zustände unterscheiden bewertete, eingereichte und offene Aufgaben.
+- feat(practice): Eine kompakte Übungszusammenfassung führt zur getrennten Übungsmatrix. Neue beziehungsweise fällige Aufgaben und aktuell sichere Aufgaben werden getrennt gezählt; gesperrte Module bleiben neutral.
+- design(live): Kompakte Werkzeugansicht mit Details unterhalb der Matrix, einheitlichen transparenten Umschaltern und mobiler Modulauswahl. Reservierter Scrollbalkenplatz hält die Detailspalten beim Reiterwechsel stabil.
+- api(teaching): Der bestehende Summary-Vertrag enthält Modulart, Übungskatalog und schülerbezogene Übungsaggregate. Ein eigentümergeschützter Bulk-Lesehelper prüft Kurszuordnung und Mitgliedschaft; keine neuen Tabellen oder Schreibendpunkte.
+- test(live): Datenbank- und API-Nachweise für Statuszählung und Berechtigungsgrenzen sowie aktualisierter authentifizierter Browserrundlauf in `live-summary.spec.ts`.
+
 ## 2026-09-24
 
 ### H5P-Rückmeldung und Abschlussstatus

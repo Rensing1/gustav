@@ -34,6 +34,12 @@ class DialogAssessmentSignature(dspy.Signature):  # type: ignore[attr-defined]
     die Bewertung in 1–3 deutschen Sätzen anhand der Schülerbeiträge.
     Auch 0 Punkte benötigen eine sachliche Begründung. Fehlende oder ungültige
     Ausgabefelder dürfen nicht durch erfundene Nullbewertungen ersetzt werden.
+    Bei nichtleerer Kriterienliste darf criteria_results niemals leer sein.
+    Bewerte jedes Kriterium auch dann, wenn Schülerbeiträge oder die geforderte
+    Abschlussantwort fehlen oder nur aus Platzhaltern bestehen. Fehlt der
+    verlangte Leistungsbeleg, vergib für das betreffende Kriterium 0 Punkte und
+    begründe konkret, welche Leistung fehlt. Vorhandene Beiträge zählen nur,
+    soweit das jeweilige Kriterium sie zulässt.
     Stütze `feedback_md` auf dieselben Kriterienbewertungen und Belege;
     erfinde weder Stärken noch Defizite. Verwende die deutsche Sie-Form.
     Bei leerer Kriterienliste liefere `criteria_results=[]` und nur formative

@@ -51,6 +51,18 @@
 
   const practiceAria = (row: LiveMatrixRowView, moduleTitle: string, cell: LivePracticeCell | null): string =>
     `${row.student.name}, Übungsmodul ${moduleTitle}: ${practiceStatusLabel(cell)}`;
+
+  const learningSummaryAria = (row: LiveMatrixRowView): string => {
+    const summary = row.learningSummary;
+    const submitted = `${summary.completed} von ${summary.total} Lernaufgaben abgegeben`;
+    if (summary.rated === 0) {
+      return `${row.student.name}: ${submitted}; keine bewertete Lernaufgabe`;
+    }
+    const ratedTasks = summary.rated === 1
+      ? "einer bewerteten Lernaufgabe"
+      : `${summary.rated} bewerteten Lernaufgaben`;
+    return `${row.student.name}: ${submitted}; Durchschnitt ${summary.averageLabel} aus ${ratedTasks}`;
+  };
 </script>
 
 <section class="live-matrix" aria-labelledby="live-matrix-heading">
@@ -89,8 +101,8 @@
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (Scrollable labelled table region.) -->
       <div class="live-matrix__scroll" role="region" aria-label="Lernaufgaben nach Schülern" tabindex="0">
         <table
-          style:--matrix-width={`${248 + view.learningGroups.reduce((count, group) => count + group.taskIds.length, 0) * 48}px`}
-          style:--mobile-width={`${208 + (view.learningGroups.find((group) => group.id === mobileLearningGroupId)?.taskIds.length ?? 0) * 48}px`}
+          style:--matrix-width={`${336 + view.learningGroups.reduce((count, group) => count + group.taskIds.length, 0) * 48}px`}
+          style:--mobile-width={`${296 + (view.learningGroups.find((group) => group.id === mobileLearningGroupId)?.taskIds.length ?? 0) * 48}px`}
         >
           <colgroup>
             <col class="live-matrix__name-col" />
@@ -99,7 +111,8 @@
                 <col class="live-matrix__task-col" class:live-matrix__mobile-hidden={mobileLearningGroupId !== group.id} />
               {/each}
             {/each}
-            <col class="live-matrix__summary-col" />
+            <col class="live-matrix__learning-summary-col" />
+            <col class="live-matrix__practice-summary-col" />
           </colgroup>
           <thead>
             <tr>
@@ -111,7 +124,8 @@
                   scope="colgroup"
                 ><span class="live-matrix__module-title" title={group.title}>{group.title}</span></th>
               {/each}
-              <th class="live-matrix__practice-summary" rowspan="2">Üben</th>
+              <th class="live-matrix__learning-summary" rowspan="2" scope="col">Stand</th>
+              <th class="live-matrix__practice-summary" rowspan="2" scope="col">Üben</th>
             </tr>
             <tr>
               {#each view.learningGroups as group}
@@ -141,6 +155,12 @@
                     </td>
                   {/each}
                 {/each}
+                <td class="live-matrix__learning-summary" aria-label={learningSummaryAria(row)}>
+                  <span class="live-learning-summary">
+                    <strong>{row.learningSummary.completed}/{row.learningSummary.total}</strong>
+                    <small data-tone={row.learningSummary.tone}>Ø {row.learningSummary.averageLabel}</small>
+                  </span>
+                </td>
                 <td class="live-matrix__practice-summary">
                   <button
                     class="live-practice-counts"
@@ -231,7 +251,8 @@
   table { width: var(--matrix-width); table-layout: fixed; border-collapse: collapse; }
   .live-matrix__name-col { width: 176px; }
   .live-matrix__task-col { width: 48px; }
-  .live-matrix__summary-col { width: 72px; }
+  .live-matrix__learning-summary-col { width: 88px; }
+  .live-matrix__practice-summary-col { width: 72px; }
   .live-matrix__practice-col { width: 176px; }
   .live-matrix__module-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.35; }
   th, td { border-right: 1px solid var(--color-line); border-bottom: 1px solid var(--color-line); text-align: center; padding: 0; height: 2.9rem; }
@@ -248,6 +269,14 @@
   .live-score[data-tone="submitted"] { border-bottom-color: var(--color-info); background: var(--color-info-soft); }
   .live-score:hover, .live-score.is-selected, .live-practice-status:hover, .live-practice-counts:hover { outline: 2px solid var(--color-link); outline-offset: -2px; }
   .live-score:focus-visible, .live-practice-status:focus-visible, .live-practice-counts:focus-visible, .live-matrix__name button:focus-visible { outline: 2px solid var(--color-link); outline-offset: -2px; }
+  .live-matrix__learning-summary { position: sticky; right: 4.5rem; z-index: 2; width: 5.5rem; min-width: 5.5rem; max-width: 5.5rem; padding: 0; background: var(--color-bg-surface); box-shadow: inset 1px 0 0 var(--color-line); text-align: center; }
+  thead .live-matrix__learning-summary { z-index: 4; padding: var(--space-2) var(--space-1); background: var(--color-bg-muted); }
+  .live-learning-summary { display: grid; min-height: 2.9rem; place-content: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); font-variant-numeric: tabular-nums; line-height: 1; }
+  .live-learning-summary strong { font: 700 var(--font-size-sm) var(--font-mono); }
+  .live-learning-summary small { color: var(--color-text-muted); font: 600 var(--font-size-xs)/1.1 var(--font-mono); }
+  .live-learning-summary small[data-tone="high"] { color: var(--color-success); }
+  .live-learning-summary small[data-tone="mid"] { color: var(--color-warning); }
+  .live-learning-summary small[data-tone="low"] { color: var(--color-danger); }
   .live-matrix__practice-summary { width: 4.5rem; min-width: 4.5rem; max-width: 4.5rem; position: sticky; right: 0; z-index: 2; background: var(--color-bg-surface); }
   thead .live-matrix__practice-summary { z-index: 4; background: var(--color-bg-muted); }
   .live-practice-counts { display: grid; grid-template-columns: 1fr 1fr; width: 100%; min-height: 2.9rem; align-items: center; gap: var(--space-1); border: 0; padding: 0 var(--space-1); background: transparent; font: 700 .78rem var(--font-mono); cursor: pointer; }

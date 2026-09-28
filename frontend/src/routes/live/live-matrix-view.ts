@@ -8,6 +8,15 @@ import type {
 
 export type LiveScoreTone = "empty" | "submitted" | "low" | "mid" | "high";
 
+export type LiveLearningSummaryView = {
+  completed: number;
+  total: number;
+  rated: number;
+  average: number | null;
+  averageLabel: string;
+  tone: LiveScoreTone;
+};
+
 export type LiveLearningCellView = {
   task: LiveTask;
   cell: LiveSummaryCell;
@@ -18,6 +27,7 @@ export type LiveLearningCellView = {
 export type LiveMatrixRowView = {
   student: { sub: string; name: string };
   learningCells: LiveLearningCellView[];
+  learningSummary: LiveLearningSummaryView;
   practiceCells: Array<{ module: LivePracticeModule; cell: LivePracticeCell | null }>;
   practiceSummary: { due: number; secure: number };
 };
@@ -32,6 +42,25 @@ function formatScore(value: number): string {
   return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(value);
 }
 
+function scoreTone(value: number): LiveScoreTone {
+  if (value >= 8) return "high";
+  if (value >= 4) return "mid";
+  return "low";
+}
+
+function normalizedScore(task: LiveTask, cell: LiveSummaryCell): number | null {
+  if (!cell.has_submission) return null;
+  if (
+    task.kind === "h5p" &&
+    typeof cell.score_raw === "number" &&
+    typeof cell.score_max === "number" &&
+    cell.score_max > 0
+  ) {
+    return (cell.score_raw / cell.score_max) * 10;
+  }
+  return typeof cell.average_score === "number" ? cell.average_score : null;
+}
+
 function scorePresentation(task: LiveTask, cell: LiveSummaryCell): Pick<LiveLearningCellView, "label" | "tone"> {
   if (!cell.has_submission) {
     return { label: "–", tone: "empty" };
@@ -40,7 +69,7 @@ function scorePresentation(task: LiveTask, cell: LiveSummaryCell): Pick<LiveLear
     const normalized = cell.score_max > 0 ? (cell.score_raw / cell.score_max) * 10 : null;
     return {
       label: `${cell.score_raw}/${cell.score_max}`,
-      tone: normalized === null ? "submitted" : normalized >= 8 ? "high" : normalized >= 4 ? "mid" : "low"
+      tone: normalized === null ? "submitted" : scoreTone(normalized)
     };
   }
   if (typeof cell.average_score !== "number") {
@@ -48,7 +77,26 @@ function scorePresentation(task: LiveTask, cell: LiveSummaryCell): Pick<LiveLear
   }
   return {
     label: formatScore(cell.average_score),
-    tone: cell.average_score >= 8 ? "high" : cell.average_score >= 4 ? "mid" : "low"
+    tone: scoreTone(cell.average_score)
+  };
+}
+
+function summarizeLearning(tasks: LiveTask[], cells: LiveSummaryCell[]): LiveLearningSummaryView {
+  const scores = tasks.flatMap((task, index) => {
+    const score = normalizedScore(task, cells[index]);
+    return score === null ? [] : [score];
+  });
+  const average = scores.length > 0
+    ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+    : null;
+
+  return {
+    completed: cells.filter((cell) => cell.has_submission).length,
+    total: tasks.length,
+    rated: scores.length,
+    average,
+    averageLabel: average === null ? "–" : formatScore(average),
+    tone: average === null ? "empty" : scoreTone(average)
   };
 }
 
@@ -84,6 +132,7 @@ export function buildLiveMatrixView(summary: LiveSummaryPayload) {
     return {
       student: row.student,
       learningCells,
+      learningSummary: summarizeLearning(learningTasks, learningCells.map((entry) => entry.cell)),
       practiceCells: orderedPracticeCells,
       practiceSummary: {
         due: row.practice.reduce((sum, cell) => sum + cell.due_tasks_count, 0),

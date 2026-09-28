@@ -42,6 +42,18 @@ describe("Live overview matrix", () => {
     expect(screen.queryByText(/bearbeitet/)).not.toBeInTheDocument();
   });
 
+  it("shows a compact accessible learning summary separate from practice", () => {
+    const handlers = props();
+    render(LiveOverviewMatrix, { props: handlers });
+
+    expect(screen.getByRole("columnheader", { name: "Stand" })).toBeInTheDocument();
+    const summary = screen.getByLabelText(
+      "Langer synthetischer Schülername: 0 von 1 Lernaufgaben abgegeben; keine bewertete Lernaufgabe"
+    );
+    expect(summary).toHaveTextContent("0/1");
+    expect(summary).toHaveTextContent("Ø –");
+  });
+
   it("labels locked practice explicitly without inventing due counts", async () => {
     const handlers = { ...props(), activeView: "practice" as const };
     render(LiveOverviewMatrix, { props: handlers });

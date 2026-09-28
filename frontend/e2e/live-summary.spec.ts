@@ -7,7 +7,7 @@ import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerNavigationCourse, seedLearnerPracticeCourse } from "./support/seed-data";
 import { completeQueuedFeedbackDeterministically, holdProviderWorker, releaseProviderWorker } from "./support/submission-finalization-fixture";
 
-test("@feature-acceptance teacher opens the ordered live task summary and retains selection", async ({ browser }) => {
+test("@feature-acceptance teacher opens the ordered live task summary and retains selection", async ({ browser }, info) => {
   test.setTimeout(120_000);
   const teacherEmail = e2eEmail("live-teacher");
   const learnerEmail = e2eEmail("live-learner");
@@ -20,6 +20,7 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
   try {
     const teacher = await teacherContext.newPage();
     const learner = await learnerContext.newPage();
+    await teacher.setViewportSize({ width: 1600, height: 900 });
     await login(teacher, teacherEmail, e2ePassword);
     await login(learner, learnerEmail, e2ePassword);
     const seeded = await seedLearnerNavigationCourse(teacher, learner, "Live-Reihenfolge");
@@ -32,6 +33,15 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
     await expect(matrix.locator("tbody tr")).toHaveCount(1);
     await expect(matrix.getByRole("columnheader", { name: "Grundlagen", exact: true })).toBeVisible();
     await expect(matrix.getByRole("columnheader", { name: "Quellen", exact: true })).toBeVisible();
+    const standHeader = matrix.getByRole("columnheader", { name: "Stand", exact: true });
+    const practiceHeader = matrix.getByRole("columnheader", { name: "Üben", exact: true });
+    await expect(standHeader).toBeVisible();
+    expect((await standHeader.boundingBox())!.width).toBeCloseTo(88, 0);
+    expect((await practiceHeader.boundingBox())!.width).toBeCloseTo(72, 0);
+    const learningSummary = matrix.locator("tbody .live-learning-summary");
+    await expect(learningSummary).toContainText("0/3");
+    await expect(learningSummary).toContainText("Ø –");
+    await teacher.screenshot({ path: info.outputPath("live-summary-1600-light.png"), fullPage: true, animations: "disabled" });
     await matrix.locator(".live-score").first().click();
 
     const taskLinks = teacher.getByRole("navigation", { name: "Aufgaben der Lerneinheit" }).getByRole("link");
@@ -68,6 +78,8 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
     }
     // No teacher reload: polling must update the matrix in place.
     await expect(matrix.locator(".live-score").first()).not.toHaveText("–", { timeout: 30_000 });
+    await expect(learningSummary).toContainText("1/3");
+    await expect(learningSummary).not.toContainText("Ø –");
     await matrix.locator(".live-score").first().click();
     await expect(teacher.getByRole("tabpanel", { name: "Abgabe", exact: true })).toContainText(answer);
     const instruction = teacher.locator(".live-panel-summary__context");
@@ -77,6 +89,15 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
       await expect(teacher.getByRole("tabpanel", { name: label, exact: true })).toBeVisible();
       expect((await instruction.boundingBox())!.width).toBeCloseTo(initialWidth, 1);
     }
+
+    await teacher.setViewportSize({ width: 390, height: 844 });
+    await expect(teacher.getByRole("combobox", { name: "Modul", exact: true })).toBeVisible();
+    expect(await teacher.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await teacher.screenshot({ path: info.outputPath("live-summary-390-light.png"), fullPage: true, animations: "disabled" });
+    await teacher.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+    await teacher.screenshot({ path: info.outputPath("live-summary-390-dark.png"), fullPage: true, animations: "disabled" });
+    await teacher.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+    await teacher.setViewportSize({ width: 1600, height: 900 });
 
     // Practice stays a separate matrix and supports the same detail navigation.
     const practice = await seedLearnerPracticeCourse(teacher, learner, "Live-Übungsmatrix");

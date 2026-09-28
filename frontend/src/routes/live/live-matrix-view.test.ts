@@ -50,7 +50,50 @@ describe("Live matrix view model", () => {
       expect.objectContaining({ id: "section-a", title: "Grundlagen", taskIds: ["learn-1", "learn-2"] })
     ]);
     expect(view.rows[0].learningCells.map((cell) => cell.task.id)).toEqual(["learn-1", "learn-2"]);
+    expect(view.rows[0].learningSummary).toEqual({
+      completed: 1,
+      total: 2,
+      rated: 1,
+      average: 8.5,
+      averageLabel: "8,5",
+      tone: "high"
+    });
     expect(view.rows[0].practiceSummary).toEqual({ due: 1, secure: 0 });
+  });
+
+  it("normalizes rated H5P learning tasks but excludes practice and ungraded submissions", () => {
+    const input = structuredClone(summary);
+    input.tasks[2].kind = "h5p";
+    input.rows[0].tasks[2] = {
+      task_id: "learn-2",
+      has_submission: true,
+      average_score: null,
+      score_raw: 3,
+      score_max: 4
+    };
+
+    expect(buildLiveMatrixView(input).rows[0].learningSummary).toEqual({
+      completed: 2,
+      total: 2,
+      rated: 2,
+      average: 8,
+      averageLabel: "8",
+      tone: "high"
+    });
+  });
+
+  it("shows no invented average when submitted learning tasks are ungraded", () => {
+    const input = structuredClone(summary);
+    input.rows[0].tasks[0].average_score = null;
+
+    expect(buildLiveMatrixView(input).rows[0].learningSummary).toMatchObject({
+      completed: 1,
+      total: 2,
+      rated: 0,
+      average: null,
+      averageLabel: "–",
+      tone: "empty"
+    });
   });
 
   it("derives compact accessible score labels without hiding open state", () => {

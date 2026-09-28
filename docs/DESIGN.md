@@ -56,11 +56,16 @@ Die Live-Aufgabenleiste gruppiert nach tatsächlichem Abschnitt beziehungsweise 
 
 Die kanonische Live-Hauptansicht ist eine Schüler-Aufgaben-Matrix. Lernaufgaben
 werden nach ihren tatsächlichen Lernmodulen gruppiert; die sticky Namensspalte
-enthält keine zusätzliche Bearbeitungsquote. Eine kompakte Spalte `Üben` zeigt
-ausschließlich zwei beschriftete Kennzahlen je Schüler: neue beziehungsweise
-fällige Übungsaufgaben und aktuell sichere, noch nicht wieder fällige
-Übungsaufgaben. Übungsaufgaben werden niemals zwischen den Lernaufgaben
-einsortiert. Die lokale Auswahl `Aufgaben | Üben` verwendet `ChoiceSwitch`.
+enthält keine zusätzliche Bearbeitungsquote. Unmittelbar vor `Üben` fasst eine
+88 px breite, rechts fixierte Spalte `Stand` den Lernfortschritt zweizeilig als
+`abgegeben/gesamt` und `Ø Bewertung` zusammen. Unbewertete Abgaben zählen nur
+zum Fortschritt; Übungsaufgaben fließen in keine der beiden Kennzahlen ein.
+Die 72 px breite Spalte `Üben` zeigt ausschließlich zwei beschriftete
+Kennzahlen je Schüler: neue beziehungsweise fällige Übungsaufgaben und aktuell
+sichere, noch nicht wieder fällige Übungsaufgaben. Übungsaufgaben werden niemals
+zwischen den Lernaufgaben einsortiert. Beide kompakten Kennzahlenspalten bleiben
+beim horizontalen Scrollen rechts sichtbar. Die lokale Auswahl `Aufgaben |
+Üben` verwendet `ChoiceSwitch`.
 
 Die getrennte Übungsansicht ordnet je Übungsmodul eine Spalte an und unterscheidet
 `Gesperrt`, `Fällig`, `Noch nicht sicher`, `Teilweise sicher` und `Sicher`.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-28
+
+### Kompakter Schülerstand in der Live-Matrix
+
+- feat(live): Eine rechts fixierte Spalte „Stand“ zeigt abgegebene zu gesamten Lernaufgaben und die Durchschnittsbewertung. Übungsaufgaben bleiben ausgeschlossen; unbewertete Abgaben zählen zum Fortschritt, aber nicht zum Durchschnitt.
+- design(live): 88 px für „Stand“ und 72 px für „Üben“, tabellarische Ziffern und zurückhaltende Bewertungsfarben halten die Werkzeugmatrix auch auf schmalen Flächen kompakt und stabil.
+- test(live): View-Model, Komponente und authentifizierter Browserrundlauf prüfen native und normalisierte H5P-Werte, fehlende Bewertungen, Barrierefreiheit, Spaltenbreiten und Live-Aktualisierung.
+
 ## 2026-09-27
 
 ### Live-Matrix für Lernaufgaben und Übungsmodule

@@ -65,7 +65,7 @@ async function verifyIndependentWheelScrolling(browser: Browser, taskUrl: string
   }
 }
 
-test("@feature-detail keeps the learner task desk split on landscape iPads", async ({ browser, browserName }) => {
+test("@feature-detail keeps the learner task desk split and its context reachable on landscape iPads", async ({ browser, browserName }) => {
   const unique = Date.now();
   const teacherEmail = e2eEmail("teacher");
   const learnerEmail = e2eEmail("learner");
@@ -80,11 +80,17 @@ test("@feature-detail keeps the learner task desk split on landscape iPads", asy
     const seeded = await seedLearnerNavigationCourse(teacher.page, learner.page, `Responsive Aufgabe ${unique}`);
 
     await learner.page.setViewportSize({ width: 1024, height: 768 });
-    await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
+    const unitUrl = `/learning/courses/${seeded.courseId}/units/${seeded.unitId}`;
+    await learner.page.goto(unitUrl);
+    await learner.page.getByRole("button", { name: /Quellen/ }).click();
+    await expect(
+      learner.page.locator(".learning-work-item__title", { hasText: seeded.contextImageTitle }).first()
+    ).toBeVisible();
+    await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
     await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
     const taskRow = learner.page.locator(".learning-task-row").first();
     await expect(taskRow.getByText("Weitere Angaben in der Aufgabe")).toBeVisible();
-    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+    await taskRow.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
     const taskUrl = learner.page.url();
 
     const workbench = learner.page.getByRole("region", { name: "Aufgabe bearbeiten" });
@@ -105,6 +111,33 @@ test("@feature-detail keeps the learner task desk split on landscape iPads", asy
     );
     expect(landscapeTracks).toBe(3);
     await expectNoViewportOverflow(learner.page);
+
+    const contextScroll = workbench.locator(".learner-task-context__scroll");
+    const additionalMaterials = context.getByText("Weitere Materialien und eigene Abgaben", { exact: true });
+    await scrollSurfaceWithKeyboard(learner.page, contextScroll, "end");
+    await expect.poll(
+      () => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight - surface.scrollTop)
+    ).toBeLessThan(2);
+    const contextGeometry = await contextScroll.evaluate((surface) => {
+      const surfaceBounds = surface.getBoundingClientRect();
+      const summary = surface.querySelector<HTMLElement>(".learner-task-context__all-materials > summary");
+      if (!summary) throw new Error("additional materials disclosure is missing");
+      const summaryBounds = summary.getBoundingClientRect();
+      return {
+        viewportHeight: window.innerHeight,
+        surfaceBottom: surfaceBounds.bottom,
+        summaryTop: summaryBounds.top,
+        summaryBottom: summaryBounds.bottom
+      };
+    });
+    expect(contextGeometry.surfaceBottom).toBeLessThanOrEqual(contextGeometry.viewportHeight + 1);
+    expect(contextGeometry.summaryTop).toBeGreaterThanOrEqual(0);
+    expect(contextGeometry.summaryBottom).toBeLessThanOrEqual(contextGeometry.viewportHeight + 1);
+    await additionalMaterials.click();
+    await expect(context.locator(".learner-task-context__all-materials")).toHaveAttribute("open", "");
+    await expect(
+      context.getByRole("button", { name: `${seeded.contextImageTitle} ein- oder ausklappen` })
+    ).toBeVisible();
 
     const deskBox = await workbench.locator(".learner-task-workbench__desk").boundingBox();
     const separatorBox = await separator.boundingBox();
@@ -134,7 +167,6 @@ test("@feature-detail keeps the learner task desk split on landscape iPads", asy
         }
       `
     });
-    const contextScroll = workbench.locator(".learner-task-context__scroll");
     const workScroll = workbench.locator(".learner-task-workbench__main");
     await expect.poll(() => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);
     await expect.poll(() => workScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight)).toBeGreaterThan(500);

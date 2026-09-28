@@ -695,6 +695,10 @@ describe("LearnerContentWorkspace", () => {
   it("keeps the workbench flat and switches layout from its own available width", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(path.resolve(currentDir, "../../styles/learning-unit.css"), "utf8");
+    const workbenchRules = Array.from(
+      css.matchAll(/\.learner-task-workbench\s*\{[^{}]*\}/g),
+      (match) => match[0]
+    ).join("\n");
 
     expect(css).toMatch(/\.learning-unit-stage--content\s*\{[^}]*container-type:\s*inline-size;/s);
     expect(css).toMatch(/\.learner-task-workbench-container\s*\{[^}]*grid-template-rows:\s*minmax\(3\.25rem,\s*auto\) auto;/s);
@@ -704,6 +708,8 @@ describe("LearnerContentWorkspace", () => {
     expect(css).not.toContain("@container learning-dialog (min-width: 64rem)");
     expect(css).toMatch(/\.learner-task-context__scroll\s*\{[^}]*overflow-y:\s*auto;/s);
     expect(css).toMatch(/\.learner-reference-document__prose\s*\{[^}]*max-width:\s*68ch;/s);
+    expect(workbenchRules).toContain("height: calc(100svh - 14rem)");
+    expect(workbenchRules).toContain("min-height: min(36rem, calc(100svh - 14rem))");
   });
 
   it("keeps opened-module context styles local, responsive and free of pinning controls", () => {

@@ -713,7 +713,11 @@ describe("LearningDialogWorkspace", () => {
       css.matchAll(/\.dialog-workspace \.workspace-top-action\s*\{[^{}]*\}/g),
       (match) => match[0]
     ).join("\n");
-    const workbenchRules = Array.from(
+    const sharedWorkbenchRules = Array.from(
+      css.matchAll(/\.learner-task-workbench\s*\{[^{}]*\}/g),
+      (match) => match[0]
+    ).join("\n");
+    const dialogWorkbenchRules = Array.from(
       css.matchAll(/\.learner-task-workbench--dialog\s*\{[^{}]*\}/g),
       (match) => match[0]
     ).join("\n");
@@ -751,7 +755,9 @@ describe("LearningDialogWorkspace", () => {
     expect(composerRules).not.toContain("border: 2px solid");
     expect(actionRules).not.toContain("border-radius: 999px");
     expect(layoutRules).toContain("40%");
-    expect(workbenchRules).toContain("height: calc(100svh - 14rem)");
+    expect(sharedWorkbenchRules).toContain("height: calc(100svh - 14rem)");
+    expect(sharedWorkbenchRules).toContain("min-height: min(36rem, calc(100svh - 14rem))");
+    expect(dialogWorkbenchRules).not.toContain("height:");
     expect(nestedProseRules).toContain("border: 0");
     expect(nestedProseRules).toContain("border-inline-start: 0");
   });

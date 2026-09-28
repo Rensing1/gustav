@@ -4485,8 +4485,8 @@ button.learner-material-context__module-toggle:focus-visible,
   }
 
   .learner-task-workbench {
-    height: calc(100svh - 7.25rem);
-    min-height: 36rem;
+    height: calc(100svh - 14rem);
+    min-height: min(36rem, calc(100svh - 14rem));
   }
 
   .learner-task-workbench__desk {
@@ -4682,11 +4682,6 @@ button.learner-material-context__module-toggle:focus-visible,
 
 /* Keep the dialog controls in view while only the conversation history scrolls. */
 @container (min-width: 60rem) {
-  .learner-task-workbench--dialog {
-    height: calc(100svh - 14rem);
-    min-height: min(36rem, calc(100svh - 14rem));
-  }
-
   .learner-task-workbench--dialog .learner-task-workbench__main {
     overflow: hidden;
   }

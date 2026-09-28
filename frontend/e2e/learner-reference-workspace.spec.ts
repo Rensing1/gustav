@@ -107,6 +107,55 @@ test("@feature-acceptance reads a document stack without losing the active task"
     expect(desktopScroll.book).toBeGreaterThan(0);
     expect(desktopScroll.work).toBe(0);
 
+    await learner.page.setViewportSize({ width: 1024, height: 768 });
+    await expect(book).toBeVisible();
+    await expect(exercise).toBeVisible();
+    const bookScroll = workbench.locator(".learner-task-context__scroll");
+    await bookScroll.evaluate((surface) => surface.setAttribute("tabindex", "-1"));
+    await bookScroll.focus();
+    await learner.page.keyboard.press("End");
+    await expect.poll(
+      () => bookScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight - surface.scrollTop)
+    ).toBeLessThan(2);
+    const iPadGeometry = await bookScroll.evaluate((surface) => {
+      const surfaceBounds = surface.getBoundingClientRect();
+      const summary = surface.querySelector<HTMLElement>(".learner-task-context__all-materials > summary");
+      if (!summary) throw new Error("additional materials disclosure is missing");
+      const summaryBounds = summary.getBoundingClientRect();
+      return {
+        viewportHeight: window.innerHeight,
+        surfaceBottom: surfaceBounds.bottom,
+        summaryTop: summaryBounds.top,
+        summaryBottom: summaryBounds.bottom
+      };
+    });
+    expect(iPadGeometry.surfaceBottom).toBeLessThanOrEqual(iPadGeometry.viewportHeight + 1);
+    expect(iPadGeometry.summaryTop).toBeGreaterThanOrEqual(0);
+    expect(iPadGeometry.summaryBottom).toBeLessThanOrEqual(iPadGeometry.viewportHeight + 1);
+
+    const additionalMaterials = book.getByText("Weitere Materialien und eigene Abgaben", { exact: true });
+    const additionalDetails = book.locator(".learner-task-context__all-materials");
+    await expect(additionalDetails).not.toHaveAttribute("open", "");
+    await expect(additionalContext).toBeHidden();
+    await additionalMaterials.click();
+    await expect(additionalDetails).toHaveAttribute("open", "");
+    await expect(additionalContext).toBeVisible();
+    if (await ownSubmissions.getAttribute("aria-expanded") === "true") {
+      await ownSubmissions.click();
+    }
+    await expect(ownSubmissions).toHaveAttribute("aria-expanded", "false");
+    await ownSubmissions.click();
+    await expect(ownSubmissions).toHaveAttribute("aria-expanded", "true");
+    await expect(previousSubmission).toBeVisible();
+    if (await previousSubmission.getAttribute("aria-expanded") !== "true") {
+      await previousSubmission.click();
+    }
+    await expect(previousSubmission).toHaveAttribute("aria-expanded", "true");
+    await expect(book.getByText(seeded.previousSubmissionText)).toBeVisible();
+    await expectNoViewportOverflow(learner.page);
+    await additionalMaterials.click();
+    await expect(additionalDetails).not.toHaveAttribute("open", "");
+
     for (const viewport of [
       { width: 820, height: 1180 },
       { width: 390, height: 844 }

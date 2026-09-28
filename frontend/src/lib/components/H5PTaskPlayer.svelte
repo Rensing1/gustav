@@ -237,7 +237,7 @@
           }
           const statementId = String((statement as { id?: string }).id || "");
           const result = await submitAttempt(statementId, score.raw, score.max);
-          if (!result) {
+          if (disposed || !result) {
             return;
           }
           await onProgressPersisted?.(result);

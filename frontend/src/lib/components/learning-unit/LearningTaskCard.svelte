@@ -1016,16 +1016,18 @@
               />
             {:else if task.kind === "h5p"}
               {#if task.h5p?.content_id}
-                <H5PTaskPlayer
-                  {courseId}
-                  taskId={task.id}
-                  contentId={task.h5p.content_id}
-                  onProgressPersisted={(result) => {
-                    if (result.kind === "learning") {
-                      return onProgressPersisted?.(result.submission);
-                    }
-                  }}
-                />
+                {#key `${courseId}:${task.id}:${task.h5p.content_id}`}
+                  <H5PTaskPlayer
+                    {courseId}
+                    taskId={task.id}
+                    contentId={task.h5p.content_id}
+                    onProgressPersisted={(result) => {
+                      if (result.kind === "learning") {
+                        return onProgressPersisted?.(result.submission);
+                      }
+                    }}
+                  />
+                {/key}
               {:else}
                 <p class="workspace-note">Diese H5P-Aufgabe ist noch nicht bereit.</p>
               {/if}

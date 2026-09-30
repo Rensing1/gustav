@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { browserUUID } from "$lib/utils/browser-uuid";
   import { createSubmissionPreviewLoader, type SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
   import { applyAction } from "$app/forms";
   import { browser } from "$app/environment";
@@ -110,6 +111,7 @@
   let flowNodes = $state.raw<LearningFlowNode[]>([]);
   let flowEdges = $state.raw<TeacherFlowEdge[]>([]);
   let graphBusy = $state(false);
+  let graphError = $state<string | null>(null);
   let graphState = $state<LearningUnitGraph | null>(null);
   let modularWorkspace = $state<ModularWorkspaceState>(defaultModularWorkspaceState(currentViewportWidth()));
   let linearWorkspace = $state<LinearWorkspaceState>(defaultLinearWorkspaceState(currentViewportWidth()));
@@ -985,7 +987,7 @@
         credentials: "include",
         headers: {
           "content-type": "application/json",
-          "idempotency-key": crypto.randomUUID()
+          "idempotency-key": browserUUID()
         },
         body: JSON.stringify({
           intent: "feedback",
@@ -1601,6 +1603,7 @@
 
     const token = ++rebuildToken;
     graphBusy = true;
+    graphError = null;
 
     try {
       const flow = await buildLearningUnitFlow(
@@ -1616,6 +1619,10 @@
 
       flowNodes = flow.nodes;
       flowEdges = flow.edges;
+    } catch {
+      if (token === rebuildToken) {
+        graphError = "Der Lernpfad konnte nicht aufgebaut werden. Bitte versuche es erneut.";
+      }
     } finally {
       if (token === rebuildToken) {
         graphBusy = false;
@@ -1848,7 +1855,7 @@
     </section>
 
     {#if learnerWorkspace.surface === "graph"}
-      <LearningUnitOverview graph={graphState} nodes={flowNodes} edges={flowEdges} />
+      <LearningUnitOverview graph={graphState} nodes={flowNodes} edges={flowEdges} busy={graphBusy} error={graphError} onRetry={() => void rebuildGraph()} />
     {/if}
 
     <div hidden={learnerWorkspace.surface === "graph"} class="learning-unit-mounted-workspace">

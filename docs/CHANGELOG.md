@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-30
+
+### Browserkompatibilität für ältere iPads
+
+- fix(graph): Gezielt früh geladene Laufzeit-Polyfills sichern Graph und Kameraaktionen ab. Fehlgeschlagener Graphaufbau zeigt einen erklärten Zustand mit Wiederholung; Kamerafehler bleiben sichtbar statt unbehandelt.
+- fix(browser): Sichere UUIDv4-Erzeugung und validierende Formularübermittlung funktionieren auch ohne neuere Browsermethoden. Die für SvelteKit erforderliche Button-/FormData-Submitter-Semantik wird bei fehlerhafter nativer Umsetzung ergänzt. Abgabe- und Übungsbestätigungen verwenden die bestehende Fokusverwaltung mit wiederherstellbarer Hintergrundisolation.
+- fix(css): Kompatible Farben, Viewportgrößen, Fokuszustände und Layoutgrundlagen erhalten sichtbare Inhalte und Graphkanten; moderne Werte werden gezielt über `@supports` ergänzt.
+- test(browser): Authentifizierte Graph-, Lernenden-, Lehrkräfte- und Live-Abläufe werden mit und ohne definierte API-Lücken geprüft. Die Abnahme auf einem echten iPad mit iPadOS 15.3.1 bleibt mangels Gerät offen; die alte Safari-Engine ist damit noch nicht bestätigt.
+- docs(browser): Browseruntergrenze, Polyfill-Verwendungen und gezieltes Gate sind in `docs/references/browser_compatibility.md` dokumentiert. Keine Änderungen an API, Datenbank oder RLS.
+
 ## 2026-09-28
 
 ### Kompakter Schülerstand in der Live-Matrix

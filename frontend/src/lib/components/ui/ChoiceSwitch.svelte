@@ -26,7 +26,7 @@
   <legend class="choice-switch__legend" class:visually-hidden={legendHidden}>{legend}</legend>
   <div class="choice-switch__options">
     {#each options as option}
-      <label class="choice-switch__option" data-current={option.value === value}>
+      <label class="choice-switch__option" data-current={option.value === value} data-disabled={option.disabled === true}>
         <input
           type="radio"
           {name}

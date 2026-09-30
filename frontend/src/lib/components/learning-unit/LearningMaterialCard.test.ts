@@ -171,7 +171,7 @@ describe("LearningMaterialCard", () => {
     const designSystemCss = css;
 
     expect(css).toMatch(
-      /\.learning-work-item--material\s*\{[^}]*--learning-material-rail-width:\s*min\(100%,\s*calc\(clamp\(30rem,\s*66vw,\s*46rem\)\s*\*\s*var\(--learning-unit-measure-scale\)\)\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+      /\.learning-work-item--material\s*\{[^}]*--learning-material-rail-width:\s*min\(100%,\s*calc\(clamp\(30rem,\s*66vw,\s*46rem\)\s*\*\s*var\(--learning-unit-measure-scale\)\)\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid var\(--color-line\);[^}]*box-shadow:\s*var\(--color-shadow\);/s
     );
     expect(css).toMatch(
       /\.learning-unit-pane-grid--split\s+\.learning-work-item--material\s*\{[^}]*--learning-material-rail-width:\s*min\(100%,\s*calc\(clamp\(24rem,\s*88%,\s*34rem\)\s*\*\s*var\(--learning-unit-measure-scale\)\)\);/s

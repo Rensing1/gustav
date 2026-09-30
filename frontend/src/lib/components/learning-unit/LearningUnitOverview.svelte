@@ -15,11 +15,17 @@
   let {
     graph,
     nodes,
-    edges
+    edges,
+    busy = false,
+    error = null,
+    onRetry
   }: {
     graph: LearningUnitGraph | null;
     nodes: LearningFlowNode[];
     edges: TeacherFlowEdge[];
+    busy?: boolean;
+    error?: string | null;
+    onRetry?: () => void;
   } = $props();
 
   const nodeTypes = {
@@ -35,7 +41,14 @@
 <GraphStageFrame chromeless eyebrow="Lernpfad" title="Lernpfad">
   {#snippet children()}
     <section use:fitGraphToScreen class="learning-unit-stage learning-unit-stage--graph teacher-flow-workspace teacher-flow-shell learning-flow-shell">
-      {#if graph}
+      {#if error}
+        <div role="alert">
+          <p>{error}</p>
+          <button class="workspace-link-action" type="button" onclick={onRetry}>Erneut versuchen</button>
+        </div>
+      {:else if busy && nodes.length === 0}
+        <p role="status">Lernpfad wird aufgebaut …</p>
+      {:else if graph && nodes.length > 0}
         <SvelteFlow
           ariaLabelConfig={graphAriaLabels}
           bind:nodes={nodes}
@@ -58,6 +71,8 @@
             showInteractionToggle={false}
           />
         </SvelteFlow>
+      {:else if graph}
+        <p class="learning-unit-empty-copy">Der Lernpfad enthält noch keine Module.</p>
       {:else}
         <p class="learning-unit-empty-copy">Der Graph konnte nicht geladen werden.</p>
       {/if}

@@ -13,12 +13,18 @@
   width: 1.12rem;
   min-height: 1.12rem;
   border-radius: 0.32rem;
-  color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text) 10%);
+  color: var(--color-text-muted);
   background: transparent;
   transition:
     background-color 160ms ease,
     color 160ms ease,
     transform 160ms ease;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-handle {
+    color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text) 10%);
+  }
 }
 
 .workspace-unit-controls {
@@ -73,9 +79,17 @@
   gap: 0.25rem;
   padding: 0.48rem 0.58rem;
   background: var(--color-bg-elevated);
-  border: 1px solid color-mix(in srgb, var(--color-border) 82%, var(--color-text) 18%);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-s);
   box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-row-menu-popover,
+  .workspace-row-menu__panel,
+  .workspace-overflow-popover {
+    border: 1px solid color-mix(in srgb, var(--color-border) 82%, var(--color-text) 18%);
+  }
 }
 
 .workspace-row-menu__danger {
@@ -338,7 +352,7 @@
   width: min(100%, 34rem);
   display: grid;
   align-content: start;
-  max-height: calc(100dvh - var(--space-5) * 2);
+  max-height: calc(100vh - var(--space-5) * 2);
   overflow: auto;
   gap: var(--space-4);
   padding: var(--space-5);
@@ -346,6 +360,12 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-s);
   box-shadow: var(--color-shadow);
+}
+
+@supports (height: 100dvh) {
+  .workspace-modal-card {
+    max-height: calc(100dvh - var(--space-5) * 2);
+  }
 }
 
 .workspace-modal--drawer {
@@ -385,8 +405,15 @@
 
 .workspace-icon-button:hover,
 .workspace-icon-button:focus-visible {
-  background: color-mix(in srgb, var(--color-bg-surface) 76%, var(--color-accent-soft) 24%);
+  background: var(--color-accent-soft);
   color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-icon-button:hover,
+  .workspace-icon-button:focus-visible {
+    background: color-mix(in srgb, var(--color-bg-surface) 76%, var(--color-accent-soft) 24%);
+  }
 }
 
 .workspace-modal-eyebrow {
@@ -454,12 +481,18 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 90%, var(--color-border) 10%);
+  border-bottom: 1px solid var(--color-line);
   transition:
     background-color 180ms ease,
     border-color 180ms ease,
     box-shadow 180ms ease,
     transform 180ms ease;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-manage-row {
+    border-bottom: 1px solid color-mix(in srgb, var(--color-line) 90%, var(--color-border) 10%);
+  }
 }
 
 .workspace-manage-row:last-child {
@@ -509,8 +542,14 @@
 }
 
 .workspace-manage-row .workspace-note {
-  color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text) 10%);
+  color: var(--color-text-muted);
   font-size: 0.78rem;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-manage-row .workspace-note {
+    color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text) 10%);
+  }
 }
 
 .workspace-unit-order {
@@ -518,27 +557,51 @@
   flex: 0 0 auto;
   align-items: baseline;
   margin-right: 0.42rem;
-  color: color-mix(in srgb, var(--color-text-muted) 82%, var(--color-text) 18%);
+  color: var(--color-text-muted);
   font-size: 0.64rem;
   font-weight: 700;
   line-height: 1;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-order {
+    color: color-mix(in srgb, var(--color-text-muted) 82%, var(--color-text) 18%);
+  }
+}
+
 .workspace-row-menu[open] summary,
 .workspace-overflow-menu[open] summary {
-  border-color: color-mix(in srgb, var(--color-border) 70%, var(--color-accent-soft) 30%);
-  background: color-mix(in srgb, var(--color-bg-surface) 66%, var(--color-accent-soft) 34%);
+  border-color: var(--color-line);
+  background: var(--color-accent-soft);
   box-shadow: 0 4px 12px rgba(35, 41, 45, 0.08);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-row-menu[open] summary,
+  .workspace-overflow-menu[open] summary {
+    border-color: color-mix(in srgb, var(--color-border) 70%, var(--color-accent-soft) 30%);
+    background: color-mix(in srgb, var(--color-bg-surface) 66%, var(--color-accent-soft) 34%);
+  }
 }
 
 .workspace-row-menu summary:hover,
 .workspace-row-menu summary:focus-visible,
 .workspace-overflow-menu summary:hover,
 .workspace-overflow-menu summary:focus-visible {
-  border-color: color-mix(in srgb, var(--color-border) 68%, var(--color-accent-soft) 32%);
-  background: color-mix(in srgb, var(--color-bg-surface) 76%, var(--color-accent-soft) 24%);
+  border-color: var(--color-line);
+  background: var(--color-accent-soft);
   color: var(--color-text);
   box-shadow: 0 4px 10px rgba(35, 41, 45, 0.06);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-row-menu summary:hover,
+  .workspace-row-menu summary:focus-visible,
+  .workspace-overflow-menu summary:hover,
+  .workspace-overflow-menu summary:focus-visible {
+    border-color: color-mix(in srgb, var(--color-border) 68%, var(--color-accent-soft) 32%);
+    background: color-mix(in srgb, var(--color-bg-surface) 76%, var(--color-accent-soft) 24%);
+  }
 }
 
 .workspace-unit-header {
@@ -546,14 +609,26 @@
   gap: 0.95rem;
   margin-bottom: 1.1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 78%, white 22%);
+  border-bottom: 1px solid var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-header {
+    border-bottom: 1px solid color-mix(in srgb, var(--color-line) 78%, white 22%);
+  }
 }
 
 .workspace-composer-copyline {
   margin: 0;
-  color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text) 10%);
+  color: var(--color-text-muted);
   font-size: 0.88rem;
   line-height: 1.45;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-composer-copyline {
+    color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text) 10%);
+  }
 }
 
 .workspace-unit-header-main {
@@ -589,7 +664,13 @@
   border: 1px solid var(--color-line);
   border-radius: 999px;
   padding: 0.15rem;
-  background: color-mix(in srgb, var(--color-bg-surface) 94%, white 6%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-mode-switch {
+    background: color-mix(in srgb, var(--color-bg-surface) 94%, white 6%);
+  }
 }
 
 .workspace-mode-switch__item {
@@ -602,8 +683,14 @@
 }
 
 .workspace-mode-switch__item--active {
-  background: color-mix(in srgb, var(--color-bg-elevated) 92%, white 8%);
+  background: var(--color-bg-surface);
   color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-mode-switch__item--active {
+    background: color-mix(in srgb, var(--color-bg-elevated) 92%, white 8%);
+  }
 }
 
 .workspace-unit-main {
@@ -655,9 +742,26 @@
 
 .teacher-module-workbench {
   max-width: none;
+  grid-template-columns: 22rem minmax(0, 1fr);
   grid-template-columns: clamp(22rem, 23cqw, 25rem) minmax(0, 1fr);
   gap: 0;
   border-top: 1px solid var(--color-line);
+}
+
+/* Older WebKit uses the same stage selection with a viewport-sized breakpoint. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 63.99rem) {
+    .teacher-module-workbench { grid-template-columns: minmax(0, 1fr); }
+    .teacher-module-workbench[data-module-stage="contents"] .teacher-module-editor-pane,
+    .teacher-module-workbench[data-module-stage="editor"] .teacher-module-outline { display: none; }
+    .teacher-module-outline { position: static; padding-right: 0; border-right: 0; }
+    .teacher-module-outline__compact-add { display: inline-grid; }
+    .teacher-module-editor-pane { padding-inline: 0; }
+    .teacher-module-editor-pane__back { display: inline-flex; }
+  }
+  @media (max-width: 47.99rem) {
+    .teacher-module-editor-pane .workspace-node-editor-grid { grid-template-columns: minmax(0, 1fr); }
+  }
 }
 
 .teacher-module-workbench.workspace-node-editor--content-only {
@@ -830,6 +934,7 @@
 
 .teacher-module-editor-pane {
   min-width: 0;
+  padding: 1.4rem clamp(2rem, 4vw, 5rem) 3rem;
   padding: 1.4rem clamp(2rem, 4cqw, 5rem) 3rem;
 }
 
@@ -882,7 +987,9 @@
 
 @container (min-width: 64rem) {
   .teacher-module-editor-pane .learning-markdown-editor__surface .tiptap {
+    min-height: clamp(24rem, 52vh, 36rem);
     min-height: clamp(24rem, 52dvh, 36rem);
+    max-height: 64vh;
     max-height: 64dvh;
   }
 }
@@ -1132,7 +1239,13 @@
   border: 1px solid var(--color-border);
   border-radius: 0;
   background: var(--color-bg-surface);
-  box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--color-border) 12%, transparent 88%);
+  box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-node-editor-card {
+    box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--color-border) 12%, transparent 88%);
+  }
 }
 
 .workspace-node-editor-card--expanded {
@@ -1175,7 +1288,13 @@
 }
 
 .workspace-node-editor-entry--task .workspace-node-editor-entry-summary-bar {
-  background: color-mix(in srgb, var(--color-accent) 56%, white 44%);
+  background: var(--color-accent-soft);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-node-editor-entry--task .workspace-node-editor-entry-summary-bar {
+    background: color-mix(in srgb, var(--color-accent) 56%, white 44%);
+  }
 }
 
 .workspace-node-editor-entry-summary-copy {
@@ -1234,7 +1353,13 @@
   display: grid;
   gap: 0.85rem;
   padding-top: 0.2rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-line) 82%, white 18%);
+  border-top: 1px solid var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-node-editor-entry-body {
+    border-top: 1px solid color-mix(in srgb, var(--color-line) 82%, white 18%);
+  }
 }
 
 .workspace-node-editor-entry-toolbar {
@@ -1279,7 +1404,13 @@
   border: 1px solid var(--color-border);
   border-radius: 0;
   background: var(--color-bg-surface);
-  box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--color-border) 12%, transparent 88%);
+  box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-node-editor-card-menu__panel {
+    box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--color-border) 12%, transparent 88%);
+  }
 }
 
 .workspace-node-editor-card-menu__panel form {
@@ -1300,7 +1431,14 @@
 
 .workspace-node-editor-card-menu__panel button:hover,
 .workspace-node-editor-card-menu__panel button:focus-visible {
-  background: color-mix(in srgb, var(--color-bg-surface) 88%, white 12%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-node-editor-card-menu__panel button:hover,
+  .workspace-node-editor-card-menu__panel button:focus-visible {
+    background: color-mix(in srgb, var(--color-bg-surface) 88%, white 12%);
+  }
 }
 
 .workspace-node-editor-card-menu__danger {
@@ -1364,7 +1502,13 @@
 .workspace-node-editor-file-preview img {
   max-height: 22rem;
   object-fit: contain;
-  background: color-mix(in srgb, var(--color-bg-base) 88%, white 12%);
+  background: var(--color-bg-base);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-node-editor-file-preview img {
+    background: color-mix(in srgb, var(--color-bg-base) 88%, white 12%);
+  }
 }
 
 .workspace-node-editor-file-preview iframe {
@@ -1387,6 +1531,7 @@
 .workspace-node-editor-simulation-frame {
   display: block;
   width: 100%;
+  height: clamp(26rem, 65vh, 44rem);
   height: clamp(26rem, 65dvh, 44rem);
   border: 1px solid var(--color-border);
   background: white;
@@ -1501,7 +1646,15 @@
 .workspace-unit-outline-row--link:hover,
 .workspace-unit-outline-row--link:focus-visible,
 .workspace-unit-outline-row--active {
-  background: color-mix(in srgb, var(--color-bg-surface) 90%, white 10%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-outline-row--link:hover,
+  .workspace-unit-outline-row--link:focus-visible,
+  .workspace-unit-outline-row--active {
+    background: color-mix(in srgb, var(--color-bg-surface) 90%, white 10%);
+  }
 }
 
 .workspace-unit-outline-index {
@@ -1533,8 +1686,15 @@
   padding: 0.9rem;
   overflow: hidden;
   background:
+    var(--color-bg-base);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-canvas-shell {
+    background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0) 34%),
     linear-gradient(180deg, color-mix(in srgb, var(--color-bg-surface) 90%, white 10%), color-mix(in srgb, var(--color-bg-surface) 95%, var(--color-bg-base) 5%));
+  }
 }
 
 .workspace-unit-canvas-shell::before {
@@ -1570,10 +1730,17 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.5rem 0.65rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 70%, white 30%);
+  border: 1px solid var(--color-line);
   border-radius: 1rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
+  background: var(--color-bg-surface);
   box-shadow: 0 10px 20px rgba(35, 41, 45, 0.05);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-canvas-tools {
+    border: 1px solid color-mix(in srgb, var(--color-border) 70%, white 30%);
+    background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
+  }
 }
 
 .workspace-unit-canvas-tools__group {
@@ -1598,11 +1765,18 @@
   display: grid;
   gap: 0.72rem;
   padding: 0.85rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 84%, white 16%);
+  border: 1px solid var(--color-line);
   border-radius: 0.92rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 90%, white 10%);
+  background: var(--color-bg-surface);
   box-shadow: 0 16px 34px rgba(35, 41, 45, 0.1);
   backdrop-filter: blur(18px);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-selection-card {
+    border: 1px solid color-mix(in srgb, var(--color-border) 84%, white 16%);
+    background: color-mix(in srgb, var(--color-bg-elevated) 90%, white 10%);
+  }
 }
 
 .workspace-unit-canvas-stage {
@@ -1641,9 +1815,15 @@
 
 .workspace-unit-linear-edge path {
   fill: none;
-  stroke: color-mix(in srgb, var(--color-accent-soft) 42%, var(--color-border) 58%);
+  stroke: var(--color-border);
   stroke-width: 2.6;
   stroke-linecap: round;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-linear-edge path {
+    stroke: color-mix(in srgb, var(--color-accent-soft) 42%, var(--color-border) 58%);
+  }
 }
 
 .workspace-unit-edge-layer {
@@ -1662,18 +1842,31 @@
 
 .workspace-unit-edge-layer__path {
   fill: none;
-  stroke: color-mix(in srgb, var(--color-accent-soft) 48%, var(--color-border) 52%);
+  stroke: var(--color-border);
   stroke-width: 3.2;
   stroke-linecap: round;
   opacity: 0.96;
   transition: stroke 140ms ease, opacity 140ms ease, stroke-width 140ms ease;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-edge-layer__path {
+    stroke: color-mix(in srgb, var(--color-accent-soft) 48%, var(--color-border) 52%);
+  }
+}
+
 .workspace-unit-edge-layer__path:hover,
 .workspace-unit-edge-layer__path--active {
-  stroke: color-mix(in srgb, var(--color-accent-soft) 72%, var(--color-text) 28%);
+  stroke: var(--color-border);
   stroke-width: 4;
   opacity: 1;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-edge-layer__path:hover,
+  .workspace-unit-edge-layer__path--active {
+    stroke: color-mix(in srgb, var(--color-accent-soft) 72%, var(--color-text) 28%);
+  }
 }
 
 .workspace-unit-phase-band {
@@ -1699,7 +1892,7 @@
   position: absolute;
   inset: 0;
   border-radius: 1.1rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 68%, white 32%);
+  border: 1px solid var(--color-line);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.2)),
     linear-gradient(90deg, rgba(31, 91, 102, 0.035), rgba(31, 91, 102, 0));
@@ -1707,6 +1900,12 @@
     0 1px 0 rgba(255, 255, 255, 0.45) inset,
     0 8px 18px rgba(35, 41, 45, 0.035);
   pointer-events: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-phase-band__surface {
+    border: 1px solid color-mix(in srgb, var(--color-border) 68%, white 32%);
+  }
 }
 
 .workspace-unit-phase-link {
@@ -1756,8 +1955,17 @@
 .workspace-unit-phase-menu summary:focus-visible,
 .workspace-unit-node-menu summary:hover,
 .workspace-unit-node-menu summary:focus-visible {
-  background: color-mix(in srgb, var(--color-bg-elevated) 84%, white 16%);
+  background: var(--color-bg-surface);
   color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-phase-menu summary:hover,
+  .workspace-unit-phase-menu summary:focus-visible,
+  .workspace-unit-node-menu summary:hover,
+  .workspace-unit-node-menu summary:focus-visible {
+    background: color-mix(in srgb, var(--color-bg-elevated) 84%, white 16%);
+  }
 }
 
 .workspace-unit-phase-menu .workspace-row-menu-popover,
@@ -1780,29 +1988,49 @@
   gap: 0.55rem;
   align-items: start;
   padding: 0.72rem 0.8rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+  border: 1px solid var(--color-line);
   border-radius: 0.92rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 94%, white 6%);
+  background: var(--color-bg-surface);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.6) inset,
     0 10px 22px rgba(35, 41, 45, 0.06);
   transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-node {
+    border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+    background: color-mix(in srgb, var(--color-bg-elevated) 94%, white 6%);
+  }
+}
+
 .workspace-unit-node:hover,
 .workspace-unit-node:focus-within {
-  border-color: color-mix(in srgb, var(--color-accent-soft) 38%, var(--color-border) 62%);
+  border-color: var(--color-line);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.78) inset,
     0 14px 26px rgba(35, 41, 45, 0.09);
   transform: translateY(-1px);
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-node:hover,
+  .workspace-unit-node:focus-within {
+    border-color: color-mix(in srgb, var(--color-accent-soft) 38%, var(--color-border) 62%);
+  }
+}
+
 .workspace-unit-node--active {
-  border-color: color-mix(in srgb, var(--color-accent-soft) 68%, var(--color-text) 32%);
+  border-color: var(--color-line);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.78) inset,
     0 16px 30px rgba(35, 41, 45, 0.1);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-node--active {
+    border-color: color-mix(in srgb, var(--color-accent-soft) 68%, var(--color-text) 32%);
+  }
 }
 
 .workspace-unit-node--target {
@@ -1838,10 +2066,16 @@
   width: 1.7rem;
   height: 1.7rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-bg-surface) 82%, white 18%);
+  background: var(--color-bg-surface);
   color: var(--color-text-muted);
   font-size: 0.74rem;
   font-weight: 800;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-node-index {
+    background: color-mix(in srgb, var(--color-bg-surface) 82%, white 18%);
+  }
 }
 
 .workspace-unit-node-copy {
@@ -1876,7 +2110,7 @@
 /* Match the frame primitive's specificity so this later context rule keeps priority. */
 .teacher-flow-shell,
 .graph-stage-frame .teacher-flow-shell {
-  height: var(--graph-available-height, 65dvh);
+  height: var(--graph-available-height, 65vh);
   min-height: 15rem;
   --background-color: transparent;
   --xy-background-color: transparent;
@@ -1884,6 +2118,13 @@
   --xy-background-pattern-color: transparent;
   --xy-background-pattern-color-props: transparent;
   background: transparent;
+}
+
+@supports (height: 100dvh) {
+  .teacher-flow-shell,
+  .graph-stage-frame .teacher-flow-shell {
+    height: var(--graph-available-height, 65dvh);
+  }
 }
 
 .teacher-flow-shell .teacher-flow-canvas {
@@ -1985,7 +2226,7 @@
 
 .teacher-flow-phase-band__kicker {
   flex: 0 0 auto;
-  color: color-mix(in srgb, #6f736f 68%, var(--color-text) 32%);
+  color: var(--color-text);
   font-size: 0.86rem;
   line-height: 1;
   font-weight: 650;
@@ -1993,25 +2234,51 @@
   text-transform: uppercase;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-phase-band__kicker {
+    color: color-mix(in srgb, #6f736f 68%, var(--color-text) 32%);
+  }
+}
+
 .teacher-flow-phase-band__title {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: color-mix(in srgb, #0d4f71 90%, var(--color-text) 10%);
+  color: var(--color-text);
   font-size: clamp(1.4rem, 1.6vw, 1.92rem);
   line-height: 0.98;
   font-weight: 760;
   letter-spacing: -0.034em;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-phase-band__title {
+    color: color-mix(in srgb, #0d4f71 90%, var(--color-text) 10%);
+  }
+}
+
 .teacher-flow-phase-band--selected .teacher-flow-phase-band__kicker,
 .teacher-flow-phase--context .teacher-flow-phase-band__kicker {
-  color: color-mix(in srgb, #5f696e 56%, var(--color-text) 44%);
+  color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-phase-band--selected .teacher-flow-phase-band__kicker,
+  .teacher-flow-phase--context .teacher-flow-phase-band__kicker {
+    color: color-mix(in srgb, #5f696e 56%, var(--color-text) 44%);
+  }
 }
 
 .teacher-flow-phase-band--selected .teacher-flow-phase-band__title,
 .teacher-flow-phase--context .teacher-flow-phase-band__title {
-  color: color-mix(in srgb, #0a567b 94%, var(--color-text) 6%);
+  color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-phase-band--selected .teacher-flow-phase-band__title,
+  .teacher-flow-phase--context .teacher-flow-phase-band__title {
+    color: color-mix(in srgb, #0a567b 94%, var(--color-text) 6%);
+  }
 }
 
 .teacher-flow-node {
@@ -2044,15 +2311,23 @@
   width: 100%;
   height: 100%;
   padding: 0.92rem 0.98rem 0.86rem;
+  border: 1px solid var(--color-line);
   border: 1px solid color-mix(in srgb, rgba(116, 111, 96, 0.22) 70%, white 30%);
   border-radius: 1.05rem;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.55)),
-    color-mix(in srgb, var(--color-bg-elevated) 96%, white 4%);
+    var(--color-bg-surface);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.82) inset,
     0 10px 22px rgba(35, 41, 45, 0.055);
   transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease, opacity 120ms ease, filter 120ms ease;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node {
+    background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.55)),
+    color-mix(in srgb, var(--color-bg-elevated) 96%, white 4%);
+  }
 }
 
 .teacher-flow-unit-node--compact {
@@ -2066,11 +2341,17 @@
 
 .teacher-flow-node--context .teacher-flow-unit-node {
   opacity: 1;
-  border-color: color-mix(in srgb, rgba(113, 154, 180, 0.18) 28%, var(--color-border) 72%);
+  border-color: var(--color-line);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.84) inset,
     0 12px 24px rgba(35, 41, 45, 0.065),
     0 0 0 3px rgba(113, 154, 180, 0.06);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-node--context .teacher-flow-unit-node {
+    border-color: color-mix(in srgb, rgba(113, 154, 180, 0.18) 28%, var(--color-border) 72%);
+  }
 }
 
 .teacher-flow-node--active .teacher-flow-unit-node,
@@ -2079,20 +2360,32 @@
 }
 
 .teacher-flow-unit-node:hover {
-  border-color: color-mix(in srgb, rgba(113, 154, 180, 0.28) 38%, var(--color-border) 62%);
+  border-color: var(--color-line);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.84) inset,
     0 14px 28px rgba(35, 41, 45, 0.085);
   transform: translateY(-1px);
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node:hover {
+    border-color: color-mix(in srgb, rgba(113, 154, 180, 0.28) 38%, var(--color-border) 62%);
+  }
+}
+
 .teacher-flow-unit-node--selected {
-  border-color: color-mix(in srgb, rgba(93, 145, 178, 0.46) 56%, var(--color-border) 44%);
+  border-color: var(--color-line);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.88) inset,
     0 16px 32px rgba(35, 41, 45, 0.1),
     0 0 0 4px rgba(93, 145, 178, 0.08);
   z-index: 4;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node--selected {
+    border-color: color-mix(in srgb, rgba(93, 145, 178, 0.46) 56%, var(--color-border) 44%);
+  }
 }
 
 .teacher-flow-unit-node__copy {
@@ -2155,11 +2448,17 @@
 }
 
 .teacher-flow-unit-node__copy strong {
-  color: color-mix(in srgb, var(--color-text) 94%, #38566d 6%);
+  color: var(--color-text);
   font-size: 0.95rem;
   line-height: 1.18;
   font-weight: 760;
   letter-spacing: -0.012em;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node__copy strong {
+    color: color-mix(in srgb, var(--color-text) 94%, #38566d 6%);
+  }
 }
 
 .teacher-flow-unit-node__copy small {
@@ -2170,7 +2469,7 @@
 
 .teacher-flow-unit-node__editor {
   flex: 0 0 auto;
-  color: color-mix(in srgb, #355f7b 36%, var(--color-text-muted) 64%);
+  color: var(--color-text-muted);
   font-size: 0.62rem;
   font-weight: 700;
   text-decoration: none;
@@ -2178,6 +2477,12 @@
   pointer-events: none;
   transform: translateY(1px);
   transition: opacity 120ms ease, transform 120ms ease, color 120ms ease;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node__editor {
+    color: color-mix(in srgb, #355f7b 36%, var(--color-text-muted) 64%);
+  }
 }
 
 .teacher-flow-unit-node:hover .teacher-flow-unit-node__editor,
@@ -2190,8 +2495,15 @@
 
 .teacher-flow-unit-node__editor:hover,
 .teacher-flow-unit-node__editor:focus-visible {
-  color: color-mix(in srgb, #2f5f7e 56%, var(--color-text) 44%);
+  color: var(--color-text);
   text-decoration: underline;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node__editor:hover,
+  .teacher-flow-unit-node__editor:focus-visible {
+    color: color-mix(in srgb, #2f5f7e 56%, var(--color-text) 44%);
+  }
 }
 
 .teacher-flow-unit-node__popover {
@@ -2204,11 +2516,18 @@
   width: max-content;
   max-width: min(18rem, calc(100vw - 3rem));
   padding: 0.4rem 0.46rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+  border: 1px solid var(--color-line);
   border-radius: 0.85rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 96%, white 4%);
+  background: var(--color-bg-surface);
   box-shadow: 0 16px 28px rgba(35, 41, 45, 0.11);
   z-index: 8;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node__popover {
+    border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+    background: color-mix(in srgb, var(--color-bg-elevated) 96%, white 4%);
+  }
 }
 
 .teacher-flow-unit-node__popover-action {
@@ -2232,8 +2551,9 @@
   width: 0.72rem;
   height: 0.72rem;
   border-width: 1.5px;
+  border-color: var(--color-line);
   border-color: color-mix(in srgb, rgba(88, 113, 129, 0.56) 52%, white 48%);
-  background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
+  background: var(--color-bg-surface);
   position: absolute;
   z-index: 3;
   opacity: 0;
@@ -2246,14 +2566,28 @@
     box-shadow 120ms ease;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node__handle {
+    background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
+  }
+}
+
 .teacher-flow-unit-node:hover .teacher-flow-unit-node__handle,
 .teacher-flow-unit-node--selected .teacher-flow-unit-node__handle,
 .teacher-flow-node--active .teacher-flow-unit-node__handle {
   opacity: 0.92;
-  border-color: color-mix(in srgb, rgba(72, 125, 157, 0.55) 62%, var(--color-border) 38%);
+  border-color: var(--color-line);
   box-shadow:
     0 2px 8px rgba(35, 41, 45, 0.09),
     0 0 0 3px rgba(93, 145, 178, 0.08);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node:hover .teacher-flow-unit-node__handle,
+  .teacher-flow-unit-node--selected .teacher-flow-unit-node__handle,
+  .teacher-flow-node--active .teacher-flow-unit-node__handle {
+    border-color: color-mix(in srgb, rgba(72, 125, 157, 0.55) 62%, var(--color-border) 38%);
+  }
 }
 
 .teacher-flow-unit-node__handle--top-target,
@@ -2300,9 +2634,15 @@
 }
 
 .teacher-flow-shell .svelte-flow__edge-path {
-  stroke: color-mix(in srgb, rgba(112, 116, 116, 0.56) 48%, var(--color-border) 52%);
+  stroke: var(--color-border);
   stroke-width: 1.8;
   opacity: 0.26;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-shell .svelte-flow__edge-path {
+    stroke: color-mix(in srgb, rgba(112, 116, 116, 0.56) 48%, var(--color-border) 52%);
+  }
 }
 
 .teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--same-row .svelte-flow__edge-path {
@@ -2320,8 +2660,14 @@
 }
 
 .teacher-flow-shell .svelte-flow__connection-path {
-  stroke: color-mix(in srgb, var(--color-accent-soft) 70%, var(--color-text) 30%);
+  stroke: var(--color-border);
   stroke-width: 2.8;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-shell .svelte-flow__connection-path {
+    stroke: color-mix(in srgb, var(--color-accent-soft) 70%, var(--color-text) 30%);
+  }
 }
 
 .teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--muted .svelte-flow__edge-path {
@@ -2329,17 +2675,31 @@
 }
 
 .teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--related .svelte-flow__edge-path {
-  stroke: color-mix(in srgb, #667786 34%, var(--color-accent-soft) 66%);
+  stroke: var(--color-accent);
   stroke-width: 2.1;
   opacity: 0.44;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--related .svelte-flow__edge-path {
+    stroke: color-mix(in srgb, #667786 34%, var(--color-accent-soft) 66%);
+  }
 }
 
 .teacher-flow-shell .svelte-flow__edge.selected .svelte-flow__edge-path,
 .teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--selected .svelte-flow__edge-path,
 .teacher-flow-shell .svelte-flow__edge:hover .svelte-flow__edge-path {
-  stroke: color-mix(in srgb, #5d91b2 42%, var(--color-text) 58%);
+  stroke: var(--color-accent);
   stroke-width: 2.4;
   opacity: 1;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-shell .svelte-flow__edge.selected .svelte-flow__edge-path,
+  .teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--selected .svelte-flow__edge-path,
+  .teacher-flow-shell .svelte-flow__edge:hover .svelte-flow__edge-path {
+    stroke: color-mix(in srgb, #5d91b2 42%, var(--color-text) 58%);
+  }
 }
 
 .teacher-flow-shell .svelte-flow__controls {
@@ -2393,8 +2753,9 @@
   width: 100%;
   min-height: 2rem;
   padding: 0.38rem 0.74rem;
-  border: 1px solid color-mix(in srgb, #b96855 24%, var(--color-border) 76%);
+  border: 1px solid var(--color-line);
   border-radius: 999px;
+  background: var(--color-bg-surface);
   background: color-mix(in srgb, rgba(255, 250, 243, 0.96) 78%, rgba(185, 104, 85, 0.1) 22%);
   box-shadow: 0 10px 20px rgba(35, 41, 45, 0.12);
   color: #8d3f33;
@@ -2405,8 +2766,15 @@
   white-space: nowrap;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-edge-chip__button {
+    border: 1px solid color-mix(in srgb, #b96855 24%, var(--color-border) 76%);
+  }
+}
+
 .teacher-flow-edge-chip__button:hover,
 .teacher-flow-edge-chip__button:focus-visible {
+  background: var(--color-bg-surface);
   background: color-mix(in srgb, rgba(255, 250, 243, 0.92) 64%, rgba(185, 104, 85, 0.16) 36%);
 }
 
@@ -2495,7 +2863,15 @@
 .workspace-unit-tree-link:hover,
 .workspace-unit-tree-link:focus-visible,
 .workspace-unit-tree-link--active {
-  background: color-mix(in srgb, var(--color-bg-surface) 90%, white 10%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-unit-tree-link:hover,
+  .workspace-unit-tree-link:focus-visible,
+  .workspace-unit-tree-link--active {
+    background: color-mix(in srgb, var(--color-bg-surface) 90%, white 10%);
+  }
 }
 
 .workspace-unit-danger {
@@ -2535,8 +2911,15 @@
   display: grid;
   place-items: center;
   padding: var(--space-5);
-  background: color-mix(in srgb, var(--color-bg-base) 72%, transparent 28%);
+  background: var(--color-bg-base);
   isolation: isolate;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-backdrop,
+  .graph-delete-dialog-backdrop {
+    background: color-mix(in srgb, var(--color-bg-base) 72%, transparent 28%);
+  }
 }
 
 .dialog-backdrop__dismiss,
@@ -2558,12 +2941,18 @@
   display: grid;
   gap: var(--space-4);
   width: min(34rem, 100%);
-  max-height: calc(100dvh - 2 * var(--space-5));
+  max-height: calc(100vh - 2 * var(--space-5));
   padding: var(--space-5);
   overflow-y: auto;
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
   box-shadow: var(--color-shadow);
+}
+
+@supports (height: 100dvh) {
+  .dialog-card {
+    max-height: calc(100dvh - 2 * var(--space-5));
+  }
 }
 
 .dialog-card__header,
@@ -2590,13 +2979,19 @@
   display: grid;
   gap: var(--space-4);
   width: min(34rem, 100%);
-  max-height: calc(100dvh - 2 * var(--space-5));
+  max-height: calc(100vh - 2 * var(--space-5));
   overflow-y: auto;
   padding: var(--space-5);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-s);
   background: var(--color-bg-surface);
   box-shadow: var(--color-shadow);
+}
+
+@supports (height: 100dvh) {
+  .graph-delete-dialog {
+    max-height: calc(100dvh - 2 * var(--space-5));
+  }
 }
 
 .graph-delete-dialog .dialog-card__header {
@@ -2788,10 +3183,18 @@
 
 .teacher-flow-unit-node--learner-locked,
 .learning-flow-node--locked .teacher-flow-unit-node--learner {
-  border-color: color-mix(in srgb, var(--color-border) 84%, transparent 16%);
-  background: color-mix(in srgb, var(--color-bg-surface) 80%, var(--color-bg-base) 20%);
+  border-color: var(--color-line);
+  background: var(--color-bg-base);
   box-shadow: 1px 1px 0 0 rgba(27, 27, 27, 0.18);
   opacity: 1;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node--learner-locked,
+  .learning-flow-node--locked .teacher-flow-unit-node--learner {
+    border-color: color-mix(in srgb, var(--color-border) 84%, transparent 16%);
+    background: color-mix(in srgb, var(--color-bg-surface) 80%, var(--color-bg-base) 20%);
+  }
 }
 
 .teacher-flow-unit-node--learner-open {
@@ -2807,14 +3210,29 @@
 .teacher-flow-unit-node--learner-done .teacher-flow-unit-node__copy strong,
 .teacher-flow-unit-node--learner-done .teacher-flow-unit-node__meta small,
 .teacher-flow-unit-node--learner-done .teacher-flow-unit-node__header-main span {
-  color: color-mix(in srgb, var(--color-success) 76%, var(--color-text) 24%);
+  color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node--learner-done .teacher-flow-unit-node__copy strong,
+  .teacher-flow-unit-node--learner-done .teacher-flow-unit-node__meta small,
+  .teacher-flow-unit-node--learner-done .teacher-flow-unit-node__header-main span {
+    color: color-mix(in srgb, var(--color-success) 76%, var(--color-text) 24%);
+  }
 }
 
 .teacher-flow-unit-node--selected.teacher-flow-unit-node--learner,
 .teacher-flow-node--active .teacher-flow-unit-node--learner {
   border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-bg-surface) 88%, var(--color-accent-soft) 12%);
+  background: var(--color-accent-soft);
   box-shadow: 4px 4px 0 0 rgba(255, 81, 47, 0.85);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node--selected.teacher-flow-unit-node--learner,
+  .teacher-flow-node--active .teacher-flow-unit-node--learner {
+    background: color-mix(in srgb, var(--color-bg-surface) 88%, var(--color-accent-soft) 12%);
+  }
 }
 
 .teacher-flow-unit-node--selected.teacher-flow-unit-node--learner .teacher-flow-unit-node__copy strong,
@@ -2823,7 +3241,18 @@
 .teacher-flow-node--active .teacher-flow-unit-node__copy strong,
 .teacher-flow-node--active .teacher-flow-unit-node__meta small,
 .teacher-flow-node--active .teacher-flow-unit-node__header-main span {
-  color: color-mix(in srgb, var(--color-accent) 74%, var(--color-text) 26%);
+  color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-unit-node--selected.teacher-flow-unit-node--learner .teacher-flow-unit-node__copy strong,
+  .teacher-flow-unit-node--selected.teacher-flow-unit-node--learner .teacher-flow-unit-node__meta small,
+  .teacher-flow-unit-node--selected.teacher-flow-unit-node--learner .teacher-flow-unit-node__header-main span,
+  .teacher-flow-node--active .teacher-flow-unit-node__copy strong,
+  .teacher-flow-node--active .teacher-flow-unit-node__meta small,
+  .teacher-flow-node--active .teacher-flow-unit-node__header-main span {
+    color: color-mix(in srgb, var(--color-accent) 74%, var(--color-text) 26%);
+  }
 }
 
 .teacher-flow-unit-node--learner-locked .teacher-flow-unit-node__copy strong,
@@ -2863,9 +3292,15 @@
 }
 
 .teacher-flow-shell .svelte-flow__edge-path {
-  stroke: color-mix(in srgb, var(--color-border) 72%, transparent 28%);
+  stroke: var(--color-border);
   stroke-width: 2;
   opacity: 0.45;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-flow-shell .svelte-flow__edge-path {
+    stroke: color-mix(in srgb, var(--color-border) 72%, transparent 28%);
+  }
 }
 
 .teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--related .svelte-flow__edge-path,
@@ -2990,6 +3425,7 @@
     gap: var(--space-4);
     width: 100%;
     max-width: none;
+    min-height: 100vh;
     min-height: 100dvh;
     padding: var(--space-4);
     overflow-y: auto;
@@ -3040,8 +3476,14 @@
   }
 
   .graph-delete-dialog {
-    max-height: calc(100dvh - 2 * var(--space-3));
+    max-height: calc(100vh - 2 * var(--space-3));
     padding: var(--space-4);
+  }
+
+  @supports (height: 100dvh) {
+    .graph-delete-dialog {
+      max-height: calc(100dvh - 2 * var(--space-3));
+    }
   }
 
   .graph-delete-dialog__actions {
@@ -3653,7 +4095,14 @@
 
 .teacher-course-unit-list__row:hover,
 .teacher-course-unit-list__row:focus-within {
-  background: color-mix(in srgb, var(--color-bg-surface) 86%, var(--color-accent-soft) 14%);
+  background: var(--color-accent-soft);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .teacher-course-unit-list__row:hover,
+  .teacher-course-unit-list__row:focus-within {
+    background: color-mix(in srgb, var(--color-bg-surface) 86%, var(--color-accent-soft) 14%);
+  }
 }
 
 .teacher-course-unit-list__identity {

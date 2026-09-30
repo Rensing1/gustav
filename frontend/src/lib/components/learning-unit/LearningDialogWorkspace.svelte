@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { browserUUID } from "$lib/utils/browser-uuid";
   import { onMount, tick } from "svelte";
   import LearnerTaskContext from "$lib/components/learning-unit/LearnerTaskContext.svelte";
   import DialogMessage from "$lib/components/learning-unit/DialogMessage.svelte";
@@ -302,7 +303,7 @@
     try {
       acceptSession(await request(`/${session.id}/turns`, {
         method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        headers: { "content-type": "application/json", "idempotency-key": browserUUID() },
         body: JSON.stringify({ student_message_md: message, used_sentence_starter_md: selectedStarter?.text, used_sentence_starter_source: selectedStarter?.source })
       }));
       message = "";
@@ -343,7 +344,7 @@
     try {
       const result = await requestPayload<DialogSessionCompletionResult>(`/${session.id}/complete`, {
         method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        headers: { "content-type": "application/json", "idempotency-key": browserUUID() },
         body: JSON.stringify({ closing_answer_md: closingAnswer || null })
       });
       clearClosingDraft(result.session);

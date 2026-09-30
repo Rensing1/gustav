@@ -219,8 +219,9 @@ describe("course invitation panel", () => {
     await fireEvent.click(trigger);
     const overlay = screen.getByRole("dialog", { name: "QR-Code im Vollbild" });
     await waitFor(() => expect(overlay).toHaveClass("course-invite-fullscreen--fallback"));
-    const linkField = screen.getByRole("textbox", { name: "Klassenlink" });
-    expect(linkField.closest("label")).toHaveProperty("inert", true);
+    const linkField = screen.getByLabelText("Klassenlink");
+    expect(linkField.closest("label")).toHaveAttribute("aria-hidden", "true");
+    expect(linkField.closest("label")?.style.pointerEvents).toBe("none");
     const close = screen.getByRole("button", { name: "Vollbild schließen" });
     expect(close).toHaveFocus();
 
@@ -232,7 +233,8 @@ describe("course invitation panel", () => {
     await fireEvent.keyDown(window, { key: "Escape" });
     expect(overlay).not.toHaveClass("course-invite-fullscreen--open");
     expect(trigger).toHaveFocus();
-    expect(linkField.closest("label")).toHaveProperty("inert", false);
+    expect(linkField.closest("label")).not.toHaveAttribute("aria-hidden");
+    expect(linkField.closest("label")?.style.pointerEvents).toBe("");
     expect(historyBack).toHaveBeenCalledTimes(1);
   });
 

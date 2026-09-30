@@ -63,8 +63,9 @@ describe("ChoiceSwitch", () => {
     expect(activeRule).toContain("color: var(--color-text)");
     expect(activeRule).not.toContain("background");
     expect(activeRule).not.toContain("box-shadow");
-    expect(activeMarkerRule).toContain("color-mix(in srgb, var(--color-accent) 42%, var(--color-border) 58%)");
+    expect(activeMarkerRule).toContain("border-bottom-color: var(--color-accent)");
+    expect(css).toMatch(/@supports \(color: color-mix\(in srgb, black, white\)\)\s*\{\s*\.choice-switch__option\[data-current="true"\] span,[^}]*color-mix\(in srgb, var\(--color-accent\) 42%, var\(--color-border\) 58%\)/s);
     expect(css).toContain("@container (max-width: 30rem)");
-    expect(css).toMatch(/\.choice-switch__option input:focus-visible \+ span,\s*\.choice-tabs__tab:focus-visible\s*\{[^}]*outline:/s);
+    expect(css).toMatch(/\.choice-switch__option input:focus \+ span,\s*\.choice-tabs__tab:focus\s*\{[^}]*outline:/s);
   });
 });

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { requestFormSubmit } from "$lib/utils/request-form-submit";
   import { browser } from "$app/environment";
   import { replaceState } from "$app/navigation";
   import { onMount, tick } from "svelte";
@@ -558,7 +559,7 @@
       }
 
       preparedMaterialUploadName = file.name || (createMaterialKind === "simulation" ? "Simulation.html" : "Datei");
-      formElement.requestSubmit();
+      requestFormSubmit(formElement);
     } catch (caught) {
       clearPreparedMaterialUpload();
       const reason = caught instanceof Error ? caught.message : "upload_failed";
@@ -1022,7 +1023,8 @@
     if (!draggedContent || draggedContent.kind !== kind || draggedContent.id === beforeId) return;
     dropBeforeId = beforeId;
     await tick();
-    (kind === "material" ? materialDropForm : taskDropForm)?.requestSubmit();
+    const dropForm = kind === "material" ? materialDropForm : taskDropForm;
+    if (dropForm) requestFormSubmit(dropForm);
     draggedContent = null;
   }
 </script>

@@ -1,6 +1,12 @@
 .app-topbar {
-  background: color-mix(in srgb, var(--color-bg-base) 94%, white 6%);
+  background: var(--color-bg-base);
   border-bottom: 2px solid var(--color-border);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .app-topbar {
+    background: color-mix(in srgb, var(--color-bg-base) 94%, white 6%);
+  }
 }
 
 .workspace-shell {
@@ -311,10 +317,20 @@ fieldset.workspace-field {
   min-height: var(--layout-control-min);
   padding: 0.24rem 0.58rem;
   font-size: 0.7rem;
-  background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
-  border-color: color-mix(in srgb, var(--color-border) 72%, white 28%);
-  box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
-  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  background: var(--color-bg-surface);
+  border-color: var(--color-line);
+  box-shadow: var(--color-shadow);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-top-action--subtle,
+  .workspace-link-action--subtle {
+    background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
+    border-color: color-mix(in srgb, var(--color-border) 72%, white 28%);
+    box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
+    color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  }
 }
 
 .workspace-top-action--subtle:hover,
@@ -322,8 +338,17 @@ fieldset.workspace-field {
 .workspace-link-action--subtle:hover,
 .workspace-link-action--subtle:focus-visible {
   transform: none;
-  box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
+  box-shadow: var(--color-shadow);
   color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-top-action--subtle:hover,
+  .workspace-top-action--subtle:focus-visible,
+  .workspace-link-action--subtle:hover,
+  .workspace-link-action--subtle:focus-visible {
+    box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
+  }
 }
 
 .workspace-link-action--danger {
@@ -478,7 +503,7 @@ fieldset.workspace-field {
 .choice-switch__legend {
   margin: 0 0 var(--space-2);
   padding: 0;
-  color: color-mix(in srgb, var(--color-link) 72%, var(--color-text) 28%);
+  color: var(--color-link);
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 700;
@@ -486,12 +511,25 @@ fieldset.workspace-field {
   text-transform: uppercase;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .choice-switch__legend {
+    color: color-mix(in srgb, var(--color-link) 72%, var(--color-text) 28%);
+  }
+}
+
 .choice-switch__options,
 .choice-tabs {
   display: inline-flex;
   max-width: 100%;
   gap: var(--space-4);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 45%, transparent 55%);
+  border-bottom: 1px solid var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .choice-switch__options,
+  .choice-tabs {
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 45%, transparent 55%);
+  }
 }
 
 .choice-switch__option {
@@ -549,19 +587,52 @@ fieldset.workspace-field {
 
 .choice-switch__option[data-current="true"] span,
 .choice-tabs__tab[aria-selected="true"] {
-  border-bottom-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-border) 58%);
+  border-bottom-color: var(--color-accent);
 }
 
-.choice-switch__option input:focus-visible + span,
-.choice-tabs__tab:focus-visible {
+@supports (color: color-mix(in srgb, black, white)) {
+  .choice-switch__option[data-current="true"] span,
+  .choice-tabs__tab[aria-selected="true"] {
+    border-bottom-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-border) 58%);
+  }
+}
+
+.choice-switch__option input:focus + span,
+.choice-tabs__tab:focus {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.choice-switch__option:has(input:disabled) {
+@supports not (container-type: inline-size) {
+  @media (max-width: 30rem) {
+    .choice-switch__options { width: 100%; }
+    .choice-switch__option { flex: 1 1 50%; }
+    .choice-switch__option span { width: 100%; }
+  }
+}
+
+.choice-switch__option[data-disabled="true"] {
   color: var(--color-text-muted);
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+/* Safari 15.3 has no :focus-visible; always retain a visible focus outline. */
+:is(a[href], button, input, select, textarea, summary, [tabindex]):focus {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.graph-viewport-error {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--color-bg-surface);
+  color: var(--color-danger);
 }
 
 @container (max-width: 30rem) {
@@ -856,11 +927,17 @@ fieldset.workspace-field {
   display: flex;
   align-items: end;
   box-shadow: var(--color-shadow);
-  color: color-mix(in srgb, var(--color-text) 88%, white 12%);
+  color: var(--color-text);
   font-family: var(--font-mono);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .preview-token-swatch {
+    color: color-mix(in srgb, var(--color-text) 88%, white 12%);
+  }
 }
 
 .preview-theme-toggle {
@@ -1002,7 +1079,13 @@ fieldset.workspace-field {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-outline__header h2 {
+    color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
+  }
 }
 
 .workspace-outline__body,
@@ -1037,7 +1120,13 @@ fieldset.workspace-field {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text-muted) 92%, var(--color-text) 8%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-outline__group-title {
+    color: color-mix(in srgb, var(--color-text-muted) 92%, var(--color-text) 8%);
+  }
 }
 
 .workspace-outline__group-remove,
@@ -1093,12 +1182,24 @@ fieldset.workspace-field {
   top: 0.24rem;
   bottom: 0.24rem;
   width: 1px;
-  background: color-mix(in srgb, var(--color-line) 78%, transparent 22%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-outline__item::before {
+    background: color-mix(in srgb, var(--color-line) 78%, transparent 22%);
+  }
 }
 
 .workspace-outline__item--active::before {
-  background: color-mix(in srgb, var(--color-line) 78%, transparent 22%);
+  background: var(--color-bg-surface);
   width: 1px;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-outline__item--active::before {
+    background: color-mix(in srgb, var(--color-line) 78%, transparent 22%);
+  }
 }
 
 .workspace-outline__item-copy {
@@ -1127,23 +1228,49 @@ fieldset.workspace-field {
 
 [data-theme="dark"] .workspace-outline {
   background: #111111;
-  border-color: color-mix(in srgb, var(--color-border) 28%, transparent 72%);
+  border-color: var(--color-line);
   box-shadow: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  [data-theme="dark"] .workspace-outline {
+    border-color: color-mix(in srgb, var(--color-border) 28%, transparent 72%);
+  }
 }
 
 [data-theme="dark"] .workspace-outline__group-title,
 [data-theme="dark"] .workspace-outline__group-remove,
 [data-theme="dark"] .workspace-outline__item-label {
-  color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  [data-theme="dark"] .workspace-outline__group-title,
+  [data-theme="dark"] .workspace-outline__group-remove,
+  [data-theme="dark"] .workspace-outline__item-label {
+    color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  }
 }
 
 [data-theme="dark"] .workspace-outline__item::before {
-  background: color-mix(in srgb, var(--color-text-muted) 32%, transparent 68%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  [data-theme="dark"] .workspace-outline__item::before {
+    background: color-mix(in srgb, var(--color-text-muted) 32%, transparent 68%);
+  }
 }
 
 [data-theme="dark"] .workspace-outline__item--active .workspace-outline__item-label {
-  color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  color: var(--color-text-muted);
   background: transparent;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  [data-theme="dark"] .workspace-outline__item--active .workspace-outline__item-label {
+    color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  }
 }
 
 .workspace-settings-menu {
@@ -1239,14 +1366,26 @@ fieldset.workspace-field {
 .workspace-settings-menu__range::-webkit-slider-runnable-track {
   height: 0.24rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-line) 92%, transparent 8%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-settings-menu__range::-webkit-slider-runnable-track {
+    background: color-mix(in srgb, var(--color-line) 92%, transparent 8%);
+  }
 }
 
 .workspace-settings-menu__range::-moz-range-track {
   height: 0.24rem;
   border: 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-line) 92%, transparent 8%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-settings-menu__range::-moz-range-track {
+    background: color-mix(in srgb, var(--color-line) 92%, transparent 8%);
+  }
 }
 
 .workspace-settings-menu__range::-webkit-slider-thumb {
@@ -1350,7 +1489,14 @@ fieldset.workspace-field {
 
 [data-theme="dark"] .workspace-settings-menu__range::-webkit-slider-runnable-track,
 [data-theme="dark"] .workspace-settings-menu__range::-moz-range-track {
-  background: color-mix(in srgb, var(--color-text-muted) 32%, transparent 68%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  [data-theme="dark"] .workspace-settings-menu__range::-webkit-slider-runnable-track,
+  [data-theme="dark"] .workspace-settings-menu__range::-moz-range-track {
+    background: color-mix(in srgb, var(--color-text-muted) 32%, transparent 68%);
+  }
 }
 
 [data-theme="dark"] .workspace-settings-menu__range::-webkit-slider-thumb,
@@ -1369,6 +1515,15 @@ fieldset.workspace-field {
   height: min(82vh, 58rem);
   min-height: 36rem;
   background:
+    var(--color-bg-base);
+  box-shadow: var(--color-shadow);
+  overflow: hidden;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .graph-stage-frame .learning-unit-stage--graph,
+  .graph-stage-frame .teacher-flow-workspace {
+    background:
     linear-gradient(var(--color-bg-base), var(--color-bg-base)),
     repeating-linear-gradient(
       to right,
@@ -1384,8 +1539,7 @@ fieldset.workspace-field {
       color-mix(in srgb, var(--color-border) 14%, transparent 86%) 23px,
       color-mix(in srgb, var(--color-border) 14%, transparent 86%) 24px
     );
-  box-shadow: var(--color-shadow);
-  overflow: hidden;
+  }
 }
 
 .graph-stage-frame--chromeless .graph-stage-frame__body {
@@ -1415,12 +1569,19 @@ fieldset.workspace-field {
   width: 100%;
   margin: 0;
   padding: 0.85rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--status-message-color) 52%, var(--color-border) 48%);
+  border: 1px solid var(--color-line);
   border-inline-start: 4px solid var(--status-message-color);
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--status-message-soft) 72%, var(--color-bg-surface) 28%);
+  background: var(--color-bg-surface);
   color: var(--color-text);
   box-shadow: 0 10px 24px rgba(20, 24, 26, 0.08);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .status-message {
+    border: 1px solid color-mix(in srgb, var(--status-message-color) 52%, var(--color-border) 48%);
+    background: color-mix(in srgb, var(--status-message-soft) 72%, var(--color-bg-surface) 28%);
+  }
 }
 
 .status-message--success {
@@ -1478,9 +1639,15 @@ fieldset.workspace-field {
 }
 
 .status-message__description {
-  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  color: var(--color-text-muted);
   font-size: 0.9rem;
   line-height: 1.45;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .status-message__description {
+    color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  }
 }
 
 .status-message__action,

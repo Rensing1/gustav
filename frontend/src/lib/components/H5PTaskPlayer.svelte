@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { browserUUID } from "$lib/utils/browser-uuid";
   import { onMount } from "svelte";
   import StatusMessage, { type StatusMessageTone } from "$lib/components/ui/StatusMessage.svelte";
   import { loadH5PWebcomponentsModule } from "$lib/runtime/h5p-webcomponents";
@@ -117,7 +118,7 @@
     ): Promise<H5PPersistedResult | null> {
       const safeKey = /^[A-Za-z0-9_-]{1,64}$/.test(statementId)
         ? statementId
-        : (crypto.randomUUID?.() || `h5p_${Date.now()}`);
+        : browserUUID();
       if (submittedStatementIds.has(safeKey) || (practiceContext && practiceAttemptLocked)) {
         return null;
       }

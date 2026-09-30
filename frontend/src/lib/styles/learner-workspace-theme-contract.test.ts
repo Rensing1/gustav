@@ -10,8 +10,8 @@ describe("learner workspace theme contract", () => {
     const css = readWorkspaceCssBundle(import.meta.dirname);
     const topbarRule = css.match(/\.app-topbar--learner-unit\s*\{(?<body>[^}]*)\}/s)?.groups?.body ?? "";
 
-    expect(topbarRule).toContain("var(--color-bg-surface)");
     expect(topbarRule).toContain("var(--color-bg-base)");
+    expect(css).toMatch(/@supports \(color: color-mix\(in srgb, black, white\)\)\s*\{\s*\.app-topbar--learner-unit\s*\{[^}]*var\(--color-bg-surface\)/s);
     expect(topbarRule).not.toMatch(/rgba?\(|#[0-9a-f]{3,8}|\bwhite\b/i);
   });
 

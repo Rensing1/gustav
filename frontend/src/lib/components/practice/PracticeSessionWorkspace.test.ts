@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -41,6 +41,20 @@ const session = {
 };
 
 describe("PracticeSessionWorkspace", () => {
+  it("opens, traps focus and resumes without native dialog methods", async () => {
+    render(PracticeSessionWorkspace, { props: { session, attempt: null, attemptKey: "key", solution: null, nowIso: "2026-09-30T12:00:00Z" } });
+    const opener = screen.getByRole("button", { name: "Sitzung beenden" });
+    opener.focus();
+    await fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "Möchtest du die Übung jetzt beenden?" });
+    const resume = within(dialog).getByRole("button", { name: "Weiter üben" });
+    await waitFor(() => expect(resume).toHaveFocus());
+    await fireEvent.keyDown(resume, { key: "Tab", shiftKey: true });
+    expect(within(dialog).getByRole("button", { name: "Sitzung beenden" })).toHaveFocus();
+    await fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
   it.each([1, 2] as const)("explains only repeated presentation %s without changing progress", (presentationNumber) => {
     render(PracticeSessionWorkspace, { props: {
       session: { ...session, current_item: { ...session.current_item, presentation_number: presentationNumber } },

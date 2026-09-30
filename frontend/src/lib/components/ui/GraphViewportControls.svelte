@@ -25,6 +25,16 @@
   const viewportInitialized = useViewportInitialized();
   const viewport = useViewport();
   let initialFocusApplied = $state(false);
+  let viewportError = $state<string | null>(null);
+
+  async function adjustViewport(action: () => Promise<unknown>) {
+    viewportError = null;
+    try {
+      await action();
+    } catch {
+      viewportError = "Die Graphansicht konnte nicht ausgerichtet werden. Bitte versuche es erneut.";
+    }
+  }
 
   function focusNode(nodeId: string | null = initialNodeId, attempt = 0) {
     if (!nodeId) return;
@@ -33,20 +43,20 @@
       if (attempt < 10) requestAnimationFrame(() => focusNode(nodeId, attempt + 1));
       return;
     }
-    void flow.fitView({ nodes: [node], padding: 0.34, minZoom: 0.82, maxZoom: 1.02, duration: 180 });
+    void adjustViewport(() => flow.fitView({ nodes: [node], padding: 0.34, minZoom: 0.82, maxZoom: 1.02, duration: 180 }));
   }
 
   async function showAll() {
     const allNodes = flow.getNodes();
     const phaseBands = allNodes.filter((node) => node.type === "phaseBand");
-    await flow.fitView({
+    await adjustViewport(() => flow.fitView({
       nodes: phaseBands.length > 0 ? phaseBands : allNodes,
       padding: 0.2,
       // Overview may shrink below reading size; the focus action restores it.
       minZoom: 0.1,
       maxZoom: 0.92,
       duration: 0
-    });
+    }));
   }
 
   const controller: GraphViewportController = { focusNode, showAll };
@@ -62,7 +72,7 @@
       initialFocusApplied = true;
       untrack(() => {
         const saved = storageKey ? readViewport(sessionStorage, storageKey) : null;
-        if (saved) void flow.setViewport(saved);
+        if (saved) void adjustViewport(() => flow.setViewport(saved));
         else focusNode(initialNodeId);
       });
     }
@@ -72,6 +82,10 @@
     if (storageKey && initialFocusApplied) writeViewport(sessionStorage, storageKey, viewport.current);
   });
 </script>
+
+{#if viewportError}
+  <p class="graph-viewport-error nodrag nopan" role="alert">{viewportError}</p>
+{/if}
 
 {#snippet additionalControls()}
   <ControlButton onclick={showAll} title="Gesamtansicht" aria-label="Gesamtansicht">

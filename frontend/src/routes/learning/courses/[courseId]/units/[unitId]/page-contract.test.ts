@@ -390,7 +390,7 @@ describe("learning unit route contract", () => {
       /\.learning-unit-content-shell \.learning-unit-module__meta\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*calc\(0\.78rem \* var\(--learning-unit-label-scale\)\);/s
     );
     expect(designSystemCss).toMatch(
-      /\.learning-unit-content-shell \.learning-unit-module__section-head h5\s*\{[^}]*color:\s*color-mix\(in srgb,\s*var\(--color-text\) 78%,\s*transparent 22%\);[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*700;[^}]*letter-spacing:\s*0\.14em;/s
+      /\.learning-unit-content-shell \.learning-unit-module__section-head h5\s*\{[^}]*color:\s*var\(--color-text\);[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*700;[^}]*letter-spacing:\s*0\.14em;/s
     );
     expect(designSystemCss).toMatch(
       /\.learning-unit-content-shell \.learning-unit-module__header\s*\{[^}]*margin-bottom:\s*var\(--space-6\);/s
@@ -424,13 +424,13 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("## 13. Verbotene Alt-Muster");
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-unit-workspace-surface\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
     expect(designSystemCss).toMatch(
-      /\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+      /\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*border:\s*1px solid var\(--color-line\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*var\(--color-shadow\);/s
     );
     expect(appCss).toMatch(
-      /\.learning-unit-module\s*\{[^}]*padding:\s*var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+      /\.learning-unit-module\s*\{[^}]*padding:\s*var\(--space-5\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid var\(--color-line\);[^}]*box-shadow:\s*var\(--color-shadow\);/s
     );
     expect(appCss).toMatch(
-      /\.learning-work-item--material\s*\{[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid color-mix\(in srgb,\s*var\(--color-border\) 72%,\s*white 28%\);[^}]*box-shadow:\s*2px 2px 0 color-mix\(in srgb,\s*var\(--color-border\) 10%,\s*transparent 90%\);/s
+      /\.learning-work-item--material\s*\{[^}]*background:\s*var\(--color-bg-surface\);[^}]*border:\s*1px solid var\(--color-line\);[^}]*box-shadow:\s*var\(--color-shadow\);/s
     );
     expect(appCss).toMatch(
       /\.learning-unit-pane-grid--split \.learning-unit-module\s*\{[^}]*gap:\s*var\(--space-4\);[^}]*padding:\s*var\(--space-4\);/s

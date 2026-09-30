@@ -107,20 +107,47 @@ async function listCssFiles(directory) {
   return files.sort();
 }
 
+/** Check only the agreed contracts: graph strokes, dialog tokens and viewport sizes. */
+export function findMissingBrowserFallbacks(css, from = "generated.css") {
+  const root = postcss.parse(css, { from });
+  const findings = [];
+  root.walkDecls((declaration) => {
+    const viewport = /\b\d*\.?\d+(?:dvh|svh)\b/.test(declaration.value);
+    const color = declaration.value.includes("color-mix(") && (declaration.prop === "stroke" || declaration.prop.startsWith("--dialog-"));
+    if (!viewport && !color) return;
+    // Values containing var() are checked only at computed-value time. Without
+    // a supports guard they can discard the compatible declaration too.
+    let parent = declaration.parent;
+    while (parent) {
+      if (parent.type === "atrule" && parent.name === "supports" && (
+        (color && /^\(color:\s*color-mix\(/.test(parent.params)) || (viewport && /^\(height:\s*100(?:dvh|svh)\)/.test(parent.params))
+      )) return;
+      parent = parent.parent;
+    }
+    const previous = declaration.parent.nodes.slice(0, declaration.parent.nodes.indexOf(declaration));
+    if (declaration.value.includes("var(") || color && declaration.prop.startsWith("--")) {
+      findings.push(declaration.prop);
+    } else if (!previous.some((item) => item.type === "decl" && item.prop === declaration.prop && !/color-mix\(|\b\d*\.?\d+(?:dvh|svh)\b/.test(item.value))) {
+      findings.push(declaration.prop);
+    }
+  });
+  return findings;
+}
+
 /**
- * Reject a generated client bundle that still uses cascade layers.
+ * Reject cascade layers and missing agreed browser fallbacks in client CSS.
  *
  * Parameters:
  * - `directory`: Vite's generated client-asset directory.
  *
  * Expected behavior:
  * - Resolves silently when all generated CSS is compatible.
- * - Throws with relative file names and layer names when incompatible rules remain.
+ * - Throws with relative file names and violated contracts when rules remain.
  *
  * Permissions:
  * - The caller only needs read access to the generated build directory.
  */
-export async function assertNoCascadeLayers(directory) {
+export async function assertBrowserCompatibleCss(directory) {
   const findings = [];
 
   for (const file of await listCssFiles(directory)) {
@@ -129,11 +156,13 @@ export async function assertNoCascadeLayers(directory) {
     if (layers.length > 0) {
       findings.push(`${path.relative(directory, file)}: ${layers.join(", ")}`);
     }
+    const missing = findMissingBrowserFallbacks(css, file);
+    if (missing.length) findings.push(`${path.relative(directory, file)}: missing fallback for ${missing.join(", ")}`);
   }
 
   if (findings.length > 0) {
     throw new Error(
-      `Generated CSS still contains cascade layers unsupported by iPadOS 15.3:\n${findings.join("\n")}`
+      `Generated CSS violates the iPadOS 15.3 compatibility contracts:\n${findings.join("\n")}`
     );
   }
 }

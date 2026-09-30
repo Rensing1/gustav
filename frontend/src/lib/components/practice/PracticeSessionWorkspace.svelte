@@ -1,6 +1,7 @@
 <script lang="ts">
   import PracticeH5PTask from "$lib/components/PracticeH5PTask.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
+  import { modalFocus } from "$lib/components/ui/modal-focus";
   import { renderMarkdown } from "$lib/utils/markdown";
   import type { LearningPracticeAttempt, LearningPracticeSession } from "$lib/types/practice";
   import PracticeFeedback from "./PracticeFeedback.svelte";
@@ -19,7 +20,7 @@
     nowIso: string;
   } = $props();
 
-  let endDialog = $state<HTMLDialogElement | null>(null);
+  let endDialogOpen = $state(false);
   let persistedH5PItemId = $state<string | null>(null);
   let persistedH5PAttempt = $state<LearningPracticeAttempt | null>(null);
   const item = $derived(session.current_item);
@@ -31,7 +32,7 @@
   );
 
   function openEndDialog(): void {
-    endDialog?.showModal();
+    endDialogOpen = true;
   }
 
   function handleH5PCompleted(completedAttempt: LearningPracticeAttempt | null): void {
@@ -165,16 +166,20 @@
     </div>
   </section>
 
-  <dialog bind:this={endDialog} class="practice-end-dialog" aria-labelledby="practice-end-dialog-title">
-    <form method="POST" action="?/end" class="practice-end-dialog__card">
-      <input type="hidden" name="session_id" value={session.id} />
-      <p class="practice-eyebrow">Sitzung beenden</p>
-      <h2 id="practice-end-dialog-title">Möchtest du die Übung jetzt beenden?</h2>
-      <p>Noch offene Aufgaben werden nur für diese Sitzung übersprungen. Deine bisherigen Antworten bleiben erhalten.</p>
-      <div class="practice-end-dialog__actions">
-        <button class="workspace-link-action workspace-link-action--secondary" type="button" onclick={() => endDialog?.close()}>Weiter üben</button>
-        <button class="workspace-link-action workspace-link-action--danger" type="submit">Sitzung beenden</button>
+  {#if endDialogOpen}
+    <div class="dialog-backdrop">
+      <div use:modalFocus={() => endDialogOpen = false} role="dialog" aria-modal="true" class="practice-end-dialog" aria-labelledby="practice-end-dialog-title">
+        <form method="POST" action="?/end" class="practice-end-dialog__card">
+          <input type="hidden" name="session_id" value={session.id} />
+          <p class="practice-eyebrow">Sitzung beenden</p>
+          <h2 id="practice-end-dialog-title">Möchtest du die Übung jetzt beenden?</h2>
+          <p>Noch offene Aufgaben werden nur für diese Sitzung übersprungen. Deine bisherigen Antworten bleiben erhalten.</p>
+          <div class="practice-end-dialog__actions">
+            <button data-modal-initial class="workspace-link-action workspace-link-action--secondary" type="button" onclick={() => endDialogOpen = false}>Weiter üben</button>
+            <button class="workspace-link-action workspace-link-action--danger" type="submit">Sitzung beenden</button>
+          </div>
+        </form>
       </div>
-    </form>
-  </dialog>
+    </div>
+  {/if}
 {/if}

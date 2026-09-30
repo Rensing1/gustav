@@ -1544,7 +1544,7 @@ describe("LearningTaskCard", () => {
     await waitFor(() => expect(editor).toHaveFocus());
 
     await fireEvent.click(finalButton);
-    await fireEvent.click(within(warning).getByRole("button", { name: "Trotzdem abgeben" }));
+    await fireEvent.click(within(screen.getByRole("dialog", { name: "Überarbeitung noch nicht geprüft" })).getByRole("button", { name: "Trotzdem abgeben" }));
     expect(requestSubmit).toHaveBeenCalledOnce();
     expect(requestSubmit).toHaveBeenCalledWith(finalButton);
   });

@@ -3,6 +3,23 @@ import { modalFocus } from "./modal-focus";
 
 describe("shared modal focus", () => {
   afterEach(() => document.body.replaceChildren());
+  it("isolates and restores background semantics and pointer interaction without inert", async () => {
+    document.body.innerHTML = '<main aria-hidden="false" style="pointer-events:auto"><button id="opener">Öffnen</button></main><div class="overlay"><div role="dialog" aria-modal="true"><button>Schließen</button></div></div>';
+    const background = document.querySelector("main")!;
+    const opener = document.querySelector<HTMLButtonElement>("#opener")!;
+    opener.focus();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const action = modalFocus(dialog, vi.fn());
+    await Promise.resolve();
+    expect(background).toHaveAttribute("aria-hidden", "true");
+    expect(background.style.pointerEvents).toBe("none");
+    opener.focus();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    action.destroy();
+    expect(background).toHaveAttribute("aria-hidden", "false");
+    expect(background.style.pointerEvents).toBe("auto");
+    expect(opener).toHaveFocus();
+  });
   it("focuses within the dialog, cycles Tab and returns to the opener", async () => {
     document.body.innerHTML = '<button id="opener">Öffnen</button><div role="dialog" aria-modal="true"><button>Schließen</button><input aria-label="Titel"></div>';
     const opener = document.querySelector<HTMLButtonElement>("#opener")!;

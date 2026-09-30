@@ -59,8 +59,14 @@ select {
   top: 0;
   z-index: 20;
   border-bottom: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-bg-base) 92%, white 8%);
+  background: var(--color-bg-base);
   backdrop-filter: blur(18px);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .app-topbar {
+    background: color-mix(in srgb, var(--color-bg-base) 92%, white 8%);
+  }
 }
 
 .app-topbar-inner {
@@ -153,9 +159,15 @@ select {
 }
 
 .space-nav a[aria-current="page"] {
-  background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
+  background: var(--color-bg-surface);
   border-color: var(--color-border);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .space-nav a[aria-current="page"] {
+    background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
+  }
 }
 
 .nav-label {
@@ -201,8 +213,16 @@ select {
 .app-topbar-concern-link:focus-visible,
 .app-topbar-concern-link[aria-current="page"] {
   border-color: var(--color-border);
-  background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
+  background: var(--color-bg-surface);
   color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .app-topbar-concern-link:hover,
+  .app-topbar-concern-link:focus-visible,
+  .app-topbar-concern-link[aria-current="page"] {
+    background: color-mix(in srgb, var(--color-bg-elevated) 88%, white 12%);
+  }
 }
 
 .app-topbar-tools {
@@ -309,8 +329,15 @@ select {
 
 .account-menu__action:hover,
 .account-menu__action:focus-visible {
-  background: color-mix(in srgb, var(--color-accent-soft) 18%, var(--color-bg-surface) 82%);
+  background: var(--color-accent-soft);
   color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .account-menu__action:hover,
+  .account-menu__action:focus-visible {
+    background: color-mix(in srgb, var(--color-accent-soft) 18%, var(--color-bg-surface) 82%);
+  }
 }
 
 .workspace-heading h1,
@@ -352,8 +379,15 @@ select {
 .ghost-link {
   border: 1px solid var(--color-border);
   padding: 0.44rem 0.72rem;
-  background: color-mix(in srgb, var(--color-bg-surface) 84%, white 16%);
+  background: var(--color-bg-surface);
   color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .ghost-button,
+  .ghost-link {
+    background: color-mix(in srgb, var(--color-bg-surface) 84%, white 16%);
+  }
 }
 
 .primary-button {
@@ -361,10 +395,10 @@ select {
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  border: 1px solid color-mix(in srgb, var(--color-accent) 22%, var(--color-border) 78%);
+  border: 1px solid var(--color-line);
   padding: 0.52rem 0.9rem;
   border-radius: 0.82rem;
-  background: color-mix(in srgb, var(--color-accent-soft) 28%, white 72%);
+  background: var(--color-accent-soft);
   color: var(--color-text);
   font-weight: 700;
   text-decoration: none;
@@ -372,18 +406,40 @@ select {
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .primary-button {
+    border: 1px solid color-mix(in srgb, var(--color-accent) 22%, var(--color-border) 78%);
+    background: color-mix(in srgb, var(--color-accent-soft) 28%, white 72%);
+  }
+}
+
 .ghost-button:hover,
 .ghost-link:hover {
-  background: color-mix(in srgb, var(--color-bg-surface) 72%, var(--color-accent-soft) 28%);
+  background: var(--color-accent-soft);
   color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .ghost-button:hover,
+  .ghost-link:hover {
+    background: color-mix(in srgb, var(--color-bg-surface) 72%, var(--color-accent-soft) 28%);
+  }
 }
 
 .primary-button:hover,
 .primary-button:focus-visible {
-  background: color-mix(in srgb, var(--color-accent-soft) 42%, white 58%);
-  border-color: color-mix(in srgb, var(--color-accent) 38%, var(--color-border) 62%);
+  background: var(--color-accent-soft);
+  border-color: var(--color-line);
   color: var(--color-text);
   text-decoration: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .primary-button:hover,
+  .primary-button:focus-visible {
+    background: color-mix(in srgb, var(--color-accent-soft) 42%, white 58%);
+    border-color: color-mix(in srgb, var(--color-accent) 38%, var(--color-border) 62%);
+  }
 }
 
 .workspace-header {
@@ -473,8 +529,17 @@ select {
 .workspace-list p {
   margin: 0;
   font-family: var(--font-reading);
-  color: color-mix(in srgb, var(--color-text) 88%, var(--color-text-muted) 12%);
+  color: var(--color-text-muted);
   line-height: 1.56;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-copy,
+  .workspace-lead,
+  .workspace-empty,
+  .workspace-list p {
+    color: color-mix(in srgb, var(--color-text) 88%, var(--color-text-muted) 12%);
+  }
 }
 
 .workspace-section,
@@ -557,7 +622,13 @@ select {
 }
 
 .workspace-data-table tbody tr:hover {
-  background: color-mix(in srgb, var(--color-bg-muted) 72%, transparent 28%);
+  background: var(--color-bg-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-data-table tbody tr:hover {
+    background: color-mix(in srgb, var(--color-bg-muted) 72%, transparent 28%);
+  }
 }
 
 .workspace-data-table tbody tr.is-selected {
@@ -595,10 +666,16 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
-  color: color-mix(in srgb, var(--color-text) 68%, var(--color-text-muted) 32%);
+  color: var(--color-text-muted);
   font-size: 0.82rem;
   font-weight: 560;
   line-height: 1.35;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-metrics {
+    color: color-mix(in srgb, var(--color-text) 68%, var(--color-text-muted) 32%);
+  }
 }
 
 .workspace-metrics--summary {
@@ -631,7 +708,16 @@ select {
 .workspace-link-card:focus-visible,
 .workspace-list a:hover,
 .workspace-list a:focus-visible {
-  background: color-mix(in srgb, rgba(255, 252, 247, 0.78) 82%, var(--color-accent-soft) 18%);
+  background: var(--color-accent-soft);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-link-card:hover,
+  .workspace-link-card:focus-visible,
+  .workspace-list a:hover,
+  .workspace-list a:focus-visible {
+    background: color-mix(in srgb, rgba(255, 252, 247, 0.78) 82%, var(--color-accent-soft) 18%);
+  }
 }
 
 .workspace-action {

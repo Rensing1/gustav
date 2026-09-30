@@ -184,14 +184,21 @@
   border-radius: 1.15rem;
   text-decoration: none;
   color: inherit;
-  background: color-mix(in srgb, var(--color-bg-elevated) 92%, white 8%);
-  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-line);
   box-shadow: 0 1px 2px rgba(52, 46, 38, 0.02);
   transition:
     box-shadow 140ms ease,
     border-color 140ms ease,
     background-color 140ms ease,
     color 140ms ease;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-home-card {
+    background: color-mix(in srgb, var(--color-bg-elevated) 92%, white 8%);
+    border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+  }
 }
 
 .learning-home-card strong {
@@ -220,9 +227,17 @@
 
 .learning-home-card:hover,
 .learning-home-card:focus-visible {
-  border-color: color-mix(in srgb, var(--color-link) 20%, var(--color-border) 80%);
+  border-color: var(--color-line);
   box-shadow: 0 1px 2px rgba(41, 35, 29, 0.024);
-  background: color-mix(in srgb, var(--color-bg-elevated) 95%, white 5%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-home-card:hover,
+  .learning-home-card:focus-visible {
+    border-color: color-mix(in srgb, var(--color-link) 20%, var(--color-border) 80%);
+    background: color-mix(in srgb, var(--color-bg-elevated) 95%, white 5%);
+  }
 }
 
 .learning-home-card:hover .learning-home-open::after,
@@ -232,7 +247,14 @@
 
 .learning-home-card:hover .learning-home-open,
 .learning-home-card:focus-visible .learning-home-open {
-  color: color-mix(in srgb, var(--color-link) 82%, var(--color-text) 18%);
+  color: var(--color-link);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-home-card:hover .learning-home-open,
+  .learning-home-card:focus-visible .learning-home-open {
+    color: color-mix(in srgb, var(--color-link) 82%, var(--color-text) 18%);
+  }
 }
 
 .learning-home-empty {
@@ -244,8 +266,14 @@
 }
 
 .app-topbar--learner-unit {
-  background: color-mix(in srgb, var(--color-bg-surface) 94%, var(--color-bg-base) 6%);
+  background: var(--color-bg-base);
   backdrop-filter: blur(12px);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .app-topbar--learner-unit {
+    background: color-mix(in srgb, var(--color-bg-surface) 94%, var(--color-bg-base) 6%);
+  }
 }
 
 .app-topbar-inner--learner-unit {
@@ -292,7 +320,13 @@
   font-family: var(--font-learner-label);
   font-size: 0.88rem;
   font-weight: 600;
-  color: color-mix(in srgb, var(--color-text-muted) 76%, var(--color-text) 24%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .space-nav--learner-unit .nav-label {
+    color: color-mix(in srgb, var(--color-text-muted) 76%, var(--color-text) 24%);
+  }
 }
 
 .space-nav--learner-unit a[aria-current="page"] .nav-label {
@@ -313,16 +347,37 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .app-topbar-breadcrumbs--learner-unit,
+  .app-topbar-breadcrumbs--learner-unit a,
+  .app-topbar-breadcrumbs--learner-unit .app-topbar-breadcrumbs__current {
+    color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text) 20%);
+  }
 }
 
 .app-topbar-breadcrumbs--learner-unit a:hover,
 .app-topbar-breadcrumbs--learner-unit a:focus-visible {
-  color: color-mix(in srgb, var(--color-link) 76%, var(--color-text) 24%);
+  color: var(--color-link);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .app-topbar-breadcrumbs--learner-unit a:hover,
+  .app-topbar-breadcrumbs--learner-unit a:focus-visible {
+    color: color-mix(in srgb, var(--color-link) 76%, var(--color-text) 24%);
+  }
 }
 
 .app-topbar-breadcrumbs--learner-unit .app-topbar-breadcrumbs__current {
-  color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .app-topbar-breadcrumbs--learner-unit .app-topbar-breadcrumbs__current {
+    color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  }
 }
 
 .workspace-breadcrumbs--learner-unit,
@@ -343,7 +398,13 @@
   max-width: 56rem;
   font-family: var(--font-learner-body);
   font-size: calc(0.98rem * var(--learning-unit-font-scale));
-  color: color-mix(in srgb, var(--color-text-muted) 82%, var(--color-text) 18%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .workspace-header--learner-unit .workspace-copy {
+    color: color-mix(in srgb, var(--color-text-muted) 82%, var(--color-text) 18%);
+  }
 }
 
 .learning-unit-flash {
@@ -397,28 +458,60 @@
   height: 2.15rem;
   padding: 0;
   border-radius: 0;
-  border-color: color-mix(in srgb, var(--color-border) 38%, transparent 62%);
-  background: color-mix(in srgb, var(--color-bg-surface) 86%, transparent 14%);
+  border-color: var(--color-line);
+  background: var(--color-bg-surface);
   box-shadow: none;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toolbar__utility .workspace-top-action {
+    border-color: color-mix(in srgb, var(--color-border) 38%, transparent 62%);
+    background: color-mix(in srgb, var(--color-bg-surface) 86%, transparent 14%);
+  }
+}
+
 .learning-unit-toolbar__utility .workspace-top-action--quiet {
-  border-color: color-mix(in srgb, var(--color-border) 38%, transparent 62%);
-  color: color-mix(in srgb, var(--color-text-muted) 72%, var(--color-text) 28%);
-  background: color-mix(in srgb, var(--color-bg-surface) 86%, transparent 14%);
+  border-color: var(--color-line);
+  color: var(--color-text-muted);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toolbar__utility .workspace-top-action--quiet {
+    border-color: color-mix(in srgb, var(--color-border) 38%, transparent 62%);
+    color: color-mix(in srgb, var(--color-text-muted) 72%, var(--color-text) 28%);
+    background: color-mix(in srgb, var(--color-bg-surface) 86%, transparent 14%);
+  }
 }
 
 .learning-unit-toolbar__utility .workspace-top-action--quiet:hover,
 .learning-unit-toolbar__utility .workspace-top-action--quiet:focus-visible {
-  border-color: color-mix(in srgb, var(--color-border) 72%, transparent 28%);
-  background: color-mix(in srgb, var(--color-bg-surface) 88%, var(--color-link) 12%);
-  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  border-color: var(--color-line);
+  background: var(--color-bg-surface);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toolbar__utility .workspace-top-action--quiet:hover,
+  .learning-unit-toolbar__utility .workspace-top-action--quiet:focus-visible {
+    border-color: color-mix(in srgb, var(--color-border) 72%, transparent 28%);
+    background: color-mix(in srgb, var(--color-bg-surface) 88%, var(--color-link) 12%);
+    color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  }
 }
 
 .learning-unit-toolbar__utility .workspace-top-action--active {
-  border-color: color-mix(in srgb, var(--color-border) 78%, transparent 22%);
-  background: color-mix(in srgb, white 88%, var(--color-link) 12%);
-  color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  border-color: var(--color-line);
+  background: var(--color-bg-surface);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toolbar__utility .workspace-top-action--active {
+    border-color: color-mix(in srgb, var(--color-border) 78%, transparent 22%);
+    background: color-mix(in srgb, white 88%, var(--color-link) 12%);
+    color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  }
 }
 
 .learning-unit-view-toggle {
@@ -467,9 +560,16 @@
 }
 
 .learning-unit-toolbar .workspace-tab--active {
-  color: color-mix(in srgb, var(--color-link) 84%, var(--color-text) 16%);
-  border-bottom-color: color-mix(in srgb, var(--color-link) 76%, white 24%);
+  color: var(--color-link);
+  border-bottom-color: var(--color-line);
   background: transparent;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toolbar .workspace-tab--active {
+    color: color-mix(in srgb, var(--color-link) 84%, var(--color-text) 16%);
+    border-bottom-color: color-mix(in srgb, var(--color-link) 76%, white 24%);
+  }
 }
 
 .learning-unit-stage {
@@ -530,11 +630,17 @@
 
 .learning-unit-content-toolbar__meta {
   margin: 0;
-  color: color-mix(in srgb, var(--color-text-muted) 74%, var(--color-text) 26%);
+  color: var(--color-text-muted);
   font-size: calc(0.74rem * var(--learning-unit-label-scale));
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-content-toolbar__meta {
+    color: color-mix(in srgb, var(--color-text-muted) 74%, var(--color-text) 26%);
+  }
 }
 
 .learning-unit-content-toolbar__actions {
@@ -561,12 +667,25 @@
 }
 
 .learning-unit-content-toolbar .workspace-top-action--quiet {
-  border-color: color-mix(in srgb, var(--color-border) 70%, white 30%);
-  background: color-mix(in srgb, var(--color-bg-base) 96%, white 4%);
+  border-color: var(--color-line);
+  background: var(--color-bg-base);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-content-toolbar .workspace-top-action--quiet {
+    border-color: color-mix(in srgb, var(--color-border) 70%, white 30%);
+    background: color-mix(in srgb, var(--color-bg-base) 96%, white 4%);
+  }
 }
 
 .learning-unit-content-toolbar .workspace-top-action--active {
-  background: color-mix(in srgb, var(--color-link) 9%, white 91%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-content-toolbar .workspace-top-action--active {
+    background: color-mix(in srgb, var(--color-link) 9%, white 91%);
+  }
 }
 
 .learning-unit-content-shell {
@@ -614,6 +733,7 @@
 }
 
 .learning-unit-content-shell:not(.learning-unit-content-shell--single) .learning-unit-toc {
+  max-height: calc(100vh - 12.5rem);
   max-height: calc(100dvh - 12.5rem);
   overflow: auto;
 }
@@ -621,7 +741,13 @@
 .learning-unit-toc__header {
   display: block;
   padding-bottom: 0.2rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+  border-bottom: 1px solid var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toc__header {
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+  }
 }
 
 .learning-unit-toc__copy {
@@ -633,7 +759,13 @@
   font-weight: 800;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text-muted) 88%, var(--color-text) 12%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toc__copy h3 {
+    color: color-mix(in srgb, var(--color-text-muted) 88%, var(--color-text) 12%);
+  }
 }
 
 
@@ -657,11 +789,17 @@
 
 .learning-unit-toc__group-title {
   margin: 0;
-  color: color-mix(in srgb, var(--color-text-muted) 82%, var(--color-text) 18%);
+  color: var(--color-text-muted);
   font-size: calc(0.82rem * var(--learning-unit-label-scale));
   font-weight: 760;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toc__group-title {
+    color: color-mix(in srgb, var(--color-text-muted) 82%, var(--color-text) 18%);
+  }
 }
 
 .learning-unit-toc__group-remove {
@@ -673,16 +811,29 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: color-mix(in srgb, var(--color-text-muted) 84%, var(--color-text) 16%);
+  color: var(--color-text-muted);
   font: inherit;
   font-size: calc(0.98rem * var(--learning-unit-font-scale));
   line-height: 1;
   cursor: pointer;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toc__group-remove {
+    color: color-mix(in srgb, var(--color-text-muted) 84%, var(--color-text) 16%);
+  }
+}
+
 .learning-unit-toc__group-remove:hover,
 .learning-unit-toc__group-remove:focus-visible {
-  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toc__group-remove:hover,
+  .learning-unit-toc__group-remove:focus-visible {
+    color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  }
 }
 
 .learning-unit-toc__items {
@@ -700,7 +851,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text) 10%);
+  color: var(--color-text-muted);
   font: inherit;
   font-size: calc(0.95rem * var(--learning-unit-font-scale));
   font-weight: 500;
@@ -708,6 +859,12 @@
   text-align: left;
   cursor: pointer;
   transition: color 120ms ease;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toc__item {
+    color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text) 10%);
+  }
 }
 
 .learning-unit-toc__item::before {
@@ -722,7 +879,14 @@
 
 .learning-unit-toc__item:hover,
 .learning-unit-toc__item:focus-visible {
-  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toc__item:hover,
+  .learning-unit-toc__item:focus-visible {
+    color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  }
 }
 
 .learning-unit-toc__item-label {
@@ -732,11 +896,23 @@
 }
 
 .learning-unit-toc__item--active {
-  color: color-mix(in srgb, var(--color-link) 88%, var(--color-text) 12%);
+  color: var(--color-link);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toc__item--active {
+    color: color-mix(in srgb, var(--color-link) 88%, var(--color-text) 12%);
+  }
 }
 
 .learning-unit-toc__item--active::before {
-  background: color-mix(in srgb, var(--color-link) 88%, white 12%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-toc__item--active::before {
+    background: color-mix(in srgb, var(--color-link) 88%, white 12%);
+  }
 }
 
 .learning-unit-pane-grid {
@@ -769,6 +945,7 @@
 }
 
 .learning-unit-pane-grid--split .learning-unit-pane {
+  height: calc(100vh - 12.5rem);
   height: calc(100dvh - 12.5rem);
 }
 
@@ -783,8 +960,14 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: color-mix(in srgb, var(--color-text) 72%, var(--color-text-muted) 28%);
+  color: var(--color-text-muted);
   box-shadow: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-workspace-surface {
+    color: color-mix(in srgb, var(--color-text) 72%, var(--color-text-muted) 28%);
+  }
 }
 
 .learning-unit-pane__stack {
@@ -841,8 +1024,15 @@
   gap: var(--space-5);
   padding: var(--space-5);
   background: var(--color-bg-surface);
-  border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
-  box-shadow: 2px 2px 0 color-mix(in srgb, var(--color-border) 10%, transparent 90%);
+  border: 1px solid var(--color-line);
+  box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-module {
+    border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+    box-shadow: 2px 2px 0 color-mix(in srgb, var(--color-border) 10%, transparent 90%);
+  }
 }
 
 .learning-unit-pane-grid--split .learning-unit-module {
@@ -865,13 +1055,19 @@
 
 .learning-unit-module__index {
   margin: 0;
-  color: color-mix(in srgb, var(--color-text) 72%, transparent 28%);
+  color: var(--color-text);
   font-family: var(--font-mono);
   font-size: calc(0.78rem * var(--learning-unit-label-scale));
   font-weight: 700;
   letter-spacing: 0.14em;
   line-height: 1;
   text-transform: uppercase;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-module__index {
+    color: color-mix(in srgb, var(--color-text) 72%, transparent 28%);
+  }
 }
 
 .learning-unit-module__title {
@@ -884,12 +1080,18 @@
 
 .learning-unit-module__meta {
   margin: 0;
-  color: color-mix(in srgb, var(--color-text) 62%, transparent 38%);
+  color: var(--color-text);
   font-family: var(--font-mono);
   font-size: calc(0.82rem * var(--learning-unit-label-scale));
   font-weight: 500;
   letter-spacing: 0.04em;
   line-height: 1.25;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-module__meta {
+    color: color-mix(in srgb, var(--color-text) 62%, transparent 38%);
+  }
 }
 
 .learning-unit-pane-grid--split .learning-unit-module__copy {
@@ -1025,8 +1227,15 @@
 .learning-work-item--material {
   --learning-material-rail-width: min(100%, calc(clamp(30rem, 66vw, 46rem) * var(--learning-unit-measure-scale)));
   background: var(--color-bg-surface);
-  border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
-  box-shadow: 2px 2px 0 color-mix(in srgb, var(--color-border) 10%, transparent 90%);
+  border: 1px solid var(--color-line);
+  box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-work-item--material {
+    border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+    box-shadow: 2px 2px 0 color-mix(in srgb, var(--color-border) 10%, transparent 90%);
+  }
 }
 
 .learning-unit-pane-grid--split .learning-work-item--material {
@@ -1064,7 +1273,13 @@
 }
 
 .learning-material-prose :global(p) {
-  color: color-mix(in srgb, var(--color-text) 76%, var(--color-text-muted) 24%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-material-prose :global(p) {
+    color: color-mix(in srgb, var(--color-text) 76%, var(--color-text-muted) 24%);
+  }
 }
 
 .learning-material-card__support {
@@ -1075,6 +1290,7 @@
 
 .learning-material-file__image,
 .learning-material-file__frame {
+  max-height: min(34rem, 62vh);
   max-height: min(34rem, 62svh);
 }
 
@@ -1102,6 +1318,7 @@
 
 .learning-material-simulation__frame {
   width: 100%;
+  height: clamp(26rem, 65vh, 44rem);
   height: clamp(26rem, 65dvh, 44rem);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-m);
@@ -1174,24 +1391,43 @@
 
 .markdown-prose th,
 .markdown-prose td {
-  border: 1px solid color-mix(in srgb, var(--color-border) 18%, transparent 82%);
+  border: 1px solid var(--color-line);
   padding: 0.5rem 0.65rem;
   text-align: left;
   vertical-align: top;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .markdown-prose th,
+  .markdown-prose td {
+    border: 1px solid color-mix(in srgb, var(--color-border) 18%, transparent 82%);
+  }
 }
 
 .markdown-prose th {
   font-family: var(--font-mono);
   font-size: 0.9em;
   letter-spacing: 0.04em;
-  background: color-mix(in srgb, var(--color-bg-muted) 88%, white 12%);
+  background: var(--color-bg-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .markdown-prose th {
+    background: color-mix(in srgb, var(--color-bg-muted) 88%, white 12%);
+  }
 }
 
 .markdown-prose code {
   padding: 0.08rem 0.34rem;
   border-radius: 0.4rem;
-  background: color-mix(in srgb, var(--color-bg-base) 84%, white 16%);
+  background: var(--color-bg-base);
   font-size: 0.92em;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .markdown-prose code {
+    background: color-mix(in srgb, var(--color-bg-base) 84%, white 16%);
+  }
 }
 
 .learning-work-item__toggle--collapsed,
@@ -1260,7 +1496,13 @@
 
 .learning-work-item--collapsed .learning-work-item__toggle:focus-visible .learning-work-item__header {
   border-radius: 0.35rem;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-link) 16%, transparent 84%);
+  box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-work-item--collapsed .learning-work-item__toggle:focus-visible .learning-work-item__header {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-link) 16%, transparent 84%);
+  }
 }
 
 .learning-unit-pane__stack > .learning-work-item:first-child,
@@ -1287,8 +1529,14 @@
   padding: 0.1rem 0 0.1rem 1rem;
   background: transparent;
   border: 0;
-  border-left: 1px solid color-mix(in srgb, var(--color-border) 58%, white 42%);
+  border-left: 1px solid var(--color-line);
   border-radius: 0;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-work-item__support {
+    border-left: 1px solid color-mix(in srgb, var(--color-border) 58%, white 42%);
+  }
 }
 
 .learning-task-workspace {
@@ -1302,7 +1550,13 @@
   display: grid;
   gap: calc(0.85rem * var(--learning-unit-copy-gap-scale));
   padding-bottom: calc(1.1rem * var(--learning-unit-copy-padding-scale));
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 62%, white 38%);
+  border-bottom: 1px solid var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-workspace__header {
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 62%, white 38%);
+  }
 }
 
 .learning-task-workspace__copy {
@@ -1341,7 +1595,13 @@
   padding: calc(1rem * var(--learning-unit-copy-padding-scale)) calc(1.05rem * var(--learning-unit-copy-padding-scale));
   border-left: 0;
   border-radius: var(--radius-s);
-  background: color-mix(in srgb, var(--color-bg-muted) 82%, var(--color-bg-surface) 18%);
+  background: var(--color-bg-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-workspace__statement {
+    background: color-mix(in srgb, var(--color-bg-muted) 82%, var(--color-bg-surface) 18%);
+  }
 }
 
 .learning-task-workspace__statement :global(p),
@@ -1417,9 +1677,17 @@
   gap: 0.95rem;
   align-items: center;
   padding: 0.8rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
-  background: color-mix(in srgb, var(--color-bg-surface) 96%, white 4%);
-  box-shadow: 3px 3px 0 color-mix(in srgb, var(--color-border) 12%, transparent 88%);
+  border: 1px solid var(--color-line);
+  background: var(--color-bg-surface);
+  box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-row {
+    border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+    background: color-mix(in srgb, var(--color-bg-surface) 96%, white 4%);
+    box-shadow: 3px 3px 0 color-mix(in srgb, var(--color-border) 12%, transparent 88%);
+  }
 }
 
 .learning-task-row--new {
@@ -1427,7 +1695,13 @@
 }
 
 .learning-task-row--draft {
-  border-left: 3px solid color-mix(in srgb, var(--color-warning) 72%, var(--color-accent) 28%);
+  border-left: 3px solid var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-row--draft {
+    border-left: 3px solid color-mix(in srgb, var(--color-warning) 72%, var(--color-accent) 28%);
+  }
 }
 
 .learning-task-row--pending {
@@ -1443,7 +1717,13 @@
 }
 
 .learning-task-row--active {
-  background: color-mix(in srgb, var(--color-bg-soft) 28%, var(--color-bg-surface) 72%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-row--active {
+    background: color-mix(in srgb, var(--color-bg-soft) 28%, var(--color-bg-surface) 72%);
+  }
 }
 
 .learning-task-row__copy {
@@ -1497,9 +1777,14 @@
 
 .learning-work-item--task-compact .learning-task-inline-editor {
   padding-left: 0.95rem;
-  border-left: 1px solid color-mix(in srgb, var(--color-border) 58%, white 42%);
+  border-left: 1px solid var(--color-line);
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-work-item--task-compact .learning-task-inline-editor {
+    border-left: 1px solid color-mix(in srgb, var(--color-border) 58%, white 42%);
+  }
+}
 @media (max-width: 920px) {
   .learning-task-row {
     grid-template-columns: 1fr;
@@ -1512,9 +1797,15 @@
 
 .learning-task-submission-summary__plain {
   margin: 0;
-  color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  color: var(--color-text-muted);
   font-size: calc(0.9rem * var(--learning-unit-font-scale));
   line-height: 1.6;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-submission-summary__plain {
+    color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  }
 }
 
 .learning-task-submission-summary__asset {
@@ -1535,11 +1826,17 @@
 
 .learning-submission-artifact__eyebrow {
   margin: 0;
-  color: color-mix(in srgb, var(--color-link) 78%, var(--color-text) 22%);
+  color: var(--color-link);
   font-size: calc(0.74rem * var(--learning-unit-label-scale));
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-submission-artifact__eyebrow {
+    color: color-mix(in srgb, var(--color-link) 78%, var(--color-text) 22%);
+  }
 }
 
 .learning-submission-artifact__meta {
@@ -1554,14 +1851,21 @@
   max-width: 100%;
   overflow-x: auto;
   padding: 0.85rem 0.95rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
-  background: color-mix(in srgb, var(--color-bg-surface) 96%, white 4%);
+  border: 1px solid var(--color-line);
+  background: var(--color-bg-surface);
   color: var(--color-text);
   font-family: var(--font-mono);
   font-size: calc(0.86rem * var(--learning-unit-font-scale));
   line-height: 1.55;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-submission-artifact__code {
+    border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+    background: color-mix(in srgb, var(--color-bg-surface) 96%, white 4%);
+  }
 }
 
 .learning-submission-artifact__code code {
@@ -1585,8 +1889,14 @@
 .structure-evidence h2 {
   margin-top: 0.9rem;
   padding-top: 0.45rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+  border-top: 1px solid var(--color-line);
   font-size: calc(1rem * var(--learning-unit-font-scale));
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .structure-evidence h2 {
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+  }
 }
 
 .structure-evidence h2:first-of-type {
@@ -1632,7 +1942,14 @@
   width: 100%;
   border: 0;
   border-radius: 0.22rem;
-  background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-submission-summary__image,
+  .learning-task-submission-summary__frame {
+    background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
+  }
 }
 
 .learning-task-submission-summary__image {
@@ -1658,8 +1975,15 @@
   display: grid;
   gap: 0.28rem;
   padding: 0.7rem 0.85rem;
-  border-left: 1px solid color-mix(in srgb, var(--color-border) 58%, white 42%);
-  background: color-mix(in srgb, var(--color-bg-muted) 72%, white 28%);
+  border-left: 1px solid var(--color-line);
+  background: var(--color-bg-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-submission-summary__history-entry {
+    border-left: 1px solid color-mix(in srgb, var(--color-border) 58%, white 42%);
+    background: color-mix(in srgb, var(--color-bg-muted) 72%, white 28%);
+  }
 }
 
 .learning-task-submission-summary__history-entry header {
@@ -1676,8 +2000,14 @@
 
 .learning-work-item__support summary {
   cursor: pointer;
-  color: color-mix(in srgb, var(--color-link) 86%, var(--color-text) 14%);
+  color: var(--color-link);
   font-weight: 700;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-work-item__support summary {
+    color: color-mix(in srgb, var(--color-link) 86%, var(--color-text) 14%);
+  }
 }
 
 .learning-work-item__support--open summary {
@@ -1694,7 +2024,14 @@
   width: 100%;
   border: 0;
   border-radius: 0.22rem;
-  background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-material-file__image,
+  .learning-material-file__frame {
+    background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
+  }
 }
 
 .learning-material-file__image {
@@ -1777,18 +2114,34 @@
 
 .learning-submission-editor__field span,
 .learning-submission-upload__title {
-  color: color-mix(in srgb, var(--color-link) 78%, var(--color-text) 22%);
+  color: var(--color-link);
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-submission-editor__field span,
+  .learning-submission-upload__title {
+    color: color-mix(in srgb, var(--color-link) 78%, var(--color-text) 22%);
+  }
+}
+
 .learning-unit-workspace-surface h3,
 .learning-unit-workspace-surface h4,
 .learning-unit-workspace-surface h5,
 .learning-unit-workspace-surface h6 {
-  color: color-mix(in srgb, var(--color-link) 92%, var(--color-text) 8%);
+  color: var(--color-link);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-workspace-surface h3,
+  .learning-unit-workspace-surface h4,
+  .learning-unit-workspace-surface h5,
+  .learning-unit-workspace-surface h6 {
+    color: color-mix(in srgb, var(--color-link) 92%, var(--color-text) 8%);
+  }
 }
 
 .learning-unit-workspace-surface strong,
@@ -1797,7 +2150,18 @@
 .learning-unit-workspace-surface .learning-work-item__link,
 .learning-unit-workspace-surface .learning-work-item__copy h4,
 .learning-unit-workspace-surface .learning-task-workspace__copy h4 {
-  color: color-mix(in srgb, var(--color-link) 78%, var(--color-text) 22%);
+  color: var(--color-link);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-workspace-surface strong,
+  .learning-unit-workspace-surface b,
+  .learning-unit-workspace-surface .workspace-label,
+  .learning-unit-workspace-surface .learning-work-item__link,
+  .learning-unit-workspace-surface .learning-work-item__copy h4,
+  .learning-unit-workspace-surface .learning-task-workspace__copy h4 {
+    color: color-mix(in srgb, var(--color-link) 78%, var(--color-text) 22%);
+  }
 }
 
 .learning-submission-editor--immersive {
@@ -1810,9 +2174,16 @@
 
 .learning-submission-upload__dropzone {
   padding: 1.8rem 1.35rem;
-  border: 1px dashed color-mix(in srgb, var(--color-border) 64%, var(--color-link) 36%);
+  border: 1px dashed var(--color-line);
   border-radius: 0.25rem;
-  background: color-mix(in srgb, var(--color-bg-base) 97%, white 3%);
+  background: var(--color-bg-base);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-submission-upload__dropzone {
+    border: 1px dashed color-mix(in srgb, var(--color-border) 64%, var(--color-link) 36%);
+    background: color-mix(in srgb, var(--color-bg-base) 97%, white 3%);
+  }
 }
 
 .learning-submission-upload__dropzone input[type="file"] {
@@ -1836,8 +2207,15 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   padding: 0.8rem 0.95rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
-  background: color-mix(in srgb, var(--color-bg-surface) 95%, white 5%);
+  border: 1px solid var(--color-line);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-submission-upload__selected {
+    border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+    background: color-mix(in srgb, var(--color-bg-surface) 95%, white 5%);
+  }
 }
 
 .learning-submission-upload__selected-name,
@@ -1866,12 +2244,18 @@
   gap: 0;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-border) 72%, var(--color-line) 28%);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-l);
   background: var(--color-bg-surface);
   box-shadow: none;
   container-type: inline-size;
   transition: border-color 140ms ease;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-markdown-editor {
+    border: 1px solid color-mix(in srgb, var(--color-border) 72%, var(--color-line) 28%);
+  }
 }
 
 .learning-markdown-editor__controls {
@@ -1897,7 +2281,13 @@
 }
 
 .learning-markdown-editor:focus-within {
-  border-color: color-mix(in srgb, var(--color-accent) 64%, var(--color-border) 36%);
+  border-color: var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-markdown-editor:focus-within {
+    border-color: color-mix(in srgb, var(--color-accent) 64%, var(--color-border) 36%);
+  }
 }
 
 .learning-markdown-editor__surface {
@@ -1921,7 +2311,7 @@
 }
 
 .h5p-task-viewport { min-width: 0; max-width: 100%; }
-.h5p-task-viewport--scrollable { overflow: auto; max-height: 65dvh; overscroll-behavior: contain; }
+.h5p-task-viewport--scrollable { overflow: auto; max-height: 65vh; max-height: 65dvh; overscroll-behavior: contain; }
 .h5p-view-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .h5p-view-controls .workspace-button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-on-accent); }
 .h5p-view-hint { margin: 0; color: var(--color-text-muted); }
@@ -1948,12 +2338,21 @@
 .learning-markdown-editor__link-panel button,
 .learning-markdown-editor__link-panel input {
   min-height: 2rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 58%, var(--color-bg-surface) 42%);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-s);
   background: var(--color-bg-surface);
   color: var(--color-text);
   font: inherit;
   box-shadow: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-markdown-editor__toolbar button,
+  .learning-markdown-editor__toolbar select,
+  .learning-markdown-editor__link-panel button,
+  .learning-markdown-editor__link-panel input {
+    border: 1px solid color-mix(in srgb, var(--color-border) 58%, var(--color-bg-surface) 42%);
+  }
 }
 
 .learning-markdown-editor__toolbar button,
@@ -1969,10 +2368,16 @@
 }
 
 .learning-markdown-editor__toolbar button.active {
-  border-color: color-mix(in srgb, var(--color-border) 58%, var(--color-bg-surface) 42%);
+  border-color: var(--color-line);
   border-bottom-color: var(--color-accent);
   background: var(--color-bg-surface);
   color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-markdown-editor__toolbar button.active {
+    border-color: color-mix(in srgb, var(--color-border) 58%, var(--color-bg-surface) 42%);
+  }
 }
 
 .learning-markdown-editor__table-actions {
@@ -2043,7 +2448,13 @@
 .learning-submission-editor__actions {
   justify-content: flex-end;
   padding-top: 0.4rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 62%, white 38%);
+  border-top: 1px solid var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-submission-editor__actions {
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 62%, white 38%);
+  }
 }
 
 .learning-submission-editor__final-hint {
@@ -2081,13 +2492,27 @@
 .learning-task-inline-response .learning-criteria-details {
   border: 0;
   border-radius: var(--radius-s);
-  background: color-mix(in srgb, var(--color-bg-muted) 72%, var(--color-bg-surface) 28%);
+  background: var(--color-bg-muted);
   box-shadow: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-inline-response .learning-response-panel,
+  .learning-task-inline-response .learning-criteria-details {
+    background: color-mix(in srgb, var(--color-bg-muted) 72%, var(--color-bg-surface) 28%);
+  }
 }
 
 .learning-task-inline-response .learning-response-panel[open],
 .learning-task-inline-response .learning-criteria-details[open] {
-  background: color-mix(in srgb, var(--color-bg-muted) 86%, var(--color-bg-surface) 14%);
+  background: var(--color-bg-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-inline-response .learning-response-panel[open],
+  .learning-task-inline-response .learning-criteria-details[open] {
+    background: color-mix(in srgb, var(--color-bg-muted) 86%, var(--color-bg-surface) 14%);
+  }
 }
 
 .learning-task-inline-response .learning-response-panel > summary,
@@ -2136,13 +2561,20 @@
   gap: 0.28rem;
   padding: 0.92rem 0.98rem 0.88rem;
   appearance: none;
-  border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+  border: 1px solid var(--color-line);
   border-radius: 1.02rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 94%, white 6%);
+  background: var(--color-bg-surface);
   color: var(--color-text);
   font: inherit;
   text-align: left;
   box-shadow: 0 10px 22px rgba(35, 41, 45, 0.045);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-flow-unit-node {
+    border: 1px solid color-mix(in srgb, var(--color-border) 76%, white 24%);
+    background: color-mix(in srgb, var(--color-bg-elevated) 94%, white 6%);
+  }
 }
 
 .learning-flow-unit-node strong {
@@ -2192,13 +2624,26 @@
 }
 
 .learning-flow-unit-node--interactive:hover {
-  border-color: color-mix(in srgb, var(--color-link) 22%, var(--color-border) 78%);
+  border-color: var(--color-line);
   box-shadow: 0 12px 26px rgba(35, 41, 45, 0.07);
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-flow-unit-node--interactive:hover {
+    border-color: color-mix(in srgb, var(--color-link) 22%, var(--color-border) 78%);
+  }
+}
+
 .learning-flow-unit-node--selected {
-  border-color: color-mix(in srgb, var(--color-link) 28%, var(--color-border) 72%);
-  box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--color-accent) 85%, transparent 15%);
+  border-color: var(--color-line);
+  box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-flow-unit-node--selected {
+    border-color: color-mix(in srgb, var(--color-link) 28%, var(--color-border) 72%);
+    box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--color-accent) 85%, transparent 15%);
+  }
 }
 
 .learning-flow-unit-node--locked {
@@ -2206,7 +2651,13 @@
 }
 
 .learning-flow-unit-node--done {
-  border-color: color-mix(in srgb, #5f8a68 24%, var(--color-border) 76%);
+  border-color: var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-flow-unit-node--done {
+    border-color: color-mix(in srgb, #5f8a68 24%, var(--color-border) 76%);
+  }
 }
 
 .learning-flow-node--locked .teacher-flow-unit-node,
@@ -2263,9 +2714,16 @@
 .learning-unit-content-shell .workspace-outline {
   position: sticky;
   top: 1rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+  border: 1px solid var(--color-line);
   background: var(--color-bg-surface);
-  box-shadow: 2px 2px 0 color-mix(in srgb, var(--color-border) 10%, transparent 90%);
+  box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-content-shell .workspace-outline {
+    border: 1px solid color-mix(in srgb, var(--color-border) 72%, white 28%);
+    box-shadow: 2px 2px 0 color-mix(in srgb, var(--color-border) 10%, transparent 90%);
+  }
 }
 
 .learning-unit-content-shell .learning-unit-pane-grid {
@@ -2325,7 +2783,13 @@
 }
 
 .learning-unit-content-shell .learning-unit-module__index {
-  color: color-mix(in srgb, var(--color-text) 62%, transparent 38%);
+  color: var(--color-text);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-content-shell .learning-unit-module__index {
+    color: color-mix(in srgb, var(--color-text) 62%, transparent 38%);
+  }
 }
 
 .learning-unit-content-shell .learning-unit-module__title {
@@ -2344,10 +2808,16 @@
 }
 
 .learning-unit-content-shell .learning-unit-module__meta {
-  color: color-mix(in srgb, var(--color-text) 54%, transparent 46%);
+  color: var(--color-text);
   font-family: var(--font-mono);
   font-size: calc(0.78rem * var(--learning-unit-label-scale));
   letter-spacing: 0.08em;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-content-shell .learning-unit-module__meta {
+    color: color-mix(in srgb, var(--color-text) 54%, transparent 46%);
+  }
 }
 
 .learning-unit-content-shell .learning-unit-module__section-head {
@@ -2356,11 +2826,17 @@
 
 .learning-unit-content-shell .learning-unit-module__section-head h5 {
   padding-bottom: 0;
-  color: color-mix(in srgb, var(--color-text) 78%, transparent 22%);
+  color: var(--color-text);
   font-family: var(--font-mono);
   font-size: calc(0.82rem * var(--learning-unit-label-scale));
   font-weight: 700;
   letter-spacing: 0.14em;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-unit-content-shell .learning-unit-module__section-head h5 {
+    color: color-mix(in srgb, var(--color-text) 78%, transparent 22%);
+  }
 }
 
 .learning-unit-content-shell .learning-task-inline-editor {
@@ -2464,15 +2940,24 @@
 
 /* Dialog layout is container-driven because learner panes may be narrower than the viewport. */
 .dialog-workspace {
-  --dialog-border-soft: color-mix(in srgb, var(--color-border) 38%, transparent 62%);
-  --dialog-surface-soft: color-mix(in srgb, var(--color-bg-muted) 62%, var(--color-bg-surface) 38%);
-  --dialog-ai-surface: color-mix(in srgb, var(--color-success) 9%, var(--color-bg-surface) 91%);
-  --dialog-student-surface: color-mix(in srgb, var(--color-accent) 9%, var(--color-bg-surface) 91%);
+  --dialog-border-soft: var(--color-line);
+  --dialog-surface-soft: var(--color-bg-muted);
+  --dialog-ai-surface: var(--color-bg-surface);
+  --dialog-student-surface: var(--color-bg-surface);
   container-name: learning-dialog;
   container-type: inline-size;
   display: grid;
   gap: var(--space-4);
   min-width: 0;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-workspace {
+    --dialog-border-soft: color-mix(in srgb, var(--color-border) 38%, transparent 62%);
+    --dialog-surface-soft: color-mix(in srgb, var(--color-bg-muted) 62%, var(--color-bg-surface) 38%);
+    --dialog-ai-surface: color-mix(in srgb, var(--color-success) 9%, var(--color-bg-surface) 91%);
+    --dialog-student-surface: color-mix(in srgb, var(--color-accent) 9%, var(--color-bg-surface) 91%);
+  }
 }
 
 .dialog-layout,
@@ -2495,7 +2980,13 @@
   border: 1px solid var(--dialog-border-soft);
   border-radius: var(--dialog-radius-panel);
   background: var(--dialog-surface-soft);
-  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--color-border) 10%, transparent 90%);
+  box-shadow: var(--color-shadow);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-sidebar {
+    box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--color-border) 10%, transparent 90%);
+  }
 }
 
 .dialog-context {
@@ -2699,10 +3190,17 @@
 }
 
 .dialog-message--current {
-  border-color: color-mix(in srgb, var(--color-success) 58%, var(--dialog-border-soft) 42%);
+  border-color: var(--color-line);
   border-inline-start-color: var(--color-success);
-  background: color-mix(in srgb, var(--color-success) 13%, var(--color-bg-surface) 87%);
+  background: var(--color-success-soft);
   box-shadow: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-message--current {
+    border-color: color-mix(in srgb, var(--color-success) 58%, var(--dialog-border-soft) 42%);
+    background: color-mix(in srgb, var(--color-success) 13%, var(--color-bg-surface) 87%);
+  }
 }
 
 .dialog-message__current {
@@ -2772,8 +3270,14 @@
 }
 
 .dialog-closing {
-  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, var(--dialog-border-soft) 45%);
+  border: 1px solid var(--color-line);
   box-shadow: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-closing {
+    border: 1px solid color-mix(in srgb, var(--color-accent) 55%, var(--dialog-border-soft) 45%);
+  }
 }
 
 .dialog-starters {
@@ -3090,8 +3594,14 @@
 
   .dialog-layout {
     direction: ltr;
-    grid-template-columns: var(--learner-task-column-ratio, clamp(32rem, 44cqw, 38rem)) 1px minmax(0, 1fr);
+    grid-template-columns: var(--learner-task-column-ratio, clamp(32rem, 44vw, 38rem)) 1px minmax(0, 1fr);
     align-items: stretch;
+  }
+
+  @supports (width: 1cqw) {
+    .dialog-layout {
+      grid-template-columns: var(--learner-task-column-ratio, clamp(32rem, 44cqw, 38rem)) 1px minmax(0, 1fr);
+    }
   }
 
   .dialog-sidebar {
@@ -3134,7 +3644,13 @@
     align-content: stretch;
     gap: var(--space-3);
     overflow: hidden;
-    padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+    padding: var(--space-6) clamp(var(--space-5), 4vw, var(--space-8));
+  }
+
+  @supports (width: 1cqw) {
+    .dialog-main {
+      padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+    }
   }
 
   .dialog-progress {
@@ -3201,10 +3717,16 @@
 
 .learning-response-panel {
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 58%, transparent 42%);
+  border-bottom: 1px solid var(--color-line);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-response-panel {
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 58%, transparent 42%);
+  }
 }
 
 .learning-response-panel[open] {
@@ -3285,9 +3807,15 @@
 
 .learning-feedback-actions__hint {
   margin: 0;
-  color: color-mix(in srgb, var(--color-text) 72%, var(--color-text-muted) 28%);
+  color: var(--color-text-muted);
   font-size: calc(0.92rem * var(--learning-unit-font-scale));
   line-height: 1.55;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-feedback-actions__hint {
+    color: color-mix(in srgb, var(--color-text) 72%, var(--color-text-muted) 28%);
+  }
 }
 
 .learning-feedback-actions__choices {
@@ -3323,16 +3851,18 @@
 .learning-finalization-warning {
   width: min(calc(100% - 2rem), 31rem);
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--color-border) 68%, transparent 32%);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-s);
   background: var(--color-bg-surface);
   color: var(--color-text);
-  box-shadow: 0 1.2rem 3rem color-mix(in srgb, var(--color-text) 18%, transparent 82%);
+  box-shadow: var(--color-shadow);
 }
 
-.learning-finalization-warning::backdrop {
-  background: color-mix(in srgb, var(--color-bg-base) 52%, transparent 48%);
-  backdrop-filter: blur(2px);
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-finalization-warning {
+    border: 1px solid color-mix(in srgb, var(--color-border) 68%, transparent 32%);
+    box-shadow: 0 1.2rem 3rem color-mix(in srgb, var(--color-text) 18%, transparent 82%);
+  }
 }
 
 .learning-finalization-warning__content {
@@ -3353,8 +3883,14 @@
 }
 
 .learning-finalization-warning__content > p:not(.learning-finalization-warning__eyebrow) {
-  color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  color: var(--color-text-muted);
   line-height: 1.55;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-finalization-warning__content > p:not(.learning-finalization-warning__eyebrow) {
+    color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
+  }
 }
 
 .learning-finalization-warning__eyebrow {
@@ -3391,8 +3927,14 @@
 
 .learning-criteria-details {
   border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 58%, transparent 42%);
+  border-top: 1px solid var(--color-line);
   background: transparent;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-criteria-details {
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 58%, transparent 42%);
+  }
 }
 
 .learning-criteria-details > summary,
@@ -3461,7 +4003,13 @@
 }
 
 .learning-criteria-details__item {
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent 50%);
+  border-top: 1px solid var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-criteria-details__item {
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent 50%);
+  }
 }
 
 .learning-criterion {
@@ -3481,11 +4029,17 @@
 }
 
 .learning-criterion__index {
-  color: color-mix(in srgb, var(--color-text-muted) 74%, transparent 26%);
+  color: var(--color-text-muted);
   font-family: var(--font-mono);
   font-size: calc(0.68rem * var(--learning-unit-label-scale));
   font-weight: 650;
   letter-spacing: 0.05em;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-criterion__index {
+    color: color-mix(in srgb, var(--color-text-muted) 74%, transparent 26%);
+  }
 }
 
 .learning-criterion__title {
@@ -3506,15 +4060,23 @@
   min-height: 1.55rem;
   padding: 0.18rem 0.52rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--criterion-level-tone) 11%, var(--color-bg-surface) 89%);
-  color: color-mix(in srgb, var(--criterion-level-tone) 80%, var(--color-text) 20%);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--criterion-level-tone) 18%, transparent 82%);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  box-shadow: var(--color-shadow);
   font-family: var(--font-mono);
   font-size: calc(0.72rem * var(--learning-unit-label-scale));
   font-weight: 700;
   letter-spacing: 0.025em;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-criterion__level {
+    background: color-mix(in srgb, var(--criterion-level-tone) 11%, var(--color-bg-surface) 89%);
+    color: color-mix(in srgb, var(--criterion-level-tone) 80%, var(--color-text) 20%);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--criterion-level-tone) 18%, transparent 82%);
+  }
 }
 
 .learning-criterion__level--mangelhaft {
@@ -3542,7 +4104,13 @@
   margin: 0 0 var(--space-5) calc(2rem + var(--space-3));
   padding: 0 var(--space-6) 0 0;
   border: 0;
-  color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  color: var(--color-text-muted);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-criterion__explanation {
+    color: color-mix(in srgb, var(--color-text) 78%, var(--color-text-muted) 22%);
+  }
 }
 
 .learning-work-item--task .learning-criterion__explanation {
@@ -3596,8 +4164,14 @@
 .learner-orientation > .workspace-outline {
   position: sticky;
   top: var(--space-4);
-  max-height: calc(100svh - var(--space-8));
+  max-height: calc(100vh - var(--space-8));
   overflow-y: auto;
+}
+
+@supports (height: 100svh) {
+  .learner-orientation > .workspace-outline {
+    max-height: calc(100svh - var(--space-8));
+  }
 }
 
 .workspace-outline__disclosure,
@@ -3713,8 +4287,14 @@
   min-height: 3.25rem;
   padding: var(--space-2) var(--space-3);
   border-block-end: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-bg-base) 94%, transparent 6%);
+  background: var(--color-bg-base);
   backdrop-filter: blur(12px);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learner-task-header {
+    background: color-mix(in srgb, var(--color-bg-base) 94%, transparent 6%);
+  }
 }
 
 .learner-task-header__back,
@@ -3820,6 +4400,7 @@
   min-height: 0;
   display: grid;
   gap: var(--space-6);
+  max-height: calc(100vh - 12rem);
   max-height: calc(100svh - 12rem);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -3986,8 +4567,18 @@ button.learner-material-context__module-toggle:focus-visible,
 .learner-material-context__submissions-toggle:hover,
 .learner-material-context__submissions-toggle:focus-visible {
   color: var(--color-text);
-  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, var(--color-border) 30%);
   outline-offset: 2px;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  button.learner-material-context__module-toggle:hover,
+  button.learner-material-context__module-toggle:focus-visible,
+  .learner-material-context__close:hover,
+  .learner-material-context__close:focus-visible,
+  .learner-material-context__submissions-toggle:hover,
+  .learner-material-context__submissions-toggle:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, var(--color-border) 30%);
+  }
 }
 
 .learner-material-context__module-body {
@@ -4238,6 +4829,7 @@ button.learner-material-context__module-toggle:focus-visible,
 
 .learner-reference-document__pdf {
   width: 100%;
+  min-height: min(32rem, 58vh);
   min-height: min(32rem, 58svh);
   border: 1px solid var(--color-border);
   background: var(--color-bg-surface);
@@ -4258,11 +4850,18 @@ button.learner-material-context__module-toggle:focus-visible,
   display: grid;
   align-content: start;
   gap: var(--space-5);
+  max-height: calc(100vh - 7.25rem);
   max-height: calc(100svh - 7.25rem);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding: var(--space-5) clamp(var(--space-5), 7cqw, var(--space-9));
+  padding: var(--space-5) clamp(var(--space-5), 7vw, var(--space-9));
+}
+
+@supports (width: 1cqw) {
+  .learner-context-reader__scroll {
+    padding: var(--space-5) clamp(var(--space-5), 7cqw, var(--space-9));
+  }
 }
 
 .learner-context-reader__toolbar {
@@ -4288,8 +4887,14 @@ button.learner-material-context__module-toggle:focus-visible,
 
 .learner-reference-document__reader-header h2 {
   margin: 0;
-  font-size: calc(clamp(1.65rem, 3cqw, 2.5rem) * var(--learning-unit-headline-scale));
+  font-size: calc(clamp(1.65rem, 3vw, 2.5rem) * var(--learning-unit-headline-scale));
   overflow-wrap: anywhere;
+}
+
+@supports (width: 1cqw) {
+  .learner-reference-document__reader-header h2 {
+    font-size: calc(clamp(1.65rem, 3cqw, 2.5rem) * var(--learning-unit-headline-scale));
+  }
 }
 
 .learner-reference-transcript {
@@ -4334,8 +4939,13 @@ button.learner-material-context__module-toggle:focus-visible,
 
 .learner-reference-document__icon-action:focus-visible {
   color: var(--color-text);
-  outline: 2px solid color-mix(in srgb, var(--color-accent) 72%, var(--color-border) 28%);
   outline-offset: 2px;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learner-reference-document__icon-action:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-accent) 72%, var(--color-border) 28%);
+  }
 }
 
 .learner-context-reader {
@@ -4448,7 +5058,13 @@ button.learner-material-context__module-toggle:focus-visible,
   margin: 0 0 var(--space-5);
   padding: var(--space-4);
   border: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-bg-soft) 38%, var(--color-bg-surface) 62%);
+  background: var(--color-bg-surface);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learning-task-workspace-statement {
+    background: color-mix(in srgb, var(--color-bg-soft) 38%, var(--color-bg-surface) 62%);
+  }
 }
 
 .learning-task-workspace-statement > .workspace-label {
@@ -4485,14 +5101,22 @@ button.learner-material-context__module-toggle:focus-visible,
   }
 
   .learner-task-workbench {
+    height: calc(100vh - 14rem);
     height: calc(100svh - 14rem);
+    min-height: min(36rem, calc(100vh - 14rem));
     min-height: min(36rem, calc(100svh - 14rem));
   }
 
   .learner-task-workbench__desk {
     height: 100%;
-    grid-template-columns: var(--learner-task-column-ratio, clamp(32rem, 44cqw, 38rem)) 1px minmax(0, 1fr);
+    grid-template-columns: var(--learner-task-column-ratio, clamp(32rem, 44vw, 38rem)) 1px minmax(0, 1fr);
     align-items: stretch;
+  }
+
+  @supports (width: 1cqw) {
+    .learner-task-workbench__desk {
+      grid-template-columns: var(--learner-task-column-ratio, clamp(32rem, 44cqw, 38rem)) 1px minmax(0, 1fr);
+    }
   }
 
   .learner-task-split-divider {
@@ -4537,7 +5161,13 @@ button.learner-material-context__module-toggle:focus-visible,
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
-    padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+    padding: var(--space-6) clamp(var(--space-5), 4vw, var(--space-8));
+  }
+
+  @supports (width: 1cqw) {
+    .learner-task-workbench__main {
+      padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+    }
   }
 
   .learner-context-reader__scroll {
@@ -4698,7 +5328,12 @@ button.learner-material-context__module-toggle:focus-visible,
 /* The dialog transcript keeps the same restrained scrollbar as the shared context column. */
 .dialog-transcript {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-text-muted) 45%, transparent 55%) transparent;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-transcript {
+    scrollbar-color: color-mix(in srgb, var(--color-text-muted) 45%, transparent 55%) transparent;
+  }
 }
 
 .dialog-main .dialog-message .markdown-prose {
@@ -4714,9 +5349,15 @@ button.learner-material-context__module-toggle:focus-visible,
   border: 1px solid var(--dialog-border-soft);
   border-radius: var(--radius-s);
   background: var(--color-bg-surface);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-border) 8%, transparent 92%);
+  box-shadow: var(--color-shadow);
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-composer .workspace-field textarea,
+  .dialog-closing .workspace-field textarea {
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-border) 8%, transparent 92%);
+  }
+}
 /* Dialog tasks reuse the same context column as every other task type. */
 .dialog-sidebar.learner-task-context {
   grid-template-areas: none;
@@ -4809,8 +5450,14 @@ button.learner-material-context__module-toggle:focus-visible,
   width: 1.15rem;
   height: 1.15rem;
   flex: 0 0 auto;
-  border: 3px solid color-mix(in srgb, var(--color-success) 38%, var(--color-line) 62%);
+  border: 3px solid var(--color-line);
   border-radius: 50%;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learner-task-context__progress-ring {
+    border: 3px solid color-mix(in srgb, var(--color-success) 38%, var(--color-line) 62%);
+  }
 }
 
 .learner-focused-materials {
@@ -4841,13 +5488,25 @@ button.learner-material-context__module-toggle:focus-visible,
 }
 
 .learner-reference-document--compact .learner-reference-document__toggle:hover {
-  background: color-mix(in srgb, var(--color-success) 5%, transparent 95%);
+  background: var(--color-success-soft);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learner-reference-document--compact .learner-reference-document__toggle:hover {
+    background: color-mix(in srgb, var(--color-success) 5%, transparent 95%);
+  }
 }
 
 .learner-reference-document--compact .learner-reference-document__toggle:focus-visible {
-  background: color-mix(in srgb, var(--color-success) 5%, transparent 95%);
-  outline: 2px solid color-mix(in srgb, var(--color-success) 42%, transparent 58%);
+  background: var(--color-success-soft);
   outline-offset: -2px;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .learner-reference-document--compact .learner-reference-document__toggle:focus-visible {
+    background: color-mix(in srgb, var(--color-success) 5%, transparent 95%);
+    outline: 2px solid color-mix(in srgb, var(--color-success) 42%, transparent 58%);
+  }
 }
 
 .learner-reference-document__type-icon {
@@ -4961,8 +5620,14 @@ button.learner-material-context__module-toggle:focus-visible,
   grid-auto-rows: max-content;
   align-content: start;
   gap: var(--space-5);
-  padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+  padding: var(--space-6) clamp(var(--space-5), 4vw, var(--space-8));
   border-radius: 0;
+}
+
+@supports (width: 1cqw) {
+  .dialog-transcript {
+    padding: var(--space-6) clamp(var(--space-5), 4cqw, var(--space-8));
+  }
 }
 
 .dialog-message {
@@ -5009,18 +5674,36 @@ button.learner-material-context__module-toggle:focus-visible,
 
 .dialog-main .dialog-message .dialog-message__bubble {
   padding: var(--space-4) var(--space-5);
-  border: 1px solid color-mix(in srgb, var(--color-success) 32%, var(--color-line) 68%);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-xl);
   background: var(--dialog-ai-surface);
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-main .dialog-message .dialog-message__bubble {
+    border: 1px solid color-mix(in srgb, var(--color-success) 32%, var(--color-line) 68%);
+  }
+}
+
 .dialog-main .dialog-message--student .dialog-message__bubble {
-  border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-line) 66%);
+  border-color: var(--color-line);
   background: var(--dialog-student-surface);
 }
 
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-main .dialog-message--student .dialog-message__bubble {
+    border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-line) 66%);
+  }
+}
+
 .dialog-main .dialog-message--current .dialog-message__bubble {
-  border-color: color-mix(in srgb, var(--color-success) 48%, var(--color-line) 52%);
+  border-color: var(--color-line);
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-main .dialog-message--current .dialog-message__bubble {
+    border-color: color-mix(in srgb, var(--color-success) 48%, var(--color-line) 52%);
+  }
 }
 
 .dialog-message__avatar {
@@ -5029,20 +5712,33 @@ button.learner-material-context__module-toggle:focus-visible,
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg-surface) 84%);
+  background: var(--color-accent-soft);
   color: var(--color-accent);
   font-weight: 750;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-message__avatar {
+    background: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg-surface) 84%);
+  }
 }
 
 .dialog-composer,
 .dialog-closing {
   gap: var(--space-3);
-  padding: var(--space-4) clamp(var(--space-5), 4cqw, var(--space-8));
+  padding: var(--space-4) clamp(var(--space-5), 4vw, var(--space-8));
   border: 0;
   border-block-start: 1px solid var(--color-line);
   border-radius: 0;
   background: var(--color-bg-surface);
   box-shadow: none;
+}
+
+@supports (width: 1cqw) {
+  .dialog-composer,
+  .dialog-closing {
+    padding: var(--space-4) clamp(var(--space-5), 4cqw, var(--space-8));
+  }
 }
 
 .dialog-actions .workspace-top-action--accent {
@@ -5068,9 +5764,16 @@ button.learner-material-context__module-toggle:focus-visible,
 
 .dialog-composer .workspace-field textarea,
 .dialog-closing .workspace-field textarea {
-  border-color: color-mix(in srgb, var(--color-success) 58%, var(--color-border) 42%);
+  border-color: var(--color-line);
   border-radius: var(--radius-xl);
   box-shadow: none;
+}
+
+@supports (color: color-mix(in srgb, black, white)) {
+  .dialog-composer .workspace-field textarea,
+  .dialog-closing .workspace-field textarea {
+    border-color: color-mix(in srgb, var(--color-success) 58%, var(--color-border) 42%);
+  }
 }
 
 .dialog-notice {

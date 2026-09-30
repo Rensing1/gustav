@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import QRCode from "qrcode";
+  import { isolateModalBackground } from "$lib/components/ui/modal-focus";
 
   export type CourseInvitation = {
     id: string;
@@ -33,7 +34,7 @@
   let copied = $state(false);
   let now = $state(Date.now());
   let fullscreenHistoryEntryActive = false;
-  let inertBackground: Array<{ element: HTMLElement; wasInert: boolean }> = [];
+  let restoreBackground = () => {};
 
   const expiresAt = $derived(invitation ? new Date(invitation.expires_at) : null);
   const expiryText = $derived(expiresAt
@@ -73,24 +74,12 @@
 
   function isolateFallbackBackground(): void {
     restoreFallbackBackground();
-    let current = fullscreenHost;
-    while (current?.parentElement) {
-      const parent = current.parentElement;
-      for (const sibling of parent.children) {
-        if (sibling === current || !(sibling instanceof HTMLElement)) continue;
-        inertBackground.push({ element: sibling, wasInert: sibling.inert === true });
-        sibling.inert = true;
-      }
-      current = parent;
-      if (parent === document.body) break;
-    }
+    if (fullscreenHost) restoreBackground = isolateModalBackground(fullscreenHost);
   }
 
   function restoreFallbackBackground(): void {
-    for (const { element, wasInert } of inertBackground) {
-      element.inert = wasInert;
-    }
-    inertBackground = [];
+    restoreBackground();
+    restoreBackground = () => {};
   }
 
   async function focusFullscreenClose(): Promise<void> {

@@ -2388,6 +2388,14 @@
     {
       "ecosystem": "node",
       "license": "MIT",
+      "name": "core-js",
+      "policy": "allowed",
+      "version": "3.50.0",
+      "workspace": "frontend"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
       "name": "css-tree",
       "policy": "allowed",
       "version": "3.2.1",
@@ -5224,9 +5232,9 @@
     "h5p-service/package-lock.json"
   ],
   "summary": {
-    "node_entries": 528,
+    "node_entries": 529,
     "python_entries": 135,
     "review_required_entries": 0,
-    "total_entries": 663
+    "total_entries": 664
   }
 }

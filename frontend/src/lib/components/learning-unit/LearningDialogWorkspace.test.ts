@@ -677,8 +677,8 @@ describe("LearningDialogWorkspace", () => {
     expect(css).not.toContain("@container learning-dialog (min-width: 64rem)");
     expect(css).toContain("@container learning-dialog (max-width: 21.999rem)");
     expect(css).toContain("@supports not (container-type: inline-size)");
-    expect(dialogBlocks).not.toContain("var(--color-success-soft)");
-    expect(dialogBlocks).not.toContain("var(--color-accent-soft)");
+    expect(dialogBlocks).toContain("--dialog-ai-surface: var(--color-bg-surface)");
+    expect(dialogBlocks).toContain("--dialog-student-surface: var(--color-bg-surface)");
     expect(dialogBlocks).not.toMatch(/#[0-9a-f]{3,8}/i);
   });
 

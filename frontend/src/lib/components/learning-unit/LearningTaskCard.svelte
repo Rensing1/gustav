@@ -1,6 +1,8 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { enhance } from "$app/forms";
+  import { modalFocus } from "$lib/components/ui/modal-focus";
+  import { requestFormSubmit } from "$lib/utils/request-form-submit";
   import H5PTaskPlayer from "$lib/components/H5PTaskPlayer.svelte";
   import LearningCriteriaDetails from "$lib/components/learning-unit/LearningCriteriaDetails.svelte";
   import LearningDialogWorkspace from "$lib/components/learning-unit/LearningDialogWorkspace.svelte";
@@ -163,7 +165,7 @@
   let feedbackAnchor = $state<HTMLElement | null>(null);
   let finalizationForm = $state<HTMLFormElement | null>(null);
   let finalizationSubmitButton = $state<HTMLButtonElement | null>(null);
-  let finalizationWarningDialog = $state<HTMLDialogElement | null>(null);
+  let finalizationWarningOpen = $state(false);
   let finalizationConfirmationPending = $state(false);
   let editorFocusRequest = $state(0);
   let lastSubmissionFocused = $state(false);
@@ -627,21 +629,11 @@
     }
     event.preventDefault();
     persistCurrentTextDraft();
-    if (!finalizationWarningDialog?.open) {
-      if (typeof finalizationWarningDialog?.showModal === "function") {
-        finalizationWarningDialog.showModal();
-      } else {
-        finalizationWarningDialog?.setAttribute("open", "");
-      }
-    }
+    finalizationWarningOpen = true;
   }
 
   function closeFinalizationWarning() {
-    if (typeof finalizationWarningDialog?.close === "function") {
-      finalizationWarningDialog.close();
-    } else {
-      finalizationWarningDialog?.removeAttribute("open");
-    }
+    finalizationWarningOpen = false;
   }
 
   function continueEditingFromWarning() {
@@ -657,7 +649,7 @@
     closeFinalizationWarning();
     persistCurrentTextDraft();
     if (finalizationForm && finalizationSubmitButton) {
-      finalizationForm.requestSubmit(finalizationSubmitButton);
+      requestFormSubmit(finalizationForm, finalizationSubmitButton);
     }
   }
 
@@ -1262,37 +1254,44 @@
                 {/if}
               </section>
 
-              <dialog
-                bind:this={finalizationWarningDialog}
-                class="learning-finalization-warning"
-                aria-labelledby={`learning-finalization-warning-title-${task.id}`}
-              >
-                <div class="learning-finalization-warning__content">
-                  <p class="learning-finalization-warning__eyebrow">Endgültige Abgabe</p>
-                  <h2 id={`learning-finalization-warning-title-${task.id}`}>Überarbeitung noch nicht geprüft</h2>
-                  <p>
-                    Du hast den Entwurf seit der letzten Rückmeldung verändert. Endgültig abgegeben wird der Entwurf,
-                    zu dem du die Rückmeldung erhalten hast – nicht deine aktuelle Überarbeitung.
-                  </p>
-                  <div class="learning-finalization-warning__actions">
-                    <button
-                      class="workspace-top-action workspace-top-action--accent"
-                      type="button"
-                      onclick={continueEditingFromWarning}
-                    >
-                      Weiter überarbeiten
-                    </button>
-                    <button
-                      class="workspace-top-action workspace-top-action--quiet"
-                      type="button"
-                      disabled={finalizationConfirmationPending}
-                      onclick={confirmReviewedFinalization}
-                    >
-                      Trotzdem abgeben
-                    </button>
+              {#if finalizationWarningOpen}
+                <div class="dialog-backdrop">
+                  <div
+                    use:modalFocus={closeFinalizationWarning}
+                    role="dialog"
+                    aria-modal="true"
+                    class="learning-finalization-warning"
+                    aria-labelledby={`learning-finalization-warning-title-${task.id}`}
+                  >
+                    <div class="learning-finalization-warning__content">
+                      <p class="learning-finalization-warning__eyebrow">Endgültige Abgabe</p>
+                      <h2 id={`learning-finalization-warning-title-${task.id}`}>Überarbeitung noch nicht geprüft</h2>
+                      <p>
+                        Du hast den Entwurf seit der letzten Rückmeldung verändert. Endgültig abgegeben wird der Entwurf,
+                        zu dem du die Rückmeldung erhalten hast – nicht deine aktuelle Überarbeitung.
+                      </p>
+                      <div class="learning-finalization-warning__actions">
+                        <button
+                          data-modal-initial
+                          class="workspace-top-action workspace-top-action--accent"
+                          type="button"
+                          onclick={continueEditingFromWarning}
+                        >
+                          Weiter überarbeiten
+                        </button>
+                        <button
+                          class="workspace-top-action workspace-top-action--quiet"
+                          type="button"
+                          disabled={finalizationConfirmationPending}
+                          onclick={confirmReviewedFinalization}
+                        >
+                          Trotzdem abgeben
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </dialog>
+              {/if}
             {/if}
 
             {#if errorMessage}

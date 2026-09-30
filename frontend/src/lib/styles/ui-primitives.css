@@ -623,6 +623,13 @@ fieldset.workspace-field {
   outline-offset: var(--focus-ring-offset);
 }
 
+/* Modern browsers can distinguish keyboard focus from pointer focus. */
+@supports selector(:focus-visible) {
+  :is(a[href], button, input, select, textarea, summary, [tabindex]):focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
 .graph-viewport-error {
   position: absolute;
   z-index: 5;

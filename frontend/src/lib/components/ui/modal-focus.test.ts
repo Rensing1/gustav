@@ -1,8 +1,30 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { modalFocus } from "./modal-focus";
+import { containModalFocus, modalFocus } from "./modal-focus";
 
 describe("shared modal focus", () => {
   afterEach(() => document.body.replaceChildren());
+  it("redirects direct focus into an active modal and stops after cleanup", () => {
+    document.body.innerHTML = '<button id="outside">Außen</button><div role="dialog" aria-modal="true"><button id="inside">Schließen</button></div>';
+    const outside = document.querySelector<HTMLButtonElement>("#outside")!;
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const inside = document.querySelector<HTMLButtonElement>("#inside")!;
+    let active = true;
+    const stop = containModalFocus(dialog, () => inside.focus(), () => active);
+
+    outside.focus();
+    expect(inside).toHaveFocus();
+
+    active = false;
+    outside.focus();
+    expect(outside).toHaveFocus();
+
+    active = true;
+    stop();
+    inside.focus();
+    outside.focus();
+    expect(outside).toHaveFocus();
+  });
+
   it("isolates and restores background semantics and pointer interaction without inert", async () => {
     document.body.innerHTML = '<main aria-hidden="false" style="pointer-events:auto"><button id="opener">Öffnen</button></main><div class="overlay"><div role="dialog" aria-modal="true"><button>Schließen</button></div></div>';
     const background = document.querySelector("main")!;

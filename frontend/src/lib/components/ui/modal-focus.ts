@@ -42,6 +42,29 @@ export function isolateModalBackground(node: HTMLElement): () => void {
 }
 
 /**
+ * Redirect focus that enters the page outside an active modal.
+ * The caller owns activation and the concrete initial focus target.
+ */
+export function containModalFocus(
+  node: HTMLElement,
+  focusInside: () => void,
+  isActive: () => boolean = () => true
+): () => void {
+  function handleFocus(event: FocusEvent): void {
+    if (
+      isActive()
+      && event.target instanceof Node
+      && !node.contains(event.target)
+    ) {
+      focusInside();
+    }
+  }
+
+  document.addEventListener("focusin", handleFocus);
+  return () => document.removeEventListener("focusin", handleFocus);
+}
+
+/**
  * Keep keyboard focus in the topmost modal and return it to its live opener.
  * This presentation-only action does not submit forms or change permissions.
  */
@@ -92,19 +115,16 @@ export function modalFocus(node: HTMLElement, onClose: () => void) {
   function focusInitial() {
     (node.querySelector<HTMLElement>('[data-modal-initial]') ?? focusable()[0] ?? node).focus();
   }
-  function handleFocus(event: FocusEvent) {
-    if (active && isTopmost() && !node.contains(event.target as Node)) focusInitial();
-  }
+  const stopContainingFocus = containModalFocus(node, focusInitial, () => active && isTopmost());
   node.addEventListener("keydown", handleKeydown);
   window.addEventListener("keydown", handleKeydown);
-  document.addEventListener("focusin", handleFocus);
   return {
     update(nextClose: () => void) { close = nextClose; },
     destroy() {
       active = false;
       node.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("keydown", handleKeydown);
-      document.removeEventListener("focusin", handleFocus);
+      stopContainingFocus();
       restoreBackground();
       if (opener?.isConnected) opener.focus();
     }

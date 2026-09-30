@@ -230,6 +230,9 @@ describe("course invitation panel", () => {
     await fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
     expect(close).toHaveFocus();
 
+    linkField.focus();
+    expect(close).toHaveFocus();
+
     await fireEvent.keyDown(window, { key: "Escape" });
     expect(overlay).not.toHaveClass("course-invite-fullscreen--open");
     expect(trigger).toHaveFocus();

@@ -1,7 +1,10 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import QRCode from "qrcode";
-  import { isolateModalBackground } from "$lib/components/ui/modal-focus";
+  import {
+    containModalFocus,
+    isolateModalBackground
+  } from "$lib/components/ui/modal-focus";
 
   export type CourseInvitation = {
     id: string;
@@ -35,6 +38,7 @@
   let now = $state(Date.now());
   let fullscreenHistoryEntryActive = false;
   let restoreBackground = () => {};
+  let stopContainingFocus = () => {};
 
   const expiresAt = $derived(invitation ? new Date(invitation.expires_at) : null);
   const expiryText = $derived(expiresAt
@@ -74,10 +78,18 @@
 
   function isolateFallbackBackground(): void {
     restoreFallbackBackground();
-    if (fullscreenHost) restoreBackground = isolateModalBackground(fullscreenHost);
+    if (!fullscreenHost) return;
+    restoreBackground = isolateModalBackground(fullscreenHost);
+    stopContainingFocus = containModalFocus(
+      fullscreenHost,
+      () => fullscreenCloseButton?.focus(),
+      () => fullscreenOpen && fallbackFullscreen
+    );
   }
 
   function restoreFallbackBackground(): void {
+    stopContainingFocus();
+    stopContainingFocus = () => {};
     restoreBackground();
     restoreBackground = () => {};
   }

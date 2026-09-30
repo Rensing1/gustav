@@ -22,4 +22,35 @@ describe("global CSS syntax", () => {
       expect(() => postcss.parse(source, { from: fileName })).not.toThrow();
     }
   });
+
+  it("keeps the Safari focus fallback while modern browsers suppress pointer focus rings", () => {
+    const source = readFileSync(path.resolve(stylesDir, "ui-primitives.css"), "utf8");
+    const root = postcss.parse(source, { from: "ui-primitives.css" });
+    const fallbackSelector = ":is(a[href], button, input, select, textarea, summary, [tabindex]):focus";
+    const modernSelector = `${fallbackSelector}:not(:focus-visible)`;
+    let hasFallback = false;
+    let hasModernOverride = false;
+
+    root.walkRules((rule) => {
+      const parent = rule.parent;
+      if (rule.selector === fallbackSelector && rule.parent === root) {
+        hasFallback = rule.some(
+          (node) => node.type === "decl" && node.prop === "outline" && node.value.includes("--focus-ring-width")
+        );
+      }
+      if (
+        rule.selector === modernSelector
+        && parent?.type === "atrule"
+        && parent.name === "supports"
+        && parent.params === "selector(:focus-visible)"
+      ) {
+        hasModernOverride = rule.some(
+          (node) => node.type === "decl" && node.prop === "outline" && node.value === "none"
+        );
+      }
+    });
+
+    expect(hasFallback).toBe(true);
+    expect(hasModernOverride).toBe(true);
+  });
 });

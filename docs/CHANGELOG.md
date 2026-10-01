@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-01
+
+### Produktions-Hotfixes für Dialogauswertung und H5P-Aufgabenwechsel
+
+- fix(learning): Unvollständige oder typfalsche KI-Dialogauswertungen werden als `feedback_invalid_analysis` behandelt, statt fehlende Kriterien als scheinbar gültige Nullbewertung zu speichern. Nur echte ganzzahlige Scores von 0 bis 10 mit nicht leerer Begründung werden übernommen.
+- fix(h5p): Beim Wechsel der ausgewählten H5P-Aufgabe wird der Player anhand von Kurs, Aufgabe und Inhalt neu aufgebaut. Verspätete Ergebnisantworten eines bereits abgebauten Players verändern die neue Aufgabenansicht nicht.
+- docs(ai): Der vollständige Prompt-Vertrag der Dialogauswertung ist in der kanonischen Prompt-Referenz dokumentiert und durch einen Drift-Test mit dem Signature-Docstring verbunden.
+- test(learning): Adapter-, Worker- und Komponententests prüfen ungültige Modellantworten, Spieleridentität und verspätete Antworten. Der authentifizierte H5P-Browserrundlauf prüft zusätzlich den Wechsel zwischen zwei echten H5P-Aufgaben.
+- scope: Keine Änderung an OpenAPI, Datenbankschema, RLS oder vorhandenen Produktionsdaten.
+
 ## 2026-09-30
 
 ### Browserkompatibilität für ältere iPads

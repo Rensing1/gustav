@@ -14,8 +14,10 @@ import importlib
 import inspect
 import re
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Iterator
 
 import pytest
 
@@ -38,10 +40,18 @@ def _install_fake_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "dspy", fake)
 
 
-def _load_signatures_module() -> object:
-    # Ensure a clean import (pytest may have imported it earlier under a different `dspy`).
-    sys.modules.pop("backend.learning.adapters.dspy.signatures", None)
-    return importlib.import_module("backend.learning.adapters.dspy.signatures")
+@contextmanager
+def _load_signature_module(module_name: str) -> Iterator[object]:
+    """Import against fake DSPy without replacing a module used by later tests."""
+
+    previous = sys.modules.pop(module_name, None)
+    try:
+        yield importlib.import_module(module_name)
+    finally:
+        if previous is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous
 
 
 def _extract_signature_blocks_from_docs() -> dict[str, str]:
@@ -79,33 +89,38 @@ def _extract_signature_blocks_from_docs() -> dict[str, str]:
 
 
 @pytest.mark.parametrize(
-    "signature_name",
+    ("module_name", "signature_name"),
     [
-        "FeedbackAnalysisSignature",
-        "FeedbackSynthesisSignature",
-        "FeedbackNoCriteriaSignature",
-        "VisualFeedbackAnalysisSignature",
-        "VisualFeedbackSynthesisSignature",
-        "VisualFeedbackNoCriteriaSignature",
-        "VisionOcrSignature",
+        ("backend.learning.adapters.dspy.signatures", "FeedbackAnalysisSignature"),
+        ("backend.learning.adapters.dspy.signatures", "FeedbackSynthesisSignature"),
+        ("backend.learning.adapters.dspy.signatures", "FeedbackNoCriteriaSignature"),
+        ("backend.learning.adapters.dspy.signatures", "VisualFeedbackAnalysisSignature"),
+        ("backend.learning.adapters.dspy.signatures", "VisualFeedbackSynthesisSignature"),
+        ("backend.learning.adapters.dspy.signatures", "VisualFeedbackNoCriteriaSignature"),
+        ("backend.learning.adapters.dspy.signatures", "VisionOcrSignature"),
+        ("backend.learning.adapters.dspy.dialog_assessment_program", "DialogAssessmentSignature"),
     ],
 )
-def test_signature_docstrings_match_reference(monkeypatch: pytest.MonkeyPatch, signature_name: str) -> None:
+def test_signature_docstrings_match_reference(
+    monkeypatch: pytest.MonkeyPatch,
+    module_name: str,
+    signature_name: str,
+) -> None:
     _install_fake_dspy(monkeypatch)
     docs_blocks = _extract_signature_blocks_from_docs()
     assert signature_name in docs_blocks, f"Missing docs block for {signature_name}"
 
-    sigs = _load_signatures_module()
-    cls = getattr(sigs, signature_name)
-    doc = inspect.getdoc(cls) or ""
-    assert doc == docs_blocks[signature_name]
+    with _load_signature_module(module_name) as sigs:
+        cls = getattr(sigs, signature_name)
+        doc = inspect.getdoc(cls) or ""
+        assert doc == docs_blocks[signature_name]
 
 
 def test_feedback_synthesis_contract_avoids_unverifiable_technical_suggestions(monkeypatch: pytest.MonkeyPatch) -> None:
     """Feedback prose should not invent concrete network values from weak evidence."""
     _install_fake_dspy(monkeypatch)
-    sigs = _load_signatures_module()
-    doc = inspect.getdoc(getattr(sigs, "FeedbackSynthesisSignature")) or ""
+    with _load_signature_module("backend.learning.adapters.dspy.signatures") as sigs:
+        doc = inspect.getdoc(getattr(sigs, "FeedbackSynthesisSignature")) or ""
 
     assert "Nenne konkrete technische Werte" in doc
     assert "nur, wenn sie eindeutig" in doc

@@ -146,6 +146,11 @@ test("@feature-acceptance H5P feedback remains readable and full score unlocks t
       phase_id: phaseId,
       module_kind: "learning"
     });
+    const switchTarget = await create(teacher, `${base}/modules`, {
+      title: "H5P Wechselziel",
+      phase_id: phaseId,
+      module_kind: "learning"
+    });
     await create(teacher, `${base}/modules/edges`, {
       from_module_id: source.id,
       to_module_id: target.id
@@ -169,6 +174,19 @@ test("@feature-acceptance H5P feedback remains readable and full score unlocks t
       String(source.id),
       learningTask.taskId
     );
+    const switchTask = await createH5PTask(
+      teacher,
+      String(unit.id),
+      String(switchTarget.id),
+      "Zeige nach dem Aufgabenwechsel ausschließlich diesen H5P-Inhalt."
+    );
+    switchTask.contentId = await importH5P(
+      teacher,
+      teacherEmail,
+      String(unit.id),
+      String(switchTarget.id),
+      switchTask.taskId
+    );
     const targetContent = await teacher.request.get(`${webBase}${base}/modules/${target.id}/content-target`);
     await expectApiOk(targetContent);
     await create(teacher, `${base}/sections/${(await targetContent.json()).section_id}/tasks`, {
@@ -187,6 +205,35 @@ test("@feature-acceptance H5P feedback remains readable and full score unlocks t
     const unitPath = `/learning/courses/${course.id}/units/${unit.id}`;
     await learner.goto(unitPath);
     await expect(learner.getByRole("button", { name: /Freigeschaltetes Ziel/ })).toBeDisabled();
+    await learner.getByRole("button", { name: /H5P Start/ }).click();
+    await learner.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+    await expect(learner.locator(".h5p-multichoice")).toBeVisible({ timeout: 30_000 });
+    const sourcePlayer = await learner.locator("h5p-player").elementHandle();
+    expect(sourcePlayer).not.toBeNull();
+
+    // Browser history changes keep the learning workspace mounted. This is the
+    // production path that previously reused the player from the old task.
+    await learner.evaluate(
+      ({ moduleId, taskId }) => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("module", moduleId);
+        url.searchParams.set("task", taskId);
+        url.searchParams.delete("history");
+        url.searchParams.delete("panel");
+        window.history.pushState(window.history.state, "", url);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      },
+      { moduleId: String(switchTarget.id), taskId: switchTask.taskId }
+    );
+    await expect(learner.locator("h5p-player")).toHaveAttribute("content-id", switchTask.contentId, {
+      timeout: 30_000
+    });
+    await expect(learner.locator("h5p-player")).toHaveAttribute("context-id", switchTask.taskId);
+    await expect.poll(async () => sourcePlayer?.evaluate((player) => player.isConnected)).toBe(false);
+    await expect(learner.locator(".h5p-multichoice")).toBeVisible({ timeout: 30_000 });
+
+    // Continue the original progress scenario from a fresh graph surface.
+    await learner.goto(unitPath);
     await learner.getByRole("button", { name: /H5P Start/ }).click();
     await learner.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
     await expect(learner.locator(".h5p-multichoice")).toBeVisible({ timeout: 30_000 });

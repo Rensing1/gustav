@@ -124,7 +124,7 @@
               <p class="learning-work-item__file-meta">{fileMeta()}</p>
             {/if}
             {#if hasPreviewUrl() && !showsInlinePreview()}
-              <a class="learning-work-item__link" href={material.file_url ?? undefined}>Datei öffnen</a>
+              <a class="learning-work-item__link" href={material.file_url ?? undefined}>Herunterladen</a>
             {/if}
             {#if hasPreviewUrl() && showsInlinePreview()}
               <a class="learning-work-item__link" href={material.file_url ?? undefined} target="_blank" rel="noreferrer">Separat öffnen</a>

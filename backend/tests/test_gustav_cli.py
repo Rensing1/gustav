@@ -547,8 +547,8 @@ def test_materials_mutations_with_module_id_use_module_endpoints_without_read_re
 
 def test_materials_upload_with_module_id_uses_module_write_endpoints_without_read_resolver(tmp_path, monkeypatch) -> None:
     _configure_test_cli(tmp_path, monkeypatch)
-    source = tmp_path / "diagramm.pdf"
-    payload_bytes = b"%PDF-1.4\nGUSTAV\n"
+    source = tmp_path / "sortieren.py"
+    payload_bytes = b"print('GUSTAV')\n"
     source.write_bytes(payload_bytes)
     sha256 = hashlib.sha256(payload_bytes).hexdigest()
     calls: list[tuple[str, str, dict[str, str] | None, object | None]] = []
@@ -560,9 +560,9 @@ def test_materials_upload_with_module_id_uses_module_write_endpoints_without_rea
             return 200, {
                 "intent_id": "intent-1",
                 "url": "https://storage.example/upload",
-                "headers": {"content-type": "application/pdf"},
+                "headers": {"content-type": "text/x-python"},
             }
-        return 201, {"id": "material-1", "title": "Diagramm", "kind": "file"}
+        return 201, {"id": "material-1", "title": "Python-Programm", "kind": "file"}
 
     def fake_bytes(method: str, url: str, *, headers: dict[str, str] | None = None, data: bytes | None = None):
         byte_calls.append((method, url, headers, data))
@@ -582,7 +582,9 @@ def test_materials_upload_with_module_id_uses_module_write_endpoints_without_rea
             "--file",
             str(source),
             "--title",
-            "Diagramm",
+            "Python-Programm",
+            "--mime-type",
+            "text/x-python",
             "--json",
         ],
         stdout=io.StringIO(),
@@ -595,16 +597,22 @@ def test_materials_upload_with_module_id_uses_module_write_endpoints_without_rea
             "POST",
             "https://gustav.example/api/teaching/units/unit-1/modules/module-1/materials/upload-intents",
             {"Authorization": "Bearer gustav_cli_token_secret"},
-            {"filename": "diagramm.pdf", "mime_type": "application/pdf", "size_bytes": len(payload_bytes)},
+            {
+                "filename": "sortieren.py",
+                "mime_type": "text/x-python",
+                "size_bytes": len(payload_bytes),
+            },
         ),
         (
             "POST",
             "https://gustav.example/api/teaching/units/unit-1/modules/module-1/materials/finalize",
             {"Authorization": "Bearer gustav_cli_token_secret"},
-            {"intent_id": "intent-1", "title": "Diagramm", "sha256": sha256},
+            {"intent_id": "intent-1", "title": "Python-Programm", "sha256": sha256},
         ),
     ]
-    assert byte_calls == [("PUT", "https://storage.example/upload", {"content-type": "application/pdf"}, payload_bytes)]
+    assert byte_calls == [
+        ("PUT", "https://storage.example/upload", {"content-type": "text/x-python"}, payload_bytes)
+    ]
 
 
 def test_tasks_create_sends_instruction_and_criteria(tmp_path, monkeypatch) -> None:
@@ -865,6 +873,101 @@ def test_materials_upload_uses_intent_put_and_finalize(tmp_path, monkeypatch) ->
             payload_bytes,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    ("filename", "mime_type"),
+    [
+        ("projekt.sb3", "application/x.scratch.sb3"),
+        ("programm.hex", "application/x.makecode.hex"),
+        ("netz.fls", "application/x.filius.fls"),
+        ("sortieren.py", "text/x-python"),
+        ("daten.json", "application/json"),
+        ("hinweise.txt", "text/plain"),
+        ("arbeitsblatt.odt", "application/vnd.oasis.opendocument.text"),
+        ("messwerte.ods", "application/vnd.oasis.opendocument.spreadsheet"),
+        ("vortrag.odp", "application/vnd.oasis.opendocument.presentation"),
+    ],
+)
+def test_materials_upload_detects_canonical_material_mime(
+    tmp_path, monkeypatch, filename: str, mime_type: str
+) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    source = tmp_path / filename
+    source.write_bytes(b"material")
+    payloads: list[object] = []
+
+    def fake_json(method: str, url: str, *, headers=None, json_body=None):
+        payloads.append(json_body)
+        if url.endswith("/materials/upload-intents"):
+            return 200, {
+                "intent_id": "intent-1",
+                "url": "https://storage.example/upload",
+                "headers": {"content-type": mime_type},
+            }
+        return 201, {"id": "material-1", "kind": "file"}
+
+    monkeypatch.setattr(cli, "_http_json", fake_json)
+    monkeypatch.setattr(cli, "_http_bytes", lambda *args, **kwargs: (200, b""))
+
+    code = cli.main(
+        [
+            "materials",
+            "upload",
+            "--unit-id",
+            "unit-1",
+            "--section-id",
+            "section-1",
+            "--file",
+            str(source),
+            "--title",
+            "Material",
+        ],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert code == 0
+    assert payloads[0] == {
+        "filename": filename,
+        "mime_type": mime_type,
+        "size_bytes": len(b"material"),
+    }
+
+
+@pytest.mark.parametrize(
+    ("filename", "explicit_mime"),
+    [("programm.exe", None), ("programm.py", "text/plain")],
+)
+def test_materials_upload_rejects_unsupported_or_mismatched_type_before_http(
+    tmp_path, monkeypatch, filename: str, explicit_mime: str | None
+) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    source = tmp_path / filename
+    source.write_bytes(b"material")
+    monkeypatch.setattr(
+        cli,
+        "_http_json",
+        lambda *args, **kwargs: pytest.fail("invalid material type reached the API"),
+    )
+    args = [
+        "materials",
+        "upload",
+        "--unit-id",
+        "unit-1",
+        "--section-id",
+        "section-1",
+        "--file",
+        str(source),
+        "--title",
+        "Material",
+    ]
+    if explicit_mime is not None:
+        args.extend(["--mime-type", explicit_mime])
+    stderr = io.StringIO()
+
+    assert cli.main(args, stdout=io.StringIO(), stderr=stderr) == 1
+    assert "Dateiformat" in stderr.getvalue()
 
 
 def test_materials_upload_supports_self_contained_simulations(tmp_path, monkeypatch) -> None:

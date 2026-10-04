@@ -17,6 +17,11 @@ from backend.storage.config import (
 )
 from backend.storage.keys import make_materials_key
 from backend.storage.upload_intents import normalize_upload_intent_headers
+from backend.teaching.material_file_types import (
+    ACCEPTED_MATERIAL_MIME_TYPES,
+    material_download_disposition,
+    validate_material_file_type,
+)
 from backend.teaching.services.simulation_validation import validate_simulation_html
 from backend.teaching.storage import StorageAdapterProtocol
 
@@ -102,11 +107,7 @@ class MaterialsRepoProtocol(Protocol):
 class MaterialFileSettings:
     """Configuration for file-based teaching materials."""
 
-    accepted_mime_types: Tuple[str, ...] = (
-        "application/pdf",
-        "image/png",
-        "image/jpeg",
-    )
+    accepted_mime_types: Tuple[str, ...] = ACCEPTED_MATERIAL_MIME_TYPES
     max_size_bytes: int = field(default_factory=get_materials_max_upload_bytes)
     simulation_max_size_bytes: int = field(default_factory=get_simulation_max_upload_bytes)
     upload_intent_ttl_seconds: int = 3 * 60
@@ -306,6 +307,10 @@ class MaterialsService:
         )
         if normalized_kind == "simulation" and not sanitized.lower().endswith(".html"):
             raise ValueError("invalid_filename")
+        if normalized_kind == "file":
+            # The extension is authoritative because browsers often omit or
+            # disagree on MIME values for classroom project files.
+            normalized_mime = validate_material_file_type(sanitized, normalized_mime)
         if normalized_mime not in accepted_mime_types:
             raise ValueError("mime_not_allowed")
         if size_bytes <= 0 or size_bytes > max_size_bytes:
@@ -427,6 +432,14 @@ class MaterialsService:
         accepted_mime_types = (
             ("text/html",) if material_kind == "simulation" else self.settings.accepted_mime_types
         )
+        if material_kind == "file":
+            try:
+                base_content_type = validate_material_file_type(
+                    str(intent.get("filename") or ""), base_content_type
+                )
+            except ValueError:
+                storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
+                raise
         if base_content_type not in accepted_mime_types:
             storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
             raise ValueError("mime_not_allowed")
@@ -491,13 +504,16 @@ class MaterialsService:
             raise LookupError("material_not_found")
         if isinstance(material, dict):
             storage_key = material.get("storage_key")
+            mime_type = material.get("mime_type")
         else:
             storage_key = getattr(material, "storage_key", None)
+            mime_type = getattr(material, "mime_type", None)
         if not storage_key:
             raise LookupError("material_not_found")
         requested_disposition = (disposition or "attachment").strip().lower()
         if requested_disposition not in {"inline", "attachment"}:
             raise ValueError("invalid_disposition")
+        requested_disposition = material_download_disposition(mime_type, requested_disposition)
         presign = storage.presign_download(
             bucket=self.settings.storage_bucket,
             key=storage_key,

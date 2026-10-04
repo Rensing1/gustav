@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-04
+
+### Programm- und OpenDocument-Dateien als Material
+
+- feat(materials): Lehrkräfte können Scratch-, Calliope/MakeCode-, Filius-, Python-, JSON-, Text- und OpenDocument-Dateien über Weboberfläche, direkten CLI-Upload und den CLI-Spiegel als private Datei-Materialien bereitstellen. Die 20-MiB-Grenze und die Manifest-Schemaversion `1` bleiben unverändert.
+- security(materials): Dateiendung und kanonischer MIME-Typ werden zentral vor Upload und Finalisierung geprüft. Die neuen Formate werden nie eingebettet oder ausgeführt, sondern auch bei angefragter Inline-Darstellung als Attachment mit `nosniff` und `private, no-store` ausgeliefert.
+- feat(cli): `gustav materials upload` erkennt die unterstützten MIME-Typen ohne betriebssystemabhängige MIME-Datenbank. Ein widersprüchliches `--mime-type`, unbekannte Endungen und ungültige Sync-Manifeste werden lokal vor dem ersten API-Aufruf beziehungsweise der ersten externen Änderung abgelehnt.
+- db(storage): Eine additive Migration erweitert die Positivliste des weiterhin privaten `materials`-Buckets; Tabellen, Materialarten und RLS-Policies bleiben unverändert.
+- test(materials): Parametrisierte API-, CLI-, Sync-, Frontend- und Datenbanktests sowie der authentifizierte Browserrundlauf `material-program-file-download` decken Webupload, CLI-Upload, exakten Download und die bestehenden Vorschauformate ab.
+
 ## 2026-10-01
 
 ### Produktions-Hotfixes für Dialogauswertung und H5P-Aufgabenwechsel

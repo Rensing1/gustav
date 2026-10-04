@@ -75,7 +75,10 @@ async def test_sections_and_material_links_use_the_same_explicit_adapter(monkeyp
     def metadata(*, repo, student_sub, course_id, material_ids):
         assert (student_sub, course_id, material_ids) == ("learner", COURSE, [FILE, SIM])
         observed.append(repo)
-        return {FILE: SimpleNamespace(kind="file"), SIM: SimpleNamespace(kind="simulation")}
+        return {
+            FILE: SimpleNamespace(kind="file", mime_type="application/pdf"),
+            SIM: SimpleNamespace(kind="simulation", mime_type="text/html"),
+        }
 
     monkeypatch.setattr(helpers, "load_student_material_asset_metadata_batch", metadata)
     first, second = Repository("A"), Repository("B")

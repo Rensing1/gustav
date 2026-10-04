@@ -182,6 +182,70 @@ async def test_upload_intent_flow_requires_teacher_and_returns_presign_payload(_
         assert expires_at > datetime.now(timezone.utc)
 
 
+@pytest.mark.parametrize(
+    ("filename", "mime_type"),
+    [
+        ("projekt.sb3", "application/x.scratch.sb3"),
+        ("programm.hex", "application/x.makecode.hex"),
+        ("netz.fls", "application/x.filius.fls"),
+        ("sortieren.py", "text/x-python"),
+        ("daten.json", "application/json"),
+        ("hinweise.txt", "text/plain"),
+        ("arbeitsblatt.odt", "application/vnd.oasis.opendocument.text"),
+        ("messwerte.ods", "application/vnd.oasis.opendocument.spreadsheet"),
+        ("vortrag.odp", "application/vnd.oasis.opendocument.presentation"),
+    ],
+)
+@pytest.mark.anyio
+async def test_upload_intent_accepts_program_and_opendocument_materials(
+    _reset_storage_adapter,
+    monkeypatch: pytest.MonkeyPatch,
+    filename: str,
+    mime_type: str,
+) -> None:
+    """Every documented extension/MIME pair must pass the real DB-backed API boundary."""
+    store = _session_store(monkeypatch)
+    from backend.tests.utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    teacher = store.create(sub=f"teacher-file-{uuid.uuid4()}", name="Lehrkraft", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client, f"Dateiformat {filename}")
+        section = await _create_section(client, unit["id"])
+        response = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": filename, "mime_type": mime_type, "size_bytes": 64},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["headers"]["content-type"] == mime_type
+    assert mime_type in response.json()["accepted_mime_types"]
+
+
+@pytest.mark.anyio
+async def test_upload_intent_rejects_extension_mime_mismatch_before_storage(
+    _reset_storage_adapter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _session_store(monkeypatch)
+    from backend.tests.utils.db import require_db_or_skip
+
+    require_db_or_skip()
+    teacher = store.create(sub=f"teacher-mismatch-{uuid.uuid4()}", name="Lehrkraft", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        unit = await _create_unit(client, "MIME-Prüfung")
+        section = await _create_section(client, unit["id"])
+        response = await client.post(
+            f"/api/teaching/units/{unit['id']}/sections/{section['id']}/materials/upload-intents",
+            json={"filename": "programm.py", "mime_type": "text/plain", "size_bytes": 64},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "mime_not_allowed"
+    assert _reset_storage_adapter.presign_upload_calls == []
+
+
 @pytest.mark.anyio
 async def test_finalize_and_download_flow_enforces_checks(_reset_storage_adapter, monkeypatch: pytest.MonkeyPatch):
     store = _session_store(monkeypatch)

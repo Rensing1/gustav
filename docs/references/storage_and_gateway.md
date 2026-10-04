@@ -32,6 +32,8 @@ This doc explains how to run Supabase Storage locally (self-hosted) and wire the
 ## Security
 - Use Service Role key only in the backend. Never expose keys to the browser.
 - Buckets are private; the app uses signed URLs with short TTLs (upload: 3 min, download: 45 s).
+- Der private `materials`-Bucket akzeptiert Datei-Materialien ausschließlich über eine additive Positivliste: PDF, PNG, JPEG, Scratch (`.sb3`), Calliope/MakeCode (`.hex`), Filius (`.fls`), Python (`.py`), JSON, Text und OpenDocument (`.odt`, `.ods`, `.odp`). Dateiendung und kanonischer MIME-Typ werden vor dem Upload und bei der Finalisierung erneut gemeinsam geprüft.
+- Nur PDF, PNG und JPEG dürfen inline angezeigt werden. Programm-, Text-, JSON- und OpenDocument-Dateien werden auch bei angefragtem `disposition=inline` als Attachment mit `X-Content-Type-Options: nosniff` und `Cache-Control: private, no-store` ausgeliefert; GUSTAV führt ihren Inhalt nicht aus und zeigt ihn nicht als Quelltext an.
 - Simulations use signed URLs only for upload. Executable HTML is validated and streamed by authenticated GUSTAV endpoints with CSP `sandbox allow-scripts` and `connect-src 'none'`; raw download URLs are never returned.
 - Download URL responses include `Cache-Control: private, no-store` to avoid caching.
 - Filenames and path segments are sanitized in the service to avoid traversal and odd characters.

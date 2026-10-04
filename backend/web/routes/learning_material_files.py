@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import quote as _quote
 from uuid import UUID
 
+from backend.teaching.material_file_types import material_download_disposition
 from backend.web.material_file_access import (
     StudentMaterialAssetMetadata,
     load_student_material_asset_metadata_batch,
@@ -81,7 +82,13 @@ def _attach_material_urls(
             row = material_rows.get(material_id)
             material_payload["file_url"] = (
                 material_file_href(
-                    course_id=course_id, material_id=material_id, disposition="inline"
+                    course_id=course_id,
+                    material_id=material_id,
+                    # Missing type metadata must never turn an unknown file
+                    # into an inline browser resource.
+                    disposition=material_download_disposition(
+                        getattr(row, "mime_type", None), "inline"
+                    ),
                 )
                 if row is not None and row.kind == "file"
                 else None

@@ -70,6 +70,31 @@ describe("LearningReferenceDocument", () => {
     expect(screen.getByRole("link", { name: "Auswertungsgrafik separat öffnen" })).toBeInTheDocument();
   });
 
+  it("offers program materials as downloads without opening a browsing context", () => {
+    render(LearningReferenceDocument, {
+      props: {
+        referenceKey: "material:program",
+        label: "Material · Aktuelles Modul",
+        title: "Sortierprogramm",
+        material: {
+          id: "program",
+          title: "Sortierprogramm",
+          kind: "file",
+          mime_type: "text/x-python",
+          filename_original: "sortieren.py",
+          size_bytes: 128,
+          file_url: "/api/materials/program?disposition=attachment"
+        },
+        expanded: true
+      }
+    });
+
+    expect(document.querySelector("iframe")).toBeNull();
+    const download = screen.getByRole("link", { name: "Sortierprogramm herunterladen" });
+    expect(download).toHaveTextContent("Herunterladen");
+    expect(download).not.toHaveAttribute("target", "_blank");
+  });
+
   it("shows the latest own image submission and keeps feedback and older attempts collapsed", () => {
     render(LearningReferenceDocument, {
       props: {

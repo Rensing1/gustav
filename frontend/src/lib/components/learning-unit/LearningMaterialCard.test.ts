@@ -145,6 +145,32 @@ describe("LearningMaterialCard", () => {
     expect(screen.getByRole("link", { name: "Separat öffnen" })).toHaveAttribute("target", "_blank");
   });
 
+  it("offers program files only as downloads without an inline browsing context", () => {
+    render(LearningMaterialCard, {
+      props: {
+        material: {
+          id: "material-python",
+          title: "Sortierprogramm",
+          kind: "file",
+          mime_type: "text/x-python",
+          size_bytes: 128,
+          filename_original: "sortieren.py",
+          file_url: "/api/materials/sortieren.py?disposition=attachment"
+        },
+        expanded: true
+      }
+    });
+
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(document.querySelector("img")).toBeNull();
+    const download = screen.getByRole("link", { name: "Herunterladen" });
+    expect(download).toHaveAttribute(
+      "href",
+      "/api/materials/sortieren.py?disposition=attachment"
+    );
+    expect(download).not.toHaveAttribute("target", "_blank");
+  });
+
   it("keeps material rows compact while leaving markdown content open", () => {
     render(LearningMaterialCard, {
       props: {

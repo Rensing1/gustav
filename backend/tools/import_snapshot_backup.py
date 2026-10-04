@@ -74,8 +74,18 @@ _PG_DUMP_OBJECT_HEADER_RE = re.compile(
 LOCAL_BUCKET_ALLOWED_MIME_TYPES: dict[str, tuple[str, ...]] = {
     "materials": (
         "application/pdf",
+        "application/json",
+        "application/vnd.oasis.opendocument.presentation",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.oasis.opendocument.text",
+        "application/x.filius.fls",
+        "application/x.makecode.hex",
+        "application/x.scratch.sb3",
         "image/jpeg",
         "image/png",
+        "text/html",
+        "text/plain",
+        "text/x-python",
     ),
     "submissions": (
         "application/pdf",

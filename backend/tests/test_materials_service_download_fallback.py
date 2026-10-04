@@ -11,6 +11,7 @@ class _RepoStub:
             "section_id": "s1",
             "kind": "file",
             "storage_key": "materials/a/b/c/file.pdf",
+            "mime_type": "application/pdf",
         }
 
     # Protocol methods used by generate_file_download_url
@@ -21,8 +22,12 @@ class _RepoStub:
 
 
 class _AdapterNoExpiry:
+    def __init__(self):
+        self.disposition = None
+
     def presign_download(self, *, bucket: str, key: str, expires_in: int, disposition: str):
         # Return URL without expires_at so the service computes a fallback
+        self.disposition = disposition
         return {"url": f"http://example.local/{bucket}/{key}"}
 
 
@@ -42,3 +47,24 @@ def test_generate_download_url_falls_back_to_server_expiry_when_missing():
     # Should be an ISO timestamp in the near future
     expires = datetime.fromisoformat(res["expires_at"])  # type: ignore[arg-type]
     assert expires > now
+
+
+def test_generate_download_url_forces_attachment_for_program_materials():
+    repo = _RepoStub()
+    repo._material.update(
+        storage_key="materials/a/b/c/program.py",
+        mime_type="text/x-python",
+    )
+    adapter = _AdapterNoExpiry()
+    service = MaterialsService(repo, settings=MaterialFileSettings())
+
+    service.generate_file_download_url(
+        "u1",
+        "s1",
+        "m1",
+        "author",
+        disposition="inline",
+        storage=adapter,
+    )
+
+    assert adapter.disposition == "attachment"

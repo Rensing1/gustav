@@ -2583,7 +2583,24 @@ components:
           description: Original filename supplied by the teacher
         mime_type:
           type: string
-          description: MIME type expected for the upload
+          enum:
+            - application/pdf
+            - image/png
+            - image/jpeg
+            - application/x.scratch.sb3
+            - application/x.makecode.hex
+            - application/x.filius.fls
+            - text/x-python
+            - application/json
+            - text/plain
+            - application/vnd.oasis.opendocument.text
+            - application/vnd.oasis.opendocument.spreadsheet
+            - application/vnd.oasis.opendocument.presentation
+            - text/html
+          description: >-
+            Canonical MIME type expected for the upload. For `kind=file`, the
+            filename extension and MIME type must match the closed material
+            allowlist. `text/html` is accepted only for `kind=simulation`.
         size_bytes:
           type: integer
           minimum: 1
@@ -7467,7 +7484,9 @@ paths:
       description: >-
         Streams a visible file material through GUSTAV for enrolled students.
         This is the canonical student-facing route used by learning payloads
-        and SSR previews instead of direct storage-signed URLs.
+        and SSR previews instead of direct storage-signed URLs. Only PDF, PNG,
+        and JPEG materials may be rendered inline. Program and OpenDocument
+        files are always returned as attachments, even when `inline` is requested.
       operationId: streamLearningMaterialFileCanonical
       security:
         - cookieAuth: []
@@ -7486,7 +7505,9 @@ paths:
           schema:
             type: string
             enum: [inline, attachment]
-          description: Desired `Content-Disposition`; defaults to `inline`.
+          description: >-
+            Desired `Content-Disposition`; defaults to `inline`. The server
+            overrides this to `attachment` for every non-previewable file type.
       responses:
         '200':
           description: File bytes streamed successfully
@@ -7500,6 +7521,9 @@ paths:
             Content-Disposition:
               description: Inline preview or attachment download disposition
               schema: { type: string }
+            X-Content-Type-Options:
+              description: Prevents browsers from MIME-sniffing downloaded material files.
+              schema: { type: string, example: nosniff }
           content:
             application/octet-stream:
               schema:
@@ -7573,6 +7597,7 @@ paths:
         Compatibility alias for the canonical material file route. The server
         resolves student visibility from the material itself and only returns
         `200` when the supplied `section_id` matches the visible material.
+        Non-previewable program and OpenDocument files are always attachments.
       operationId: streamLearningMaterialFile
       security:
         - cookieAuth: []
@@ -7595,7 +7620,9 @@ paths:
           schema:
             type: string
             enum: [inline, attachment]
-          description: Desired `Content-Disposition`; defaults to `inline`.
+          description: >-
+            Desired `Content-Disposition`; defaults to `inline`. The server
+            overrides this to `attachment` for every non-previewable file type.
       responses:
         '200':
           description: File bytes streamed successfully
@@ -7609,6 +7636,9 @@ paths:
             Content-Disposition:
               description: Inline preview or attachment download disposition
               schema: { type: string }
+            X-Content-Type-Options:
+              description: Prevents browsers from MIME-sniffing downloaded material files.
+              schema: { type: string, example: nosniff }
           content:
             application/octet-stream:
               schema:
@@ -13477,7 +13507,9 @@ paths:
           schema:
             type: string
             enum: [inline, attachment]
-          description: Desired `Content-Disposition`; defaults to `attachment`.
+          description: >-
+            Desired `Content-Disposition`; defaults to `attachment`. The server
+            always uses `attachment` for non-previewable program and OpenDocument files.
       responses:
         '200':
           description: Short-lived download URL returned

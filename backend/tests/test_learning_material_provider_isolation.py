@@ -151,6 +151,30 @@ async def test_disposition_order_and_normalization(metadata, path):
         assert response.headers["content-disposition"].startswith("attachment;")
 
 
+@pytest.mark.parametrize("path", [FILE_PATH, ALIAS_PATH])
+async def test_program_material_forces_attachment_and_disables_mime_sniffing(
+    monkeypatch, path
+):
+    wiring = importlib.import_module("backend.web.learning_material_providers")
+    program_file = replace(
+        FILE,
+        mime_type="text/x-python",
+        storage_key="private/program.py",
+        filename_original="sortieren.py",
+    )
+    monkeypatch.setattr(
+        wiring, "load_student_material_file_metadata", lambda **kwargs: program_file
+    )
+
+    async with client_for(providers_for()) as client:
+        response = await client.get(path, params={"disposition": "inline"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/x-python")
+    assert response.headers["content-disposition"] == 'attachment; filename="sortieren.py"'
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
 @pytest.mark.parametrize("path", [FILE_PATH, ALIAS_PATH, SIM_PATH])
 @pytest.mark.parametrize("case", ["hidden", "unavailable", "wrong_type"])
 async def test_visibility_denial_never_signs(monkeypatch, path, case):

@@ -13,6 +13,8 @@ from typing import Any
 
 import yaml
 
+from backend.teaching.material_file_types import validate_material_file_type
+
 SCHEMA_VERSION = 1
 KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_YAML_BYTES = 2 * 1024 * 1024
@@ -384,6 +386,11 @@ def _read_container_files(unit_root: Path, container: dict[str, Any]) -> None:
             path = _safe_local_file(unit_root, material.pop("asset_file", None))
             if path.stat().st_size > MAX_ASSET_BYTES:
                 raise ValueError("asset_too_large")
+            if material.get("kind") == "file":
+                material["mime_type"] = validate_material_file_type(
+                    str(material.get("filename_original") or ""),
+                    str(material.get("mime_type") or ""),
+                )
             content = path.read_bytes()
             material["_asset_bytes"] = content
             material["sha256"] = hashlib.sha256(content).hexdigest()

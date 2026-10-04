@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import uuid
 from copy import deepcopy
 from urllib.parse import urlsplit
 
@@ -45,8 +46,9 @@ async def test_sync_adapter_roundtrips_linear_modular_h5p_and_prune_through_real
         "roles_for_cli_sub",
         lambda sub: ["teacher"],
     )
+    teacher_sub = f"teacher-cli-sync-api-{uuid.uuid4().hex}"
     created = token_store.create_token(
-        user_sub="teacher-cli-sync-api",
+        user_sub=teacher_sub,
         label="Sync integration",
         scopes=["read", "write", "delete"],
         ttl_seconds=3_600,

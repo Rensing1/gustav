@@ -4,7 +4,6 @@ import argparse
 import getpass
 import hashlib
 import json
-import mimetypes
 import sys
 from pathlib import Path
 from typing import Any, TextIO
@@ -13,6 +12,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from uuid import uuid4
 
+from backend.teaching.material_file_types import (
+    MATERIAL_FILE_MAX_BYTES,
+    canonical_material_mime,
+    validate_material_file_type,
+)
 from backend.teaching.services.tasks import normalize_dialog_config
 
 from .config import GustavCLIConfig, load_config, save_config
@@ -264,9 +268,16 @@ def _build_parser() -> argparse.ArgumentParser:
             material_cmd.add_argument("--title", required=True)
             material_cmd.add_argument("--body-md", required=True)
         if name == "upload":
-            material_cmd.add_argument("--file", required=True)
+            material_cmd.add_argument(
+                "--file",
+                required=True,
+                help="PDF, PNG, JPEG, SB3, HEX, FLS, PY, JSON, TXT, ODT, ODS oder ODP",
+            )
             material_cmd.add_argument("--title", required=True)
-            material_cmd.add_argument("--mime-type")
+            material_cmd.add_argument(
+                "--mime-type",
+                help="Optionaler kanonischer MIME-Typ; wird sonst aus der Dateiendung erkannt",
+            )
             material_cmd.add_argument("--alt-text")
             material_cmd.add_argument("--kind", choices=("file", "simulation"), default="file")
             material_cmd.add_argument("--body-md")
@@ -779,15 +790,34 @@ def _materials(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> i
         if not source.is_file():
             stderr.write("Die angegebene Datei existiert nicht.\n")
             return 1
-        content = source.read_bytes()
         if args.kind == "simulation" and args.alt_text is not None:
             stderr.write("--alt-text ist nur für Datei-Materialien zulässig.\n")
             return 1
-        mime_type = (
-            "text/html"
-            if args.kind == "simulation" and args.mime_type is None
-            else args.mime_type or mimetypes.guess_type(str(source))[0] or "application/octet-stream"
-        )
+        try:
+            size_bytes = source.stat().st_size
+        except OSError:
+            stderr.write("Die angegebene Datei konnte nicht gelesen werden.\n")
+            return 1
+        if size_bytes <= 0 or (
+            args.kind == "file" and size_bytes > MATERIAL_FILE_MAX_BYTES
+        ):
+            stderr.write("Datei zu groß oder leer; Datei-Materialien sind auf 20 MiB begrenzt.\n")
+            return 1
+        if args.kind == "simulation":
+            mime_type = args.mime_type or "text/html"
+        else:
+            try:
+                detected_mime = canonical_material_mime(source.name)
+                mime_type = validate_material_file_type(
+                    source.name, args.mime_type or detected_mime
+                )
+            except ValueError as exc:
+                if str(exc) == "mime_not_allowed":
+                    stderr.write("Dateiformat und --mime-type passen nicht zusammen.\n")
+                else:
+                    stderr.write("Dateiformat wird für Materialien nicht unterstützt.\n")
+                return 1
+        content = source.read_bytes()
         intent_payload: dict[str, object] = {
             "filename": source.name,
             "mime_type": mime_type,

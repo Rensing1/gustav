@@ -55,3 +55,27 @@ def test_openapi_documents_material_file_route_503_as_lookup_or_storage_unavaila
 
     assert canonical["responses"]["503"]["description"] == "Visibility lookup or storage unavailable"
     assert legacy["responses"]["503"]["description"] == "Visibility lookup or storage unavailable"
+
+
+def test_openapi_documents_download_only_material_mimes_and_nosniff() -> None:
+    spec = _load_spec()
+    schema = spec["components"]["schemas"]["MaterialUploadIntentRequest"]
+    mime_values = set(schema["properties"]["mime_type"]["enum"])
+    assert {
+        "application/x.scratch.sb3",
+        "application/x.makecode.hex",
+        "application/x.filius.fls",
+        "text/x-python",
+        "application/json",
+        "text/plain",
+        "application/vnd.oasis.opendocument.text",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.oasis.opendocument.presentation",
+    } <= mime_values
+    for path in (
+        "/api/learning/courses/{course_id}/materials/{material_id}/file",
+        "/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file",
+    ):
+        operation = spec["paths"][path]["get"]
+        assert "always" in operation["description"]
+        assert "X-Content-Type-Options" in operation["responses"]["200"]["headers"]

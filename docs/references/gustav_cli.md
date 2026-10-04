@@ -101,7 +101,7 @@ Entfernte Objekte und der Austausch binärer Materialien werden nur mit `--prune
 
 Für `status` und `pull` braucht das CLI-Token `read`. `push` braucht zusätzlich `write`; `push --prune` benötigt auch `delete`. Der Austausch eines Datei- oder Simulationsmaterials zählt als Prune, weil die Teaching-API dabei das alte Remote-Objekt durch ein neues ersetzt.
 
-Manifestdateien akzeptieren nur dokumentierte Felder, eindeutige fachliche Schlüssel und gültige lineare beziehungsweise modulare Beziehungen. Pfade außerhalb des jeweiligen Unit-Verzeichnisses, Symlinks, übergroße Dateien sowie unsichere oder übergroße H5P-ZIP-Pakete werden vor einer Mutation abgewiesen. Ein H5P-Entwurf ohne veröffentlichtes Paket bleibt als Aufgabe ohne `h5p_file` gültig; lokale und externe Pakete sind auf 100 MiB begrenzt. `.gustav/state.json` und das Journal enthalten keine Token und keine Unterrichtsinhalte, sondern nur Bindungsdaten, Digests und Remote-ID-Zuordnungen.
+Manifestdateien akzeptieren nur dokumentierte Felder, eindeutige fachliche Schlüssel und gültige lineare beziehungsweise modulare Beziehungen. Pfade außerhalb des jeweiligen Unit-Verzeichnisses, Symlinks, übergroße Dateien sowie unsichere oder übergroße H5P-ZIP-Pakete werden vor einer Mutation abgewiesen. Für Datei-Materialien prüft der Preflight außerdem Originalname, kanonischen MIME-Typ und die 20-MiB-Grenze vollständig, bevor die erste externe Änderung erfolgt. `pull`, `status` und `push` behalten dabei Originalnamen, MIME-Typ und exakte Bytes bei; die Manifest-Schemaversion bleibt `1`. Ein H5P-Entwurf ohne veröffentlichtes Paket bleibt als Aufgabe ohne `h5p_file` gültig; lokale und externe Pakete sind auf 100 MiB begrenzt. `.gustav/state.json` und das Journal enthalten keine Token und keine Unterrichtsinhalte, sondern nur Bindungsdaten, Digests und Remote-ID-Zuordnungen.
 
 ### Lerneinheiten
 
@@ -168,7 +168,18 @@ gustav materials delete <material-id> --unit-id <unit-id> (--section-id <section
 gustav materials reorder --unit-id <unit-id> (--section-id <section-id> | --module-id <module-id>) --ids <material-id>...
 ```
 
-`upload` nutzt den bestehenden sicheren Upload-Intent-/Finalize-Flow. Dateien unterstützen PDF, PNG und JPEG bis 20 MiB. `--kind simulation` erwartet eine vollständig eingebettete HTML-Datei bis 5 MiB; `--body-md` setzt den optionalen Orientierungstext. `--alt-text` ist nur für Dateien zulässig. `download` schreibt nur mit `--force` über eine bestehende lokale Datei; Simulations-HTML wird nicht über den Download-Befehl herausgegeben.
+`upload` nutzt den bestehenden sicheren Upload-Intent-/Finalize-Flow. Datei-Materialien unterstützen PDF (`.pdf`), PNG (`.png`), JPEG (`.jpg`, `.jpeg`), Scratch (`.sb3`), Calliope/MakeCode (`.hex`), Filius (`.fls`), Python (`.py`), JSON (`.json`), Text (`.txt`) sowie OpenDocument-Text, -Tabelle und -Präsentation (`.odt`, `.ods`, `.odp`) bis 20 MiB. Die CLI bestimmt den MIME-Typ aus der Dateiendung und ist damit unabhängig von der MIME-Konfiguration des Betriebssystems. Ein ausdrücklich gesetztes `--mime-type` bleibt für Skripte verfügbar, muss aber zum kanonischen Typ der Endung passen; unbekannte Endungen und Widersprüche werden vor jedem API-Aufruf abgelehnt.
+
+Beispiele für einen Direktupload in einen Abschnitt beziehungsweise ein Modul:
+
+```bash
+gustav materials upload --unit-id <unit-id> --section-id <section-id> \
+  --file ./projekt.sb3 --title "Scratch-Projekt"
+gustav materials upload --unit-id <unit-id> --module-id <module-id> \
+  --file ./analyse.py --title "Python-Programm" --mime-type text/x-python
+```
+
+`--kind simulation` erwartet weiterhin eine vollständig eingebettete HTML-Datei bis 5 MiB; `--body-md` setzt den optionalen Orientierungstext. `--alt-text` ist nur für Dateien zulässig. `download` liefert Datei-Materialien ausschließlich als Attachment und schreibt nur mit `--force` über eine bestehende lokale Datei; Simulations-HTML wird nicht über den Download-Befehl herausgegeben.
 
 Bei lesenden Materialbefehlen mit `--module-id` löst die CLI intern das versteckte Inhaltsziel des Moduls auf:
 

@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from "./$types";
 
 import { BackendRequestError, backendRequest, requireBackendJson } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
+import { MATERIAL_FILE_FORMAT_NAMES } from "$lib/utils/material-file-types";
 import {
   graphDeletionFallback,
   graphDeletionImpact
@@ -645,12 +646,12 @@ export const actions: Actions = {
             }
           });
         }
-        if (detail === "mime_not_allowed") {
+        if (detail === "mime_not_allowed" || detail === "invalid_filename") {
           return fail(response.status, {
             createMaterial: {
               error: materialKind === "simulation"
                 ? "Bitte wähle eine selbstständige HTML-Datei aus."
-                : "Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.",
+                : `Dateiformat nicht erlaubt. Erlaubt sind ${MATERIAL_FILE_FORMAT_NAMES}.`,
               field: "upload_file",
               requires_reupload: true,
               values: {

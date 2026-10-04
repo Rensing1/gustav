@@ -135,6 +135,52 @@ def test_attach_section_material_files_batches_storage_lookup(
     )
 
 
+def test_attach_section_material_files_forces_program_file_attachment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    material_files = importlib.import_module("backend.web.routes.learning_material_files")
+    material_id = "11111111-1111-4111-8111-111111111111"
+    section_id = "44444444-4444-4444-8444-444444444444"
+    unit_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    course_id = "33333333-3333-4333-8333-333333333333"
+    cursor = _FakeCursor(
+        fetchall_results=[
+            [
+                (
+                    material_id,
+                    section_id,
+                    unit_id,
+                    "file",
+                    "text/x-python",
+                    32,
+                    "materials/lesson.py",
+                    "lesson.py",
+                )
+            ]
+        ]
+    )
+    connect_calls: list[str] = []
+    _patch_material_cursor(monkeypatch, cursor=cursor, connect_calls=connect_calls)
+
+    payload = material_files.attach_section_material_files(
+        repo=SimpleNamespace(_dsn="postgresql://test"),
+        student_sub="student-1",
+        course_id=course_id,
+        sections=[
+            {
+                "section": {"id": section_id},
+                "materials": [{"id": material_id, "kind": "file"}],
+            }
+        ],
+    )
+
+    assert len(connect_calls) == 1
+    assert payload[0]["materials"][0]["file_url"] == (
+        f"/api/learning/courses/{course_id}/materials/{material_id}/file"
+        "?disposition=attachment"
+    )
+
+
 def test_attach_modular_material_files_batches_storage_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

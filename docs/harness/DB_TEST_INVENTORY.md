@@ -11,9 +11,9 @@ Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Te
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 149
+- Inventarisierte Dateien: 150
 - Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 0
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 106
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 107
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 14
 - Statische Migrationstests ohne echte DB-Verbindung: 12
@@ -64,6 +64,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/migration/test_teaching_live_practice_aggregates_contract.py | migration-static | - | no-db-marker-needed | migration | Keep static migration contract unless it opens a DB connection |
 | backend/tests/migration/test_teaching_live_practice_roundtrip.py | real-db | db_write | marked-db | migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_teaching_live_unit_summary_helper_hardening.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
+| backend/tests/migration/test_teaching_material_program_files_schema_contract.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_unit_module_edges_update_hardening.py | real-db | db_read | marked-db | env:DATABASE_URL, migration, psycopg-connect, psycopg-import, requires-db | Keep marker and isolation visible |
 | backend/tests/migration/test_verify_db_preflight.py | migration-static | - | no-db-marker-needed | migration | Keep static migration contract unless it opens a DB connection |
 | backend/tests/test_api_cache_headers_materials_tasks.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |

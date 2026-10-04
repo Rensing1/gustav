@@ -6,6 +6,12 @@
   import { onMount, tick } from "svelte";
 
   import { prepareBrowserStorageUpload } from "$lib/utils/browser-storage-upload";
+  import {
+    MATERIAL_FILE_ACCEPT,
+    MATERIAL_FILE_FORMAT_NAMES,
+    canonicalMaterialMime,
+    isInlineMaterialMime
+  } from "$lib/utils/material-file-types";
   import { renderMarkdown } from "$lib/utils/markdown";
   import GraphDeleteDialog from "$lib/components/teacher-unit-graph/GraphDeleteDialog.svelte";
   import ContentDeleteDialog from "$lib/components/teacher-node-editor/ContentDeleteDialog.svelte";
@@ -489,10 +495,10 @@
   }
 
   function createMaterialClientUploadError(reason: string): string {
-    if (reason === "mime_not_allowed") {
+    if (reason === "mime_not_allowed" || reason === "invalid_filename") {
       return createMaterialKind === "simulation"
         ? "Bitte wähle eine selbstständige HTML-Datei aus."
-        : "Dateiformat nicht erlaubt. Erlaubt sind PDF, PNG und JPEG.";
+        : `Dateiformat nicht erlaubt. Erlaubt sind ${MATERIAL_FILE_FORMAT_NAMES}.`;
     }
     if (reason === "size_exceeded") {
       return "Datei zu groß. Bitte das Größenlimit beachten.";
@@ -535,7 +541,10 @@
     try {
       const mimeType = createMaterialKind === "simulation"
         ? "text/html"
-        : String(file.type || "").trim().toLowerCase() || "application/octet-stream";
+        : canonicalMaterialMime(file.name) ?? String(file.type || "").trim().toLowerCase();
+      if (!mimeType) {
+        throw new Error("invalid_filename");
+      }
       const prepared = await prepareBrowserStorageUpload({
         intentUrl: createMaterialIntentUrl(),
         intentPayload: {
@@ -739,7 +748,7 @@
     if (material.kind !== "file") {
       return false;
     }
-    return material.mime_type?.startsWith("image/") === true || material.mime_type === "application/pdf";
+    return isInlineMaterialMime(material.mime_type);
   }
 
   function isImageFile(material: TeacherUnitNodeEditorMaterial): boolean {
@@ -1343,6 +1352,7 @@
                 bind:this={createMaterialUploadInput}
                 name="upload_file"
                 type="file"
+                accept={MATERIAL_FILE_ACCEPT}
                 aria-invalid={createMaterialErrorField() === "upload_file" ? "true" : undefined}
                 aria-describedby={createMaterialErrorField() === "upload_file" ? "create-material-upload-error" : undefined}
                 onchange={handleCreateMaterialFileChange}
@@ -1545,8 +1555,10 @@
                       <input name="alt_text" type="text" value={materialValues(material).alt_text ?? material.alt_text ?? ""} />
                     </label>
                     <div class="workspace-node-editor-file-actions">
-                      <a class="workspace-link-action" href={fileHref(material, "inline")} target="_blank" rel="noreferrer">Vorschau öffnen</a>
-                      <a class="workspace-link-action" href={fileHref(material, "attachment")} target="_blank" rel="noreferrer">Herunterladen</a>
+                      {#if isPreviewableFile(material)}
+                        <a class="workspace-link-action" href={fileHref(material, "inline")} target="_blank" rel="noreferrer">Vorschau öffnen</a>
+                      {/if}
+                      <a class="workspace-link-action" href={fileHref(material, "attachment")}>Herunterladen</a>
                     </div>
                   {/if}
 

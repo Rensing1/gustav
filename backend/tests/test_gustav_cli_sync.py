@@ -229,6 +229,76 @@ def test_manifest_roundtrip_preserves_file_simulation_and_h5p_assets(tmp_path: P
     assert materials[1]["_asset_bytes"] == b"%PDF-demo"
 
 
+@pytest.mark.parametrize(
+    ("filename", "mime_type", "content"),
+    [
+        ("projekt.sb3", "application/x.scratch.sb3", b"PK\x03\x04scratch"),
+        ("sortieren.py", "text/x-python", b"print('Hallo')\n"),
+        (
+            "arbeitsblatt.odt",
+            "application/vnd.oasis.opendocument.text",
+            b"PK\x03\x04opendocument",
+        ),
+    ],
+)
+def test_manifest_roundtrip_preserves_supported_material_assets(
+    tmp_path: Path, filename: str, mime_type: str, content: bytes
+) -> None:
+    unit = _unit()
+    unit["sections"][0]["materials"].append(
+        {
+            "key": "datei",
+            "kind": "file",
+            "title": "Datei",
+            "filename_original": filename,
+            "mime_type": mime_type,
+            "alt_text": None,
+            "_asset_bytes": content,
+        }
+    )
+    mirror = tmp_path / "mirror"
+    write_local_snapshot(
+        mirror,
+        {"schema_version": 1, "units": {"binaerzahlen": unit}},
+        base_url=BASE_URL,
+    )
+
+    loaded = load_local_snapshot(mirror, expected_base_url=BASE_URL)
+    material = loaded["units"]["binaerzahlen"]["sections"][0]["materials"][1]
+    assert material["filename_original"] == filename
+    assert material["mime_type"] == mime_type
+    assert material["_asset_bytes"] == content
+
+
+def test_manifest_rejects_mismatched_material_mime_before_remote_mutation(tmp_path: Path) -> None:
+    unit = _unit()
+    unit["sections"][0]["materials"].append(
+        {
+            "key": "programm",
+            "kind": "file",
+            "title": "Programm",
+            "filename_original": "sortieren.py",
+            "mime_type": "text/x-python",
+            "alt_text": None,
+            "_asset_bytes": b"print('Hallo')\n",
+        }
+    )
+    mirror = tmp_path / "mirror"
+    write_local_snapshot(
+        mirror,
+        {"schema_version": 1, "units": {"binaerzahlen": unit}},
+        base_url=BASE_URL,
+    )
+    unit_file = mirror / "units" / "binaerzahlen" / "unit.yaml"
+    unit_file.write_text(
+        unit_file.read_text(encoding="utf-8").replace("text/x-python", "text/plain"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="mime_not_allowed"):
+        load_local_snapshot(mirror, expected_base_url=BASE_URL)
+
+
 def test_manifest_roundtrip_preserves_h5p_draft_without_package(tmp_path: Path) -> None:
     unit = _unit()
     unit["sections"][0]["tasks"].append(

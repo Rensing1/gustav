@@ -196,9 +196,13 @@
             </p>
           {/if}
           {#if material.file_url}
-            <a href={material.file_url} target="_blank" rel="noreferrer" aria-label={`${title} separat öffnen`}>
-              Separat öffnen
-            </a>
+            {#if isImageMime(material.mime_type) || isPdfMime(material.mime_type)}
+              <a href={material.file_url} target="_blank" rel="noreferrer" aria-label={`${title} separat öffnen`}>
+                Separat öffnen
+              </a>
+            {:else}
+              <a href={material.file_url} aria-label={`${title} herunterladen`}>Herunterladen</a>
+            {/if}
           {:else}
             <StatusMessage tone="error" title="Datei nicht verfügbar" description="Die Datei ist derzeit nicht verfügbar." />
           {/if}

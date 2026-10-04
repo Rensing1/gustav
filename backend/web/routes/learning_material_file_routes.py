@@ -21,6 +21,7 @@ from backend.storage.config import (
     get_materials_max_upload_bytes,
     get_simulation_max_upload_bytes,
 )
+from backend.teaching.material_file_types import material_download_disposition
 from backend.web.learning_material_providers import learning_material_providers
 from backend.web.material_file_access import (
     MaterialVisibilityLookupUnavailable,
@@ -161,6 +162,8 @@ async def get_material_file(
     if not storage_key or not mime_type:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
 
+    normalized_disposition = material_download_disposition(mime_type, normalized_disposition)
+
     body = await providers.download_object(
         bucket=get_materials_bucket(),
         key=storage_key,
@@ -179,6 +182,7 @@ async def get_material_file(
             "Cache-Control": "private, no-store",
             "Vary": "Origin",
             "Content-Disposition": f'{normalized_disposition}; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
         },
     )
 

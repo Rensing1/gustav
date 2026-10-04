@@ -240,9 +240,13 @@ def test_visual_smoke_target_is_full_prod_like_not_default_verify() -> None:
 
     assert "test-visual-smoke" in help_text
     assert "update-visual-baselines" in help_text
-    assert "npm run test:e2e" in visual_body
-    assert "backend.tools.feature_acceptance run --profile detail --feature design-system" in update_body
-    assert "--update-snapshots" in update_body
+    assert "backend.tools.feature_acceptance run --profile visual --all" in visual_body
+    assert "npm run test:e2e" not in visual_body
+    for feature in ("design-system", "teacher-module-editor-visual", "visual-smoke"):
+        assert (
+            f"backend.tools.feature_acceptance run --profile visual --feature {feature} "
+            "--update-snapshots"
+        ) in update_body
     assert "$(MAKE) test-visual-smoke" in full_prod_body
     assert "$(MAKE) test-visual-smoke" not in verify_body
 

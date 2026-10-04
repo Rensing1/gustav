@@ -3,12 +3,17 @@ import { expect, type Locator, type Page } from "@playwright/test";
 export type SmokePage = {
   path: string;
   heading: string;
+  brandSelector?: string;
 };
 
 export async function expectVisiblePageShell(page: Page, smokePage: SmokePage): Promise<void> {
   await page.goto(smokePage.path);
   await expect(page.getByRole("heading", { name: smokePage.heading })).toBeVisible();
-  await expect(page.locator("body")).toContainText("GUSTAV");
+  if (smokePage.brandSelector) {
+    await expect(page.locator(smokePage.brandSelector)).toBeVisible();
+  } else {
+    await expect(page.locator("body")).toContainText("GUSTAV");
+  }
   await expectInteractiveSurface(page.locator("body"));
   await expectNoViewportOverflow(page);
 }

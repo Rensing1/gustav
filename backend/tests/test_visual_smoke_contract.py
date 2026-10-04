@@ -85,6 +85,34 @@ def test_visual_smoke_spec_uses_support_helpers_for_teacher_learner_and_h5p_surf
     assert "function expectVisiblePageShell" not in source
 
 
+def test_mutating_visual_specs_use_run_owned_identities_and_cleanup_fixture() -> None:
+    e2e_dir = REPO_ROOT / "frontend" / "e2e"
+    for file_name in (
+        "design-system.spec.ts",
+        "teacher-module-editor-visual.spec.ts",
+        "visual-smoke.spec.ts",
+    ):
+        source = (e2e_dir / file_name).read_text(encoding="utf-8")
+        assert 'from "./support/feature-test"' in source
+        assert "e2eEmail" in source
+        assert "e2ePassword" in source
+        assert "Passw0rd!e2e" not in source
+        assert "Date.now()" not in source
+
+
+def test_auth_visual_smokes_fix_the_expected_german_locale() -> None:
+    source = (
+        REPO_ROOT / "frontend" / "e2e" / "visual-smoke.spec.ts"
+    ).read_text(encoding="utf-8")
+
+    assert 'test.use({ locale: "de-DE" })' in source
+    assert (
+        '{ path: "/register", heading: "Registrieren", '
+        'brandSelector: ".kc-gustav.kc-auth-shell" }'
+    ) in source
+    assert '{ path: "/forgot-password", heading: "Passwort zurücksetzen" }' in source
+
+
 def test_visual_smoke_has_reproducible_browser_bootstrap_and_preflight() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     preflight = REPO_ROOT / "frontend" / "tooling" / "check-playwright-browser.mjs"
@@ -92,13 +120,17 @@ def test_visual_smoke_has_reproducible_browser_bootstrap_and_preflight() -> None
     assert ".PHONY: playwright-bootstrap" in makefile
     assert "npx playwright install chromium webkit" in makefile
     visual_body = makefile.split("test-visual-smoke:", 1)[1].split(".PHONY:", 1)[0]
-    assert "tooling/check-playwright-browser.mjs" in visual_body
+    assert "backend.tools.feature_acceptance run --profile visual --all" in visual_body
+    assert "npm run test:e2e" not in visual_body
     feature_body = makefile.split("test-feature-acceptance:", 1)[1].split(".PHONY:", 1)[0]
     assert "backend.tools.feature_acceptance" in feature_body
     orchestrator = (REPO_ROOT / "backend" / "tools" / "feature_acceptance.py").read_text(
         encoding="utf-8"
     )
-    assert '["node", "tooling/check-playwright-browser.mjs", "chromium", "webkit"]' in orchestrator
+    assert '"tooling/check-playwright-browser.mjs"' in orchestrator
+    assert '"NODE_EXTRA_CA_CERTS"' in orchestrator
+    assert '"E2E_RUN_ID"' in orchestrator
+    assert '"E2E_STATE_PATH"' in orchestrator
     assert preflight.exists()
     source = preflight.read_text(encoding="utf-8")
     assert "const availableBrowsers = { chromium, webkit }" in source

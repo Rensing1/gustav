@@ -71,7 +71,18 @@ RUNTIME_DATABASE_VARIABLES = {
 PROFILE_MARKERS = {
     "acceptance": "@feature-acceptance",
     "detail": "@feature-detail",
+    "visual": "@visual-smoke",
 }
+
+
+def _required_browsers(profile: str) -> tuple[str, ...]:
+    """Return the installed browser engines required by one test profile."""
+
+    if profile not in PROFILE_MARKERS:
+        raise RuntimeError(f"unknown feature test profile: {profile}")
+    if profile == "visual":
+        return ("chromium",)
+    return ("chromium", "webkit")
 
 
 def _require_local_url(value: str, *, label: str) -> None:
@@ -241,7 +252,7 @@ def build_playwright_command(
     marker = PROFILE_MARKERS.get(profile)
     if marker is None:
         raise RuntimeError(f"unknown feature test profile: {profile}")
-    if update_snapshots and (all_features or profile != "detail"):
+    if update_snapshots and (all_features or profile not in {"detail", "visual"}):
         raise RuntimeError("snapshot updates require one explicitly selected detail spec")
     command = ["npm", "run", "test:e2e", "--"]
     if all_features:
@@ -873,7 +884,11 @@ def run_acceptance(
         cleanup_error: Exception | None = None
         try:
             browser_check = subprocess.run(
-                ["node", "tooling/check-playwright-browser.mjs", "chromium", "webkit"],
+                [
+                    "node",
+                    "tooling/check-playwright-browser.mjs",
+                    *_required_browsers(profile),
+                ],
                 cwd=FRONTEND_ROOT,
                 env=child_environment,
                 check=False,

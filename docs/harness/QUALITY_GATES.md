@@ -215,7 +215,7 @@ Regel:
 ### visual-smoke
 Zweck: zentrale UI-Flächen sichtbar prüfen, ohne die schnelle Verify-Suite durch breite Browser-/Screenshot-Tests zu belasten.
 
-Geplanter Inhalt:
+Inhalt:
 - Playwright-Smokes mit stabilen Selektoren und festen Viewports.
 - Learner-Workspace, Teacher-Workspace, Login/Auth-Shell und H5P-Player-/Editor-Shell.
 - DOM-/Layout-Assertions und nur dort Screenshots, wo sie stabil und aussagekräftig sind.
@@ -227,11 +227,13 @@ Aktueller Status:
 - Als eigener Make-Target vorhanden.
 - Teil von `make test-full-prod-like`.
 - Nicht Teil von `make verify`, bis Stabilität und Laufzeit für lokale Standardverifikation belegt sind.
-- Läuft gegen das produktionsnahe Compose-Setup mit Web, Keycloak, Caddy und H5P; fehlende Infrastruktur ist ein echter Gate-Fehler, kein stiller Skip.
-- Die Support-Schicht unter `frontend/e2e/support/` lädt lokale Env-Defaults, legt Keycloak-Teacher-/Student-User an, loggt über den echten Auth-Flow ein und seedet deterministische Teacher-/Learner-/H5P-Daten über die öffentlichen Teaching-APIs.
+- Läuft als internes Runner-Profil `visual` ausschließlich mit Chromium und dem Marker `@visual-smoke` gegen das produktionsnahe Compose-Setup mit Web, Keycloak, Caddy und H5P; fehlende Infrastruktur ist ein echter Gate-Fehler, kein stiller Skip.
+- Der Runner verweigert entfernte Ziele, setzt `E2E_RUN_ID`, ein privates `E2E_STATE_PATH` und `NODE_EXTRA_CA_CERTS` und bereinigt im Erfolgs- wie im Fehlerfall ausschließlich die im Laufmanifest registrierten Konten, Kurse, Lerneinheiten, Sitzungen, Tokens und H5P-Inhalte.
+- Die Support-Schicht unter `frontend/e2e/support/` verwendet das gemeinsame Cleanup-Fixture, legt laufbezogene Keycloak-Teacher-/Student-User an, loggt über den echten Auth-Flow ein und seedet deterministische Teacher-/Learner-/H5P-Daten über die öffentlichen Teaching-APIs.
 - Die Smokes prüfen Auth-Shells, Teacher-Graph-Workspace, Learner-Workspace und H5P-Task-Shell mit DOM-/Layout-Sanity.
-- Das UI-Labor wird zusätzlich über berechnete kontrastreiche Stilwerte und vier freigegebene Screenshot-Baselines geprüft: Light und Dark bei 1440×900 sowie 390×844 Pixeln.
-- `make update-visual-baselines` aktualisiert ausschließlich die freigegebenen Design-Baselines aus UI-Labor und integrierten Arbeitsansichten. Das Ergebnis muss vor Übernahme visuell geprüft werden.
+- Die Auth-Shells laufen in einem deterministischen deutschen Browserkontext; TLS- und Inhaltsprüfungen bleiben unverändert verbindlich.
+- UI-Labor, Moduleditor und integrierte Arbeitsansichten besitzen freigegebene Referenzen für Light und Dark sowie Desktop, Tablet und Smartphone.
+- `make update-visual-baselines` führt diese drei ausdrücklich mit `@design-system` markierten Spec-Gruppen nacheinander über den sicheren Runner aus. Breite oder nicht freigegebene Snapshot-Aktualisierungen werden abgewiesen; jede geänderte Referenz muss vor Übernahme visuell geprüft werden.
 - Paketimport, FinishedData und tiefe H5P-Integration bleiben in den bestehenden H5P-E2E-Tests.
 
 ### supply-chain

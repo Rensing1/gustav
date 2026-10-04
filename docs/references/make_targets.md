@@ -28,7 +28,8 @@ Status: Stable
 - `make dependency-audit` – Drei unabhängige Online-Prüfungen für Frontend, H5P und den vollständigen Python-Harness-Lock; Befunde und Werkzeugfehler führen zum Gesamtfehler
 - `make lock-python` – Erzeugt unter Python 3.11 die vollständigen Runtime-/Harness-Locks mit Hashes und berücksichtigt die vorläufig eingefrorene DSPy-Baseline
 - `make playwright-bootstrap` – installiert die von Playwright unterstützten Chromium- und WebKit-Browser; visuelle Smokes bleiben auf Chromium begrenzt, iPad-nahe Feature-Acceptance-Fälle laufen zusätzlich in WebKit
-- `make test-visual-smoke` – prüft zuerst die Browserinstallation und führt danach die markierten produktnahen Chromium-Smokes aus
+- `make test-visual-smoke` – führt ausschließlich `@visual-smoke` in Chromium über das lokale, TLS-geprüfte Feature-Harness aus und bereinigt anhand des privaten Laufmanifests auch nach Fehlern nur laufzugehörige Daten
+- `make update-visual-baselines` – aktualisiert UI-Labor, Moduleditor und integrierte Arbeitsansichten nacheinander über das sichere Visual-Profil; jede geänderte PNG-Referenz muss anschließend gegen `docs/DESIGN.md` geprüft werden
 - `make test-full-prod-like` – vollständiges produktionsnahes Freigabeprofil (`verify` + Online-Dependency-Audit + Supabase-Smoke + OpenAI-Smoke + E2E + visueller Browser-Smoke)
 - `make supabase-status` – Supabase Status/URLs
 - `make docker-validate` – `docker compose config` (Syntax/ENV)

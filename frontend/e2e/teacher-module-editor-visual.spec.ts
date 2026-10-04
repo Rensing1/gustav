@@ -1,11 +1,11 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
-import { emailDomain } from "./support/e2e-env";
+import { e2eEmail, e2ePassword } from "./support/e2e-env";
 import { ensureTeacherUser } from "./support/keycloak";
 import { seedTeacherModuleEditorVisualUnit } from "./support/seed-data";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 async function waitForStablePage(page: Page): Promise<void> {
   await page.evaluate(async () => {
@@ -20,7 +20,7 @@ test.describe("@visual-smoke @design-system module editor workspace", () => {
     { name: "mobile", width: 390, height: 844 }
   ] as const) {
     test(`keeps the flat content workspace on ${viewport.name}`, async ({ page }) => {
-      const email = `visual_module_editor_${viewport.name}@${emailDomain}`;
+      const email = e2eEmail(`visual-module-editor-${viewport.name}`);
       await ensureTeacherUser(email, password);
       await page.setViewportSize(viewport);
       await login(page, email, password);

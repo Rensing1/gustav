@@ -10,6 +10,13 @@
 - db(storage): Eine additive Migration erweitert die Positivliste des weiterhin privaten `materials`-Buckets; Tabellen, Materialarten und RLS-Policies bleiben unverändert.
 - test(materials): Parametrisierte API-, CLI-, Sync-, Frontend- und Datenbanktests sowie der authentifizierte Browserrundlauf `material-program-file-download` decken Webupload, CLI-Upload, exakten Download und die bestehenden Vorschauformate ab.
 
+### Isolierter Visual-Smoke-Sammellauf
+
+- fix(test-harness): `make test-visual-smoke` führt ausschließlich `@visual-smoke` über den lokalen Feature-Acceptance-Runner aus. Chromium, Lauf-ID, privates Zustandsmanifest, lokale Node-CA, Local-only-Prüfung und eigentümergebundene Bereinigung sind dadurch auch bei Testfehlern verbindlich.
+- test(ui): Die datenverändernden Visual-Specs verwenden das gemeinsame Cleanup-Fixture und laufbezogene Zugangsdaten. Auth-Shells laufen deterministisch auf Deutsch; TLS- und Inhaltsprüfungen bleiben unverändert streng.
+- design(test): `make update-visual-baselines` aktualisiert UI-Labor, Moduleditor und integrierte Arbeitsansichten ausschließlich über gezielte `@design-system`-Specs. Die Referenzen entsprechen dem aktuellen Designvertrag einschließlich vollständiger mobiler Navigation, Kummerkasten und aktueller Dialog-/Lernraumgestaltung.
+- scope: Keine Änderung an HTTP-API, Datenbankschema, Migrationen, RLS oder Produktlogik.
+
 ## 2026-10-01
 
 ### Produktions-Hotfixes für Dialogauswertung und H5P-Aufgabenwechsel

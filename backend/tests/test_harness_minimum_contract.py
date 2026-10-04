@@ -478,6 +478,6 @@ def test_local_make_targets_keep_image_and_visual_smokes_available() -> None:
     assert ".PHONY: test-docker-image-smoke" in makefile
     assert ".PHONY: playwright-bootstrap" in makefile
     assert ".PHONY: test-visual-smoke" in makefile
-    assert "tooling/check-playwright-browser.mjs" in _make_target_body(
-        makefile, "test-visual-smoke"
-    )
+    visual_body = _make_target_body(makefile, "test-visual-smoke")
+    assert "backend.tools.feature_acceptance run --profile visual --all" in visual_body
+    assert "npm run test:e2e -- --grep @visual-smoke" not in visual_body

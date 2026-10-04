@@ -276,8 +276,7 @@ test-frontend-h5p:
 
 .PHONY: test-visual-smoke
 test-visual-smoke:
-	@cd frontend && node tooling/check-playwright-browser.mjs
-	@cd frontend && npm run test:e2e -- --grep @visual-smoke
+	@.venv/bin/python -m backend.tools.feature_acceptance run --profile visual --all
 
 .PHONY: test-feature-acceptance
 test-feature-acceptance:
@@ -308,7 +307,9 @@ verify-feature:
 
 .PHONY: update-visual-baselines
 update-visual-baselines:
-	@.venv/bin/python -m backend.tools.feature_acceptance run --profile detail --feature design-system --update-snapshots
+	@.venv/bin/python -m backend.tools.feature_acceptance run --profile visual --feature design-system --update-snapshots
+	@.venv/bin/python -m backend.tools.feature_acceptance run --profile visual --feature teacher-module-editor-visual --update-snapshots
+	@.venv/bin/python -m backend.tools.feature_acceptance run --profile visual --feature visual-smoke --update-snapshots
 
 .PHONY: playwright-bootstrap
 playwright-bootstrap:

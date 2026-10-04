@@ -7,6 +7,7 @@ import pytest
 from backend.tools.feature_acceptance import (
     FeatureAcceptanceConfig,
     _assert_runtime_stack_safe,
+    _required_browsers,
     _revoke_cli_tokens,
     build_playwright_command,
     cleanup_manifest,
@@ -173,6 +174,15 @@ def test_targeted_detail_command_selects_only_the_requested_detail_spec(tmp_path
     assert command[-3:] == [str(spec), "--grep", "@feature-detail"]
 
 
+def test_visual_command_selects_all_visual_smokes() -> None:
+    command = build_playwright_command(
+        feature=None, all_features=True, profile="visual"
+    )
+
+    assert command[-2:] == ["--grep", "@visual-smoke"]
+    assert _required_browsers("visual") == ("chromium",)
+
+
 def test_regression_command_selects_all_marked_specs(tmp_path: Path) -> None:
     command = build_playwright_command(feature=None, all_features=True, e2e_dir=tmp_path)
 
@@ -189,10 +199,29 @@ def test_visual_update_is_limited_to_one_design_detail_spec(tmp_path: Path) -> N
     assert command[-4:] == [str(spec), "--grep", "@design-system", "--update-snapshots"]
 
 
+def test_visual_profile_updates_one_explicit_design_spec(tmp_path: Path) -> None:
+    spec = tmp_path / "teacher-module-editor-visual.spec.ts"
+    spec.write_text(
+        'test("@visual-smoke @design-system", () => {});', encoding="utf-8"
+    )
+
+    command = build_playwright_command(
+        feature="teacher-module-editor-visual",
+        all_features=False,
+        profile="visual",
+        update_snapshots=True,
+        e2e_dir=tmp_path,
+    )
+
+    assert command[-4:] == [str(spec), "--grep", "@design-system", "--update-snapshots"]
+
+
 @pytest.mark.parametrize("profile,all_features,marker", [
     ("acceptance", False, "@feature-acceptance @design-system"),
     ("detail", True, "@feature-detail @design-system"),
     ("detail", False, "@feature-detail"),
+    ("visual", True, "@visual-smoke @design-system"),
+    ("visual", False, "@visual-smoke"),
 ])
 def test_visual_update_rejects_broad_or_nonvisual_selection(
     tmp_path: Path, profile: str, all_features: bool, marker: str,

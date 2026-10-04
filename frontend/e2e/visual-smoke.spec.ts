@@ -1,10 +1,10 @@
 import { newBrowserContext } from "./support/browser-context";
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { currentUserSub, login } from "./support/auth";
 import { apiHeaders, expectApiOk } from "./support/api";
 import { makeCourseMetadataIncomplete } from "./support/course-fixture";
-import { emailDomain, webBase } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import {
   expectInteractiveSurface,
@@ -21,11 +21,11 @@ import {
   seedTeacherVisualSmokeUnit
 } from "./support/seed-data";
 
-const password = "Passw0rd!e2e";
+const password = e2ePassword;
 
 const smokePages: SmokePage[] = [
   { path: "/", heading: "Anmelden" },
-  { path: "/register", heading: "Registrieren" },
+  { path: "/register", heading: "Registrieren", brandSelector: ".kc-gustav.kc-auth-shell" },
   { path: "/forgot-password", heading: "Passwort zurücksetzen" }
 ];
 
@@ -62,6 +62,8 @@ async function expectCenteredGraphContext(page: Page): Promise<void> {
 }
 
 test.describe("@visual-smoke auth shell pages", () => {
+  test.use({ locale: "de-DE" });
+
   for (const viewport of [
     { name: "desktop", width: 1280, height: 900 },
     { name: "mobile", width: 390, height: 844 }
@@ -78,8 +80,7 @@ test.describe("@visual-smoke auth shell pages", () => {
 
 test.describe("@visual-smoke teacher workspace", () => {
   test("@design-system renders the teacher work starter across themes and widths", async ({ page }) => {
-    const unique = Date.now();
-    const email = `visual_teacher_home_${unique}@${emailDomain}`;
+    const email = e2eEmail("visual-teacher-home");
     await ensureTeacherUser(email, password);
     await login(page, email, password);
     await seedTeacherHomeWorkStarter(page, "Visual Arbeitsstart");
@@ -123,8 +124,7 @@ test.describe("@visual-smoke teacher workspace", () => {
 
   test("@design-system renders the modular graph inspector and deletion dialog across themes and widths", async ({ page }) => {
     test.setTimeout(120_000);
-    const unique = Date.now();
-    const email = `visual_teacher_${unique}@${emailDomain}`;
+    const email = e2eEmail("visual-teacher-graph");
     await ensureTeacherUser(email, password);
     await login(page, email, password);
 
@@ -214,9 +214,8 @@ test.describe("@visual-smoke teacher workspace", () => {
 
   test("@design-system renders the active catalog, school-year archive and personal learning archive", async ({ browser }) => {
     test.setTimeout(180_000);
-    const unique = Date.now();
-    const teacherEmail = `visual_teacher_archive_${unique}@${emailDomain}`;
-    const learnerEmail = `visual_learner_archive_${unique}@${emailDomain}`;
+    const teacherEmail = e2eEmail("visual-teacher-archive");
+    const learnerEmail = e2eEmail("visual-learner-archive");
     await ensureTeacherUser(teacherEmail, password);
     await ensureLearnerUser(learnerEmail, password);
     const teacher = await newSmokePage(browser);
@@ -329,9 +328,8 @@ test.describe("@visual-smoke teacher workspace", () => {
 test.describe("@visual-smoke learner workspace", () => {
   test("@design-system renders the responsive learner orientation, work and reading surfaces", async ({ browser }) => {
     test.setTimeout(90_000);
-    const unique = Date.now();
-    const teacherEmail = `visual_teacher_learner_${unique}@${emailDomain}`;
-    const learnerEmail = `visual_learner_${unique}@${emailDomain}`;
+    const teacherEmail = e2eEmail("visual-teacher-learner");
+    const learnerEmail = e2eEmail("visual-learner");
     await ensureTeacherUser(teacherEmail, password);
     await ensureLearnerUser(learnerEmail, password);
 
@@ -391,18 +389,31 @@ test.describe("@visual-smoke learner workspace", () => {
         const desk = workspace.querySelector(".learner-task-workbench__desk");
         const context = workspace.querySelector('[data-work-surface="materials"]');
         const task = workspace.querySelector('[data-work-surface="task"]');
-        if (!(desk instanceof HTMLElement) || !(context instanceof HTMLElement) || !(task instanceof HTMLElement)) {
+        const divider = workspace.querySelector('.learner-task-split-divider[role="separator"]');
+        if (
+          !(desk instanceof HTMLElement) ||
+          !(context instanceof HTMLElement) ||
+          !(task instanceof HTMLElement) ||
+          !(divider instanceof HTMLElement)
+        ) {
           throw new Error("learner work surfaces are incomplete");
         }
         return {
           context: context.getBoundingClientRect().toJSON(),
+          divider: divider.getBoundingClientRect().toJSON(),
           task: task.getBoundingClientRect().toJSON(),
-          columns: getComputedStyle(desk).gridTemplateColumns
+          columns: getComputedStyle(desk).gridTemplateColumns,
+          workSurfaceCount: desk.querySelectorAll("[data-work-surface]").length
         };
       });
-      expect(desktopGeometry.columns.split(" ")).toHaveLength(2);
-      expect(desktopGeometry.task.x).toBeGreaterThan(
+      expect(desktopGeometry.workSurfaceCount).toBe(2);
+      expect(desktopGeometry.columns.split(" ")).toHaveLength(3);
+      expect(desktopGeometry.divider.width).toBe(1);
+      expect(desktopGeometry.divider.x).toBeGreaterThanOrEqual(
         desktopGeometry.context.x + desktopGeometry.context.width - 1
+      );
+      expect(desktopGeometry.task.x).toBeGreaterThan(
+        desktopGeometry.divider.x + desktopGeometry.divider.width - 1
       );
       await expect(learner.page).toHaveScreenshot("learner-work-light-desktop.png", {
         animations: "disabled",
@@ -419,9 +430,12 @@ test.describe("@visual-smoke learner workspace", () => {
         caret: "hide",
         mask: [accountControl]
       });
-      const sourceSection = contextSurface.getByRole("button", { name: "Modul Vertiefung ein- oder ausklappen" });
-      await expect(sourceSection).toBeVisible();
-      await sourceSection.click();
+      await contextSurface.getByText("Weitere Materialien und eigene Abgaben", { exact: true }).click();
+      await expect(
+        contextSurface
+          .getByRole("region", { name: "Materialien", exact: true })
+          .getByRole("heading", { name: "Vertiefung", exact: true, level: 4 })
+      ).toBeVisible();
       await contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => {
         surface.scrollTop = surface.scrollHeight;
       });
@@ -474,7 +488,7 @@ test.describe("@visual-smoke learner workspace", () => {
       });
 
       for (const viewport of [
-        { name: "tablet", width: 1024, height: 768 },
+        { name: "tablet", width: 768, height: 1024 },
         { name: "mobile", width: 390, height: 844 }
       ] as const) {
         await learner.page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -537,9 +551,8 @@ test.describe("@visual-smoke learner workspace", () => {
 
 test.describe("@visual-smoke h5p workspace", () => {
   test("renders the learner H5P task shell for a released H5P task", async ({ browser }) => {
-    const unique = Date.now();
-    const teacherEmail = `visual_teacher_h5p_${unique}@${emailDomain}`;
-    const learnerEmail = `visual_learner_h5p_${unique}@${emailDomain}`;
+    const teacherEmail = e2eEmail("visual-teacher-h5p");
+    const learnerEmail = e2eEmail("visual-learner-h5p");
     await ensureTeacherUser(teacherEmail, password);
     await ensureLearnerUser(learnerEmail, password);
 
@@ -548,7 +561,7 @@ test.describe("@visual-smoke h5p workspace", () => {
     try {
       await login(teacher.page, teacherEmail, password);
       await login(learner.page, learnerEmail, password);
-      const seeded = await seedH5pVisualSmokeUnit(teacher.page, learner.page, `Visual Smoke ${unique}`);
+      const seeded = await seedH5pVisualSmokeUnit(teacher.page, learner.page, "Visual Smoke");
       await currentUserSub(learner.page);
 
       await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);

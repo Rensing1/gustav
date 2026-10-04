@@ -2,6 +2,7 @@
   import { onMount, untrack } from "svelte";
   import { ControlButton, Controls, useNodesInitialized, useSvelteFlow, useViewportInitialized, useViewport } from "@xyflow/svelte";
   import { readViewport, writeViewport } from "$lib/graph/viewport-memory";
+  import { graphFocusNodes, orientationForViewport } from "$lib/graph/graph-presentation";
 
   export type GraphViewportController = {
     focusNode: (nodeId?: string | null) => void;
@@ -25,7 +26,9 @@
   const viewportInitialized = useViewportInitialized();
   const viewport = useViewport();
   let initialFocusApplied = $state(false);
+  let cameraReady = $state(false);
   let viewportError = $state<string | null>(null);
+  let layoutFrame = 0;
 
   async function adjustViewport(action: () => Promise<unknown>) {
     viewportError = null;
@@ -38,12 +41,19 @@
 
   function focusNode(nodeId: string | null = initialNodeId, attempt = 0) {
     if (!nodeId) return;
-    const node = flow.getNode(nodeId);
-    if (!node) {
+    const nodes = graphFocusNodes(nodeId, flow.getNodes());
+    if (nodes.length === 0) {
       if (attempt < 10) requestAnimationFrame(() => focusNode(nodeId, attempt + 1));
       return;
     }
-    void adjustViewport(() => flow.fitView({ nodes: [node], padding: 0.34, minZoom: 0.82, maxZoom: 1.02, duration: 180 }));
+    void adjustViewport(() => flow.fitView({ nodes, padding: 0.24, minZoom: 0.82, maxZoom: 1.02, duration: 180 }));
+  }
+
+  function afterStableGraphLayout(action: () => void) {
+    cancelAnimationFrame(layoutFrame);
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = requestAnimationFrame(action);
+    });
   }
 
   async function showAll() {
@@ -63,6 +73,18 @@
 
   onMount(() => {
     onControllerReady?.(controller);
+    let orientation = orientationForViewport(window.innerWidth, window.innerHeight);
+    const handleResize = () => {
+      const nextOrientation = orientationForViewport(window.innerWidth, window.innerHeight);
+      if (nextOrientation === orientation) return;
+      orientation = nextOrientation;
+      afterStableGraphLayout(() => focusNode());
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      cancelAnimationFrame(layoutFrame);
+      window.removeEventListener("resize", handleResize);
+    };
   });
 
   // Role adapters can deliver nodes after mount. Focus once they are measured,
@@ -71,15 +93,18 @@
     if (!initialFocusApplied && initialNodeId && nodesInitialized.current && viewportInitialized.current) {
       initialFocusApplied = true;
       untrack(() => {
-        const saved = storageKey ? readViewport(sessionStorage, storageKey) : null;
-        if (saved) void adjustViewport(() => flow.setViewport(saved));
-        else focusNode(initialNodeId);
+        afterStableGraphLayout(() => {
+          const saved = storageKey ? readViewport(sessionStorage, storageKey) : null;
+          if (saved) void adjustViewport(() => flow.setViewport(saved));
+          else focusNode(initialNodeId);
+          cameraReady = true;
+        });
       });
     }
   });
 
   $effect(() => {
-    if (storageKey && initialFocusApplied) writeViewport(sessionStorage, storageKey, viewport.current);
+    if (storageKey && cameraReady) writeViewport(sessionStorage, storageKey, viewport.current);
   });
 </script>
 

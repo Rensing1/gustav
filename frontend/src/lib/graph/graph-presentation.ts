@@ -1,5 +1,13 @@
 import type { AriaLabelConfig } from "@xyflow/system";
 
+export type GraphFocusNode = {
+  id: string;
+  parentId?: string;
+  type?: string;
+};
+
+export type GraphViewportOrientation = "landscape" | "portrait";
+
 /** Labels describe available graph interactions, never internal identifiers. */
 export const graphAriaLabels: Partial<AriaLabelConfig> = {
   "controls.ariaLabel": "Graphansicht steuern",
@@ -18,6 +26,19 @@ export const graphAriaLabels: Partial<AriaLabelConfig> = {
 export function remainingGraphHeight(screenHeight: number, top: number): number {
   // Extremely short screens retain a usable canvas and ordinary page scrolling.
   return Math.max(240, screenHeight - Math.max(0, top) - 16);
+}
+
+/** A phase focus includes its modules so the didactic unit stays understandable. */
+export function graphFocusNodes<T extends GraphFocusNode>(nodeId: string, nodes: T[]): T[] {
+  const target = nodes.find((node) => node.id === nodeId);
+  if (!target) return [];
+  if (target.type !== "phaseBand") return [target];
+  return nodes.filter((node) => node.id === nodeId || node.parentId === nodeId);
+}
+
+/** Square viewports follow the landscape layout to avoid breakpoint oscillation. */
+export function orientationForViewport(width: number, height: number): GraphViewportOrientation {
+  return width >= height ? "landscape" : "portrait";
 }
 
 /** Measure page chrome instead of assuming equal header heights for both roles. */

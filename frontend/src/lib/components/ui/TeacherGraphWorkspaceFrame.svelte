@@ -17,6 +17,7 @@
     commandBarActions,
     commandBarPopovers,
     contextBar,
+    contextOpen = false,
     inspectorOpen = false,
     embedded = false,
     canvas,
@@ -30,6 +31,7 @@
     commandBarActions: TeacherGraphCommandBarAction[];
     commandBarPopovers?: Snippet;
     contextBar?: Snippet;
+    contextOpen?: boolean;
     inspectorOpen?: boolean;
     embedded?: boolean;
     canvas?: Snippet;
@@ -37,33 +39,38 @@
   } = $props();
 </script>
 
-<PageActionHead
-  {backHref}
-  {backLabel}
-  {title}
-  {copy}
-  actions={headerActions}
->
-  {#snippet secondary()}
-    <TeacherGraphCommandBar actions={commandBarActions} popovers={commandBarPopovers} />
-  {/snippet}
-</PageActionHead>
+<div class="teacher-graph-workspace-frame">
+  <PageActionHead
+    {backHref}
+    {backLabel}
+    {title}
+    {copy}
+    actions={headerActions}
+  >
+    {#snippet secondary()}
+      <TeacherGraphCommandBar actions={commandBarActions} popovers={commandBarPopovers} />
+    {/snippet}
+  </PageActionHead>
 
-{#if contextBar}
-  {@render contextBar()}
-{/if}
+  <section
+    use:fitGraphToScreen
+    class:teacher-flow-workspace--with-context={contextOpen && Boolean(contextBar)}
+    class:teacher-flow-workspace--with-inspector={inspectorOpen}
+    class:teacher-flow-workspace--embedded={embedded}
+    class="teacher-flow-workspace teacher-flow-shell"
+  >
+    {#if contextOpen && contextBar}
+      <div class="teacher-flow-workspace__context">
+        {@render contextBar()}
+      </div>
+    {/if}
 
-<section
-  use:fitGraphToScreen
-  class:teacher-flow-workspace--with-inspector={inspectorOpen}
-  class:teacher-flow-workspace--embedded={embedded}
-  class="teacher-flow-workspace teacher-flow-shell"
->
-  <div class="teacher-flow-workspace__canvas" tabindex="-1" aria-label="Lernweg-Graph">
-    {@render canvas?.()}
-  </div>
+    <div class="teacher-flow-workspace__canvas" tabindex="-1" aria-label="Lernweg-Graph">
+      {@render canvas?.()}
+    </div>
 
-  {#if inspectorOpen && inspector}
-    {@render inspector()}
-  {/if}
-</section>
+    {#if inspectorOpen && inspector}
+      {@render inspector()}
+    {/if}
+  </section>
+</div>

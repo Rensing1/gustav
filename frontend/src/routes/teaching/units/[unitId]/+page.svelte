@@ -416,7 +416,8 @@
     const tryFocus = (attempt: number) => {
       const target = document.querySelector<HTMLElement>(selector);
       if (target) {
-        target.focus();
+        // Keyboard focus must not move the page and change the viewport-sized canvas.
+        target.focus({ preventScroll: true });
       } else if (attempt < 8) {
         requestAnimationFrame(() => tryFocus(attempt + 1));
       }
@@ -1155,6 +1156,7 @@
   commandBarActions={graphCommandActions()}
   commandBarPopovers={unitCommandPopovers}
   contextBar={selectionContext}
+  contextOpen={Boolean(selectionBarSelection())}
   inspectorOpen={inspectorOpen()}
 >
   {#snippet canvas()}

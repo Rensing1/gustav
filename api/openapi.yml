@@ -7519,7 +7519,10 @@ paths:
               description: MIME type of the released material file
               schema: { type: string }
             Content-Disposition:
-              description: Inline preview or attachment download disposition
+              description: >-
+                Inline preview or attachment download disposition with a
+                quoted ASCII `filename` fallback and an RFC 5987 UTF-8
+                `filename*` value for the sanitized original filename.
               schema: { type: string }
             X-Content-Type-Options:
               description: Prevents browsers from MIME-sniffing downloaded material files.
@@ -7634,7 +7637,10 @@ paths:
               description: MIME type of the visible material file
               schema: { type: string }
             Content-Disposition:
-              description: Inline preview or attachment download disposition
+              description: >-
+                Inline preview or attachment download disposition with a
+                quoted ASCII `filename` fallback and an RFC 5987 UTF-8
+                `filename*` value for the sanitized original filename.
               schema: { type: string }
             X-Content-Type-Options:
               description: Prevents browsers from MIME-sniffing downloaded material files.

@@ -6,6 +6,7 @@ import threading
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import quote
 from uuid import uuid4
 
 import httpx
@@ -102,7 +103,9 @@ async def test_interleaved_material_reads_are_isolated(metadata, path):
                 )
                 assert response.headers["x-content-type-options"] == "nosniff"
             else:
-                assert response.headers["content-disposition"] == 'inline; filename="blatt.pdf"'
+                assert response.headers["content-disposition"] == (
+                    "inline; filename=\"blatt.pdf\"; filename*=UTF-8''blatt___.pdf"
+                )
                 assert response.headers["vary"] == "Origin"
     assert [label for label, _ in metadata] == (
         ["A", "A", "B", "B", "A", "A"] if path == ALIAS_PATH else ["A", "B", "A"]
@@ -152,9 +155,7 @@ async def test_disposition_order_and_normalization(metadata, path):
 
 
 @pytest.mark.parametrize("path", [FILE_PATH, ALIAS_PATH])
-async def test_program_material_forces_attachment_and_disables_mime_sniffing(
-    monkeypatch, path
-):
+async def test_program_material_forces_attachment_and_disables_mime_sniffing(monkeypatch, path):
     wiring = importlib.import_module("backend.web.learning_material_providers")
     program_file = replace(
         FILE,
@@ -171,8 +172,43 @@ async def test_program_material_forces_attachment_and_disables_mime_sniffing(
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/x-python")
-    assert response.headers["content-disposition"] == 'attachment; filename="sortieren.py"'
+    assert response.headers["content-disposition"] == (
+        "attachment; filename=\"sortieren.py\"; filename*=UTF-8''sortieren.py"
+    )
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.parametrize("path", [FILE_PATH, ALIAS_PATH])
+@pytest.mark.parametrize(
+    ("original_filename", "ascii_fallback", "safe_original"),
+    [
+        ("программа🧪.py", "material.py", "программа🧪.py"),
+        ('ordner\\seite"\r\n.txt', "ordner_seite.txt", "ordner_seite___.txt"),
+    ],
+)
+async def test_material_download_filename_is_http_safe_and_rfc_5987_encoded(
+    monkeypatch, path, original_filename, ascii_fallback, safe_original
+):
+    wiring = importlib.import_module("backend.web.learning_material_providers")
+    program_file = replace(
+        FILE,
+        mime_type="text/x-python",
+        storage_key="private/program.py",
+        filename_original=original_filename,
+    )
+    monkeypatch.setattr(
+        wiring, "load_student_material_file_metadata", lambda **kwargs: program_file
+    )
+
+    async with client_for(providers_for()) as client:
+        response = await client.get(path, params={"disposition": "attachment"})
+
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == (
+        f'attachment; filename="{ascii_fallback}"; '
+        f"filename*=UTF-8''{quote(safe_original, safe='')}"
+    )
+    response.headers["content-disposition"].encode("latin-1")
 
 
 @pytest.mark.parametrize("path", [FILE_PATH, ALIAS_PATH, SIM_PATH])

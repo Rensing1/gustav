@@ -52,8 +52,11 @@ async function expectMaterialDownload(
   expect(href).toBeTruthy();
   const response = await page.request.get(`${webBase}${href}`);
   expect(response.status()).toBe(200);
-  expect(response.headers()["content-disposition"]).toContain("attachment");
-  expect(response.headers()["content-disposition"]).toContain(expectedFilename);
+  const contentDisposition = response.headers()["content-disposition"];
+  expect(contentDisposition).toContain("attachment");
+  expect(contentDisposition).toContain(
+    `filename*=UTF-8''${encodeURIComponent(expectedFilename)}`
+  );
   expect(response.headers()["x-content-type-options"]).toBe("nosniff");
   expect(Buffer.from(await response.body())).toEqual(expectedBytes);
 
@@ -73,7 +76,7 @@ test("teacher uploads a Scratch material and learner downloads exact bytes", asy
   const teacherEmail = e2eEmail("teacher");
   const learnerEmail = e2eEmail("learner");
   const title = `Scratch-Projekt ${unique}`;
-  const filename = `sortieren-${unique}.sb3`;
+  const filename = `программа-${unique}.sb3`;
   const content = Buffer.from(`PK\u0003\u0004GUSTAV-Scratch-${unique}`, "utf8");
 
   await ensureTeacherUser(teacherEmail, e2ePassword);

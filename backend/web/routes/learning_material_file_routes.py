@@ -22,6 +22,7 @@ from backend.storage.config import (
     get_simulation_max_upload_bytes,
 )
 from backend.teaching.material_file_types import material_download_disposition
+from backend.web.content_disposition import content_disposition_value
 from backend.web.learning_material_providers import learning_material_providers
 from backend.web.material_file_access import (
     MaterialVisibilityLookupUnavailable,
@@ -29,9 +30,6 @@ from backend.web.material_file_access import (
 from backend.web.routes.app_session_helpers import current_user, private_headers
 from backend.web.routes.learning_submission_files import (
     normalize_download_disposition as _normalize_download_disposition,
-)
-from backend.web.routes.teaching_submission_files import (
-    safe_download_filename as _safe_download_filename,
 )
 from backend.web.security.guards import has_role
 from backend.web.simulation_player import build_simulation_response
@@ -155,9 +153,7 @@ async def get_material_file(
 
     mime_type = str(metadata.mime_type or "").strip().lower()
     storage_key = str(metadata.storage_key or "").strip()
-    filename = _safe_download_filename(
-        metadata.filename_original or os.path.basename(storage_key), "material.bin"
-    )
+    filename = metadata.filename_original or os.path.basename(storage_key)
     size_bytes = int(metadata.size_bytes or 0)
     if not storage_key or not mime_type:
         return JSONResponse({"error": "not_found"}, status_code=404, headers=_cache_headers_error())
@@ -181,7 +177,11 @@ async def get_material_file(
         headers={
             "Cache-Control": "private, no-store",
             "Vary": "Origin",
-            "Content-Disposition": f'{normalized_disposition}; filename="{filename}"',
+            "Content-Disposition": content_disposition_value(
+                normalized_disposition,
+                filename,
+                fallback="material.bin",
+            ),
             "X-Content-Type-Options": "nosniff",
         },
     )

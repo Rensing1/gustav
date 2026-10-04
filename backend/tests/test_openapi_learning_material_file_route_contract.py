@@ -50,10 +50,16 @@ def test_openapi_documents_legacy_learning_material_file_alias_route() -> None:
 
 def test_openapi_documents_material_file_route_503_as_lookup_or_storage_unavailable() -> None:
     spec = _load_spec()
-    canonical = spec["paths"]["/api/learning/courses/{course_id}/materials/{material_id}/file"]["get"]
-    legacy = spec["paths"]["/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file"]["get"]
+    canonical = spec["paths"]["/api/learning/courses/{course_id}/materials/{material_id}/file"][
+        "get"
+    ]
+    legacy = spec["paths"][
+        "/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file"
+    ]["get"]
 
-    assert canonical["responses"]["503"]["description"] == "Visibility lookup or storage unavailable"
+    assert (
+        canonical["responses"]["503"]["description"] == "Visibility lookup or storage unavailable"
+    )
     assert legacy["responses"]["503"]["description"] == "Visibility lookup or storage unavailable"
 
 
@@ -79,3 +85,16 @@ def test_openapi_documents_download_only_material_mimes_and_nosniff() -> None:
         operation = spec["paths"][path]["get"]
         assert "always" in operation["description"]
         assert "X-Content-Type-Options" in operation["responses"]["200"]["headers"]
+
+
+def test_openapi_documents_rfc_5987_material_download_filenames() -> None:
+    spec = _load_spec()
+
+    for path in (
+        "/api/learning/courses/{course_id}/materials/{material_id}/file",
+        "/api/learning/courses/{course_id}/sections/{section_id}/materials/{material_id}/file",
+    ):
+        header = spec["paths"][path]["get"]["responses"]["200"]["headers"]["Content-Disposition"]
+        description = str(header["description"])
+        assert "ASCII `filename` fallback" in description
+        assert "RFC 5987 UTF-8 `filename*`" in description

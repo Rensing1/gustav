@@ -26,4 +26,9 @@ describe("workspace layout route contract", () => {
     expect(routeSource("teaching/units/+page.server.ts")).not.toContain("wideWorkspaceShell");
     expect(routeSource("live/+page.server.ts")).not.toContain("wideWorkspaceShell");
   });
+
+  it("marks only the teacher unit graph as an immersive workspace", () => {
+    expect(routeSource("teaching/units/[unitId]/+page.server.ts")).toContain("immersiveWorkspace: true");
+    expect(routeSource("teaching/units/+page.server.ts")).not.toContain("immersiveWorkspace: true");
+  });
 });

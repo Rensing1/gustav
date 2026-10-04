@@ -83,6 +83,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
   return {
     breadcrumbs,
     hidePageHeading: true,
+    immersiveWorkspace: true,
     workspaceLayout: "wide",
     pageTitle: workspace.unit.title,
     showEditDialog: url.searchParams.get("edit") == "1",

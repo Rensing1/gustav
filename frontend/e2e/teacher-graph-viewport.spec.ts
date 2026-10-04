@@ -7,6 +7,8 @@ import { seedTeacherVisualSmokeUnit } from "./support/seed-data";
 
 type GraphGeometry = {
   canvas: { top: number; right: number; bottom: number; left: number; width: number; height: number };
+  header: { height: number };
+  graphToolsInsideCanvas: boolean;
   viewport: { width: number; height: number };
   modulesInsideCanvas: boolean;
   pageOverflowsHorizontally: boolean;
@@ -15,8 +17,10 @@ type GraphGeometry = {
 async function graphGeometry(page: Page): Promise<GraphGeometry> {
   return page.evaluate(() => {
     const canvas = document.querySelector<HTMLElement>(".teacher-flow-workspace__canvas")?.getBoundingClientRect();
+    const header = document.querySelector<HTMLElement>(".teacher-graph-workspace-frame .page-action-head")?.getBoundingClientRect();
+    const graphTools = document.querySelector<HTMLElement>(".teacher-graph-workspace-frame__commandbar")?.getBoundingClientRect();
     const modules = Array.from(document.querySelectorAll<HTMLElement>(".teacher-flow-node--module"));
-    if (!canvas || modules.length === 0) throw new Error("graph_not_ready");
+    if (!canvas || !header || !graphTools || modules.length === 0) throw new Error("graph_not_ready");
     return {
       canvas: {
         top: canvas.top,
@@ -26,6 +30,13 @@ async function graphGeometry(page: Page): Promise<GraphGeometry> {
         width: canvas.width,
         height: canvas.height
       },
+      header: { height: header.height },
+      graphToolsInsideCanvas:
+        graphTools.width > 0 &&
+        graphTools.left >= canvas.left &&
+        graphTools.top >= canvas.top &&
+        graphTools.right <= canvas.right &&
+        graphTools.bottom <= canvas.bottom,
       viewport: { width: innerWidth, height: innerHeight },
       modulesInsideCanvas: modules.every((module) => {
         const rect = module.getBoundingClientRect();
@@ -72,8 +83,21 @@ test("@feature-acceptance keeps the teacher module graph visible across iPad ori
   await login(page, email, e2ePassword);
   const seeded = await seedTeacherVisualSmokeUnit(page, `Graphfläche ${Date.now()}`);
 
-  await page.setViewportSize({ width: 1024, height: 768 });
+  // The scaled iPad Mini preview reports this effective CSS viewport.
+  await page.setViewportSize({ width: 1137, height: 853 });
   await page.goto(`/teaching/units/${seeded.unitId}`);
+  await expect(page.locator(".teacher-flow-node--module")).toHaveCount(2);
+  await waitForStableGraphLayout(page);
+  await waitForStableViewport(page);
+
+  const scaledIpad = await graphGeometry(page);
+  expect(scaledIpad.canvas.height / scaledIpad.viewport.height).toBeGreaterThanOrEqual(0.8);
+  expect(scaledIpad.canvas.top / scaledIpad.viewport.height).toBeLessThanOrEqual(0.2);
+  expect(scaledIpad.graphToolsInsideCanvas).toBe(true);
+  expect(scaledIpad.header.height).toBeLessThan(90);
+  await expect(page.locator(".workspace-unit-commandbar-heading")).toHaveCSS("position", "absolute");
+
+  await page.setViewportSize({ width: 1024, height: 768 });
   await expect(page.locator(".teacher-flow-node--module")).toHaveCount(2);
   await expect(page.getByRole("button", { name: "Gesamtansicht", exact: true })).toBeVisible();
   await waitForStableGraphLayout(page);
@@ -84,7 +108,9 @@ test("@feature-acceptance keeps the teacher module graph visible across iPad ori
     pageOverflowsHorizontally: false
   });
   const landscape = await graphGeometry(page);
-  expect(landscape.canvas.height / landscape.viewport.height).toBeGreaterThanOrEqual(0.6);
+  expect(landscape.canvas.height / landscape.viewport.height).toBeGreaterThanOrEqual(0.8);
+  expect(landscape.canvas.top / landscape.viewport.height).toBeLessThanOrEqual(0.2);
+  expect(landscape.graphToolsInsideCanvas).toBe(true);
 
   const canvasHeightBeforeSelection = landscape.canvas.height;
   const phaseLink = page.getByRole("link", { name: "PHASE 01 Phase 1" });
@@ -97,6 +123,7 @@ test("@feature-acceptance keeps the teacher module graph visible across iPad ori
   );
   const context = page.getByRole("region", { name: "Ausgewählte Phase" });
   await expect(context).toBeVisible();
+  await expect(page.getByRole("toolbar", { name: "Graphwerkzeuge" })).toBeHidden();
   await waitForStableGraphLayout(page);
   await waitForStableViewport(page);
   await expect.poll(async () => (await graphGeometry(page)).canvas.height).toBeCloseTo(canvasHeightBeforeSelection, 0);
@@ -122,6 +149,15 @@ test("@feature-acceptance keeps the teacher module graph visible across iPad ori
   await waitForStableGraphLayout(page);
   await waitForStableViewport(page);
   await expect.poll(() => viewportTransform(page)).toBe(storedCamera);
+
+  await page.setViewportSize({ width: 911, height: 1311 });
+  await waitForStableGraphLayout(page);
+  await waitForStableViewport(page);
+  await expect.poll(() => graphGeometry(page)).toMatchObject({
+    modulesInsideCanvas: true,
+    pageOverflowsHorizontally: false
+  });
+  await expect(page.locator(".workspace-unit-commandbar-heading")).toHaveCSS("position", "absolute");
 
   await page.setViewportSize({ width: 768, height: 1024 });
   await expect.poll(() => graphGeometry(page)).toMatchObject({

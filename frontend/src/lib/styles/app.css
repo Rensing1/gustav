@@ -238,6 +238,33 @@ select {
   flex: 0 0 var(--topbar-tool-height);
 }
 
+/*
+ * Immersive workspaces keep every global destination available while giving
+ * short tablet and laptop screens a deliberately smaller application chrome.
+ */
+@media (min-width: 901px) and (max-height: 900px),
+  (min-width: 901px) and (max-width: 1400px) and (max-height: 1000px),
+  (min-width: 721px) and (max-width: 960px) {
+  .app-topbar-inner--immersive-workspace {
+    min-height: 3.4rem;
+    gap: var(--space-3);
+    padding-inline: var(--space-4);
+  }
+
+  .app-topbar--immersive-workspace .brand-logo {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .app-topbar--immersive-workspace .space-nav a {
+    padding: 0.38rem 0.72rem;
+  }
+
+  .workspace-header.workspace-header--immersive-workspace {
+    display: none;
+  }
+}
+
 @media (max-width: 48rem) {
   .app-topbar-tools { --topbar-tool-height: var(--layout-control-min); }
   .app-topbar-tools :is(.theme-toggle, .account-trigger) {

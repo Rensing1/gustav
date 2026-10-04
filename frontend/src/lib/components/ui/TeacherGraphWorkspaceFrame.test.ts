@@ -6,7 +6,7 @@ import TeacherGraphWorkspaceFrame from "./TeacherGraphWorkspaceFrame.svelte";
 
 describe("TeacherGraphWorkspaceFrame", () => {
   it("renders the shared teacher graph shell with commandbar", () => {
-    render(TeacherGraphWorkspaceFrame, {
+    const { container } = render(TeacherGraphWorkspaceFrame, {
       props: {
         backHref: "/teaching/units",
         backLabel: "Zurück zu Lerneinheiten",
@@ -24,6 +24,12 @@ describe("TeacherGraphWorkspaceFrame", () => {
     expect(screen.getByRole("toolbar", { name: "Graphwerkzeuge" })).toBeInTheDocument();
     expect(screen.getByText("Lernweg")).toBeInTheDocument();
     expect(screen.getByLabelText("Lernweg-Graph").parentElement).toHaveClass("teacher-flow-workspace--embedded");
+    expect(container.querySelector(".teacher-graph-workspace-frame__commandbar")).toContainElement(
+      screen.getByRole("toolbar", { name: "Graphwerkzeuge" })
+    );
+    expect(container.querySelector(".page-action-head")).not.toContainElement(
+      screen.getByRole("toolbar", { name: "Graphwerkzeuge" })
+    );
   });
 
   it("keeps graph context and inspector inside the graph-first surface", () => {
@@ -57,6 +63,7 @@ describe("TeacherGraphWorkspaceFrame", () => {
     const context = screen.getByRole("region", { name: "Ausgewählte Phase" });
 
     expect(frame).toBeInTheDocument();
+    expect(frame).toHaveClass("teacher-graph-workspace-frame--with-context");
     expect(frame).toContainElement(workspace);
     expect(context.closest(".teacher-flow-workspace__context")?.parentElement).toBe(workspace);
     expect(screen.getByTestId("graph-canvas-content").closest(".teacher-flow-workspace__canvas")?.parentElement).toBe(workspace);

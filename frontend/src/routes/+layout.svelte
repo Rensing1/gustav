@@ -146,6 +146,10 @@
     return page.data.authLayout === true;
   }
 
+  function isImmersiveWorkspace(): boolean {
+    return page.data.immersiveWorkspace === true;
+  }
+
   function pageTitle(): string {
     return typeof page.data.pageTitle === "string" && page.data.pageTitle.length > 0
       ? page.data.pageTitle
@@ -229,8 +233,16 @@
 <svelte:window onclick={closeAccountMenuOnWindowClick} />
 
 <div class:app-shell--auth-route={isAuthLayout()} class="app-shell" data-theme={currentTheme}>
-  <header class:app-topbar--learner-unit={isLearnerUnitWorkspaceRoute()} class="app-topbar">
-    <div class:app-topbar-inner--learner-unit={isLearnerUnitWorkspaceRoute()} class="app-topbar-inner">
+  <header
+    class:app-topbar--learner-unit={isLearnerUnitWorkspaceRoute()}
+    class:app-topbar--immersive-workspace={isImmersiveWorkspace()}
+    class="app-topbar"
+  >
+    <div
+      class:app-topbar-inner--learner-unit={isLearnerUnitWorkspaceRoute()}
+      class:app-topbar-inner--immersive-workspace={isImmersiveWorkspace()}
+      class="app-topbar-inner"
+    >
       <a class="brand-lockup" href="/" aria-label="Startseite">
         <img class="brand-logo" src="/gustav-logo.png" alt="" />
         <div class="brand-copy">
@@ -301,6 +313,7 @@
           class="workspace-header"
           class:workspace-header--breadcrumbs-wide={isLearnerUnitWorkspaceRoute()}
           class:workspace-header--learner-unit={isLearnerUnitWorkspaceRoute()}
+          class:workspace-header--immersive-workspace={isImmersiveWorkspace()}
         >
           <div class="workspace-topbar">
             {#if currentBreadcrumbs().length && !isLearnerUnitWorkspaceRoute()}

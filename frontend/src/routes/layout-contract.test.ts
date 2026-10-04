@@ -26,4 +26,14 @@ describe("root layout contract", () => {
     expect(layoutSource).not.toContain("requiresPractice");
     expect(layoutSource).not.toContain("practice_enabled");
   });
+
+  it("scopes the compact application chrome to immersive workspaces", () => {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const layoutSource = readFileSync(path.resolve(currentDir, "+layout.svelte"), "utf8");
+
+    expect(layoutSource).toContain("function isImmersiveWorkspace(): boolean");
+    expect(layoutSource).toContain("page.data.immersiveWorkspace === true");
+    expect(layoutSource).toContain("class:app-topbar--immersive-workspace={isImmersiveWorkspace()}");
+    expect(layoutSource).toContain("class:workspace-header--immersive-workspace={isImmersiveWorkspace()}");
+  });
 });

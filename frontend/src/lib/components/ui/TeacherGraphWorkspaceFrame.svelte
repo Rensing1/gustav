@@ -39,18 +39,21 @@
   } = $props();
 </script>
 
-<div class="teacher-graph-workspace-frame">
+<div
+  class:teacher-graph-workspace-frame--with-context={contextOpen && Boolean(contextBar)}
+  class="teacher-graph-workspace-frame"
+>
   <PageActionHead
     {backHref}
     {backLabel}
     {title}
     {copy}
     actions={headerActions}
-  >
-    {#snippet secondary()}
-      <TeacherGraphCommandBar actions={commandBarActions} popovers={commandBarPopovers} />
-    {/snippet}
-  </PageActionHead>
+  />
+
+  <div class="teacher-graph-workspace-frame__commandbar">
+    <TeacherGraphCommandBar actions={commandBarActions} popovers={commandBarPopovers} />
+  </div>
 
   <section
     use:fitGraphToScreen

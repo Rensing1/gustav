@@ -2646,6 +2646,12 @@ components:
           description: ISO timestamp when the upload intent expires
     MaterialFileFinalizeRequest:
       type: object
+      description: >-
+        Finalizes a server-owned upload intent. File materials retain strict
+        filename/storage-MIME matching. Simulation intents must use a `.html`
+        filename and `text/html`; their stored bytes are checked for size,
+        SHA-256, UTF-8 HTML structure and offline safety. Storage-reported MIME
+        metadata is non-authoritative for simulations.
       required: [intent_id, title, sha256]
       properties:
         intent_id:
@@ -13380,6 +13386,10 @@ paths:
     post:
       tags: [Teaching]
       summary: Finalize upload intent (author only)
+      description: >-
+        Finalizes a private file or simulation upload. For simulations, the
+        canonical server-owned intent and the validated object bytes are
+        authoritative even when Storage reports a different MIME type.
       operationId: finalizeSectionMaterialUpload
       security:
         - cookieAuth: []
@@ -13461,7 +13471,7 @@ paths:
                     error: bad_request
                     detail: intent_expired
                 mime_not_allowed:
-                  summary: Uploaded object has a MIME type outside the whitelist
+                  summary: File Storage MIME or canonical intent MIME is outside the whitelist
                   value:
                     error: bad_request
                     detail: mime_not_allowed
@@ -13779,6 +13789,10 @@ paths:
     post:
       tags: [Teaching]
       summary: Finalize upload intent for a module-backed file material (author only)
+      description: >-
+        Uses the same file and simulation validation as the section endpoint.
+        For simulations, the canonical server-owned intent and validated bytes
+        are authoritative rather than Storage-reported MIME metadata.
       operationId: finalizeModuleMaterialUpload
       security:
         - cookieAuth: []

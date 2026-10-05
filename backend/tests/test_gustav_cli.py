@@ -976,6 +976,7 @@ def test_materials_upload_supports_self_contained_simulations(tmp_path, monkeypa
     content = b"<!doctype html><html><body>Modell</body></html>"
     source.write_bytes(content)
     calls: list[tuple[str, str, dict[str, str] | None, object | None]] = []
+    byte_calls: list[tuple[str, str, dict[str, str] | None, bytes | None]] = []
 
     def fake_json(method: str, url: str, *, headers=None, json_body=None):
         calls.append((method, url, headers, json_body))
@@ -983,12 +984,17 @@ def test_materials_upload_supports_self_contained_simulations(tmp_path, monkeypa
             return 200, {
                 "intent_id": "intent-sim",
                 "url": "https://storage.example/upload",
-                "headers": {"content-type": "text/html"},
+                "headers": {},
             }
         return 201, {"id": "simulation-1", "kind": "simulation"}
 
     monkeypatch.setattr(cli, "_http_json", fake_json)
-    monkeypatch.setattr(cli, "_http_bytes", lambda *args, **kwargs: (200, b""), raising=False)
+
+    def fake_bytes(method: str, url: str, *, headers=None, data=None):
+        byte_calls.append((method, url, headers, data))
+        return 200, b""
+
+    monkeypatch.setattr(cli, "_http_bytes", fake_bytes, raising=False)
 
     code = cli.main(
         [
@@ -1013,6 +1019,50 @@ def test_materials_upload_supports_self_contained_simulations(tmp_path, monkeypa
         "sha256": hashlib.sha256(content).hexdigest(),
         "body_md": "Verändere den Regler.",
     }
+    assert byte_calls == [
+        ("PUT", "https://storage.example/upload", {"content-type": "text/html"}, content)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("filename", "explicit_mime", "content"),
+    [
+        ("modell.htm", "text/html", b"<html></html>"),
+        ("modell.html", "text/plain", b"<html></html>"),
+        ("modell.html", "text/html", b""),
+        ("modell.html", "text/html", b"x" * (5 * 1024 * 1024 + 1)),
+    ],
+    ids=["wrong-extension", "wrong-mime", "empty", "too-large"],
+)
+def test_materials_upload_rejects_invalid_simulation_before_http(
+    tmp_path,
+    monkeypatch,
+    filename: str,
+    explicit_mime: str,
+    content: bytes,
+) -> None:
+    _configure_test_cli(tmp_path, monkeypatch)
+    source = tmp_path / filename
+    source.write_bytes(content)
+    monkeypatch.setattr(
+        cli,
+        "_http_json",
+        lambda *args, **kwargs: pytest.fail("invalid simulation reached the API"),
+    )
+    stderr = io.StringIO()
+
+    code = cli.main(
+        [
+            "materials", "upload", "--unit-id", "unit-1", "--section-id", "section-1",
+            "--file", str(source), "--title", "Modell", "--kind", "simulation",
+            "--mime-type", explicit_mime,
+        ],
+        stdout=io.StringIO(),
+        stderr=stderr,
+    )
+
+    assert code == 1
+    assert stderr.getvalue()
 
 
 def test_materials_download_refuses_overwrite_without_force(tmp_path, monkeypatch) -> None:

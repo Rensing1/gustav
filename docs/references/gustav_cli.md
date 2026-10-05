@@ -177,9 +177,13 @@ gustav materials upload --unit-id <unit-id> --section-id <section-id> \
   --file ./projekt.sb3 --title "Scratch-Projekt"
 gustav materials upload --unit-id <unit-id> --module-id <module-id> \
   --file ./analyse.py --title "Python-Programm" --mime-type text/x-python
+gustav materials upload --unit-id <unit-id> --section-id <section-id> \
+  --file ./simulation.html --title "Interaktive Simulation" \
+  --kind simulation --mime-type text/html \
+  --body-md "Verändere den Regler und beobachte das Ergebnis."
 ```
 
-`--kind simulation` erwartet weiterhin eine vollständig eingebettete HTML-Datei bis 5 MiB; `--body-md` setzt den optionalen Orientierungstext. `--alt-text` ist nur für Dateien zulässig. `download` liefert Datei-Materialien ausschließlich als Attachment und schreibt nur mit `--force` über eine bestehende lokale Datei; Simulations-HTML wird nicht über den Download-Befehl herausgegeben.
+`--kind simulation` erwartet weiterhin eine vollständig eingebettete `.html`-Datei mit dem MIME-Typ `text/html` bis 5 MiB; `--body-md` setzt den optionalen Orientierungstext. Endung, MIME-Typ und Größe werden lokal vor dem ersten API-Aufruf geprüft. Beim Finalisieren sind der serverseitige Upload-Intent sowie Größe, SHA-256 und die geprüften HTML-Bytes maßgeblich; abweichende MIME-Metadaten des Storage verhindern deshalb keinen gültigen CLI-Upload. `--alt-text` ist nur für Dateien zulässig. `download` liefert Datei-Materialien ausschließlich als Attachment und schreibt nur mit `--force` über eine bestehende lokale Datei; Simulations-HTML wird nicht über den Download-Befehl herausgegeben.
 
 Bei lesenden Materialbefehlen mit `--module-id` löst die CLI intern das versteckte Inhaltsziel des Moduls auf:
 

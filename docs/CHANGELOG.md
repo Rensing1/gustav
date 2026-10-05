@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-05
+
+### CLI-Upload von HTML-Simulationen
+
+- fix(cli): `gustav materials upload --kind simulation --mime-type text/html` prüft `.html`, MIME-Typ, leere Dateien und die 5-MiB-Grenze lokal und setzt auch ohne zurückgelieferten Header den kanonischen Upload-Content-Type.
+- fix(materials): Beim Finalisieren einer Simulation sind der serverseitige Intent und die vollständig geprüften Bytes maßgeblich. Abweichende MIME-Metadaten des Storage lösen nicht länger `mime_not_allowed` aus; normale Datei-Materialien bleiben streng geprüft.
+- security(simulations): Manipulierte Intent-Endungen oder MIME-Typen, Größen- und Prüfsummenfehler, ungültiges HTML sowie externe Ressourcen werden weiterhin abgelehnt und aus dem privaten Storage entfernt.
+- test(simulations): Der authentifizierte Browserrundlauf `simulation-material` lädt eine HTML-Simulation mit einem über die Oberfläche erzeugten CLI-Token hoch und prüft die interaktive Lehrkraft- und Lernendenansicht.
+
 ## 2026-10-04
 
 ### Programm- und OpenDocument-Dateien als Material

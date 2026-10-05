@@ -54,15 +54,21 @@ class Repo:
 
 
 class Storage:
-    def __init__(self, payload: bytes = HTML) -> None:
+    def __init__(
+        self,
+        payload: bytes = HTML,
+        *,
+        content_type: str | None = "text/html; charset=utf-8",
+    ) -> None:
         self.payload = payload
+        self.content_type = content_type
         self.deleted: list[str] = []
 
     def presign_upload(self, **_kwargs):
         return {"url": "https://storage.test/upload", "headers": {}}
 
     def head_object(self, **_kwargs):
-        return {"content_type": "text/html; charset=utf-8", "content_length": len(self.payload)}
+        return {"content_type": self.content_type, "content_length": len(self.payload)}
 
     def read_object(self, *, key: str, max_bytes: int, **_kwargs):
         assert max_bytes == 5 * 1024 * 1024
@@ -112,6 +118,84 @@ def test_simulation_finalize_verifies_actual_bytes_and_preserves_orientation() -
     assert material["kind"] == "simulation"
     assert material["body_md"] == "Verändere den Regler."
     assert material["alt_text"] is None
+
+
+@pytest.mark.parametrize("reported_content_type", ["application/octet-stream", "text/plain"])
+def test_simulation_finalize_uses_canonical_intent_and_validated_bytes(
+    reported_content_type: str,
+) -> None:
+    """Storage metadata must not overrule the canonical simulation contract."""
+    repo = Repo()
+    service = MaterialsService(repo=repo)
+    storage = Storage(content_type=reported_content_type)
+    intent = service.create_file_upload_intent(
+        "unit", "section", "teacher",
+        filename="modell.html", mime_type="text/html", size_bytes=len(HTML),
+        material_kind="simulation", storage=storage,
+    )
+
+    material, created = service.finalize_file_material(
+        "unit", "section", "teacher",
+        intent_id=intent["intent_id"], title="Modell", sha256=sha256(HTML).hexdigest(),
+        alt_text=None, body_md="Beobachte das Modell.", storage=storage,
+    )
+
+    assert created is True
+    assert material["kind"] == "simulation"
+    assert material["mime_type"] == "text/html"
+    assert storage.deleted == []
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value", "expected_error"),
+    [
+        ("mime_type", "application/octet-stream", "mime_not_allowed"),
+        ("filename", "modell.htm", "invalid_filename"),
+    ],
+)
+def test_simulation_finalize_deletes_object_for_tampered_canonical_intent(
+    field: str,
+    invalid_value: str,
+    expected_error: str,
+) -> None:
+    repo = Repo()
+    service = MaterialsService(repo=repo)
+    storage = Storage()
+    intent = service.create_file_upload_intent(
+        "unit", "section", "teacher",
+        filename="modell.html", mime_type="text/html", size_bytes=len(HTML),
+        material_kind="simulation", storage=storage,
+    )
+    repo.intents[intent["intent_id"]][field] = invalid_value
+
+    with pytest.raises(ValueError, match=f"^{expected_error}$"):
+        service.finalize_file_material(
+            "unit", "section", "teacher",
+            intent_id=intent["intent_id"], title="Modell", sha256=sha256(HTML).hexdigest(),
+            alt_text=None, body_md="", storage=storage,
+        )
+
+    assert storage.deleted == [intent["storage_key"]]
+
+
+def test_file_material_finalize_keeps_strict_storage_mime_validation() -> None:
+    repo = Repo()
+    service = MaterialsService(repo=repo)
+    storage = Storage(content_type="text/plain")
+    intent = service.create_file_upload_intent(
+        "unit", "section", "teacher",
+        filename="modell.pdf", mime_type="application/pdf", size_bytes=len(HTML),
+        material_kind="file", storage=storage,
+    )
+
+    with pytest.raises(ValueError, match="^mime_not_allowed$"):
+        service.finalize_file_material(
+            "unit", "section", "teacher",
+            intent_id=intent["intent_id"], title="Modell", sha256=sha256(HTML).hexdigest(),
+            alt_text=None, body_md=None, storage=storage,
+        )
+
+    assert storage.deleted == [intent["storage_key"]]
 
 
 def test_simulation_finalize_deletes_rejected_online_html() -> None:

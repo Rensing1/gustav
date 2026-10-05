@@ -116,6 +116,19 @@ class MaterialFileSettings:
     storage_bucket: str = field(default_factory=get_materials_bucket)
 
 
+def _validate_simulation_intent(filename: object, mime_type: object) -> None:
+    """Recheck the canonical simulation identity stored in a server-owned intent.
+
+    The Storage MIME value is deliberately not used here: finalization reads
+    and validates the complete HTML object before it can become a material.
+    """
+
+    if not str(filename or "").strip().lower().endswith(".html"):
+        raise ValueError("invalid_filename")
+    if str(mime_type or "").strip().lower() != "text/html":
+        raise ValueError("mime_not_allowed")
+
+
 _SANITIZE_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 _SEGMENT_SANITIZE_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -425,14 +438,12 @@ class MaterialsService:
         if actual_length is not None and actual_length != intent["size_bytes"]:
             storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
             raise ValueError("checksum_mismatch")
-        content_type = head.get("content_type") or intent["mime_type"]
-        # Accept content types with parameters (e.g., "application/pdf; charset=UTF-8").
-        base_content_type = (str(content_type or "").split(";", 1)[0]).strip().lower()
         material_kind = str(intent.get("material_kind") or "file").strip().lower()
-        accepted_mime_types = (
-            ("text/html",) if material_kind == "simulation" else self.settings.accepted_mime_types
-        )
         if material_kind == "file":
+            content_type = head.get("content_type") or intent["mime_type"]
+            # File materials keep strict Storage metadata validation. Parameters
+            # such as a charset do not change the underlying media type.
+            base_content_type = (str(content_type or "").split(";", 1)[0]).strip().lower()
             try:
                 base_content_type = validate_material_file_type(
                     str(intent.get("filename") or ""), base_content_type
@@ -440,9 +451,15 @@ class MaterialsService:
             except ValueError:
                 storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
                 raise
-        if base_content_type not in accepted_mime_types:
-            storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
-            raise ValueError("mime_not_allowed")
+            if base_content_type not in self.settings.accepted_mime_types:
+                storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
+                raise ValueError("mime_not_allowed")
+        elif material_kind == "simulation":
+            try:
+                _validate_simulation_intent(intent.get("filename"), intent.get("mime_type"))
+            except ValueError:
+                storage.delete_object(bucket=self.settings.storage_bucket, key=intent["storage_key"])
+                raise
         if alt_text is not None and not isinstance(alt_text, str):
             raise ValueError("invalid_alt_text")
         normalized_alt = (alt_text or "").strip() or None

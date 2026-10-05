@@ -12,6 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from uuid import uuid4
 
+from backend.storage.config import get_simulation_max_upload_bytes
+from backend.storage.upload_intents import normalize_upload_intent_headers
 from backend.teaching.material_file_types import (
     MATERIAL_FILE_MAX_BYTES,
     canonical_material_mime,
@@ -271,7 +273,10 @@ def _build_parser() -> argparse.ArgumentParser:
             material_cmd.add_argument(
                 "--file",
                 required=True,
-                help="PDF, PNG, JPEG, SB3, HEX, FLS, PY, JSON, TXT, ODT, ODS oder ODP",
+                help=(
+                    "PDF, PNG, JPEG, SB3, HEX, FLS, PY, JSON, TXT, ODT, ODS oder ODP; "
+                    "HTML mit --kind simulation"
+                ),
             )
             material_cmd.add_argument("--title", required=True)
             material_cmd.add_argument(
@@ -279,7 +284,12 @@ def _build_parser() -> argparse.ArgumentParser:
                 help="Optionaler kanonischer MIME-Typ; wird sonst aus der Dateiendung erkannt",
             )
             material_cmd.add_argument("--alt-text")
-            material_cmd.add_argument("--kind", choices=("file", "simulation"), default="file")
+            material_cmd.add_argument(
+                "--kind",
+                choices=("file", "simulation"),
+                default="file",
+                help="Materialart; HTML-Simulationen erfordern ausdrücklich simulation",
+            )
             material_cmd.add_argument("--body-md")
             material_cmd.add_argument("--json", action="store_true")
         if name == "edit":
@@ -798,14 +808,24 @@ def _materials(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> i
         except OSError:
             stderr.write("Die angegebene Datei konnte nicht gelesen werden.\n")
             return 1
-        if size_bytes <= 0 or (
-            args.kind == "file" and size_bytes > MATERIAL_FILE_MAX_BYTES
-        ):
-            stderr.write("Datei zu groß oder leer; Datei-Materialien sind auf 20 MiB begrenzt.\n")
+        if size_bytes <= 0:
+            stderr.write("Die Datei ist leer.\n")
             return 1
         if args.kind == "simulation":
-            mime_type = args.mime_type or "text/html"
+            if source.suffix.lower() != ".html":
+                stderr.write("HTML-Simulationen benötigen die Dateiendung .html.\n")
+                return 1
+            mime_type = str(args.mime_type or "text/html").strip().lower()
+            if mime_type != "text/html":
+                stderr.write("HTML-Simulationen benötigen den MIME-Typ text/html.\n")
+                return 1
+            if size_bytes > get_simulation_max_upload_bytes():
+                stderr.write("HTML-Simulationen sind auf 5 MiB begrenzt.\n")
+                return 1
         else:
+            if size_bytes > MATERIAL_FILE_MAX_BYTES:
+                stderr.write("Datei-Materialien sind auf 20 MiB begrenzt.\n")
+                return 1
             try:
                 detected_mime = canonical_material_mime(source.name)
                 mime_type = validate_material_file_type(
@@ -834,7 +854,10 @@ def _materials(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> i
         if status != 200 or not isinstance(intent, dict):
             stderr.write(f"API-Fehler ({status}): {intent}\n")
             return 1
-        upload_headers = {str(k): str(v) for k, v in dict(intent.get("headers") or {}).items()}
+        upload_headers = normalize_upload_intent_headers(
+            dict(intent.get("headers") or {}),
+            fallback_content_type=mime_type,
+        )
         upload_url = str(intent.get("url") or "")
         upload_status, upload_body = _http_bytes("PUT", upload_url, headers=upload_headers, data=content)
         if upload_status < 200 or upload_status >= 300:

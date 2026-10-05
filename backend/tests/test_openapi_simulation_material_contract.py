@@ -36,6 +36,16 @@ def test_material_schemas_expose_simulations_without_breaking_file_uploads() -> 
         "description": "Uploaded material kind. Omitted values remain compatible with file uploads.",
     }
     assert schemas["MaterialFileFinalizeRequest"]["properties"]["body_md"]["type"] == "string"
+    finalize_description = schemas["MaterialFileFinalizeRequest"]["description"]
+    assert "Storage-reported MIME metadata is non-authoritative for simulations" in finalize_description
+
+    for path in (
+        "/api/teaching/units/{unit_id}/sections/{section_id}/materials/finalize",
+        "/api/teaching/units/{unit_id}/modules/{module_id}/materials/finalize",
+    ):
+        description = spec["paths"][path]["post"]["description"]
+        assert "authoritative" in description
+        assert "Storage" in description
 
 
 def test_simulation_player_paths_are_authenticated_html_streams() -> None:

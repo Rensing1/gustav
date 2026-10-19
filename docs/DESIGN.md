@@ -2,13 +2,11 @@
 
 ## Status
 
-Dieses Dokument ist der verbindliche Designvertrag für die Svelte-Oberfläche
-von GUSTAV. Es ersetzt `docs/UI-UX-Leitfaden.md` fachlich vollständig. Die
-Preview-Route unter `/ui-lab` dient als visuelle Referenzfläche; Stitch-Projekt
-`7234666190356643774` ist die kanonische visuelle Quelle für diese Fassung.
+Dieses Dokument ist der verbindliche Designvertrag für die Svelte-Oberfläche von GUSTAV. Es ersetzt `docs/UI-UX-Leitfaden.md` fachlich vollständig.
 
-Primäre Stitch-Referenzen sind die Task- und Graph-Referenzflächen sowie das
-Designsystem `Gustav Logic` im oben genannten Projekt.
+Die am 18. Oktober 2026 abgestimmte Zielgestaltung ist eine ruhige, moderne Arbeitsoberfläche mit vertrauten SaaS-Mustern. Grundlage ist der besprochene Gestaltungsentwurf für Modulansicht und Aufgabenraum mit 8 px Rundung der Inhaltsflächen und 16 px Abstand zwischen Arbeitsbereichen. Die verbindlichen Regeln sind hier vollständig beschrieben; der Vertrag benötigt keinen Zugriff auf den Chatentwurf.
+
+Die Preview-Route `/ui-lab` bleibt die visuelle Referenzfläche für die Umsetzung. Gemeinsame Tokens sowie Modulansicht und Aufgabenraum werden als erste Produktflächen auf diesen Vertrag umgestellt. Die vollständige Sichtabnahme und die Aktualisierung der Referenzbilder stehen noch aus; andere Produktbereiche sind damit nicht vollständig überarbeitet. Das Stitch-Projekt `7234666190356643774` und `Gustav Logic` dokumentieren die vorherige Gestaltung; sie überstimmen die neue Formensprache nicht. Referenzbilder werden erst nach bewusster Umsetzung und visueller Prüfung aktualisiert.
 
 Die Prüfung `frontend/src/lib/styles/token-ownership.test.ts` sichert für die globalen Stylesheets ab, dass Schrift-, Farb-, Radius-, Abstands- und Layouttokens ausschließlich in `theme-tokens.css` definiert werden und alle entsprechenden Referenzen auflösbar sind. Lokale Komponentenstyles sind noch nicht vollständig durch diese Prüfung abgedeckt. Im Dialog verwenden Produkt und UI-Labor denselben `DialogMessage`-Baustein; das Labor nutzt außerdem den produktiven Aufgaben-/Kontextbaustein und Spaltentrenner. Das ersetzt keine vollständige Prüfung aller Produktseiten.
 
@@ -28,17 +26,17 @@ Die Auswahl eines linearen Abschnitts zeigt wie bei Modulen eine flache Kontextl
 
 ### Reparaturvertrag: gemeinsame Aktionen, Felder und Dialoge
 
-Die bestehende Workspace-Aktionsbasis gilt auch für Practice, Kataloge, Profil und Verwaltungsdialoge. Primär, sekundär, dezent und destruktiv unterscheiden ihre Gewichtung, nicht Schriftfamilie oder Grundform. Normale Aktionen und einzeilige Felder sind mindestens 44 px hoch; mehrzeilige Beschriftungen dürfen wachsen. Kleinere Desktopwerkzeuge benötigen eine ausdrückliche kompakte Ausnahme; mobile Symbolaktionen haben mindestens 44 × 44 px Bedienfläche. Akzentflächen erhalten kontrastreiche dunkle Schrift. Navigationslinks bleiben Links, Zustandsänderungen Buttons.
+Die bestehende Workspace-Aktionsbasis gilt auch für Practice, Kataloge, Profil und Verwaltungsdialoge. Primär, sekundär, dezent und destruktiv unterscheiden ihre Gewichtung, nicht Schriftfamilie oder Grundform. Normale Aktionen und einzeilige Felder sind mindestens 44 px hoch; mehrzeilige Beschriftungen dürfen wachsen. Kleinere Desktopwerkzeuge benötigen eine ausdrückliche kompakte Ausnahme; mobile Symbolaktionen haben mindestens 44 × 44 px Bedienfläche. Akzentflächen verwenden das kontrastgeprüfte Text-/Flächenpaar des jeweiligen Themes. Navigationslinks bleiben Links, Zustandsänderungen Buttons.
 
 Radiofelder und Checkboxen stehen kompakt neben ihrer Beschriftung und werden von allgemeinen Vollbreitenregeln ausgenommen. Suchfelder verwenden dieselbe Feldbasis und Theme-Farben wie Formulare. Drawer ordnen ihren Inhalt oben an; freie Bildschirmhöhe streckt keine Eingabefelder.
 
-Dialoge und Drawer verwenden kantige Rahmen, gemeinsame Innenabstände und eine beschriftete Schließen-Aktion. Fokus wechselt hinein, Tab bleibt im obersten Dialog, Escape schließt nur diesen, danach kehrt der Fokus zum noch vorhandenen Auslöser zurück. Löschen liegt im sichtbar beschrifteten Menü „Weitere Aktionen“ und erfordert weiterhin die vorhandene Bestätigung. Öffnen und Bearbeiten bleiben direkt zugänglich.
+Dialoge und Drawer verwenden dezente Konturen, die gemeinsamen Radien und Innenabstände und eine beschriftete Schließen-Aktion. Fokus wechselt hinein, Tab bleibt im obersten Dialog, Escape schließt nur diesen, danach kehrt der Fokus zum noch vorhandenen Auslöser zurück. Löschen liegt im sichtbar beschrifteten Menü „Weitere Aktionen“ und erfordert weiterhin die vorhandene Bestätigung. Öffnen und Bearbeiten bleiben direkt zugänglich.
 
 ### Reparaturvertrag: Anmeldung und Einladungen
 
 Anmeldung und Passwort-Reset bezeichnen das normale Anmeldefeld als „E-Mail-Adresse“ und verwenden E-Mail-Autofill. Registrierung bleibt an die Schul-E-Mail gebunden; IServ und bestehende Kontonamen werden nicht verändert. Keycloak-Seiten teilen genau einen äußeren Rahmen sowie dieselbe Initialisierung und sichtbare Umschaltung von Hell/Dunkel. Felder passen einschließlich Innenabständen und Rahmen in ihre Fläche.
 
-Beim Einstieg über GUSTAV wird ausschließlich die validierte Darstellung `light` oder `dark` übergeben. Ohne diesen Hinweis gilt die auf der Auth-Domain gespeicherte Auswahl, danach die Systemeinstellung. Keine Sitzungs- oder Identitätsdaten werden dafür übergeben. Fehlerseiten bieten einen festen Rückweg zur Anmeldung über den konfigurierten GUSTAV-Ursprung; freie Rücksprungadressen sind dafür nicht zulässig. Gültige und ungültige Einladungen verwenden dieselbe kantige, kontrastreiche Gestaltung. Die Auth-Ressourcen erhalten ihre Grundwerte beim Build aus `theme-tokens.css`, ohne Abrufe zwischen den Oberflächen zur Laufzeit.
+Beim Einstieg über GUSTAV wird ausschließlich die validierte Darstellung `light` oder `dark` übergeben. Ohne diesen Hinweis gilt die auf der Auth-Domain gespeicherte Auswahl, danach die Systemeinstellung. Keine Sitzungs- oder Identitätsdaten werden dafür übergeben. Fehlerseiten bieten einen festen Rückweg zur Anmeldung über den konfigurierten GUSTAV-Ursprung; freie Rücksprungadressen sind dafür nicht zulässig. Gültige und ungültige Einladungen verwenden dieselbe ruhige, kontrastreiche Gestaltung. Die Auth-Ressourcen erhalten ihre Grundwerte beim Build aus `theme-tokens.css`, ohne Abrufe zwischen den Oberflächen zur Laufzeit.
 
 ### Reparaturvertrag: H5P-Arbeitsflächen
 
@@ -79,29 +77,22 @@ Detailpanel bleibt davon unberührt.
 
 Die Live-Tabelle und das Schülerdetail stehen auch auf großen Bildschirmen untereinander und nutzen dieselbe volle Arbeitsbreite. Innerhalb des Details stehen Aufgabenstellung und Antwortbereich auf breiten Flächen nebeneinander, auf schmalen untereinander. Die Aufgabenbreiten bleiben kompakt; zusätzliche Arbeitsbreite streckt die Bewertungszellen nicht.
 
-GUSTAV folgt einer präzisen, kontrastreichen und technisch-scharfen
-Produktsprache. Es ist kein
-freundlich-rundes EdTech-Produkt und keine warme Editorial-Oberfläche mehr.
+GUSTAV ist eine ruhige, moderne Arbeitsanwendung. Vertraute SaaS-Muster für Navigation, Formulare, Reiter, Dialoge und Arbeitsflächen erleichtern die Bedienung und eine konsistente Umsetzung durch Menschen und KI-Agenten.
 
 Verbindliche Zielwahrnehmung:
 
-- Präzision
-- Klarheit
-- Eigenständigkeit
+- klar und gut lesbar
+- ruhig und konzentriert
+- modern und verlässlich
 
-Verbindliche Negativrichtung:
+Logo, Orange als Akzentfarbe und eine konsistente Sprache tragen die Wiedererkennbarkeit. Gemeinsame Komponenten und wenige eindeutige Regeln haben Vorrang vor individuellen Gestaltungsideen pro Seite. Die Aufgabenfläche ist der Primäranker; der Graph verwendet dieselben Farben, Schriften und Bedienelemente.
 
-- nicht weichgespült
-- nicht generisch-SaaS
-- nicht verspielt
-
-Der Primäranker ist die Aufgabenfläche. Der Graph übernimmt dieselbe Sprache,
-ordnet sich aber der Task-Fläche gestalterisch unter.
+Die Weiterentwicklung gestaltet vorhandene Inhalte und Abläufe. Sie verlangt keine neuen Lernziele, Aufgabentitel, Zeitangaben oder sonstigen Pflichtangaben von Lehrkräften. Der Entwurf ist keine Erlaubnis, fachliche Zustände, Berechtigungen, Abgaben oder Lernpfade zu verändern.
 
 ## 2. Rollen und Grundhaltung
 
 GUSTAV optimiert weiterhin im Zweifel zuerst für Lernende. Lehrkraftflächen
-teilen jedoch dieselbe harte Formensprache und denselben Kontrast.
+teilen dieselben Flächen, moderaten Rundungen und zugänglichen Kontraste.
 
 Verbindliche Regeln:
 
@@ -126,15 +117,15 @@ Zusätzliche globale Navigationsleisten sind nicht erlaubt.
 
 ### 3.2 Top-Bar
 
-Die Top-Bar ist technisch-präzise und kontrastreich.
+Die Top-Bar ist kompakt und gegenüber der eigentlichen Arbeit zurückhaltend.
 
 Regeln:
 
-- klare Objektkanten statt weicher Flächen
-- aktiver Navigationszustand bleibt typografisch markiert
-- Primärnavigation ist textbasiert
-- Marke darf präsenter sein als zuvor
-- Meta und Steuerung nutzen technische Kleinformate
+- neutrale Oberfläche mit feiner Trennlinie zum Workspace
+- aktiver Navigationszustand bleibt typografisch und durch eine dezente Markierung erkennbar
+- Primärnavigation ist textbasiert und verwendet die gemeinsame Leseschrift
+- Marke, Navigation und Kontosteuerung teilen eine klare Ausrichtung
+- mobile Kopfbereiche umbrechen geordnet; wiederholte Titel und zusätzliche Leerzeilen entfallen
 
 ### 3.3 Breadcrumbs
 
@@ -144,7 +135,7 @@ Regeln:
 
 - Schülerpfad bleibt `Lernraum -> Kurs -> Lerneinheit`
 - Breadcrumbs sitzen im Lernfluss in der Top-Bar
-- Breadcrumbs sind klein, technisch und klar lesbar
+- Breadcrumbs sind zurückhaltend, klar lesbar und verwenden die gemeinsame Leseschrift
 - Breadcrumbs enthalten keine Aktionen
 
 ### 3.4 Seitenkopf
@@ -156,7 +147,7 @@ Regeln:
 - kein Hero-Pattern
 - Primäraktionen sitzen im Seitenkopf
 - Sekundäraktionen bleiben sichtbar, aber schwächer
-- Seitenkopf nutzt klare Kante und kompakte Meta-Zeile
+- Seitenkopf nutzt eine klare Titelhierarchie; eine Meta-Zeile erscheint nur bei zusätzlichem Informationswert
 
 ### 3.5 Arbeitsbreiten
 
@@ -189,78 +180,72 @@ Light und Dark bleiben gleichrangig.
 Regeln:
 
 - beide Modi teilen exakt dieselbe Kompositionslogik
-- Light ist off-white, dunkel konturiert und orange akzentuiert
-- Dark ist tief, kontrastreich und technisch, nicht weich getönt
+- Light verwendet einen dezenten neutralen Seitenhintergrund, helle Inhaltsflächen und orange Akzente
+- Dark verwendet abgestufte dunkle Flächen und zurückhaltende Konturen; Text und Bedienelemente bleiben kontrastreich
 - neue Komponenten ohne definierte Dark-Regeln sind unvollständig
 
 ## 5. Farbe
 
-Die Startpalette orientiert sich am Stitch-Designsystem `Gustav Logic`.
+Die folgende Zielpalette übernimmt die neutralen Flächen des abgestimmten Entwurfs. Werte werden bei der Umsetzung zentral in `theme-tokens.css` gepflegt. Dieses Dokument ändert noch keine Laufzeittokens. Akzentflächen und ihre Vordergrundfarbe bilden immer ein Paar; vor einer Umsetzung sind die Kontraste in beiden Themes zu prüfen.
 
 ### 5.1 Light
 
-- `--color-bg-base`: `#f9f9f9`
+- `--color-bg-base`: `#f6f7f9`
 - `--color-bg-surface`: `#ffffff`
-- `--color-bg-muted`: `#f3f3f4`
-- `--color-bg-soft`: `rgba(255, 81, 47, 0.08)`
-- `--color-text`: `#1a1c1c`
-- `--color-text-muted`: `#5c5c5c`
-- `--color-link`: `#b41f00`
-- `--color-link-hover`: `#da3717`
-- `--color-accent`: `#ff512f`
-- `--color-accent-soft`: `rgba(255, 81, 47, 0.14)`
-- `--color-border`: `#1b1b1b`
-- `--color-line`: `rgba(27, 27, 27, 0.14)`
-- `--color-success`: `#387f50`
-- `--color-success-soft`: `rgba(56, 127, 80, 0.14)`
-- `--color-warning`: `#8d5a00`
-- `--color-warning-soft`: `rgba(141, 90, 0, 0.14)`
-- `--color-danger`: `#ba1a1a`
-- `--color-danger-soft`: `rgba(186, 26, 26, 0.14)`
+- `--color-bg-muted`: `#f0f2f5`
+- `--color-bg-soft`: `#fff0e9`
+- `--color-text`: `#242830`
+- `--color-text-muted`: `#626b78`
+- `--color-link`: `#bd3d1f`
+- `--color-accent`: `#c84425`, mit `#ffffff` als Vordergrund auf gefüllten Primäraktionen
+- `--color-accent-soft`: `#fff0e9`
+- `--color-border`: `#e4e7ec`
+- `--color-line`: `#e4e7ec`
+- `--color-success`: `#356a50`
+- `--color-success-soft`: `#edf5ef`
 
 ### 5.2 Dark
 
-- `--color-bg-base`: `#121212`
-- `--color-bg-surface`: `#1a1a1a`
-- `--color-bg-muted`: `#1d1d1d`
-- `--color-bg-soft`: `rgba(255, 81, 47, 0.10)`
-- `--color-text`: `#f0f1f1`
-- `--color-text-muted`: `#c6c6c6`
-- `--color-link`: `#ff866b`
-- `--color-link-hover`: `#ffb4a4`
-- `--color-accent`: `#ff512f`
-- `--color-accent-soft`: `rgba(255, 81, 47, 0.20)`
-- `--color-border`: `#f0f1f1`
-- `--color-line`: `rgba(240, 241, 241, 0.18)`
+- `--color-bg-base`: `#15171b`
+- `--color-bg-surface`: `#202329`
+- `--color-bg-muted`: `#2a3039`
+- `--color-bg-soft`: `#3b2b26`
+- `--color-text`: `#edf0f4`
+- `--color-text-muted`: `#aeb7c6`
+- `--color-link`: `#ff997c`
+- `--color-accent`: `#ff9b7e`, mit `#281910` als Vordergrund auf gefüllten Primäraktionen
+- `--color-accent-soft`: `#3b2b26`
+- `--color-border`: `#363c46`
+- `--color-line`: `#363c46`
+- `--color-success`: `#9bceb0`
+- `--color-success-soft`: `#24382d`
 
 ### 5.3 Farbnutzung
 
-- Orange markiert aktive Lernmomente und primäre Aktionen.
-- Grün markiert Systemlogik, AI oder Erfolg.
-- Linien und Rahmen bleiben monochrom, Akzente gezielt.
+- Orange hebt primäre Aktionen und die aktive Auswahl hervor. Ein offener oder begonnener Zustand erhält keine konkurrierende große Akzentfläche.
+- Zustände werden verständlich beschriftet; Farbe und Symbole unterstützen die Bedeutung. Grün als Erfolg und eine grün getönte KI-Nachricht werden durch Beschriftung und Kontext eindeutig unterschieden.
+- Konturen von Inhaltsflächen und dekorative Trennlinien sind dezent. Erforderliche Feldgrenzen, Fokus- und Auswahlmarkierungen erhalten stärkere, kontrastgeprüfte Farben; die leichten Strukturfarben reichen dafür allein nicht aus.
+- Warnungen und Fehler behalten eigene semantische Tokenpaare für Light und Dark. Bestehende Werte werden bei der Umsetzung auf den neuen Flächen geprüft, nicht ersatzlos entfernt.
+- Hover verändert Fläche oder Textfarbe zurückhaltend; Farben entstehen aus gemeinsamen Tokens statt lokalen Einzelwerten.
 - Es gibt keine zonenspezifischen Farbwelten für Rollen.
 
 ## 6. Typografie
 
-Konkrete Implementierungen dürfen leicht variieren, die Rollen sind
-verbindlich.
+Die Oberfläche verwendet eine gut lesbare Sans-Serif als gemeinsame Schriftfamilie. Hierarchie entsteht durch Größe, Gewicht, Abstand und Farbe.
 
 Rollen:
 
-- `Display Sans`
-  - technisch, breit, präzise
-  - für Titel, Phasenüberschriften und starke Einstiegsmomente
-- `Reading Sans`
-  - hoch lesbar und neutraler für längere Inhalte
-- `Technical Mono`
-  - für Kicker, Meta, Labels, Status, Breadcrumbs und Werkzeuge
+- `Reading Sans`: Standard für Inhalte, Navigation, Buttons, Formularbeschriftungen, Status und Breadcrumbs.
+- `Display Sans`: verwendet dieselbe Familie mit stärkerem Gewicht für Seiten- und Modultitel; keine eigenständige technisch-breite Titelschrift.
+- `Technical Mono`: bleibt Code, technischen Kennungen und fachlich notwendigen tabellarischen Ausrichtungen vorbehalten.
 
 Regeln:
 
-- keine Serif als Leitmotiv
-- Meta-Texte bevorzugt in Monospace/Technical-Sprache
-- Headlines sind kompakt, kontrastreich und enger gesetzt
-- UI-Labels dürfen häufiger uppercase erscheinen als bisher
+- Standardtext und Bedienelemente verwenden 14–16 px, längerer Lesetext und Eingabefelder mindestens 16 px; Metadaten 12–14 px.
+- Seitentitel verwenden ungefähr 24–28 px, Bereichstitel 16–20 px. Überschriften im Material bleiben der umgebenden Modulhierarchie untergeordnet.
+- Fließtext verwendet eine Zeilenhöhe von ungefähr 1,5–1,7 und bleibt auf etwa `68ch` begrenzt.
+- Beschriftungen stehen in normaler deutscher Schreibweise. Versalien und zusätzliche Laufweite sind kurzen, sparsam eingesetzten Bereichsmarkern vorbehalten.
+- Lesbarkeit hat Vorrang vor Dichte. Zoom und größere Schrift dürfen keine Inhalte oder Aktionen abschneiden.
 
 ## 7. Form, Raum und Bewegung
 
@@ -277,46 +262,75 @@ Die bestehende Spacing-Skala bleibt erhalten:
 - `--space-7`: `3rem`
 - `--space-8`: `4rem`
 
+Der Standardabstand zwischen benachbarten Arbeitsbereichen beträgt `--space-4` (16 px). Zusammengehörige Elemente verwenden 4–8 px, Inhaltsflächen 16–24 px Innenabstand und größere Abschnittswechsel 24–32 px. Die Skala beschreibt Beziehungen; freie Höhe wird nicht durch gestreckte Felder oder dekorative Leerzonen gefüllt.
+
 ### 7.2 Radius
 
-Radien sind praktisch deaktiviert:
+Zielwerte für die gemeinsamen Tokens:
 
-- `--radius-s`: `0`
-- `--radius-m`: `0`
-- `--radius-l`: `2px`
-- `--radius-xl`: `4px`
+- `--radius-s`: `4px` für kleine Markierungen
+- `--radius-m`: `8px` für Buttons, Felder und Inhaltsflächen
+- `--radius-l`: `12px` für Dialoge und Popover
+- `--radius-xl`: `12px`; größere Rundungen sind kein Standardmuster
 
-Default-Regel:
-
-- neue Komponenten starten mit `0px`
-- Abweichungen brauchen Begründung
+Neue Inhaltsflächen verwenden 8 px. Avatare dürfen kreisförmig bleiben; Modusumschalter und gewöhnliche Aktionen erhalten keine beliebig wechselnden Pillenformen.
 
 ### 7.3 Flächen
 
-- Interactive Objects erhalten klare Rahmen
-- große Flächen bleiben ruhig und hell
-- Tiefe entsteht primär über Kontrast und harte Schatten
-- Standard-Schatten folgen dem Objektprinzip, nicht dem SaaS-Prinzip
+- Ein neutraler Seitenhintergrund und wenige klar abgegrenzte Inhaltsflächen bilden die Grundstruktur.
+- Inhaltsflächen verwenden eine feine Kontur und standardmäßig keinen Schatten. Unterabschnitte werden mit Abstand oder Trennlinien gegliedert, nicht jeweils neu eingerahmt.
+- Buttons, Eingabefelder und ausgewählte Elemente bleiben als bedienbare Objekte erkennbar. Nicht jedes Textelement erhält eine Karte.
+- Subtile Schatten kennzeichnen primär schwebende Menüs, Popover und Dialoge. Harte versetzte Schatten und dekorative Tiefenstaffelungen entfallen.
+- Das Punktraster ist auf die Graphfläche begrenzt und bleibt dort zurückhaltend. Lesen, Schreiben, Rückmeldungen und gewöhnliche Formulare verwenden ruhige Hintergründe.
 
 ### 7.4 Motion
 
-- Motion bleibt subtil
-- Hover und Fokus dürfen deutlicher und technischer reagieren
-- kleine Translate-/Shadow-Verschiebungen sind erlaubt
+- Hover-, Fokus- und Auswahlzustände reagieren subtil und konsistent.
+- Kurze Farb- und Konturübergänge unterstützen die Bedienung; Buttons springen nicht durch Translate- oder Schatteneffekte.
+- Bewegung ist für das Verständnis nie erforderlich und respektiert `prefers-reduced-motion`.
 
 ## 8. UI-Sprache
 
-Die UI-Sprache bleibt kurz, sachlich und direkt.
+Die UI-Sprache ist kurz, verständlich und situationsbezogen. Sie benennt Handlungen und Zustände mit vertrauten Begriffen aus dem Produkt. Lernende werden einheitlich mit „du“ angesprochen.
 
-Zusätzliche Regeln:
+### 8.1 Textökonomie
 
-- technisch-präzise statt pädagogisch-begleitend
-- Actions eher knapp und objektartig
-- Status- und Metatexte dürfen technischer klingen
-- `accent` für Primäraktionen
+- Jeder UI-Text erfüllt einen konkreten Zweck: eine Handlung benennen, eine benötigte Information vermitteln oder einen relevanten Zustand beziehungsweise eine Folge erklären.
+- Überschrift, Beschreibung und Aktion wiederholen nicht dieselbe Aussage. Bereits sichtbarer Kontext wird nicht erneut erläutert.
+- Vertraute Bedienelemente benötigen keine Gebrauchsanweisung. Formulierungen wie „Klicke hier, um …“, Einleitungen über gewöhnlichen Formularen und Erklärungen normaler Reiter entfallen.
+- Beschriftungen sind kurz und eindeutig. „Speichern“ genügt bei klarem Bearbeitungskontext; bei einer folgenreichen Aktion wie „Kurs löschen“ wird das betroffene Objekt ausdrücklich genannt.
+- Hinweise erscheinen am relevanten Ort und im relevanten Zustand. Statische Hilfetexte sind nur zulässig, wenn eine tatsächliche Anforderung oder Unklarheit sonst verborgen bliebe.
+- Leere Flächen werden nicht mit Begrüßungen, Motivation, Tipps, Zusammenfassungen oder künstlichen Kennzahlen gefüllt. Ein leerer Zustand nennt bei Bedarf knapp den Grund und eine verfügbare nächste Aktion.
+- Aufgabenstellungen, Materialien und fachlich notwendiges Feedback sind Lerninhalte. Sie werden durch diese Regel weder automatisch gekürzt noch inhaltlich verändert.
+- Kürze darf Sicherheit und Zugänglichkeit nicht beeinträchtigen: notwendige Feldbeschriftungen, Formatvorgaben, Fehlermeldungen, Hinweise zu Datenverlust, Datenschutz und endgültigen Aktionen bleiben erhalten. Symbole erhalten verständliche zugängliche Namen; Platzhalter ersetzen keine Labels. Pflichtinformationen werden nicht ausschließlich in Tooltips versteckt.
+
+### 8.2 Verbindliche Regel für KI-Agenten
+
+Neue UI-Texte benötigen einen konkreten Informationsbedarf. Ergänze keine erklärenden Untertitel, Hilfetexte oder Statusmeldungen allein deshalb, weil Platz vorhanden ist. Prüfe zuerst, ob Struktur, Platzierung oder ein bestehendes Bedienelement die Information bereits vermitteln. Entferne redundante Texte vor der Fertigstellung.
+
+Die Prüfung erfolgt bei jeder UI-Änderung:
+
+1. Welche Entscheidung oder Handlung unterstützt dieser Text?
+2. Steht dieselbe Information bereits sichtbar im Kontext?
+3. Reichen eine eindeutige Beschriftung und eine bessere Anordnung aus?
+4. Bleibt ohne den Text eine notwendige Information zu Sicherheit, Zugänglichkeit oder Bedienung verborgen?
+
+Fehlt ein konkreter Zweck, entfällt der Text. Ein längerer Text braucht einen tatsächlichen Informationsbedarf, keine rein dekorative Begründung.
+
+| Situation | Bevorzugte Darstellung |
+| --- | --- |
+| Formular mit bereits sichtbarer Überschrift „Kurseinstellungen“ | Felder und „Speichern“; keine zusätzliche Einleitung „Hier kannst du deine Kurseinstellungen bearbeiten.“ |
+| Reiter „Materialien“ | Materialliste; keine unmittelbar wiederholte Überschrift mit gleichem Wortlaut |
+| Aufgabe mit vorhandener Startaktion | „Aufgabe beginnen“; kein zusätzlicher Satz „Klicke auf den Button, um die Aufgabe zu beginnen.“ |
+| Dateiauswahl mit einer notwendigen Formateinschränkung | „Bild oder PDF“ unmittelbar am Feld |
+| Fehlgeschlagenes Speichern | Knapp benannter Fehler und eine tatsächlich mögliche Wiederherstellungsaktion |
+
+### 8.3 Aktionen
+
+- `accent` für Primäraktionen im jeweiligen Arbeitskontext
 - `quiet` für normale Sekundäraktionen
-- `subtle` für kleine, nicht-dominante Nebenaktionen wie `Pausieren`,
-  `Schließen` oder `Bearbeiten` in dichten UI-Kontexten
+- `subtle` für kleine, nicht-dominante Nebenaktionen wie `Pausieren`, `Schließen` oder `Bearbeiten`
+- Aktionen teilen Schriftfamilie, Radien und Höhen; Gewichtung entsteht durch Farbe und Kontur, nicht durch wechselnde Formensprache.
 
 ## 9. Accessibility
 
@@ -327,7 +341,7 @@ Regeln:
 - hohe Kontraste in Light und Dark
 - klare Fokuszustände
 - vollständige Tastaturbedienbarkeit
-- semantische Struktur bleibt trotz technischer Stilrichtung erhalten
+- semantische Struktur, zugängliche Namen und notwendige Hinweise bleiben unabhängig von visueller Reduktion erhalten
 
 ### 9.1 Meldungen und Validierungsfehler
 
@@ -497,8 +511,8 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
 Lehrkraft- und Schüleransicht verwenden für dieselbe modulare Lerneinheit dieselbe Graphgeometrie: Phasenreihenfolge, relative Knotenpositionen, Knotengrößen und Anschlusspositionen stimmen überein. Statusfarben, Fortschritt, Auswahl und Bearbeitungsaktionen sind dagegen rollenbezogen. Die gemeinsame Steuerung trennt einen lesbaren Startfokus von der bewussten `Gesamtansicht`; diese darf auch auf schmalen Bildschirmen unter die Lesevergrößerung herauszoomen. Nach dem einmaligen Startfokus setzen Datenaktualisierungen den gewählten Ausschnitt nicht automatisch zurück. Lernende erhalten keinen Schalter zum Aktivieren der Knotenbearbeitung.
 
 - Graph bleibt Phasen-zentriert
-- Knoten sind harte, klar gerahmte Objekte
-- aktiver Status ist orange
+- Knoten verwenden die gemeinsamen 8-px-Radien, ruhige Flächen und dezente Konturen; Titel dominieren gegenüber Nummern und Bestandszahlen
+- aktive Auswahl ist orange markiert; Bearbeitungszustand und Tastaturfokus bleiben davon unterscheidbar
 - gesperrte Zustände sind reduziert und monochrom
 - bereits geöffnete Module sind erkennbar markiert
 - ein Modul wird höchstens einmal geöffnet und in der Leseansicht nach seiner
@@ -514,14 +528,12 @@ Lehrkraft- und Schüleransicht verwenden für dieselbe modulare Lerneinheit dies
 - Kopfzeile, Toolbar und Lernraum verwenden dasselbe zentrale Raster von
   höchstens `80rem`. Vollbreiten-Ausbrüche des Lernraums sind nicht zulässig.
 - Der Modultitel ist der klare Einstiegspunkt eines Moduls
-- `MATERIALIEN` und `AUFGABEN` bleiben technische Marker, keine konkurrierenden
-  Subheadlines
+- `Materialien` und `Aufgaben` sind zurückhaltende Bereichsüberschriften in normaler Leseschrift; der Modultitel bleibt die stärkste Ebene
 - Zwei Zeilen für lange Modultitel sind erlaubt; der Modulkopf wächst nicht
   beliebig
 - Der Abstand vom Modulkopf zum ersten Abschnitt ist größer als der Abstand vom
   Abschnittslabel zu seinem Block
-- Rückmeldung, Auswertung und die zugehörige Abgabe erscheinen als kantige,
-  technische Disclosure-Familie, niemals als Pill- oder Tabnavigation
+- Rückmeldung, Auswertung und die zugehörige Abgabe verwenden gemeinsame, ruhige Offenlegungen mit feinen Trennlinien; ihre fachliche Hierarchie bleibt erhalten
 - kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile statt
   redundanter Status-/Titellabels. Die Vorschau wird lesbar aus der
   Markdown-Aufgabenstellung abgeleitet.
@@ -529,7 +541,7 @@ Lehrkraft- und Schüleransicht verwenden für dieselbe modulare Lerneinheit dies
   Zeilen belegen und erhalten den sichtbaren Hinweis `Weitere Angaben in der
   Aufgabe`. Unter `48rem` steht die Startaktion darunter und nimmt die
   verfügbare Breite ein.
-- Status wird primär über Balken und Tönung getragen
+- Relevante Zustände erhalten eine knappe verständliche Beschriftung; Balken, Tönung oder Symbol unterstützen sie. Eine bereits eindeutige Aktionsbeschriftung wird nicht durch ein gleichlautendes Statuslabel wiederholt.
 - Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline.
   In der kompakten Ansicht bleibt sie für native Text-/Dateiaufgaben, H5P und
   KI-Dialoge direkt bei der Bearbeitung sichtbar. In der zweispaltigen Ansicht
@@ -736,7 +748,7 @@ Verbindliche Regeln:
 - Genau die jüngste beantwortbare KI-Nachricht trägt die sichtbare Kennzeichnung
   `Aktuelle Frage` und eine stärkere Kontur. Frühere Beiträge bleiben vollständig
   verfügbar, erhalten aber keine konkurrierende Hervorhebung.
-- Sprecher werden technisch und eindeutig bezeichnet. Verwendete Satzanfänge
+- Sprecher werden knapp und eindeutig bezeichnet. Verwendete Satzanfänge
   bleiben als Hilfestellung sichtbar.
 - Satzanfänge stehen ausschließlich im Hybridmodus direkt am Eingabebereich als
   optionale Hilfestellungen. Im Freitextmodus werden keine Ersatzfragen
@@ -794,11 +806,14 @@ In der Druckfassung erhalten Abschnitts-/Modulüberschriften einen einheitlichen
 
 ## 13. Verbotene Alt-Muster
 
-- weiche SaaS-Radien
-- warm-editoriale Blau/Papier-Sprache
-- diffuse Schatten
-- pillige Modusumschalter als Default
-- generische Card-Haufen ohne klare Objektlogik
+- harte versetzte Schatten und schwere Rahmen als Standard auf jeder Fläche
+- technische Monospace-Schrift, Versalien und gesperrte Beschriftungen als allgemeine UI-Sprache
+- Punktraster hinter Lese- und Schreibinhalten
+- wechselnde Rundungen, übergroße Pillen und individuelle Buttonformen pro Seite
+- verschachtelte Karten ohne funktionale Gruppierung
+- dekorative Verläufe, übergroße Überschriften und unnötige Dashboard-Kennzahlen
+- erklärende Untertitel, Hilfetexte und Statusmeldungen ohne zusätzlichen Informationswert
+- lokale Farb- und Abstandsvarianten außerhalb der gemeinsamen Tokens
 
 ## 14. Technische Pflege des Designsystems
 
@@ -827,4 +842,28 @@ Verbindliche Regeln:
 - Benachbarte Bedienelemente mit derselben Funktionsebene teilen gemeinsame Chrom-Regeln; Theme- und Account-Schalter der Top-Bar sind die Referenz dafür.
 - Die ehemalige warme Papier-/Petrolpalette darf nicht lokal über hart codierte Werte zurückkehren.
 
-Das UI-Labor und ausgewählte vollständige Arbeitsansichten besitzen freigegebene Light- und Dark-Referenzbilder für Desktop und Mobil. Der Moduleditor wird als echte, authentifizierte Arbeitsansicht bei 1920 × 1080, 1024 × 768 und 390 × 844 Pixeln geprüft. `make test-visual-smoke` vergleicht diese Referenzen, während `make update-visual-baselines` ausschließlich für eine beabsichtigte und anschließend visuell geprüfte Designänderung verwendet wird.
+Das UI-Labor und ausgewählte vollständige Arbeitsansichten besitzen freigegebene Light- und Dark-Referenzbilder für Desktop und Mobil. Diese dokumentieren bis zur expliziten visuellen Migration den bisherigen Implementierungsstand. Die Zielgestaltung wird zunächst an Modulansicht und Aufgabenraum umgesetzt und geprüft, anschließend über gemeinsame Komponenten auf weitere Flächen übertragen; eine bloße Aktualisierung der Referenzbilder ersetzt keine Prüfung. Der Moduleditor wird als echte, authentifizierte Arbeitsansicht bei 1920 × 1080, 1024 × 768 und 390 × 844 Pixeln geprüft. `make test-visual-smoke` vergleicht diese Referenzen, während `make update-visual-baselines` ausschließlich für eine beabsichtigte und anschließend visuell geprüfte Designänderung verwendet wird.
+
+
+### Seitenkomposition der Lernansichten
+
+Die Aufgabenansicht hat eine einzige Hauptüberschrift für die aktive Aufgabe und einen kompakten Rückweg zum Modul. Eine zusätzliche Lernpfad-Leiste entfällt während der Bearbeitung; Layout-Einstellungen bleiben erreichbar. Aufgabenstellung und Materialien bilden den unterstützenden Kontext, die Antwort erhält die zusammenhängende hervorgehobene Arbeitsfläche. Überschriften in Materialauszügen bleiben der Aufgabenhierarchie visuell untergeordnet. Die Antwortform ist direkt an der Eingabe angeordnet und benötigt keine zusätzliche sichtbare Erklärung. Während der Bearbeitung ist die Rückmeldungsanforderung die Primäraktion; Überarbeiten ist eine Nebenaktion. Bestehende Bedingungen für die endgültige Abgabe bleiben unverändert.
+
+In der modularen Leseansicht trägt der Modultitel die visuelle Hierarchie; der bereits im Breadcrumb sichtbare Lerneinheitstitel wird nicht nochmals groß wiederholt. Das Inhaltsverzeichnis ist eine zurückhaltende Navigation statt einer zusätzlichen umrahmten Inhaltskarte. Auf schmalen Bildschirmen bleiben Kopfzeile und Breadcrumb kompakt, ohne erreichbare Navigation oder Bedienelemente zu entfernen.
+
+
+### Inhaltsnavigation in der Modulansicht
+
+Die Modulnavigation folgt der Reihenfolge der Leseansicht: Materialien, dann Aufgaben. Ein Dokument- bzw. Stiftsymbol unterscheidet die Inhaltstypen; ein Häkchen wird nicht als allgemeines Aufgabensymbol verwendet, weil es Abschluss suggeriert. Der aktuelle Eintrag wird anhand der Leseposition mit dezenter Akzentfläche, stärkerer Schrift und `aria-current="location"` markiert. Beim Wechsel der Leseposition in ein anderes Modul öffnet sich dessen Gruppe; Modulgruppen bleiben manuell aufklappbar. Dekorative Striche vor jedem Eintrag entfallen.
+
+Bis einschließlich 64 rem startet die Navigation geschlossen als kompakte Zeile „Inhalt“ mit aktuellem Modulnamen. Nach Auswahl eines Eintrags schließt sie und fokussiert den Zielinhalt. Auf größeren Ansichten bleibt die Navigation sichtbar. Zielpositionen berücksichtigen die feste Kopfzeile, Einträge und Gruppen bleiben mindestens 44 px hoch.
+
+### KI-Dialoge
+Im laufenden Gespräch bleiben sämtliche Beiträge ohne Aufklappen zugänglich. Ada steht links mit ruhiger Rollenbeschriftung; eigene Antworten stehen rechts auf einer dezenten neutralen Fläche. Farbbalken und dekorative Avatare entfallen. Nach der Abgabe steht die Abschlussantwort zuerst. Gesprächsverlauf, Rückmeldung und Auswertung lassen sich unabhängig aufklappen. Fehlende Abschlussantworten erzeugen keinen leeren Platzhalter. Die vollständige Referenzlesefassung bleibt verfügbar.
+
+Der optionale Abschlussauftrag wird im KI-Dialog früh durch die kurze Abfolge „Gespräch → Abschlussaufgabe → Abgabe“ angekündigt. Aktionen benennen den nächsten Schritt: „Zur Abschlussaufgabe“, ohne Abschlussauftrag „Zur Abgabe“. Der Auftrag steht sowohl beim Schreiben als auch in der gespeicherten Abgabe direkt bei der eigenen Antwort. „Fazit“ oder „Zusammenfassung“ werden nicht pauschal unterstellt. Gesprächsbeiträge bleiben Teil der Abgabe.
+
+### Gemeinsame Seitennavigation
+Modulansicht und Aufgabenräume verwenden dieselbe `WorkspaceOutline` für Modulgruppen, Materialzeilen, Symbole und aktive Auswahl. Dialog-, Text- und Dateiaufgaben binden sie über `LearnerTaskContext` ein. Materialien stehen vor eigenen Abgaben. Im Aufgabenraum öffnet die Auswahl den gemeinsamen Referenzleser; die Rückkehr führt zur laufenden Bearbeitung. Auf schmalen Bildschirmen bleibt die Navigation im vorhandenen Materialien-Bereich direkt sichtbar, ohne eine zusätzliche Einklappebene. Dialogspezifische Layoutregeln dürfen keine eigene Navigationsoptik erzeugen.
+
+Abgeschlossene KI-Dialoge verwenden dieselbe Abgabedarstellung wie die Modulansicht. Auftrag und eigene Abschlussantwort bleiben sichtbar; Rückmeldung ist in der Ergebnisansicht geöffnet, der Verlauf aufklappbar. Die Ergebnisansicht wächst mit dem Inhalt statt die Gesprächsfläche auf volle Höhe zu strecken. Eine sichtbare Rückkehraktion nutzt das bestehende Rücksprungziel. Ergebnisadressen laden ausschließlich die Sitzung der zugehörigen Abgabe und starten keinen neuen Dialog.

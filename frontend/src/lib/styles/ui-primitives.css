@@ -1,6 +1,6 @@
 .app-topbar {
   background: var(--color-bg-base);
-  border-bottom: 2px solid var(--color-border);
+  border-bottom: 1px solid var(--color-line);
 }
 
 @supports (color: color-mix(in srgb, black, white)) {
@@ -92,7 +92,7 @@
   padding: 0.7rem 0.85rem;
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .preview-reference-banner strong {
@@ -139,11 +139,11 @@
 
 .workspace-field span {
   color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .workspace-field input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
@@ -152,8 +152,8 @@
   width: 100%;
   min-width: 0;
   min-height: var(--layout-control-min);
-  border: 1px solid var(--color-border);
-  border-radius: 0;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-m);
   padding: 0.7rem 0.78rem;
   background: var(--color-bg-surface);
   color: var(--color-text);
@@ -208,7 +208,7 @@ fieldset.workspace-field {
 .preview-theme-toggle button {
   border-radius: var(--radius-s);
   border: 1px solid var(--color-border);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .workspace-top-action,
@@ -218,10 +218,10 @@ fieldset.workspace-field {
 .workspace-field input,
 .workspace-field select,
 .workspace-field textarea {
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: normal;
 }
 
 .workspace-top-action--accent,
@@ -229,7 +229,7 @@ fieldset.workspace-field {
 .design-auth-frame__action,
 .preview-theme-toggle button[data-current="true"] {
   background: var(--color-accent);
-  color: #ffffff;
+  color: var(--color-on-accent);
 }
 
 .workspace-top-action--accent:hover,
@@ -237,9 +237,9 @@ fieldset.workspace-field {
 .design-auth-frame__action:hover,
 .preview-theme-toggle button[data-current="true"]:hover {
   background: var(--color-link-hover);
-  color: #ffffff;
-  transform: translate(1px, 1px);
-  box-shadow: 2px 2px 0 0 rgba(27, 27, 27, 0.98);
+  color: var(--color-on-accent);
+  transform: none;
+  box-shadow: none;
 }
 
 .workspace-top-action--quiet,
@@ -266,7 +266,7 @@ fieldset.workspace-field {
   color: var(--color-text);
   text-decoration: none;
   cursor: pointer;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .workspace-top-action:hover,
@@ -277,8 +277,8 @@ fieldset.workspace-field {
 .theme-toggle:focus-visible,
 .preview-theme-toggle button:hover,
 .preview-theme-toggle button:focus-visible {
-  transform: translate(1px, 1px);
-  box-shadow: 2px 2px 0 0 rgba(27, 27, 27, 0.98);
+  transform: none;
+  box-shadow: none;
   text-decoration: none;
 }
 
@@ -316,10 +316,10 @@ fieldset.workspace-field {
 .workspace-link-action--subtle {
   min-height: var(--layout-control-min);
   padding: 0.24rem 0.58rem;
-  font-size: 0.7rem;
+  font-size: var(--font-size-sm);
   background: var(--color-bg-surface);
   border-color: var(--color-line);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
   color: var(--color-text-muted);
 }
 
@@ -328,7 +328,7 @@ fieldset.workspace-field {
   .workspace-link-action--subtle {
     background: color-mix(in srgb, var(--color-bg-surface) 92%, white 8%);
     border-color: color-mix(in srgb, var(--color-border) 72%, white 28%);
-    box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
+    box-shadow: none;
     color: color-mix(in srgb, var(--color-text) 82%, var(--color-text-muted) 18%);
   }
 }
@@ -338,7 +338,7 @@ fieldset.workspace-field {
 .workspace-link-action--subtle:hover,
 .workspace-link-action--subtle:focus-visible {
   transform: none;
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
   color: var(--color-text);
 }
 
@@ -347,7 +347,7 @@ fieldset.workspace-field {
   .workspace-top-action--subtle:focus-visible,
   .workspace-link-action--subtle:hover,
   .workspace-link-action--subtle:focus-visible {
-    box-shadow: 1px 1px 0 color-mix(in srgb, var(--color-border) 24%, transparent 76%);
+    box-shadow: none;
   }
 }
 
@@ -409,7 +409,7 @@ fieldset.workspace-field {
   color: inherit;
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .quiet-list-entry strong {
@@ -425,14 +425,14 @@ fieldset.workspace-field {
   display: block;
   color: var(--color-text-muted);
   font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .quiet-list-entry:hover,
 .quiet-list-entry:focus-visible {
-  transform: translate(1px, 1px);
-  box-shadow: 2px 2px 0 0 rgba(27, 27, 27, 0.98);
+  transform: none;
+  box-shadow: none;
 }
 
 .breadcrumb-bar {
@@ -441,10 +441,10 @@ fieldset.workspace-field {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.45rem;
-  font-size: 0.68rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .breadcrumb-bar__separator {
@@ -476,11 +476,11 @@ fieldset.workspace-field {
   background: transparent;
   color: var(--color-text-muted);
   text-decoration: none;
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
   font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
   cursor: pointer;
 }
 
@@ -504,11 +504,11 @@ fieldset.workspace-field {
   margin: 0 0 var(--space-2);
   padding: 0;
   color: var(--color-link);
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
   font-weight: 700;
   letter-spacing: 0.1em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 @supports (color: color-mix(in srgb, black, white)) {
@@ -661,7 +661,7 @@ fieldset.workspace-field {
   gap: var(--space-3);
   margin-bottom: var(--space-4);
   padding-bottom: var(--space-4);
-  border-bottom: 2px solid var(--color-border);
+  border-bottom: 1px solid var(--color-line);
 }
 
 .page-action-head__main {
@@ -730,7 +730,7 @@ fieldset.workspace-field {
   padding: var(--space-4);
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .profile-editor__grid {
@@ -750,7 +750,7 @@ fieldset.workspace-field {
 .concern-box-entry {
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .concern-box-composer,
@@ -800,11 +800,11 @@ fieldset.workspace-field {
 
 .concern-box-entry__meta {
   color: var(--color-text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 @media (max-width: 720px) {
@@ -833,16 +833,16 @@ fieldset.workspace-field {
   border: 2px solid var(--color-border);
   border-radius: var(--radius-s);
   background: var(--color-bg-surface);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .design-auth-frame__eyebrow {
   margin: 0 0 0.75rem;
   color: var(--color-accent);
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
+  text-transform: none;
+  letter-spacing: normal;
   font-size: 0.72rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
 }
 
 .design-auth-frame__title {
@@ -873,10 +873,10 @@ fieldset.workspace-field {
 }
 
 .preview-heading__meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.72rem;
   letter-spacing: 0.14em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--color-text-muted);
 }
 
@@ -885,14 +885,14 @@ fieldset.workspace-field {
   border: 2px solid var(--color-border);
   border-radius: var(--radius-s);
   background: var(--color-bg-surface);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .preview-card__eyebrow {
   margin: 0 0 var(--space-2);
   font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
+  text-transform: none;
+  letter-spacing: normal;
   color: var(--color-accent);
 }
 
@@ -933,12 +933,12 @@ fieldset.workspace-field {
   min-height: 5.5rem;
   display: flex;
   align-items: end;
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
   color: var(--color-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 @supports (color: color-mix(in srgb, black, white)) {
@@ -963,7 +963,7 @@ fieldset.workspace-field {
   justify-content: space-between;
   gap: var(--space-4);
   padding-bottom: var(--space-3);
-  border-bottom: 2px solid var(--color-border);
+  border-bottom: 1px solid var(--color-line);
 }
 
 .preview-shell-sample__body {
@@ -1017,7 +1017,7 @@ fieldset.workspace-field {
   padding: 1rem 1.1rem;
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .workspace-frame-header__main {
@@ -1065,10 +1065,12 @@ fieldset.workspace-field {
 .graph-inspector-panel {
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
 }
 
 .workspace-outline {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
   display: grid;
   gap: 0.65rem;
   padding: 0.82rem 0.85rem 0.9rem;
@@ -1081,11 +1083,11 @@ fieldset.workspace-field {
 
 .workspace-outline__header h2 {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.9rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--color-text-muted);
 }
 
@@ -1122,11 +1124,11 @@ fieldset.workspace-field {
 
 .workspace-outline__group-title {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
   font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--color-text-muted);
 }
 
@@ -1149,7 +1151,7 @@ fieldset.workspace-field {
   min-height: 1.5rem;
   padding: 0;
   color: var(--color-text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.82rem;
   line-height: 1;
 }
@@ -1170,7 +1172,7 @@ fieldset.workspace-field {
   position: relative;
   width: 100%;
   min-width: 0;
-  min-height: 1.82rem;
+  min-height: var(--layout-control-min);
   padding: 0.24rem 0 0.24rem 0.95rem;
   text-align: left;
   color: var(--color-text);
@@ -1216,7 +1218,7 @@ fieldset.workspace-field {
 }
 
 .workspace-outline__item-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.82rem;
   font-weight: 500;
   min-width: 0;
@@ -1234,7 +1236,7 @@ fieldset.workspace-field {
 }
 
 [data-theme="dark"] .workspace-outline {
-  background: #111111;
+  background: var(--color-bg-surface);
   border-color: var(--color-line);
   box-shadow: none;
 }
@@ -1293,7 +1295,7 @@ fieldset.workspace-field {
   padding: 1rem;
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
   display: grid;
   gap: var(--space-3);
 }
@@ -1339,7 +1341,7 @@ fieldset.workspace-field {
   border: 2px solid var(--color-border);
   border-radius: 0.16rem;
   background: var(--color-bg-surface);
-  box-shadow: 2px 2px 0 0 rgba(27, 27, 27, 0.98);
+  box-shadow: none;
   cursor: pointer;
 }
 
@@ -1358,7 +1360,7 @@ fieldset.workspace-field {
 }
 
 .workspace-settings-menu__checkbox:checked::after {
-  border-color: #ffffff;
+  border-color: var(--color-on-accent);
 }
 
 .workspace-settings-menu__range {
@@ -1403,7 +1405,7 @@ fieldset.workspace-field {
   border: 2px solid var(--color-accent);
   border-radius: 999px;
   background: var(--color-bg-surface);
-  box-shadow: 2px 2px 0 0 rgba(27, 27, 27, 0.98);
+  box-shadow: none;
 }
 
 .workspace-settings-menu__range::-moz-range-thumb {
@@ -1412,7 +1414,7 @@ fieldset.workspace-field {
   border: 2px solid var(--color-accent);
   border-radius: 999px;
   background: var(--color-bg-surface);
-  box-shadow: 2px 2px 0 0 rgba(27, 27, 27, 0.98);
+  box-shadow: none;
 }
 
 .workspace-settings-menu__range:disabled {
@@ -1427,7 +1429,7 @@ fieldset.workspace-field {
   border: 1px solid var(--color-border);
   background: var(--color-bg-surface);
   color: var(--color-text);
-  box-shadow: 2px 2px 0 0 rgba(27, 27, 27, 0.98);
+  box-shadow: none;
   text-align: right;
 }
 
@@ -1437,10 +1439,10 @@ fieldset.workspace-field {
 
 .workspace-settings-menu__value,
 .workspace-settings-menu__section-title {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .workspace-settings-menu__font-options {
@@ -1456,7 +1458,7 @@ fieldset.workspace-field {
   border-radius: 0;
   background: var(--color-bg-surface);
   color: var(--color-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
@@ -1476,12 +1478,12 @@ fieldset.workspace-field {
   border: 1px solid var(--color-border);
   background: var(--color-bg-surface);
   color: var(--color-text);
-  box-shadow: var(--color-shadow);
-  font-family: var(--font-mono);
+  box-shadow: none;
+  font-family: var(--font-ui);
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 [data-theme="dark"] .workspace-settings-menu__panel {
@@ -1523,7 +1525,7 @@ fieldset.workspace-field {
   min-height: 36rem;
   background:
     var(--color-bg-base);
-  box-shadow: var(--color-shadow);
+  box-shadow: none;
   overflow: hidden;
 }
 

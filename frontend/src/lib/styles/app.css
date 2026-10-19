@@ -1,12 +1,6 @@
 html,
 body {
   background-color: var(--color-bg-base);
-  background-image: radial-gradient(
-    circle,
-    var(--app-bg-dot-color) var(--app-bg-dot-size),
-    transparent var(--app-bg-dot-fade-size)
-  );
-  background-size: var(--app-bg-dot-spacing) var(--app-bg-dot-spacing);
 }
 
 body {
@@ -155,7 +149,7 @@ select {
 
 .space-nav a:hover,
 .space-nav a:focus-visible {
-  background: rgba(255, 250, 243, 0.54);
+  background: var(--color-bg-muted);
 }
 
 .space-nav a[aria-current="page"] {
@@ -196,12 +190,12 @@ select {
   padding: 0 0.78rem;
   border: 1px solid transparent;
   color: var(--color-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.76rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: normal;
   text-decoration: none;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
   transition:
     background-color 160ms ease,
@@ -298,11 +292,11 @@ select {
   align-items: center;
   height: 100%;
   padding-right: 0.74rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.76rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--color-text);
 }
 
@@ -316,7 +310,7 @@ select {
   padding: 0;
   border-left: 1px solid var(--color-border);
   color: var(--color-accent);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.78rem;
   font-weight: 800;
 }
@@ -341,12 +335,12 @@ select {
   padding: 0.62rem 0.84rem;
   border-top: 1px solid var(--color-border);
   color: var(--color-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.76rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: normal;
   text-decoration: none;
-  text-transform: uppercase;
+  text-transform: none;
   background: var(--color-bg-surface);
 }
 

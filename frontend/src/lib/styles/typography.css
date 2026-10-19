@@ -15,7 +15,7 @@ h6,
 .page-action-head__copy h1 {
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.025em;
 }
 
 .brand-copy strong,
@@ -35,5 +35,5 @@ h6,
 .teacher-flow-unit-node__copy span,
 .teacher-flow-unit-node__copy small,
 .learning-response-panel > summary {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
 }

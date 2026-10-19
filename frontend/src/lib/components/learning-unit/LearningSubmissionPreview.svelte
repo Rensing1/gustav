@@ -11,11 +11,13 @@
   import type { LearningSubmission } from "$lib/types/learning";
 
   let { courseId, taskId, taskTitle, hasSubmission, h5pCompleted = null, h5pHistory = [], state: previewState, active = true, newerDraft = false,
-    onLoad = null, onContinueDraft = null }: {
+    feedbackOpen = false, resultView = false, onLoad = null, onContinueDraft = null }: {
     courseId: string; taskId: string; taskTitle: string; hasSubmission: boolean;
     h5pCompleted?: boolean | null;
     h5pHistory?: LearningSubmission[];
     state?: SubmissionPreviewState; active?: boolean; newerDraft?: boolean;
+    feedbackOpen?: boolean;
+    resultView?: boolean;
     onLoad?: (() => void | Promise<void>) | null;
     onContinueDraft?: (() => void) | null;
   } = $props();
@@ -36,7 +38,9 @@
   const canExpand = $derived(clipped || Boolean(file || submission?.dialog_session_id || submission?.feedback_md
     || submission?.analysis_json?.criteria_results?.length || processing || failed));
   const bodyId = $derived(`submission-preview-${taskId}`);
+  const isDialog = $derived(submission?.kind === "dialog" && Boolean(submission.dialog_session_id));
   const isH5P = $derived(submission?.kind === "h5p");
+  const accessibleLabel = $derived(isH5P ? "Eigene Bearbeitung" : submission?.intent === "submit" ? "Eigene Abgabe" : "Eigener Entwurf");
   const h5pIsComplete = $derived(Boolean(isH5P && h5pCompletionReached(
     h5pCompleted,
     submission ? [submission, ...h5pHistory] : h5pHistory
@@ -101,11 +105,40 @@
 
 <div bind:this={root} class="learning-submission-preview-anchor">
   {#if previewState?.status === "failed"}
-    <StatusMessage tone="error" title="Abgabe konnte nicht geladen werden" actionLabel="Erneut versuchen" onAction={onLoad} />
+    <StatusMessage tone="error" title="Gespeicherte Fassung konnte nicht geladen werden" actionLabel="Erneut versuchen" onAction={onLoad} />
   {:else if (previewState?.status === "loading" && !submission) || (hasSubmission && !previewState)}
-    <p class="workspace-note" role="status">Abgabe wird geladen …</p>
+    <p class="workspace-note" role="status">Gespeicherte Fassung wird geladen …</p>
+  {:else if submission && isDialog && resultView && submission.dialog_session_id}
+    <div class="dialog-result-groups">
+      <section class="dialog-result-group" aria-labelledby={`${bodyId}-work`}>
+        <header class="dialog-result-group__header">
+          <h2 id={`${bodyId}-work`}>Deine Bearbeitung</h2>
+          <time datetime={submission.created_at}>{timestamp(submission.created_at)}</time>
+        </header>
+        <LearningDialogTranscriptDocument {courseId} {taskId} sessionId={submission.dialog_session_id} compact resultView />
+      </section>
+      <section class="dialog-result-group" aria-labelledby={`${bodyId}-feedback`}>
+        <header>
+          <h2 id={`${bodyId}-feedback`}>Deine Rückmeldung</h2>
+          <p class="dialog-result-feedback-scope">Zu deinen eigenen Beiträgen in dieser Aufgabe.</p>
+        </header>
+        {#if processing}
+          <StatusMessage tone="progress" title="Rückmeldung wird erstellt …" />
+        {:else if failed}
+          <StatusMessage tone="error" title="Rückmeldung konnte nicht erstellt werden" description="Deine gespeicherte Bearbeitung bleibt erhalten." />
+        {/if}
+        {#if submission.feedback_md}
+          <div class="markdown-prose">{@html renderMarkdown(submission.feedback_md)}</div>
+        {/if}
+        {#if submission.analysis_json?.criteria_results?.length}
+          <LearningCriteriaDetails label="Kriterien ansehen" criteria={submission.analysis_json.criteria_results} />
+        {:else if !submission.feedback_md && !processing && !failed}
+          <p class="workspace-note" role="status">Noch keine Rückmeldung vorhanden.</p>
+        {/if}
+      </section>
+    </div>
   {:else if submission}
-    <section class="learning-submission-preview" class:learning-submission-preview--expanded={expanded} aria-label={`${isH5P ? "Eigene Bearbeitung" : "Eigene Abgabe"} zu ${taskTitle}`}>
+    <section class="learning-submission-preview" class:learning-submission-preview--expanded={expanded} aria-label={`${accessibleLabel} zu ${taskTitle}`}>
       <header class="learning-submission-preview__header">
         <strong>{isH5P ? "Meine Bearbeitung" : submission.intent === "submit" ? "Meine Abgabe" : "Mein Entwurf"}</strong>
         <span class="learning-submission-preview__meta">
@@ -115,12 +148,14 @@
         </span>
       </header>
       <div class="learning-submission-preview__body" id={bodyId}>
-        {#if expanded}
-          {#if file}
+        {#if expanded || isDialog}
+          {#if isDialog && submission.dialog_session_id}
+            <LearningDialogTranscriptDocument {courseId} {taskId} sessionId={submission.dialog_session_id} compact />
+          {:else if file}
             {#if isImage && !imageFailed}
-              <img class="learning-submission-preview__image" src={file.url} alt={`Eigene Bildabgabe zu ${taskTitle}`} loading="lazy" onerror={() => { imageFailed = true; }} />
+              <img class="learning-submission-preview__image" src={file.url} alt={`${accessibleLabel} als Bild zu ${taskTitle}`} loading="lazy" onerror={() => { imageFailed = true; }} />
             {:else if isPdf}
-              <iframe class="learning-submission-preview__pdf" src={file.url} title={`Abgabe zu ${taskTitle}`} loading="lazy"></iframe>
+              <iframe class="learning-submission-preview__pdf" src={file.url} title={`${accessibleLabel} zu ${taskTitle}`} loading="lazy"></iframe>
             {:else if artifact}
               <LearningSubmissionArtifactView {submission} />
             {/if}
@@ -136,9 +171,6 @@
           {:else if submission.kind === "h5p"}
             <p>{h5pScoreText()}</p>
           {/if}
-          {#if submission.kind === "dialog" && submission.dialog_session_id}
-            <LearningDialogTranscriptDocument {courseId} {taskId} sessionId={submission.dialog_session_id} />
-          {/if}
           {#if processing}
             <StatusMessage tone="progress" title="Rückmeldung wird erstellt …" />
           {:else if failed}
@@ -147,7 +179,7 @@
           {#if submission.feedback_md || submission.analysis_json?.criteria_results?.length}
             <div class="learning-submission-preview__details">
               {#if submission.feedback_md}
-                <details class="learning-response-panel">
+                <details class="learning-response-panel" open={feedbackOpen}>
                   <summary>Rückmeldung</summary>
                   <div class="learning-response-panel__body markdown-prose">{@html renderMarkdown(submission.feedback_md)}</div>
                 </details>
@@ -159,7 +191,7 @@
           {/if}
         {:else if file}
           {#if isImage && !imageFailed}
-            <img class="learning-submission-preview__image learning-submission-preview__image--compact" src={file.url} alt={`Eigene Bildabgabe zu ${taskTitle}`} loading="lazy" onerror={() => { imageFailed = true; }} />
+            <img class="learning-submission-preview__image learning-submission-preview__image--compact" src={file.url} alt={`${accessibleLabel} als Bild zu ${taskTitle}`} loading="lazy" onerror={() => { imageFailed = true; }} />
           {/if}
           {#if imageFailed}<p class="workspace-note">Bild konnte nicht geladen werden.</p>{/if}
           <p class="learning-submission-preview__meta">{fileDescription()}</p>
@@ -173,10 +205,10 @@
           <p>Bearbeitung gespeichert.</p>
         {/if}
       </div>
-      {#if canExpand || expanded}
+      {#if !isDialog && (canExpand || expanded)}
         <div class="learning-submission-preview__actions">
           <button class="learning-submission-preview__toggle" type="button" aria-expanded={expanded} aria-controls={bodyId} onclick={() => { expanded = !expanded; }}>
-            {expanded ? "Einklappen" : "Ausklappen"}
+            {expanded ? "Weniger anzeigen" : submission.intent === "submit" ? "Abgabe ansehen" : "Entwurf ansehen"}
             <svg viewBox="0 0 16 16" aria-hidden="true" class:learning-submission-preview__chevron--open={expanded}><path d="m4 6 4 4 4-4" /></svg>
           </button>
         </div>
@@ -184,8 +216,10 @@
     </section>
     {#if submission.intent === "submit" && newerDraft}
       <div class="learning-submission-preview__draft">
-        <span>Neuerer Entwurf vorhanden</span>
-        <button class="workspace-top-action workspace-top-action--accent" type="button" onclick={() => onContinueDraft?.()}>Entwurf weiterbearbeiten</button>
+        <span>Neuerer Entwurf · Noch nicht abgegeben</span>
+        {#if onContinueDraft}
+          <button class="workspace-top-action workspace-top-action--accent" type="button" onclick={() => onContinueDraft?.()}>Entwurf weiterbearbeiten</button>
+        {/if}
       </div>
     {/if}
   {/if}

@@ -86,7 +86,8 @@ export function createTiptapMarkdownEditor(options: CreateEditorOptions): Tiptap
       editor.commands.setContent(markdown, { contentType: "markdown", emitUpdate: notify });
     },
     setEditable(editable) {
-      editor.setEditable(editable);
+      // A permission change is not a learner edit and must not overwrite a restored draft.
+      editor.setEditable(editable, false);
     },
     setBlockType(level) {
       if (level === null) {

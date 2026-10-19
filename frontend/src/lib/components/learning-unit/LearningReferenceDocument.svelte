@@ -84,7 +84,7 @@
   }
 
   function materialSummary(): string {
-    if (!material?.body_md) return "Material zur Bearbeitung dieser Aufgabe.";
+    if (!material?.body_md) return "";
     const plain = material.body_md
       .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
@@ -109,7 +109,7 @@
 >
   {#if readerMode}
     <header class="learner-reference-document__reader-header">
-      {#if label}<p class="workspace-label">{label}</p>{/if}
+      {#if label}<p class="workspace-label">{primarySubmission()?.intent === "feedback" ? "Eigener geprüfter Entwurf" : label}</p>{/if}
       <h2 id="learner-reference-reader-heading" tabindex="-1">{title}</h2>
     </header>
   {:else}
@@ -138,7 +138,7 @@
         <span>
           {#if label}<small>{label}</small>{/if}
           <strong>{title}</strong>
-          {#if compact && !expanded}
+          {#if compact && !expanded && materialSummary()}
             <span class="learner-reference-document__summary">{materialSummary()}</span>
           {/if}
         </span>
@@ -212,7 +212,7 @@
         {@const file = firstFile(submission)}
         <section class="learner-reference-document__submission">
           <p class="learner-reference-document__meta">
-            Eigene Abgabe · Versuch {submission.attempt_nr} · {submissionDate(submission)}
+            {submission.intent === "feedback" ? "Geprüfter Entwurf · Noch nicht abgegeben" : "Eigene Abgabe"} · Versuch {submission.attempt_nr} · {submissionDate(submission)}
           </p>
           {#if submission.kind === "dialog" && submission.dialog_session_id && courseId && taskId}
             <LearningDialogTranscriptDocument

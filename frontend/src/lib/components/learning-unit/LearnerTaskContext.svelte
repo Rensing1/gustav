@@ -1,6 +1,5 @@
 <script lang="ts">
-  import LearnerMaterialContext from "$lib/components/learning-unit/LearnerMaterialContext.svelte";
-  import LearnerFocusedMaterialContext from "$lib/components/learning-unit/LearnerFocusedMaterialContext.svelte";
+  import WorkspaceOutline from "$lib/components/ui/WorkspaceOutline.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import type { LearningSubmission, SubmissionHistoryLoadState } from "$lib/types/learning";
   import { renderMarkdown } from "$lib/utils/markdown";
@@ -8,6 +7,7 @@
 
   let {
     courseId,
+    taskId,
     taskTitle,
     taskKind,
     instructionMd,
@@ -30,10 +30,12 @@
     onToggleSubmissionGroup = null,
     onToggleSubmission = null,
     onOpenReference = null,
+    onOpenCurrentTask = null,
     onCloseModule = null,
     onUndoCloseModule = null
   }: {
     courseId: string;
+    taskId: string;
     taskTitle: string;
     taskKind: string;
     instructionMd: string;
@@ -55,27 +57,41 @@
     onToggleMaterial?: ((moduleId: string, referenceKey: string) => void) | null;
     onToggleSubmissionGroup?: ((moduleId: string) => void | Promise<void>) | null;
     onToggleSubmission?: ((referenceKey: string) => void) | null;
+    onOpenCurrentTask?: (() => void) | null;
     onOpenReference?: ((referenceKey: string) => void | Promise<void>) | null;
     onCloseModule?: ((moduleId: string) => void) | null;
     onUndoCloseModule?: (() => void) | null;
   } = $props();
 
-  let showAllMaterials = $state(false);
+  const navigationGroups = $derived(modules.map((module) => ({
+    id: module.id,
+    title: module.title,
+    status: module.loading ? "Inhalte werden geladen …"
+      : module.error ? "Materialien konnten nicht geladen werden."
+      : module.loaded && !module.items.some((item) => item.kind === "material" || item.task?.id === taskId || item.task?.has_submission)
+        ? "Keine Materialien oder eigenen Abgaben." : undefined,
+    items: module.items.filter((item) => item.kind === "material" || item.task?.id === taskId || item.task?.has_submission)
+      .sort((left, right) => Number(left.kind === "task") - Number(right.kind === "task"))
+      .flatMap<{ key: string; title: string; kind: "material" | "task" }>((item) => {
+        if (item.kind === "material") return [{ key: item.key, title: item.title, kind: item.kind }];
+        // Keep the current task distinct from its previously submitted answer.
+        const entries: Array<{ key: string; title: string; kind: "task" }> = [];
+        if (item.task?.id === taskId) entries.push({ key: item.key, title: item.title, kind: "task" });
+        if (item.task?.has_submission) entries.push({ key: `submission:${item.task.id}`, title: `${item.title} · ${item.task.latest_final_submission_at || item.task.latest_submission_intent === "submit" ? "Meine Abgabe" : "Mein Entwurf"}`, kind: "task" });
+        return entries;
+      })
+  })));
 
-  function additionalModules(): LearnerMaterialContextModule[] {
-    const activeModuleId = focusedModuleId
-      ?? modules.find((module) => module.current)?.id
-      ?? modules[0]?.id
-      ?? null;
+  function expandModule(moduleId: string) {
+    if (!expandedModuleIds.includes(moduleId)) void onToggleModule?.(moduleId);
+  }
 
-    return modules.flatMap((module) => {
-      if (module.id !== activeModuleId) return [module];
-
-      // The active module's materials are already shown directly above. Keep
-      // only its own submissions in the additional context to avoid duplicates.
-      const submissionItems = module.items.filter((item) => item.kind === "task" && item.task?.has_submission);
-      return submissionItems.length ? [{ ...module, items: submissionItems }] : [];
-    });
+  function openReference(key: string) {
+    if (key === `task:${taskId}`) {
+      onOpenCurrentTask?.();
+      return;
+    }
+    void onOpenReference?.(key);
   }
 </script>
 
@@ -94,7 +110,7 @@
     <header class="learner-task-context__header">
       <div class="learner-task-context__headline">
         <div class="learner-task-context__title">
-          <h2>{taskTitle}</h2>
+          <h2>Aufgabenstellung</h2>
           <span>{taskKind}</span>
         </div>
         {#if roundCurrent !== null && roundMaximum !== null}
@@ -112,45 +128,23 @@
         {/if}
       </div>
       <div class="learner-task-context__assignment">
-        <h3>Aufgabe</h3>
         <div class="learner-task-context__instruction">
           {@html renderMarkdown(instructionMd)}
         </div>
       </div>
     </header>
 
-    <LearnerFocusedMaterialContext
-      {modules}
-      {focusedModuleId}
-      {expandedModuleMaterialKeys}
-      {onToggleMaterial}
-      {onOpenReference}
+    <WorkspaceOutline
+      title="Inhalt"
+      groups={navigationGroups}
+      embedded
+      initialGroupId={modules.find((module) => module.current)?.id ?? focusedModuleId ?? null}
+      activeItemKeys={[`task:${taskId}`]}
+      onExpandGroup={expandModule}
+      onOpenItem={openReference}
     />
-
-    <details class="learner-task-context__all-materials">
-      <summary onclick={() => showAllMaterials = !showAllMaterials}>Weitere Materialien und eigene Abgaben</summary>
-      {#if showAllMaterials}
-        <LearnerMaterialContext
-          {courseId}
-          modules={additionalModules()}
-          compactRows={true}
-          {expandedModuleIds}
-          {expandedModuleMaterialKeys}
-          {expandedSubmissionModuleIds}
-          {expandedSubmissionKeys}
-          {historyByTask}
-          {historyStateByTask}
-          {focusedModuleId}
-          {closedModuleTitle}
-          {onToggleModule}
-          {onToggleMaterial}
-          {onToggleSubmissionGroup}
-          {onToggleSubmission}
-          {onOpenReference}
-          {onCloseModule}
-          {onUndoCloseModule}
-        />
-      {/if}
-    </details>
+    {#if closedModuleTitle && onUndoCloseModule}
+      <button class="workspace-link-action" type="button" onclick={() => onUndoCloseModule?.()}>{closedModuleTitle} wieder öffnen</button>
+    {/if}
   </div>
 </aside>

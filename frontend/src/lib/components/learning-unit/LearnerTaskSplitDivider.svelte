@@ -224,14 +224,14 @@
   .learner-task-split-divider {
     position: relative;
     z-index: 4;
-    width: 1px;
-    min-width: 1px;
+    width: 100%;
+    min-width: 0;
     height: 100%;
     padding: 0;
     border: 0;
     border-radius: 0;
     align-self: stretch;
-    background: var(--color-border);
+    background: transparent;
     cursor: col-resize;
     touch-action: pan-y;
   }
@@ -273,7 +273,7 @@
   }
 
   .learner-task-split-divider:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
+    outline: 2px solid var(--color-accent);
     outline-offset: 4px;
   }
 

@@ -2,6 +2,8 @@
   import { browserUUID } from "$lib/utils/browser-uuid";
   import { onMount, tick } from "svelte";
   import LearnerTaskContext from "$lib/components/learning-unit/LearnerTaskContext.svelte";
+  import LearningSubmissionPreview from "./LearningSubmissionPreview.svelte";
+  import LearningDialogTranscriptDocument from "./LearningDialogTranscriptDocument.svelte";
   import DialogMessage from "$lib/components/learning-unit/DialogMessage.svelte";
   import LearnerTaskSplitDivider from "$lib/components/learning-unit/LearnerTaskSplitDivider.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
@@ -64,6 +66,7 @@
     onToggleSubmission = null,
     onCloseContextModule = null,
     onUndoCloseContextModule = null,
+    returnLabel = "Zurück zum Modul",
     onPause = null,
     showPauseAction = true,
     onCompleted = null
@@ -95,6 +98,7 @@
     onToggleSubmission?: ((key: string) => void) | null;
     onCloseContextModule?: ((moduleId: string) => void) | null;
     onUndoCloseContextModule?: (() => void) | null;
+    returnLabel?: string;
     onPause?: (() => void | Promise<void>) | null;
     showPauseAction?: boolean;
     onCompleted?: ((submission: LearningSubmission) => void | Promise<void>) | null;
@@ -403,12 +407,14 @@
       style={taskColumnRatio === null ? undefined : `--learner-task-column-ratio: ${taskColumnRatio}%`}
     >
       <LearnerTaskContext
+        onOpenCurrentTask={() => onSetCompactSurface?.("task")}
+        taskId={task.id}
         {courseId}
         {taskTitle}
         taskKind="KI-Dialog"
         instructionMd={task.instruction_md}
-        roundCurrent={session.round_count}
-        roundMaximum={session.dialog.max_rounds}
+        roundCurrent={session.status === "completed" ? null : session.round_count}
+        roundMaximum={session.status === "completed" ? null : session.dialog.max_rounds}
         variant="dialog"
         modules={contextModules}
         expandedModuleIds={expandedContextModuleIds}
@@ -434,7 +440,32 @@
         onCommit={(value) => onCommitTaskColumnRatio?.(value)}
       />
 
-      <div class="dialog-main" data-dialog-surface="task">
+      <div class="dialog-main" class:dialog-main--result={session.status === "completed"} class:dialog-main--with-steps={session.status === "active" && !readOnly && Boolean(session.dialog.closing_prompt_md)} data-dialog-surface="task">
+        {#if session.status === "active" && !readOnly && session.dialog.closing_prompt_md}
+          <ol class="dialog-steps" aria-label="Ablauf der Aufgabe">
+            <li aria-current={!closingPhase ? "step" : undefined}>Gespräch</li>
+            <li aria-current={closingPhase ? "step" : undefined}>Abschlussaufgabe</li>
+            <li>Abgabe</li>
+          </ol>
+        {/if}
+        {#if session.status === "completed"}
+          {@const submission = currentDialogSubmission()}
+          <div class="dialog-result">
+            {#if submission}
+              <LearningSubmissionPreview {courseId} taskId={task.id} {taskTitle} hasSubmission
+                state={{ status: "loaded", submission }} resultView />
+            {:else}
+              <h3>Abgegeben</h3>
+              <LearningDialogTranscriptDocument {courseId} taskId={task.id} sessionId={session.id} compact />
+              <p class="workspace-note" role="status">Die Rückmeldung wird geladen …</p>
+            {/if}
+            {#if onPause}
+              <div class="dialog-result__actions">
+                <button class="workspace-top-action workspace-top-action--accent" type="button" onclick={() => onPause?.()}>{returnLabel}</button>
+              </div>
+            {/if}
+          </div>
+        {:else}
         <div bind:this={transcriptElement} class="dialog-transcript" role="log" aria-label="Dialogverlauf" aria-live="polite">
           <DialogMessage kind="ai" speaker={session.dialog.partner_name} markdown={session.dialog.opening_message_md} current={currentAssistantMessageId() === "opening"} />
           {#each session.turns as turn}
@@ -449,22 +480,22 @@
           {#if closingPhase}
             <section class="dialog-closing" aria-labelledby="dialog-closing-title">
               <header>
-                <p class="workspace-label">Abschluss</p>
-                <h6 id="dialog-closing-title">Abschluss vorbereiten</h6>
+                <h3 id="dialog-closing-title">{session.dialog.closing_prompt_md ? "Zum Abschluss" : "Gespräch abgeben"}</h3>
               </header>
               {#if session.dialog.closing_prompt_md}
-                <label class="workspace-field"><span>{session.dialog.closing_prompt_md}</span><textarea bind:value={closingAnswer} maxlength="2000" rows="4"></textarea></label>
+                <div class="dialog-closing__prompt markdown-prose" id="dialog-closing-prompt">{@html renderMarkdown(session.dialog.closing_prompt_md)}</div>
+                <label class="workspace-field"><span>Deine Antwort</span><textarea aria-describedby="dialog-closing-prompt" bind:value={closingAnswer} maxlength="2000" rows="4"></textarea></label>
               {:else}
                 <p class="workspace-note">Mit der Abgabe wird der Dialog endgültig abgeschlossen und ein Versuch verbraucht.</p>
               {/if}
               <div class="dialog-actions dialog-closing__actions">
-                <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={continueDialog}>Zurück zum Dialog</button>
+                <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={continueDialog}>Zurück zum Gespräch</button>
                 {#if showPauseAction && onPause}
                   <button class="workspace-top-action workspace-top-action--quiet" type="button" onclick={() => onPause?.()}>Pausieren</button>
                 {:else if showPauseAction}
                   <a class="workspace-top-action workspace-top-action--quiet" href={`/learning/courses/${encodeURIComponent(courseId)}`}>Pausieren</a>
                 {/if}
-                <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || Boolean(session.dialog.closing_prompt_md && !closingAnswer.trim())} onclick={complete}>Endgültig abgeben</button>
+                <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || Boolean(session.dialog.closing_prompt_md && !closingAnswer.trim())} onclick={complete}>{session.dialog.closing_prompt_md ? "Gespräch und Antwort abgeben" : "Gespräch abgeben"}</button>
               </div>
             </section>
           {:else}
@@ -500,7 +531,7 @@
                     <button class="workspace-top-action workspace-top-action--accent" type="button" disabled={pending || !message.trim()} onclick={send}>Antwort senden</button>
                   {/if}
                   {#if canEndDialog()}
-                    <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>Dialog beenden</button>
+                    <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={beginClosing}>{session.dialog.closing_prompt_md ? "Zur Abschlussaufgabe" : "Zur Abgabe"}</button>
                   {/if}
                   {#if session.turns.length === 0 || hasTerminalDialogFailure()}
                     <button class="workspace-top-action workspace-top-action--quiet" type="button" disabled={pending} onclick={abandon}>Dialog ohne Abgabe abbrechen</button>
@@ -514,27 +545,7 @@
               {/if}
             </section>
           {/if}
-        {:else if session.status === "completed"}
-          {@const submission = currentDialogSubmission()}
-          {#if submission?.analysis_status === "completed" && submission.feedback_md}
-            <section class="dialog-feedback" aria-label="Rückmeldung zum KI-Dialog">
-              <header>
-                <p class="workspace-label">Rückmeldung</p>
-                <h6>Dein Dialog ist ausgewertet</h6>
-              </header>
-              <div class="markdown-prose">{@html renderMarkdown(submission.feedback_md)}</div>
-            </section>
-          {:else if submission?.analysis_status === "failed"}
-            <div class="dialog-completed-note">
-              <StatusMessage
-                tone="error"
-                title="Rückmeldung konnte nicht erstellt werden"
-                description="Dein Dialog ist sicher gespeichert. Bitte versuche die Auswertung später erneut."
-              />
-            </div>
-          {:else}
-            <p class="workspace-note dialog-completed-note">Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.</p>
-          {/if}
+        {/if}
         {/if}
       </div>
     </div>

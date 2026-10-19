@@ -1,9 +1,13 @@
 <script lang="ts">
+  import { anchorRestoredModule } from "$lib/learning-unit/module-scroll-anchor";
   import { browserUUID } from "$lib/utils/browser-uuid";
   import { createSubmissionPreviewLoader, type SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
   import { applyAction } from "$app/forms";
   import { browser } from "$app/environment";
-  import { onMount, tick, untrack } from "svelte";
+  import { onMount, onDestroy, getContext, tick, untrack } from "svelte";
+  import { workspaceNavigationKey, type WorkspaceNavigation } from "$lib/types/workspace-navigation";
+  const workspaceNavigation = getContext<WorkspaceNavigation | undefined>(workspaceNavigationKey);
+  onDestroy(() => { if (workspaceNavigation) workspaceNavigation.href = null; });
 
   import WorkspaceSettingsMenu from "$lib/components/ui/WorkspaceSettingsMenu.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
@@ -121,6 +125,17 @@
   let moduleErrors = $state.raw<Record<string, string | null>>({});
   let workspaceReady = $state(false);
   let historyRestored = $state(false);
+  let restoredModuleId = $state<string | null>(null);
+  $effect(() => {
+    if (!restoredModuleId || modularRestoreState !== "ready" || learnerWorkspace.surface !== "reading") return;
+    const moduleId = restoredModuleId;
+    let stop: (() => void) | undefined;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(`learner-module-${moduleId}`);
+      if (target) stop = anchorRestoredModule(target);
+    });
+    return () => { cancelAnimationFrame(frame); stop?.(); };
+  });
   let modularSettingsMenuOpen = $state(false);
   let layoutPreferences = $state<LayoutPreferences>(defaultLayoutPreferences(currentViewportWidth()));
   let taskColumnRatio = $state<number | null>(null);
@@ -270,18 +285,11 @@
           items
         } satisfies LearnerMaterialContextModule;
       });
-      return [
-        ...sections.filter((section) => section.current),
-        ...sections.filter((section) => !section.current)
-      ];
+      return sections;
     }
 
     const openedModules = orderedOpenModulesForContent();
-    const activeFirst = [
-      ...openedModules.filter((module) => module.id === activeModuleId),
-      ...openedModules.filter((module) => module.id !== activeModuleId)
-    ];
-    return activeFirst
+    return openedModules
       .map((module) => ({
         id: module.id,
         title: module.title,
@@ -351,7 +359,7 @@
     }, "push");
     await tick();
     window.scrollTo({ top: 0, behavior: "auto" });
-    document.getElementById("learner-task-back")?.focus({ preventScroll: true });
+    document.getElementById("learner-task-heading")?.focus({ preventScroll: true });
   }
 
   async function leaveTaskWorkspace(destination: LearnerReturnDestination) {
@@ -434,10 +442,7 @@
     );
     if (historyMode === "push") window.history.pushState(state, "", href);
     else window.history.replaceState(state, "", href);
-  }
-
-  function showLearningPath() {
-    void returnToLearnerDestination("learningPath");
+    if (workspaceNavigation) workspaceNavigation.href = window.location.href;
   }
 
   /*
@@ -513,7 +518,8 @@
       taskId: requestedItem?.task?.id ?? null,
       panel: requestedItem?.task && resultRequested ? "result" : null
     }, "replace");
-    if (!requestedItem?.task && returnPosition) {
+    restoredModuleId = !requestedItem?.task ? requestedModuleId : null;
+    if (!requestedItem?.task && !requestedModuleId && returnPosition) {
       await tick();
       window.scrollTo({ top: returnPosition.scrollY, behavior: "auto" });
       if (returnPosition.focusId) {
@@ -1806,6 +1812,20 @@
   }}
 />
 
+{#snippet moduleSettings()}
+              <WorkspaceSettingsMenu
+                open={modularSettingsMenuOpen}
+                tocOpen={workspaceTocOpen()}
+                fontScale={layoutPreferences.fontScale}
+                onToggleMenu={() => {
+                  modularSettingsMenuOpen = !modularSettingsMenuOpen;
+                }}
+                onToggleToc={toggleToc}
+                onResetLayout={resetLayoutPreferences}
+                onCommitFontScale={commitFontScale}
+              />
+{/snippet}
+
 <svelte:head>
   <title>{data.selectedUnit?.unit.title ?? "Lernraum"} | GUSTAV</title>
 </svelte:head>
@@ -1824,36 +1844,26 @@
   {/if}
 
   {#if isModularUnit()}
-    <section class="learning-unit-toolbar">
+    {#if learnerWorkspace.surface !== "reading"}
+    <section class="learning-unit-toolbar" class:learning-unit-toolbar--working={learnerWorkspace.surface === "task"}>
       <div class="learning-unit-layout-frame learning-unit-layout-frame--toolbar">
         <div class="learning-unit-toolbar__main">
           <div class="learning-unit-toolbar__leading">
-            {#if learnerWorkspace.surface !== "graph"}
-              <button class="learner-path-back" type="button" onclick={showLearningPath}>← Zum Lernpfad</button>
-            {:else}
+            {#if learnerWorkspace.surface === "graph"}
               <p class="workspace-label">Lernpfad</p>
             {/if}
           </div>
 
           {#if learnerWorkspace.surface !== "graph"}
             <div class="learning-unit-toolbar__utility">
-              <WorkspaceSettingsMenu
-                open={modularSettingsMenuOpen}
-                tocOpen={workspaceTocOpen()}
-                fontScale={layoutPreferences.fontScale}
-                onToggleMenu={() => {
-                  modularSettingsMenuOpen = !modularSettingsMenuOpen;
-                }}
-                onToggleToc={toggleToc}
-                onResetLayout={resetLayoutPreferences}
-                onCommitFontScale={commitFontScale}
-              />
+              {@render moduleSettings()}
             </div>
           {/if}
         </div>
       </div>
     </section>
 
+    {/if}
     {#if learnerWorkspace.surface === "graph"}
       <LearningUnitOverview graph={graphState} nodes={flowNodes} edges={flowEdges} busy={graphBusy} error={graphError} onRetry={() => void rebuildGraph()} />
     {/if}
@@ -1889,6 +1899,14 @@
                 learnerSub={data.user?.sub ?? null}
                 courseId={data.courseId}
                 unitTitle={data.selectedUnit?.unit.title ?? "Lerneinheit"}
+                orientationTools={moduleSettings}
+                onReadingModule={(id) => {
+                  if (learnerWorkspace.surface !== "reading" || !workspaceNavigation) return;
+                  const href = new URL(window.location.href);
+                  href.searchParams.set("module", id);
+                  // Update the displayed context without changing scroll or browser history.
+                  if (workspaceNavigation.href !== href.href) workspaceNavigation.href = href.href;
+                }}
                 unitType="modular"
                 contentGroups={contentGroups()}
                 mode={learnerWorkspace.surface === "task" || (learnerWorkspace.surface === "graph" && learnerWorkspace.activeTask) ? "working" : "orienting"}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack } from "svelte";
+  import { tick, untrack, type Snippet } from "svelte";
   import LearningSubmissionPreview from "./LearningSubmissionPreview.svelte";
   import type { SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
   import LearningMaterialCard from "$lib/components/learning-unit/LearningMaterialCard.svelte";
@@ -33,6 +33,8 @@
   };
 
   let {
+    orientationTools,
+    onReadingModule = null,
     learnerSub = null,
     courseId,
     unitTitle = null,
@@ -92,6 +94,8 @@
     onRetryTaskHistory = null,
     onProgressPersisted = null
   }: {
+    orientationTools?: Snippet;
+    onReadingModule?: ((id: string) => void) | null;
     learnerSub?: string | null;
     courseId: string;
     unitTitle?: string | null;
@@ -334,6 +338,63 @@
       document.getElementById(`reference-reader-trigger-${safeReferenceKey(referenceKey)}`)?.focus();
     }
   }
+
+  let readingItemKey = $state<string | null>(null);
+
+  function readingTarget(item: LearningContentItem): string {
+    return item.kind === "task" && item.task ? `task-row-${item.task.id}` : `orientation-${item.key}`;
+  }
+
+  function readingItems(): LearningContentItem[] {
+    return contentGroups.flatMap((group) => [
+      ...group.items.filter((item) => item.kind === "material"),
+      ...group.items.filter((item) => item.kind === "task")
+    ]);
+  }
+
+  async function openReadingItem(key: string): Promise<void> {
+    const item = readingItems().find((entry) => entry.key === key);
+    if (!item) return;
+    readingItemKey = key;
+    // Wait until the compact navigation closes before measuring the destination.
+    await tick();
+    const target = document.getElementById(readingTarget(item));
+    if (!target) return;
+    target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start" });
+  }
+
+  $effect(() => {
+    const items = readingItems();
+    if (mode !== "orienting" || !items.length) return;
+    let frame = 0;
+    let disposed = false;
+    const update = () => {
+      frame = 0;
+      const headerBottom = document.querySelector(".global-header")?.getBoundingClientRect().bottom ?? 64;
+      const visible = items.map((item) => ({ item, node: document.getElementById(readingTarget(item)) }))
+        .filter((entry) => {
+          if (!entry.node || !entry.node.getClientRects().length) return false;
+          const rect = entry.node.getBoundingClientRect();
+          return rect.bottom > headerBottom && rect.top < window.innerHeight;
+        });
+      const passed = visible.filter((entry) => entry.node!.getBoundingClientRect().top <= 180);
+      readingItemKey = (passed[passed.length - 1] ?? visible[0])?.item.key ?? null;
+      const visibleGroup = contentGroups.find((group) => group.items.some((item) => item.key === readingItemKey));
+      if (visibleGroup) onReadingModule?.(visibleGroup.id);
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    void tick().then(() => { if (!disposed) schedule(); });
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  });
 </script>
 
 <div class:learner-surface--inactive={mode !== "orienting"} aria-hidden={mode !== "orienting"}>
@@ -344,38 +405,42 @@
         groups={contentGroups.map((group) => ({
           id: group.id,
           title: group.title,
-          items: group.items.map((item) => ({ key: item.key, title: item.title }))
+          items: [...group.items.filter((item) => item.kind === "material"), ...group.items.filter((item) => item.kind === "task")].map((item) => ({ key: item.key, title: item.title, kind: item.kind }))
         }))}
-        activeItemKeys={[]}
-        onOpenItem={(itemKey) => document.getElementById(`orientation-${itemKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        activeItemKeys={readingItemKey ? [readingItemKey] : []}
+        onOpenItem={openReadingItem}
       />
     {/if}
 
     <div class="learner-orientation__content">
-      {#if unitTitle}
+      {#if unitTitle && unitType !== "modular"}
         <header class="learner-orientation__header">
           <p class="workspace-label">Lerneinheit</p>
           <h1>{unitTitle}</h1>
         </header>
       {/if}
       {#each contentGroups as group, index}
-        <section class="learner-orientation__module" aria-label={group.title ?? `Modul ${index + 1}`}>
+        <section id={`learner-module-${group.id}`} class="learner-orientation__module" aria-label={group.title ?? `Modul ${index + 1}`}>
           <header class="learner-orientation__module-header">
             <div>
               <p class="workspace-label">{unitType === "modular" ? `Modul ${index + 1}` : "Abschnitt"}</p>
-              <h3>{group.title ?? `Abschnitt ${index + 1}`}</h3>
+              <h2>{group.title ?? `Abschnitt ${index + 1}`}</h2>
               <p class="learner-orientation__module-meta">{moduleMeta(group)}</p>
             </div>
+            <div class="learner-orientation__module-tools">
+            {#if index === 0 && orientationTools}{@render orientationTools()}{/if}
             {#if unitType === "modular"}
               <button
                 class="workspace-top-action workspace-top-action--quiet workspace-top-action--subtle"
                 type="button"
-                aria-label="Modul schließen"
+                aria-label={`${group.title ?? "Modul"} aus der Ansicht schließen`}
+                title="Modul aus der Ansicht schließen"
                 onclick={() => onCloseModule(group.id)}
               >
-                Schließen
+                <span aria-hidden="true">×</span>
               </button>
             {/if}
+            </div>
           </header>
 
           {#if group.items.some((item) => item.kind === "material")}
@@ -412,6 +477,7 @@
                     domId={`task-row-${task.id}`}
                     expanded={true}
                     compactLayout={true}
+                    newerDraft={hasNewerDraft(task)}
                     submitted={submittedTaskId === task.id}
                     message={submissionMessage}
                     errorMessage={submissionErrorTaskId === task.id ? submissionErrorMessage : null}
@@ -438,9 +504,8 @@
                     h5pHistory={historyByTask[task.id] ?? []}
                     state={previewByTask[task.id]}
                     active={mode === "orienting"}
-                    newerDraft={hasNewerDraft(task)}
+                    newerDraft={false}
                     onLoad={() => onLoadSubmissionPreview?.(task.id)}
-                    onContinueDraft={() => onBeginTask(item.key, preferredMode(task))}
                   />
                 </div>
               {/if}
@@ -457,19 +522,9 @@
     {@const task = activeItem.task}
     <div class="learner-task-workbench-container">
       <header class="learner-task-header">
-        <button
-          id="learner-task-back"
-          class="learner-task-header__back"
-          type="button"
-          onclick={() => onReturn(taskReturnDestination())}
-        >
-          {unitType === "modular"
-            ? `← Zurück zu Modul ${groupForItem(activeItem)?.title ?? "Inhalte"}`
-            : "← Zurück zu den Inhalten"}
-        </button>
         <div class="learner-task-header__identity">
-          <strong>{activeItem.title}</strong>
-          <span>{workStatus === "result" ? "Ergebnis" : "In Bearbeitung"}</span>
+          <h1 id="learner-task-heading" tabindex="-1">{activeItem.title}</h1>
+          <span>{workStatus === "result" ? task.kind === "dialog" ? "Abgegeben" : "Ergebnis" : "In Bearbeitung"}</span>
         </div>
       </header>
       <section
@@ -534,6 +589,8 @@
       </nav>
 
       <LearnerTaskContext
+        onOpenCurrentTask={() => onSetCompactSurface?.("task")}
+        taskId={task.id}
         bind:scrollSurface={contextScrollSurface}
         {courseId}
         taskTitle={activeItem.title}

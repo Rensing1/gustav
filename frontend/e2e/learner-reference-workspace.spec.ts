@@ -39,6 +39,13 @@ test("@feature-acceptance reads a document stack without losing the active task"
     const exercise = workbench.getByRole("main", { name: "Bearbeitung" });
     await expect(book).toBeVisible();
     await expect(exercise).toBeVisible();
+    // Verify the rendered design contract alongside the real authenticated workflow.
+    await expect(book).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(exercise).toHaveCSS("border-radius", "8px");
+    await expect(workbench.locator(".learner-task-workbench__desk")).toHaveCSS("column-gap", "0px");
+    await expect(workbench.locator(".learner-task-workbench__desk")).toHaveCSS(
+      "grid-template-columns", /\d+(?:\.\d+)?px 16px \d+(?:\.\d+)?px/
+    );
 
     await book.getByRole("button", { name: "Perspektiven im Überblick ein- oder ausklappen" }).click();
     const image = book.getByRole("img", { name: seeded.imageAltText });

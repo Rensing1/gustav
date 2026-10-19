@@ -55,6 +55,7 @@
     initialSubmissionMode = null,
     reviewPanelOpen = false,
     compactLayout = false,
+    newerDraft = false,
     workspaceOnly = false,
     dialogCompactSurface = "task",
     dialogExpandedModuleMaterialKeys = {},
@@ -111,6 +112,7 @@
     initialSubmissionMode?: "text" | "upload" | null;
     reviewPanelOpen?: boolean;
     compactLayout?: boolean;
+    newerDraft?: boolean;
     workspaceOnly?: boolean;
     dialogCompactSurface?: "task" | "materials";
     dialogExpandedModuleMaterialKeys?: Record<string, string[]>;
@@ -270,6 +272,7 @@
   }
 
   function actionLabel(): string {
+    if (newerDraft) return "Entwurf weiterbearbeiten";
     if (task.kind === "h5p") {
       if (!latestH5PScore(task, history)) {
         return `${taskTitle} beginnen`;
@@ -559,6 +562,14 @@
     return feedbackPending || (reviewPanelOpen && hasFinalSubmission() && !hasFeedbackCycleAfterFinalization());
   }
 
+  function restoreReviewedText() {
+    const baseline = currentReviewedBaseline();
+    if (baseline?.kind !== "text") return;
+    updateDraft(baseline.textBody ?? "");
+    persistCurrentTextDraft();
+    scrollToEditor();
+  }
+
   function feedbackActionLabel(): string {
     return canOfferFinalization() || hasFinalSubmission()
       ? "Neue Rückmeldung einholen"
@@ -566,6 +577,8 @@
   }
 
   function persistCurrentTextDraft() {
+    // Preview cards also unmount during navigation. Only real edits may replace a stored draft.
+    if (!draftEditedSinceRestore) return;
     if (draftPersistTimer !== null) {
       clearTimeout(draftPersistTimer);
       draftPersistTimer = null;
@@ -779,7 +792,7 @@
       if (uploadInput) {
         uploadInput.value = "";
       }
-      void tick().then(scrollToFeedback);
+      if (reviewPanelOpen) void tick().then(scrollToFeedback);
     }
     lastSubmissionFocused = workspaceActive;
     lastWorkspaceTaskId = workspaceActive ? task.id : null;
@@ -849,6 +862,7 @@
       aria-label={taskPreview().text}
     >
       <div class="learning-task-row__copy">
+        {#if compactLayout}<p class="learning-task-row__identity">{taskTitle}</p>{/if}
         <p class="learning-task-row__preview" use:observeTaskPreview={taskPreview().text}>{taskPreview().text}</p>
         {#if task.kind === "h5p"}
           <p class="learning-task-row__more">{h5pProgressLabel(task, history)}</p>
@@ -859,6 +873,7 @@
       </div>
 
       <div class="learning-task-row__actions">
+        {#if newerDraft}<p class="learning-task-row__draft-status">Neuerer Entwurf · Noch nicht abgegeben</p>{/if}
         <button
           class:workspace-top-action--active={submissionFocused}
           class:workspace-top-action--accent={!hasFinalSubmission()}
@@ -902,9 +917,9 @@
 
     {#if workspaceOnly || expanded || usesCompactTaskLayout()}
       <div class="learning-work-item__body">
-        {#if workspaceOnly}
+        {#if workspaceOnly && (task.kind !== "dialog" || dialogCompactSurface === "task")}
           <section class="learning-task-workspace-statement" aria-label="Vollständige Aufgabenstellung">
-            <p class="workspace-label">Vollständige Aufgabe</p>
+            <p class="workspace-label">Aufgabe</p>
             <div class="markdown-prose">
               {@html renderMarkdown(task.instruction_md)}
             </div>
@@ -960,7 +975,6 @@
                     {@html renderMarkdown(task.instruction_md)}
                   </div>
                 {:else}
-                  <p class="learning-task-inline-editor__copy">Die Bearbeitung bleibt Teil derselben Arbeitsfläche.</p>
                 {/if}
               </div>
               {#if task.kind !== "dialog" && !reviewPanelOpen}
@@ -976,11 +990,17 @@
             {/if}
 
             {#if task.kind === "dialog"}
+              {#if reviewPanelOpen && !latestSubmission()?.dialog_session_id}
+                <p class="workspace-note" role="status">Die Abgabe wird geladen …</p>
+              {:else}
+              {#key reviewPanelOpen ? latestSubmission()?.dialog_session_id : "active"}
               <LearningDialogWorkspace
                 {learnerSub}
                 {courseId}
                 {task}
                 {taskTitle}
+                existingSessionId={reviewPanelOpen ? latestSubmission()?.dialog_session_id ?? null : null}
+                readOnly={reviewPanelOpen}
                 compactSurface={dialogCompactSurface}
                 expandedModuleMaterialKeys={dialogExpandedModuleMaterialKeys}
                 expandedContextModuleIds={dialogExpandedContextModuleIds}
@@ -1002,10 +1022,13 @@
                 onToggleSubmission={onToggleDialogSubmission}
                 onCloseContextModule={onCloseDialogContextModule}
                 onUndoCloseContextModule={onUndoCloseDialogContextModule}
-                onPause={onExitSubmissionWorkspace}
+                onPause={onCompletionReturn ?? onExitSubmissionWorkspace}
+                returnLabel={completionReturnDestination ? learnerReturnLabel(completionReturnDestination) : "Zurück zum Modul"}
                 showPauseAction={!hideDialogPauseAction}
                 onCompleted={onProgressPersisted}
               />
+              {/key}
+              {/if}
             {:else if task.kind === "h5p"}
               {#if task.h5p?.content_id}
                 {#key `${courseId}:${task.id}:${task.h5p.content_id}`}
@@ -1024,10 +1047,12 @@
                 <p class="workspace-note">Diese H5P-Aufgabe ist noch nicht bereit.</p>
               {/if}
             {:else}
+              {#if workspaceOnly}<h2 class="learning-answer-heading">{editorFieldLabel()}</h2>{/if}
               <div bind:this={editorControlsAnchor} class="learning-submission-controls-anchor" aria-hidden="true"></div>
               {#if !uploadOnly()}
                 <ChoiceSwitch
                   legend="Antwortform"
+                  legendHidden={workspaceOnly}
                   name={`answer-mode-${task.id}`}
                   value={editorMode}
                   options={[
@@ -1047,10 +1072,17 @@
                     {#if moduleId}
                       <input type="hidden" name="module_id" value={moduleId} />
                     {/if}
+                    {#if !draftText.trim() && currentReviewedBaseline()?.textBody?.trim()}
+                      <div class="learning-draft-recovery">
+                        <span>Ein gespeicherter Entwurf ist vorhanden.</span>
+                        <button class="workspace-top-action" type="button" disabled={editingLocked()} onclick={restoreReviewedText}>Entwurf ins Schreibfeld übernehmen</button>
+                      </div>
+                    {/if}
                     <section class="learning-submission-editor__field">
-                      <span>{editorFieldLabel()}</span>
+                      {#if !workspaceOnly}<span>{editorFieldLabel()}</span>{/if}
                       <MarkdownWysiwygEditor
                         name="text_body"
+                        ariaLabel="Deine Antwort"
                         value={draftText}
                         placeholder="Schreibe hier deine Lösung."
                         disabled={editingLocked()}
@@ -1059,9 +1091,11 @@
                       />
                     </section>
                     <div class="learning-submission-editor__actions">
-                      <button class="workspace-top-action workspace-top-action--quiet" name="submission_intent" type="submit" value="feedback" disabled={editingLocked()}>
+                      {#if !canOfferFinalization() || hasUnreviewedTextChanges()}
+                      <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="feedback" disabled={editingLocked() || !draftText.trim()}>
                         {feedbackActionLabel()}
                       </button>
+                      {/if}
                     </div>
                   </form>
                 </div>
@@ -1124,8 +1158,9 @@
                     </section>
                   {/if}
                   <div class="learning-submission-editor__actions">
+                    {#if !canOfferFinalization() || hasUnreviewedUploadReplacement()}
                     <button
-                      class="workspace-top-action workspace-top-action--quiet"
+                      class="workspace-top-action workspace-top-action--accent"
                       name="submission_intent"
                       type={onSubmitUploadFeedback ? "button" : "submit"}
                       value="feedback"
@@ -1138,15 +1173,16 @@
                     >
                       {feedbackActionLabel()}
                     </button>
+                    {/if}
                   </div>
                 </form>
               </div>
             {/if}
 
             {#if hasInlineResponse()}
-              <section bind:this={feedbackAnchor} class="learning-task-inline-response" aria-label="Rückmeldung zu deiner Abgabe">
+              <section bind:this={feedbackAnchor} class="learning-task-inline-response" aria-label="Rückmeldung zur gespeicherten Fassung">
                 <p class="learning-task-inline-response__meta">
-                  Zu deiner Abgabe · {formatSubmissionTimestamp(latestSubmissionOrThrow().created_at)}
+                  {latestSubmissionOrThrow().intent === "submit" ? "Abgegeben" : latestSubmissionOrThrow().analysis_status === "completed" ? "Geprüfter Entwurf" : "Gespeicherter Entwurf"} · {formatSubmissionTimestamp(latestSubmissionOrThrow().created_at)}
                 </p>
 
                 <div class="learning-response-group">
@@ -1219,14 +1255,19 @@
                 {:else if canOfferFinalization() || hasFeedbackCycleAfterFinalization()}
                   <section class="learning-feedback-actions" aria-label="Endgültige Abgabe">
                     <div class="learning-feedback-actions__choices">
+                      {#if reviewPanelOpen}
                       <button
-                        class="workspace-top-action workspace-top-action--accent"
+                        class="workspace-top-action"
+                        class:workspace-top-action--accent={!workspaceOnly || reviewPanelOpen}
+                        class:workspace-top-action--quiet={workspaceOnly && !reviewPanelOpen}
                         type="button"
                         disabled={editingLocked()}
                         onclick={scrollToEditor}
                       >
                         Überarbeiten
                       </button>
+                      {/if}
+                      {#if !hasUnreviewedTextChanges() && !hasUnreviewedUploadReplacement()}
                       <form bind:this={finalizationForm} method="POST" onsubmit={persistCurrentTextDraft} use:enhance={enhanceSubmit}>
                         <input type="hidden" name="task_id" value={task.id} />
                         <input type="hidden" name="task_kind" value={task.kind} />
@@ -1238,18 +1279,21 @@
                         <input type="hidden" name="finalization_idempotency_key" value={currentFinalizationIdempotencyKey() ?? ""} />
                         <button
                           bind:this={finalizationSubmitButton}
-                          class="workspace-top-action workspace-top-action--quiet"
+                          class="workspace-top-action workspace-top-action--accent"
                           name="submission_intent"
                           type="submit"
                           value="submit"
                           disabled={!canOfferFinalization() || editingLocked() || hasUnreviewedUploadReplacement()}
                           onclick={openFinalizationWarning}
                         >
-                          Endgültig abgeben
+                          Abgeben
                         </button>
                       </form>
+                      {/if}
                     </div>
-                    {#if hasUnreviewedUploadReplacement()}
+                    {#if hasUnreviewedTextChanges()}
+                      <p class="learning-feedback-actions__hint">Text geändert – hole vor der Abgabe eine neue Rückmeldung ein.</p>
+                    {:else if hasUnreviewedUploadReplacement()}
                       <p class="learning-feedback-actions__hint">Für die neue Datei zuerst Rückmeldung einholen.</p>
                     {/if}
                   </section>

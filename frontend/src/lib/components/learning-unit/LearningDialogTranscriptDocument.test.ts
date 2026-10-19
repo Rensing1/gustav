@@ -55,6 +55,22 @@ describe("LearningDialogTranscriptDocument", () => {
     );
   });
 
+  it("keeps the closing answer visible above a collapsed conversation in compact mode", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ dialog: { partner_name: "Ada", opening_message_md: "Eine Frage?" },
+        closing_answer_md: "Mein Ergebnis.", turns: [] })
+    }));
+    render(LearningDialogTranscriptDocument, {
+      props: { courseId: "course-1", taskId: "task-1", sessionId: "session-1", compact: true }
+    });
+    expect(await screen.findByText("Mein Ergebnis.")).toBeVisible();
+    const disclosure = screen.getByText("Gesprächsverlauf").closest("details");
+    expect(disclosure).not.toHaveAttribute("open");
+    expect(disclosure).not.toContainElement(screen.getByText("Mein Ergebnis."));
+    expect(disclosure).toContainElement(screen.getByText("Eine Frage?"));
+  });
+
   it("shows a contained error when the safe transcript is unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
 

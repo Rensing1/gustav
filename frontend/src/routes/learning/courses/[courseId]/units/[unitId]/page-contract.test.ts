@@ -377,7 +377,7 @@ describe("learning unit route contract", () => {
       /\.learning-unit-module__index\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*text-transform:\s*uppercase;/s
     );
     expect(designDoc).toContain("Der Modultitel ist der klare Einstiegspunkt eines Moduls");
-    expect(designDoc).toContain("`MATERIALIEN` und `AUFGABEN` bleiben technische Marker");
+    expect(designDoc).toContain("`Materialien` und `Aufgaben` sind zurückhaltende Bereichsüberschriften");
     expect(designDoc).toContain("Zwei Zeilen für lange Modultitel sind erlaubt");
     expect(designDoc).toContain("Der Abstand vom Modulkopf zum ersten Abschnitt ist größer");
     expect(designSystemCss).toMatch(
@@ -403,7 +403,7 @@ describe("learning unit route contract", () => {
     );
     expect(appCss).toMatch(/\.learning-task-row__preview\s*\{[^}]*-webkit-line-clamp:\s*2;[^}]*white-space:\s*normal;[^}]*text-overflow:\s*ellipsis;/s);
     expect(designDoc).toContain("kompakte Task-Zeilen im modularen Lernraum nutzen eine Vorschauzeile");
-    expect(designDoc).toContain("Status wird primär über Balken und Tönung getragen");
+    expect(designDoc).toContain("Relevante Zustände erhalten eine knappe verständliche Beschriftung");
     expect(designDoc).toContain("Die vollständige Aufgabenstellung erscheint in der aktiven Detailansicht inline");
     expect(designDoc).toContain("Die Aufgabenbearbeitung ist ein eigener Fokusraum");
     expect(designDoc).toContain("`accent` für Primäraktionen");

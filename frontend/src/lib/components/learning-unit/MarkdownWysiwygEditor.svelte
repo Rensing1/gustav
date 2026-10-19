@@ -21,6 +21,8 @@
     onInput?: ((nextValue: string) => void) | null;
   } = $props();
 
+  let compactToolbar = $state(false);
+  let formattingOpen = $state(false);
   let host = $state<HTMLDivElement | null>(null);
   let fallbackTextarea = $state<HTMLTextAreaElement | null>(null);
   let editor = $state<TiptapMarkdownEditor | null>(null);
@@ -33,6 +35,7 @@
   let linkPanelOpen = $state(false);
   let linkValue = $state("");
   let linkError = $state("");
+  let syncedEditor: TiptapMarkdownEditor | null = null;
   let appliedDisabled = $state<boolean | null>(null);
   let handledFocusRequest = $state(0);
   let removeFormListeners: (() => void) | null = null;
@@ -130,6 +133,11 @@
 
   onMount(() => {
     void mountEditor();
+    const query = window.matchMedia("(max-width: 40rem)");
+    const update = () => { compactToolbar = query.matches; };
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
   });
 
   onDestroy(() => {
@@ -139,7 +147,10 @@
 
   $effect(() => {
     const nextValue = String(value || "");
-    if (propValueInitialized && nextValue === lastPropValue) {
+    const activeEditor = editor;
+    const editorChanged = activeEditor !== syncedEditor;
+    syncedEditor = activeEditor;
+    if (!editorChanged && propValueInitialized && nextValue === lastPropValue) {
       return;
     }
     const editorValueAlreadyCurrent = nextValue === currentValue;
@@ -147,7 +158,7 @@
     lastPropValue = nextValue;
     currentValue = nextValue;
     // Tiptap already owns values it emitted; serializing them again blocks touch keyboards on long drafts.
-    if (editor && !editorValueAlreadyCurrent && editor.getMarkdown() !== nextValue) {
+    if (editor && (editorChanged || !editorValueAlreadyCurrent) && editor.getMarkdown() !== nextValue) {
       editor.setMarkdown(nextValue);
     }
   });
@@ -179,7 +190,10 @@
 </script>
 
 <div class:learning-markdown-editor--disabled={disabled} class="learning-markdown-editor">
-  <fieldset class="learning-markdown-editor__controls" disabled={disabled}>
+  {#if compactToolbar && editorReady}
+    <button class="learning-markdown-editor__format-toggle" type="button" aria-expanded={formattingOpen} onclick={() => { formattingOpen = !formattingOpen; }}>Formatierung <span aria-hidden="true">{formattingOpen ? "−" : "+"}</span></button>
+  {/if}
+  <fieldset class="learning-markdown-editor__controls" hidden={compactToolbar && editorReady && !formattingOpen} disabled={disabled}>
     {#if editorReady}
       <div class="learning-markdown-editor__toolbar" role="toolbar" aria-label="Text formatieren">
       <select

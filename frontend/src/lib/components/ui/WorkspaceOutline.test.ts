@@ -59,7 +59,7 @@ describe("WorkspaceOutline", () => {
     expect(label.closest(".workspace-outline__item-copy")).not.toBeNull();
   });
 
-  it("uses a denser, more technical stitch-like typography contract", () => {
+  it("uses readable typography and restrained outline surfaces", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const designDocPath = path.resolve(
       currentDir,
@@ -71,22 +71,22 @@ describe("WorkspaceOutline", () => {
     expect(designDoc).toContain("### 7.3 Flächen");
     expect(designDoc).toContain("## 13. Verbotene Alt-Muster");
     expect(css).toMatch(
-      /\.workspace-outline,\s*\.graph-stage-frame,\s*\.graph-inspector-panel\s*\{[^}]*border:\s*2px solid var\(--color-border\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*var\(--color-shadow\);/s
+      /\.workspace-outline,\s*\.graph-stage-frame,\s*\.graph-inspector-panel\s*\{[^}]*border:\s*2px solid var\(--color-border\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*none;/s
     );
     expect(css).toMatch(/\.workspace-outline\s*\{[^}]*gap:\s*0\.65rem;[^}]*padding:\s*0\.82rem 0\.85rem 0\.9rem;/s);
-    expect(css).toMatch(/\.workspace-outline__header h2\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.9rem;[^}]*text-transform:\s*uppercase;/s);
-    expect(css).toMatch(/\.workspace-outline__group-title\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.7rem;[^}]*letter-spacing:\s*0\.18em;/s);
-    expect(css).toMatch(/\.workspace-outline__item-label\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*0\.82rem;[^}]*line-height:\s*1\.4;/s);
+    expect(css).toMatch(/\.workspace-outline__header h2\s*\{[^}]*font-family:\s*var\(--font-ui\);[^}]*font-size:\s*0\.9rem;[^}]*text-transform:\s*none;/s);
+    expect(css).toMatch(/\.workspace-outline__group-title\s*\{[^}]*font-family:\s*var\(--font-ui\);[^}]*font-size:\s*var\(--font-size-sm\);[^}]*letter-spacing:\s*normal;/s);
+    expect(css).toMatch(/\.workspace-outline__item-label\s*\{[^}]*font-family:\s*var\(--font-ui\);[^}]*font-size:\s*0\.82rem;[^}]*line-height:\s*1\.4;/s);
     expect(css).toMatch(/\.workspace-outline__body\s*\{[^}]*gap:\s*1rem;/s);
     expect(css).toMatch(/\.workspace-outline__group\s*\{[^}]*gap:\s*0\.78rem;/s);
     expect(css).toMatch(/\.workspace-outline__items\s*\{[^}]*gap:\s*0\.2rem;/s);
-    expect(css).toMatch(/\.workspace-outline__item\s*\{[^}]*min-height:\s*1\.82rem;[^}]*padding:\s*0\.24rem 0 0\.24rem 0\.95rem;/s);
+    expect(css).toMatch(/\.workspace-outline__item\s*\{[^}]*min-height:\s*var\(--layout-control-min\);[^}]*padding:\s*0\.24rem 0 0\.24rem 0\.95rem;/s);
     expect(css).toMatch(/\.workspace-outline__item--active\s*\{[^}]*background:\s*transparent;/s);
     expect(css).not.toMatch(/\.workspace-outline__item--active::after\s*\{/s);
     expect(css).not.toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*color:\s*var\(--color-accent\);/s);
     expect(css).not.toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*font-weight:\s*700;/s);
     expect(css).toMatch(
-      /\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;[^}]*top:\s*1rem;[^}]*border:\s*1px solid var\(--color-line\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*var\(--color-shadow\);/s
+      /\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;[^}]*top:\s*1rem;[^}]*border:\s*1px solid var\(--color-line\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*none;/s
     );
   });
 });

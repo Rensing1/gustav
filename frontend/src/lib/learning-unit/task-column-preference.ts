@@ -1,5 +1,6 @@
 export const TASK_COLUMN_PREFERENCE_VERSION = 1;
-export const MIN_TASK_COLUMN_RATIO = 35;
+// Keep the context readable while allowing the task to use most of the desk.
+export const MIN_TASK_COLUMN_RATIO = 24;
 export const MAX_TASK_COLUMN_RATIO = 65;
 
 type ReadableStorage = {

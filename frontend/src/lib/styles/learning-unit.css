@@ -2297,26 +2297,37 @@
   box-shadow: none;
 }
 
+/* The inactive dialog contributes no extra box; showModal keeps the player in place. */
+.h5p-fullscreen-host:not([open]) { display: contents; }
+.h5p-fullscreen-host:modal {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  overflow: hidden;
+}
 .h5p-task-player {
   min-width: 0;
   width: 100%;
   grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: 0.75rem;
-  padding: 1rem;
-  border-radius: var(--radius-m);
   background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  box-shadow: none;
 }
-
-.h5p-task-viewport { min-width: 0; max-width: 100%; }
-.h5p-task-viewport--scrollable { overflow: auto; max-height: 65vh; max-height: 65dvh; overscroll-behavior: contain; }
-.h5p-view-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.h5p-view-controls .workspace-button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-on-accent); }
-.h5p-view-hint { margin: 0; color: var(--color-text-muted); }
-
-.h5p-status { flex-shrink: 0; }
+.h5p-fullscreen-toolbar { display: flex; justify-content: flex-end; }
+.h5p-fullscreen-host:modal .h5p-task-player { height: 100%; display: flex; flex-direction: column; }
+.h5p-fullscreen-host:modal .h5p-task-viewport { flex: 1; min-height: 0; overflow: auto; max-height: none; }
+.h5p-fullscreen-host:modal .h5p-fullscreen-toolbar,
+.h5p-fullscreen-host:modal .h5p-view-controls,
+.h5p-fullscreen-host:modal .h5p-status { flex-shrink: 0; }
 body:has(.h5p-fullscreen-host:modal) { overflow: hidden; }
 
 .h5p-task-viewport { min-width: 0; max-width: 100%; }

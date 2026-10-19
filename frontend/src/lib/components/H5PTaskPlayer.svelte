@@ -26,6 +26,24 @@
     onProgressPersisted?: ((result: H5PPersistedResult) => void | Promise<void>) | null;
   } = $props();
 
+  let fullscreenDialog: HTMLDialogElement | undefined;
+  let fullscreenButton: HTMLButtonElement | undefined;
+  let fullscreen = $state(false);
+
+  // A modal fills the browser viewport while keeping the same H5P instance alive.
+  function toggleFullscreen() {
+    if (fullscreen) fullscreenDialog?.close();
+    else {
+      fullscreenDialog?.showModal();
+      fullscreen = true;
+    }
+  }
+
+  function leaveFullscreen() {
+    fullscreen = false;
+    fullscreenButton?.focus();
+  }
+
   let root: HTMLDivElement | undefined;
   let region: HTMLDivElement | undefined;
   let dragReady = $state(false);
@@ -110,6 +128,15 @@
         })
       | undefined;
     let detachPlayerListeners: (() => void) | undefined;
+    // H5P libraries must recompute their geometry after a pane or viewport resize.
+    let resizeFrame = 0;
+    const sizeObserver = new ResizeObserver(() => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        (player as (HTMLElement & { resize?: () => void }) | undefined)?.resize?.();
+      });
+    });
+    if (region) sizeObserver.observe(region);
 
     async function submitAttempt(
       statementId: string,
@@ -276,6 +303,8 @@
 
     return () => {
       disposed = true;
+      sizeObserver.disconnect();
+      cancelAnimationFrame(resizeFrame);
       detachPlayerListeners?.();
       detachPlayerListeners = undefined;
       player = undefined;
@@ -284,7 +313,11 @@
   });
 </script>
 
+<dialog bind:this={fullscreenDialog} class="h5p-fullscreen-host" class:h5p-fullscreen-host--active={fullscreen} aria-label="H5P-Aufgabe" onclose={leaveFullscreen}>
 <div class="h5p-task-player">
+  <div class="h5p-fullscreen-toolbar">
+    <button bind:this={fullscreenButton} type="button" class="workspace-button workspace-button--ghost" aria-expanded={fullscreen} onclick={toggleFullscreen}>{fullscreen ? "Vollbild verlassen" : "Vollbild"}</button>
+  </div>
   {#if dragReady}
     <div class="h5p-view-controls" role="group" aria-label="H5P-Ansicht">
       <button type="button" class="workspace-button workspace-button--ghost" aria-pressed={viewMode === "readable"} onclick={() => chooseView("readable")}>Lesbare Ansicht</button>
@@ -300,3 +333,5 @@
   </div>
   <div class="h5p-status"><StatusMessage tone={statusTone(status)} title={status} dismissible={false} /></div>
 </div>
+
+</dialog>

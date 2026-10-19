@@ -19,8 +19,8 @@ describe("learner workspace theme contract", () => {
     const layout = readFileSync(path.resolve(import.meta.dirname, "../../routes/+layout.svelte"), "utf8");
     const appShell = readFileSync(path.resolve(import.meta.dirname, "../../app.html"), "utf8");
 
-    expect(layout).toContain('currentTheme === "dark" ? "#121212" : "#f9f9f9"');
-    expect(appShell).toContain('<meta name="theme-color" content="#f9f9f9" />');
+    expect(layout).toContain('currentTheme === "dark" ? "#15171b" : "#f6f7f9"');
+    expect(appShell).toContain('<meta name="theme-color" content="#f6f7f9" />');
     expect(layout).not.toMatch(/#272E33|#FAF4ED/i);
     expect(appShell).not.toMatch(/#faf4ed/i);
   });

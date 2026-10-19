@@ -12,7 +12,7 @@
 </svelte:head>
 
 <div class="workspace-page learning-home learning-course-home">
-  <PageActionHead backHref="/learning" backLabel="Zurück zum Lernraum" title={data.courseTitle}>
+  <PageActionHead title={data.courseTitle}>
     {#snippet actions()}
       <a class="workspace-link-action" href={`/learning/courses/${data.courseId}/archive`}>Meine Lernleistung &amp; Export</a>
     {/snippet}

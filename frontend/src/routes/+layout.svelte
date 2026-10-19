@@ -14,17 +14,19 @@
   import "@fontsource/work-sans/latin-500.css";
   import "@fontsource/work-sans/latin-600.css";
   import "$lib/styles/index.css";
-  import BreadcrumbBar from "$lib/components/ui/BreadcrumbBar.svelte";
-  import ThemeToggle from "$lib/components/ui/ThemeToggle.svelte";
+  import ContextNavigation from "$lib/components/ui/ContextNavigation.svelte";
+  import AppHeader from "$lib/components/ui/AppHeader.svelte";
   import { syncDocumentTheme } from "$lib/theme/client";
-  import type { Snippet } from "svelte";
+  import { setContext, type Snippet } from "svelte";
+  import { workspaceNavigationKey, type WorkspaceNavigation } from "$lib/types/workspace-navigation";
   import type { BreadcrumbItem } from "$lib/types/navigation";
   import type { ThemePreference } from "$lib/types/theme";
   import type { WorkspaceLayout } from "$lib/types/workspace-layout";
   import type { LayoutData } from "./$types";
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
-  let accountMenu = $state<HTMLDetailsElement | null>(null);
+  const workspaceNavigation = $state<WorkspaceNavigation>({ href: null });
+  setContext(workspaceNavigationKey, workspaceNavigation);
   let themeOverride = $state<ThemePreference | null>(null);
   let currentTheme = $derived<ThemePreference>(themeOverride ?? data.theme);
   let themeWriteController = $state<AbortController | null>(null);
@@ -76,6 +78,8 @@
   }
 
   function isPrimaryActive(href: string): boolean {
+    if (href === "/learning") return isActive(href) && !isActive("/learning/practice") && !isActive("/learning/kummerkasten");
+
     if (href === "/teaching/courses") {
       return isActive("/teaching/courses");
     }
@@ -121,7 +125,21 @@
 
   function currentBreadcrumbs(): BreadcrumbItem[] {
     const breadcrumbs = page.data.breadcrumbs;
-    return Array.isArray(breadcrumbs) ? (breadcrumbs as BreadcrumbItem[]) : [];
+    const items = Array.isArray(breadcrumbs) ? [...breadcrumbs as BreadcrumbItem[]] : [];
+    // URL state changes without a server reload inside a learning workspace.
+    const workspaceUrl = workspaceNavigation.href ? new URL(workspaceNavigation.href, page.url) : page.url;
+    const url = workspaceUrl.pathname === page.url.pathname ? workspaceUrl : page.url;
+    const moduleId = url.searchParams.get("module");
+    const graph = page.data.graph as { modules?: { id: string; title: string }[] } | null;
+    const module = isLearnerUnitWorkspaceRoute() ? graph?.modules?.find((item) => item.id === moduleId) : null;
+    if (module && items.length) {
+      items[items.length - 1] = { ...items[items.length - 1], href: page.url.pathname };
+      items.push({ label: module.title, ...(url.searchParams.has("task") ? { href: `${page.url.pathname}?module=${encodeURIComponent(module.id)}` } : {}) });
+    }
+    if (isLearnerUnitWorkspaceRoute() && !module && url.searchParams.has("task") && items.length) {
+      items[items.length - 1] = { ...items[items.length - 1], href: page.url.pathname };
+    }
+    return items;
   }
 
   function currentHeaderAction(): { href: string; label: string } | null {
@@ -170,19 +188,6 @@
     return page.data.workspaceLayout ?? "standard";
   }
 
-  function closeAccountMenuOnWindowClick(event: MouseEvent): void {
-    if (!accountMenu?.open) {
-      return;
-    }
-
-    const target = event.target;
-    if (!(target instanceof Node) || accountMenu.contains(target)) {
-      return;
-    }
-
-    accountMenu.open = false;
-  }
-
   async function toggleTheme(): Promise<void> {
     const nextTheme: ThemePreference = currentTheme === "dark" ? "light" : "dark";
     themeOverride = nextTheme;
@@ -227,78 +232,19 @@
 
 <svelte:head>
   <title>GUSTAV</title>
-  <meta name="theme-color" content={currentTheme === "dark" ? "#121212" : "#f9f9f9"} />
+  <meta name="theme-color" content={currentTheme === "dark" ? "#15171b" : "#f6f7f9"} />
 </svelte:head>
 
-<svelte:window onclick={closeAccountMenuOnWindowClick} />
+
 
 <div class:app-shell--auth-route={isAuthLayout()} class="app-shell" data-theme={currentTheme}>
-  <header
-    class:app-topbar--learner-unit={isLearnerUnitWorkspaceRoute()}
-    class:app-topbar--immersive-workspace={isImmersiveWorkspace()}
-    class="app-topbar"
-  >
-    <div
-      class:app-topbar-inner--learner-unit={isLearnerUnitWorkspaceRoute()}
-      class:app-topbar-inner--immersive-workspace={isImmersiveWorkspace()}
-      class="app-topbar-inner"
-    >
-      <a class="brand-lockup" href="/" aria-label="Startseite">
-        <img class="brand-logo" src="/gustav-logo.png" alt="" />
-        <div class="brand-copy">
-          <strong>GUSTAV</strong>
-        </div>
-      </a>
-
-      {#if isLearnerUnitWorkspaceRoute() && currentBreadcrumbs().length}
-        <BreadcrumbBar className="app-topbar-breadcrumbs app-topbar-breadcrumbs--learner-unit" items={currentBreadcrumbs()} />
-      {:else}
-        <nav class:space-nav--learner-unit={isLearnerUnitWorkspaceRoute()} class="space-nav" aria-label="Hauptnavigation">
-          {#each primaryNavItems() as item}
-            {#if data.bootstrap?.spaces?.includes(item.requiredSpace)}
-              <a
-                href={item.href}
-                aria-current={isPrimaryActive(item.href) ? "page" : undefined}
-                aria-label={item.label}
-              >
-                <span class="nav-label">{item.label}</span>
-              </a>
-            {/if}
-          {/each}
-        </nav>
-      {/if}
-
-      <div class="app-topbar-controls">
-        {#if data.bootstrap}
-          <a
-            class="app-topbar-concern-link"
-            href={concernBoxHref()}
-            aria-current={isActive(concernBoxHref()) ? "page" : undefined}
-          >Kummerkasten</a>
-        {/if}
-
-        <div class="app-topbar-tools">
-          <ThemeToggle currentTheme={currentTheme} onToggle={toggleTheme} />
-
-          {#if data.bootstrap}
-            <details class="account-menu" bind:this={accountMenu}>
-              <summary class="account-trigger" aria-label="Konto-Menü">
-                <span class="account-trigger__name">{data.bootstrap.user.name}</span>
-                <span class="account-trigger__initial" aria-hidden="true">
-                  {data.bootstrap.user.name.slice(0, 1).toUpperCase()}
-                </span>
-              </summary>
-
-              <div class="account-menu__panel">
-                <a class="account-menu__action" href="/profile">Profil</a>
-                <a class="account-menu__action" href="/auth/logout">Abmelden</a>
-              </div>
-            </details>
-          {/if}
-        </div>
-      </div>
-    </div>
-  </header>
+  <AppHeader
+    items={primaryNavItems().filter((item) => data.bootstrap?.spaces?.includes(item.requiredSpace)).map((item) => ({ ...item, active: isPrimaryActive(item.href) }))}
+    name={data.bootstrap?.user.name}
+    concernHref={data.bootstrap ? concernBoxHref() : undefined}
+    contextItems={isActive("/learning") ? currentBreadcrumbs() : undefined}
+    {currentTheme} onToggle={toggleTheme} routeKey={page.url.href}
+  />
 
   <main class:workspace-shell--auth={isAuthLayout()} class="workspace-shell">
     <div
@@ -308,19 +254,16 @@
       class:workspace-inner--wide={workspaceLayout() === "wide"}
       class:workspace-inner--canvas={workspaceLayout() === "canvas"}
     >
-      {#if !isAuthLayout()}
+      {#if !isAuthLayout() && (!isActive("/learning") || !hidePageHeading() || currentHeaderAction())}
         <header
-          class="workspace-header"
+          class="workspace-header unified-context-header"
           class:workspace-header--breadcrumbs-wide={isLearnerUnitWorkspaceRoute()}
           class:workspace-header--learner-unit={isLearnerUnitWorkspaceRoute()}
           class:workspace-header--immersive-workspace={isImmersiveWorkspace()}
         >
           <div class="workspace-topbar">
-            {#if currentBreadcrumbs().length && !isLearnerUnitWorkspaceRoute()}
-              <BreadcrumbBar
-                className="workspace-breadcrumbs"
-                items={currentBreadcrumbs()}
-              />
+            {#if currentBreadcrumbs().length && !isActive("/learning")}
+              <ContextNavigation items={currentBreadcrumbs()} />
             {/if}
 
             {#if currentHeaderAction()}

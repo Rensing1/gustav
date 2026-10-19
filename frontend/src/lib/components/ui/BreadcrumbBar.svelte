@@ -6,10 +6,12 @@
 
   let {
     items,
-    className = ""
+    className = "",
+    reload = false
   }: {
     items: BreadcrumbBarItem[];
     className?: string;
+    reload?: boolean;
   } = $props();
 </script>
 
@@ -20,7 +22,7 @@
     {/if}
 
     {#if item.href}
-      <a href={item.href}>{item.label}</a>
+      <a href={item.href} data-sveltekit-reload={reload || undefined}>{item.label}</a>
     {:else}
       <span class="breadcrumb-bar__current" aria-current="page">{item.label}</span>
     {/if}

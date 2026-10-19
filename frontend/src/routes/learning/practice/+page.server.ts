@@ -14,7 +14,7 @@ import { practiceErrorMessage } from "$lib/practice/practice-presentation";
 export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
   const authRedirectPath = currentPath(url);
   await requireParentSpaceBootstrap(parent, authRedirectPath, "learning");
-  const breadcrumbs = [{ label: "Lernraum", href: "/learning" }, { label: "Üben" }];
+  let breadcrumbs = [{ label: "Lernraum", href: "/learning" }, { label: "Üben" }];
   const activeSession = await readTypedJsonOrNull<LearningPracticeSession>(
     fetch,
     cookies,
@@ -38,6 +38,20 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
   const selectedStack = stackResponse.stacks.some(
     (stack) => `${stack.course_id}:${stack.practice_module_id}` === requestedStack
   ) ? requestedStack : null;
+  // Session context wins over stale query parameters, including after action redirects.
+  const currentItem = activeSession?.current_item;
+  const contextStack = currentItem
+    ? stackResponse.stacks.find(stack => stack.course_id === currentItem.course_id && stack.practice_module_id === currentItem.practice_module_id)
+    : stackResponse.stacks.find(stack => `${stack.course_id}:${stack.practice_module_id}` === selectedStack);
+  if (contextStack) {
+    const courseHref = `/learning/courses/${encodeURIComponent(contextStack.course_id)}`;
+    breadcrumbs = [
+      { label: "Lernraum", href: "/learning" },
+      { label: contextStack.course_title, href: courseHref },
+      { label: contextStack.unit_title, href: `${courseHref}/units/${encodeURIComponent(contextStack.unit_id)}` },
+      { label: contextStack.module_title }
+    ];
+  }
   const selectedMode: "due" | "exam" = url.searchParams.get("mode") === "exam" ? "exam" : "due";
   return {
     breadcrumbs,

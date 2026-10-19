@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import MobileLearningPath from "./MobileLearningPath.svelte";
   import { SvelteFlow } from "@xyflow/svelte";
   import { fitGraphToScreen, graphAriaLabels } from "$lib/graph/graph-presentation";
   import "@xyflow/svelte/dist/style.css";
@@ -28,6 +30,15 @@
     onRetry?: () => void;
   } = $props();
 
+  let compact = $state(false);
+  onMount(() => {
+    const query = window.matchMedia("(max-width: 64rem)");
+    const update = () => { compact = query.matches; };
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  });
+
   const nodeTypes = {
     unitNode: LearningGraphNode,
     phaseBand: GraphPhaseBand
@@ -40,7 +51,7 @@
 
 <GraphStageFrame chromeless eyebrow="Lernpfad" title="Lernpfad">
   {#snippet children()}
-    <section use:fitGraphToScreen class="learning-unit-stage learning-unit-stage--graph teacher-flow-workspace teacher-flow-shell learning-flow-shell">
+    <section use:fitGraphToScreen class:learning-unit-stage--mobile-path={compact} class="learning-unit-stage learning-unit-stage--graph teacher-flow-workspace teacher-flow-shell learning-flow-shell">
       {#if error}
         <div role="alert">
           <p>{error}</p>
@@ -49,6 +60,9 @@
       {:else if busy && nodes.length === 0}
         <p role="status">Lernpfad wird aufgebaut …</p>
       {:else if graph && nodes.length > 0}
+        {#if compact}
+          <MobileLearningPath {graph} onOpen={(id) => nodes.find((node) => node.id === id)?.data.onSelect?.()} />
+        {:else}
         <SvelteFlow
           ariaLabelConfig={graphAriaLabels}
           bind:nodes={nodes}
@@ -71,6 +85,7 @@
             showInteractionToggle={false}
           />
         </SvelteFlow>
+        {/if}
       {:else if graph}
         <p class="learning-unit-empty-copy">Der Lernpfad enthält noch keine Module.</p>
       {:else}

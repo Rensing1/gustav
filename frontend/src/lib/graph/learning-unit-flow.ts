@@ -124,6 +124,7 @@ export async function buildLearningUnitFlow(
     }
 
     const module = moduleById.get(node.id);
+    const prerequisiteCount = new Set(graph.edges.filter((edge) => edge.to === node.id).map((edge) => edge.from)).size;
     const openable = module?.status === "open" || module?.status === "done";
     const selected = module
       ? learnerGraphNodeIsSelected(module.status, openModuleIdSet, module.id)
@@ -147,7 +148,7 @@ export async function buildLearningUnitFlow(
           : `${module?.tasks_done ?? 0}/${module?.tasks_total ?? 0} Aufgaben`,
         materialsLabel: !openable
           ? module && module.prereq_required > 0 && Number.isFinite(module.prereq_done)
-            ? `${module.prereq_done}/${module.prereq_required} Voraussetzungen erfüllt`
+            ? `${module.prereq_done}/${module.prereq_required} erfüllt${prerequisiteCount > module.prereq_required ? ` · ${module.prereq_required} von ${prerequisiteCount} Modulen nötig` : ""}`
             : "Freischaltbedingungen nicht verfügbar"
           : module?.module_kind === "practice"
           ? "Übungsstapel"

@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from html import unescape
 from urllib.parse import urljoin
 
 import pytest
@@ -57,10 +58,11 @@ def _parse_register_form(html: str, base_url: str) -> tuple[str, dict]:
     )
     if not m:
         raise AssertionError("Keycloak register form not found (kc-register-form)")
-    action = urljoin(base_url, m.group(1))
+    action = urljoin(base_url, unescape(m.group(1)))
     inner = m.group(2)
     # Collect default inputs (hidden and others with value)
     inputs = dict(re.findall(r"<input[^>]*name=\"([^\"]+)\"[^>]*value=\"([^\"]*)\"", inner, re.I))
+    inputs = {unescape(name): unescape(value) for name, value in inputs.items()}
     return action, inputs
 
 
@@ -91,6 +93,23 @@ def _kc_set_password_policy(policy: str) -> None:
         timeout=5,
     )
     r2.raise_for_status()
+
+
+@pytest.fixture(autouse=True)
+def _preserve_password_policy():
+    """Keep temporary validation policies from changing the running realm."""
+    token = _kc_admin_token()
+    response = requests.get(
+        f"{KC_BASE}/admin/realms/{REALM}",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=5,
+    )
+    response.raise_for_status()
+    original = response.json().get("passwordPolicy", "")
+    try:
+        yield
+    finally:
+        _kc_set_password_policy(original)
 
 
 def test_register_invalid_shows_error():

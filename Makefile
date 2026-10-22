@@ -328,7 +328,11 @@ test-full-prod-like:
 	@$(MAKE) dependency-audit
 	@$(MAKE) test-supabase
 	@$(MAKE) test-openai
-	@$(MAKE) test-e2e
+	# Exercise production guards, then restore the caller's stack before browser mutations.
+	@profile_e2e_status=0; \
+	GUSTAV_ENV=prod $(MAKE) test-e2e || profile_e2e_status=$$?; \
+	$(MAKE) up || exit $$?; \
+	exit $$profile_e2e_status
 	@$(MAKE) test-visual-smoke
 
 .PHONY: harness-minimum
@@ -452,6 +456,8 @@ test-supabase:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	. ./.venv/bin/activate && \
 	RUN_SUPABASE_E2E=1 \
+	SUPABASE_PUBLIC_URL="$${SUPABASE_PUBLIC_URL:-https://app.localhost}" \
+	SSL_CERT_FILE="$${SSL_CERT_FILE:-.tmp/caddy-root.crt}" \
 	SUPABASE_REWRITE_SIGNED_URL_HOST=true \
 	AUTO_WIRE_STORAGE_E2E=true \
 	pytest -q -m supabase_integration

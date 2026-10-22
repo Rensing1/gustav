@@ -1,5 +1,11 @@
+import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = PROJECT_ROOT / "Makefile"
@@ -296,3 +302,37 @@ def test_named_test_targets_do_not_reference_retired_test_files() -> None:
     paths = re.findall(r"backend/tests/[A-Za-z0-9_./-]+\.py", MAKEFILE.read_text())
     missing = sorted({path for path in paths if not (PROJECT_ROOT / path).is_file()})
     assert missing == []
+
+
+@pytest.mark.parametrize("e2e_exit", [0, 7])
+def test_full_profile_restores_original_mode_even_when_production_e2e_fails(tmp_path, e2e_exit):
+    """Execute the real recipe with inert child targets; never start Docker here."""
+    log = tmp_path / "calls.jsonl"
+    runner = tmp_path / "child-make"
+    runner.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "with open(os.environ['PROFILE_CALL_LOG'], 'a') as stream:\n"
+        "    stream.write(json.dumps([sys.argv[1], os.environ.get('GUSTAV_ENV')]) + '\\n')\n"
+        "if sys.argv[1] == 'test-e2e': sys.exit(int(os.environ['PROFILE_E2E_EXIT']))\n",
+        encoding="utf-8",
+    )
+    runner.chmod(0o700)
+    result = subprocess.run(
+        ["make", "--no-print-directory", "test-full-prod-like", f"MAKE={runner}"],
+        cwd=PROJECT_ROOT,
+        env={**os.environ, "GUSTAV_ENV": "dev", "PROFILE_CALL_LOG": str(log), "PROFILE_E2E_EXIT": str(e2e_exit)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert ["test-e2e", "prod"] in calls
+    assert ["up", "dev"] in calls
+    assert calls.index(["test-e2e", "prod"]) < calls.index(["up", "dev"])
+    if e2e_exit:
+        assert result.returncode != 0
+        assert not any(name == "test-visual-smoke" for name, _ in calls)
+    else:
+        assert result.returncode == 0, result.stderr
+        assert calls[-1] == ["test-visual-smoke", "dev"]

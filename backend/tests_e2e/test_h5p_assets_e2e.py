@@ -20,6 +20,7 @@ import os
 import re
 import time
 import zipfile
+from html import unescape
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -136,9 +137,10 @@ def _parse_login_form(html: str, base_url: str) -> tuple[str, dict]:
     )
     if not form_match:
         raise AssertionError("Keycloak login form not found (kc-form-login)")
-    action = form_match.group(1)
+    action = unescape(form_match.group(1))
     inner = form_match.group(2)
     inputs = dict(re.findall(r"<input[^>]*name=\"([^\"]+)\"[^>]*value=\"([^\"]*)\"", inner, re.I))
+    inputs = {unescape(name): unescape(value) for name, value in inputs.items()}
     action_url = urljoin(base_url, action)
     return action_url, inputs
 

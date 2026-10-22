@@ -15,7 +15,8 @@ from __future__ import annotations
 import os
 import re
 import time
-from urllib.parse import urljoin, urlparse
+from html import unescape
+from urllib.parse import urljoin
 
 import pytest
 import requests
@@ -181,10 +182,11 @@ def _parse_login_form(html: str, base_url: str) -> tuple[str, dict]:
     form_match = re.search(r"<form[^>]*id=\"kc-form-login\"[^>]*action=\"([^\"]+)\"[^>]*>(.*?)</form>", html, re.I | re.S)
     if not form_match:
         raise AssertionError("Keycloak login form not found (kc-form-login)")
-    action = form_match.group(1)
+    action = unescape(form_match.group(1))
     inner = form_match.group(2)
     # Collect hidden inputs (and any with default values)
     inputs = dict(re.findall(r"<input[^>]*name=\"([^\"]+)\"[^>]*value=\"([^\"]*)\"", inner, re.I))
+    inputs = {unescape(name): unescape(value) for name, value in inputs.items()}
     # Build absolute action URL
     action_url = urljoin(base_url, action)
     return action_url, inputs
@@ -258,7 +260,16 @@ def test_register_login_logout_flow():
     assert any(c.name == "gustav_session" for c in sess.cookies), "Session cookie not set"
 
     # 6) Logout (unified: App + IdP) and ensure /api/me requires auth afterwards
-    r_lo = sess.get(f"{WEB_BASE}/auth/logout", allow_redirects=False, timeout=5)
+    confirmation = sess.get(f"{WEB_BASE}/auth/logout", timeout=5)
+    assert confirmation.status_code == 200
+    assert "Von GUSTAV abmelden?" in confirmation.text
+    assert sess.get(f"{WEB_BASE}/api/me", timeout=5).status_code == 200
+    r_lo = sess.post(
+        f"{WEB_BASE}/auth/logout",
+        headers={"Origin": WEB_BASE, "Referer": f"{WEB_BASE}/auth/logout"},
+        allow_redirects=False,
+        timeout=5,
+    )
     assert r_lo.status_code in (301, 302, 303)
     # Follow the IdP end-session redirect back to the app (best-effort)
     steps = 0
@@ -268,10 +279,6 @@ def test_register_login_logout_flow():
         resp = sess.get(next_url, allow_redirects=False, timeout=5)
         steps += 1
 
-    # After logout, /api/me should return 401
-    # If the browser preserves the cookie despite Set-Cookie=delete, clear it here
-    for c in list(sess.cookies):
-        if c.name == "gustav_session":
-            sess.cookies.clear(domain=c.domain or urlparse(WEB_BASE).hostname, path=c.path or "/", name=c.name)
+    # Logout must invalidate the session through the application itself.
     r_me2 = sess.get(f"{WEB_BASE}/api/me", timeout=5)
     assert r_me2.status_code == 401, f"Expected 401 after logout, got {r_me2.status_code}"

@@ -16,7 +16,7 @@ Status: Stable
 - `make test` – Unit/Integration
 - `make verify-preflight-db` – Prüft vor `verify`, ob die lokale DB den erwarteten Schema-Stand hat (u. a. `unit_tasks_kind_check` inkl. `calliope`)
 - `make test-h5p` – H5P Sidecar (Node) Unit-Tests
-- `make test-supabase` – Supabase Storage Integration (`-m supabase_integration`)
+- `make test-supabase` – Supabase Storage Integration (`-m supabase_integration`); nutzt bei nicht gesetzter öffentlicher Origin denselben HTTPS-Standard wie Compose und die lokale Caddy-CA über `SSL_CERT_FILE` (explizite Werte bleiben vorrangig)
 - `make test-openai` – OpenAI-kompatibler Endpoint Smoke-Tests (`-m openai_integration`)
 - `make test-e2e` – E2E (`-m e2e`, startet Dienste)
 - `make verify` – deterministische harte Gates (DB-Preflight, Import/API/Architektur/Route/Docker-Smokes, Python-Tests, Frontend und H5P), ohne echte externe OpenAI-/Browser-E2E-Smokes
@@ -30,7 +30,7 @@ Status: Stable
 - `make playwright-bootstrap` – installiert die von Playwright unterstützten Chromium- und WebKit-Browser; visuelle Smokes bleiben auf Chromium begrenzt, iPad-nahe Feature-Acceptance-Fälle laufen zusätzlich in WebKit
 - `make test-visual-smoke` – führt ausschließlich `@visual-smoke` in Chromium über das lokale, TLS-geprüfte Feature-Harness aus und bereinigt anhand des privaten Laufmanifests auch nach Fehlern nur laufzugehörige Daten
 - `make update-visual-baselines` – aktualisiert UI-Labor, Moduleditor und integrierte Arbeitsansichten nacheinander über das sichere Visual-Profil; jede geänderte PNG-Referenz muss anschließend gegen `docs/DESIGN.md` geprüft werden
-- `make test-full-prod-like` – vollständiges produktionsnahes Freigabeprofil (`verify` + Online-Dependency-Audit + Supabase-Smoke + OpenAI-Smoke + E2E + visueller Browser-Smoke)
+- `make test-full-prod-like` – vollständiges produktionsnahes Freigabeprofil (`verify` + Online-Dependency-Audit + Supabase-Smoke + OpenAI-Smoke + E2E + visueller Browser-Smoke); startet den HTTP-E2E-Block mit Produktionsschutz und stellt vor den mutierenden Browserprüfungen den vorherigen, über die unveränderte Umgebung konfigurierten Stack wieder her, auch wenn der E2E-Block scheitert
 - `make supabase-status` – Supabase Status/URLs
 - `make docker-validate` – `docker compose config` (Syntax/ENV)
 - `make import-legacy` – Legacy Dump importieren (lokal; schreibt Report nach `docs/migration/reports/`)

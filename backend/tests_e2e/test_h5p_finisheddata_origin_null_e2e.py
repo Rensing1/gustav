@@ -1,16 +1,7 @@
-"""
-E2E: H5P finishedData ingest must work even when the browser sends `Origin: null`.
+"""E2E: H5P rejects opaque origins and persists same-origin finished scores.
 
-Why:
-    Some H5P embed modes can end up sending `Origin: null` (e.g., sandboxed iframes).
-    We still need to:
-      - accept the request when a same-origin Referer is present, and
-      - forward the finished score to the Learning API so Teacher dashboards can
-        read progress from `learning_submissions(kind='h5p')`.
-
-Regression:
-    The H5P service previously rejected `Origin: null` even with a valid Referer,
-    and its internal forwarding logic failed to fall back to Referer parsing.
+The existing CSRF contract rejects Origin=null even with a trusted Referer.
+A legitimate same-origin result must still reach the Learning submission history.
 """
 
 from __future__ import annotations
@@ -19,6 +10,7 @@ import os
 import re
 import time
 import zipfile
+from html import unescape
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urljoin
@@ -135,9 +127,10 @@ def _parse_login_form(html: str, base_url: str) -> tuple[str, dict]:
     )
     if not form_match:
         raise AssertionError("Keycloak login form not found (kc-form-login)")
-    action = form_match.group(1)
+    action = unescape(form_match.group(1))
     inner = form_match.group(2)
     inputs = dict(re.findall(r"<input[^>]*name=\"([^\"]+)\"[^>]*value=\"([^\"]*)\"", inner, re.I))
+    inputs = {unescape(name): unescape(value) for name, value in inputs.items()}
     action_url = urljoin(base_url, action)
     return action_url, inputs
 
@@ -181,7 +174,7 @@ def _build_fixture_h5p_bytes() -> bytes:
     return buf.getvalue()
 
 
-def test_h5p_finisheddata_accepts_origin_null_and_persists_learning_submission():
+def test_h5p_finisheddata_rejects_null_origin_and_persists_same_origin_submission():
     _wait_for(f"{KC_BASE}/realms/{REALM}/.well-known/openid-configuration")
     _wait_for(f"{WEB_BASE}/health")
     _wait_for(f"{WEB_BASE}/h5p/healthz")
@@ -218,7 +211,7 @@ def test_h5p_finisheddata_accepts_origin_null_and_persists_learning_submission()
     # Create course + unit + released section + H5P task.
     r_course = teacher_sess.post(
         f"{WEB_BASE}/api/teaching/courses",
-        json={"title": f"E2E finishedData {int(time.time())}"},
+        json={"title": f"E2E finishedData {int(time.time())}", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026},
         headers={"Origin": WEB_BASE},
         timeout=20,
     )
@@ -288,12 +281,21 @@ def test_h5p_finisheddata_accepts_origin_null_and_persists_learning_submission()
     )
     assert r_add.status_code in (201, 204), f"Add member failed: {r_add.status_code} {r_add.text}"
 
-    # Main regression check: finishedData with Origin=null must still persist a submission.
+    # A trusted Referer must not bypass an explicitly opaque Origin.
     r_finished = student_sess.post(
         f"{WEB_BASE}/h5p/finishedData",
         params={"course_id": course_id, "task_id": task_id},
         json={"contentId": content_id, "score": 1, "maxScore": 1, "opened": 1, "finished": 2, "time": 3},
         headers={"Origin": "null", "Referer": f"{WEB_BASE}/learning/courses/{course_id}"},
+        timeout=30,
+    )
+    assert r_finished.status_code == 403
+    assert r_finished.json()["error"] == "csrf_violation"
+    r_finished = student_sess.post(
+        f"{WEB_BASE}/h5p/finishedData",
+        params={"course_id": course_id, "task_id": task_id},
+        json={"contentId": content_id, "score": 1, "maxScore": 1, "opened": 1, "finished": 2, "time": 3},
+        headers={"Origin": WEB_BASE, "Referer": f"{WEB_BASE}/learning/courses/{course_id}"},
         timeout=30,
     )
     assert r_finished.status_code == 200, f"finishedData failed: {r_finished.status_code} {r_finished.text}"

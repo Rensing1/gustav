@@ -3,7 +3,6 @@ import json
 import lzma
 import os
 import struct
-import sys
 import tempfile
 import uuid
 import zipfile
@@ -25,6 +24,15 @@ def _should_run():
 
 async def _client(app):
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+def _storage_application():
+    """Rewire real storage after fixture resets, retaining one canonical module graph."""
+    from backend.web.storage_wiring import wire_supabase_adapter_if_configured
+
+    main = importlib.import_module("backend.web.main")
+    assert wire_supabase_adapter_if_configured(), "Real Supabase adapter could not be initialized"
+    return main
 
 
 def _make_valid_sb3_bytes() -> bytes:
@@ -97,15 +105,7 @@ async def test_e2e_supabase_upload_finalize_download_delete_flow(monkeypatch):
     monkeypatch.setenv("SUPABASE_REWRITE_SIGNED_URL_HOST", "true")
 
     # Import the app fresh so storage wiring runs with current env
-    for name in list(sys.modules.keys()):
-        if name in {
-            "main",
-            "backend.web.main",
-            "backend.web.routes.teaching",
-            "backend.teaching.storage_supabase",
-        }:
-            del sys.modules[name]
-    main = importlib.import_module("backend.web.main")  # type: ignore
+    main = _storage_application()
 
     # Create a teacher session
     store = install_session_store(monkeypatch, main)
@@ -205,18 +205,8 @@ async def test_e2e_learning_submission_file_upload_finalize(monkeypatch):
     # Enforce strict CSRF checks path for submissions too
     monkeypatch.setenv("STRICT_CSRF_SUBMISSIONS", "true")
 
-    # Fresh import for wiring with current env
-    for name in list(sys.modules.keys()):
-        if name in {
-            "main",
-            "backend.web.main",
-            "backend.web.routes.teaching",
-            "backend.web.routes.learning",
-            "backend.teaching.storage_supabase",
-        }:
-            del sys.modules[name]
-    main = importlib.import_module("backend.web.main")  # type: ignore
-    importlib.import_module("backend.web.routes.learning")  # noqa: F401  # ensure module is loaded
+    # Use the normal production wiring with the current environment.
+    main = _storage_application()
 
     # Teacher and student sessions
     store = install_session_store(monkeypatch, main)
@@ -226,7 +216,7 @@ async def test_e2e_learning_submission_file_upload_finalize(monkeypatch):
     async with (await _client(main.app)) as c:
         # Create course/unit/section/task
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "E2E Course"}, headers={"Origin": "http://test"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "E2E Course", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://test"})
         assert r_course.status_code == 201, r_course.text
         course_id = r_course.json()["id"]
         r_unit = await c.post("/api/teaching/units", json={"title": "E2E Unit"}, headers={"Origin": "http://test"})
@@ -319,17 +309,7 @@ async def test_e2e_learning_submission_image_upload_finalize(monkeypatch):
     monkeypatch.setenv("STRICT_CSRF_SUBMISSIONS", "true")
     monkeypatch.setenv("SUPABASE_REWRITE_SIGNED_URL_HOST", "true")
 
-    for name in list(sys.modules.keys()):
-        if name in {
-            "main",
-            "backend.web.main",
-            "backend.web.routes.teaching",
-            "backend.web.routes.learning",
-            "backend.teaching.storage_supabase",
-        }:
-            del sys.modules[name]
-    main = importlib.import_module("backend.web.main")  # type: ignore
-    importlib.import_module("backend.web.routes.learning")  # noqa: F401
+    main = _storage_application()
 
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
@@ -337,7 +317,7 @@ async def test_e2e_learning_submission_image_upload_finalize(monkeypatch):
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        r_course = await c.post("/api/teaching/courses", json={"title": "E2E Course IMG"}, headers={"Origin": "http://test"})
+        r_course = await c.post("/api/teaching/courses", json={"title": "E2E Course IMG", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://test"})
         assert r_course.status_code == 201, r_course.text
         course_id = r_course.json()["id"]
         r_unit = await c.post("/api/teaching/units", json={"title": "E2E Unit IMG"}, headers={"Origin": "http://test"})
@@ -417,17 +397,7 @@ async def test_e2e_learning_submission_scratch_sb3_upload_finalize(monkeypatch):
     monkeypatch.setenv("STRICT_CSRF_SUBMISSIONS", "true")
     monkeypatch.setenv("SUPABASE_REWRITE_SIGNED_URL_HOST", "true")
 
-    for name in list(sys.modules.keys()):
-        if name in {
-            "main",
-            "backend.web.main",
-            "backend.web.routes.teaching",
-            "backend.web.routes.learning",
-            "backend.teaching.storage_supabase",
-        }:
-            del sys.modules[name]
-    main = importlib.import_module("backend.web.main")  # type: ignore
-    importlib.import_module("backend.web.routes.learning")  # noqa: F401
+    main = _storage_application()
 
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
@@ -435,7 +405,7 @@ async def test_e2e_learning_submission_scratch_sb3_upload_finalize(monkeypatch):
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        course_id = (await c.post("/api/teaching/courses", json={"title": "E2E Scratch Course"}, headers={"Origin": "http://test"})).json()["id"]
+        course_id = (await c.post("/api/teaching/courses", json={"title": "E2E Scratch Course", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://test"})).json()["id"]
         unit_id = (await c.post("/api/teaching/units", json={"title": "E2E Scratch Unit"}, headers={"Origin": "http://test"})).json()["id"]
         section_id = (await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Sec"}, headers={"Origin": "http://test"})).json()["id"]
         task_id = (await c.post(
@@ -499,17 +469,7 @@ async def test_e2e_learning_submission_calliope_hex_upload_finalize(monkeypatch)
     monkeypatch.setenv("STRICT_CSRF_SUBMISSIONS", "true")
     monkeypatch.setenv("SUPABASE_REWRITE_SIGNED_URL_HOST", "true")
 
-    for name in list(sys.modules.keys()):
-        if name in {
-            "main",
-            "backend.web.main",
-            "backend.web.routes.teaching",
-            "backend.web.routes.learning",
-            "backend.teaching.storage_supabase",
-        }:
-            del sys.modules[name]
-    main = importlib.import_module("backend.web.main")  # type: ignore
-    importlib.import_module("backend.web.routes.learning")  # noqa: F401
+    main = _storage_application()
 
     store = install_session_store(monkeypatch, main)
     teacher = store.create(sub=f"t-{uuid.uuid4()}", name="T", roles=["teacher"])
@@ -517,7 +477,7 @@ async def test_e2e_learning_submission_calliope_hex_upload_finalize(monkeypatch)
 
     async with (await _client(main.app)) as c:
         c.cookies.set(main.SESSION_COOKIE_NAME, teacher.session_id)
-        course_id = (await c.post("/api/teaching/courses", json={"title": "E2E Calliope Course"}, headers={"Origin": "http://test"})).json()["id"]
+        course_id = (await c.post("/api/teaching/courses", json={"title": "E2E Calliope Course", "subject": "Testfach", "grade_level": "10", "school_year_start": 2026}, headers={"Origin": "http://test"})).json()["id"]
         unit_id = (await c.post("/api/teaching/units", json={"title": "E2E Calliope Unit"}, headers={"Origin": "http://test"})).json()["id"]
         section_id = (await c.post(f"/api/teaching/units/{unit_id}/sections", json={"title": "Sec"}, headers={"Origin": "http://test"})).json()["id"]
         task_id = (await c.post(

@@ -10,6 +10,7 @@ Why:
 from __future__ import annotations
 
 import os
+import re
 import time
 
 import pytest
@@ -30,7 +31,7 @@ def _assert_state_checker_cookie_is_hardened(response: requests.Response) -> Non
     assert "kc_state_checker=" in lowered
     assert "httponly" in lowered
     assert "secure" in lowered
-    assert "samesite=lax" in lowered
+    assert "samesite=strict" in lowered
     assert "domain=" not in lowered
 
 
@@ -53,13 +54,13 @@ def _wait_for_keycloak() -> None:
 
 
 @pytest.mark.parametrize(
-    "path",
+    ("path", "title"),
     [
-        "/login-actions/authenticate",
-        "/login-actions/action-token?key=expired",
+        ("/login-actions/authenticate", "Anmeldung nicht möglich"),
+        ("/login-actions/action-token?key=expired", "Link nicht mehr gültig"),
     ],
 )
-def test_keycloak_error_flows_render_without_template_500(path: str) -> None:
+def test_keycloak_error_flows_render_without_template_500(path: str, title: str) -> None:
     """Cookie-less and invalid-token flows must not turn theme recovery into HTTP 500."""
     _wait_for_keycloak()
 
@@ -74,8 +75,8 @@ def test_keycloak_error_flows_render_without_template_500(path: str) -> None:
     assert response.status_code != 500
     assert "HTTP 500 Internal Server Error" not in response.text
     assert "FreeMarker" not in response.text
-    assert 'class="kc-gustav"' in response.text
-    assert "Anmeldung nicht möglich" in response.text
+    assert re.search(r'class="[^"]*\bkc-gustav\b[^"]*"', response.text)
+    assert title in response.text
     assert "/login-actions/authenticate" not in response.text
     assert "/login-actions/registration" not in response.text
     _assert_state_checker_cookie_is_hardened(response)

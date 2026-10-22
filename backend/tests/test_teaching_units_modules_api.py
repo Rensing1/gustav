@@ -903,3 +903,38 @@ async def test_sections_reorder_non_author_invalid_payload_is_403(monkeypatch: p
         )
         assert resp.status_code in (403, 404)
         assert resp.status_code != 400
+
+
+@pytest.mark.anyio
+async def test_task_delete_preserves_existing_submissions(monkeypatch: pytest.MonkeyPatch):
+    """The author receives a conflict instead of bypassing submission retention."""
+    import psycopg
+
+    store = _session_store(monkeypatch)
+    _require_db_or_skip()
+    teacher = store.create(sub="teacher-task-retention", name="Autor", roles=["teacher"])
+    async with (await _client()) as client:
+        client.cookies.set("gustav_session", teacher.session_id)
+        course_id = await _create_course(client)
+        unit = await _create_unit(client)
+        section = await _create_section(client, unit["id"])
+        task = await _create_task(client, unit["id"], section["id"])
+        submission_id = str(uuid4())
+        with psycopg.connect(_service_dsn()) as conn:
+            conn.execute(
+                """insert into public.learning_submissions
+                   (id, course_id, task_id, section_id, student_sub, kind, text_body,
+                    attempt_nr, analysis_status)
+                   values (%s, %s, %s, %s, 'learner-task-retention', 'text',
+                           'Meine erhaltene Antwort.', 1, 'completed')""",
+                (submission_id, course_id, task["id"], section["id"]),
+            )
+        endpoint = f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks/{task['id']}"
+        response = await client.delete(endpoint)
+        assert response.status_code == 409
+        assert response.json()["detail"] == "task_has_submissions"
+        assert response.headers["cache-control"] == "private, no-store"
+        tasks = await client.get(f"/api/teaching/units/{unit['id']}/sections/{section['id']}/tasks")
+        assert any(item["id"] == task["id"] for item in tasks.json())
+        with psycopg.connect(_service_dsn()) as conn:
+            assert conn.execute("select text_body from public.learning_submissions where id = %s", (submission_id,)).fetchone() == ("Meine erhaltene Antwort.",)

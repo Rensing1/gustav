@@ -937,7 +937,7 @@ export const actions: Actions = {
 
     if (!response.ok) {
       return fail(response.status, {
-        deleteTask: { error: "Die Aufgabe konnte nicht gelöscht werden." }
+        deleteTask: { error: response.status === 409 ? "Zu dieser Aufgabe gibt es bereits Abgaben. Sie kann deshalb nicht gelöscht werden." : "Die Aufgabe konnte nicht gelöscht werden." }
       });
     }
 

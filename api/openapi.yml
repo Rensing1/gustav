@@ -12278,6 +12278,7 @@ paths:
             type: string
             format: uuid
       responses:
+        '409': { description: 'Task has submissions and cannot be deleted (detail: task_has_submissions)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
         '204':
           description: Deleted (no content)
@@ -12805,6 +12806,7 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
+        '409': { description: 'Task has submissions and cannot be deleted (detail: task_has_submissions)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '204':
           description: Deleted (no content)
           headers:

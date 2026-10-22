@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any, List, Optional, Sequence
 
+from backend.teaching.errors import TaskHasSubmissions
 from backend.teaching.repo_row_mappers import (
     TASK_COLUMNS_SQL as _TASK_COLUMNS_SQL,
 )
@@ -423,7 +424,11 @@ def update_task(
     return task
 
 def delete_task(*, dsn: str, psycopg_module, unit_id: str, section_id: str, task_id: str, author_id: str) -> bool:
-    """Delete a task and resequence remaining positions."""
+    """Delete an author-owned task and resequence its siblings atomically.
+
+    Row-level policies enforce the caller's ownership. Linked learner submissions
+    raise TaskHasSubmissions and roll back the transaction without losing work.
+    """
     with psycopg_module.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute("select set_config('app.current_sub', %s, true)", (author_id,))
@@ -441,10 +446,16 @@ def delete_task(*, dsn: str, psycopg_module, unit_id: str, section_id: str, task
             row = cur.fetchone()
             if not row:
                 return False
-            cur.execute(
-                "delete from public.unit_tasks where id = %s and unit_id = %s and section_id = %s",
-                (task_id, unit_id, section_id),
-            )
+            try:
+                cur.execute(
+                    "delete from public.unit_tasks where id = %s and unit_id = %s and section_id = %s",
+                    (task_id, unit_id, section_id),
+                )
+            except psycopg_module.errors.ForeignKeyViolation as exc:
+                # Keep the database's submission retention guard, including concurrent writes.
+                if exc.diag.constraint_name == "learning_submissions_task_id_fkey":
+                    raise TaskHasSubmissions("task_has_submissions") from exc
+                raise
             cur.execute(
                 """
                 with ordered as (

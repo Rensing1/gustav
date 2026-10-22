@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse, Response
 
 from backend.learning.usecases.dialogs import _message as _dialog_message
 from backend.learning.usecases.dialogs import _starters as _dialog_starters
-from backend.teaching.errors import TeachingRepositoryUnavailable
+from backend.teaching.errors import TaskHasSubmissions, TeachingRepositoryUnavailable
 from backend.web.routes import teaching_authoring, teaching_guards
 from backend.web.routes.learning_dialogs import _public_payload as _public_dialog_payload
 from backend.web.routes.teaching import _get_repo
@@ -351,6 +351,8 @@ async def delete_section_task(request: Request, unit_id: str, section_id: str, t
         return guard
     try:
         _get_tasks_service().delete_task(unit_id, section_id, task_id, sub)
+    except TaskHasSubmissions:
+        return _private_error({"error": "conflict", "detail": "task_has_submissions"}, status_code=409)
     except LookupError:
         return JSONResponse({"error": "not_found"}, status_code=404)
     except PermissionError:

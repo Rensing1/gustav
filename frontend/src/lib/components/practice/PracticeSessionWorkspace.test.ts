@@ -41,6 +41,17 @@ const session = {
 };
 
 describe("PracticeSessionWorkspace", () => {
+  it("offers a native end action when an active session lost all tasks", () => {
+    render(PracticeSessionWorkspace, { props: {
+      session: { ...session, total_items: 0, current_item: null },
+      attempt: null, attemptKey: "key", solution: null, nowIso: "2026-09-30T12:00:00Z"
+    } });
+    expect(screen.getByRole("heading", { name: "Keine Aufgabe mehr verfügbar" })).toBeVisible();
+    const form = screen.getByRole("button", { name: "Sitzung beenden" }).closest("form");
+    expect(form).toHaveAttribute("method", "POST");
+    expect(form).toHaveAttribute("action", "?/end");
+    expect(form?.querySelector('[name="session_id"]')).toHaveValue(session.id);
+  });
   it("opens, traps focus and resumes without native dialog methods", async () => {
     render(PracticeSessionWorkspace, { props: { session, attempt: null, attemptKey: "key", solution: null, nowIso: "2026-09-30T12:00:00Z" } });
     const opener = screen.getByRole("button", { name: "Sitzung beenden" });

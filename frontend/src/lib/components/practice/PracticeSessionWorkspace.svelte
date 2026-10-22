@@ -182,4 +182,15 @@
       </div>
     </div>
   {/if}
+{:else if session.status === "active"}
+  <section class="practice-summary" aria-labelledby="practice-empty-session-title">
+    <header class="practice-summary__hero" data-tone="neutral">
+      <h2 id="practice-empty-session-title">Keine Aufgabe mehr verfügbar</h2>
+      <p>Beende diese Sitzung, um andere Aufgaben auszuwählen.</p>
+    </header>
+    <form method="POST" action="?/end" class="practice-summary__actions">
+      <input type="hidden" name="session_id" value={session.id} />
+      <button class="workspace-link-action workspace-link-action--primary" type="submit">Sitzung beenden</button>
+    </form>
+  </section>
 {/if}

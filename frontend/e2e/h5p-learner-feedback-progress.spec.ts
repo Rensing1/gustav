@@ -127,6 +127,9 @@ test("@feature-acceptance H5P feedback remains readable and full score unlocks t
     await expect(learner.locator("h5p-player")).toBeVisible();
     await expect(learner.getByRole("button", { name: "Weiter zur nächsten Aufgabe" })).toBeVisible();
     await expect(learner.getByRole("button", { name: "Aufgabe überspringen" })).toHaveCount(0);
+    await learner.getByRole("button", { name: "Sitzung beenden", exact: true }).click();
+    await learner.getByRole("dialog").getByRole("button", { name: "Sitzung beenden", exact: true }).click();
+    await expect(learner).toHaveURL(/\/learning\/practice\/sessions\/[^/]+\/summary$/);
 
     const unit = await create(teacher, "/api/teaching/units", {
       title: `H5P Fortschritt ${unique}`,
@@ -240,9 +243,9 @@ test("@feature-acceptance H5P feedback remains readable and full score unlocks t
     await learner.getByRole("radio", { name: /Drei/ }).press("Space");
     await learner.getByRole("button", { name: /Check|Die Antworten überprüfen/ }).click();
     await expect(learner.getByText("Gespeichert (0/1).")).toBeVisible();
-    await learner.goBack();
+    await learner.locator(".context-header__back").click();
     await expect(learner.getByText("Noch nicht abgeschlossen · zuletzt 0/1 Punkte")).toBeVisible();
-    await learner.getByRole("button", { name: "← Zum Lernpfad" }).click();
+    await learner.locator(".context-header__back").click();
     await expect(learner.getByRole("button", { name: /Freigeschaltetes Ziel/ })).toBeDisabled();
 
     await learner.getByRole("button", { name: /H5P Start/ }).click();
@@ -258,7 +261,7 @@ test("@feature-acceptance H5P feedback remains readable and full score unlocks t
     await learner.getByRole("radio", { name: /Vier/ }).press("Space");
     await learner.getByRole("button", { name: /Check|Die Antworten überprüfen/ }).click();
     await expect(learner.getByText("Gespeichert (1/1).")).toBeVisible();
-    await learner.goBack();
+    await learner.locator(".context-header__back").click();
     await expect(learner.getByText("Abgeschlossen · zuletzt 1/1 Punkte")).toBeVisible();
 
     await learner.getByRole("button", { name: "Erneut bearbeiten" }).click();
@@ -276,12 +279,12 @@ test("@feature-acceptance H5P feedback remains readable and full score unlocks t
       }
     })));
     await expect(learner.getByText("Gespeichert (0/1).")).toBeVisible();
-    await learner.getByRole("button", { name: "← Zurück zu Modul H5P Start" }).click();
+    await learner.locator(".context-header__back").click();
     await expect(learner.getByText("Abgeschlossen · zuletzt 0/1 Punkte")).toBeVisible();
     const preview = learner.getByRole("region", { name: "Eigene Bearbeitung zu Aufgabe 1" });
     await expect(preview.getByText("Abgeschlossen", { exact: true })).toBeVisible();
     await expect(preview.getByText("Zuletzt 0/1 Punkte erreicht.")).toBeVisible();
-    await learner.getByRole("button", { name: "← Zum Lernpfad" }).click();
+    await learner.locator(".context-header__back").click();
     await expect(learner.getByRole("button", { name: /Freigeschaltetes Ziel/ })).toBeEnabled();
   } finally {
     await learnerContext.close().catch(() => undefined);

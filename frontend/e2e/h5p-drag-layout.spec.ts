@@ -1,7 +1,9 @@
+import { setAppTheme } from "./support/app-navigation";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { login } from "./support/auth";
+import { apiHeaders } from "./support/api";
 import { newBrowserContext } from "./support/browser-context";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { registerE2EH5PContent } from "./support/e2e-run-state";
@@ -90,12 +92,13 @@ test("@feature-acceptance H5P drag cards remain readable and usable across theme
     const correctZone = (index: number) => zones.findIndex((zone) => zone.correctElements.includes(String(index)));
     const target = (index: number) => learner.getByRole("button", { name: new RegExp(`^Ablagefeld ${index + 1} von 6\\.`) });
     const label = (index: number) => zones[index].label.replace(/<[^>]+>/g, "");
+    await teacher.locator(".teacher-h5p-editor__tools > summary").click();
     const chooserPromise = teacher.waitForEvent("filechooser");
     await teacher.getByRole("button", { name: /^Importieren$/i }).click();
     const chooser = await chooserPromise;
     await chooser.setFiles({ name: "drag-layout.h5p", mimeType: "application/zip", buffer: pkg });
     await expect(teacher.getByText("Editor geladen (H5P.DragQuestion 1.14).").filter({ visible: true })).toBeVisible({ timeout: 30_000 });
-    await teacher.getByRole("button", { name: /^H5P speichern$/i }).click();
+    await teacher.getByRole("button", { name: /^H5P-Inhalt speichern$/i }).click();
     await expect(teacher.getByText("H5P-Inhalt gespeichert.").filter({ visible: true })).toBeVisible();
     const tasks = await (await teacher.request.get(`${webBase}/api/teaching/units/${seeded.unitId}/modules/${seeded.practiceModuleId}/tasks`)).json();
     registerE2EH5PContent(String(tasks[0].h5p.content_id), teacherEmail);
@@ -105,7 +108,7 @@ test("@feature-acceptance H5P drag cards remain readable and usable across theme
     await learner.getByRole("button", { name: /Aufgabe.*starten/ }).click();
     await expect(learner.locator(".h5p-dragquestion .h5p-draggable")).toHaveCount(6, { timeout: 30_000 });
     for (const theme of ["light", "dark"] as const) {
-      if (theme === "dark") await learner.getByRole("button", { name: "Dark Mode aktivieren" }).click();
+      if (theme === "dark") await setAppTheme(learner, "dark");
       for (const width of [1440, 1024, 390, 320]) {
         await learner.setViewportSize({ width, height: 900 });
         await checkLayout(learner);
@@ -149,6 +152,30 @@ test("@feature-acceptance H5P drag cards remain readable and usable across theme
     await expect(learner.getByRole("heading", { name: "Sicher beantwortet", exact: true })).toBeVisible({ timeout: 30_000 });
     await learner.reload();
     await expect(learner.getByRole("heading", { name: "Sicher beantwortet", exact: true })).toBeVisible();
+    // Existing submissions stay protected; ending the session keeps later cases isolated.
+    const protectedTask = await teacher.request.delete(`/api/teaching/units/${seeded.unitId}/modules/${seeded.practiceModuleId}/tasks/${tasks[0].id}`, { headers: apiHeaders() });
+    expect(protectedTask.status()).toBe(409);
+    expect((await protectedTask.json()).detail).toBe("task_has_submissions");
+    await learner.getByRole("button", { name: "Sitzung beenden", exact: true }).click();
+    await learner.getByRole("dialog").getByRole("button", { name: "Sitzung beenden", exact: true }).click();
+    await expect(learner).toHaveURL(/\/summary$/);
+
+    // An unanswered task can disappear during a session, leaving a usable exit.
+    const empty = await seedLearnerPracticeCourse(teacher, learner, "Entfernte Übungsaufgabe");
+    const emptyTasks = await (await teacher.request.get(`/api/teaching/units/${empty.unitId}/modules/${empty.practiceModuleId}/tasks`)).json();
+    await learner.goto(`/learning/practice?course_id=${empty.courseId}&practice_module_id=${empty.practiceModuleId}`);
+    await learner.getByRole("button", { name: /Aufgabe.*starten/ }).click();
+    await expect(learner.getByRole("button", { name: "Antwort prüfen", exact: true })).toBeVisible();
+    const removed = await teacher.request.delete(`/api/teaching/units/${empty.unitId}/modules/${empty.practiceModuleId}/tasks/${emptyTasks[0].id}`, { headers: apiHeaders() });
+    expect(removed.status()).toBe(204);
+    await learner.reload();
+    await expect(learner.getByRole("heading", { name: "Keine Aufgabe mehr verfügbar" })).toBeVisible();
+    for (const width of [1440, 390]) {
+      await learner.setViewportSize({ width, height: 900 });
+      await learner.screenshot({ path: testInfo.outputPath(`empty-session-${width}.png`), fullPage: true });
+    }
+    await learner.getByRole("button", { name: "Sitzung beenden", exact: true }).click();
+    await expect(learner).toHaveURL(/\/learning\/practice\/sessions\/[^/]+\/summary$/);
   } finally {
     await lc.close().catch(() => {});
     await tc.close().catch(() => {});

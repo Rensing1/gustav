@@ -474,7 +474,7 @@ def test_error_template_helper_guards_idp_account_target_edge_shapes():
 def test_error_recovery_uses_only_the_trusted_app_origin():
     """A fresh app login works without auth cookies and cannot be redirected by a request."""
     text = (THEME_ROOT / "_gustav_error_components.ftl").read_text(encoding="utf-8")
-    recovery = text.split("<#macro render_recovery_links>", 1)[1].split("</#macro>", 1)[0]
+    recovery = text.split("<#macro render_recovery_links passwordHelp=false>", 1)[1].split("</#macro>", 1)[0]
     assert '${properties.gustavAppOrigin?remove_ending("/")}/auth/login' in recovery
     assert "pageRedirectUri" not in recovery
     assert "url.loginUrl" not in recovery
@@ -486,7 +486,9 @@ def test_error_recovery_uses_only_the_trusted_app_origin():
 def test_error_templates_use_shared_fixed_recovery():
     for name in ["error.ftl", "login-page-expired.ftl"]:
         text = _theme_text(_resolve_login_template(name))
-        assert "<@gustav_error.render_recovery_links />" in text
+        assert "<@gustav_error.render_recovery_links" in text
+        if name == "error.ftl":
+            assert "passwordHelp=token_error" in text
         assert "resolve_primary_app_link" not in text
         assert "pageRedirectUri" not in text
 
@@ -689,3 +691,12 @@ def test_logout_confirmation_submits_keycloak_session_code():
     """Keycloak binds confirmation to its browser logout session with this code."""
     template = _resolve_login_template("logout-confirm.ftl").read_text()
     assert 'name="session_code" value="${logoutConfirm.code}"' in template
+
+
+def test_verification_native_confirmation_requires_a_successful_send():
+    """No-JS users see a real send result, never success alongside an error."""
+    text = _resolve_login_template("login-verify-email.ftl").read_text(encoding="utf-8")
+    assert "verifyEmail?? && verifyEmail?has_content" in text
+    assert "!(message?has_content && message.type == 'error')" in text
+    assert '<noscript><p class="kc-message" role="status">${msg("gustavVerifySent")}</p></noscript>' in text
+    assert 'method="post"' in text

@@ -4,5 +4,5 @@
   let { data }: { data: PageData } = $props();
 </script>
 
-<svelte:head><title>Anmeldung prüfen | GUSTAV</title></svelte:head>
-<AuthFrame embedded title="Anmeldung prüfen" body={data.message} actionHref={data.actionHref} actionLabel={data.actionLabel} />
+<svelte:head><title>{data.title} | GUSTAV</title></svelte:head>
+<AuthFrame embedded title={data.title} body={data.message} actionHref={data.actionHref} actionLabel={data.actionLabel} />

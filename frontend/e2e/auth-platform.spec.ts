@@ -39,7 +39,7 @@ test("@feature-acceptance Keycloak preserves standard and imported BCrypt logins
   await test.step("Sichere Darstellung eines ungültigen Rücksprungs", async () => {
     await page.goto('/auth/callback?code=invalid');
     await expect(page).toHaveURL(/\/auth\/problem\?reason=invalid_code_or_state$/);
-    await expect(page.getByRole('heading', { name: 'Anmeldung prüfen' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Anmeldevorgang abgelaufen' })).toBeVisible();
     await expect(page.getByText('invalid', { exact: true })).toHaveCount(0);
   });
   await test.step("Normale Anmeldung", () => standardLoginJourney(page));

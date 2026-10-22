@@ -45,7 +45,7 @@
   <main id="kc-content" class="kc-gustav kc-auth-shell">
     <section class="kc-card kc-auth-card">
       <div class="kc-form-shell">
-        <div class="kc-appearance"><button id="kc-theme-toggle" type="button">Darstellung wechseln</button></div>
+        <div class="kc-appearance"><span class="kc-brand">GUSTAV</span><button id="kc-theme-toggle" type="button">Darstellung wechseln</button></div>
         <#nested>
       </div>
     </section>

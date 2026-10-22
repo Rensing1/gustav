@@ -15,7 +15,8 @@
     actionLabel,
     actions = [],
     embedded = false,
-    children
+    children,
+    actionContent
   }: {
     eyebrow?: string;
     title: string;
@@ -25,6 +26,7 @@
     actions?: AuthAction[];
     embedded?: boolean;
     children?: Snippet;
+    actionContent?: Snippet;
   } = $props();
 </script>
 
@@ -43,6 +45,7 @@
       </div>
     {/if}
     <div class="design-auth-frame__actions">
+      {#if actionContent}{@render actionContent()}{/if}
       {#each (actions.length
         ? actions
         : [{ href: actionHref, label: actionLabel, variant: "primary" satisfies "primary" }]) as action}

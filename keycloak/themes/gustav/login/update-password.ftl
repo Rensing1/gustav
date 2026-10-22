@@ -12,7 +12,7 @@
     <#assign passwordFieldError = messagesPerField.existsError('password', 'password-new')>
     <#assign passwordError = passwordFieldError || (message?has_content && message.type == 'error' && !messagesPerField.existsError('password-confirm'))>
     <label class="kc-field workspace-field" for="password-new">
-      <span class="kc-label">${msg("password")}</span>
+      <span class="kc-label">${msg("gustavNewPassword")}</span>
       <input class="kc-input" aria-invalid="${passwordError?c}" id="password-new" name="password-new" type="password" autocomplete="new-password" required aria-describedby="password-requirements password-new-error" autofocus>
       <#if passwordError><span id="password-new-error" class="kc-field-error" aria-live="polite"><#if passwordFieldError>${kcSanitize(messagesPerField.getFirstError('password', 'password-new'))?no_esc}<#else>${kcSanitize(message.summary)?no_esc}</#if></span></#if>
     </label>
@@ -23,7 +23,7 @@
       <#if messagesPerField.existsError('password-confirm')><span id="password-confirm-error" class="kc-field-error" aria-live="polite">${kcSanitize(messagesPerField.get('password-confirm'))?no_esc}</span></#if>
     </label>
 
-    <button class="btn btn-primary kc-submit workspace-button" type="submit">${msg("doSubmit")}</button>
+    <button class="btn btn-primary kc-submit workspace-button" type="submit">${msg("gustavSavePassword")}</button>
   </form>
 
   <div class="kc-links">

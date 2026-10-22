@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type BrowserContext, type Page } from "./support/feature-test";
 
@@ -93,11 +94,10 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
           await learner.goto(state === "valid" ? inviteUrl : "/invite#invalid");
           await expect(learner.getByRole("heading", { name: state === "valid" ? courseTitle : "Diese Einladung ist nicht mehr gültig" })).toBeVisible();
           await expect(learner.locator(".app-shell")).toHaveClass(/app-shell--auth-route/);
-          const toggle = learner.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-          if (await toggle.count()) await toggle.click();
+          await setAppTheme(learner, theme);
           await expect(learner.locator(".app-shell")).toHaveAttribute("data-theme", theme);
           const card = learner.locator(".invite-card");
-          await expect(card).toHaveCSS("border-radius", "0px");
+          await expect(card).toHaveCSS("border-radius", "8px");
           await expectNoViewportOverflow(learner);
           const palette = await card.evaluate((node) => ({ color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor }));
           expect(contrastRatio(palette.color, palette.background)).toBeGreaterThanOrEqual(4.5);
@@ -124,7 +124,7 @@ test("@feature-acceptance a new learner registers from the fullscreen QR link an
     await learner.locator("#password-confirm").fill(password);
     await learner.locator("#kc-register-form button[type=submit]").click();
 
-    await expect(learner.getByRole("heading", { name: /E-Mail.*bestätigen|E-Mail.*verifizieren/i })).toBeVisible();
+    await expect(learner.getByRole("heading", { name: "Bestätige deine E-Mail-Adresse", exact: true })).toBeVisible();
     // Keep configured school addresses out of the public screenshot catalogue.
     await authPictures(learner, testInfo, "verification-request", [learner.locator(".kc-hint")]);
 

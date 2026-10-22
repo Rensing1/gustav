@@ -9,6 +9,7 @@
 <AuthFrame
   embedded
   title="Abgemeldet"
+  body="Du bist jetzt von GUSTAV abgemeldet."
   actionHref="/auth/login"
   actionLabel="Erneut anmelden"
 />

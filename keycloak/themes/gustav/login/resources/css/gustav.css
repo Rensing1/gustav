@@ -63,7 +63,9 @@ a:hover {
 
 .kc-appearance {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
   margin-bottom: var(--space-5);
 }
 
@@ -71,10 +73,10 @@ a:hover {
   min-height: var(--layout-control-min);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 0;
+  border-radius: 8px;
   background: var(--color-bg-surface);
   color: var(--color-text);
-  font: 700 var(--font-size-xs) var(--font-mono);
+  font: 500 .8125rem var(--auth-font-body);
   cursor: pointer;
 }
 
@@ -125,14 +127,14 @@ a:hover {
   -webkit-appearance: none;
   background-image: none !important;
   text-shadow: none !important;
-  font-size: 0.76rem;
+  font-size: .9375rem;
 }
 
 .kc-form .workspace-button:hover,
 .kc-form .kc-submit:hover,
 .kc-form .btn:hover,
 .kc-form .btn-primary:hover {
-  transform: translate(1px, 1px);
+  transform: none;
 }
 
 .kc-form .workspace-button:focus-visible,
@@ -161,4 +163,21 @@ a:hover {
   .kc-locale-links {
     flex-direction: column;
   }
+}
+
+.kc-brand { font: 700 .9375rem var(--auth-font-body); letter-spacing: .02em; }
+
+/* Keep secondary choices distinct, including on narrow screens. */
+.kc-links { column-gap: 16px; }
+@media (max-width: 720px) {
+  .kc-locale-links { flex-direction: row; }
+}
+
+.kc-verification-address { font-weight: 700; overflow-wrap: anywhere; margin: 12px 0 20px; }
+[data-verification-wait] .kc-links { align-items: center; }
+[data-verification-resend] { margin: 0; }
+[data-verification-resend] button:disabled { opacity: .65; cursor: wait; }
+@media (max-width: 720px) {
+  [data-verification-wait] .kc-links { align-items: stretch; }
+  [data-verification-resend] button { width: 100%; white-space: normal; }
 }

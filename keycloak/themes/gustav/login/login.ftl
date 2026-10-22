@@ -1,11 +1,16 @@
 <#import "_gustav_layout.ftl" as layout>
-<@layout.document title=(msg("doLogIn"))>
-<h1 class="kc-title">${msg("doLogIn")}</h1>
+<#-- Keycloak uses the login page to acknowledge reset mail requests. -->
+<#assign mail_sent = message?has_content && message.summary == msg("emailSentMessage")>
+<#assign page_title = msg("doLogIn")>
+<#if mail_sent><#assign page_title = msg("gustavCheckInbox")></#if>
+<@layout.document title=(page_title)>
+<h1 class="kc-title">${page_title}</h1>
 
   <#if message?has_content>
-    <div class="kc-message kc-${message.type}">${message.summary}</div>
+    <div role="status" class="kc-message kc-${message.type}">${message.summary}</div>
   </#if>
 
+  <#if !mail_sent>
   <form id="kc-form-login" action="${url.loginAction}" method="post" class="kc-form">
     <label class="kc-field workspace-field" for="username">
       <span class="kc-label">${msg("gustavEmailAddress")}</span>
@@ -26,13 +31,15 @@
 
     <button class="btn btn-primary kc-submit workspace-button" type="submit">${msg("doLogIn")}</button>
   </form>
+  </#if>
 
   <div class="kc-links">
     <#if realm.resetPasswordAllowed>
-      <a href="${url.loginResetCredentialsUrl}">${msg("doForgotPassword")}</a>
+      <a href="${url.loginResetCredentialsUrl}"><#if mail_sent>${msg("gustavRequestAgain")}<#else>${msg("doForgotPassword")}</#if></a>
     </#if>
-    <#if realm.registrationAllowed>
-      <span> · </span>
+    <#if mail_sent>
+      <a href="${url.loginUrl}">${msg("doLogIn")}</a>
+    <#elseif realm.registrationAllowed>
       <a href="${url.registrationUrl}">${msg("doRegister")}</a>
     </#if>
   </div>

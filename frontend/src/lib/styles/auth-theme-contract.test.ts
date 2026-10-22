@@ -15,11 +15,11 @@ describe("auth theme contract", () => {
     expect(cssSource).toContain("--auth-color-primary-button-text: var(--color-on-accent);");
     expect(cssSource).toContain("box-sizing: border-box;");
     expect(cssSource).toContain("min-height: var(--layout-control-min);");
-    expect(cssSource).toMatch(/\.design-auth-frame,[\s\S]*?border-radius:\s*0;/s);
-    expect(cssSource).toMatch(/\.design-auth-frame,[\s\S]*?box-shadow:\s*var\(--auth-color-shadow\);/s);
+    expect(cssSource).toMatch(/\.design-auth-frame,[\s\S]*?border-radius:\s*8px;/s);
+    expect(cssSource).toMatch(/\.design-auth-frame,[\s\S]*?box-shadow:\s*none;/s);
     expect(cssSource).toMatch(/\.design-auth-frame,[\s\S]*?width:\s*min\(100%,\s*31\.5rem\);/s);
     expect(cssSource).toMatch(/\.kc-form-shell\s*\{[^}]*width:\s*min\(100%,\s*28rem\);[^}]*margin-inline:\s*auto;/s);
-    expect(cssSource).toMatch(/\.auth-form,[\s\S]*?gap:\s*1\.15rem;/s);
+    expect(cssSource).toMatch(/\.auth-form,[\s\S]*?gap:\s*1rem;/s);
     expect(cssSource).toMatch(/\.auth-field,[\s\S]*?gap:\s*0\.5rem;/s);
     expect(cssSource).not.toContain("#2a6571");
     expect(cssSource).not.toContain('--auth-font-display: "Nunito"');

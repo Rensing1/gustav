@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { newBrowserContext } from "./support/browser-context";
 import { expect, test } from "./support/feature-test";
 import { authPictures } from "./support/auth-design";
@@ -17,7 +18,7 @@ test("@feature-acceptance email login reset logout and consumed mail links share
   try {
     const page = await context.newPage();
     await page.goto("/");
-    await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+    await setAppTheme(page, "dark");
     await page.getByRole("link", { name: "Anmelden", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${kcBase}/realms/${realm}/protocol/openid-connect/auth`));
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -60,6 +61,7 @@ test("@feature-acceptance email login reset logout and consumed mail links share
     await login(page, email, replacementPassword);
     expect((await page.request.get(`${webBase}/api/me`)).status()).toBe(200);
     await page.goto("/auth/logout");
+    await page.getByRole("button", { name: "Abmelden", exact: true }).click();
     await expect.poll(async () => (await page.request.get(`${webBase}/api/me`)).status()).toBe(401);
 
     await mail.goto(resetUrl);

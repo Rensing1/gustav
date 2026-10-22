@@ -54,10 +54,13 @@
   <#return "">
 </#function>
 
-<#macro render_recovery_links>
+<#macro render_recovery_links passwordHelp=false>
   <#-- Trusted deployment origin only; never use a request-supplied return address on errors. -->
   <div class="kc-links">
-    <a href="${properties.gustavAppOrigin?remove_ending("/")}/auth/login">${msg("gustavTryLoginAgain")}</a>
+    <a class="kc-submit" href="${properties.gustavAppOrigin?remove_ending("/")}/auth/login">${msg("gustavTryLoginAgain")}</a>
+    <#if passwordHelp>
+      <a href="${properties.gustavAppOrigin?remove_ending("/")}/auth/forgot">${msg("gustavRequestPasswordLink")}</a>
+    </#if>
   </div>
 </#macro>
 

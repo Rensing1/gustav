@@ -7,12 +7,20 @@ const messages: Record<string, string> = {
   csrf_forbidden: "Die Anfrage konnte nicht sicher zugeordnet werden. Bitte starte sie direkt in GUSTAV erneut.",
 };
 
+const titles: Record<string, string> = {
+  auth_unavailable: "Anmeldung gerade nicht verfügbar",
+  local_logout_only: "Abmeldung noch nicht vollständig",
+  logout_not_confirmed: "Abmeldung nicht bestätigt",
+  csrf_forbidden: "Bitte erneut starten",
+};
+
 export const load: PageServerLoad = ({ url }) => {
   const reason = url.searchParams.get("reason") || "";
   const retryLogout = ["local_logout_only", "logout_not_confirmed"].includes(reason);
   return {
     hidePageHeading: true,
     authLayout: true,
+    title: titles[reason] || "Anmeldevorgang abgelaufen",
     message: messages[reason] || "Dieser Anmeldevorgang ist nicht mehr gültig. Bitte starte die Anmeldung erneut.",
     actionHref: retryLogout ? "/auth/logout" : "/",
     actionLabel: retryLogout ? "Abmeldung erneut versuchen" : "Zurück zu GUSTAV",

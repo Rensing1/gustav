@@ -19,8 +19,8 @@
   --auth-color-focus: var(--color-accent-soft);
   --auth-color-shadow: var(--color-shadow);
   --auth-color-button-shadow: var(--color-shadow);
-  --auth-radius-s: var(--radius-s);
-  --auth-radius-l: var(--radius-l);
+  --auth-radius-s: 8px;
+  --auth-radius-l: 8px;
   --auth-color-link: var(--color-link);
 }
 
@@ -41,13 +41,7 @@
   display: grid;
   place-items: center;
   padding: var(--space-5);
-  background:
-    radial-gradient(circle, var(--app-bg-dot-color) 1.35px, transparent 1.5px),
-    linear-gradient(0deg, var(--auth-color-bg-base), var(--auth-color-bg-base));
-  background-size:
-    1.75rem 1.75rem,
-    auto,
-    auto;
+  background: var(--auth-color-bg-base);
   color: var(--auth-color-text);
 }
 
@@ -61,10 +55,10 @@
 .kc-auth-card,
 .kc-card {
   width: min(100%, 31.5rem);
-  border: 2px solid var(--auth-color-border);
-  border-radius: 0;
+  border: 1px solid var(--auth-color-border);
+  border-radius: 8px;
   background: var(--auth-color-surface);
-  box-shadow: var(--auth-color-shadow);
+  box-shadow: none;
   padding: var(--space-5);
 }
 
@@ -77,21 +71,21 @@
 .kc-auth-eyebrow {
   margin: 0 0 0.75rem;
   color: var(--auth-color-link);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
+  text-transform: none;
+  letter-spacing: normal;
   font-size: 0.7rem;
   font-weight: 700;
-  font-family: var(--auth-font-mono);
+  font-family: var(--auth-font-body);
 }
 
 .design-auth-frame__title,
 .kc-title {
   margin: 0;
   font-family: var(--auth-font-display);
-  font-size: clamp(2rem, 4vw, 2.6rem);
+  font-size: clamp(1.5rem, 3vw, 1.75rem);
   font-weight: 700;
-  line-height: 0.96;
-  letter-spacing: -0.04em;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   text-align: left;
 }
 
@@ -136,12 +130,12 @@
   border-radius: var(--auth-radius-s);
   background: var(--auth-color-primary-button);
   color: var(--auth-color-primary-button-text);
-  font-family: var(--auth-font-mono);
-  font-size: 0.76rem;
+  font-family: var(--auth-font-body);
+  font-size: 0.9375rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  box-shadow: var(--auth-color-button-shadow);
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: none;
   justify-content: center;
 }
 
@@ -153,17 +147,17 @@
   border-radius: var(--auth-radius-s);
   background: var(--auth-color-surface);
   color: var(--auth-color-text);
-  box-shadow: var(--auth-color-button-shadow);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-family: var(--auth-font-mono);
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: var(--auth-font-body);
   font-weight: 700;
 }
 
 .auth-form,
 .kc-form {
   display: grid;
-  gap: 1.15rem;
+  gap: 1rem;
 }
 
 .auth-field,
@@ -174,11 +168,11 @@
 
 .auth-field__label,
 .kc-label {
-  font-family: var(--auth-font-mono);
-  font-size: 0.68rem;
+  font-family: var(--auth-font-body);
+  font-size: 0.875rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .auth-input,
@@ -189,7 +183,9 @@ select.kc-input {
   min-height: var(--layout-control-min);
   max-width: 100%;
   width: 100%;
-  padding: 0.82rem 0.9rem;
+  padding: 0.65rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
   border: 1px solid var(--auth-color-border);
   border-radius: var(--auth-radius-s);
   background: var(--auth-color-surface);
@@ -271,7 +267,7 @@ select.kc-input:focus {
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
-  font-family: var(--auth-font-mono);
+  font-family: var(--auth-font-body);
   font-size: 0.78rem;
 }
 
@@ -316,7 +312,7 @@ select.kc-input:focus {
   border: 1px solid var(--auth-color-border);
   background: var(--auth-color-surface);
   text-align: left;
-  box-shadow: var(--auth-color-button-shadow);
+  box-shadow: none;
 }
 
 .kc-auth-selection-list__icon-glyph,
@@ -330,10 +326,10 @@ select.kc-input:focus {
 
 .kc-auth-selection-list__heading {
   color: var(--auth-color-text);
-  font-family: var(--auth-font-mono);
+  font-family: var(--auth-font-body);
   font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .kc-auth-selection-list__description {
@@ -403,11 +399,11 @@ select.kc-input:focus {
 .kc-links a,
 .auth-links a {
   color: var(--auth-color-link);
-  font-family: var(--auth-font-mono);
-  font-size: 0.76rem;
+  font-family: var(--auth-font-body);
+  font-size: 0.9375rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .kc-form > .kc-submit,
@@ -426,7 +422,7 @@ select.kc-input:focus {
   padding: 0.08rem 0.3rem;
   border: 1px solid var(--auth-color-line);
   background: var(--auth-color-surface-muted);
-  font-family: var(--auth-font-mono);
+  font-family: var(--auth-font-body);
   font-size: 0.82em;
 }
 
@@ -461,7 +457,7 @@ select.kc-input:focus {
   .kc-auth-card,
   .kc-card {
     width: min(100%, 100%);
-    padding: var(--space-5);
+    padding: 20px;
   }
 
   .design-auth-frame__actions,
@@ -469,3 +465,27 @@ select.kc-input:focus {
     flex-direction: column;
   }
 }
+
+/* Give narrow screens useful input width while keeping every action in document flow. */
+@media (max-width: 480px) {
+  .kc-auth-shell, .kc-gustav { padding: 16px; }
+}
+.kc-password-requirements { color: var(--auth-color-text-muted); font: .875rem/1.5 var(--auth-font-body); }
+.kc-password-requirements p { margin: 0 0 4px; }
+.kc-password-requirements ul { margin: 0; padding-left: 20px; }
+.kc-links a { display: inline-flex; align-items: center; min-height: 44px; }
+
+/* Recovery actions have the same hierarchy as form submissions. */
+.kc-links a.kc-submit { color: var(--auth-color-primary-button-text); padding-inline: 16px; }
+.auth-submit { display: inline-flex; align-items: center; cursor: pointer; }
+.design-auth-frame__body { margin-top: 16px; }
+
+.design-auth-frame__actions form { margin: 0; }
+@media (max-width: 720px) {
+  .design-auth-frame__actions form .auth-submit { width: 100%; justify-content: center; }
+}
+
+/* Locale choices are secondary to account recovery. */
+.kc-locale-links { gap: 4px 16px; font-size: .875rem; flex-direction: row; }
+.kc-locale-links a { color: var(--auth-color-text-muted); min-height: 44px; display: inline-flex; align-items: center; }
+.kc-locale-links span { display: none; }

@@ -11,13 +11,12 @@
       <span class="kc-label">${msg("gustavEmailAddress")}</span>
       <input class="kc-input" id="username" name="username" type="email" autocomplete="email" autofocus>
     </label>
-    <button class="btn btn-primary kc-submit workspace-button" type="submit">${msg("doSubmit")}</button>
+    <button class="btn btn-primary kc-submit workspace-button" type="submit">${msg("gustavSendResetLink")}</button>
   </form>
 
   <div class="kc-links">
     <a href="${url.loginUrl}">${msg("doLogIn")}</a>
     <#if realm.registrationAllowed>
-      <span> · </span>
       <a href="${url.registrationUrl}">${msg("doRegister")}</a>
     </#if>
   </div>

@@ -59,6 +59,9 @@ const server = net.createServer((socket) => {
 });
 server.listen(port, "0.0.0.0", () => process.stdout.write("READY\n"));
 process.on("SIGTERM", () => server.close(() => process.exit(0)));
+// docker exec does not forward host signals. Closing stdin ends this exact capture.
+process.stdin.resume();
+process.stdin.on("end", () => server.close(() => process.exit(0)));
 `;
 
 async function startCaptureProcess(port: number, messages: string[]): Promise<ChildProcessWithoutNullStreams> {
@@ -113,7 +116,7 @@ export async function startSmtpCapture(port = 25_000 + Math.floor(Math.random() 
     },
     async close(): Promise<void> {
       if (child.exitCode !== null) return;
-      child.kill("SIGTERM");
+      child.stdin.end();
       await new Promise<void>((resolve) => child.once("exit", () => resolve()));
     }
   };

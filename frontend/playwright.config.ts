@@ -8,6 +8,8 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL,
+    actionTimeout: 20_000,
+    navigationTimeout: 30_000,
     trace: "retain-on-failure"
   },
   projects: [

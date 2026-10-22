@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 import { newApiContext } from "./browser-context";
+import { restorableSmtp } from "./smtp-restore";
 
 import { adminClientId, adminClientSecret, adminPassword, adminRealm, adminUser, kcBase, realm } from "./e2e-env";
 import {
@@ -195,7 +196,7 @@ export async function useTemporaryRealmSmtp(
     // In that case restore the repository's real SMTP settings, not the stale test endpoint.
     original = current.smtpServer?.host === "gustav-frontend" || current.smtpServer?.port === "2526"
       ? configuredRealmSmtp()
-      : current.smtpServer;
+      : restorableSmtp(current.smtpServer ?? {}, configuredRealmSmtp());
     registerE2ESmtpRestore(original ?? {});
     const update = await kc.put(`/admin/realms/${realm}`, {
       headers: adminHeaders(token),
@@ -245,5 +246,18 @@ export async function ensureImportedBcryptLearner(email: string, hash: string): 
     const id = await findUserId(kc, token, email);
     expect(id).toBeTruthy();
     registerE2EUser({ email, role: 'student', keycloak_id: id! });
+  } finally { await kc.dispose(); }
+}
+
+/** Count only visible, positive rules from the realm's actual password policy. */
+export async function activePasswordRuleCount(): Promise<number> {
+  const kc = await keycloakAdminContext();
+  try {
+    const token = await adminToken(kc);
+    const response = await kc.get(`/admin/realms/${realm}`, { headers: adminHeaders(token) });
+    expect(response.ok()).toBe(true);
+    const { passwordPolicy = "" } = await response.json();
+    return [...String(passwordPolicy).matchAll(/(?:length|lowerCase|upperCase|digits|specialChars)\((\d+)\)/g)]
+      .filter(match => Number(match[1]) > 0).length;
   } finally { await kc.dispose(); }
 }

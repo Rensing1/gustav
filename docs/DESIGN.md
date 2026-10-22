@@ -229,6 +229,21 @@ Die folgende Zielpalette übernimmt die neutralen Flächen des abgestimmten Entw
 - Hover verändert Fläche oder Textfarbe zurückhaltend; Farben entstehen aus gemeinsamen Tokens statt lokalen Einzelwerten.
 - Es gibt keine zonenspezifischen Farbwelten für Rollen.
 
+### Live-Aufgabenfelder: verbindliche Bewertungsfarben
+
+Die bisherige Live-Bewertungspalette bleibt erhalten. Ihre Werte liegen ausschließlich als `--color-live-score-*` und `--color-live-on-*` in `theme-tokens.css`; Komponenten dürfen keine eigenen Farbtöne festlegen. Die folgenden Farbpaare gelten für die nummerierten Aufgabenfelder, nicht für allgemeine Erfolgsmeldungen.
+
+| Bewertung | Fläche Hell | Text Hell | Fläche Dunkel | Text Dunkel |
+|---|---|---|---|---|
+| 0 (`zero`) | `#7a0000` | `#ffffff` | `#ff4d4d` | `#000000` |
+| über 0 bis unter 4 (`low`) | `#c62828` | `#ffffff` | `#ff6b57` | `#000000` |
+| 4 bis unter 8 (`mid`) | `#d87a00` | `#000000` | `#ff9a2f` | `#000000` |
+| ab 8 (`high`) | `#2f8f5b` | `#000000` | `#49b36f` | `#000000` |
+
+Offene Aufgaben bleiben ungefüllt (`transparent`) mit gestrichelter Kontur in `--color-control-border` und Text in `--color-text`. Abgegebene, noch unbewertete Aufgaben verwenden die blaue Informationsfläche `--color-info-soft` mit durchgezogener Kontur und Text in `--color-info`. Damit unterscheiden sich beide Zustände durch Fläche und Rahmenform, nicht allein durch Farbe. Die gemeinsamen Tokens bestimmen beide Themes; lokale Farbwerte sind nicht zulässig. Die vollständige Beschriftung unterscheidet „Noch offen“ und „Noch unbewertet“. Zahlen bleiben lesbar; die Bewertung wird zusätzlich in der Statuszeile und der zugänglichen Beschriftung angegeben.
+
+Auswahl und Bewertung sind getrennte Zustände: Eine Umrandung in der gemeinsamen Akzentfarbe mit 2 px Abstand markiert die Auswahl, ohne die Bewertungsfläche zu ersetzen. Ein zusätzlicher orangefarbener Unterstrich für die jüngste Abgabe entfällt. Die größeren nummerierten Bedienflächen bleiben erhalten.
+
 ## 6. Typografie
 
 Die Oberfläche verwendet eine gut lesbare Sans-Serif als gemeinsame Schriftfamilie. Hierarchie entsteht durch Größe, Gewicht, Abstand und Farbe.

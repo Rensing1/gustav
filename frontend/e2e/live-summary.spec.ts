@@ -1,3 +1,4 @@
+import { setAppTheme, openAppDestination } from "./support/app-navigation";
 import { currentUserSub, login } from "./support/auth";
 import { apiHeaders, expectApiOk } from "./support/api";
 import { newBrowserContext } from "./support/browser-context";
@@ -25,7 +26,7 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
     await login(learner, learnerEmail, e2ePassword);
     const seeded = await seedLearnerNavigationCourse(teacher, learner, "Live-Reihenfolge");
 
-    await teacher.getByRole("link", { name: "Live", exact: true }).click();
+    await openAppDestination(teacher, "Live");
     await teacher.getByRole("combobox", { name: "Kurs", exact: true }).selectOption(seeded.courseId);
     await teacher.getByRole("combobox", { name: "Lerneinheit", exact: true }).selectOption(seeded.unitId);
     await expect(teacher.getByRole("heading", { name: "Klassenübersicht" })).toBeVisible();
@@ -70,8 +71,8 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
       await learner.getByRole("button", { name: "Rückmeldung einholen", exact: true }).click();
       await expect(learner.locator(".learning-task-feedback-status:visible")).toContainText("Rückmeldung wird erstellt");
       await completeQueuedFeedbackDeterministically({ ...seeded, learnerSub: await currentUserSub(learner) });
-      await expect(learner.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
-      await learner.getByRole("button", { name: "Endgültig abgeben" }).click();
+      await expect(learner.getByRole("button", { name: "Abgeben", exact: true })).toBeEnabled();
+      await learner.getByRole("button", { name: "Abgeben", exact: true }).click();
       await expect(learner.getByRole("region", { name: "Aufgabe abgeschlossen" })).toBeVisible();
     } finally {
       await releaseProviderWorker();
@@ -94,9 +95,9 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
     await expect(teacher.getByRole("combobox", { name: "Modul", exact: true })).toBeVisible();
     expect(await teacher.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await teacher.screenshot({ path: info.outputPath("live-summary-390-light.png"), fullPage: true, animations: "disabled" });
-    await teacher.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+    await setAppTheme(teacher, "dark");
     await teacher.screenshot({ path: info.outputPath("live-summary-390-dark.png"), fullPage: true, animations: "disabled" });
-    await teacher.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+    await setAppTheme(teacher, "light");
     await teacher.setViewportSize({ width: 1600, height: 900 });
 
     // Practice stays a separate matrix and supports the same detail navigation.
@@ -109,7 +110,7 @@ test("@feature-acceptance teacher opens the ordered live task summary and retain
     });
     await expectApiOk(emptyModule, 201);
     const emptyModuleId = (await emptyModule.json()).id;
-    await teacher.getByRole("link", { name: "Live", exact: true }).click();
+    await teacher.goto("/live");
     await teacher.getByRole("combobox", { name: "Kurs", exact: true }).selectOption(practice.courseId);
     await teacher.getByRole("combobox", { name: "Lerneinheit", exact: true }).selectOption(practice.unitId);
     await teacher.getByRole("radio", { name: "Üben", exact: true }).press("Space");

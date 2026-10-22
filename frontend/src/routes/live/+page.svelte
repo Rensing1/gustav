@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import LiveOverviewMatrix from "./LiveOverviewMatrix.svelte";
@@ -397,15 +397,50 @@
     });
   }
 
+  let detailElement = $state<HTMLElement>();
+  let matrixElement = $state<HTMLElement>();
+  let overviewScrollY = 0;
+  let overviewTrigger: HTMLElement | null = null;
+
+  // Keep the matrix mounted so returning preserves its horizontal scroll and module filter.
+  function rememberOverview(): void {
+    overviewScrollY = window.scrollY;
+    overviewTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+
+  async function revealDetail(): Promise<void> {
+    await tick();
+    detailElement?.focus({ preventScroll: true });
+    detailElement?.scrollIntoView({ block: "start" });
+  }
+
+  function returnToOverview(): void {
+    if (overviewTrigger?.isConnected) {
+      overviewTrigger.focus({ preventScroll: true });
+      window.scrollTo({ top: overviewScrollY, behavior: "instant" });
+    } else {
+      matrixElement?.focus({ preventScroll: true });
+      matrixElement?.scrollIntoView({ block: "start" });
+    }
+  }
+
+  onMount(() => {
+    if (data.selectedStudentSub) void revealDetail();
+  });
+
   async function openMatrixStudent(studentSub: string): Promise<void> {
+    rememberOverview();
     await workspaceController.selectStudent(studentSub);
     syncWorkspaceState();
+    await revealDetail();
   }
 
   async function openMatrixTask(studentSub: string, taskId: string): Promise<void> {
+    rememberOverview();
     selectedPracticeModuleId = null;
     await workspaceController.selectCell(studentSub, taskId);
     syncWorkspaceState();
+    await revealDetail();
   }
 
   async function openPracticeModule(studentSub: string, moduleId: string, taskId: string | null): Promise<void> {
@@ -447,6 +482,7 @@
   });
 
   $effect(() => {
+    overviewTrigger = null;
     workspaceController.resetFromServer({
       summary: data.summary,
       detail: data.detail?.submission ?? null,
@@ -577,7 +613,7 @@
   {#if dashboardState && matrixState}
     <section class="live-page__workspace" aria-label="Live-Arbeitsbereich">
       <div class="live-workspace">
-        <section class="workspace-panel workspace-section live-table-panel">
+        <section bind:this={matrixElement} tabindex="-1" aria-label="Klassenübersicht" class="workspace-panel workspace-section live-table-panel">
           <LiveOverviewMatrix
             view={matrixState}
             activeView={activeMatrixView}
@@ -590,12 +626,13 @@
             onMobilePracticeModuleChange={(value) => (mobilePracticeModuleId = value)}
             onOpenStudent={(studentSub) => void openMatrixStudent(studentSub)}
             onOpenTask={(studentSub, taskId) => void openMatrixTask(studentSub, taskId)}
-            onOpenPracticeModule={(studentSub, moduleId, taskId) => void openPracticeModule(studentSub, moduleId, taskId)}
+            onOpenPracticeModule={async (studentSub, moduleId, taskId) => { rememberOverview(); await openPracticeModule(studentSub, moduleId, taskId); await revealDetail(); }}
           />
         </section>
 
-        <aside class="workspace-panel live-panel" aria-label="Schülerdetail">
+        <aside bind:this={detailElement} tabindex="-1" class="workspace-panel live-panel" aria-label="Schülerdetail">
           {#if dashboardState.selected_student_panel}
+            <button type="button" class="live-overview-back" onclick={returnToOverview}>← Zur Klassenübersicht</button>
             <header class="live-panel__header">
               <div class="live-panel__copy">
                 <h3>{dashboardState.selected_student_panel.student.name}</h3>
@@ -635,7 +672,7 @@
                   <div class="learning-task-submission-summary__copy">
                     <p class="workspace-label">Aufgabenstellung</p>
                     <p class="learning-task-submission-summary__meta live-panel-summary__meta">
-                      {formatSubmissionTimestamp(selectedSubmission.created_at)}
+                      Abgabe: {formatSubmissionTimestamp(selectedSubmission.created_at)}
                     </p>
                     <div class="markdown-prose live-panel-summary__instruction">
                       {@html renderMarkdown(selectedSubmission.instruction_md)}
@@ -790,7 +827,7 @@
           {:else}
             <section class="live-panel-empty">
               <p class="workspace-empty">
-                Wähle eine Schülerzeile, um Aufgabenleiste und Detailansicht zu öffnen.
+                Wähle einen Schüler oder eine Aufgabe aus.
               </p>
             </section>
           {/if}
@@ -853,7 +890,7 @@
   .live-panel,
   .live-table-panel {
     border: 1px solid var(--color-border, #1b1b1b);
-    border-radius: 0;
+    border-radius: 8px;
   }
 
   .live-selection__field select {
@@ -876,7 +913,7 @@
   .live-workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-5);
+    gap: 16px;
     align-items: start;
   }
 
@@ -890,7 +927,7 @@
   .live-panel {
     display: grid;
     gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
+    padding: 24px;
     min-width: 0;
     box-shadow: none;
   }
@@ -910,6 +947,11 @@
     min-width: 0;
   }
 
+  .live-panel, .live-table-panel { scroll-margin-top: 80px; }
+  .live-panel:focus, .live-table-panel:focus { outline: none; }
+  .live-overview-back { justify-self: start; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--color-link); font: inherit; cursor: pointer; }
+  .live-overview-back:focus-visible { outline: 2px solid var(--color-link); outline-offset: 4px; }
+
   .live-dialog-transcript {
     display: grid;
     gap: var(--space-3);
@@ -919,6 +961,7 @@
     display: grid;
     gap: var(--space-2);
     padding: var(--space-3);
+    border-radius: 8px;
     border: 1px solid var(--color-line, rgba(27, 27, 27, 0.14));
     background: var(--color-bg-muted, #f3f3f4);
   }
@@ -945,17 +988,17 @@
 
   .live-practice-detail dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: 0; }
   .live-practice-detail dl div { min-width: 0; }
-  .live-practice-detail dt { color: var(--color-text-muted); font: .72rem var(--font-mono); text-transform: uppercase; }
+  .live-practice-detail dt { color: var(--color-text-muted); font: .8125rem var(--font-ui); }
   .live-practice-detail dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-weight: 650; }
 
   .live-panel-summary {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-4);
     align-items: start;
     border: 0;
     border-top: 1px solid var(--color-line);
-    padding-top: var(--space-2);
+    padding-top: 16px;
   }
 
   .live-panel-summary__context,
@@ -963,7 +1006,7 @@
   .live-panel__task-navigation { min-width: 0; }
   .live-panel-summary__context .learning-task-submission-summary__copy { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-3); }
   .live-panel-summary__context .workspace-label { margin: 0; }
-  .live-panel-summary__response { border-left: 1px solid var(--color-line); padding-left: var(--space-4); }
+  .live-panel-summary__response { border-top: 1px solid var(--color-line); padding-top: 16px; }
 
   .live-panel-summary__meta { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-xs); }
   .live-panel-summary__instruction { flex-basis: 100%; min-width: 0; margin-block: var(--space-2) 0; }
@@ -993,6 +1036,7 @@
   }
 
   @media (max-width: 700px) {
+    .live-panel { padding: 16px; }
     .live-panel-summary { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
     .live-panel-summary__response { border-left: 0; border-top: 1px solid var(--color-line); padding-left: 0; padding-top: var(--space-2); }
   }

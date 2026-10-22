@@ -10,16 +10,16 @@ const tasks: LiveStudentPanelTask[] = Array.from({ length: 13 }, (_, index) => (
   is_latest_submission: index === 12, href: `/live?task_id=task-${index}`
 }));
 
-describe("compact Live task strip", () => {
+describe("numbered Live task strip", () => {
   afterEach(cleanup);
-  it("keeps order, accessible labels, selection and latest marking without visible button text", () => {
+  it("keeps order, visible numbers, accessible labels and selection", () => {
     render(LiveTaskStrip, { tasks, selectedTaskId: "task-0", onOpen: vi.fn() });
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(13);
     expect(links.map((link) => link.getAttribute("href"))).toEqual(tasks.map((task) => task.href));
-    expect(links.every((link) => link.textContent?.trim() === "")).toBe(true);
+    expect(links.map((link) => link.textContent?.trim())).toEqual(tasks.map((_, index) => String(index + 1)));
     expect(links[0]).toHaveAttribute("aria-current", "true");
-    expect(links[12]).toHaveClass("is-latest");
+    expect(links[12]).not.toHaveClass("is-active");
     expect(screen.getByText("Modul 1 · Aufgabe 1: Noch offen")).toBeInTheDocument();
   });
   it("prioritizes focus over hover and returns to selection without changing it", async () => {

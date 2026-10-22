@@ -89,7 +89,8 @@
   {/if}
 
   {#if activeView === "learning"}
-    {#if view.learningGroups.length}
+    {#if view.learningGroups.length || view.rows.length}
+      {#if view.learningGroups.length}
       <label class="live-matrix__mobile-select">
         <span>Modul</span>
         <select value={mobileLearningGroupId} onchange={(event) => onMobileLearningGroupChange(event.currentTarget.value)}>
@@ -98,10 +99,11 @@
           {/each}
         </select>
       </label>
+      {/if}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (Scrollable labelled table region.) -->
       <div class="live-matrix__scroll" role="region" aria-label="Lernaufgaben nach Schülern" tabindex="0">
         <table
-          style:--matrix-width={`${336 + view.learningGroups.reduce((count, group) => count + group.taskIds.length, 0) * 48}px`}
+          style:--matrix-width={`${336 + view.learningGroups.reduce((count, group) => count + group.taskIds.length, 0) * 80}px`}
           style:--mobile-width={`${296 + (view.learningGroups.find((group) => group.id === mobileLearningGroupId)?.taskIds.length ?? 0) * 48}px`}
         >
           <colgroup>
@@ -178,7 +180,8 @@
           </tbody>
         </table>
       </div>
-    {:else}
+    {/if}
+    {#if !view.learningGroups.length}
       <p class="workspace-empty">Diese Lerneinheit enthält noch keine Lernaufgaben.</p>
     {/if}
   {:else if view.practiceModules.length}
@@ -237,10 +240,12 @@
   {:else}
     <p class="workspace-empty">Diese Lerneinheit enthält noch keine Übungsmodule.</p>
   {/if}
+<p class="live-matrix__legend">{activeView === "learning" ? "– Keine Abgabe · • Abgegeben · Zahl: Bewertung · Ø Durchschnitt" : "Fällig: jetzt üben · Sicher: bereits gefestigt"}</p>
 </section>
 
 <style>
   .live-matrix { min-width: 0; }
+  .live-matrix__legend { margin: 0; padding: 12px 16px; border-top: 1px solid var(--color-line); color: var(--color-text-muted); font: .8125rem/1.5 var(--font-ui); }
   .live-matrix__header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); padding: var(--space-3) var(--space-5); }
   .live-matrix__heading { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: var(--space-3); row-gap: var(--space-1); }
   .live-matrix__header h2 { margin: 0; font: 600 1.125rem var(--font-ui); }
@@ -248,13 +253,13 @@
   .live-matrix__switch { flex: 0 0 9rem; }
   .live-matrix__scroll { max-width: 100%; overflow-x: auto; border-top: 1px solid var(--color-line); background: var(--color-bg-surface); }
   .live-matrix__scroll:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
-  table { width: var(--matrix-width); table-layout: fixed; border-collapse: collapse; }
+  table { width: max(100%, var(--matrix-width)); table-layout: fixed; border-collapse: collapse; }
   .live-matrix__name-col { width: 176px; }
-  .live-matrix__task-col { width: 48px; }
+  .live-matrix__task-col { width: auto; }
   .live-matrix__learning-summary-col { width: 88px; }
   .live-matrix__practice-summary-col { width: 72px; }
   .live-matrix__practice-col { width: 176px; }
-  .live-matrix__module-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.35; }
+  .live-matrix__module-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: normal; hyphens: auto; line-height: 1.4; }
   th, td { border-right: 1px solid var(--color-line); border-bottom: 1px solid var(--color-line); text-align: center; padding: 0; height: 2.9rem; }
   thead th { padding: var(--space-2); background: var(--color-bg-muted); font-family: var(--font-ui); font-size: var(--font-size-xs); font-weight: 500; white-space: normal; }
   tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
@@ -272,14 +277,14 @@
   .live-matrix__learning-summary { position: sticky; right: 4.5rem; z-index: 2; width: 5.5rem; min-width: 5.5rem; max-width: 5.5rem; padding: 0; background: var(--color-bg-surface); box-shadow: inset 1px 0 0 var(--color-line); text-align: center; }
   thead .live-matrix__learning-summary { z-index: 4; padding: var(--space-2) var(--space-1); background: var(--color-bg-muted); }
   .live-learning-summary { display: grid; min-height: 2.9rem; place-content: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); font-variant-numeric: tabular-nums; line-height: 1; }
-  .live-learning-summary strong { font: 700 var(--font-size-sm) var(--font-mono); }
-  .live-learning-summary small { color: var(--color-text-muted); font: 600 var(--font-size-xs)/1.1 var(--font-mono); }
+  .live-learning-summary strong { font: 700 var(--font-size-sm) var(--font-ui); }
+  .live-learning-summary small { color: var(--color-text-muted); font: 600 var(--font-size-xs)/1.1 var(--font-ui); }
   .live-learning-summary small[data-tone="high"] { color: var(--color-success); }
   .live-learning-summary small[data-tone="mid"] { color: var(--color-warning); }
   .live-learning-summary small[data-tone="low"] { color: var(--color-danger); }
   .live-matrix__practice-summary { width: 4.5rem; min-width: 4.5rem; max-width: 4.5rem; position: sticky; right: 0; z-index: 2; background: var(--color-bg-surface); }
   thead .live-matrix__practice-summary { z-index: 4; background: var(--color-bg-muted); }
-  .live-practice-counts { display: grid; grid-template-columns: 1fr 1fr; width: 100%; min-height: 2.9rem; align-items: center; gap: var(--space-1); border: 0; padding: 0 var(--space-1); background: transparent; font: 700 .78rem var(--font-mono); cursor: pointer; }
+  .live-practice-counts { display: grid; grid-template-columns: 1fr 1fr; width: 100%; min-height: 2.9rem; align-items: center; gap: var(--space-1); border: 0; padding: 0 var(--space-1); background: transparent; font: 700 .78rem var(--font-ui); cursor: pointer; }
   .live-practice-counts [data-tone="due"] { color: var(--color-info); }
   .live-practice-counts [data-tone="secure"] { color: var(--color-success); }
   .live-practice-counts:disabled { cursor: default; opacity: .55; }
@@ -295,13 +300,20 @@
   @media (max-width: 700px) {
     .live-matrix__header { padding: var(--space-3); gap: var(--space-2); }
     .live-matrix__header h2 { font-size: var(--font-size-base); }
-    table { width: var(--mobile-width); }
+    table { width: max(100%, var(--mobile-width)); }
     .live-matrix__name-col { width: 136px; }
-    .live-matrix__mobile-select { display: grid; gap: var(--space-1); margin: 0 var(--space-3) var(--space-3); }
-    .live-matrix__mobile-select span { font: .76rem var(--font-mono); text-transform: uppercase; }
-    .live-matrix__mobile-select select { min-height: 2.75rem; border: 1px solid var(--color-border); border-radius: 0; padding: 0 var(--space-3); background: var(--color-bg-surface); color: var(--color-text); }
+    .live-matrix__task-col { width: 48px; }
+    /* The full module title is already visible in the mobile selector. */
+    .live-matrix__module-title { font-size: 0; white-space: nowrap; }
+    .live-matrix__module-title::after { content: "Aufg."; font-size: .75rem; }
+    .live-matrix__mobile-select { min-width: 0; grid-template-columns: minmax(0, 1fr); display: grid; gap: var(--space-1); margin: 0 var(--space-3) var(--space-3); }
+    .live-matrix__mobile-select span { font: .76rem var(--font-ui); text-transform: uppercase; }
+    .live-matrix__mobile-select select { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; min-height: 2.75rem; border: 1px solid var(--color-border); border-radius: 0; padding: 0 var(--space-3); background: var(--color-bg-surface); color: var(--color-text); }
     .live-matrix__mobile-hidden { display: none; }
     .live-matrix__name { padding-inline: var(--space-3); }
+    /* Summaries remain reachable to the right without covering the task columns. */
+    .live-matrix__learning-summary, .live-matrix__practice-summary { position: static; }
+
     .live-score { min-height: var(--layout-control-min); }
   }
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }

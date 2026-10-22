@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LiveStatusPreview from "$lib/components/ui/LiveStatusPreview.svelte";
   import UiPreviewSurface from "$lib/components/ui/UiPreviewSurface.svelte";
   import type { PageData } from "./$types";
 
@@ -8,5 +9,7 @@
 <svelte:head>
   <title>UI Preview | GUSTAV</title>
 </svelte:head>
+
+<LiveStatusPreview />
 
 <UiPreviewSurface userName={data.bootstrap.user.name} />

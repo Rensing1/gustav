@@ -1,5 +1,15 @@
 :root {
   color-scheme: light;
+  /* Live assessment palette, specified in DESIGN.md. */
+  --color-live-score-zero: #7a0000;
+  --color-live-score-low: #c62828;
+  --color-live-score-mid: #d87a00;
+  --color-live-score-high: #2f8f5b;
+  --color-live-on-zero: #ffffff;
+  --color-live-on-low: #ffffff;
+  --color-live-on-mid: #000000;
+  --color-live-on-high: #000000;
+
   --color-bg-base: #f6f7f9;
   --color-bg-surface: #ffffff;
   --color-bg-elevated: #ffffff;
@@ -66,6 +76,15 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
+  --color-live-score-zero: #ff4d4d;
+  --color-live-score-low: #ff6b57;
+  --color-live-score-mid: #ff9a2f;
+  --color-live-score-high: #49b36f;
+  --color-live-on-zero: #000000;
+  --color-live-on-low: #000000;
+  --color-live-on-mid: #000000;
+  --color-live-on-high: #000000;
+
   --color-bg-base: #15171b;
   --color-bg-surface: #202329;
   --color-bg-elevated: #202329;

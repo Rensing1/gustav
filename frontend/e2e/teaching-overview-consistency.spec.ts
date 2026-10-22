@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { currentUserSub, login } from "./support/auth";
 import { apiHeaders, expectApiOk } from "./support/api";
 import { newBrowserContext } from "./support/browser-context";
@@ -10,8 +11,7 @@ import { prepareCompletedFeedbackDraft } from "./support/submission-finalization
 
 async function pictures(page: Page, info: TestInfo, name: string) {
   for (const theme of ["light", "dark"]) {
-    const toggle = page.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-    if (await toggle.count()) await toggle.click();
+    await setAppTheme(page, theme);
     for (const width of [1440, 1024, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(() => window.scrollTo(0, 0));
@@ -21,21 +21,22 @@ async function pictures(page: Page, info: TestInfo, name: string) {
       await expect(async () => expectDesignContrast(page.locator("main h2, main h3, main .workspace-note, main .workspace-link-action, .workspace-tab"))).toPass({ timeout: 2000 });
       for (const panel of await page.locator(".workspace-panel--flat, .live-panel, .live-table-panel").all()) {
         await expect(panel).toHaveCSS("box-shadow", "none");
-        await expect(panel).toHaveCSS("border-top-left-radius", "0px");
+        await expect(panel).toHaveCSS("border-top-left-radius", "8px");
       }
       for (const action of await page.locator(".live-task-strip__item").all()) {
         const box = (await action.boundingBox())!;
-        // The original latest-submission marker can add two border pixels
-        // to its row; it must never expand into a full-sized action again.
-        expect(box.height).toBeGreaterThanOrEqual(18);
-        expect(box.height).toBeLessThan(21);
-        expect(box.width).toBeCloseTo(13.6, 0);
-        await expect(action).toHaveText("");
+        // Numbered touch targets keep their assessment color when selected.
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeLessThanOrEqual(46);
+        expect(box.width).toBeCloseTo(44, 0);
+        await expect(action).toHaveText(/^\d+$/);
       }
       const strip = page.getByRole("navigation", { name: "Aufgaben der Lerneinheit" });
       if (await strip.count()) {
         const rows = await strip.locator("a").evaluateAll((nodes) => new Set(nodes.map((node) => (node as HTMLElement).offsetTop)).size);
-        expect(rows).toBeLessThanOrEqual(2);
+        const stripWidth = (await strip.boundingBox())!.width;
+        const columns = Math.max(1, Math.floor((stripWidth + 8) / 52));
+        expect(rows).toBeLessThanOrEqual(Math.ceil(await strip.locator("a").count() / columns));
         await expect(strip.locator("section")).toHaveCount(0);
       }
       for (const tab of await page.getByRole("tab").all()) {
@@ -131,7 +132,7 @@ test("@feature-acceptance teacher follows diagnostics to live with 24 learners a
     const lastRow = teacher.getByRole("region", { name: "Klassenübersicht" }).locator("tbody tr").last();
     await lastRow.scrollIntoViewIfNeeded();
     await expect(lastRow).toBeVisible();
-    await lastRow.getByRole("link").first().click();
+    await lastRow.locator("th button").first().click();
     await expect(details).toContainText("Keine Abgabe");
     await teacher.goto(target.toString());
     const taskStrip = teacher.getByRole("navigation", { name: "Aufgaben der Lerneinheit" });
@@ -160,7 +161,7 @@ test("@feature-acceptance teacher follows diagnostics to live with 24 learners a
     await lastTask.hover();
     await expect(caption).toContainText("Modul 12 · Aufgabe 1");
     await teacher.goto(target.toString());
-    const liveTable = teacher.getByRole("region", { name: "Klassenübersicht" });
+    const liveTable = teacher.getByRole("region", { name: "Lernaufgaben nach Schülern", exact: true });
     await liveTable.focus();
     await teacher.keyboard.press("ArrowRight");
     await expect.poll(() => liveTable.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
@@ -170,7 +171,7 @@ test("@feature-acceptance teacher follows diagnostics to live with 24 learners a
     // teacher's persisted read-back use the real authenticated application.
     await prepareCompletedFeedbackDraft({ courseId: seeded.courseId, taskId: seeded.taskId, learnerSub, textBody: "Beide Materialien zeigen unterschiedliche Perspektiven auf digitale Grundrechte." });
     await learner.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}&task=${seeded.taskId}&panel=result`);
-    await learner.getByRole("button", { name: "Endgültig abgeben" }).click();
+    await learner.getByRole("button", { name: "Abgeben", exact: true }).click();
     await expect(learner.locator(".learning-task-feedback-status").getByRole("status")).toContainText("Aufgabe abgegeben");
     await teacher.reload();
     await teacher.getByRole("navigation", { name: "Aufgaben der Lerneinheit" }).getByRole("link", { name: /^Grundlagen · Aufgabe 1:/ }).click();
@@ -197,8 +198,8 @@ test("@feature-acceptance teacher follows diagnostics to live with 24 learners a
       const touchTasks = touch.getByRole("navigation", { name: "Aufgaben der Lerneinheit" }).getByRole("link");
       for (const task of await touchTasks.all()) {
         const box = (await task.boundingBox())!;
-        expect(box.width).toBeCloseTo(13.6, 0);
-        expect(box.height).toBeGreaterThanOrEqual(18); expect(box.height).toBeLessThan(21);
+        expect(box.width).toBeCloseTo(44, 0);
+        expect(box.height).toBeGreaterThanOrEqual(44); expect(box.height).toBeLessThanOrEqual(46);
       }
       await touchTasks.last().tap();
       await expect(touchTasks.last()).toHaveAttribute("aria-current", "true");
@@ -206,7 +207,7 @@ test("@feature-acceptance teacher follows diagnostics to live with 24 learners a
       await touchTasks.first().tap();
       await expect(touchTasks.first()).toHaveAttribute("aria-current", "true");
       for (const theme of ["dark", "light"]) {
-        await touch.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true }).click();
+        await setAppTheme(touch, theme);
         await touch.getByRole("complementary", { name: "Schülerdetail" }).screenshot({ path: info.outputPath(`live-touch-1024-${theme}.png`), animations: "disabled" });
       }
     } finally { await touchContext.close(); }

@@ -34,11 +34,10 @@
 </script>
 
 <nav class="live-task-strip" aria-label="Aufgaben der Lerneinheit">
-  {#each tasks as task (task.task_id)}
+  {#each tasks as task, index (task.task_id)}
     <a href={task.href}
       class={`live-task-strip__item live-task-strip__item--${tone(task)}`}
       class:is-active={selectedTaskId === task.task_id}
-      class:is-latest={task.is_latest_submission}
       aria-current={selectedTaskId === task.task_id ? "true" : undefined}
       aria-label={label(task)} title={label(task)}
       onmouseenter={() => hoveredId = task.task_id}
@@ -47,26 +46,30 @@
       onfocus={(event) => focusedId = event.currentTarget.matches(":focus-visible") ? task.task_id : null}
       onblur={() => focusedId = null}
       onclick={(event) => onOpen(task.task_id, event)}
-    ></a>
+    >{index + 1}</a>
   {/each}
 </nav>
 <p class="live-task-strip__caption workspace-note">{describedTask ? label(describedTask) : tasks.length ? "Wähle eine Aufgabe." : "Keine Aufgaben vorhanden."}</p>
 
 <style>
-  /* Preserve the original compact overview, including its state palette. */
+  /* Numbered targets remain usable by touch; labels retain the full task context. */
   .live-task-strip {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(0.7rem, 0.9rem));
-    gap: 0.28rem;
+    grid-template-columns: repeat(auto-fill, 2.75rem);
+    gap: 8px;
     justify-content: start;
   }
   .live-task-strip__item {
-    width: 0.85rem;
-    min-height: 1.15rem;
+    width: 2.75rem;
+    min-height: 2.75rem;
     border: 1px solid color-mix(in srgb, var(--color-border, #1b1b1b) 72%, transparent 28%);
     text-decoration: none;
     color: inherit;
-    display: block;
+    display: grid;
+    place-items: center;
+    position: relative;
+    border-radius: 8px;
+    font: 600 .875rem var(--font-ui);
     padding: 0;
     transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
   }
@@ -75,41 +78,22 @@
     transform: translateY(-1px);
   }
   .live-task-strip__item--empty {
-    background: color-mix(in srgb, var(--color-bg-muted, #f3f3f4) 92%, white 8%);
-    border-color: color-mix(in srgb, var(--color-border, #1b1b1b) 20%, transparent 80%);
+    background: transparent;
+    border: 1px dashed var(--color-control-border);
   }
   .live-task-strip__item--submitted-unscored {
-    background: color-mix(in srgb, var(--color-border, #1b1b1b) 72%, white 28%);
-    border-color: color-mix(in srgb, var(--color-border, #1b1b1b) 84%, transparent 16%);
+    background: var(--color-info-soft);
+    color: var(--color-info);
+    border-color: var(--color-info);
   }
-  .live-task-strip__item--score-zero { background: #7a0000; border-color: #7a0000; }
-  .live-task-strip__item--score-low { background: #c62828; border-color: #c62828; }
-  .live-task-strip__item--score-mid { background: #d87a00; border-color: #d87a00; }
-  .live-task-strip__item--score-high { background: #2f8f5b; border-color: #2f8f5b; }
+  .live-task-strip__item--score-zero { background: var(--color-live-score-zero); border-color: var(--color-live-score-zero); color: var(--color-live-on-zero); }
+  .live-task-strip__item--score-low { background: var(--color-live-score-low); border-color: var(--color-live-score-low); color: var(--color-live-on-low); }
+  .live-task-strip__item--score-mid { background: var(--color-live-score-mid); border-color: var(--color-live-score-mid); color: var(--color-live-on-mid); }
+  .live-task-strip__item--score-high { background: var(--color-live-score-high); border-color: var(--color-live-score-high); color: var(--color-live-on-high); }
   .live-task-strip__item.is-active {
     outline: 2px solid var(--color-accent, #ff512f);
-    outline-offset: -2px;
+    outline-offset: 2px;
   }
-  .live-task-strip__item.is-latest::after {
-    content: "";
-    display: block;
-    width: 100%;
-    height: 2px;
-    background: var(--color-accent, #ff512f);
-    margin-top: calc(1.15rem - 2px);
-  }
-  :global(.dark) .live-task-strip__item--empty {
-    background: #4a4f54;
-    border-color: color-mix(in srgb, white 26%, transparent 74%);
-  }
-  :global(.dark) .live-task-strip__item--submitted-unscored {
-    background: #7b8288;
-    border-color: #7b8288;
-  }
-  :global(.dark) .live-task-strip__item--score-zero { background: #ff4d4d; border-color: #ff4d4d; }
-  :global(.dark) .live-task-strip__item--score-low { background: #ff6b57; border-color: #ff6b57; }
-  :global(.dark) .live-task-strip__item--score-mid { background: #ff9a2f; border-color: #ff9a2f; }
-  :global(.dark) .live-task-strip__item--score-high { background: #49b36f; border-color: #49b36f; }
   /* Reserve wrapped caption space so hover does not move a bottom-scrolled strip. */
   .live-task-strip__caption { margin: var(--space-2) 0 0; min-height: 2lh; overflow-wrap: anywhere; }
 </style>

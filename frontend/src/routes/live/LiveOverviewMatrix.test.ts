@@ -28,6 +28,15 @@ describe("Live overview matrix", () => {
     expect(screen.getByText("Noch keine Schüler im Kurs.")).toBeInTheDocument();
   });
 
+  it("keeps enrolled learners reachable when the unit has no learning tasks", async () => {
+    const handlers = props();
+    handlers.view.learningGroups = [];
+    render(LiveOverviewMatrix, { props: handlers });
+    await fireEvent.click(screen.getByRole("button", { name: "Langer synthetischer Schülername" }));
+    expect(handlers.onOpenStudent).toHaveBeenCalledWith("student");
+    expect(screen.getByText("Diese Lerneinheit enthält noch keine Lernaufgaben.")).toBeInTheDocument();
+  });
+
   it("opens an unsubmitted task and keeps native view and module controls accessible", async () => {
     const handlers = props();
     render(LiveOverviewMatrix, { props: handlers });

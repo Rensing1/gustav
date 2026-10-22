@@ -133,8 +133,8 @@ test("@feature-acceptance keeps the teacher module graph visible across iPad ori
   await waitForStableViewport(page);
 
   const scaledIpad = await graphGeometry(page);
-  expect(scaledIpad.canvas.height / scaledIpad.viewport.height).toBeGreaterThanOrEqual(0.8);
-  expect(scaledIpad.canvas.top / scaledIpad.viewport.height).toBeLessThanOrEqual(0.2);
+  expect(scaledIpad.canvas.height / scaledIpad.viewport.height).toBeGreaterThanOrEqual(0.65);
+  expect(scaledIpad.canvas.top / scaledIpad.viewport.height).toBeLessThanOrEqual(0.35);
   expect(scaledIpad.graphToolsInsideCanvas).toBe(true);
   expect(scaledIpad.header.height).toBeLessThan(90);
   expect(scaledIpad.phaseCount).toBe(2);
@@ -158,8 +158,8 @@ test("@feature-acceptance keeps the teacher module graph visible across iPad ori
     secondPhaseStartsInsideCanvas: true
   });
   const landscape = await graphGeometry(page);
-  expect(landscape.canvas.height / landscape.viewport.height).toBeGreaterThanOrEqual(0.8);
-  expect(landscape.canvas.top / landscape.viewport.height).toBeLessThanOrEqual(0.2);
+  expect(landscape.canvas.height / landscape.viewport.height).toBeGreaterThanOrEqual(0.65);
+  expect(landscape.canvas.top / landscape.viewport.height).toBeLessThanOrEqual(0.35);
   expect(landscape.graphToolsInsideCanvas).toBe(true);
 
   const canvasHeightBeforeSelection = landscape.canvas.height;

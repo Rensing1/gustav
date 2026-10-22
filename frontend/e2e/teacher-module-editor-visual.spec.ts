@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { expect, test, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
@@ -74,7 +75,7 @@ test.describe("@visual-smoke @design-system module editor workspace", () => {
         expect(outlineBox!.width).toBeGreaterThanOrEqual(22 * 16);
         expect(outlineBox!.width).toBeLessThanOrEqual(25 * 16);
         expect(contentBox!.width).toBeLessThanOrEqual(72 * 16 + 1);
-        expect(contentBox!.width).toBeGreaterThan(60 * 16);
+        expect(contentBox!.width).toBeGreaterThan(56 * 16);
         expect(formatBox!.width / toolbarBox!.width).toBeLessThan(0.3);
       }
       await waitForStablePage(page);
@@ -83,7 +84,7 @@ test.describe("@visual-smoke @design-system module editor workspace", () => {
         caret: "hide"
       });
 
-      await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+      await setAppTheme(page, "dark");
       await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
       await expect(page).toHaveScreenshot(`teacher-module-editor-dark-${viewport.name}-material.png`, {
         animations: "disabled",

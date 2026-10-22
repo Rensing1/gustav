@@ -31,7 +31,7 @@
 <section class:teacher-node-editor-section--workbench={workbench} class="workspace-panel teacher-node-editor-section">
   <div class="teacher-node-editor-section__header">
     <div class="teacher-node-editor-section__heading">
-      <p class="workspace-label">{eyebrow}</p>
+      {#if !workbench}<p class="workspace-label">{eyebrow}</p>{/if}
       <h2>{title}</h2>
     </div>
     {#if !workbench}

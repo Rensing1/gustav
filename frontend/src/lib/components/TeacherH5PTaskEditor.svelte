@@ -86,18 +86,22 @@
 >
   <div class="teacher-h5p-editor__toolbar">
     <div class="teacher-h5p-editor__identity">
-      <p class="teacher-h5p-editor__eyebrow">Interaktive Aufgabe</p>
-      <h4>H5P-Inhalt direkt in dieser Aufgabe pflegen</h4>
+      <h3>H5P-Inhalt</h3>
     </div>
-    <div class="teacher-h5p-editor__actions">
+    <details class="teacher-h5p-editor__tools">
+      <summary>Werkzeuge</summary>
+      <div class="teacher-h5p-editor__actions">
       <input data-role="h5p-import-file" type="file" accept=".h5p,application/zip" hidden />
       <button class="workspace-button workspace-button--ghost" data-role="h5p-import" type="button">Importieren</button>
-      <button class="workspace-button workspace-button--ghost" data-role="h5p-export" type="button">Export</button>
+      <button class="workspace-button workspace-button--ghost" data-role="h5p-export" type="button">Exportieren</button>
       <button class="workspace-button workspace-button--ghost" data-role="h5p-reset" type="button">Zurücksetzen</button>
-      <button class="workspace-button" data-role="h5p-save" type="button">H5P speichern</button>
-    </div>
+      </div>
+    </details>
   </div>
   <span data-role="h5p-status" hidden>{status}</span>
-  <StatusMessage tone={statusTone(status)} title={status} dismissible={false} />
+  {#if status !== "Bereit."}<StatusMessage tone={statusTone(status)} title={status} dismissible={false} />{/if}
   <div data-role="h5p-editor-host"></div>
+  <div class="teacher-h5p-editor__save">
+    <button class="workspace-button workspace-button--primary" data-role="h5p-save" type="button">H5P-Inhalt speichern</button>
+  </div>
 </div>

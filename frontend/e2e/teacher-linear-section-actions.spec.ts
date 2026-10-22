@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { expect, test } from "./support/feature-test";
 import { apiHeaders, expectApiOk } from "./support/api";
 import { currentUserSub, login } from "./support/auth";
@@ -40,7 +41,7 @@ test("@feature-acceptance linear sections separate selection and properties and 
     const transform = await page.locator(".svelte-flow__viewport").getAttribute("style");
     await bar.getByRole("link", { name: "Inhalte bearbeiten" }).click();
     await expect(page).toHaveURL(new RegExp(`/nodes/${sectionId}$`));
-    await page.getByRole("link", { name: "Zurück zum Graph" }).click();
+    await page.locator(".context-header__back").click();
     await expect(page).toHaveURL(new RegExp(`section=${sectionId}`));
     await expect(bar).toBeVisible();
     await expect(inspector).toHaveCount(0);
@@ -51,8 +52,7 @@ test("@feature-acceptance linear sections separate selection and properties and 
   await expect(inspector).toBeVisible();
   await page.keyboard.press("Escape");
   for (const theme of ["light", "dark"]) {
-    const themeButton = page.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-    if (await themeButton.count()) await themeButton.click();
+    await setAppTheme(page, theme);
     await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", theme);
     for (const width of [1440, 1024, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
@@ -104,8 +104,8 @@ test("@feature-acceptance linear sections separate selection and properties and 
           }));
         }
         await other.goto(`/learning/courses/${courseId}/units/${unitId}`);
-        await expect(other.getByText("Abschnitt 1 · Grundlagen", { exact: true }).first()).toBeVisible();
-        await expect(other.getByText("Abschnitt 2 · Abschluss", { exact: true }).first()).toBeVisible();
+        await expect(other.getByRole("button", { name: "Abschnitt 1 · Grundlagen", exact: true })).toBeVisible();
+        await expect(other.getByRole("button", { name: "Abschnitt 2 · Abschluss", exact: true })).toBeVisible();
         await other.screenshot({ path: testInfo.outputPath("learner-section-titles.png"), fullPage: true });
       }
     } finally {

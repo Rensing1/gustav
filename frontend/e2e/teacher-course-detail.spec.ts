@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
@@ -57,18 +58,18 @@ test("@feature-acceptance teacher manages a course in the flat detail workspace"
     await teacher.page.getByRole("button", { name: "Mitglieder verwalten" }).click();
     const membersDrawer = teacher.page.getByRole("dialog", { name: "Mitglieder verwalten" });
     await expect(membersDrawer).toBeVisible();
+    const memberName = await membersDrawer.getByRole("listitem").first().locator("strong").innerText();
     const search = membersDrawer.getByRole("searchbox", { name: "Mitglieder durchsuchen" });
     expect((await search.boundingBox())!.height).toBeLessThanOrEqual(60);
     await teacher.page.keyboard.press("Escape");
     await expect(membersDrawer).toBeHidden();
 
     for (const theme of ["light", "dark"] as const) {
-      const themeButton = teacher.page.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-      if (await themeButton.count()) await themeButton.click();
+      await setAppTheme(teacher.page, theme);
       for (const width of [1440, 1024, 390, 320]) {
         await teacher.page.setViewportSize({ width, height: 900 });
         await teacher.page.getByRole("button", { name: "Mitglieder verwalten" }).click();
-        await search.fill("E2E");
+        await search.fill(memberName);
         const palette = await search.evaluate((node) => ({ color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor, height: node.getBoundingClientRect().height }));
         expect(palette.height).toBeGreaterThanOrEqual(44);
         expect(palette.height).toBeLessThanOrEqual(60);

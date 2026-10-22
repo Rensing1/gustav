@@ -3,8 +3,9 @@
   import type { BreadcrumbItem } from "$lib/types/navigation";
   import ThemeToggle from "./ThemeToggle.svelte";
   import type { ThemePreference } from "$lib/types/theme";
-  let { items, name, concernHref, currentTheme, onToggle, routeKey, contextItems }: {
+  let { items, name, concernHref, currentTheme, onToggle, routeKey, contextItems, teaching = false }: {
     contextItems?: BreadcrumbItem[];
+    teaching?: boolean;
     items: { href: string; label: string; active: boolean }[];
     name?: string; concernHref?: string; currentTheme: ThemePreference;
     onToggle: () => void; routeKey: string;
@@ -31,8 +32,8 @@
   <div class="global-header__inner">
     <a class="global-header__brand" href="/" aria-label="GUSTAV Startseite"><img src="/gustav-logo.png" alt="" />GUSTAV</a>
     {#if contextItems}
-      <ContextHeaderNavigation items={contextItems} destinations={items} />
-    {:else}
+      <ContextHeaderNavigation items={contextItems} destinations={items} {teaching} />
+    {:else if items.length}
     <nav class="global-header__nav" aria-label="Hauptnavigation">
       {#each items as item}<a href={item.href} aria-current={item.active ? "page" : undefined}>{item.label}</a>{/each}
     </nav>
@@ -40,6 +41,7 @@
     <div class="global-header__tools">
       {#if !contextItems}
       {#if concernHref}<a class="global-header__concern" href={concernHref}>Kummerkasten</a>{/if}
+      {#if items.length || concernHref}
       <details class="global-header__mobile-menu" bind:this={menu} ontoggle={() => { if (menu?.open && account) account.open = false; }}>
         <summary>Menü <span aria-hidden="true">☰</span></summary>
         <nav class="global-header__panel" aria-label="Mobile Hauptnavigation">
@@ -47,6 +49,7 @@
           {#if concernHref}<a href={concernHref}>Kummerkasten</a>{/if}
         </nav>
       </details>
+      {/if}
       {/if}
       <details class="global-header__account" bind:this={account} ontoggle={() => { if (account?.open && menu) menu.open = false; }}>
         <summary aria-label="Konto-Menü"><span class="global-header__name">{name ?? "Darstellung"}</span><span class="global-header__avatar" aria-hidden="true">{name?.slice(0, 1).toUpperCase() ?? "◐"}</span></summary>

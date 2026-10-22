@@ -139,7 +139,7 @@ describe("teacher node editor page", () => {
     const taskEntry = screen.getByRole("button", { name: /Gespeicherte Aufgabe/ });
     await fireEvent.click(taskEntry);
     await screen.findByRole("toolbar", { name: "Text formatieren" });
-    await fireEvent.input(screen.getByLabelText("Anweisung & Beschreibung"));
+    await fireEvent.input(screen.getByLabelText("Aufgabenstellung"));
     await fireEvent.click(screen.getByRole("button", { name: "← Inhalte" }));
 
     expect(within(taskEntry).queryByText("Entwurf", { exact: true })).toBeNull();
@@ -249,7 +249,7 @@ describe("teacher node editor page", () => {
 
     await fireEvent.change(typeSelect, { target: { value: "filius" } });
 
-    expect(screen.getByLabelText("Anweisung & Beschreibung")).toBeInTheDocument();
+    expect(screen.getByLabelText("Aufgabenstellung")).toBeInTheDocument();
     expect(screen.getAllByLabelText(/^Kriterium \d+$/i)).toHaveLength(1);
     expect(screen.getByLabelText("Lehrkraft-Kontext")).toBeInTheDocument();
     expect(
@@ -301,7 +301,7 @@ describe("teacher node editor page", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: /Führe einen prüfenden Dialog/i }));
 
-    expect(screen.getByLabelText("Anweisung & Beschreibung")).toHaveValue("Führe einen prüfenden Dialog.");
+    expect(screen.getByLabelText("Aufgabenstellung")).toHaveValue("Führe einen prüfenden Dialog.");
     expect(screen.getByLabelText("Lehrkraft-Kontext")).toHaveValue("Interner Fachkontext.");
     expect(screen.getByLabelText("Name des KI-Partners")).toHaveValue("Dr. Dialog");
     expect(screen.getByLabelText("Sichtbare Kurzbeschreibung")).toHaveValue("Eine sichtbare Kurzbeschreibung.");
@@ -313,7 +313,7 @@ describe("teacher node editor page", () => {
     expect(screen.getByLabelText("Optionaler Abschlussauftrag")).toHaveValue("Fasse dein Ergebnis zusammen.");
 
     expect(screen.getByLabelText("Probeantwort eines Schülers")).not.toBeVisible();
-    await fireEvent.click(screen.getByText("Gespeicherte Konfiguration testen"));
+    await fireEvent.click(screen.getByText("Dialogvorschau"));
     expect(screen.getByLabelText("Probeantwort eines Schülers")).toBeVisible();
   });
 
@@ -485,7 +485,7 @@ describe("teacher node editor page", () => {
     expect(screen.getByRole("heading", { name: "Orientierung aktualisiert" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Merkblatt/ })).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: /Neue Aufgabe/i }));
-    expect(screen.getByLabelText("Anweisung & Beschreibung")).toHaveValue("Neue Aufgabe");
+    expect(screen.getByLabelText("Aufgabenstellung")).toHaveValue("Neue Aufgabe");
     expect(screen.queryByRole("heading", { name: "Orientierung" })).not.toBeInTheDocument();
   });
 

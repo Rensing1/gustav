@@ -1617,11 +1617,11 @@
             </p>
           {:else}
             <div class="workspace-field">
-              <span>Anweisung & Beschreibung</span>
+              <span>Aufgabenstellung</span>
               {#if isModuleEditor}
                 <MarkdownEditor
                   name="instruction_md"
-                  ariaLabel="Anweisung & Beschreibung"
+                  ariaLabel="Aufgabenstellung"
                   value={restoredDraftText("new-task", "instruction_md", createTaskValues().instruction_md ?? "")}
                   placeholder="Aufgabenstellung eingeben …"
                   onInput={(value) => captureMarkdownDraft("new-task", "instruction_md", value)}
@@ -1756,7 +1756,6 @@
                   {#if task.kind === "h5p"}
                     <input type="hidden" name="instruction_md" value={taskInstructionValue(task)} />
                     <input type="hidden" name="h5p_content_id" value={task.h5p?.content_id ?? ""} />
-                    <p class="workspace-note">Diese Aufgabe wird direkt im H5P-Editor gepflegt.</p>
                     <TeacherH5PTaskEditor
                       unitId={editorState.unit.id}
                       sectionId={sectionId()}
@@ -1765,11 +1764,11 @@
                     />
                   {:else}
                     <div class="workspace-field">
-                      <span>Anweisung & Beschreibung</span>
+                      <span>Aufgabenstellung</span>
                       {#if isModuleEditor}
                         <MarkdownEditor
                           name="instruction_md"
-                          ariaLabel="Anweisung & Beschreibung"
+                          ariaLabel="Aufgabenstellung"
                           value={restoredDraftText(`task:${task.id}`, "instruction_md", taskInstructionValue(task))}
                           placeholder="Aufgabenstellung eingeben …"
                           onInput={(value) => captureMarkdownDraft(`task:${task.id}`, "instruction_md", value)}
@@ -1816,9 +1815,9 @@
                         <legend>Abschluss</legend>
                         <label class="workspace-field"><span>Optionaler Abschlussauftrag</span><textarea name="dialog_closing_prompt_md" rows="3">{taskValues(task).dialog_closing_prompt_md ?? task.dialog?.closing_prompt_md ?? ""}</textarea></label>
                       </fieldset>
-                      <details class="workspace-note" aria-label="Dialogvorschau">
-                        <summary>Gespeicherte Konfiguration testen</summary>
-                        <p>Die Vorschau wird nicht gespeichert. Speichere Änderungen zuerst.</p>
+                      <details class="teacher-dialog-preview" aria-label="Dialogvorschau">
+                        <summary>Dialogvorschau</summary>
+                        <p class="workspace-note">Nutzt die gespeicherte Fassung. Speichere Änderungen vor der Vorschau.</p>
                         <label class="workspace-field"><span>Probeantwort eines Schülers</span><textarea rows="3" value={dialogPreviewInputs[task.id] ?? ""} oninput={(event) => (dialogPreviewInputs[task.id] = event.currentTarget.value)}></textarea></label>
                         <button class="workspace-link-action" type="button" disabled={dialogPreviews[task.id]?.pending || !(dialogPreviewInputs[task.id] ?? "").trim()} onclick={() => previewDialog(task)}>KI-Antwort testen</button>
                         {#if dialogPreviews[task.id]?.error}<StatusMessage tone="error" title="Vorschau nicht verfügbar" description={dialogPreviews[task.id].error} />{/if}
@@ -1863,7 +1862,7 @@
 
                   <div class="workspace-node-editor-card-actions">
                     {#if isModuleEditor && hasDraft(`task:${task.id}`)}<button class="workspace-link-action workspace-link-action--subtle" type="button" onclick={discardCurrentDraft}>Verwerfen</button>{/if}
-                    <button class="workspace-link-action" type="submit">{isModuleEditor ? "Änderungen speichern" : "Speichern"}</button>
+                    <button class="workspace-link-action" type="submit">{task.kind === "h5p" ? "Aufgabeneinstellungen speichern" : isModuleEditor ? "Änderungen speichern" : "Speichern"}</button>
                   </div>
                 </form>
               </div>

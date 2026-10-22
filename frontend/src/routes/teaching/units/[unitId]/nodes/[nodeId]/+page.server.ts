@@ -369,7 +369,7 @@ export const load: PageServerLoad = async ({ fetch, cookies, params, parent, url
 
   const breadcrumbs: BreadcrumbItem[] = [
     { label: "Lerneinheiten", href: "/teaching/units" },
-    { label: editor.unit.title, href: `/teaching/units/${params.unitId}` }
+    { label: editor.unit.title, href: `/teaching/units/${params.unitId}?${editor.node.kind === "module" ? "module" : "section"}=${encodeURIComponent(editor.node.id)}` }
   ];
 
   return {

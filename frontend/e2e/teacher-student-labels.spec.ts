@@ -35,12 +35,14 @@ test("@feature-acceptance teacher surfaces use one learner label and hide diagno
   );
 
   await page.goto(`/teaching/courses/${seeded.courseId}`);
-  const primaryNavigation = page.getByRole("navigation", { name: "Hauptnavigation" });
+  await page.locator(".context-header__location > summary").click();
+  const primaryNavigation = page.locator(".context-header__panel");
   await expect(primaryNavigation.getByRole("link", { name: "Kurse" })).toBeVisible();
   await expect(primaryNavigation.getByRole("link", { name: "Lerneinheiten" })).toBeVisible();
   await expect(primaryNavigation.getByRole("link", { name: "Live" })).toBeVisible();
   await expect(primaryNavigation.getByRole("link", { name: "Diagnostik" })).toHaveCount(0);
 
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Mitglieder verwalten" }).click();
   const members = page.getByRole("dialog", { name: "Mitglieder verwalten" });
   await expect(members.getByText("Nora Namensgleich", { exact: true })).toBeVisible();

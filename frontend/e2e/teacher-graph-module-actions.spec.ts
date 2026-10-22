@@ -128,8 +128,7 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
   expect(freePoint).toBeTruthy();
   await page.mouse.click(freePoint!.x, freePoint!.y);
   await expect(moduleContext).toHaveCount(0);
-  await firstPhase.click();
-  await expect(phaseContext).toBeVisible();
+  await expect(phaseContext).toHaveCount(0);
 
   const addPhaseButton = page.getByRole("button", { name: "Phase hinzufügen" });
   await addPhaseButton.click();
@@ -146,7 +145,7 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
   await expect(phasePanel).toBeVisible();
   await expect(phasePanel.getByLabel("Name")).toHaveValue(phaseTitle);
 
-  await page.getByRole("toolbar", { name: "Graphwerkzeuge" }).getByRole("button", { name: "Modul hinzufügen" }).click();
+  await phaseContext.getByRole("button", { name: "Modul hinzufügen" }).click();
   const createModulePanel = page.getByRole("complementary", { name: "Modul hinzufügen" });
   await expect(createModulePanel).toBeVisible();
 
@@ -204,14 +203,14 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
   await expect(editorPane.locator(".teacher-node-editor-section__header").getByText("Aktionen")).toBeVisible();
 
   await page.getByRole("button", { name: "Aufgabe hinzufügen" }).first().click();
-  await editorPane.locator('[contenteditable="true"][aria-label="Anweisung & Beschreibung"]').fill("Begründe deine Antwort.");
+  await editorPane.locator('[contenteditable="true"][aria-label="Aufgabenstellung"]').fill("Begründe deine Antwort.");
   await editorPane.getByRole("textbox", { name: "Kriterium 1", exact: true }).fill("Die Antwort ist nachvollziehbar begründet.");
   await editorPane.getByRole("button", { name: "Aufgabe hinzufügen" }).click();
   await expect(page.getByText("Aufgabe angelegt.")).toBeVisible();
 
   const taskOutlineEntry = page.getByRole("button", { name: /Begründe deine Antwort/ }).first();
   await taskOutlineEntry.click();
-  const taskInstruction = editorPane.locator('[contenteditable="true"][aria-label="Anweisung & Beschreibung"]');
+  const taskInstruction = editorPane.locator('[contenteditable="true"][aria-label="Aufgabenstellung"]');
   await expect(taskInstruction).toBeVisible();
   await taskInstruction.evaluate((element) => {
     element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
@@ -257,12 +256,12 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
   await page.getByRole("dialog", { name: "Material löschen" }).getByRole("button", { name: "Material löschen" }).click();
   await expect(page.getByText("Material gelöscht.")).toBeVisible();
 
-  await page.getByRole("link", { name: "Zurück zum Graph" }).click();
+  await page.locator(".context-header__back").click();
   await expect(page).toHaveURL(new RegExp(`/teaching/units/${unitId}\\?module=[^&]+$`));
   await expect(moduleContext).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Modul bearbeiten" })).toHaveCount(0);
 
-  await moduleContext.getByLabel("Weitere Aktionen").click();
+  await moduleContext.getByText("Weitere Aktionen", { exact: true }).click();
   await moduleContext.getByRole("button", { name: "Modul löschen" }).click();
   const moduleDeleteDialog = page.getByRole("dialog", { name: "Modul löschen" });
   await expect(moduleDeleteDialog).toContainText(moduleTitle);
@@ -278,7 +277,7 @@ test("@feature-acceptance phase and module workflows keep the graph context and 
   await expect(page.getByText(moduleTitle, { exact: true })).toHaveCount(0);
 
   await expect(phaseContext).toContainText(phaseTitle);
-  await phaseContext.getByLabel("Weitere Aktionen").click();
+  await phaseContext.getByText("Weitere Aktionen", { exact: true }).click();
   await phaseContext.getByRole("button", { name: "Phase löschen" }).click();
   const phaseDeleteDialog = page.getByRole("dialog", { name: "Phase löschen" });
   await expect(phaseDeleteDialog).toContainText(phaseTitle);

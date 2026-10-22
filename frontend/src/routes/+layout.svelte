@@ -123,6 +123,21 @@
     return "Ein Produkt, klare Räume, wenig visuelle Ablenkung.";
   }
 
+  function isTeacherArea(): boolean {
+    return isActive("/teaching") || isActive("/live");
+  }
+
+  function teacherContext(): BreadcrumbItem[] {
+    const items = currentBreadcrumbs();
+    const title = pageTitle();
+    // Some course detail pages own their heading and provide no breadcrumbs.
+    if (!items.length && page.url.pathname.startsWith("/teaching/courses/")) {
+      items.push({ label: "Kurse", href: "/teaching/courses" });
+    }
+    if (items.at(-1)?.label !== title || items.at(-1)?.href) items.push({ label: title });
+    return items;
+  }
+
   function currentBreadcrumbs(): BreadcrumbItem[] {
     const breadcrumbs = page.data.breadcrumbs;
     const items = Array.isArray(breadcrumbs) ? [...breadcrumbs as BreadcrumbItem[]] : [];
@@ -237,12 +252,13 @@
 
 
 
-<div class:app-shell--auth-route={isAuthLayout()} class="app-shell" data-theme={currentTheme}>
+<div class:app-shell--auth-route={isAuthLayout()} class:teacher-ui={isTeacherArea()} class="app-shell" data-theme={currentTheme}>
   <AppHeader
     items={primaryNavItems().filter((item) => data.bootstrap?.spaces?.includes(item.requiredSpace)).map((item) => ({ ...item, active: isPrimaryActive(item.href) }))}
     name={data.bootstrap?.user.name}
     concernHref={data.bootstrap ? concernBoxHref() : undefined}
-    contextItems={isActive("/learning") ? currentBreadcrumbs() : undefined}
+    contextItems={isActive("/learning") ? currentBreadcrumbs() : isTeacherArea() ? teacherContext() : undefined}
+    teaching={isTeacherArea()}
     {currentTheme} onToggle={toggleTheme} routeKey={page.url.href}
   />
 
@@ -254,7 +270,7 @@
       class:workspace-inner--wide={workspaceLayout() === "wide"}
       class:workspace-inner--canvas={workspaceLayout() === "canvas"}
     >
-      {#if !isAuthLayout() && (!isActive("/learning") || !hidePageHeading() || currentHeaderAction())}
+      {#if !isAuthLayout() && ((!isActive("/learning") && !isTeacherArea()) || !hidePageHeading() || currentHeaderAction())}
         <header
           class="workspace-header unified-context-header"
           class:workspace-header--breadcrumbs-wide={isLearnerUnitWorkspaceRoute()}
@@ -262,7 +278,7 @@
           class:workspace-header--immersive-workspace={isImmersiveWorkspace()}
         >
           <div class="workspace-topbar">
-            {#if currentBreadcrumbs().length && !isActive("/learning")}
+            {#if currentBreadcrumbs().length && !isActive("/learning") && !isTeacherArea()}
               <ContextNavigation items={currentBreadcrumbs()} />
             {/if}
 

@@ -106,5 +106,5 @@ def test_compose_and_caddy_route_app_to_frontend_and_api_to_fastapi() -> None:
     assert "handle @api_path" in caddy_src
     assert "reverse_proxy gustav-alpha2:8000" in caddy_src
     assert "reverse_proxy gustav-frontend:3000" in caddy_src
-    assert "FROM caddy:2-alpine" in caddy_dockerfile_src
+    assert "FROM caddy:2.11.7-alpine" in caddy_dockerfile_src
     assert "COPY Caddyfile /etc/caddy/Caddyfile" in caddy_dockerfile_src

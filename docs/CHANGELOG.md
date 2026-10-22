@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-22
+
+### Sicherheitsupdates für Laufzeiten und Abhängigkeiten
+
+- security: Node 24.22.1, Python 3.11.17, Caddy 2.11.7, Keycloak 26.8.1 mit bcrypt-Provider 1.7.0 und PostgreSQL 16.15 gepinnt; Provider-Build und isolierte Erststart-/Upgrade-Tests prüfen dieselbe Keycloak-Version.
+- security(auth): RS256-Verifikation auf PyJWT 2.15.1 migriert und python-jose/ecdsa entfernt; Signatur-, Claim- und JWKS-Refresh-Verträge bleiben erhalten.
+- security(ai): DSPy mit reproduzierbarem SafeDisk-Patch und diskcache-community aktualisiert; alte Pickle-Caches werden nicht geöffnet. Beide vollständigen Hash-Locks und das Supply-Chain-Inventar wurden erneuert.
+- security(frontend/h5p): Markdown-, Sanitizer-, Upload- und transitive Abhängigkeiten aktualisiert; Regressionstests sichern pathologische Eingaben, Uploadlimits, Proxy-Vertrauen und Bereinigung abgebrochener Uploads ab.
+- fix(pdf/images): Adapter für WeasyPrint 70 und image-size 2 erhalten die bestehenden Bild-/PDF-Verträge und die Sperre externer PDF-Ressourcen.
+- docs: Upgrade-/Rollback-Hinweise und Prüfgrenzen stehen im [Security-Plan](plan/2026-10-22-security-update.md). Keine Änderung öffentlicher HTTP-APIs oder GUSTAV-Datenbankschemata.
+
 ## 2026-10-05
 
 ### CLI-Upload von HTML-Simulationen

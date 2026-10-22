@@ -11,6 +11,12 @@ from backend.identity_access.tokens import (
 )
 
 
+@pytest.fixture(autouse=True)
+def fake_jwk_conversion(monkeypatch):
+    # These tests isolate claims and error mapping; real JWKs have separate tests.
+    monkeypatch.setattr(tokens_mod.RSAAlgorithm, "from_jwk", lambda key: key)
+
+
 class FakeCache:
     def get(self, cfg):
         return {"keys": [{"kid": "kid1", "kty": "RSA"}]}

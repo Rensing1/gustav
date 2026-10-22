@@ -44,22 +44,26 @@ def _weasyprint_document(markup: str, *, assets: dict[str, tuple[bytes, str]] | 
 
     try:
         from weasyprint import HTML
+        from weasyprint.urls import FatalURLFetchingError, URLFetcher, URLFetcherResponse
     except Exception as exc:  # pragma: no cover - deployment dependency guard
         raise PrintExportError("pdf_renderer_unavailable", 503) from exc
 
     available_assets = assets or {}
 
-    def fetch_asset(url: str) -> dict[str, object]:
-        if url not in available_assets:
-            raise ValueError("external_resource_denied")
-        content, mime_type = available_assets[url]
-        return {"string": content, "mime_type": mime_type}
+    class AssetFetcher(URLFetcher):
+        """WeasyPrint 70 adapter restricted to the already authorized in-memory assets."""
+
+        def fetch(self, url: str, headers=None):
+            if url not in available_assets:
+                raise ValueError("external_resource_denied")
+            content, mime_type = available_assets[url]
+            return URLFetcherResponse(url, content, {"Content-Type": mime_type})
 
     try:
-        return HTML(string=markup, url_fetcher=fetch_asset).render()
+        return HTML(string=markup, url_fetcher=AssetFetcher(fail_on_errors=True)).render()
     except PrintExportError:
         raise
-    except Exception as exc:
+    except (Exception, FatalURLFetchingError) as exc:
         raise PrintExportError("pdf_render_failed", 503) from exc
 
 

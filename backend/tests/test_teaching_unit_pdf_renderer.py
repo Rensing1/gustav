@@ -74,7 +74,7 @@ def test_print_typography_and_compact_wrapping_header_use_actual_layout(monkeypa
     assert section.style["font_size"] == pytest.approx(14 * 96 / 72)
     assert item_title.style["font_size"] == pytest.approx(12 * 96 / 72)
     assert paragraph.style["font_size"] == pytest.approx(11 * 96 / 72)
-    assert paragraph.style["line_height"] == ("NUMBER", 1.45)
+    assert paragraph.style["line_height"] == pytest.approx(1.45)
     assert paragraph.style["orphans"] == paragraph.style["widows"] == 3
     authored_headings = [box for box in blocks if box.element_tag in {"h1", "h2", "h3"} and (box.element.text or "").startswith("Inhaltsebene")]
     assert len(authored_headings) == 3
@@ -425,3 +425,18 @@ def test_isolated_renderer_returns_pdf_from_a_short_lived_worker() -> None:
     )
 
     assert content.startswith(b"%PDF")
+
+
+@pytest.mark.parametrize('url', ['https://example.com/image.png', 'file:///etc/passwd', 'data:image/png;base64,AAAA'])
+def test_pdf_fetcher_never_delegates_unowned_resources(url, monkeypatch):
+    from weasyprint.urls import URLFetcher
+
+    from backend.teaching.printouts_pdf import _weasyprint_document
+    delegated = []
+    def forbidden_fetch(*args, **kwargs):
+        delegated.append(True)
+        raise AssertionError('External fetching must not run')
+    monkeypatch.setattr(URLFetcher, 'fetch', forbidden_fetch)
+    with pytest.raises(PrintExportError, match='pdf_render_failed'):
+        _weasyprint_document(f'<img src="{url}">')
+    assert delegated == []

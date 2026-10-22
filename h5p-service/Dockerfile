@@ -1,13 +1,14 @@
-FROM node:24.18.0-alpine AS fonts
+FROM node:24.22.1-alpine AS fonts
 WORKDIR /fonts
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 
-FROM node:24.18.0-alpine
+FROM node:24.22.1-alpine
 
 WORKDIR /app
 
 COPY h5p-service/package.json h5p-service/package-lock.json /app/
+COPY h5p-service/tooling /app/tooling
 RUN npm ci --omit=dev
 
 RUN apk add --no-cache su-exec

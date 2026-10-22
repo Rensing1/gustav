@@ -46,7 +46,7 @@ def test_keycloak_uses_postgres_service():
     assert "keycloak-db" in services, "Expected dedicated postgres service for Keycloak"
 
     keycloak_db = services["keycloak-db"]
-    assert keycloak_db.get("image") == "postgres:16", "Keycloak DB should use postgres:16 image"
+    assert keycloak_db.get("image") == "postgres:16.15", "Keycloak DB should use postgres:16.15 image"
     assert any(
         "keycloak_pg_data" in str(volume) for volume in keycloak_db.get("volumes", [])
     ), "Keycloak DB needs persistent volume keycloak_pg_data"

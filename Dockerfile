@@ -1,5 +1,10 @@
+FROM python:3.11.17-slim AS security-wheels
+WORKDIR /build
+COPY build_support ./build_support
+RUN python build_support/build_dspy_wheel.py --output-dir /wheels
+
 # Base image: Python 3.11-slim keeps the runtime lean
-FROM python:3.11-slim
+FROM python:3.11.17-slim
 
 # Set container working directory
 WORKDIR /app
@@ -16,7 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python dependencies
 COPY backend/web/requirements.lock .
-RUN pip install --no-cache-dir --require-hashes -r requirements.lock
+COPY --from=security-wheels /wheels /wheels
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock --find-links=/wheels
+RUN rm -rf /wheels
 RUN apt-get purge -y --auto-remove gcc
 
 # Copy the backend as a Python package. The runtime entry point is

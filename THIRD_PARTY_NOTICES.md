@@ -103,3 +103,9 @@ When updating anything listed in this file:
 5) Run local verification:
    - Rebuild affected services (e.g. `docker compose build h5p-service`).
    - Run the relevant contract tests (`.venv/bin/pytest -q backend/tests/test_h5p_* backend/tests/test_openapi_h5p_*`).
+
+## DSPy-Sicherheitsbuild und H5P-Kompatibilitätspatch
+
+DSPy 3.4.1 (MIT, Stanford NLP contributors) wird aus dem SHA-256-geprüften PyPI-Wheel als 3.4.1+gustav.1 neu gebaut. Die ursprüngliche Lizenz bleibt enthalten. Änderungen und Reproduktionsanleitung stehen in `build_support/dspy/README.md`; der vollständige Abhängigkeitsbaum bleibt gehasht und auditiert. diskcache-community 5.8.1 erhält die Apache-2.0-Lizenz und Urheberhinweise von python-diskcache; GUSTAV verwendet ausdrücklich dessen SafeDisk-Regeln.
+
+Der installierte H5PEditor aus @lumieducation/h5p-server 10.0.4 erhält eine durch Prüfsumme abgesicherte Anpassung für die asynchrone Dateischnittstelle von image-size 2. Die Paketlizenz bleibt unverändert. Der vollständige Patch steht in `h5p-service/tooling/patch-lumi.mjs`.

@@ -207,7 +207,8 @@ def test_backend_lint_target_is_part_of_verify() -> None:
     verify_body = _target_body("verify")
 
     assert "lint-backend" in help_text
-    assert "backend/requirements-harness.txt" in lint_body
+    assert "backend/requirements-harness.lock" in lint_body
+    assert "build_support/dspy/README.md" in lint_body
     assert "python -m ruff check backend" in lint_body
     assert "--select" not in lint_body
     assert "--exclude 'backend/tests/*'" not in lint_body

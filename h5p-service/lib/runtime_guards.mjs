@@ -34,11 +34,14 @@ export function pruneCacheToMaxEntries(cache, nowMs, maxEntries) {
 
 
 export function getPublicOrigin(req) {
-  const proto = String(req.get("x-forwarded-proto") || req.protocol || "")
+  const trust = req.app?.get("trust proxy fn");
+  const trusted = typeof trust === "function" && trust(req.socket?.remoteAddress, 0);
+  const forwarded = name => trusted ? req.get(name) : undefined;
+  const proto = String(forwarded("x-forwarded-proto") || req.protocol || "")
     .split(",")[0]
     .trim()
     .toLowerCase();
-  const xfHost = String(req.get("x-forwarded-host") || req.get("host") || "")
+  const xfHost = String(forwarded("x-forwarded-host") || req.get("host") || "")
     .split(",")[0]
     .trim();
   if (!proto || !xfHost) return null;
@@ -46,7 +49,7 @@ export function getPublicOrigin(req) {
   // Some proxy setups strip the port from `X-Forwarded-Host`, but set
   // `X-Forwarded-Port` instead. We normalize this so CSRF same-origin checks
   // behave like browsers: default ports are omitted from origins.
-  const xfPort = String(req.get("x-forwarded-port") || "").split(",")[0].trim();
+  const xfPort = String(forwarded("x-forwarded-port") || "").split(",")[0].trim();
 
   let hostname = "";
   let port = "";

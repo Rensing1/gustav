@@ -351,8 +351,8 @@ def test_main_restores_optional_h5p_storage_archive(
     )
 
     assert mod.main() == 0
-    assert restore_calls == [(h5p_tar, Path("/home/felix/gustav-alpha2/supabase/storage/h5p"))]
-    assert consistency_calls == [(args.dsn, Path("/home/felix/gustav-alpha2/supabase/storage/h5p"))]
+    assert restore_calls == [(h5p_tar, (Path(mod.__file__).resolve().parents[2] / "supabase/storage/h5p"))]
+    assert consistency_calls == [(args.dsn, (Path(mod.__file__).resolve().parents[2] / "supabase/storage/h5p"))]
 
 
 def test_main_fails_fast_when_snapshot_has_h5p_refs_but_no_h5p_archive(

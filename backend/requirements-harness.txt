@@ -8,3 +8,6 @@ ruff==0.15.20
 pytest==9.0.3
 pip-tools==7.6.1
 pip-audit==2.10.1
+
+# Synthetic image fixtures use NumPy; it is not a runtime dependency.
+numpy==2.4.6

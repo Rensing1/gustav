@@ -1,4 +1,4 @@
-"""Keep reviewed non-AI security fixes while the DSPy baseline is frozen."""
+"""Keep reviewed non-AI security fixes including the reviewed DSPy migration."""
 
 from pathlib import Path
 
@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[3]
 @pytest.mark.parametrize("pin", [
     "fastapi==0.136.3",
     "python-multipart==0.0.32",
-    "python-jose[cryptography]==3.5.0",
-    "Pillow==12.3.0",
+    "PyJWT[crypto]==2.15.1",
+    "Pillow==13.0.0",
     "bleach==6.4.0",
     "pip==26.2.1",
     "setuptools==84.0.0",

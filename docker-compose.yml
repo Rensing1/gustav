@@ -127,6 +127,8 @@ services:
     environment:
       # Service listens on this port inside the compose network
       - PORT=3000
+      # Only Caddy exposes this service; trust its single proxy hop for origin checks.
+      - H5P_TRUST_PROXY=true
       - GUSTAV_ENV=${GUSTAV_ENV:-dev}
       # Internal URL to validate gustav_session via /api/me (cookie forwarded)
       - GUSTAV_WEB_INTERNAL_BASE=http://gustav-alpha2:8000
@@ -290,7 +292,7 @@ services:
       - gustav-alpha2-network
 
   keycloak-db:
-    image: postgres:16
+    image: postgres:16.15
     container_name: gustav-keycloak-db
     environment:
       POSTGRES_DB: keycloak

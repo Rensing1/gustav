@@ -10,14 +10,15 @@ audience, and expiration are respected. A bounded per-process cache supports Key
 from __future__ import annotations
 
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from threading import Lock
 from typing import Dict, Tuple
 
+import jwt
 import requests
-from jose import jwt
-from jose.exceptions import JOSEError
+from jwt.algorithms import RSAAlgorithm
 
 from .oidc import OIDCConfig
 
@@ -150,7 +151,7 @@ def verify_id_token(
     cache = cache or JWKS_CACHE
     try:
         header = jwt.get_unverified_header(id_token)
-    except JOSEError as exc:
+    except (jwt.PyJWTError, ValueError, TypeError) as exc:
         raise IDTokenVerificationError("invalid_id_token") from exc
     if header.get('alg') != 'RS256':
         raise IDTokenVerificationError('invalid_id_token')
@@ -169,23 +170,22 @@ def verify_id_token(
         # Security: enforce RS256 (as configured in Keycloak) regardless of JWKS 'alg'
         claims = jwt.decode(
             id_token,
-            key_dict,
+            RSAAlgorithm.from_jwk(key_dict),
             algorithms=["RS256"],
             audience=cfg.client_id,
             issuer=expected_issuer,
             options={
                 "verify_signature": True,
                 "verify_aud": True,
-                "require_aud": True,
-                "require_iat": True,
+                "require": ["aud", "iat"],
                 "verify_exp": False,
                 "verify_iat": False,
                 "verify_nbf": False,
                 "verify_at_hash": False,
             },
         )
-    except JOSEError as exc:
-        logger.warning("ID token JOSE verification failed: %s", exc.__class__.__name__)
+    except (jwt.PyJWTError, ValueError, TypeError) as exc:
+        logger.warning("ID token JWT verification failed: %s", exc.__class__.__name__)
         raise IDTokenVerificationError("invalid_id_token") from exc
 
     _validate_temporal_claims(claims)
@@ -203,7 +203,7 @@ def verify_bearer_token(
     cache = cache or JWKS_CACHE
     try:
         header = jwt.get_unverified_header(token)
-    except JOSEError as exc:
+    except (jwt.PyJWTError, ValueError, TypeError) as exc:
         logger.warning("Bearer token header decode failed: %s", exc.__class__.__name__)
         raise BearerTokenVerificationError("invalid_bearer_token") from exc
     if header.get('alg') != 'RS256':
@@ -227,7 +227,7 @@ def verify_bearer_token(
     try:
         claims = jwt.decode(
             token,
-            key_dict,
+            RSAAlgorithm.from_jwk(key_dict),
             algorithms=["RS256"],
             issuer=_expected_issuer(cfg),
             options={
@@ -239,8 +239,8 @@ def verify_bearer_token(
                 "verify_at_hash": False,
             },
         )
-    except JOSEError as exc:
-        logger.warning("Bearer token JOSE verification failed: %s", exc.__class__.__name__)
+    except (jwt.PyJWTError, ValueError, TypeError) as exc:
+        logger.warning("Bearer token JWT verification failed: %s", exc.__class__.__name__)
         raise BearerTokenVerificationError("invalid_bearer_token") from exc
 
     try:
@@ -261,20 +261,34 @@ def _find_key(jwks: Dict[str, object], kid: str) -> Dict[str, object] | None:
     return None
 
 
+def _is_finite_numeric_date(value: object) -> bool:
+    """Reject malformed dates, including integers too large for finite timestamps."""
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def _validate_temporal_claims(claims: Dict[str, object]) -> None:
     now = time.time()
     exp = claims.get("exp")
-    if not isinstance(exp, (int, float)):
+    if not _is_finite_numeric_date(exp):
         raise IDTokenVerificationError("invalid_id_token")
     if exp + MAX_CLOCK_SKEW_SECONDS < now:
         raise IDTokenVerificationError("invalid_id_token")
 
     iat = claims.get("iat")
+    if "iat" in claims and not _is_finite_numeric_date(iat):
+        raise IDTokenVerificationError("invalid_id_token")
     if isinstance(iat, (int, float)):
         if iat - MAX_CLOCK_SKEW_SECONDS > now:
             raise IDTokenVerificationError("invalid_id_token")
 
     nbf = claims.get("nbf")
+    if "nbf" in claims and not _is_finite_numeric_date(nbf):
+        raise IDTokenVerificationError("invalid_id_token")
     if isinstance(nbf, (int, float)) and nbf - MAX_CLOCK_SKEW_SECONDS > now:
         raise IDTokenVerificationError("invalid_id_token")
 

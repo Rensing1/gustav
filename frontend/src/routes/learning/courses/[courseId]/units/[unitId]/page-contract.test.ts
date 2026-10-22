@@ -28,7 +28,7 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain('class="learning-unit-layout-frame learning-unit-layout-frame--toolbar"');
     expect(routeSource).toContain('learnerWorkspace.surface === "task" ? "working" : "orienting"');
     expect(routeSource).not.toContain('import ModeSwitch from "$lib/components/ui/ModeSwitch.svelte";');
-    expect(routeSource).toContain("← Zum Lernpfad");
+    expect(routeSource).not.toContain("← Zum Lernpfad");
     expect(routeSource).not.toContain("showSplitToggle=");
     expect(routeSource).not.toContain("onToggleSplitView=");
     expect(routeSource).toContain("modularSettingsMenuOpen = !modularSettingsMenuOpen");
@@ -46,7 +46,8 @@ describe("learning unit route contract", () => {
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;/s);
     expect(designSystemCss).not.toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*background:\s*transparent;/s);
     expect(designSystemCss).not.toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*border:\s*0;/s);
-    expect(designSystemCss).not.toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*box-shadow:\s*none;/s);
+    expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*box-shadow:\s*var\(--color-shadow\);/s);
+    expect(designSystemCss).toMatch(/@supports \(color: color-mix\(in srgb, black, white\)\)\s*\{\s*\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*box-shadow:\s*none;/s);
     expect(designSystemCss).not.toMatch(/\.workspace-outline__item--active::after\s*\{/s);
     expect(designSystemCss).not.toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*color:\s*var\(--color-accent\);/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-unit-workspace-surface\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
@@ -74,7 +75,7 @@ describe("learning unit route contract", () => {
     expect(routeSource).not.toContain('window.history.state?.gustavLearnerSurface === "task"');
     expect(routeSource).not.toContain('window.history.state?.gustavLearnerSurface === "reading"');
     expect(routeSource).toContain('window.scrollTo({ top: 0, behavior: "auto" })');
-    expect(routeSource).toContain('document.getElementById("learner-task-back")?.focus');
+    expect(routeSource).toContain('document.getElementById("learner-task-heading")?.focus');
     expect(routeSource).toContain("learnerWorkspaceStorageKeys(data.user?.sub ?? null");
     expect(routeSource).not.toContain("showSplitToggle=");
     expect(routeSource).not.toContain("onToggleSplitView=");
@@ -205,7 +206,7 @@ describe("learning unit route contract", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = readFileSync(path.resolve(currentDir, "+page.svelte"), "utf8");
 
-    expect(routeSource).toContain('import { onMount, tick, untrack } from "svelte";');
+    expect(routeSource).toContain('import { onMount, onDestroy, getContext, tick, untrack } from "svelte";');
     expect(routeSource).toMatch(/\$effect\(\(\) => \{\s*const historyTaskId = data\.historyTaskId;[\s\S]*?untrack\(\(\) => \{[\s\S]*?setTaskHistory\(historyTaskId, history, historyLoadState\)/);
   });
 
@@ -320,7 +321,7 @@ describe("learning unit route contract", () => {
     expect(routeSource).not.toContain("ensureContextReferenceSourceLoaded");
     expect(routeSource).not.toContain("addContextReference");
     expect(workspaceSource).toContain("<LearnerTaskContext");
-    expect(taskContextSource).toContain("<LearnerMaterialContext");
+    expect(taskContextSource).toContain("<WorkspaceOutline");
     expect(taskContextSource).not.toContain("Material suchen");
     expect(taskContextSource).not.toContain("Angeheftet");
   });
@@ -374,7 +375,7 @@ describe("learning unit route contract", () => {
     expect(appCss).toMatch(/\.learning-unit-module__materials,\s*\.learning-unit-module__tasks\s*\{[^}]*gap:\s*var\(--space-4\);/s);
     expect(appCss).toMatch(/\.learning-unit-module__tasks\s*\{[^}]*margin-top:\s*var\(--space-6\);/s);
     expect(appCss).toMatch(
-      /\.learning-unit-module__index\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*text-transform:\s*uppercase;/s
+      /\.learning-unit-module__index\s*\{[^}]*font-family:\s*var\(--font-ui\);[^}]*text-transform:\s*none;/s
     );
     expect(designDoc).toContain("Der Modultitel ist der klare Einstiegspunkt eines Moduls");
     expect(designDoc).toContain("`Materialien` und `Aufgaben` sind zurückhaltende Bereichsüberschriften");
@@ -387,10 +388,10 @@ describe("learning unit route contract", () => {
       /\.learning-unit-content-shell \.learning-unit-pane-grid--split \.learning-unit-module__title\s*\{[^}]*font-size:\s*calc\(1\.34rem \* var\(--learning-unit-headline-scale\)\);/s
     );
     expect(designSystemCss).toMatch(
-      /\.learning-unit-content-shell \.learning-unit-module__meta\s*\{[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*calc\(0\.78rem \* var\(--learning-unit-label-scale\)\);/s
+      /\.learning-unit-content-shell \.learning-unit-module__meta\s*\{[^}]*font-family:\s*var\(--font-ui\);[^}]*font-size:\s*calc\(0\.78rem \* var\(--learning-unit-label-scale\)\);/s
     );
     expect(designSystemCss).toMatch(
-      /\.learning-unit-content-shell \.learning-unit-module__section-head h5\s*\{[^}]*color:\s*var\(--color-text\);[^}]*font-family:\s*var\(--font-mono\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*700;[^}]*letter-spacing:\s*0\.14em;/s
+      /\.learning-unit-content-shell \.learning-unit-module__section-head h5\s*\{[^}]*color:\s*var\(--color-text\);[^}]*font-family:\s*var\(--font-ui\);[^}]*font-size:\s*calc\(0\.82rem \* var\(--learning-unit-label-scale\)\);[^}]*font-weight:\s*700;[^}]*letter-spacing:\s*0\.14em;/s
     );
     expect(designSystemCss).toMatch(
       /\.learning-unit-content-shell \.learning-unit-module__header\s*\{[^}]*margin-bottom:\s*var\(--space-6\);/s
@@ -410,7 +411,7 @@ describe("learning unit route contract", () => {
     expect(designDoc).toContain("`quiet` für normale Sekundäraktionen");
     expect(designDoc).toContain("`subtle` für kleine, nicht-dominante Nebenaktionen");
     expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*min-height:\s*var\(--layout-control-min\);/s);
-    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*box-shadow:\s*1px 1px 0/s);
+    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*box-shadow:\s*none;/s);
   });
 
   it("uses one subtle card per module while keeping the pane surface itself cardless", () => {

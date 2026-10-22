@@ -974,7 +974,6 @@
                   <div class="markdown-prose learning-task-inline-editor__statement">
                     {@html renderMarkdown(task.instruction_md)}
                   </div>
-                {:else}
                 {/if}
               </div>
               {#if task.kind !== "dialog" && !reviewPanelOpen}
@@ -1257,9 +1256,7 @@
                     <div class="learning-feedback-actions__choices">
                       {#if reviewPanelOpen}
                       <button
-                        class="workspace-top-action"
-                        class:workspace-top-action--accent={!workspaceOnly || reviewPanelOpen}
-                        class:workspace-top-action--quiet={workspaceOnly && !reviewPanelOpen}
+                        class="workspace-top-action workspace-top-action--quiet"
                         type="button"
                         disabled={editingLocked()}
                         onclick={scrollToEditor}
@@ -1267,7 +1264,6 @@
                         Überarbeiten
                       </button>
                       {/if}
-                      {#if !hasUnreviewedTextChanges() && !hasUnreviewedUploadReplacement()}
                       <form bind:this={finalizationForm} method="POST" onsubmit={persistCurrentTextDraft} use:enhance={enhanceSubmit}>
                         <input type="hidden" name="task_id" value={task.id} />
                         <input type="hidden" name="task_kind" value={task.kind} />
@@ -1289,7 +1285,6 @@
                           Abgeben
                         </button>
                       </form>
-                      {/if}
                     </div>
                     {#if hasUnreviewedTextChanges()}
                       <p class="learning-feedback-actions__hint">Text geändert – hole vor der Abgabe eine neue Rückmeldung ein.</p>

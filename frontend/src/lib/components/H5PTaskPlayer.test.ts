@@ -38,6 +38,7 @@ describe("H5PTaskPlayer", () => {
     await tick();
     await Promise.resolve();
     expect(webcomponentsRuntime.defineElements).toHaveBeenCalledWith(["h5p-player"]);
+    expect(document.querySelector("h5p-player")).toBeVisible();
     expect(document.querySelectorAll("h5p-player")).toHaveLength(1);
     expect(document.querySelector("h5p-player")?.getAttribute("content-id")).toBe("content-a");
     expect(screen.getByText("Bereit.")).toBeInTheDocument();

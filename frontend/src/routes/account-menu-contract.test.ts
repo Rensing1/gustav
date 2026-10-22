@@ -9,37 +9,33 @@ describe("account menu contract", () => {
   it("renders the topbar tools as one group with a minimal account menu", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const layoutSource = readFileSync(path.resolve(currentDir, "+layout.svelte"), "utf8");
+    const headerSource = readFileSync(path.resolve(currentDir, "../lib/components/ui/AppHeader.svelte"), "utf8");
 
-    expect(layoutSource).toContain('<div class="app-topbar-tools">');
-    expect(layoutSource).toContain('<ThemeToggle currentTheme={currentTheme} onToggle={toggleTheme} />');
-    expect(layoutSource).toContain('<details class="account-menu" bind:this={accountMenu}>');
-    expect(layoutSource).not.toContain("Angemeldet als");
-    expect(layoutSource).not.toContain('class="identity-meta"');
-    expect(layoutSource).not.toContain('class="ghost-link" href="/profile"');
+    expect(layoutSource).toContain("<AppHeader");
+    expect(headerSource).toContain('<div class="global-header__tools">');
+    expect(headerSource).toContain('<ThemeToggle {currentTheme} {onToggle} />');
+    expect(headerSource).toContain('<details class="global-header__account"');
+    expect(headerSource).not.toContain("Angemeldet als");
   });
 
   it("keeps the account actions as dedicated menu rows", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const layoutSource = readFileSync(path.resolve(currentDir, "+layout.svelte"), "utf8");
+    const headerSource = readFileSync(path.resolve(currentDir, "../lib/components/ui/AppHeader.svelte"), "utf8");
 
-    expect(layoutSource).toContain('class="account-menu__action" href="/profile"');
-    expect(layoutSource).toContain('class="account-menu__action" href="/auth/logout"');
-    expect(layoutSource).toContain('class="account-menu__panel"');
+    expect(headerSource).toContain('<a href="/profile">Profil</a>');
+    expect(headerSource).toContain('<a href="/auth/logout">Abmelden</a>');
+    expect(headerSource).toContain('class="global-header__panel"');
   });
 
   it("keeps the role-aware concern box visible outside the account menu", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const layoutSource = readFileSync(path.resolve(currentDir, "+layout.svelte"), "utf8");
-    const accountPanelStart = layoutSource.indexOf('<div class="account-menu__panel">');
-    const accountPanelSource = layoutSource.slice(accountPanelStart);
+    const headerSource = readFileSync(path.resolve(currentDir, "../lib/components/ui/AppHeader.svelte"), "utf8");
 
     expect(layoutSource).toContain("function concernBoxHref(): string");
-    expect(layoutSource).toContain('class="app-topbar-concern-link"');
-    expect(layoutSource).toContain('href={concernBoxHref()}');
-    expect(layoutSource).toContain('aria-current={isActive(concernBoxHref()) ? "page" : undefined}');
-    expect(layoutSource).toMatch(/app-topbar-concern-link[\s\S]*?<div class="app-topbar-tools">/);
-    expect(accountPanelSource).not.toContain('href="/learning/kummerkasten"');
-    expect(accountPanelSource).not.toContain('href="/teaching/kummerkasten"');
+    expect(layoutSource).toContain("concernHref={data.bootstrap ? concernBoxHref() : undefined}");
+    expect(headerSource).toContain('class="global-header__concern" href={concernHref}');
+    expect(headerSource).toContain('{#if contextItems && concernHref}<a href={concernHref}>Kummerkasten</a>{/if}');
   });
 
   it("keeps all topbar actions reachable on narrow screens", () => {
@@ -91,20 +87,14 @@ describe("account menu contract", () => {
     expect(cssSource).not.toMatch(/\.app-topbar-tools :is\(\.theme-toggle, \.account-trigger\)\s*\{[^}]*box-shadow:\s*var\(--color-shadow\);/s);
   });
 
-  it("defines a subtle dotted global background without overriding it in the shared themes", () => {
+  it("defines the calm global background without overriding it in the shell", () => {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const appCss = readFileSync(path.resolve(currentDir, "../lib/styles/app.css"), "utf8");
-    const tokenCss = readFileSync(path.resolve(currentDir, "../lib/styles/theme-tokens.css"), "utf8");
     const globalCss = readGlobalCssBundle(path.resolve(currentDir, "../lib/styles"));
-    const authThemeCss = readFileSync(path.resolve(currentDir, "../lib/styles/auth-theme.css"), "utf8");
 
-    expect(tokenCss).toMatch(/--app-bg-dot-color:\s*rgba\([^)]+\);/);
-    expect(tokenCss).toContain("--app-bg-dot-size: 1.35px;");
-    expect(tokenCss).toContain("--app-bg-dot-fade-size: 1.5px;");
-    expect(tokenCss).toContain("--app-bg-dot-spacing: 1.75rem;");
-    expect(appCss).toMatch(/html,\s*body\s*\{[^}]*background-color:\s*var\(--color-bg-base\);[^}]*radial-gradient\([\s\S]*?var\(--app-bg-dot-color\) var\(--app-bg-dot-size\),[\s\S]*?transparent var\(--app-bg-dot-fade-size\)[\s\S]*?background-size:\s*var\(--app-bg-dot-spacing\) var\(--app-bg-dot-spacing\);/s);
+    expect(appCss).toMatch(/html,\s*body\s*\{[^}]*background-color:\s*var\(--color-bg-base\);/s);
+    expect(appCss).not.toMatch(/html,\s*body\s*\{[^}]*radial-gradient/s);
     expect(appCss).toMatch(/\.app-shell\s*\{[^}]*background:\s*transparent;/s);
     expect(globalCss).not.toMatch(/body\s*\{[^}]*background:\s*var\(--color-bg-base\);/s);
-    expect(authThemeCss).toMatch(/\.design-auth-shell,[\s\S]*?\.kc-gustav\s*\{[^}]*radial-gradient\(circle,\s*var\(--app-bg-dot-color\)\s+1\.35px,\s*transparent\s+1\.5px\)/s);
   });
 });

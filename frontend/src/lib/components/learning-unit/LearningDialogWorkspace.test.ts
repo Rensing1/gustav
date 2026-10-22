@@ -141,9 +141,9 @@ describe("LearningDialogWorkspace", () => {
     renderDialog(session(), dialogTask, "student-1", { taskTitle: "Aufgabe 2" });
 
     const context = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
-    expect(within(context).getByRole("heading", { name: "Aufgabe 2" })).toBeInTheDocument();
+    expect(within(context).getByRole("heading", { name: "Aufgabenstellung" })).toBeInTheDocument();
     expect(within(context).getByText("Untersuche die Quelle im Gespräch.")).toBeInTheDocument();
-    expect(within(context).getByRole("region", { name: "Materialien zur Aufgabe" })).toBeInTheDocument();
+    expect(within(context).getByRole("complementary", { name: "Inhalt" })).toBeInTheDocument();
     expect(within(context).queryByText("Dein Dialogpartner")).not.toBeInTheDocument();
     expect(within(context).queryByText("Eine sachkundige Gesprächspartnerin.")).not.toBeInTheDocument();
 
@@ -182,8 +182,8 @@ describe("LearningDialogWorkspace", () => {
     const currentQuestion = screen.getByRole("article", { name: "Aktuelle Frage" });
     expect(within(currentQuestion).getByText("Welche zusätzliche Perspektive wäre hilfreich?")).toBeInTheDocument();
     expect(within(currentQuestion).queryByText("Woran erkennst du diese Einseitigkeit?")).toBeNull();
-    for (const avatar of screen.getAllByLabelText("Du")) {
-      expect(avatar).toHaveTextContent("D");
+    for (const speaker of screen.getAllByText("Du")) {
+      expect(speaker).toHaveClass("dialog-message__speaker");
     }
     expect(screen.queryByText("Aktuelle Frage")).toBeNull();
   });
@@ -266,10 +266,10 @@ describe("LearningDialogWorkspace", () => {
     renderDialog(session(), dialogTask, "student-1", { taskTitle: "Aufgabe 2" });
 
     const context = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
-    expect(within(context).getByRole("heading", { name: "Aufgabe 2" })).toBeInTheDocument();
+    expect(within(context).getByRole("heading", { name: "Aufgabenstellung" })).toBeInTheDocument();
     expect(within(context).getByText("KI-Dialog")).toBeInTheDocument();
     expect(within(context).getByText("Untersuche die Quelle im Gespräch.")).toBeInTheDocument();
-    expect(within(context).getByRole("region", { name: "Materialien zur Aufgabe" })).toBeInTheDocument();
+    expect(within(context).getByRole("complementary", { name: "Inhalt" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Gesprächsbriefing" })).toBeNull();
     expect(within(context).queryByText("Archivarin")).toBeNull();
   });
@@ -282,7 +282,7 @@ describe("LearningDialogWorkspace", () => {
     const composer = screen.getByRole("region", { name: "Dialog fortsetzen" });
     expect(screen.getByLabelText("Deine Antwort (0/3)")).toBeInTheDocument();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Zur Abschlussaufgabe" })).toBeNull();
     expect(within(taskContext).queryByRole("link", { name: "Pausieren" })).toBeNull();
     expect(within(taskContext).queryByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeNull();
     expect(within(taskContext).queryByRole("button", { name: "Antwort senden" })).toBeNull();
@@ -323,10 +323,10 @@ describe("LearningDialogWorkspace", () => {
 
     const taskContext = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
     const composer = screen.getByRole("region", { name: "Dialog fortsetzen" });
-    expect(within(taskContext).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(within(taskContext).queryByRole("button", { name: "Zur Abschlussaufgabe" })).toBeNull();
     expect(within(taskContext).queryByRole("link", { name: "Pausieren" })).toBeNull();
     expect(within(composer).getByRole("button", { name: "Antwort senden" })).toBeInTheDocument();
-    expect(within(composer).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "Zur Abschlussaufgabe" })).toBeInTheDocument();
     expect(within(composer).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
     expect(screen.getByLabelText("Deine Antwort (1/3)")).toBeInTheDocument();
@@ -334,21 +334,21 @@ describe("LearningDialogWorkspace", () => {
 
   it("opens and leaves the closing phase without a server mutation", async () => {
     const fetchMock = renderDialog(answeredSession());
-    const endButton = await screen.findByRole("button", { name: "Dialog beenden" });
+    const endButton = await screen.findByRole("button", { name: "Zur Abschlussaufgabe" });
 
     await fireEvent.click(endButton);
 
     const taskContext = screen.getByRole("complementary", { name: "Aufgabe und Kontext" });
-    const closing = screen.getByRole("region", { name: "Abschluss vorbereiten" });
-    expect(screen.getByLabelText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeInTheDocument();
+    const closing = screen.getByRole("region", { name: "Zum Abschluss" });
+    expect(screen.getByLabelText("Deine Antwort")).toBeInTheDocument();
     expect(within(taskContext).queryByRole("link", { name: "Pausieren" })).toBeNull();
-    expect(within(taskContext).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
-    expect(within(closing).getByRole("button", { name: "Endgültig abgeben" })).toBeInTheDocument();
-    expect(within(closing).getByRole("button", { name: "Zurück zum Dialog" })).toBeInTheDocument();
+    expect(within(taskContext).queryByRole("button", { name: "Zur Abschlussaufgabe" })).toBeNull();
+    expect(within(closing).getByRole("button", { name: "Gespräch und Antwort abgeben" })).toBeInTheDocument();
+    expect(within(closing).getByRole("button", { name: "Zurück zum Gespräch" })).toBeInTheDocument();
     expect(within(closing).getByRole("link", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Deine Antwort (1/3)")).toBeNull();
 
-    await fireEvent.click(screen.getByRole("button", { name: "Zurück zum Dialog" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Zurück zum Gespräch" }));
 
     expect(screen.getByLabelText("Deine Antwort (1/3)")).toBeInTheDocument();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
@@ -364,7 +364,7 @@ describe("LearningDialogWorkspace", () => {
 
     renderDialog(answeredSession());
 
-    const closingField = await screen.findByLabelText("Fasse deine wichtigste Erkenntnis zusammen.");
+    const closingField = await screen.findByLabelText("Deine Antwort");
     expect(closingField).toHaveValue("Meine gespeicherte Erkenntnis");
 
     await fireEvent.input(closingField, { target: { value: "Überarbeitete Erkenntnis" } });
@@ -382,10 +382,10 @@ describe("LearningDialogWorkspace", () => {
 
     renderDialog(answeredSession(), dialogTask, null);
 
-    expect(await screen.findByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Zur Abschlussaufgabe" })).toBeInTheDocument();
     expect(screen.queryByText("Fremder Entwurf")).toBeNull();
-    await fireEvent.click(screen.getByRole("button", { name: "Dialog beenden" }));
-    await fireEvent.input(screen.getByLabelText("Fasse deine wichtigste Erkenntnis zusammen."), {
+    await fireEvent.click(screen.getByRole("button", { name: "Zur Abschlussaufgabe" }));
+    await fireEvent.input(screen.getByLabelText("Deine Antwort"), {
       target: { value: "Nicht speichern" }
     });
     expect(window.sessionStorage.length).toBe(1);
@@ -401,11 +401,11 @@ describe("LearningDialogWorkspace", () => {
       taskWithoutPrompt
     );
 
-    await fireEvent.click(await screen.findByRole("button", { name: "Dialog beenden" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Zur Abgabe" }));
 
     expect(screen.getByText("Mit der Abgabe wird der Dialog endgültig abgeschlossen und ein Versuch verbraucht.")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /erkenntnis/i })).toBeNull();
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Gespräch abgeben" })).toBeEnabled();
   });
 
   it("keeps the final round as an explicit transition without another answer field", async () => {
@@ -414,7 +414,7 @@ describe("LearningDialogWorkspace", () => {
     expect(await screen.findByText("Maximale Rundenzahl erreicht.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Deine Antwort (3/3)")).toBeNull();
     expect(screen.queryByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeNull();
-    expect(screen.getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Zur Abschlussaufgabe" })).toBeInTheDocument();
   });
 
   it("offers a failed AI response retry in the main action area", async () => {
@@ -422,7 +422,7 @@ describe("LearningDialogWorkspace", () => {
 
     const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
     expect(within(composer).getByRole("button", { name: "KI-Antwort erneut versuchen" })).toBeInTheDocument();
-    expect(within(composer).getByRole("button", { name: "Dialog beenden" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "Zur Abschlussaufgabe" })).toBeInTheDocument();
     expect(within(screen.getByRole("log", { name: "Dialogverlauf" })).queryByRole("button")).toBeNull();
     expect(screen.queryByText("Die KI-Antwort kann nicht erneut erzeugt werden.")).toBeNull();
   });
@@ -433,13 +433,13 @@ describe("LearningDialogWorkspace", () => {
     const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
     expect(within(composer).queryByRole("button", { name: "KI-Antwort erneut versuchen" })).toBeNull();
     expect(within(composer).getByText("Die KI-Antwort kann nicht erneut erzeugt werden.")).toBeInTheDocument();
-    const endButton = within(composer).getByRole("button", { name: "Dialog beenden" });
+    const endButton = within(composer).getByRole("button", { name: "Zur Abschlussaufgabe" });
     expect(endButton).toBeInTheDocument();
     expect(within(composer).getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeInTheDocument();
 
     await fireEvent.click(endButton);
 
-    expect(screen.getByRole("region", { name: "Abschluss vorbereiten" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Zum Abschluss" })).toBeInTheDocument();
   });
 
   it("offers the allowed abort after a terminal first-turn failure", async () => {
@@ -459,7 +459,7 @@ describe("LearningDialogWorkspace", () => {
 
     const composer = await screen.findByRole("region", { name: "Dialog fortsetzen" });
     expect(within(composer).queryByRole("button", { name: "KI-Antwort erneut versuchen" })).toBeNull();
-    expect(within(composer).queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(within(composer).queryByRole("button", { name: "Zur Abschlussaufgabe" })).toBeNull();
     expect(within(composer).getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toHaveLength(1);
   });
@@ -470,19 +470,20 @@ describe("LearningDialogWorkspace", () => {
     const completed = answeredSession({ status: "completed", closing_answer_md: "Fazit" });
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ session: active }))
-      .mockResolvedValueOnce(jsonResponse({ session: completed }));
+      .mockResolvedValueOnce(jsonResponse({ session: completed }))
+      .mockResolvedValue(jsonResponse({ session: completed }));
     vi.stubGlobal("fetch", fetchMock);
     render(LearningDialogWorkspace, {
       props: { learnerSub: "student-1", courseId: "course-1", task: dialogTask }
     });
 
-    await fireEvent.click(await screen.findByRole("button", { name: "Dialog beenden" }));
-    await fireEvent.input(screen.getByLabelText("Fasse deine wichtigste Erkenntnis zusammen."), {
+    await fireEvent.click(await screen.findByRole("button", { name: "Zur Abschlussaufgabe" }));
+    await fireEvent.input(screen.getByLabelText("Deine Antwort"), {
       target: { value: "Fazit" }
     });
     expect(window.sessionStorage.getItem(storageKey)).not.toBeNull();
 
-    await fireEvent.click(screen.getByRole("button", { name: "Endgültig abgeben" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Gespräch und Antwort abgeben" }));
 
     await waitFor(() => expect(window.sessionStorage.getItem(storageKey)).toBeNull());
     expect(fetchMock.mock.calls[1]?.[0]).toContain("/session-1/complete");
@@ -506,6 +507,7 @@ describe("LearningDialogWorkspace", () => {
       vi.fn()
         .mockResolvedValueOnce(jsonResponse({ session: active }))
         .mockResolvedValueOnce(jsonResponse({ session: completed, submission }))
+        .mockResolvedValue(jsonResponse({ session: completed }))
     );
     render(LearningDialogWorkspace, {
       props: {
@@ -516,11 +518,11 @@ describe("LearningDialogWorkspace", () => {
       }
     });
 
-    await fireEvent.click(await screen.findByRole("button", { name: "Dialog beenden" }));
-    await fireEvent.input(screen.getByLabelText("Fasse deine wichtigste Erkenntnis zusammen."), {
+    await fireEvent.click(await screen.findByRole("button", { name: "Zur Abschlussaufgabe" }));
+    await fireEvent.input(screen.getByLabelText("Deine Antwort"), {
       target: { value: "Fazit" }
     });
-    await fireEvent.click(screen.getByRole("button", { name: "Endgültig abgeben" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Gespräch und Antwort abgeben" }));
 
     await waitFor(() => expect(onCompleted).toHaveBeenCalledWith(submission));
   });
@@ -547,7 +549,7 @@ describe("LearningDialogWorkspace", () => {
         historyByTask: { [dialogTask.id]: [submission] }
       }
     });
-    const feedback = await screen.findByRole("region", { name: "Rückmeldung zum KI-Dialog" });
+    const feedback = (await screen.findByRole("heading", { name: "Deine Rückmeldung" })).closest("section")!;
     expect(within(feedback).getByText("Stark:")).toBeInTheDocument();
     expect(within(feedback).getByText(/Du belegst deine Einschätzung/)).toBeInTheDocument();
   });
@@ -610,16 +612,12 @@ describe("LearningDialogWorkspace", () => {
     });
 
     const context = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
-    const focusedMaterials = within(context).getByRole("region", { name: "Materialien zur Aufgabe" });
-    expect(within(focusedMaterials).getByText("Lange Quelle")).toBeInTheDocument();
-    expect(within(focusedMaterials).getByText("Ein langer Quellentext.")).toBeInTheDocument();
+    const outline = within(context).getByRole("complementary", { name: "Inhalt" });
+    expect(within(outline).getByText("Lange Quelle")).toBeInTheDocument();
     expect(within(context).queryByText("Angeheftet")).not.toBeInTheDocument();
     expect(within(context).queryByText("Material suchen")).not.toBeInTheDocument();
-    await fireEvent.click(within(context).getByText("Weitere Materialien und eigene Abgaben"));
-    expect(within(context).getByRole("heading", { name: "Vertiefung", level: 4 })).toBeInTheDocument();
-    expect(within(context).getAllByText("Lange Quelle")).toHaveLength(1);
-    await fireEvent.click(within(context).getByRole("button", { name: "Modul Vertiefung schließen" }));
-    expect(onCloseContextModule).toHaveBeenCalledWith("module-extra");
+    await fireEvent.click(within(outline).getByRole("button", { name: /Lange Quelle/ }));
+    expect(onOpenContext).toHaveBeenCalledWith("material:source");
   });
 
   it("does not render the removed source picker in the dialog sidebar", async () => {
@@ -652,9 +650,9 @@ describe("LearningDialogWorkspace", () => {
       }
     });
 
-    expect(await screen.findByText("Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.")).toBeInTheDocument();
+    expect(await screen.findByText("Die Rückmeldung wird geladen …")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Pausieren" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Dialog beenden" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Zur Abschlussaufgabe" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Antwort senden" })).toBeNull();
   });
@@ -730,8 +728,8 @@ describe("LearningDialogWorkspace", () => {
     expect(workspaceRules).not.toContain("--dialog-radius-message");
     expect(layoutRules).toContain("gap: var(--space-4)");
     expect(source).toContain("<LearnerTaskContext");
-    expect(source).toContain("roundCurrent={session.round_count}");
-    expect(source).toContain("roundMaximum={session.dialog.max_rounds}");
+    expect(source).toContain('roundCurrent={session.status === "completed" ? null : session.round_count}');
+    expect(source).toContain('roundMaximum={session.status === "completed" ? null : session.dialog.max_rounds}');
     expect(source).not.toContain('class="dialog-progress"');
     expect(source).toContain("<DialogMessage");
     expect(source).not.toContain('class="dialog-reference-chip"');
@@ -742,14 +740,14 @@ describe("LearningDialogWorkspace", () => {
     expect(sharedSidebarRules).toContain("background: var(--color-bg-surface)");
     expect(mainRules).toContain("border: 1px solid");
     expect(mainRules).not.toContain("border-inline-start: 3px solid");
-    expect(mainRules).toContain("border-radius: var(--radius-xl)");
+    expect(mainRules).toContain("border-radius: var(--radius-m)");
     expect(mainRules).toContain("background: var(--color-bg-surface)");
     expect(mainRules).toContain("box-shadow: none");
     expect(transcriptRules).toContain("align-content: start");
     expect(transcriptRules).toContain("grid-auto-rows: max-content");
     expect(messageRules).toContain("box-shadow: none");
     expect(messageRules).toContain("max-width:");
-    expect(bubbleRules).toContain("border-radius: var(--radius-xl)");
+    expect(bubbleRules).toContain("border-radius: 0");
     expect(composerRules).toContain("border: 0");
     expect(composerRules).toContain("border-block-start: 1px solid");
     expect(composerRules).not.toContain("border: 2px solid");

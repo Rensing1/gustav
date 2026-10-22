@@ -20,15 +20,15 @@ def test_frontend_contains_concern_box_pages() -> None:
     assert "/api/teaching/views/concern-box" in teacher_loader.read_text(encoding="utf-8")
 
 
-def test_root_layout_contains_role_aware_concern_box_topbar_link() -> None:
+def test_app_header_contains_role_aware_concern_box_link() -> None:
     layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
-    src = layout_path.read_text(encoding="utf-8")
-    account_panel = src.split('<div class="account-menu__panel">', maxsplit=1)[1]
+    header_path = REPO_ROOT / "frontend" / "src" / "lib" / "components" / "ui" / "AppHeader.svelte"
+    layout_src = layout_path.read_text(encoding="utf-8")
+    header_src = header_path.read_text(encoding="utf-8")
 
-    assert 'function concernBoxHref(): string' in src
-    assert '"/learning/kummerkasten"' in src
-    assert '"/teaching/kummerkasten"' in src
-    assert 'class="app-topbar-concern-link"' in src
-    assert 'href={concernBoxHref()}' in src
-    assert 'href="/learning/kummerkasten"' not in account_panel
-    assert 'href="/teaching/kummerkasten"' not in account_panel
+    assert 'function concernBoxHref(): string' in layout_src
+    assert '"/learning/kummerkasten"' in layout_src
+    assert '"/teaching/kummerkasten"' in layout_src
+    assert 'concernHref={data.bootstrap ? concernBoxHref() : undefined}' in layout_src
+    assert 'class="global-header__concern" href={concernHref}' in header_src
+    assert 'contextItems && concernHref' in header_src

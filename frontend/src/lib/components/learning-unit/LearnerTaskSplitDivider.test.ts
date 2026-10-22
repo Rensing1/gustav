@@ -38,7 +38,7 @@ describe("LearnerTaskSplitDivider", () => {
     const { separator } = renderDivider(44);
 
     expect(separator).toHaveAttribute("aria-orientation", "vertical");
-    expect(separator).toHaveAttribute("aria-valuemin", "35");
+    expect(separator).toHaveAttribute("aria-valuemin", "24");
     expect(separator).toHaveAttribute("aria-valuemax", "65");
     expect(separator).toHaveAttribute("aria-valuenow", "44");
     expect(separator).toHaveAttribute("tabindex", "0");
@@ -56,7 +56,7 @@ describe("LearnerTaskSplitDivider", () => {
     expect(onCommit).toHaveBeenLastCalledWith(40);
 
     await fireEvent.keyDown(separator, { key: "Home" });
-    expect(onCommit).toHaveBeenLastCalledWith(35);
+    expect(onCommit).toHaveBeenLastCalledWith(24);
 
     await fireEvent.keyDown(separator, { key: "End" });
     expect(onCommit).toHaveBeenLastCalledWith(65);

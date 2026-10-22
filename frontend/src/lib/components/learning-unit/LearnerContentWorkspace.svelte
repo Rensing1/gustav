@@ -12,6 +12,7 @@
   import { renderMarkdown } from "$lib/utils/markdown";
   import {
     completionReturnDestination,
+    learnerReturnLabel,
     type LearnerReturnDestination
   } from "$lib/learning-unit/learner-return-navigation";
   import type { ContentGroup, LearnerMaterialContextModule, LearningContentItem } from "$lib/learning-unit/workspace";
@@ -526,6 +527,13 @@
           <h1 id="learner-task-heading" tabindex="-1">{activeItem.title}</h1>
           <span>{workStatus === "result" ? task.kind === "dialog" ? "Abgegeben" : "Ergebnis" : "In Bearbeitung"}</span>
         </div>
+        {#if workStatus !== "result"}
+          <button
+            class="workspace-top-action workspace-top-action--quiet"
+            type="button"
+            onclick={() => onReturn(taskReturnDestination())}
+          >{learnerReturnLabel(taskReturnDestination())}</button>
+        {/if}
       </header>
       <section
         class:learner-task-workbench--dialog={task.kind === "dialog"}

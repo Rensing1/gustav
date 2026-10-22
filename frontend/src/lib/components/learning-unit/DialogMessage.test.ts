@@ -16,11 +16,11 @@ describe("DialogMessage", () => {
     expect(screen.queryByRole("article", { name: "Aktuelle Frage" })).toBeNull();
   });
 
-  it("renders a learner answer with a neutral avatar and optional starter note", () => {
+  it("renders a learner answer with a clear speaker and optional starter note", () => {
     const { container } = render(DialogMessage, { kind: "student", markdown: "Meine Antwort", usedStarter: true });
-    expect(screen.getByLabelText("Du")).toHaveTextContent("D");
+    expect(screen.getByText("Du")).toHaveClass("dialog-message__speaker");
     expect(screen.getByText("Hilfestellung: Satzanfang verwendet")).toBeInTheDocument();
     expect(container.querySelector(".dialog-message--student .dialog-message__bubble")).toHaveTextContent("Meine Antwort");
-    expect(container.querySelector(".dialog-message__speaker")).toBeNull();
+    expect(container.querySelector(".dialog-message__speaker")).toHaveTextContent("Du");
   });
 });

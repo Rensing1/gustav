@@ -54,7 +54,7 @@ describe("WorkspaceSettingsMenu", () => {
     const css = readGlobalCssBundle(path.resolve(currentDir, "../../styles"));
 
     expect(css).toMatch(/\.workspace-settings-menu__checkbox\s*\{[^}]*appearance:\s*none;[^}]*background:\s*var\(--color-bg-surface\);/s);
-    expect(css).toMatch(/\.workspace-settings-menu__checkbox:checked::after\s*\{[^}]*border-color:\s*#ffffff;/s);
+    expect(css).toMatch(/\.workspace-settings-menu__checkbox:checked::after\s*\{[^}]*border-color:\s*var\(--color-on-accent\);/s);
     expect(css).toMatch(/\.workspace-settings-menu__font-option\s*\{[^}]*border:/s);
     expect(css).toMatch(/\.workspace-settings-menu__font-option--active\s*\{[^}]*background:\s*var\(--color-text\);/s);
   });

@@ -142,6 +142,7 @@
       activeItemKeys={[`task:${taskId}`]}
       onExpandGroup={expandModule}
       onOpenItem={openReference}
+      onRemoveGroup={onCloseModule ?? undefined}
     />
     {#if closedModuleTitle && onUndoCloseModule}
       <button class="workspace-link-action" type="button" onclick={() => onUndoCloseModule?.()}>{closedModuleTitle} wieder öffnen</button>

@@ -16,8 +16,8 @@ def test_frontend_contains_profile_page() -> None:
     assert "/api/app/profile" in loader.read_text(encoding="utf-8")
 
 
-def test_root_layout_contains_profile_account_link() -> None:
-    layout_path = REPO_ROOT / "frontend" / "src" / "routes" / "+layout.svelte"
-    src = layout_path.read_text(encoding="utf-8")
+def test_app_header_contains_profile_account_link() -> None:
+    header_path = REPO_ROOT / "frontend" / "src" / "lib" / "components" / "ui" / "AppHeader.svelte"
+    src = header_path.read_text(encoding="utf-8")
 
     assert 'href="/profile"' in src

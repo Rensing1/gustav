@@ -28,9 +28,9 @@ describe("WorkspaceOutline", () => {
       }
     });
 
-    expect(screen.getByRole("heading", { name: "Inhaltsverzeichnis" })).toBeInTheDocument();
-    expect(screen.getByText("Modul Graphen")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Begriffe präzisieren" })).toHaveClass("workspace-outline__item--active");
+    expect(screen.getByRole("heading", { name: "Inhalt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Modul Graphen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Begriffe präzisieren/ })).toHaveClass("workspace-outline__item--active");
   });
 
   it("keeps long item labels inside a dedicated text wrapper for reliable wrapping", () => {
@@ -86,7 +86,8 @@ describe("WorkspaceOutline", () => {
     expect(css).not.toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*color:\s*var\(--color-accent\);/s);
     expect(css).not.toMatch(/\.workspace-outline__item--active \.workspace-outline__item-label\s*\{[^}]*font-weight:\s*700;/s);
     expect(css).toMatch(
-      /\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;[^}]*top:\s*1rem;[^}]*border:\s*1px solid var\(--color-line\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*none;/s
+      /\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*position:\s*sticky;[^}]*top:\s*1rem;[^}]*border:\s*1px solid var\(--color-line\);[^}]*background:\s*var\(--color-bg-surface\);[^}]*box-shadow:\s*var\(--color-shadow\);/s
     );
+    expect(css).toMatch(/@supports \(color: color-mix\(in srgb, black, white\)\)\s*\{\s*\.learning-unit-content-shell \.workspace-outline\s*\{[^}]*box-shadow:\s*none;/s);
   });
 });

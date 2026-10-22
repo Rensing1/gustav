@@ -21,7 +21,7 @@ describe("LearningSubmissionPreview", () => {
     expect(screen.getByText(/Eigene Lösung mit Quelle/)).toBeVisible();
     expect(screen.queryByText("Rückmeldung", { exact: true })).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: "Ausklappen" });
+    const toggle = screen.getByRole("button", { name: "Abgabe ansehen" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await fireEvent.click(toggle);
     expect(screen.getByRole("link", { name: "Quelle" })).toBeVisible();
@@ -32,7 +32,7 @@ describe("LearningSubmissionPreview", () => {
     feedback.open = true;
     expect(evaluation.open).toBe(false);
     toggle.focus();
-    await fireEvent.click(screen.getByRole("button", { name: "Einklappen" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Weniger anzeigen" }));
     expect(toggle).toHaveFocus();
     expect(screen.queryByText("Rückmeldung", { exact: true })).not.toBeInTheDocument();
     await fireEvent.click(toggle);
@@ -41,22 +41,22 @@ describe("LearningSubmissionPreview", () => {
 
   it("resets disclosures when the selected snapshot changes", async () => {
     const view = render(LearningSubmissionPreview, props());
-    await fireEvent.click(screen.getByRole("button", { name: "Ausklappen" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Abgabe ansehen" }));
     await view.rerender(props({ state: { status: "loaded", submission: { ...submission, id: "new" } } }));
-    expect(screen.getByRole("button", { name: "Ausklappen" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Abgabe ansehen" })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("keeps the same snapshot expanded during a background update", async () => {
     const view = render(LearningSubmissionPreview, props());
-    await fireEvent.click(screen.getByRole("button", { name: "Ausklappen" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Abgabe ansehen" }));
     await view.rerender(props({ state: { status: "loading", submission } }));
-    expect(screen.getByRole("button", { name: "Einklappen" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Weniger anzeigen" })).toBeVisible();
   });
 
   it("omits pointless expansion for short answers without more content", () => {
     render(LearningSubmissionPreview, props({ state: { status: "loaded", submission: { ...submission, text_body: "Kurz.", feedback_md: null, analysis_json: null } } }));
     expect(screen.getByText("Kurz.")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Ausklappen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Abgabe ansehen" })).not.toBeInTheDocument();
   });
 
   it("labels a saved draft without calling it a final submission", () => {
@@ -69,7 +69,7 @@ describe("LearningSubmissionPreview", () => {
   it("retains the final answer while offering the newer draft separately", async () => {
     const resume = vi.fn();
     render(LearningSubmissionPreview, props({ newerDraft: true, onContinueDraft: resume }));
-    expect(screen.getByText("Neuerer Entwurf vorhanden")).toBeVisible();
+    expect(screen.getByText("Neuerer Entwurf · Noch nicht abgegeben")).toBeVisible();
     await fireEvent.click(screen.getByRole("button", { name: "Entwurf weiterbearbeiten" }));
     expect(resume).toHaveBeenCalledOnce();
     expect(screen.getByText("Meine Abgabe")).toBeVisible();
@@ -80,7 +80,7 @@ describe("LearningSubmissionPreview", () => {
     const view = render(LearningSubmissionPreview, props({ hasSubmission: false, state: undefined }));
     expect(screen.queryByText("Meine Abgabe")).not.toBeInTheDocument();
     await view.rerender(props({ onLoad: retry, state: { status: "failed", submission: null } }));
-    expect(screen.getByText("Abgabe konnte nicht geladen werden")).toBeVisible();
+    expect(screen.getByText("Gespeicherte Fassung konnte nicht geladen werden")).toBeVisible();
     await fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
     expect(retry).toHaveBeenCalled();
   });
@@ -90,10 +90,10 @@ describe("LearningSubmissionPreview", () => {
       ...submission, kind: mime.startsWith("image/") ? "image" : "file", text_body: null,
       files: [{ mime, size: 2048, url: "/private/file", download_url: "/private/file?download=1" }]
     } } }));
-    expect(screen.queryByTitle("Abgabe zu Ampel")).not.toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Ausklappen" }));
+    expect(screen.queryByTitle("Eigene Abgabe zu Ampel")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Abgabe ansehen" }));
     expect(screen.getByRole("link", { name: "Datei öffnen" })).toHaveAttribute("href", "/private/file");
-    if (mime === "application/pdf") expect(screen.getByTitle("Abgabe zu Ampel")).toBeVisible();
+    if (mime === "application/pdf") expect(screen.getByTitle("Eigene Abgabe zu Ampel")).toBeVisible();
   });
 
   it.each([
@@ -106,7 +106,7 @@ describe("LearningSubmissionPreview", () => {
       files: [{ mime, size: 2048, url: "/file", download_url: "/download" }]
     } } }));
     expect(screen.queryByText(label)).not.toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Ausklappen" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Abgabe ansehen" }));
     expect(screen.getByText(label)).toBeVisible();
     expect(screen.getByRole("link", { name: "Originaldatei herunterladen" })).toHaveAttribute("href", "/download");
     expect(screen.queryByRole("link", { name: "Datei öffnen" })).not.toBeInTheDocument();
@@ -122,7 +122,7 @@ describe("LearningSubmissionPreview", () => {
     } } }));
     expect(screen.getByText("Mein Fazit.")).toBeVisible();
     expect(fetcher).not.toHaveBeenCalled();
-    await fireEvent.click(screen.getByRole("button", { name: "Ausklappen" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Abgabe ansehen" }));
     expect(await screen.findByText("Begründe deine Beobachtung.")).toBeVisible();
     expect(fetcher.mock.calls[0][0]).toContain("/dialog-sessions/session");
   });
@@ -131,7 +131,7 @@ describe("LearningSubmissionPreview", () => {
     render(LearningSubmissionPreview, props({ state: { status: "loaded", submission: {
       ...submission, analysis_status: status, feedback_md: null, analysis_json: null
     } } }));
-    await fireEvent.click(screen.getByRole("button", { name: "Ausklappen" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Abgabe ansehen" }));
     expect(screen.getByText(status === "pending" ? "Rückmeldung wird erstellt …" : "Rückmeldung konnte nicht erstellt werden")).toBeVisible();
     expect(screen.queryByText("Auswertung", { exact: true })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Quelle" })).toBeVisible();
@@ -145,7 +145,7 @@ describe("LearningSubmissionPreview", () => {
     expect(screen.getByText("Noch nicht abgeschlossen")).toBeVisible();
     expect(screen.getByText("Zuletzt 4/5 Punkte erreicht.")).toBeVisible();
     expect(screen.queryByText("Meine Abgabe")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Ausklappen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Abgabe ansehen" })).not.toBeInTheDocument();
   });
 
   it("keeps an earlier H5P completion visible beside the latest lower score", () => {

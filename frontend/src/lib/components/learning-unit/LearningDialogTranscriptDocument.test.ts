@@ -65,7 +65,7 @@ describe("LearningDialogTranscriptDocument", () => {
       props: { courseId: "course-1", taskId: "task-1", sessionId: "session-1", compact: true }
     });
     expect(await screen.findByText("Mein Ergebnis.")).toBeVisible();
-    const disclosure = screen.getByText("Gesprächsverlauf").closest("details");
+    const disclosure = screen.getByText("Gespräch mit Ada").closest("details");
     expect(disclosure).not.toHaveAttribute("open");
     expect(disclosure).not.toContainElement(screen.getByText("Mein Ergebnis."));
     expect(disclosure).toContainElement(screen.getByText("Eine Frage?"));

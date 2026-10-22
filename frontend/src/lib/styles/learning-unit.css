@@ -2297,8 +2297,8 @@
   box-shadow: none;
 }
 
-/* The inactive dialog contributes no extra box; showModal keeps the player in place. */
-.h5p-fullscreen-host:not([open]) { display: contents; }
+/* The non-modal dialog contributes no extra box; showModal keeps the player in place. */
+.h5p-fullscreen-host { display: contents; }
 .h5p-fullscreen-host:modal {
   position: fixed;
   inset: 0;

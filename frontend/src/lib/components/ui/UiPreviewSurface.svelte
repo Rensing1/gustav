@@ -369,6 +369,7 @@
             <div class="dialog-layout" data-compact-surface="task" data-phase="conversation">
               <LearnerTaskContext
                 courseId="preview-course"
+                taskId="preview-dialog-task"
                 taskTitle="Aufgabe 2"
                 taskKind="KI-Dialog"
                 instructionMd="Untersuche die Perspektive der Quelle im Gespräch."
@@ -422,6 +423,7 @@
             <div class="dialog-layout" data-compact-surface="task" data-phase="closing">
               <LearnerTaskContext
                 courseId="preview-course"
+                taskId="preview-dialog-task"
                 taskTitle="Aufgabe 2"
                 taskKind="KI-Dialog"
                 instructionMd="Untersuche die Perspektive der Quelle im Gespräch."

@@ -33,14 +33,21 @@
   // A modal fills the browser viewport while keeping the same H5P instance alive.
   function toggleFullscreen() {
     if (fullscreen) fullscreenDialog?.close();
-    else {
+    else if (fullscreenDialog) {
+      // The dialog is open non-modally during the regular page layout. Native
+      // dialogs must be closed before they can enter the modal top layer.
+      fullscreenDialog.close();
       fullscreenDialog?.showModal();
       fullscreen = true;
     }
   }
 
   function leaveFullscreen() {
+    // Ignore the queued close event when the same dialog has already entered
+    // the modal top layer. A real exit restores its visible non-modal state.
+    if (fullscreenDialog?.open) return;
     fullscreen = false;
+    fullscreenDialog?.show();
     fullscreenButton?.focus();
   }
 
@@ -313,7 +320,7 @@
   });
 </script>
 
-<dialog bind:this={fullscreenDialog} class="h5p-fullscreen-host" class:h5p-fullscreen-host--active={fullscreen} aria-label="H5P-Aufgabe" onclose={leaveFullscreen}>
+<dialog open bind:this={fullscreenDialog} class="h5p-fullscreen-host" class:h5p-fullscreen-host--active={fullscreen} aria-label="H5P-Aufgabe" onclose={leaveFullscreen}>
 <div class="h5p-task-player">
   <div class="h5p-fullscreen-toolbar">
     <button bind:this={fullscreenButton} type="button" class="workspace-button workspace-button--ghost" aria-expanded={fullscreen} onclick={toggleFullscreen}>{fullscreen ? "Vollbild verlassen" : "Vollbild"}</button>

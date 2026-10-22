@@ -91,7 +91,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement | null;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement | null;
     expect(editor).not.toBeNull();
     await waitFor(() => expect(editor!.value).toBe("Inline Sitzungsentwurf"));
 
@@ -117,7 +117,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor).toBeInTheDocument());
     const setItem = vi.spyOn(Storage.prototype, "setItem");
 
@@ -160,12 +160,12 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor.value).toBe("Entwurf mit Rückmeldung"));
     await fireEvent.input(editor, { target: { value: "Noch nicht rückgemeldete Überarbeitung" } });
     expect(window.sessionStorage.getItem(scopedKey)).toBeNull();
 
-    const finalButton = screen.getByRole("button", { name: "Endgültig abgeben" });
+    const finalButton = screen.getByRole("button", { name: "Abgeben" });
     await fireEvent.submit(finalButton.closest("form")!);
 
     expect(window.sessionStorage.getItem(scopedKey)).toBe("Noch nicht rückgemeldete Überarbeitung");
@@ -197,7 +197,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await fireEvent.input(editor, { target: { value: "Lokale Überarbeitung" } });
     const feedbackSummary = screen.getByText("Rückmeldung");
 
@@ -230,7 +230,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor.value).toBe("Entwurf für Aufgabe 1"));
 
     await rerender({
@@ -294,12 +294,12 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement | null;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement | null;
     expect(editor).not.toBeNull();
     await waitFor(() => expect(editor!.value).toBe("Mein bisheriger Entwurf"));
 
     const answerFormat = screen.getByRole("group", { name: "Antwortform" });
-    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" });
     expect(answerFormat.compareDocumentPosition(responseGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(responseGroup).getByText("Rückmeldung").closest("details")).not.toHaveAttribute("open");
     expect(within(responseGroup).getByText("Auswertung").closest("details")).not.toHaveAttribute("open");
@@ -323,7 +323,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor.value).toBe(""));
 
     await rerender({
@@ -350,7 +350,7 @@ describe("LearningTaskCard", () => {
     });
 
     await waitFor(() => expect(editor.value).toBe("Später geladener geprüfter Entwurf"));
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeEnabled();
     expect(document.querySelector<HTMLInputElement>('input[name="feedback_submission_id"]')?.value).toBe(
       reviewedSubmissionId
     );
@@ -376,7 +376,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor.value).toBe(storedDraft));
 
     await rerender({
@@ -403,7 +403,7 @@ describe("LearningTaskCard", () => {
     });
 
     await waitFor(() => expect(editor.value).toBe(storedDraft));
-    expect(screen.getByRole("button", { name: /endgültig abgeben/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /abgeben/i })).toBeEnabled();
   });
 
   it("keeps a local edit while offering the completed feedback snapshot for finalization", async () => {
@@ -421,7 +421,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await fireEvent.input(editor, { target: { value: "Gerade bearbeiteter Entwurf" } });
 
     await rerender({
@@ -448,7 +448,7 @@ describe("LearningTaskCard", () => {
     });
 
     await waitFor(() => expect(editor.value).toBe("Gerade bearbeiteter Entwurf"));
-    expect(screen.getByRole("button", { name: /endgültig abgeben/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /abgeben/i })).toBeEnabled();
   });
 
   it("omits the evaluation disclosure when the latest submission has no criteria results", () => {
@@ -475,7 +475,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" });
     expect(within(responseGroup).getByText("Rückmeldung")).toBeInTheDocument();
     expect(within(responseGroup).getByText("Entwurf")).toBeInTheDocument();
     expect(within(responseGroup).queryByText("Auswertung")).toBeNull();
@@ -506,19 +506,19 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor.value).toBe("Mein Entwurf"));
-    expect(screen.getByRole("button", { name: /endgültig abgeben/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /abgeben/i })).toBeEnabled();
 
     await fireEvent.input(editor, { target: { value: "Mein überarbeiteter Entwurf" } });
 
-    expect(screen.getByRole("button", { name: /endgültig abgeben/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /abgeben/i })).toBeEnabled();
     const actions = screen.getByRole("region", { name: "Endgültige Abgabe" });
     expect(within(actions).queryByText("Für die neue Datei zuerst Rückmeldung einholen.")).toBeNull();
 
     await fireEvent.input(editor, { target: { value: "  Mein Entwurf  " } });
 
-    expect(screen.getByRole("button", { name: /endgültig abgeben/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /abgeben/i })).toBeEnabled();
     expect(within(actions).queryByText("Für die neue Datei zuerst Rückmeldung einholen.")).toBeNull();
   });
 
@@ -569,7 +569,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.queryByRole("button", { name: "Endgültig abgeben" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abgeben" })).toBeNull();
     expect(document.querySelector('input[name="finalization_idempotency_key"]')).toBeNull();
   });
 
@@ -587,7 +587,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(document.querySelector('textarea[aria-label="text_body"]')).toBeDisabled();
+    expect(document.querySelector('textarea[name="text_body"]')).toBeDisabled();
     expect(screen.getByLabelText("Datei auswählen")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Rückmeldung einholen" })).toBeDisabled();
   });
@@ -608,7 +608,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement | null;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement | null;
     expect(editor).not.toBeNull();
     await waitFor(() => expect(editor!.value).toBe(""));
 
@@ -787,7 +787,7 @@ describe("LearningTaskCard", () => {
 
     expect(screen.getByRole("button", { name: "Entwurf weiterbearbeiten" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Entwurf" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Endgültig abgeben" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abgeben" })).toBeNull();
     expect(document.querySelector(".learning-task-row--draft")).not.toBeNull();
   });
 
@@ -825,7 +825,7 @@ describe("LearningTaskCard", () => {
     });
 
     expect(document.querySelector(".learning-task-row")).not.toBeNull();
-    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" });
     expect(responseGroup.querySelector(".learning-response-panel")).toHaveAttribute("open");
     expect(within(responseGroup).getByText("Entwurf").closest("details")).not.toHaveAttribute("open");
     const editor = container.querySelector(".learning-task-inline-editor");
@@ -872,9 +872,9 @@ describe("LearningTaskCard", () => {
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*padding:\s*0;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*border-left:\s*0;/s);
     expect(designSystemCss).toMatch(/\.learning-unit-content-shell \.learning-task-inline-editor__statement\s*\{[^}]*background:\s*transparent;/s);
-    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*min-height:\s*var\(--layout-control-min\);[^}]*padding:\s*0\.24rem 0\.58rem;[^}]*font-size:\s*0\.7rem;/s);
-    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*box-shadow:\s*1px 1px 0/s);
-    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle:hover,[^}]*\.workspace-link-action--subtle:hover,[^}]*transform:\s*none;/s);
+    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*min-height:\s*var\(--layout-control-min\);[^}]*padding:\s*0\.24rem 0\.58rem;[^}]*font-size:\s*var\(--font-size-sm\);/s);
+    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle,\s*\.workspace-link-action--subtle\s*\{[^}]*box-shadow:\s*none;/s);
+    expect(designSystemCss).toMatch(/\.workspace-top-action--subtle:hover,[\s\S]*?\.workspace-link-action--subtle:focus-visible\s*\{[^}]*transform:\s*none;[^}]*box-shadow:\s*none;/s);
     expect(readFileSync(path.resolve(currentDir, "LearningTaskCard.svelte"), "utf8")).toContain("workspace-top-action--subtle");
   });
 
@@ -890,7 +890,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByText("Aufgabe 8")).toBeInTheDocument();
+    expect(screen.getAllByText("Aufgabe 8")).not.toHaveLength(0);
   });
 
   it("renders markdown in the compact review summary for submission, feedback and evaluation", async () => {
@@ -933,7 +933,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" });
     expect(responseGroup.querySelector("details:last-child .markdown-prose h2")).not.toBeNull();
     expect(responseGroup.querySelector("details:last-child .markdown-prose strong")).not.toBeNull();
     expect(responseGroup.querySelector("details:last-child .markdown-prose br")).not.toBeNull();
@@ -965,7 +965,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.queryByRole("region", { name: "Rückmeldung zu deiner Abgabe" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" })).toBeNull();
     expect(screen.queryByText("Es liegt noch keine Rückmeldung vor.")).toBeNull();
     expect(screen.queryByText("Es liegt noch keine Auswertung vor.")).toBeNull();
   });
@@ -1068,7 +1068,7 @@ describe("LearningTaskCard", () => {
     expect(screen.getByText("Final abgegeben am 05.04.2026, 10:00 Uhr")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Erneut bearbeiten" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Entwurf" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "Rückmeldung zu deiner Abgabe" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Weitere Versuche" })).toBeNull();
   });
 
@@ -1097,9 +1097,9 @@ describe("LearningTaskCard", () => {
     });
 
     expect(screen.getByText("Entwurf vorhanden")).toBeInTheDocument();
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor.value).toBe("Geprüfter Entwurf"));
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeEnabled();
   });
 
   it("binds final submission forms to the reviewed submission", async () => {
@@ -1127,7 +1127,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Abgeben" })).toBeEnabled());
     const finalizationKeys = Array.from(
       document.querySelectorAll<HTMLInputElement>('input[name="finalization_idempotency_key"]')
     );
@@ -1167,9 +1167,9 @@ describe("LearningTaskCard", () => {
     });
 
     expect(screen.getByRole("status")).toHaveTextContent("Abgabe wird verarbeitet ...");
-    expect(screen.getByRole("button", { name: "Neue Rückmeldung einholen" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
-    expect(document.querySelector('textarea[aria-label="text_body"]')).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Neue Rückmeldung einholen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeDisabled();
+    expect(document.querySelector('textarea[name="text_body"]')).toBeDisabled();
   });
 
   it("opens native tasks with one accessible answer format choice", () => {
@@ -1203,7 +1203,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await fireEvent.input(editor, { target: { value: "Mein erhaltener Entwurf" } });
 
     await fireEvent.click(screen.getByRole("radio", { name: "Datei hochladen" }));
@@ -1391,8 +1391,8 @@ describe("LearningTaskCard", () => {
       ]
     });
 
-    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
-    expect(within(responseGroup).getByText("Zu deiner Abgabe · 05.04.2026, 10:00 Uhr")).toBeInTheDocument();
+    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" });
+    expect(within(responseGroup).getByText("Abgegeben · 05.04.2026, 10:00 Uhr")).toBeInTheDocument();
     const topLevelDisclosures = Array.from(
       responseGroup.querySelectorAll(".learning-response-group > details > summary")
     );
@@ -1439,7 +1439,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = await screen.findByRole("textbox", { name: "text_body" });
+    const editor = await screen.findByRole("textbox", { name: "Deine Antwort" });
     const feedback = screen.getByText("Rückmeldung").closest("details");
     expect(feedback).not.toBeNull();
     expect(editor.compareDocumentPosition(feedback!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -1476,15 +1476,15 @@ describe("LearningTaskCard", () => {
 
     const actions = screen.getByRole("region", { name: "Endgültige Abgabe" });
     const reviseButton = within(actions).getByRole("button", { name: "Überarbeiten" });
-    const finalButton = within(actions).getByRole("button", { name: "Endgültig abgeben" });
+    const finalButton = within(actions).getByRole("button", { name: "Abgeben" });
     expect(reviseButton).toBeEnabled();
-    expect(reviseButton).toHaveClass("workspace-top-action--accent");
+    expect(reviseButton).toHaveClass("workspace-top-action--quiet");
     expect(finalButton).toBeEnabled();
-    expect(finalButton).toHaveClass("workspace-top-action--quiet");
+    expect(finalButton).toHaveClass("workspace-top-action--accent");
     expect(within(actions).queryByRole("button", { name: /Zurück/ })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Endgültig abgeben" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Abgeben" })).toHaveLength(1);
 
-    const editor = await screen.findByRole("textbox", { name: "text_body" });
+    const editor = await screen.findByRole("textbox", { name: "Deine Antwort" });
     const scrollIntoView = vi.fn();
     const editorControlsAnchor = document.querySelector(".learning-submission-controls-anchor") as HTMLElement;
     editorControlsAnchor.scrollIntoView = scrollIntoView;
@@ -1519,9 +1519,9 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = await screen.findByRole("textbox", { name: "text_body" });
+    const editor = await screen.findByRole("textbox", { name: "Deine Antwort" });
     await fireEvent.input(editor, { target: { value: "Neue, noch nicht geprüfte Überarbeitung" } });
-    const finalButton = screen.getByRole("button", { name: "Endgültig abgeben" });
+    const finalButton = screen.getByRole("button", { name: "Abgeben" });
     await fireEvent.click(finalButton);
 
     const warning = screen.getByRole("dialog", { name: "Überarbeitung noch nicht geprüft" });
@@ -1575,9 +1575,9 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = await screen.findByRole("textbox", { name: "text_body" });
+    const editor = await screen.findByRole("textbox", { name: "Deine Antwort" });
     await waitFor(() => expect(editor).toHaveValue("Geprüfter Entwurf"));
-    const finalButton = screen.getByRole("button", { name: "Endgültig abgeben" });
+    const finalButton = screen.getByRole("button", { name: "Abgeben" });
     const submit = vi.fn((event: Event) => event.preventDefault());
     finalButton.closest("form")!.addEventListener("submit", submit);
 
@@ -1616,9 +1616,9 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor.value).toBe("  Geprüfter Entwurf\n\n"));
-    const finalButton = screen.getByRole("button", { name: "Endgültig abgeben" });
+    const finalButton = screen.getByRole("button", { name: "Abgeben" });
     const submit = vi.fn((event: Event) => event.preventDefault());
     finalButton.closest("form")!.addEventListener("submit", submit);
 
@@ -1654,9 +1654,9 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const editor = await screen.findByRole("textbox", { name: "text_body" });
+    const editor = await screen.findByRole("textbox", { name: "Deine Antwort" });
     await fireEvent.input(editor, { target: { value: "" } });
-    await fireEvent.click(screen.getByRole("button", { name: "Endgültig abgeben" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Abgeben" }));
 
     expect(screen.getByRole("dialog", { name: "Überarbeitung noch nicht geprüft" })).toBeInTheDocument();
   });
@@ -1692,7 +1692,7 @@ describe("LearningTaskCard", () => {
     const actions = screen.getByRole("region", { name: "Aufgabe abgeschlossen" });
     expect(within(actions).getByText("Aufgabe abgegeben.")).toBeInTheDocument();
     expect(within(actions).queryByRole("button", { name: "Überarbeiten" })).toBeNull();
-    expect(within(actions).queryByRole("button", { name: "Endgültig abgeben" })).toBeNull();
+    expect(within(actions).queryByRole("button", { name: "Abgeben" })).toBeNull();
     expect(within(actions).queryByRole("button", { name: /^Weiter zu / })).toBeNull();
 
     const returnButton = within(actions).getByRole("button", { name: "Zurück zum Modul" });
@@ -1794,7 +1794,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" });
     const answerFormat = screen.getByRole("group", { name: "Antwortform" });
 
     expect(document.querySelector(".learning-task-cta-row")).toBeNull();
@@ -1845,7 +1845,7 @@ describe("LearningTaskCard", () => {
         feedbackStatusMessage: "Rückmeldung wird erstellt ..."
       }
     });
-    expect(screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pausieren" })).toBeNull();
     expect(screen.getByText("Entwurf wird ausgewertet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rückmeldung einholen" })).toBeDisabled();
@@ -1947,9 +1947,9 @@ describe("LearningTaskCard", () => {
     expect(screen.getByRole("status")).toHaveClass("status-message--success");
     expect(screen.queryByRole("button", { name: "Rückmeldung ansehen" })).toBeNull();
     expect(screen.getByText("Rückmeldung").closest("details")).toHaveAttribute("open");
-    const editor = document.querySelector('textarea[aria-label="text_body"]') as HTMLTextAreaElement;
+    const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
     await waitFor(() => expect(editor.value).toBe("Mein Entwurf"));
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeEnabled();
     expect(document.querySelector<HTMLInputElement>('input[name="feedback_submission_id"]')?.value).toBe(
       reviewedSubmissionId
     );
@@ -1995,7 +1995,7 @@ describe("LearningTaskCard", () => {
       }
     });
 
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeDisabled();
     expect(document.querySelector<HTMLInputElement>('input[name="feedback_submission_id"]')?.value).toBe(
       previousReviewedId
     );
@@ -2034,7 +2034,7 @@ describe("LearningTaskCard", () => {
       ]
     });
 
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeEnabled();
     expect(document.querySelector<HTMLInputElement>('input[name="feedback_submission_id"]')?.value).toBe(
       newerReviewedId
     );
@@ -2088,7 +2088,7 @@ describe("LearningTaskCard", () => {
     });
 
     expect(screen.queryByRole("region", { name: "Aufgabe abgeschlossen" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeEnabled();
     expect(document.querySelector<HTMLInputElement>('input[name="feedback_submission_id"]')?.value).toBe(
       revisedReviewedId
     );
@@ -2132,7 +2132,7 @@ describe("LearningTaskCard", () => {
     });
 
     expect(screen.queryByRole("region", { name: "Aufgabe abgeschlossen" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeDisabled();
   });
 
   it("keeps a processing failure visible as an alert", () => {
@@ -2208,16 +2208,16 @@ describe("LearningTaskCard", () => {
     expect(input.value).toBe("");
     expect(screen.getByRole("region", { name: "Bisherige Datei" })).toHaveTextContent("Aktuelle Datei");
     expect(screen.getByRole("button", { name: "Andere Datei auswählen" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeEnabled();
 
     await fireEvent.change(input, {
       target: { files: [new File(["replacement"], "neu.png", { type: "image/png" })] }
     });
 
     expect(screen.getByRole("region", { name: "Ausgewählte Datei" })).toHaveTextContent("neu.png");
-    expect(screen.getByRole("button", { name: "Endgültig abgeben" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Abgeben" })).toBeDisabled();
     expect(screen.getByText("Für die neue Datei zuerst Rückmeldung einholen.")).toBeInTheDocument();
-    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    const responseGroup = screen.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" });
     expect(within(responseGroup).getByRole("img", { name: "Abgabevorschau" })).toHaveAttribute("src", "/uploads/test.png");
   });
 
@@ -2678,13 +2678,13 @@ describe("LearningTaskCard", () => {
       /\.learning-feedback-actions \.workspace-top-action--accent,\s*\.learning-finalization-warning__actions \.workspace-top-action--accent\s*\{([^}]*)\}/
     );
 
-    expect(css).toMatch(/font-family:\s*var\(--font-mono\);/);
-    expect(css).toMatch(/text-transform:\s*uppercase;/);
-    expect(css).toMatch(/box-shadow:\s*var\(--color-shadow\);/);
+    expect(css).toMatch(/font-family:\s*var\(--font-ui\);/);
+    expect(css).toMatch(/text-transform:\s*none;/);
+    expect(css).toMatch(/box-shadow:\s*none;/);
     expect(css).not.toMatch(/\.learning-feedback-actions \.workspace-top-action\s*\{[^}]*font-family:/);
     expect(css).not.toMatch(/\.learning-finalization-warning__actions \.workspace-top-action\s*\{[^}]*font-family:/);
     expect(accentMatch?.[1] ?? "").toMatch(/background:\s*var\(--color-accent\);/);
-    expect(accentMatch?.[1] ?? "").toMatch(/color:\s*#ffffff;/);
+    expect(accentMatch?.[1] ?? "").toMatch(/color:\s*var\(--color-on-accent\);/);
   });
 
   it("renders task reading surfaces without decorative accent rails or a nested draft surface", () => {

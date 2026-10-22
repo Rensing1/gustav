@@ -63,7 +63,7 @@ describe("one graph geometry for both roles", () => {
     locked.prereq_done = 1;
     const flow = await buildLearningUnitFlow(graph, user, [], vi.fn());
     expect(flow.nodes.find((node) => node.id === "d")!.data.progressLabel).toBe("Gesperrt");
-    expect(flow.nodes.find((node) => node.id === "d")!.data.materialsLabel).toBe("1/2 Voraussetzungen erfüllt");
+    expect(flow.nodes.find((node) => node.id === "d")!.data.materialsLabel).toBe("1/2 erfüllt");
     locked.prereq_required = 0;
     const unknown = await buildLearningUnitFlow(graph, user, [], vi.fn());
     expect(unknown.nodes.find((node) => node.id === "d")!.data.materialsLabel).toBe("Freischaltbedingungen nicht verfügbar");

@@ -1,4 +1,4 @@
-"""Contract tests for the Alpha-3 SvelteKit UI shell.
+"""Contract tests for the shared SvelteKit UI shell.
 
 Why:
     The UI guide now fixes a shared `Top-Bar + Workspace + Sheet`
@@ -82,35 +82,34 @@ def test_root_layout_uses_current_shell_primitives() -> None:
 
     for needle in (
         'import "$lib/styles/index.css";',
+        'import AppHeader from "$lib/components/ui/AppHeader.svelte";',
         'class="app-shell"',
-        'class="app-topbar"',
-        'class="app-topbar-inner"',
-        'class="brand-lockup"',
+        '<AppHeader',
+        'items={primaryNavItems()',
+        'concernHref={data.bootstrap ? concernBoxHref() : undefined}',
+        '{currentTheme} onToggle={toggleTheme}',
         'class="workspace-shell"',
-        'class="workspace-header"',
-            'class="workspace-topbar"',
-            'className="workspace-breadcrumbs"',
-            'class="space-nav"',
-            'aria-label="Hauptnavigation"',
-            'src="/gustav-logo.png"',
-            'class="account-menu"',
-            "data.theme",
+        'class="workspace-header unified-context-header"',
+        "data.theme",
         "page.data.breadcrumbs",
         "page.data.pageTitle",
         "page.data.headerAction",
         "page.data.hidePageHeading",
         'class="workspace-topbar-action"',
     ):
-        assert needle in src, f"Expected Alpha-3 shell primitive {needle!r} in {layout_path}"
+        assert needle in src, f"Expected shared shell primitive {needle!r} in {layout_path}"
 
     assert "status-chip" not in src, "The calmer shell should not keep top-right status pills"
     assert "rail-note" not in src, "The rail should avoid decorative product meta"
     assert "nav-meta" not in src, "Primary navigation should be label-first and almost text-free"
     assert "nav-short" not in src, "Primary navigation should not render separate abbreviation labels"
     assert "identity-card" not in src, "Account chrome should move into a compact menu"
-    assert 'href="/auth/logout"' in src, "Logout should remain available from the account menu"
-    assert "bind:this={accountMenu}" in src, "Account menu should expose its details element"
-    assert "closeAccountMenuOnWindowClick" in src, "Account menu should close on outside clicks"
+    header_src = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "components" / "ui" / "AppHeader.svelte"
+    ).read_text(encoding="utf-8")
+    assert 'href="/auth/logout"' in header_src, "Logout should remain available from the account menu"
+    assert "bind:this={account}" in header_src, "Account menu should expose its details element"
+    assert "closeOutside" in header_src, "Account menu should close on outside clicks"
     assert "teacherNavItems" in src, "Teacher navigation should be derived separately from learner navigation"
     assert 'label: "Kurse"' in src, "Teacher navigation should expose courses directly"
     assert 'label: "Lerneinheiten"' in src, "Teacher navigation should expose units directly"
@@ -254,17 +253,18 @@ def test_theme_tokens_keep_the_approved_contrast_contract() -> None:
     src = token_path.read_text(encoding="utf-8")
 
     for declaration in (
-        "--color-bg-base: #f9f9f9;",
+        "--color-bg-base: #f6f7f9;",
         "--color-bg-surface: #ffffff;",
-        "--color-text: #1a1c1c;",
-        "--color-link: #b41f00;",
-        "--color-accent: #ff512f;",
-        "--color-border: #1b1b1b;",
-        "--color-shadow: 4px 4px 0 0 rgba(27, 27, 27, 0.98);",
-        '--font-display: "Space Grotesk", "Manrope", "Inter", sans-serif;',
+        "--color-text: #242830;",
+        "--color-link: #bd3d1f;",
+        "--color-accent: #c84425;",
+        "--color-border: #e4e7ec;",
+        "--color-control-border: #818997;",
+        "--color-shadow: 0 4px 16px rgba(24, 32, 48, 0.08);",
+        "--font-display: var(--font-reading);",
         '--font-reading: "Inter", "Work Sans", "Nunito", sans-serif;',
-        "--radius-s: 0;",
-        "--radius-m: 0;",
+        "--radius-s: 4px;",
+        "--radius-m: 8px;",
     ):
         assert declaration in src
 

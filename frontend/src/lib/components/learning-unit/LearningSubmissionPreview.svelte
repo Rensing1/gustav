@@ -148,9 +148,9 @@
         </span>
       </header>
       <div class="learning-submission-preview__body" id={bodyId}>
-        {#if expanded || isDialog}
+        {#if expanded}
           {#if isDialog && submission.dialog_session_id}
-            <LearningDialogTranscriptDocument {courseId} {taskId} sessionId={submission.dialog_session_id} compact />
+            <LearningDialogTranscriptDocument {courseId} {taskId} sessionId={submission.dialog_session_id} />
           {:else if file}
             {#if isImage && !imageFailed}
               <img class="learning-submission-preview__image" src={file.url} alt={`${accessibleLabel} als Bild zu ${taskTitle}`} loading="lazy" onerror={() => { imageFailed = true; }} />
@@ -205,7 +205,7 @@
           <p>Bearbeitung gespeichert.</p>
         {/if}
       </div>
-      {#if !isDialog && (canExpand || expanded)}
+      {#if canExpand || expanded}
         <div class="learning-submission-preview__actions">
           <button class="learning-submission-preview__toggle" type="button" aria-expanded={expanded} aria-controls={bodyId} onclick={() => { expanded = !expanded; }}>
             {expanded ? "Weniger anzeigen" : submission.intent === "submit" ? "Abgabe ansehen" : "Entwurf ansehen"}

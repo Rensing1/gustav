@@ -17,7 +17,7 @@ describe("UiPreviewSurface", () => {
     expect(screen.getByText("Designreferenz")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Programmieren mit Scratch" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Zurück zu Lerneinheiten" })).toHaveAttribute("href", "/teaching/units");
-    expect(screen.getByRole("heading", { name: "Inhaltsverzeichnis" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Inhalt" }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Was tut die Europäische Union für mich und wie verändert sie meinen Alltag?").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Werte der Union").length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText("Aufgabe bearbeiten").length).toBeGreaterThan(0);
@@ -40,7 +40,7 @@ describe("UiPreviewSurface", () => {
       name: "Aufgabe und Kontext"
     });
     const conversationComposer = within(conversation).getByRole("region", { name: "Beispielhafte Dialogeingabe" });
-    expect(within(conversationContext).getByRole("heading", { name: "Aufgabe 2" })).toBeInTheDocument();
+    expect(within(conversationContext).getByRole("heading", { name: "Aufgabenstellung" })).toBeInTheDocument();
     expect(within(conversationContext).getByText("KI-Dialog")).toBeInTheDocument();
     expect(conversation.querySelector(".dialog-progress")).toBeNull();
     expect(within(conversationContext).getByRole("progressbar", { name: "Runde 1 von 3" })).toBeInTheDocument();

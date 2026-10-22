@@ -1,16 +1,18 @@
 FROM gradle:8.14-jdk21 AS bcrypt-provider
-ARG KEYCLOAK_BCRYPT_VERSION=1.6.0
+ARG KEYCLOAK_BCRYPT_VERSION=1.7.0
 WORKDIR /provider
 RUN curl --fail --location "https://github.com/leroyguillaume/keycloak-bcrypt/archive/refs/tags/v${KEYCLOAK_BCRYPT_VERSION}.tar.gz" \
-    | tar -xz --strip-components=1 \
- && gradle --no-daemon test jar -Pdependency.keycloak.version=26.7.3
+    --output /tmp/keycloak-bcrypt.tar.gz \
+ && echo "ab54105d5ff610ad5d4de1003788847cfb2924debd859c4374739425b847c671  /tmp/keycloak-bcrypt.tar.gz" | sha256sum --check - \
+ && tar -xzf /tmp/keycloak-bcrypt.tar.gz --strip-components=1 \
+ && gradle --no-daemon test jar -Pdependency.keycloak.version=26.8.1
 
-FROM node:24.18.0-alpine AS auth-fonts
+FROM node:24.22.1-alpine AS auth-fonts
 WORKDIR /fonts
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 
-FROM python:3.12-alpine AS realm-renderer
+FROM python:3.11.17-slim AS realm-renderer
 ARG ALLOWED_REGISTRATION_DOMAINS=
 WORKDIR /work
 COPY keycloak/realm-gustav.json /work/realm-gustav.json
@@ -20,10 +22,10 @@ RUN python /work/render_realm.py \
     --output /work/realm-gustav.rendered.json \
     --allowed-registration-domains "${ALLOWED_REGISTRATION_DOMAINS}"
 
-FROM quay.io/keycloak/keycloak:26.7.3
+FROM quay.io/keycloak/keycloak:26.8.1
 
 # Provider versions
-ARG KEYCLOAK_BCRYPT_VERSION=1.6.0
+ARG KEYCLOAK_BCRYPT_VERSION=1.7.0
 
 # Copy the custom GUSTAV login theme into the Keycloak image
 # This makes deployments reproducible without runtime volumes.

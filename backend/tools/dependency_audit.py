@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -22,11 +23,16 @@ def run_audits(*, run: Callable = subprocess.run) -> int:
         ("h5p", ["npm", "audit", "--omit=dev", "--audit-level=low"], ROOT / "h5p-service"),
         ("python", [sys.executable, "-m", "pip_audit", "-r", "backend/requirements-harness.lock"], ROOT),
     )
+    commands = (*commands, (
+        "dspy-upstream", [sys.executable, "-m", "pip_audit", "--no-deps", "--disable-pip",
+                          "-r", "build_support/dspy/upstream-audit.txt"], ROOT,
+    ))
+    environment = {**os.environ, "PIP_FIND_LINKS": str(ROOT / ".tmp/security-wheels")}
     failed = False
     for label, command, cwd in commands:
         print(f"Dependency audit: {label}", flush=True)
         try:
-            result = run(command, cwd=cwd, check=False)
+            result = run(command, cwd=cwd, check=False, env=environment)
             failed = result.returncode != 0 or failed
         except OSError:
             print(f"Dependency audit unavailable: {label}", file=sys.stderr)

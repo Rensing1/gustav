@@ -34,13 +34,13 @@ def test_frontend_uses_the_maintained_markdown_editor_and_exact_security_pins() 
 
     assert dependencies["@xyflow/svelte"] == "1.6.2"
     assert dependencies["isomorphic-dompurify"] == "3.19.0"
-    assert dependencies["markdown-it"] == "14.3.0"
+    assert dependencies["markdown-it"] == "14.3.3"
     assert "jose" not in dependencies
     assert dev_dependencies["@sveltejs/adapter-node"] == "5.5.7"
     assert dev_dependencies["@sveltejs/kit"] == "2.70.3"
     assert dev_dependencies["svelte"] == "5.56.6"
-    assert dev_dependencies["vite"] == "6.4.3"
-    assert dev_dependencies["vitest"] == "4.1.10"
+    assert dev_dependencies["vite"] == "6.4.5"
+    assert dev_dependencies["vitest"] == "4.1.12"
     assert dev_dependencies["postcss"] == "8.5.28"
     assert package["overrides"]["cookie"] == "0.7.2"
     assert package["engines"]["node"] == ">=22.13.0"
@@ -52,12 +52,18 @@ def test_h5p_uses_safe_compatible_versions_and_targeted_overrides() -> None:
     assert package["engines"]["node"] == ">=22.13.0"
     assert package["dependencies"]["@lumieducation/h5p-express"] == "10.0.5"
     assert package["dependencies"]["express"] == "4.22.2"
-    assert package["dependencies"]["multer"] == "2.3.0"
+    assert package["dependencies"]["multer"] == "2.4.0"
     assert package["overrides"] == {
         "express": "4.22.2",
         "path-to-regexp": "0.1.13",
         "qs": "6.16.0",
         "underscore": "1.13.8",
+        "fast-uri": "3.1.8",
+        "follow-redirects": "1.16.1",
+        "image-size": "2.0.4",
+        "proxy-addr": "2.0.8",
+        "sanitize-html": "2.18.1",
+        "source-map-js": "1.2.2",
     }
 
 
@@ -65,13 +71,13 @@ def test_containers_use_node_24_with_production_only_runtime_dependencies() -> N
     frontend_dockerfile = (REPO_ROOT / "frontend/Dockerfile").read_text(encoding="utf-8")
     h5p_dockerfile = (REPO_ROOT / "h5p-service/Dockerfile").read_text(encoding="utf-8")
 
-    assert frontend_dockerfile.count("node:24.18.0-alpine") == 4
+    assert frontend_dockerfile.count("node:24.22.1-alpine") == 4
     assert "RUN apk add --no-cache bash" in frontend_dockerfile
     assert "AS runtime-deps" in frontend_dockerfile
     assert "npm ci --omit=dev" in frontend_dockerfile
     assert "COPY --from=runtime-deps /app/node_modules ./node_modules" in frontend_dockerfile
     assert "COPY --from=build /app/node_modules ./node_modules" not in frontend_dockerfile
-    assert "FROM node:24.18.0-alpine" in h5p_dockerfile
+    assert "FROM node:24.22.1-alpine" in h5p_dockerfile
 
 
 def test_build_and_online_audit_gates_are_explicit_and_narrow() -> None:

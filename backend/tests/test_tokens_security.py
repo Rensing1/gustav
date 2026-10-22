@@ -23,13 +23,14 @@ def test_verify_enforces_rs256_alg(monkeypatch: pytest.MonkeyPatch):
     # Ensure header returns a kid
     monkeypatch.setattr(tokens_mod.jwt, "get_unverified_header", lambda _: {"kid": "kid1", "alg": "RS256"})
 
+    monkeypatch.setattr(tokens_mod.RSAAlgorithm, "from_jwk", lambda key: key)
     captured = {}
 
     def fake_decode(token, key, algorithms=None, **kwargs):
         captured["algorithms"] = list(algorithms or [])
         # Raise to force verify_id_token to wrap into IDTokenVerificationError
-        from jose.exceptions import JOSEError
-        raise JOSEError("boom")
+        from jwt.exceptions import InvalidTokenError
+        raise InvalidTokenError("boom")
 
     monkeypatch.setattr(tokens_mod.jwt, "decode", fake_decode)
 

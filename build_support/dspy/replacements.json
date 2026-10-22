@@ -1,0 +1,33 @@
+[
+  [
+    "dspy/clients/cache.py",
+    "from diskcache import FanoutCache",
+    "from diskcache_community import FanoutCache"
+  ],
+  [
+    "dspy/clients/cache.py",
+    "from dspy.clients.disk_serialization import restricted_disk",
+    "from dspy.clients.gustav_safe_disk import safe_disk"
+  ],
+  [
+    "dspy/clients/cache.py",
+    "            if restrict_pickle:\n                for t in safe_types or []:\n                    if not isinstance(t, type):\n                        raise TypeError(f\"safe_types entries must be types, got {t!r}\")\n                allowed = frozenset((cls.__module__, cls.__qualname__) for cls in (safe_types or []))\n                fanout_kwargs[\"disk\"] = restricted_disk(allowed)\n",
+    "            if safe_types:\n                raise ValueError(\"GUSTAV does not allow extending the cache type allowlist\")\n            fanout_kwargs[\"disk\"] = safe_disk()\n"
+  ],
+  [
+    "dspy/clients/cache.py",
+    "        # Each tier imports its backend in its own branch, so declining a tier also drops its dependency.",
+    "        # Never read pre-migration pickle files, including on the lazy default path.\n        if self.enable_disk_cache:\n            if self.disk_cache_dir is None:\n                raise ValueError(\"A disk cache directory is required\")\n            self.disk_cache_dir = os.path.join(self.disk_cache_dir, \"gustav-safe-v1\")\n        # Each tier imports its backend in its own branch, so declining a tier also drops its dependency."
+  ],
+  [
+    "dspy/clients/cache.py",
+    "logger.debug(\"Failed to put value in disk cache: %s, %s\", value, e)",
+    "logger.debug(\"Cache write refused: %s\", type(e).__name__)"
+  ],
+  [
+    "dspy/clients/cache.py",
+    "logger.debug(\"Failed to generate cache key for request: %s\", request)",
+    "logger.debug(\"Cache key generation failed\")",
+    2
+  ]
+]

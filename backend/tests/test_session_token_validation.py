@@ -1,11 +1,12 @@
 """Real signed JWTs protect the shared session across login and refresh."""
+import json
 import time
 from types import SimpleNamespace
 
+import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from jose import jwt
 
 from backend.identity_access import tokens as token_module
 from backend.identity_access.oidc import OIDCConfig
@@ -17,7 +18,7 @@ from backend.identity_access.unified_sessions import SessionInvalid, SessionUnav
 def signed_tokens(monkeypatch):
     private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     key = private.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
-    public = private.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+    public = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(private.public_key()))
     monkeypatch.setattr(token_module, '_find_key', lambda jwks, kid: public if kid == 'test-key' else None)
     monkeypatch.setattr(token_module.JWKS_CACHE, 'get', lambda *a, **kw: {'keys': []})
     cfg = OIDCConfig('http://keycloak:8080', 'gustav', 'gustav-web', 'https://app.example/auth/callback', 'https://id.example')

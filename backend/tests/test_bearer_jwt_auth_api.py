@@ -8,11 +8,11 @@ import time
 import types
 
 import httpx
+import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from httpx import ASGITransport
-from jose import jwt
 
 from backend.identity_access.oidc import OIDCConfig
 from backend.tests.runtime_auth_helpers import install_oidc_config

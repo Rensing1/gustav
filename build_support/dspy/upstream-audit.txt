@@ -1,0 +1,2 @@
+# Audit the unmodified base as well as every resolved runtime dependency.
+dspy==3.4.1 --hash=sha256:afda9e7f8b3d46be0829af19ac1153a6feaa6db5923f2b1011eef547fb15ce2d

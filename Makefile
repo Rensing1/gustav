@@ -167,7 +167,7 @@ test-fast:
 
 .PHONY: lint-backend
 lint-backend:
-	@. ./.venv/bin/activate && python -c "import ruff" >/dev/null 2>&1 || { echo "Ruff is not installed. Install harness dependencies with: ./.venv/bin/python -m pip install -r backend/requirements-harness.txt" >&2; exit 1; }
+	@. ./.venv/bin/activate && python -c "import ruff" >/dev/null 2>&1 || { echo "Ruff is not installed. Build the DSPy wheel and install backend/requirements-harness.lock; see build_support/dspy/README.md" >&2; exit 1; }
 	. ./.venv/bin/activate && python -m ruff check backend
 
 .PHONY: test-db-security
@@ -229,6 +229,11 @@ test-upload-llm-boundaries:
 .PHONY: test-docker-image-smoke
 test-docker-image-smoke:
 	. ./.venv/bin/activate && python -m backend.tools.docker_image_smoke
+	@$(MAKE) test-keycloak-security-smoke
+
+.PHONY: test-keycloak-security-smoke
+test-keycloak-security-smoke:
+	@RUN_KEYCLOAK_SECURITY_SMOKE=1 .venv/bin/pytest -q backend/tests/test_keycloak_security_smoke.py
 
 .PHONY: quality-scorecard
 quality-scorecard:
@@ -264,8 +269,9 @@ dependency-audit:
 
 .PHONY: lock-python
 lock-python:
-	@CUSTOM_COMPILE_COMMAND='make lock-python' .venv/bin/pip-compile --quiet --allow-unsafe --strip-extras --generate-hashes --extra-index-url https://pypi.org/pypi/ --no-emit-index-url --no-emit-trusted-host --output-file backend/web/requirements.lock backend/web/requirements.txt
-	@CUSTOM_COMPILE_COMMAND='make lock-python' .venv/bin/pip-compile --quiet --allow-unsafe --strip-extras --generate-hashes --extra-index-url https://pypi.org/pypi/ --no-emit-index-url --no-emit-trusted-host --constraint backend/web/requirements.lock --output-file backend/requirements-harness.lock backend/requirements-harness.txt
+	@.venv/bin/python build_support/build_dspy_wheel.py
+	@CUSTOM_COMPILE_COMMAND='make lock-python' .venv/bin/pip-compile --quiet --find-links .tmp/security-wheels --no-emit-find-links --allow-unsafe --strip-extras --generate-hashes --extra-index-url https://pypi.org/pypi/ --no-emit-index-url --no-emit-trusted-host --output-file backend/web/requirements.lock backend/web/requirements.txt
+	@CUSTOM_COMPILE_COMMAND='make lock-python' .venv/bin/pip-compile --quiet --find-links .tmp/security-wheels --no-emit-find-links --allow-unsafe --strip-extras --generate-hashes --extra-index-url https://pypi.org/pypi/ --no-emit-index-url --no-emit-trusted-host --constraint backend/web/requirements.lock --output-file backend/requirements-harness.lock backend/requirements-harness.txt
 
 .PHONY: test-frontend-h5p
 test-frontend-h5p:

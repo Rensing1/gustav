@@ -98,6 +98,10 @@ def _check_runtime_dependencies(image_tag: str) -> None:
     code = (
         "import importlib.util; "
         "assert importlib.util.find_spec('ruff') is None, 'ruff must not be installed in runtime image'; "
+        "assert all(importlib.util.find_spec(name) is None for name in ('jose', 'ecdsa', 'diskcache')); "
+        "import importlib.metadata as metadata; "
+        "assert metadata.version('dspy') == '3.4.1+gustav.1'; "
+        "assert metadata.version('diskcache-community') == '5.8.1'; "
         "print('runtime-deps-ok')"
     )
     _run(["docker", "run", "--rm", "--entrypoint", "python", image_tag, "-c", code])

@@ -14,6 +14,8 @@ function reqWithHeaders(headers) {
       return headers[String(name).toLowerCase()];
     },
     protocol: "http",
+    app: { get: () => () => true },
+    socket: { remoteAddress: "127.0.0.1" },
   };
 }
 

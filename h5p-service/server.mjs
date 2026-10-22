@@ -34,7 +34,7 @@ import { access, readdir, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import express from "express";
 import { translateH5p } from "./lib/translations.mjs";
-import multer from "multer";
+import { createUploads } from "./lib/uploads.mjs";
 import { debugPagesEnabled, isProdLikeEnv } from "./lib/env.mjs";
 import { createFinishedForwardingMetrics } from "./lib/finished_forwarding.mjs";
 import { createReviewModeMiddleware } from "./lib/review_mode_middleware.mjs";
@@ -151,34 +151,10 @@ async function listInstalledLibraries() {
   }
 }
 
-const uploadImport = multer({
-  storage: multer.diskStorage({
-    destination: storageDirs.uploads,
-    filename: (_req, file, cb) => {
-      const safeBase = String(file.originalname || "upload.h5p")
-        .replace(/[^a-zA-Z0-9._-]/g, "_")
-        .slice(0, 80);
-      cb(null, `${Date.now()}-${Math.random().toString(16).slice(2)}-${safeBase}`);
-    },
-  }),
-  limits: { fileSize: uploadMaxBytes },
+const { uploadImport, uploadAjax } = createUploads({
+  directory: storageDirs.uploads,
+  maxBytes: uploadMaxBytes,
 });
-
-const uploadAjax = multer({
-  storage: multer.diskStorage({
-    destination: storageDirs.uploads,
-    filename: (_req, file, cb) => {
-      const safeBase = String(file.originalname || "upload.bin")
-        .replace(/[^a-zA-Z0-9._-]/g, "_")
-        .slice(0, 80);
-      cb(null, `${Date.now()}-${Math.random().toString(16).slice(2)}-${safeBase}`);
-    },
-  }),
-  limits: { fileSize: uploadMaxBytes },
-}).fields([
-  { name: "file", maxCount: 1 },
-  { name: "h5p", maxCount: 1 },
-]);
 
 function maybeParseAjaxFiles(req, res, next) {
   if (req.is("multipart/form-data")) {

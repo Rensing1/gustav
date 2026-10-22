@@ -3,10 +3,10 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from jose import jwt
 
 from backend.identity_access import tokens
 from backend.identity_access.oidc import OIDCConfig
@@ -19,7 +19,7 @@ def test_wrong_algorithm_is_rejected_without_reading_keys(monkeypatch, identity)
     cache = tokens.JWKSCache()
     calls = []
     monkeypatch.setattr(cache, '_fetch', lambda cfg: calls.append(1) or {'keys': []})
-    token = jwt.encode({'exp': 4102444800}, 'synthetic', algorithm='HS256', headers={'kid': 'unknown'})
+    token = jwt.encode({'exp': 4102444800}, 'synthetic-key-with-at-least-32-bytes', algorithm='HS256', headers={'kid': 'unknown'})
     with pytest.raises((tokens.IDTokenVerificationError, tokens.BearerTokenVerificationError)):
         if identity:
             tokens.verify_id_token(id_token=token, cfg=CFG, cache=cache)
@@ -104,8 +104,8 @@ def test_newly_rotated_signed_key_recovers_after_bounded_cooldown(monkeypatch):
     monkeypatch.setattr(tokens.time, 'monotonic', lambda: clock[0])
     private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     pem = private.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
-    from jose import jwk
-    public = jwk.construct(private.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo), algorithm='RS256').to_dict()
+    import json
+    public = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(private.public_key()))
     public['kid'] = 'new'
     now = int(time.time())
     token = jwt.encode({'sub': 'synthetic', 'aud': 'gustav-api', 'iss': 'http://keycloak:8080/realms/gustav', 'iat': now, 'exp': now+300}, pem, algorithm='RS256', headers={'kid': 'new'})

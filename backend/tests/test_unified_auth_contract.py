@@ -11,7 +11,7 @@ def test_keycloak_lifetimes_and_api_audience():
     assert realm["ssoSessionMaxLifespanRememberMe"] == 2592000
     client = next(c for c in realm["clients"] if c["clientId"] == "gustav-web")
     assert any(m.get("config", {}).get("included.custom.audience") == "gustav-api" for m in client["protocolMappers"])
-    assert "keycloak:26.7.3" in Path("keycloak/Dockerfile").read_text()
+    assert "keycloak:26.8.1" in Path("keycloak/Dockerfile").read_text()
 
 
 def test_openapi_shared_session_and_safe_logout():

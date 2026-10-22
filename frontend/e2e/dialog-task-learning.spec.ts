@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
@@ -18,11 +19,11 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promi
   const workspace = page.getByRole("region", { name: "KI-Dialog" });
   const taskContext = workspace.getByRole("complementary", { name: "Aufgabe und Kontext" });
   const composer = workspace.getByRole("region", { name: "Dialog fortsetzen" });
-  await expect(page.locator("#learner-task-back")).toBeVisible();
+  await expect(page.locator(".context-header__back")).toBeVisible();
   await expect(taskContext.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
 
   if (mode === "desktop") {
-    await expect(taskContext.getByRole("button", { name: "Dialog beenden" })).toHaveCount(0);
+    await expect(taskContext.getByRole("button", { name: "Zur Abschlussaufgabe" })).toHaveCount(0);
     await expect(composer.getByRole("button", { name: "Antwort senden" })).toBeVisible();
   } else {
     await expect(taskContext).toBeHidden();
@@ -30,11 +31,11 @@ async function expectDialogLayout(page: Page, mode: "desktop" | "mobile"): Promi
     await workspace.getByRole("button", { name: "Materialien" }).click();
     await expect(taskContext).toBeVisible();
     await expect(composer).toBeHidden();
-    await workspace.getByRole("button", { name: "Aufgabe" }).click();
+    await workspace.getByRole("button", { name: "Aufgabe", exact: true }).click();
     await expect(composer).toBeVisible();
   }
   await expect(taskContext.getByRole("button", { name: "Antwort senden" })).toHaveCount(0);
-  await expect(composer.getByRole("button", { name: "Dialog beenden" })).toBeVisible();
+  await expect(composer.getByRole("button", { name: "Zur Abschlussaufgabe" })).toBeVisible();
 
   const geometry = await workspace.locator(".dialog-layout").evaluate((layout) => {
     const sidebar = layout.querySelector(".dialog-sidebar");
@@ -99,12 +100,12 @@ test("@feature-acceptance learner deliberately enters and resumes dialog complet
 
     await learner.page.setViewportSize({ width: 1600, height: 1000 });
     await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
-    await expect(learner.page.getByRole("heading", { name: seeded.unitTitle })).toBeVisible();
+    await expect(learner.page.getByRole("navigation", { name: "Kontextnavigation" })).toBeVisible();
     await learner.page.getByRole("button", { name: /beginnen/i }).first().click();
     await expect(learner.page.getByRole("region", { name: "KI-Dialog" })).toBeVisible();
     await expect(learner.page.getByText("Welche Beobachtung möchtest du zuerst untersuchen?")).toBeVisible();
     await expect(learner.page.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeHidden();
-    await expect(learner.page.getByRole("button", { name: "Dialog beenden" })).toBeHidden();
+    await expect(learner.page.getByRole("button", { name: "Zur Abschlussaufgabe" })).toBeHidden();
     const initialTaskContext = learner.page.getByRole("complementary", { name: "Aufgabe und Kontext" });
     const initialComposer = learner.page.getByRole("region", { name: "Dialog fortsetzen" });
     const initialDialogGeometry = await learner.page.getByRole("region", { name: "KI-Dialog" }).evaluate((workspace) => {
@@ -205,33 +206,33 @@ test("@feature-acceptance learner deliberately enters and resumes dialog complet
     await learner.page.setViewportSize({ width: 390, height: 844 });
     await expectDialogLayout(learner.page, "mobile");
     await expect(dialogSeparator).toBeHidden();
-    await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+    await setAppTheme(learner.page, "dark");
     await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
-    await learner.page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+    await setAppTheme(learner.page, "light");
     await learner.page.setViewportSize({ width: 1600, height: 1000 });
     await expectDialogLayout(learner.page, "desktop");
-    await learner.page.getByRole("button", { name: "Dialog beenden" }).click();
+    await learner.page.getByRole("button", { name: "Zur Abschlussaufgabe" }).click();
 
-    const closingField = learner.page.getByLabel("Fasse deine wichtigste Erkenntnis zusammen.");
+    const closingField = learner.page.getByLabel("Deine Antwort", { exact: true });
     await expect(closingField).toBeVisible();
     const closingTaskContext = learner.page.getByRole("complementary", { name: "Aufgabe und Kontext" });
-    const closingRegion = learner.page.getByRole("region", { name: "Abschluss vorbereiten" });
+    const closingRegion = learner.page.getByRole("region", { name: "Zum Abschluss" });
     await expect(closingTaskContext.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
-    await expect(closingTaskContext.getByRole("button", { name: "Dialog beenden" })).toHaveCount(0);
-    await expect(closingRegion.getByRole("button", { name: "Zurück zum Dialog" })).toBeVisible();
-    await expect(closingRegion.getByRole("button", { name: "Endgültig abgeben" })).toBeVisible();
+    await expect(closingTaskContext.getByRole("button", { name: "Zur Abschlussaufgabe" })).toHaveCount(0);
+    await expect(closingRegion.getByRole("button", { name: "Zurück zum Gespräch" })).toBeVisible();
+    await expect(closingRegion.getByRole("button", { name: "Gespräch und Antwort abgeben", exact: true })).toBeVisible();
     await expect(closingRegion.getByRole("button", { name: "Pausieren" })).toHaveCount(0);
     await closingField.fill("Die Auswahl der Textstellen bestimmt die Perspektive.");
-    await expect(learner.page.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    await expect(learner.page.getByRole("button", { name: "Gespräch und Antwort abgeben", exact: true })).toBeEnabled();
 
-    await learner.page.locator("#learner-task-back").click();
+    await learner.page.locator(".context-header__back").click();
     await expect(learner.page.getByRole("region", { name: "Orientieren" })).toBeVisible();
     await learner.page.reload();
     await learner.page.getByRole("button", { name: /beginnen/i }).first().click();
-    await expect(learner.page.getByLabel("Fasse deine wichtigste Erkenntnis zusammen.")).toHaveValue(
+    await expect(learner.page.getByLabel("Deine Antwort", { exact: true })).toHaveValue(
       "Die Auswahl der Textstellen bestimmt die Perspektive."
     );
-    await learner.page.getByRole("button", { name: "Zurück zum Dialog" }).click();
+    await learner.page.getByRole("button", { name: "Zurück zum Gespräch" }).click();
     await expect(learner.page.getByLabel("Deine Antwort (1/2)")).toBeVisible();
     await expect(learner.page.getByText("Fasse deine wichtigste Erkenntnis zusammen.")).toBeHidden();
 
@@ -239,22 +240,21 @@ test("@feature-acceptance learner deliberately enters and resumes dialog complet
     await learner.page.reload();
     await expect(learner.page.getByRole("button", { name: "KI-Antwort erneut versuchen" })).toHaveCount(0);
     await expect(learner.page.getByText("Die KI-Antwort kann nicht erneut erzeugt werden.")).toBeVisible();
-    await expect(learner.page.getByRole("button", { name: "Dialog beenden" })).toBeVisible();
+    await expect(learner.page.getByRole("button", { name: "Zur Abschlussaufgabe" })).toBeVisible();
     await expect(learner.page.getByRole("button", { name: "Dialog ohne Abgabe abbrechen" })).toBeVisible();
 
-    await learner.page.getByRole("button", { name: "Dialog beenden" }).click();
-    await expect(learner.page.getByLabel("Fasse deine wichtigste Erkenntnis zusammen.")).toHaveValue(
+    await learner.page.getByRole("button", { name: "Zur Abschlussaufgabe" }).click();
+    await expect(learner.page.getByLabel("Deine Antwort", { exact: true })).toHaveValue(
       "Die Auswahl der Textstellen bestimmt die Perspektive."
     );
-    await learner.page.getByRole("button", { name: "Endgültig abgeben" }).click();
+    await learner.page.getByRole("button", { name: "Gespräch und Antwort abgeben", exact: true }).click();
 
-    await expect(learner.page.getByText("Der Dialog wurde endgültig abgegeben. Die Rückmeldung wird erstellt.")).toBeVisible();
+    await expect(learner.page.getByRole("region", { name: "Deine Bearbeitung", exact: true })).toBeVisible();
     await completeDialogFeedback({
       sessionId,
       feedbackMd: "Du belegst deine Einschätzung nachvollziehbar mit der Quelle."
     });
-    await expect(learner.page.getByText("Rückmeldung ist bereit", { exact: true })).toBeVisible();
-    const feedback = learner.page.getByRole("region", { name: "Rückmeldung zum KI-Dialog" });
+    const feedback = learner.page.getByRole("region", { name: "Deine Rückmeldung" });
     await expect(feedback).toContainText("Du belegst deine Einschätzung nachvollziehbar mit der Quelle.");
     expect(await learner.page.evaluate((key) => window.sessionStorage.getItem(key), storageKey)).toBeNull();
     const sessionResponse = await learner.page.request.get(

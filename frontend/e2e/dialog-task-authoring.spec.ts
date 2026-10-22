@@ -31,7 +31,7 @@ test("@feature-acceptance saves and reloads every dialog authoring field", async
   const createForm = page.getByTestId("teacher-node-editor-create-slot");
   await createForm.getByLabel("Aufgabentyp").selectOption("dialog");
   await createForm.locator(
-    '[contenteditable="true"][aria-label="Anweisung & Beschreibung"]'
+    '[contenteditable="true"][aria-label="Aufgabenstellung"]'
   ).fill(values.instruction);
   await createForm.getByLabel("Kriterium 1", { exact: true }).fill(values.criterion);
   await createForm.getByText("Weitere Einstellungen", { exact: true }).click();
@@ -55,7 +55,7 @@ test("@feature-acceptance saves and reloads every dialog authoring field", async
   await page.getByText("Weitere Einstellungen", { exact: true }).click();
 
   await expect(page.locator(
-    '[contenteditable="true"][aria-label="Anweisung & Beschreibung"]'
+    '[contenteditable="true"][aria-label="Aufgabenstellung"]'
   )).toContainText(values.instruction);
   await expect(page.getByLabel("Kriterium 1", { exact: true })).toHaveValue(values.criterion);
   await expect(page.getByLabel("Lehrkraft-Kontext")).toHaveValue(values.teacherContext);
@@ -69,6 +69,6 @@ test("@feature-acceptance saves and reloads every dialog authoring field", async
   await expect(page.getByLabel("Optionaler Abschlussauftrag")).toHaveValue(values.closing);
   await expect(page.getByLabel("Probeantwort eines Schülers")).toBeHidden();
 
-  await page.getByText("Gespeicherte Konfiguration testen").click();
+  await page.getByText("Dialogvorschau").click();
   await expect(page.getByLabel("Probeantwort eines Schülers")).toBeVisible();
 });

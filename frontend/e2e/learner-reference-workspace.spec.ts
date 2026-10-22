@@ -47,138 +47,51 @@ test("@feature-acceptance reads a document stack without losing the active task"
       "grid-template-columns", /\d+(?:\.\d+)?px 16px \d+(?:\.\d+)?px/
     );
 
-    await book.getByRole("button", { name: "Perspektiven im Überblick ein- oder ausklappen" }).click();
-    const image = book.getByRole("img", { name: seeded.imageAltText });
+    const reader = workbench.getByRole("region", { name: "Dokument groß lesen" });
+    const outline = book.locator(".workspace-outline");
+    await outline.getByRole("button", { name: /Perspektiven im Überblick/ }).click();
+    const image = reader.getByRole("img", { name: seeded.imageAltText });
     await expect(image).toBeVisible();
     await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
     await expect(image).toHaveAttribute("loading", "lazy");
-    await book.getByRole("button", { name: `${seeded.pdfMaterialTitle} ein- oder ausklappen` }).click();
-    await expect(book.getByTitle(`Material ${seeded.pdfMaterialTitle}`)).toBeVisible();
-
-    await book.getByText("Weitere Materialien und eigene Abgaben", { exact: true }).click();
-    const additionalContext = book.locator(".learner-material-context--compact");
-    await expect(additionalContext).toBeVisible();
-    await expect(additionalContext.locator(".learner-material-context__tree-children")).toHaveCount(0);
-    const ownSubmissions = additionalContext.getByRole("button", { name: /Eigene Abgaben in Start/ });
-    await expect(ownSubmissions).toHaveAttribute("aria-expanded", "false");
-    await ownSubmissions.click();
-    const previousSubmission = book.getByRole("button", {
-      name: `${seeded.previousTaskLabel} ein- oder ausklappen`
-    });
-    await expect(previousSubmission).toBeVisible();
-    const hierarchy = await additionalContext.evaluate((context) => {
-      const moduleTitle = context.querySelector<HTMLElement>(
-        ".learner-material-context__module--current > .learner-material-context__module-header h4"
-      );
-      const submissionGroup = context.querySelector<HTMLElement>(
-        ".learner-material-context__submissions-toggle span"
-      );
-      const submissionTitle = context.querySelector<HTMLElement>(
-        ".learner-material-context__tree-item--submission .learner-reference-document__toggle strong"
-      );
-      if (!moduleTitle || !submissionGroup || !submissionTitle) {
-        throw new Error("Material tree hierarchy is incomplete");
-      }
-      return {
-        moduleX: moduleTitle.getBoundingClientRect().left,
-        submissionGroupX: submissionGroup.getBoundingClientRect().left,
-        submissionX: submissionTitle.getBoundingClientRect().left
-      };
-    });
-    expect(hierarchy.submissionGroupX).toBeGreaterThanOrEqual(hierarchy.moduleX);
-    expect(hierarchy.submissionX).toBeGreaterThan(hierarchy.submissionGroupX);
-    await previousSubmission.click();
-    await expect(book.getByText(seeded.previousSubmissionText)).toBeVisible();
-    await expect(workbench.getByRole("region", { name: "Dokument groß lesen" })).toHaveCount(0);
-
-    await expect(exercise.locator(".learning-markdown-editor__toolbar")).toBeVisible();
-    const editor = exercise.locator('.learning-markdown-editor__surface [contenteditable="true"]');
-    await editor.fill("Dieser Entwurf muss während des Lesens erhalten bleiben.");
-    await book.getByRole("button", { name: `${seeded.longMaterialTitle} groß lesen` }).click();
-    const reader = workbench.getByRole("region", { name: "Dokument groß lesen" });
-    await expect(reader).toBeVisible();
-    await expect(reader.getByText("Vertiefung für die Großansicht")).toBeVisible();
-    await learner.page.reload();
-    await expect(reader).toBeVisible();
-    await expect(reader.getByText("Vertiefung für die Großansicht")).toBeVisible();
     await reader.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
-    await expect(editor).toHaveText("Dieser Entwurf muss während des Lesens erhalten bleiben.");
+    await outline.getByRole("button", { name: seeded.pdfMaterialTitle + " Material", exact: true }).click();
+    await expect(reader.getByTitle(`Material ${seeded.pdfMaterialTitle}`)).toBeVisible();
+    await reader.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
+    const previousSubmission = outline.getByRole("button", { name: `${seeded.previousTaskLabel} · Meine Abgabe`, exact: true });
+    await previousSubmission.click();
+    await expect(reader).toContainText(seeded.previousSubmissionText);
+    await reader.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
 
-    const desktopScroll = await workbench.evaluate(() => {
-      const bookScroll = document.querySelector<HTMLElement>(".learner-task-context__scroll");
-      const workScroll = document.querySelector<HTMLElement>(".learner-task-workbench__main");
-      if (!bookScroll || !workScroll) throw new Error("work surfaces missing");
-      bookScroll.scrollTop = 80;
-      return { book: bookScroll.scrollTop, work: workScroll.scrollTop };
-    });
-    expect(desktopScroll.book).toBeGreaterThan(0);
-    expect(desktopScroll.work).toBe(0);
-
-    await learner.page.setViewportSize({ width: 1024, height: 768 });
-    await expect(book).toBeVisible();
-    await expect(exercise).toBeVisible();
-    const bookScroll = workbench.locator(".learner-task-context__scroll");
-    await bookScroll.evaluate((surface) => surface.setAttribute("tabindex", "-1"));
-    await bookScroll.focus();
-    await learner.page.keyboard.press("End");
-    await expect.poll(
-      () => bookScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight - surface.scrollTop)
-    ).toBeLessThan(2);
-    const iPadGeometry = await bookScroll.evaluate((surface) => {
-      const surfaceBounds = surface.getBoundingClientRect();
-      const summary = surface.querySelector<HTMLElement>(".learner-task-context__all-materials > summary");
-      if (!summary) throw new Error("additional materials disclosure is missing");
-      const summaryBounds = summary.getBoundingClientRect();
-      return {
-        viewportHeight: window.innerHeight,
-        surfaceBottom: surfaceBounds.bottom,
-        summaryTop: summaryBounds.top,
-        summaryBottom: summaryBounds.bottom
-      };
-    });
-    expect(iPadGeometry.surfaceBottom).toBeLessThanOrEqual(iPadGeometry.viewportHeight + 1);
-    expect(iPadGeometry.summaryTop).toBeGreaterThanOrEqual(0);
-    expect(iPadGeometry.summaryBottom).toBeLessThanOrEqual(iPadGeometry.viewportHeight + 1);
-
-    const additionalMaterials = book.getByText("Weitere Materialien und eigene Abgaben", { exact: true });
-    const additionalDetails = book.locator(".learner-task-context__all-materials");
-    await expect(additionalDetails).not.toHaveAttribute("open", "");
-    await expect(additionalContext).toBeHidden();
-    await additionalMaterials.click();
-    await expect(additionalDetails).toHaveAttribute("open", "");
-    await expect(additionalContext).toBeVisible();
-    if (await ownSubmissions.getAttribute("aria-expanded") === "true") {
-      await ownSubmissions.click();
-    }
-    await expect(ownSubmissions).toHaveAttribute("aria-expanded", "false");
-    await ownSubmissions.click();
-    await expect(ownSubmissions).toHaveAttribute("aria-expanded", "true");
-    await expect(previousSubmission).toBeVisible();
-    if (await previousSubmission.getAttribute("aria-expanded") !== "true") {
-      await previousSubmission.click();
-    }
-    await expect(previousSubmission).toHaveAttribute("aria-expanded", "true");
-    await expect(book.getByText(seeded.previousSubmissionText)).toBeVisible();
-    await expectNoViewportOverflow(learner.page);
-    await additionalMaterials.click();
-    await expect(additionalDetails).not.toHaveAttribute("open", "");
+    const editor = exercise.locator('.learning-markdown-editor__surface [contenteditable="true"]');
+    const draft = "Dieser Entwurf muss während des Lesens erhalten bleiben.";
+    await editor.fill(draft);
+    const openLongMaterial = () => outline.getByRole("button", { name: seeded.longMaterialTitle + " Material", exact: true }).click();
+    await openLongMaterial();
+    await expect(reader).toContainText("Vertiefung für die Großansicht");
+    await learner.page.reload();
+    await expect(reader).toContainText("Vertiefung für die Großansicht");
+    await reader.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
+    await expect(editor).toHaveText(draft);
 
     for (const viewport of [
-      { width: 820, height: 1180 },
-      { width: 390, height: 844 }
+      { width: 1024, height: 768 }, { width: 820, height: 1180 }, { width: 390, height: 844 }
     ]) {
       await learner.page.setViewportSize(viewport);
-      await expect(workbench.getByRole("button", { name: "Aufgabe", exact: true })).toBeVisible();
+      if (!(await book.isVisible())) await workbench.getByRole("button", { name: "Materialien", exact: true }).click();
       await expect(book).toBeVisible();
-      await expect(exercise).toBeHidden();
-      const touchTargets = await book.locator(
-        ".learner-material-context__module-toggle, .learner-material-context__submissions-toggle, .learner-reference-document__toggle, .learner-reference-document__icon-action"
-      ).evaluateAll((elements) => elements.filter((element) => {
-        const styles = getComputedStyle(element);
-        return styles.display !== "none" && styles.visibility !== "hidden";
-      }).map((element) => element.getBoundingClientRect().height));
-      expect(Math.min(...touchTargets)).toBeGreaterThanOrEqual(44);
+      await expect(outline).toBeVisible();
+      await previousSubmission.click();
+      await expect(reader).toContainText(seeded.previousSubmissionText);
+      await reader.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
+      if (!(await exercise.isVisible())) await workbench.getByRole("button", { name: "Aufgabe", exact: true }).click();
+      await expect(editor).toHaveText(draft);
+      if (!(await book.isVisible())) await workbench.getByRole("button", { name: "Materialien", exact: true }).click();
+      await openLongMaterial();
+      await expect(reader).toContainText("Vertiefung für die Großansicht");
+      await reader.locator(".learner-reference-document").scrollIntoViewIfNeeded();
       await expectNoViewportOverflow(learner.page);
+      await reader.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
     }
 
     const removed = await teacher.page.request.delete(

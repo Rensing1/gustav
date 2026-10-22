@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { expect, test } from "./support/feature-test";
 import { apiHeaders, expectApiOk } from "./support/api";
 import { login } from "./support/auth";
@@ -31,8 +32,7 @@ test("@feature-acceptance existing inline code survives an unchanged editor save
   await expect(form.locator('input[name="body_md"]')).toHaveValue(body);
   await expect(content.locator("script")).toHaveCount(0);
   for (const theme of ["light", "dark"]) {
-    const themeButton = page.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-    if (await themeButton.count()) await themeButton.click();
+    await setAppTheme(page, theme);
     await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", theme);
     // Capture the settled theme rather than an intermediate color transition.
     await page.waitForTimeout(250);

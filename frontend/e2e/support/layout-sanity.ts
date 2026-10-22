@@ -111,12 +111,12 @@ export function contrastRatio(foreground: string, background: string): number {
 export async function expectLearnerMaterialContrast(page: Page): Promise<void> {
   const palette = await page.evaluate(() => {
     const context = document.querySelector(".learner-task-context");
-    const title = document.querySelector(".learner-reference-document__toggle strong");
-    const moduleTitle = document.querySelector(".learner-material-context__module-toggle h4");
+    const title = document.querySelector(".workspace-outline__item-label");
+    const moduleTitle = document.querySelector(".workspace-outline__group-toggle span");
     if (!(context instanceof HTMLElement) || !(title instanceof HTMLElement) || !(moduleTitle instanceof HTMLElement)) {
       throw new Error("Learner material surfaces are incomplete");
     }
-    const rootStyles = getComputedStyle(document.documentElement);
+    const rootStyles = getComputedStyle(context);
     return {
       background: rootStyles.getPropertyValue("--color-bg-base").trim(),
       title: getComputedStyle(title).color,
@@ -133,8 +133,8 @@ export async function expectLearnerMaterialContrast(page: Page): Promise<void> {
 
 export async function expectLearnerTaskTheme(page: Page, theme: "light" | "dark"): Promise<void> {
   const palette = await page.evaluate(() => {
-    const topbar = document.querySelector(".app-topbar--learner-unit");
-    const brand = document.querySelector(".app-topbar--learner-unit .brand-copy strong");
+    const topbar = document.querySelector(".global-header");
+    const brand = document.querySelector(".global-header__brand");
     const editor = document.querySelector(".learning-markdown-editor");
     const toolbar = document.querySelector(".learning-markdown-editor__toolbar");
     const surface = document.querySelector(".learning-markdown-editor__surface");
@@ -182,20 +182,20 @@ export async function expectLearnerTaskTheme(page: Page, theme: "light" | "dark"
 
   if (theme === "dark") {
     await expect.poll(async () => {
-      const color = await page.locator(".app-topbar--learner-unit .brand-copy strong").evaluate((brand) => {
+      const color = await page.locator(".global-header__brand").evaluate((brand) => {
         return getComputedStyle(brand).color;
       });
       return Math.min(...normalizedColorChannels(color));
     }).toBeGreaterThan(0.75);
   } else {
     await expect.poll(async () => {
-      const color = await page.locator(".app-topbar--learner-unit .brand-copy strong").evaluate((brand) => {
+      const color = await page.locator(".global-header__brand").evaluate((brand) => {
         return getComputedStyle(brand).color;
       });
       return Math.max(...normalizedColorChannels(color));
     }).toBeLessThan(0.25);
   }
   expect(palette.controlShadow).toBe("none");
-  expect(palette.controlRadius).toBe("0px");
+  expect(palette.controlRadius).toBe("4px");
   expect(palette.toolbarScrollWidth).toBeLessThanOrEqual(palette.toolbarWidth + 1);
 }

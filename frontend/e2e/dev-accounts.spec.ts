@@ -150,7 +150,7 @@ test("@dev-accounts exposes the complete modular browser landscape to both perso
 
     await learner.page.goto(`/learning/courses/${state.course_id}/units/${state.unit_id}`);
     await expect(learner.page).toHaveTitle(/Digitale Systeme untersuchen/);
-    await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
+    await expect(learner.page.locator(".learning-unit-stage--graph")).toBeVisible();
 
     const learnerGraphResponse = await learner.page.request.get(
       `${webBase}/api/learning/courses/${state.course_id}/units/${state.unit_id}/modules/graph`

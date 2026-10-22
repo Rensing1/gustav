@@ -14,7 +14,7 @@ async function pageFor(browser: Browser): Promise<{ context: BrowserContext; pag
   return { context, page: await context.newPage() };
 }
 
-test("@feature-acceptance keeps the concern box one click away for learners and teachers", async ({ browser }) => {
+test("@feature-acceptance keeps the concern box reachable through the shared account menu", async ({ browser }) => {
   test.setTimeout(90_000);
   const unique = Date.now();
   const teacherEmail = e2eEmail("teacher");
@@ -35,9 +35,10 @@ test("@feature-acceptance keeps the concern box one click away for learners and 
 
     await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
     const learnerConcernLink = learner.page
-      .locator(".app-topbar-controls")
+      .locator(".global-header__account")
       .getByRole("link", { name: "Kummerkasten" });
-    await expect(learner.page.locator(".app-topbar-breadcrumbs")).toBeVisible();
+    await expect(learner.page.locator(".context-header")).toBeVisible();
+    await learner.page.getByLabel("Konto-Menü").click();
     await expect(learnerConcernLink).toBeVisible();
     await expect(learnerConcernLink).toHaveAttribute("href", "/learning/kummerkasten");
 
@@ -53,26 +54,27 @@ test("@feature-acceptance keeps the concern box one click away for learners and 
     await learner.page.setViewportSize({ width: 1024, height: 768 });
     await expectWorkspaceMeasure(learner.page, 672);
     await learner.page.setViewportSize({ width: 390, height: 844 });
-    await expect(learnerConcernLink).toHaveAttribute("aria-current", "page");
     await learner.page.getByLabel("Konto-Menü").click();
-    const learnerAccountMenu = learner.page.locator(".account-menu__panel");
+    await expect(learnerConcernLink).toHaveAttribute("href", "/learning/kummerkasten");
+    const learnerAccountMenu = learner.page.locator(".global-header__account .global-header__panel");
     await expect(learnerAccountMenu.getByRole("link", { name: "Profil" })).toBeVisible();
     await expect(learnerAccountMenu.getByRole("link", { name: "Abmelden" })).toBeVisible();
-    await expect(learnerAccountMenu.getByRole("link", { name: "Kummerkasten" })).toHaveCount(0);
+    await expect(learnerAccountMenu.getByRole("link", { name: "Kummerkasten" })).toHaveCount(1);
 
     await teacher.page.goto(`/teaching/courses/${seeded.courseId}`);
     const teacherConcernLink = teacher.page
-      .locator(".app-topbar-controls")
+      .locator(".global-header__account")
       .getByRole("link", { name: "Kummerkasten" });
+    await teacher.page.getByLabel("Konto-Menü").click();
     await expect(teacherConcernLink).toBeVisible();
     await expect(teacherConcernLink).toHaveAttribute("href", "/teaching/kummerkasten");
     await teacherConcernLink.click();
     await expect(teacher.page).toHaveURL(/\/teaching\/kummerkasten$/);
-    await expect(teacherConcernLink).toHaveAttribute("aria-current", "page");
+    await expect(teacher.page.getByRole("heading", { name: /Kummerkasten/ })).toBeVisible();
     await teacher.page.getByLabel("Konto-Menü").click();
     await expect(
-      teacher.page.locator(".account-menu__panel").getByRole("link", { name: "Kummerkasten" })
-    ).toHaveCount(0);
+      teacher.page.locator(".global-header__account .global-header__panel").getByRole("link", { name: "Kummerkasten" })
+    ).toHaveCount(1);
   } finally {
     await learner.context.close();
     await teacher.context.close();

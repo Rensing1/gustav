@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { login } from "./support/auth";
@@ -13,9 +14,7 @@ test.use({ actionTimeout: 15_000 });
 
 async function pictures(page: Page, info: TestInfo, name: string) {
   for (const theme of ["light", "dark"]) {
-    const desiredToggle = theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren";
-    const toggle = page.getByRole("button", { name: desiredToggle, exact: true });
-    if (await toggle.count()) await toggle.click();
+    await setAppTheme(page, theme);
     for (const width of [1440, 1024, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(() => window.scrollTo(0, 0));
@@ -49,7 +48,7 @@ async function pictures(page: Page, info: TestInfo, name: string) {
           expect(box.width).toBeGreaterThanOrEqual(44);
         }
         for (const surface of await page.locator(".h5p-feedback-inner, .h5p-joubelui-score-bar").all()) {
-          if (await surface.isVisible()) await expect(surface).toHaveCSS("background-color", theme === "dark" ? "rgb(26, 26, 26)" : "rgb(255, 255, 255)");
+          if (await surface.isVisible()) await expect(surface).toHaveCSS("background-color", theme === "dark" ? "rgb(32, 35, 41)" : "rgb(255, 255, 255)");
         }
         await expectDesignContrast(page.locator(".h5p-alternative-container, .h5p-joubelui-button, .h5p-question-feedback, .feedback-text, .h5p-feedback-inner, .h5p-feedback-inner p, .h5p-feedback-text"));
       }
@@ -85,8 +84,7 @@ test("@feature-acceptance German H5P editor preserves author text and multiple c
     await expect(editor.getByText(/Keep this author text/)).toBeVisible();
     await pictures(teacher, info, "editor");
     for (const theme of ["light", "dark"]) {
-      const toggle = teacher.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-      if (await toggle.count()) await toggle.click();
+      await setAppTheme(teacher, theme);
       await editor.locator(".h5p-li .remove").first().click();
       const cancel = editor.locator("button.h5p-core-cancel-button");
       await expect(cancel).toBeVisible();
@@ -112,7 +110,7 @@ test("@feature-acceptance German H5P editor preserves author text and multiple c
       await cancel.click();
       await expect(editor.locator(".h5p-li")).toHaveCount(2);
     }
-    await teacher.getByRole("button", { name: "H5P speichern", exact: true }).click();
+    await teacher.getByRole("button", { name: "H5P-Inhalt speichern", exact: true }).click();
     await expect(teacher.getByText("H5P-Inhalt gespeichert.").filter({ visible: true })).toBeVisible();
     await teacher.reload();
     if (!await teacher.locator('[data-role="h5p-status"]').count()) await teacher.getByRole("button", { name: /H5P-Aufgabe/ }).click();

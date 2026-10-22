@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { newBrowserContext } from "./support/browser-context";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -42,8 +43,7 @@ function practiceH5pPackage(): Buffer {
 
 async function pictures(page: Page, info: TestInfo, state: string) {
   for (const theme of ["light", "dark"]) {
-    const toggle = page.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-    if (await toggle.count()) await toggle.click();
+    await setAppTheme(page, theme);
     for (const width of [1440, 1024, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(() => window.scrollTo(0, 0));
@@ -121,7 +121,7 @@ test("@feature-acceptance teacher authors and learner completes native repetitio
     await teacher.page.reload();
     await teacher.page.getByRole("button", { name: /H5P-Aufgabe/ }).click();
     await expect(teacher.page.locator('[data-role="h5p-status"]')).toHaveText(/Editor geladen/, { timeout: 30_000 });
-    await teacher.page.getByRole("button", { name: "H5P speichern", exact: true }).click();
+    await teacher.page.getByRole("button", { name: "H5P-Inhalt speichern", exact: true }).click();
     await expect(teacher.page.getByText("H5P-Inhalt gespeichert.").filter({ visible: true })).toBeVisible();
 
     const accessPath = `${webBase}/api/learning/courses/${seeded.courseId}/h5p/contents/${contentId}/access`;
@@ -132,7 +132,7 @@ test("@feature-acceptance teacher authors and learner completes native repetitio
     await learner.page.goto(
       `/learning/practice?course_id=${seeded.courseId}&practice_module_id=${seeded.practiceModuleId}`
     );
-    await expect(learner.page.getByRole("heading", { name: "Üben" })).toBeVisible();
+    await expect(learner.page.getByRole("navigation", { name: "Kontextnavigation" })).toBeVisible();
     await learner.page.getByRole("button", { name: /Aufgabe.*starten/ }).click();
 
     let sawNative = false;

@@ -60,8 +60,8 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
       await releaseProviderWorker();
     }
 
-    const finalButton = learner.page.getByRole("button", { name: "Endgültig abgeben" });
-    const responseGroup = learner.page.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    const finalButton = learner.page.getByRole("button", { name: "Abgeben", exact: true });
+    const responseGroup = learner.page.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" });
     await expect(editor).toContainText(reviewedText);
     await expect(responseGroup.getByText("Rückmeldung", { exact: true })).toBeVisible();
     await expect(responseGroup.getByText("Rückmeldung", { exact: true })).toBeInViewport();
@@ -75,19 +75,10 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     expect(responseBox).not.toBeNull();
     expect(editorBox!.y).toBeLessThan(responseBox!.y);
 
-    const reviseButton = responseGroup.getByRole("button", { name: "Überarbeiten" });
-    await reviseButton.click();
+    // The current immersive editor stays directly editable beside its feedback.
+    await editor.click();
     await expect(editor).toBeFocused();
-    const answerFormat = learner.page.getByRole("group", { name: "Antwortform" });
-    await expect(answerFormat).toBeInViewport();
-    await expect(editor).toBeInViewport();
-    const readyStatusBox = await learner.page
-      .locator(".learning-task-feedback-status--active")
-      .boundingBox();
-    const answerFormatBox = await answerFormat.boundingBox();
-    expect(readyStatusBox).not.toBeNull();
-    expect(answerFormatBox).not.toBeNull();
-    expect(answerFormatBox!.y).toBeGreaterThanOrEqual(readyStatusBox!.y + readyStatusBox!.height);
+    await expect(learner.page.getByRole("group", { name: "Antwortform" })).toBeVisible();
 
     const localDraft = "Diese lokale Weiterarbeit besitzt noch keine neue Rückmeldung.";
     await editor.fill(localDraft);
@@ -181,7 +172,7 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     await expect(learner.page).toHaveURL(
       new RegExp(`\\?module=${seeded.graphModuleId}$`)
     );
-    const editAgainButton = learner.page.getByRole("button", { name: "Erneut bearbeiten" });
+    const editAgainButton = learner.page.getByRole("button", { name: "Erneut bearbeiten", exact: true });
     await expect(editAgainButton).toBeVisible();
     await editAgainButton.click();
     await expect(editor).toContainText(newerLocalDraft);
@@ -250,7 +241,7 @@ async function verifyPersistenceEquivalentTextDraft(browser: Browser): Promise<v
       await releaseProviderWorker();
     }
 
-    const finalButton = learner.page.getByRole("button", { name: "Endgültig abgeben" });
+    const finalButton = learner.page.getByRole("button", { name: "Abgeben", exact: true });
     await expect(finalButton).toBeEnabled();
     await finalButton.click();
     await expect(learner.page.getByRole("dialog", { name: "Überarbeitung noch nicht geprüft" })).toBeHidden();
@@ -296,7 +287,7 @@ test("@feature-detail finalizes the reviewed uploaded file", async ({ browser })
       `/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}&task=${seeded.taskId}&panel=result`
     );
 
-    const finalButton = learner.page.getByRole("button", { name: "Endgültig abgeben" });
+    const finalButton = learner.page.getByRole("button", { name: "Abgeben", exact: true });
     await expect(learner.page.getByText("Datei", { exact: true })).toBeVisible();
     await expect(learner.page.getByRole("region", { name: "Bisherige Datei" })).toContainText("Aktuelle Datei");
     await expect(finalButton).toBeEnabled();

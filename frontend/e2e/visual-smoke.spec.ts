@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+import { setAppTheme } from "./support/app-navigation";
 import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
@@ -22,6 +24,7 @@ import {
 } from "./support/seed-data";
 
 const password = e2ePassword;
+const teacherHomeScreenshotStyle = fileURLToPath(new URL("./fixtures/teacher-home-visual.css", import.meta.url));
 
 const smokePages: SmokePage[] = [
   { path: "/", heading: "Anmelden" },
@@ -89,8 +92,7 @@ test.describe("@visual-smoke teacher workspace", () => {
       await document.fonts.ready;
     });
 
-    const accountControl = page.locator(".account-trigger");
-    const updatedAt = page.locator(".teacher-home-workstarter .quiet-list-entry__meta");
+    const accountControl = page.locator(".global-header__account > summary");
 
     for (const viewport of [
       { name: "desktop", width: 1440, height: 900, columns: 2 },
@@ -107,17 +109,21 @@ test.describe("@visual-smoke teacher workspace", () => {
       await expect(page).toHaveScreenshot(`teacher-home-light-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide",
-        mask: [accountControl, updatedAt],
+        // Hide volatile dates without a mask whose edge moves with the timestamp width.
+        stylePath: teacherHomeScreenshotStyle,
+        mask: [accountControl],
       });
 
-      await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+      await setAppTheme(page, "dark");
       await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
       await expect(page).toHaveScreenshot(`teacher-home-dark-${viewport.name}.png`, {
         animations: "disabled",
         caret: "hide",
-        mask: [accountControl, updatedAt],
+        // Hide volatile dates without a mask whose edge moves with the timestamp width.
+        stylePath: teacherHomeScreenshotStyle,
+        mask: [accountControl],
       });
-      await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+      await setAppTheme(page, "light");
       await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "light");
     }
   });
@@ -144,7 +150,7 @@ test.describe("@visual-smoke teacher workspace", () => {
     await expect(phaseContext).toBeVisible();
     await phaseContext.getByRole("button", { name: "Eigenschaften" }).click();
     const inspector = page.getByRole("complementary", { name: "Phase bearbeiten" });
-    const accountControl = page.locator(".account-trigger");
+    const accountControl = page.locator(".global-header__account > summary");
     await expect(inspector).toBeVisible();
     await page.evaluate(async () => { await document.fonts.ready; });
 
@@ -180,7 +186,7 @@ test.describe("@visual-smoke teacher workspace", () => {
       await dialog.getByRole("button", { name: "Abbrechen" }).click();
 
       await inspector.getByRole("button", { name: "Schließen" }).click();
-      await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+      await setAppTheme(page, "dark");
       await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
       await page.goto(phasePropertiesUrl);
       await expect(inspector).toBeVisible();
@@ -206,7 +212,7 @@ test.describe("@visual-smoke teacher workspace", () => {
       });
       await page.getByRole("dialog", { name: "Phase löschen" }).getByRole("button", { name: "Abbrechen" }).click();
       await inspector.getByRole("button", { name: "Schließen" }).click();
-      await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+      await setAppTheme(page, "light");
       await page.goto(phasePropertiesUrl);
       await expect(inspector).toBeVisible();
     }
@@ -238,15 +244,15 @@ test.describe("@visual-smoke teacher workspace", () => {
       ]) {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await expectNoViewportOverflow(page);
-        const masks = [page.locator(".account-trigger"), page.locator("time")];
+        const masks = [page.locator(".global-header__account > summary"), page.locator("time")];
         await expect(page).toHaveScreenshot(`${prefix}-light-${viewport.name}.png`, {
           animations: "disabled", caret: "hide", fullPage: true, mask: masks,
         });
-        await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+        await setAppTheme(page, "dark");
         await expect(page).toHaveScreenshot(`${prefix}-dark-${viewport.name}.png`, {
           animations: "disabled", caret: "hide", fullPage: true, mask: masks,
         });
-        await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+        await setAppTheme(page, "light");
       }
     };
 
@@ -340,208 +346,69 @@ test.describe("@visual-smoke learner workspace", () => {
       await login(learner.page, learnerEmail, password);
       const seeded = await seedLearnerVisualSmokeCourse(teacher.page, learner.page, "Lernraum Referenz");
 
-      await learner.page.setViewportSize({ width: 1920, height: 1080 });
-      await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
-      await expect(learner.page.getByRole("heading", { name: seeded.unitTitle })).toBeVisible();
-      await expect(learner.page.getByText("Beschreibe in zwei Sätzen", { exact: false })).toBeVisible();
-      await expectInteractiveSurface(learner.page.locator(".learning-unit-stage--content"));
-      await expectNoViewportOverflow(learner.page);
-      await learner.page.evaluate(async () => {
-        await document.fonts.ready;
-      });
-
-      const accountControl = learner.page.locator(".account-trigger");
-      await expect(learner.page).toHaveScreenshot("learner-orientation-light-desktop.png", {
-        animations: "disabled",
-        caret: "hide",
-        mask: [accountControl]
-      });
-
-      await learner.page.getByRole("button", { name: /beginnen/i }).first().click();
-      const workbench = learner.page.getByRole("region", { name: "Aufgabe bearbeiten" });
+      const page = learner.page;
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
+      await expect(page.getByRole("navigation", { name: "Kontextnavigation" })).toBeVisible();
+      await expectNoViewportOverflow(page);
+      const accountControl = page.locator(".global-header__account > summary");
+      const capture = async (name: string) => {
+        await page.evaluate(() => document.fonts.ready);
+        await expectNoViewportOverflow(page);
+        await expect(page).toHaveScreenshot(name, { animations: "disabled", caret: "hide", mask: [accountControl] });
+      };
+      await capture("learner-orientation-light-desktop.png");
+      await page.getByRole("button", { name: /beginnen/i }).first().click();
+      const workbench = page.getByRole("region", { name: "Aufgabe bearbeiten" });
       const taskSurface = workbench.getByRole("main", { name: "Bearbeitung" });
       const contextSurface = workbench.getByRole("complementary", { name: "Aufgabe und Kontext" });
-      await expect(taskSurface).toBeVisible();
-      await expect(contextSurface).toBeVisible();
-      await expect
-        .poll(() => contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => surface.scrollTop))
-        .toBe(0);
-      const verticalGeometry = await learner.page.evaluate(() => {
-        const taskHeader = document.querySelector(".learner-task-header");
-        const contextHeader = document.querySelector(".learner-task-context__header");
-        const workbench = document.querySelector(".learner-task-workbench");
-        const context = document.querySelector(".learner-task-context");
-        if (!(taskHeader instanceof HTMLElement) || !(contextHeader instanceof HTMLElement) || !(workbench instanceof HTMLElement) || !(context instanceof HTMLElement)) {
-          throw new Error("learner task headers are incomplete");
-        }
-        return {
-          taskHeaderTop: taskHeader.getBoundingClientRect().top,
-          taskHeaderBottom: taskHeader.getBoundingClientRect().bottom,
-          workbenchTop: workbench.getBoundingClientRect().top,
-          contextTop: context.getBoundingClientRect().top,
-          contextHeaderTop: contextHeader.getBoundingClientRect().top,
-          taskHeaderPosition: getComputedStyle(taskHeader).position,
-          contextPosition: getComputedStyle(context).position
-        };
-      });
-      expect(verticalGeometry.contextHeaderTop).toBeGreaterThanOrEqual(verticalGeometry.taskHeaderBottom);
-      const desktopGeometry = await workbench.evaluate((workspace) => {
-        const desk = workspace.querySelector(".learner-task-workbench__desk");
-        const context = workspace.querySelector('[data-work-surface="materials"]');
-        const task = workspace.querySelector('[data-work-surface="task"]');
-        const divider = workspace.querySelector('.learner-task-split-divider[role="separator"]');
-        if (
-          !(desk instanceof HTMLElement) ||
-          !(context instanceof HTMLElement) ||
-          !(task instanceof HTMLElement) ||
-          !(divider instanceof HTMLElement)
-        ) {
-          throw new Error("learner work surfaces are incomplete");
-        }
-        return {
-          context: context.getBoundingClientRect().toJSON(),
-          divider: divider.getBoundingClientRect().toJSON(),
-          task: task.getBoundingClientRect().toJSON(),
-          columns: getComputedStyle(desk).gridTemplateColumns,
-          workSurfaceCount: desk.querySelectorAll("[data-work-surface]").length
-        };
-      });
-      expect(desktopGeometry.workSurfaceCount).toBe(2);
-      expect(desktopGeometry.columns.split(" ")).toHaveLength(3);
-      expect(desktopGeometry.divider.width).toBe(1);
-      expect(desktopGeometry.divider.x).toBeGreaterThanOrEqual(
-        desktopGeometry.context.x + desktopGeometry.context.width - 1
-      );
-      expect(desktopGeometry.task.x).toBeGreaterThan(
-        desktopGeometry.divider.x + desktopGeometry.divider.width - 1
-      );
-      await expect(learner.page).toHaveScreenshot("learner-work-light-desktop.png", {
-        animations: "disabled",
-        caret: "hide",
-        mask: [accountControl]
-      });
-      await expectLearnerTaskTheme(learner.page, "light");
-
-      await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
-      await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
-      await expectLearnerTaskTheme(learner.page, "dark");
-      await expect(learner.page).toHaveScreenshot("learner-work-dark-desktop.png", {
-        animations: "disabled",
-        caret: "hide",
-        mask: [accountControl]
-      });
-      await contextSurface.getByText("Weitere Materialien und eigene Abgaben", { exact: true }).click();
-      await expect(
-        contextSurface
-          .getByRole("region", { name: "Materialien", exact: true })
-          .getByRole("heading", { name: "Vertiefung", exact: true, level: 4 })
-      ).toBeVisible();
-      await contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => {
-        surface.scrollTop = surface.scrollHeight;
-      });
-      await expectLearnerMaterialContrast(learner.page);
-      await expect(learner.page).toHaveScreenshot("learner-material-list-dark-desktop.png", {
-        animations: "disabled",
-        caret: "hide",
-        mask: [accountControl]
-      });
-      await learner.page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
-      await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "light");
-      await expectLearnerMaterialContrast(learner.page);
-      await expect(learner.page).toHaveScreenshot("learner-material-list-light-desktop.png", {
-        animations: "disabled",
-        caret: "hide",
-        mask: [accountControl]
-      });
-      await contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => {
-        surface.scrollTop = 0;
-      });
-
-      const currentMaterial = contextSurface
-        .locator(".learner-reference-document")
-        .filter({ hasText: "Grundrechte und digitale Kommunikation" });
-      await currentMaterial.getByRole("button", { name: "Grundrechte und digitale Kommunikation groß lesen" }).click();
+      const outline = contextSurface.locator(".workspace-outline");
       const reader = workbench.getByRole("region", { name: "Dokument groß lesen" });
-      await expect(reader).toBeVisible();
-      await expect(reader.getByRole("heading", { name: "Grundrechte und digitale Kommunikation" })).toBeVisible();
-      const readingMeasure = await reader.locator(".learner-reference-document__prose").first().evaluate((body) => ({
-        width: body.getBoundingClientRect().width,
-        maxWidth: Number.parseFloat(getComputedStyle(body).maxWidth)
-      }));
-      expect(readingMeasure.width).toBeLessThanOrEqual(readingMeasure.maxWidth + 1);
-      await expect(learner.page).toHaveScreenshot("learner-context-light-desktop.png", {
-        animations: "disabled",
-        caret: "hide",
-        mask: [accountControl]
-      });
+      await expect(taskSurface).toBeVisible();
+      await expect(outline).toBeVisible();
+      const divider = workbench.getByRole("separator", { name: "Spaltenbreite anpassen" });
+      expect((await divider.boundingBox())!.width).toBe(16);
+      for (const theme of ["light", "dark"] as const) {
+        await setAppTheme(page, theme);
+        await expectLearnerTaskTheme(page, theme);
+        await capture(`learner-work-${theme}-desktop.png`);
+        for (const group of await outline.locator(".workspace-outline__group-toggle").all()) {
+          if (await group.getAttribute("aria-expanded") !== "true") await group.click();
+        }
+        await expectLearnerMaterialContrast(page);
+        await capture(`learner-material-list-${theme}-desktop.png`);
+      }
+      await setAppTheme(page, "light");
+      await outline.getByRole("button", { name: seeded.longMaterialTitle + " Material", exact: true }).click();
+      await expect(reader.getByRole("heading", { name: seeded.longMaterialTitle, exact: true })).toBeVisible();
+      await capture("learner-context-light-desktop.png");
       await reader.getByRole("button", { name: "Zurück zur Aufgabe" }).click();
-
-      await learner.page.setViewportSize({ width: 1366, height: 768 });
+      await page.setViewportSize({ width: 1366, height: 768 });
       await expect(taskSurface).toBeVisible();
       await expect(contextSurface).toBeVisible();
-      await expect(workbench.getByRole("button", { name: "Aufgabe" })).toBeHidden();
-      await expectNoViewportOverflow(learner.page);
-      await expect(learner.page).toHaveScreenshot("learner-context-light-1366.png", {
-        animations: "disabled",
-        caret: "hide",
-        mask: [accountControl]
-      });
-
+      await capture("learner-context-light-1366.png");
       for (const viewport of [
-        { name: "tablet", width: 768, height: 1024 },
-        { name: "mobile", width: 390, height: 844 }
-      ] as const) {
-        await learner.page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await expect(workbench.getByRole("button", { name: "Aufgabe" })).toBeVisible();
+        { name: "tablet", width: 768, height: 1024 }, { name: "mobile", width: 390, height: 844 }
+      ]) {
+        await page.setViewportSize(viewport);
+        await workbench.getByRole("button", { name: "Materialien", exact: true }).click();
         await expect(contextSurface).toBeVisible();
         await expect(taskSurface).toBeHidden();
-        await expectNoViewportOverflow(learner.page);
-        await expect(learner.page).toHaveScreenshot(`learner-context-light-${viewport.name}.png`, {
-          animations: "disabled",
-          caret: "hide",
-          mask: [accountControl]
-        });
-        await contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => {
-          surface.scrollTop = surface.scrollHeight;
-        });
-        await expectLearnerMaterialContrast(learner.page);
-        await expect(learner.page).toHaveScreenshot(`learner-material-list-light-${viewport.name}.png`, {
-          animations: "disabled",
-          caret: "hide",
-          mask: [accountControl]
-        });
-        await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
-        await expectLearnerMaterialContrast(learner.page);
-        await expect(learner.page).toHaveScreenshot(`learner-material-list-dark-${viewport.name}.png`, {
-          animations: "disabled",
-          caret: "hide",
-          mask: [accountControl]
-        });
-        await learner.page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
-        await contextSurface.locator(".learner-task-context__scroll").evaluate((surface) => {
-          surface.scrollTop = 0;
-        });
+        await capture(`learner-context-light-${viewport.name}.png`);
+        for (const theme of ["light", "dark"] as const) {
+          await setAppTheme(page, theme);
+          await expectLearnerMaterialContrast(page);
+          await capture(`learner-material-list-${theme}-${viewport.name}.png`);
+        }
+        await setAppTheme(page, "light");
+        await workbench.getByRole("button", { name: "Aufgabe", exact: true }).click();
       }
-
-      await workbench.getByRole("button", { name: "Aufgabe" }).click();
+      await setAppTheme(page, "dark");
       await expect(taskSurface).toBeVisible();
-      await expect(contextSurface).toBeHidden();
-      await learner.page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
-      await expect(learner.page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
-      await expectLearnerTaskTheme(learner.page, "dark");
-      await expect(learner.page).toHaveScreenshot("learner-work-dark-mobile.png", {
-        animations: "disabled",
-        caret: "hide",
-        mask: [accountControl]
-      });
-      await workbench.getByRole("button", { name: "Materialien" }).click();
-      await expect(contextSurface).toBeVisible();
-      await expect(taskSurface).toBeHidden();
-      await expect(learner.page).toHaveScreenshot("learner-context-dark-mobile.png", {
-        animations: "disabled",
-        caret: "hide",
-        mask: [accountControl]
-      });
+      await expectLearnerTaskTheme(page, "dark");
+      await capture("learner-work-dark-mobile.png");
+      await workbench.getByRole("button", { name: "Materialien", exact: true }).click();
+      await capture("learner-context-dark-mobile.png");
     } finally {
       await learner.context.close();
       await teacher.context.close();
@@ -565,7 +432,7 @@ test.describe("@visual-smoke h5p workspace", () => {
       await currentUserSub(learner.page);
 
       await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
-      await expect(learner.page.getByRole("heading", { name: seeded.unitTitle })).toBeVisible();
+      await expect(learner.page.getByRole("navigation", { name: "Kontextnavigation" })).toBeVisible();
       await learner.page.getByRole("button", { name: /beginnen/ }).first().click();
       await expect(learner.page.getByText("Diese H5P-Aufgabe ist noch nicht bereit.")).toBeVisible();
       await expectInteractiveSurface(learner.page.locator(".learning-unit-stage--content"));

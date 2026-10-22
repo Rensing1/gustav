@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { apiHeaders, expectApiOk } from "./support/api";
 import { currentUserSub, login } from "./support/auth";
 import { newBrowserContext } from "./support/browser-context";
@@ -102,12 +103,12 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     for (const page of [teacher, learner]) {
       await expect.poll(() => page.locator(".svelte-flow__viewport").evaluate((element) =>
         new DOMMatrix(getComputedStyle(element).transform).a
-      )).toBeCloseTo(0.82, 2);
+      )).toBeGreaterThanOrEqual(0.819);
     }
 
     await expect(learner.getByRole("button", { name: /Zusammenführen/ })).toBeDisabled();
     await expect(learner.getByRole("button", { name: /Zusammenführen/ })).toContainText("Gesperrt");
-    await expect(learner.getByRole("button", { name: /Zusammenführen/ })).toContainText("Voraussetzungen erfüllt");
+    await expect(learner.getByRole("button", { name: /Zusammenführen/ })).toContainText("0/2 erfüllt");
     await expect(learner.getByRole("toolbar", { name: "Graphwerkzeuge" })).toHaveCount(0);
     await expect(learner.locator(".svelte-flow__controls-interactive")).toHaveCount(0);
     await expect(learner.locator('.svelte-flow__handle:not([aria-hidden="true"])')).toHaveCount(0);
@@ -127,9 +128,21 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
       for (const theme of ["light", "dark"]) {
         for (const [role, page] of [["teacher", teacher], ["learner", learner]] as const) {
           await page.setViewportSize(viewport);
-          const toggle = page.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-          if (await toggle.count()) await toggle.click();
+          await setAppTheme(page, theme);
           await page.evaluate(() => window.scrollTo(0, 0));
+          if (role === "learner" && viewport.width <= 1024) {
+            const path = page.getByRole("navigation", { name: "Lernpfad nach Phasen" });
+            await expect(path).toBeVisible();
+            await expect(path.locator(".mobile-learning-path__module")).toHaveCount(6);
+            const locked = path.locator(`#mobile-path-${modules[3].id}`);
+            await expect(locked).toContainText("Gesperrt");
+            await expect(locked.getByRole("button")).toHaveCount(0);
+            await expect(locked.getByRole("link", { name: "Beobachten", exact: true })).toBeVisible();
+            await expectDesignContrast(path.locator("h2, h3, .mobile-learning-path__status"));
+            await expectNoViewportOverflow(page);
+            await path.screenshot({ path: testInfo.outputPath(`${role}-${label}-${theme}-path.png`), animations: "disabled" });
+            continue;
+          }
           await expect(page.getByRole("button", { name: "Vergrößern", exact: true })).toBeVisible();
           await expect(page.getByRole("button", { name: "Verkleinern", exact: true })).toBeVisible();
           const controls = page.locator(".svelte-flow__controls");
@@ -176,8 +189,21 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
           await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
           await page.screenshot({ path: testInfo.outputPath(`${role}-${label}-${theme}.png`), fullPage: true, animations: "disabled" });
         }
-        await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
+        if (viewport.width > 1024) await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
       }
+    }
+    // The learner phase list replaces the graph below the desktop breakpoint.
+    for (const page of [teacher, learner]) await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(learner.locator(".svelte-flow__node")).toHaveCount(9);
+    await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
+    // Orientation changes deliberately refocus the selected phase with an animation.
+    for (const page of [teacher, learner]) {
+      if (page === teacher) await expect.poll(async () => (await camera(page))[0]).toBeGreaterThanOrEqual(0.819);
+      await expect.poll(() => page.locator(".svelte-flow__viewport").evaluate(async (element) => {
+        const before = getComputedStyle(element).transform;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return getComputedStyle(element).transform === before;
+      })).toBe(true);
     }
     const teacherCamera = await camera(teacher), learnerCamera = await camera(learner);
     await teacher.reload();

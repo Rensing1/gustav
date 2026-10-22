@@ -47,7 +47,7 @@ test("@feature-acceptance keeps text drafts separated by task", async ({ browser
     await learner.page.setViewportSize({ width: 1024, height: 768 });
     await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
     await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
-    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+    await learner.page.locator(`#task-row-${seeded.taskId}`).getByRole("button", { name: /beginnen|Entwurf weiterbearbeiten/ }).click();
 
     const editor = learner.page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
     const performanceDraft = "Eine flüssige Eingabe auf dem iPad bleibt vollständig erhalten. ".repeat(4).trim();
@@ -56,6 +56,13 @@ test("@feature-acceptance keeps text drafts separated by task", async ({ browser
       if (metrics) {
         metrics.draftWrites = 0;
         metrics.longTasks = [];
+        // Install after app/polyfill initialization so the active Storage method is measured.
+        const prototype = Object.getPrototypeOf(window.sessionStorage);
+        const setItem = prototype.setItem;
+        prototype.setItem = function(key: string, value: string) {
+          if (key.startsWith("gustav.learning.submission-draft:")) metrics.draftWrites += 1;
+          return setItem.call(this, key, value);
+        };
       }
     });
     const typingStartedAt = Date.now();
@@ -71,18 +78,18 @@ test("@feature-acceptance keeps text drafts separated by task", async ({ browser
     await expect.poll(() => learner.page.evaluate(
       () => (window as Window & { __gustavDraftMetrics?: DraftMetrics }).__gustavDraftMetrics?.draftWrites ?? 0
     )).toBeGreaterThan(0);
-    await learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" }).click();
+    await learner.page.locator(".context-header__back").click();
 
-    await learner.page.getByRole("button", { name: "Aufgabe 2 beginnen" }).click();
+    await learner.page.locator(`#task-row-${seeded.secondTaskId}`).getByRole("button", { name: /beginnen|Entwurf weiterbearbeiten/ }).click();
     await expect(editor).toHaveText("");
     await editor.fill("Entwurf für Aufgabe 2");
-    await learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" }).click();
+    await learner.page.locator(".context-header__back").click();
 
-    await learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+    await learner.page.locator(`#task-row-${seeded.taskId}`).getByRole("button", { name: /beginnen|Entwurf weiterbearbeiten/ }).click();
     await expect(editor).toContainText(performanceDraft);
-    await learner.page.getByRole("button", { name: "← Zurück zu Modul Grundlagen" }).click();
+    await learner.page.locator(".context-header__back").click();
 
-    await learner.page.getByRole("button", { name: "Aufgabe 2 beginnen" }).click();
+    await learner.page.locator(`#task-row-${seeded.secondTaskId}`).getByRole("button", { name: /beginnen|Entwurf weiterbearbeiten/ }).click();
     await expect(editor).toContainText("Entwurf für Aufgabe 2");
     await learner.page.reload();
     await expect(editor).toContainText("Entwurf für Aufgabe 2");

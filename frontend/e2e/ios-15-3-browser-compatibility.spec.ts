@@ -1,3 +1,4 @@
+import { openAppDestination } from "./support/app-navigation";
 import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
@@ -90,7 +91,7 @@ for (const profile of ["camera", "combined", "modern"] as const) {
       });
       expect(edgeResponse.ok()).toBe(true);
 
-      await learner.page.setViewportSize({ width: 1024, height: 768 });
+      await learner.page.setViewportSize({ width: 1280, height: 900 });
       const errors = trackErrors(learner.page);
       await learner.page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
       await expect(learner.page.locator(".workspace-page")).toBeVisible();
@@ -125,7 +126,7 @@ for (const profile of ["camera", "combined", "modern"] as const) {
       await expectCompatibleStylesheets(learner.page);
       const layout = await learner.page.evaluate(() => ({
         shellDisplay: getComputedStyle(document.querySelector(".app-shell")!).display,
-        topbarPosition: getComputedStyle(document.querySelector(".app-topbar")!).position,
+        topbarPosition: getComputedStyle(document.querySelector(".global-header")!).position,
         workspaceDisplay: getComputedStyle(document.querySelector(".workspace-page")!).display,
         graphMinHeightRem:
           parseFloat(getComputedStyle(document.querySelector(".graph-stage-frame .teacher-flow-shell")!).minHeight) /
@@ -150,13 +151,18 @@ for (const profile of ["camera", "combined", "modern"] as const) {
       await learner.page.getByRole("button", { name: "Gesamtansicht", exact: true }).click();
       await expect(module).toBeInViewport();
       await learner.page.setViewportSize({ width: 768, height: 1024 });
-      await learner.page.getByRole("button", { name: "Gesamtansicht", exact: true }).click();
+      await expect(learner.page.getByRole("navigation", { name: "Lernpfad nach Phasen" })).toBeVisible();
       await expect(module).toBeInViewport();
       await module.click();
       await expect(learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" })).toBeVisible();
       // Exercise client navigation back to the graph as well as direct entry.
-      await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
-      await expect(learner.page.getByRole("button", { name: "Gesamtansicht", exact: true })).toBeVisible();
+      await learner.page.locator(".context-header__back").click();
+      await expect(learner.page.getByRole("navigation", { name: "Lernpfad nach Phasen" })).toBeVisible();
+      await learner.page.setViewportSize({ width: 1024, height: 768 });
+      const mobilePath = learner.page.getByRole("navigation", { name: "Lernpfad nach Phasen" });
+      await expect(mobilePath).toBeVisible();
+      await expect(mobilePath.getByRole("button", { name: /Modul öffnen.*Grundlagen/ })).toBeVisible();
+      await expect(mobilePath.getByRole("link", { name: "Quellen", exact: true })).toBeVisible();
       expect(errors).toEqual([]);
     } finally {
       await learner.context.close();
@@ -202,7 +208,7 @@ for (const profile of ["combined", "modern"] as const) {
         await expect(learner.page.locator(".learning-task-feedback-status:visible").getByText("Rückmeldung wird erstellt ...", { exact: true })).toBeVisible();
         await completeQueuedFeedbackDeterministically({ courseId: seeded.courseId, taskId: seeded.taskId, learnerSub });
       } finally { await releaseProviderWorker(); }
-      const final = learner.page.getByRole("button", { name: "Endgültig abgeben", exact: true });
+      const final = learner.page.getByRole("button", { name: "Abgeben", exact: true });
       await expect(final).toBeEnabled();
       await editor.fill("Diese weitere Überarbeitung ist noch nicht geprüft.");
       await final.click();
@@ -298,7 +304,7 @@ for (const profile of ["combined", "modern"] as const) {
       });
       await materialForm.getByRole("button", { name: "Material hinzufügen", exact: true }).click();
       await expect(teacher.page.getByText("Material angelegt.", { exact: true })).toBeVisible();
-      await teacher.page.getByRole("link", { name: "Live", exact: true }).click();
+      await openAppDestination(teacher.page, "Live");
       await teacher.page.getByRole("combobox", { name: "Kurs", exact: true }).selectOption(seeded.courseId);
       await teacher.page.getByRole("combobox", { name: "Lerneinheit", exact: true }).selectOption(seeded.unitId);
       const matrix = teacher.page.getByRole("region", { name: "Lernaufgaben nach Schülern" });

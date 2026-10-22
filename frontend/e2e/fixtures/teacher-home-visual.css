@@ -1,0 +1,2 @@
+/* Screenshot-only: hide volatile timestamps without variable-width masks. */
+.teacher-home-workstarter .quiet-list-entry__meta { visibility: hidden !important; }

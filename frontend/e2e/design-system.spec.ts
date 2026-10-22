@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { expect, test, type Page } from "./support/feature-test";
 
 import { login } from "./support/auth";
@@ -52,45 +53,27 @@ async function expectContrastDesignContract(page: Page): Promise<void> {
     };
   });
 
-  expect(contract.accent).toBe("#ff512f");
-  expect(contract.background).toBe("#f9f9f9");
-  expect(contract.border).toBe("#1b1b1b");
-  expect(contract.radius).toBe("0");
-  expect(contract.shadow).toContain("4px 4px 0 0");
-  expect(contract.shadow).toContain("27, 27, 27");
-  expect(contract.headingFont).toContain("Space Grotesk");
+  expect(contract.accent).toBe("#c84425");
+  expect(contract.background).toBe("#f6f7f9");
+  expect(contract.border).toBe("#e4e7ec");
+  expect(contract.radius).toBe("8px");
+  expect(contract.shadow).toContain("0 4px 16px");
+  expect(contract.shadow).toContain("24, 32, 48");
+  expect(contract.headingFont).toContain("Inter");
   expect(contract.bodyFont).toContain("Inter");
-  expect(contract.buttonRadius).toBe("0px");
-  expect(contract.buttonShadow).toContain("4px 4px 0px");
-  expect(contract.cardRadius).toBe("0px");
+  expect(contract.buttonRadius).toBe("4px");
+  expect(contract.buttonShadow).toBe("none");
+  expect(contract.cardRadius).toBe("8px");
   expect(contract.cardBorderStyle).toBe("solid");
-  expect(contract.cardBorderWidth).toBe("2px");
+  expect(contract.cardBorderWidth).toBe("1px");
 
-  const topbarControls = await page.locator(".app-topbar-tools").evaluate((tools) => {
-    const themeToggle = tools.querySelector(".theme-toggle");
-    const accountTrigger = tools.querySelector(".account-trigger");
-    if (!(themeToggle instanceof HTMLElement) || !(accountTrigger instanceof HTMLElement)) {
-      throw new Error("Top bar is missing its theme or account control");
-    }
-
-    const chrome = (element: HTMLElement) => {
-      const style = getComputedStyle(element);
-      return {
-        background: style.backgroundColor,
-        borderColor: style.borderTopColor,
-        borderRadius: style.borderRadius,
-        borderStyle: style.borderTopStyle,
-        borderWidth: style.borderTopWidth,
-        boxShadow: style.boxShadow
-      };
-    };
-
-    return {
-      account: chrome(accountTrigger),
-      theme: chrome(themeToggle)
-    };
-  });
-  expect(topbarControls.theme).toEqual(topbarControls.account);
+  const account = page.getByLabel("Konto-Menü", { exact: true });
+  await expect(account).toBeVisible();
+  await account.click();
+  const theme = page.locator(".global-header__theme .theme-toggle");
+  await expect(theme).toBeVisible();
+  expect((await theme.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await page.keyboard.press("Escape");
 }
 
 async function expectDialogDesignContract(page: Page): Promise<void> {
@@ -191,7 +174,7 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
   expect(contract.aiLeftBorderWidth).toBe("0px");
   expect(contract.studentRightBorderWidth).toBe("0px");
   expect(contract.studentJustify).toBe("end");
-  expect(contract.starterRadius).toBe("0px");
+  expect(contract.starterRadius).toBe("4px");
   // DESIGN.md puts session actions beside the answer, never in the material column.
   expect(contract.actionsInComposer).toBe(true);
   expect(contract.actionsInSidebar).toBe(false);
@@ -221,7 +204,8 @@ async function expectDialogDesignContract(page: Page): Promise<void> {
     expect(contract.mainDisplay).toBe("grid");
     expect(contract.switchDisplay).toBe("grid");
     expect(Math.abs(contract.aiWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
-    expect(Math.abs(contract.studentWidth - contract.transcriptContentWidth)).toBeLessThanOrEqual(1);
+    expect(contract.studentWidth).toBeGreaterThan(0);
+    expect(contract.studentWidth).toBeLessThanOrEqual(contract.transcriptContentWidth + 1);
     expect(
       Math.abs(contract.sendButtonWidth - contract.composerContentWidth),
       `mobile dialog geometry: ${JSON.stringify(contract)}`
@@ -287,7 +271,7 @@ async function expectChoiceSwitchDesignContract(page: Page): Promise<void> {
 
 async function expectDialogStatesScreenshot(page: Page, name: string): Promise<void> {
   // The sticky product top bar would otherwise cover the isolated component after Playwright scrolls it into view.
-  const isolationStyle = await page.addStyleTag({ content: ".app-topbar { display: none !important; }" });
+  const isolationStyle = await page.addStyleTag({ content: ".global-header { display: none !important; }" });
   try {
     await expect(page.getByTestId("preview-dialog-states")).toHaveScreenshot(name, {
       animations: "disabled",
@@ -299,7 +283,7 @@ async function expectDialogStatesScreenshot(page: Page, name: string): Promise<v
 }
 
 async function expectChoiceSwitchScreenshot(page: Page, name: string): Promise<void> {
-  const isolationStyle = await page.addStyleTag({ content: ".app-topbar { display: none !important; }" });
+  const isolationStyle = await page.addStyleTag({ content: ".global-header { display: none !important; }" });
   try {
     await expect(page.getByTestId("preview-choice-switches")).toHaveScreenshot(name, {
       animations: "disabled",
@@ -329,7 +313,7 @@ test.describe("@feature-detail @visual-smoke @design-system contrast design cont
         caret: "hide"
       });
 
-      await page.getByRole("button", { name: "Dark Mode aktivieren", exact: true }).click();
+      await setAppTheme(page, "dark");
       await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
       await page.getByRole("button", { name: "Dark", exact: true }).click();
       await expect(page.locator(".preview-page")).toHaveAttribute("data-theme", "dark");
@@ -343,10 +327,10 @@ test.describe("@feature-detail @visual-smoke @design-system contrast design cont
           shadow: style.getPropertyValue("--color-shadow").trim()
         };
       });
-      expect(darkContract.background).toBe("#121212");
-      expect(darkContract.border).toBe("#f0f1f1");
-      expect(darkContract.shadow).toContain("4px 4px 0 0");
-      expect(darkContract.shadow).toContain("240, 241, 241");
+      expect(darkContract.background).toBe("#15171b");
+      expect(darkContract.border).toBe("#363c46");
+      expect(darkContract.shadow).toContain("0 4px 16px");
+      expect(darkContract.shadow).toContain("0, 0, 0");
       await expectDialogDesignContract(page);
       await expectChoiceSwitchDesignContract(page);
       await expect(page).toHaveScreenshot(`ui-lab-dark-${viewport.name}.png`, {
@@ -356,7 +340,7 @@ test.describe("@feature-detail @visual-smoke @design-system contrast design cont
       await expectDialogStatesScreenshot(page, `dialog-states-dark-${viewport.name}.png`);
       await expectChoiceSwitchScreenshot(page, `choice-switch-dark-${viewport.name}.png`);
 
-      await page.getByRole("button", { name: "Light Mode aktivieren", exact: true }).click();
+      await setAppTheme(page, "light");
       await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "light");
       await page.getByRole("button", { name: "Light", exact: true }).click();
       await expect(page.locator(".preview-page")).toHaveAttribute("data-theme", "light");

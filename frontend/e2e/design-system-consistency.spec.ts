@@ -1,3 +1,4 @@
+import { setAppTheme } from "./support/app-navigation";
 import { login } from "./support/auth";
 import { newBrowserContext } from "./support/browser-context";
 import { e2eEmail, e2ePassword } from "./support/e2e-env";
@@ -8,29 +9,24 @@ import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { seedLearnerNavigationCourse, seedLearnerPracticeCourse } from "./support/seed-data";
 import { contrastRatio, expectNoViewportOverflow } from "./support/layout-sanity";
 
-async function toggleTheme(page: Page, theme: "light" | "dark"): Promise<void> {
-  await page.getByRole("button", {
-    name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true
-  }).click();
-  await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", theme);
-}
+const toggleTheme = setAppTheme;
 
 async function verifyHeader(page: Page, info: TestInfo, role: string): Promise<void> {
   for (const width of [1440, 1024, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     for (const theme of ["dark", "light"] as const) {
       await toggleTheme(page, theme);
-      const themeBox = (await page.locator(".app-topbar-tools .theme-toggle").boundingBox())!;
-      const accountBox = (await page.locator(".account-trigger").boundingBox())!;
-      expect(Math.abs(themeBox.height - accountBox.height)).toBeLessThanOrEqual(1);
-      expect(Math.abs(themeBox.y - accountBox.y)).toBeLessThanOrEqual(1);
+      const themeBox = (await page.locator(".context-header__location > summary, .global-header__mobile-menu > summary").filter({ visible: true }).first().boundingBox())!;
+      const accountBox = (await page.getByLabel("Konto-Menü", { exact: true }).boundingBox())!;
+      expect(themeBox.height).toBeGreaterThanOrEqual(40);
+      expect(Math.abs(themeBox.y - accountBox.y)).toBeLessThanOrEqual(8);
       if (width <= 768) {
         for (const box of [themeBox, accountBox]) {
           expect(box.height).toBeGreaterThanOrEqual(44);
           expect(box.width).toBeGreaterThanOrEqual(44);
         }
       }
-      await page.locator(".app-topbar").screenshot({ path: info.outputPath(`header-${role}-${width}-${theme}.png`), animations: "disabled" });
+      await page.locator(".global-header").screenshot({ path: info.outputPath(`header-${role}-${width}-${theme}.png`), animations: "disabled" });
     }
   }
 }
@@ -129,8 +125,7 @@ test("@feature-acceptance catalogs practice profile and creation dialogs share a
         await learner.setViewportSize({ width, height: 900 });
         for (const route of ["/teaching/courses", "/teaching/units"]) {
           await teacher.goto(route);
-          const themeButton = teacher.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-          if (await themeButton.count()) await themeButton.click();
+          await setAppTheme(teacher, theme);
           await expect(teacher.locator(".app-shell")).toHaveAttribute("data-theme", theme);
           const search = teacher.getByRole("textbox", { name: "Suche", exact: true }).or(teacher.getByRole("searchbox", { name: "Suche", exact: true }));
           expect((await search.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -177,8 +172,7 @@ test("@feature-acceptance catalogs practice profile and creation dialogs share a
           }
         }
         await learner.goto("/learning/practice");
-        const learnerTheme = learner.getByRole("button", { name: theme === "dark" ? "Dark Mode aktivieren" : "Light Mode aktivieren", exact: true });
-        if (await learnerTheme.count()) await learnerTheme.click();
+        await setAppTheme(learner, theme);
         const stack = learner.locator(".practice-stack-card").first();
         if (!(await stack.getByRole("checkbox").isChecked())) await stack.click();
         await expect(stack.getByRole("checkbox")).toBeChecked();
@@ -190,8 +184,8 @@ test("@feature-acceptance catalogs practice profile and creation dialogs share a
           const css = getComputedStyle(node);
           return { font: css.fontFamily, radius: css.borderRadius, fg: css.color, bg: css.backgroundColor, height: node.getBoundingClientRect().height };
         });
-        expect(palette.font).toContain("monospace");
-        expect(palette.radius).toBe("0px");
+        expect(palette.font).toContain("Inter");
+        expect(palette.radius).toBe("4px");
         expect(palette.height).toBeGreaterThanOrEqual(44);
         expect(contrastRatio(palette.fg, palette.bg)).toBeGreaterThanOrEqual(4.5);
         await expectNoViewportOverflow(learner);

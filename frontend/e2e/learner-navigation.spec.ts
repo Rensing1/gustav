@@ -40,7 +40,7 @@ async function requestDeterministicFeedback({
   } finally {
     await releaseProviderWorker();
   }
-  await expect(page.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Abgeben", exact: true })).toBeEnabled();
 }
 
 test("@feature-acceptance follows graph, reading, task and deterministic feedback as one learning path", async ({ browser }) => {
@@ -67,8 +67,8 @@ test("@feature-acceptance follows graph, reading, task and deterministic feedbac
     await learner.page.getByRole("link", { name: seeded.unitTitle }).click();
     await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
     await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.graphModuleId}$`));
-    await expect(learner.page.getByRole("heading", { name: seeded.unitTitle })).toBeVisible();
-    await expect(learner.page.getByTitle(seeded.secondMaterialTitle)).toBeVisible();
+    await expect(learner.page.getByRole("navigation", { name: "Kontextnavigation" })).toBeVisible();
+    await expect(learner.page.getByRole("button", { name: seeded.secondMaterialTitle, exact: true })).toBeVisible();
 
     await learner.page.locator(`#task-row-${seeded.taskId}`).getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
     const editor = learner.page.locator(
@@ -91,18 +91,18 @@ test("@feature-acceptance follows graph, reading, task and deterministic feedbac
 
     await learner.page.goto(`/learning/courses/${seeded.courseId}`);
     await learner.page.goto(modulePath);
-    await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
+    await learner.page.locator(".context-header__back").click();
     await expect(learner.page).toHaveURL(new RegExp(`${unitPath}$`));
-    await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
+    await expect(learner.page.locator(".learning-unit-stage--graph")).toBeVisible();
 
     await learner.page.goto(`/learning/courses/${seeded.courseId}`);
     await learner.page.goto(contextTaskPath);
-    await learner.page.getByRole("button", { name: /← Zurück zu Modul Quellen/ }).click();
+    await learner.page.locator(".context-header__back").click();
     await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.contextGraphModuleId}$`));
 
     await learner.page.goto(taskPath);
     await learner.page.reload();
-    await learner.page.getByRole("button", { name: /← Zurück zu Modul Grundlagen/ }).click();
+    await learner.page.locator(".context-header__back").click();
     await expect(learner.page).toHaveURL(new RegExp(`\\?module=${seeded.graphModuleId}$`));
 
     await learner.page.locator(`#task-row-${seeded.taskId}`).getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
@@ -118,12 +118,12 @@ test("@feature-acceptance follows graph, reading, task and deterministic feedbac
       `/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}&task=${seeded.taskId}&panel=result`
     );
 
-    const response = learner.page.getByRole("region", { name: "Rückmeldung zu deiner Abgabe" });
+    const response = learner.page.getByRole("region", { name: "Rückmeldung zur gespeicherten Fassung" });
     await expect(response).toBeVisible();
     await expect(response).toContainText(
       "Die Antwort erklärt den Gedanken nachvollziehbar und kann jetzt weiterverwendet werden."
     );
-    await learner.page.getByRole("button", { name: "Endgültig abgeben" }).click();
+    await learner.page.getByRole("button", { name: "Abgeben", exact: true }).click();
     const firstCompletion = learner.page.getByRole("region", { name: "Aufgabe abgeschlossen" });
     await expect(firstCompletion.getByRole("button", { name: "Zurück zum Modul" })).toBeVisible();
     await firstCompletion.getByRole("button", { name: "Zurück zum Modul" }).click();
@@ -140,12 +140,12 @@ test("@feature-acceptance follows graph, reading, task and deterministic feedbac
       taskId: seeded.secondTaskId,
       learnerSub
     });
-    await learner.page.getByRole("button", { name: "Endgültig abgeben" }).click();
+    await learner.page.getByRole("button", { name: "Abgeben", exact: true }).click();
     const finalCompletion = learner.page.getByRole("region", { name: "Aufgabe abgeschlossen" });
     await expect(finalCompletion.getByRole("button", { name: "Zurück zum Lernpfad" })).toBeVisible();
     await finalCompletion.getByRole("button", { name: "Zurück zum Lernpfad" }).click();
     await expect(learner.page).toHaveURL(new RegExp(`${unitPath}$`));
-    await expect(learner.page.getByText("Lernpfad", { exact: true })).toBeVisible();
+    await expect(learner.page.locator(".learning-unit-stage--graph")).toBeVisible();
 
     const linear = await seedLearnerVisualSmokeCourse(
       teacher.page,
@@ -154,9 +154,9 @@ test("@feature-acceptance follows graph, reading, task and deterministic feedbac
     );
     const linearUnitPath = `/learning/courses/${linear.courseId}/units/${linear.unitId}`;
     await learner.page.goto(`${linearUnitPath}?task=${linear.taskId}`);
-    await learner.page.getByRole("button", { name: "← Zurück zu den Inhalten" }).click();
+    await learner.page.locator(".context-header__back").click();
     await expect(learner.page).toHaveURL(new RegExp(`${linearUnitPath}$`));
-    await expect(learner.page.getByRole("heading", { name: linear.unitTitle })).toBeVisible();
+    await expect(learner.page.getByRole("navigation", { name: "Kontextnavigation" })).toBeVisible();
   } finally {
     await learner.context.close();
     await teacher.context.close();

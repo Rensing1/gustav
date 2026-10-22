@@ -86,7 +86,7 @@ test("@feature-detail keeps the learner task desk split and its context reachabl
     await expect(
       learner.page.locator(".learning-work-item__title", { hasText: seeded.contextImageTitle }).first()
     ).toBeVisible();
-    await learner.page.getByRole("button", { name: "← Zum Lernpfad" }).click();
+    await learner.page.locator(".context-header__back").click();
     await learner.page.getByRole("button", { name: /Grundlagen/ }).click();
     const taskRow = learner.page.locator(".learning-task-row").first();
     await expect(taskRow.getByText("Weitere Angaben in der Aufgabe")).toBeVisible();

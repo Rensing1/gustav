@@ -34,7 +34,7 @@ async function review(page: Page, seeded: { courseId: string; taskId: string }, 
     await page.getByRole("button", { name: /^(Neue )?Rückmeldung einholen$/ }).click();
     await expect(page.locator(".learning-task-feedback-status:visible")).toContainText("Rückmeldung wird erstellt");
     await completeQueuedFeedbackDeterministically({ ...seeded, learnerSub });
-    await expect(page.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Abgeben", exact: true })).toBeEnabled();
   } finally {
     await releaseProviderWorker();
   }
@@ -49,7 +49,7 @@ test("@feature-acceptance reads the final answer and nested feedback directly in
     await page.getByRole("button", { name: /Grundlagen/ }).click();
     await page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
     await review(page, seeded, answer);
-    await page.getByRole("button", { name: "Endgültig abgeben" }).click();
+    await page.getByRole("button", { name: "Abgeben", exact: true }).click();
     await expect(page.getByRole("region", { name: "Aufgabe abgeschlossen" })).toBeVisible();
     await page.getByRole("button", { name: /Zurück zum Modul/ }).click();
     const moduleUrl = page.url();
@@ -71,7 +71,7 @@ test("@feature-acceptance reads the final answer and nested feedback directly in
     expect(clipping.height).toBeLessThanOrEqual(clipping.line * 3 + 1);
     expect(clipping.full).toBeGreaterThan(clipping.height);
 
-    const toggle = preview.getByRole("button", { name: "Ausklappen" });
+    const toggle = preview.getByRole("button", { name: "Abgabe ansehen" });
     await toggle.focus();
     await page.keyboard.press("Enter");
     await expect(preview.locator(".markdown-prose").first()).toContainText("Der Taster ist also die Eingabe");
@@ -87,15 +87,15 @@ test("@feature-acceptance reads the final answer and nested feedback directly in
     await expect(evaluation).not.toHaveAttribute("open");
     await evaluation.locator("summary").first().click();
     await expect(evaluation).toHaveAttribute("open");
-    const collapse = preview.getByRole("button", { name: "Einklappen" });
+    const collapse = preview.getByRole("button", { name: "Weniger anzeigen" });
     await collapse.focus();
     await page.keyboard.press("Enter");
-    await expect(preview.getByRole("button", { name: "Ausklappen" })).toBeFocused();
+    await expect(preview.getByRole("button", { name: "Abgabe ansehen" })).toBeFocused();
     await expect(preview.locator("details")).toHaveCount(0);
     expect(page.url()).toBe(moduleUrl);
     await page.reload();
     await page.locator(`#task-row-${seeded.taskId}`).scrollIntoViewIfNeeded();
-    await expect(preview.getByRole("button", { name: "Ausklappen" })).toBeVisible();
+    await expect(preview.getByRole("button", { name: "Abgabe ansehen" })).toBeVisible();
   } finally { await learner.close(); await teacher.close(); }
 });
 
@@ -111,7 +111,7 @@ test(`@feature-detail linear sections preserve first and last answers with ${mim
     await expect(last).toContainText(linear.previousSubmissionText);
     await page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
     await review(page, linear, "Meine eigene Einordnung am Anfang des Abschnitts.");
-    await page.locator("#learner-task-back").click();
+    await page.locator(".context-header__back").click();
     await page.locator(`#task-row-${linear.taskId}`).scrollIntoViewIfNeeded();
     const first = page.getByRole("region", { name: "Eigene Abgabe zu Aufgabe 1", exact: true });
     await expect(first).toContainText("Meine eigene Einordnung");
@@ -128,7 +128,7 @@ test(`@feature-detail linear sections preserve first and last answers with ${mim
     await page.getByRole("button", { name: "Entwurf weiterbearbeiten" }).click();
     const editor = page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
     await editor.fill("Mein lokaler Text bleibt im Editor.");
-    await page.locator("#learner-task-back").click();
+    await page.locator(".context-header__back").click();
     await expect(first).not.toContainText("Mein lokaler Text");
     await page.getByRole("button", { name: "Entwurf weiterbearbeiten" }).click();
     await expect(editor).toContainText("Mein lokaler Text bleibt im Editor.");
@@ -147,9 +147,9 @@ test(`@feature-detail linear sections preserve first and last answers with ${mim
       await page.getByRole("button", { name: /^(Neue )?Rückmeldung einholen$/ }).click();
       await expect(page.locator(".learning-task-feedback-status:visible")).toContainText("Rückmeldung wird erstellt");
       await completeQueuedFeedbackDeterministically({ courseId: linear.courseId, taskId: linear.taskId, learnerSub });
-      await expect(page.getByRole("button", { name: "Endgültig abgeben" })).toBeEnabled();
+      await expect(page.getByRole("button", { name: "Abgeben", exact: true })).toBeEnabled();
     } finally { await releaseProviderWorker(); }
-    await page.locator("#learner-task-back").click();
+    await page.locator(".context-header__back").click();
     await page.locator(`#task-row-${linear.taskId}`).scrollIntoViewIfNeeded();
     if (mime === "image/png") {
       const image = first.getByRole("img");
@@ -159,7 +159,7 @@ test(`@feature-detail linear sections preserve first and last answers with ${mim
       await expect(first).toContainText("PDF");
       await expect(first.locator("iframe")).toHaveCount(0);
     }
-    await first.getByRole("button", { name: "Ausklappen" }).click();
+    await first.getByRole("button", { name: "Abgabe ansehen" }).click();
     if (mime === "application/pdf") await expect(first.getByTitle("Abgabe zu Aufgabe 1")).toBeVisible();
     const href = await first.getByRole("link", { name: "Datei öffnen" }).getAttribute("href");
     expect(href).toContain(`/tasks/${linear.taskId}/submissions/`);
@@ -180,17 +180,17 @@ test("@feature-detail saved drafts, final priority and responsive reading preser
     await expect(page.locator(".learning-submission-preview")).toHaveCount(0);
     await page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
     await review(page, seeded, answer);
-    await page.locator("#learner-task-back").click();
+    await page.locator(".context-header__back").click();
     await page.locator(`#task-row-${seeded.taskId}`).scrollIntoViewIfNeeded();
     const preview = page.getByRole("region", { name: "Eigene Abgabe zu Aufgabe 1", exact: true });
     await expect(preview.getByText("Mein Entwurf", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Entwurf weiterbearbeiten" }).click();
-    await page.getByRole("button", { name: "Endgültig abgeben" }).click();
+    await page.getByRole("button", { name: "Abgeben", exact: true }).click();
     await expect(page.getByRole("region", { name: "Aufgabe abgeschlossen" })).toBeVisible();
     await page.getByRole("button", { name: /Zurück zum Modul/ }).click();
     await page.getByRole("button", { name: "Erneut bearbeiten", exact: true }).click();
     await review(page, seeded, "Ein neuerer gespeicherter Entwurf.");
-    await page.locator("#learner-task-back").click();
+    await page.locator(".context-header__back").click();
     await page.locator(`#task-row-${seeded.taskId}`).scrollIntoViewIfNeeded();
     await expect(preview).toContainText("Die Eingabe kommt vom Taster.");
     await expect(page.getByText("Neuerer Entwurf vorhanden", { exact: true })).toBeVisible();
@@ -209,10 +209,10 @@ test("@feature-detail saved drafts, final priority and responsive reading preser
         expect(readingSurface).not.toBe("rgba(0, 0, 0, 0)");
         if (width >= 1024) {
           const editBounds = await page.locator(`#task-row-${seeded.taskId}`).getByRole("button", { name: "Erneut bearbeiten", exact: true }).boundingBox();
-          const expandBounds = await preview.getByRole("button", { name: "Ausklappen" }).boundingBox();
+          const expandBounds = await preview.getByRole("button", { name: "Abgabe ansehen" }).boundingBox();
           expect(Math.abs(editBounds!.x + editBounds!.width - expandBounds!.x - expandBounds!.width)).toBeLessThanOrEqual(2);
         }
-        const expand = preview.getByRole("button", { name: "Ausklappen" });
+        const expand = preview.getByRole("button", { name: "Abgabe ansehen" });
         await expect(expand).toBeVisible();
         expect((await expand.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await expand.click();
@@ -225,15 +225,15 @@ test("@feature-detail saved drafts, final priority and responsive reading preser
         expect(disclosureMetrics.every((metric) => metric.height >= 44)).toBe(true);
         await page.screenshot({ path: testInfo.outputPath(`preview-${width}-${theme}.png`), fullPage: true });
         await page.locator(".learner-task-reading").first().screenshot({ path: testInfo.outputPath(`answer-${width}-${theme}.png`) });
-        await preview.getByRole("button", { name: "Einklappen" }).click();
+        await preview.getByRole("button", { name: "Weniger anzeigen" }).click();
       }
     }
     await page.getByRole("button", { name: "Entwurf weiterbearbeiten" }).click();
     await expect(page.locator('.learning-markdown-editor__surface [contenteditable="true"]')).toContainText("Ein neuerer gespeicherter Entwurf.");
-    await page.locator("#learner-task-back").click();
+    await page.locator(".context-header__back").click();
     await page.getByRole("button", { name: "Aufgabe 2 beginnen" }).click();
     await page.locator('.learning-markdown-editor__surface [contenteditable="true"]').fill("Lokaler Entwurf zur letzten Modulaufgabe.");
-    await page.locator("#learner-task-back").click();
+    await page.locator(".context-header__back").click();
     await expect(preview).toContainText("Die Eingabe kommt vom Taster.");
     await expect(page.getByRole("region", { name: "Eigene Abgabe zu Aufgabe 2", exact: true })).toHaveCount(0);
     await page.locator(`#task-row-${seeded.secondTaskId}`).getByRole("button").click();

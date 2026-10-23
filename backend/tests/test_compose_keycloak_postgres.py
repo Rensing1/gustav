@@ -99,6 +99,34 @@ def test_keycloak_uses_explicit_xforwarded_proxy_headers():
     assert environment.get("KC_HTTP_ENABLED") == "true"
 
 
+def test_keycloak_uses_modern_bootstrap_names_with_legacy_input_fallback():
+    """Keep existing ENV inputs working without forwarding deprecated names."""
+    keycloak = load_compose()["services"]["keycloak"]
+    environment = keycloak["environment"]
+
+    assert environment.get("KC_BOOTSTRAP_ADMIN_USERNAME") == "${KC_BOOTSTRAP_ADMIN_USERNAME:-${KEYCLOAK_ADMIN:-admin}}"
+    assert environment.get("KC_BOOTSTRAP_ADMIN_PASSWORD") == "${KC_BOOTSTRAP_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
+    assert "KEYCLOAK_ADMIN" not in environment
+    assert "KEYCLOAK_ADMIN_PASSWORD" not in environment
+    # A broad env_file would silently reintroduce both deprecated names.
+    assert not keycloak.get("env_file")
+
+
+def test_keycloak_single_node_disables_sticky_session_route():
+    """One identity node needs no owner suffix on authentication cookies."""
+    environment = load_compose()["services"]["keycloak"]["environment"]
+    assert environment.get("KC_SPI_STICKY_SESSION_ENCODER__INFINISPAN__SHOULD_ATTACH_ROUTE") == "false"
+
+
+def test_env_example_documents_bootstrap_and_existing_admin_tool_inputs():
+    """Examples must explain first-start semantics without real credentials."""
+    source = Path(".env.example").read_text(encoding="utf-8")
+    assert "# KC_BOOTSTRAP_ADMIN_USERNAME=" in source
+    assert "# KC_BOOTSTRAP_ADMIN_PASSWORD=" in source
+    assert "KEYCLOAK_ADMIN=admin" in source
+    assert "KEYCLOAK_ADMIN_PASSWORD=CHANGE_ME_DEV" in source
+
+
 def test_keycloak_owns_its_secure_cookie_attributes():
     """Modern Keycloak emits correct cookies; the proxy must not duplicate attributes."""
     caddyfile = Path("reverse-proxy/Caddyfile").read_text()

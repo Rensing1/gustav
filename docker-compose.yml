@@ -256,11 +256,12 @@ services:
         ALLOWED_REGISTRATION_DOMAINS: ${ALLOWED_REGISTRATION_DOMAINS:-}
     container_name: gustav-keycloak
     command: ["start", "--optimized", "--import-realm"]
-    env_file:
-      - .env
     environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Keep old host inputs working without forwarding deprecated container names.
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-${KEYCLOAK_ADMIN:-admin}}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}
+      # One Keycloak node needs no owner route suffix on authentication cookies.
+      KC_SPI_STICKY_SESSION_ENCODER__INFINISPAN__SHOULD_ATTACH_ROUTE: "false"
       # Never log browser queries or personal authentication events.
       KC_HTTP_ACCESS_LOG_ENABLED: "false"
       KC_LOG_LEVEL: "info,org.keycloak.events:off"

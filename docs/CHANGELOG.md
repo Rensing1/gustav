@@ -2,6 +2,8 @@
 
 ## 2026-10-23
 
+- fix(keycloak): Moderne Bootstrap-Admin-Variablen mit kompatiblen bisherigen ENV-Eingaben; unnötigen Sticky-Session-Routenanhang im Einzelknotenbetrieb deaktiviert. Isolierte Neuinstallations-/Upgrade-Smokes prüfen bestehende Admin-Zugänge, OIDC und bcrypt einschließlich der verbleibenden internen SPI-Abhängigkeit. Das Major-Upgrade-Risiko ist in der [Konfigurationsreferenz](references/compose_env.md) dokumentiert.
+
 ### Große H5P-Bearbeitungsstände
 
 - fix(h5p): Der Player bestätigt Runtime-Zustände im Vordergrund über normale asynchrone Aufträge. Ein personenbezogen und kontextgebunden gepufferter Tab-Entwurf erhält die letzte Änderung auch beim unmittelbaren Neuladen oberhalb des Beacon-Budgets; nur bestätigte Fassungen werden entfernt. Langsame Aufträge können neuere Änderungen nicht verwerfen, geschlossene Player keine neueren Zustände überschreiben.

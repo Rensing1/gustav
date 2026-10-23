@@ -41,6 +41,8 @@ COPY --from=auth-fonts /fonts/node_modules/@fontsource/space-grotesk /opt/keyclo
 
 # Install bcrypt password hash provider so imported Supabase hashes remain valid.
 # Source: https://github.com/leroyguillaume/keycloak-bcrypt (Apache-2.0)
+# Version 1.7.0 still uses the internal password-hashing SPI (server-spi-private).
+# Recheck the provider build and both isolated login smokes before a major upgrade.
 COPY --from=bcrypt-provider /provider/build/libs/keycloak-bcrypt-${KEYCLOAK_BCRYPT_VERSION}.jar /opt/keycloak/providers/keycloak-bcrypt-${KEYCLOAK_BCRYPT_VERSION}.jar
 
 # Bake a rendered realm import from the shared registration-domain config.

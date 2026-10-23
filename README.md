@@ -24,6 +24,8 @@ My hope is that these elements can contribute to better learning processes and, 
 
 The gallery shows the real GUSTAV 0.0.4 interface with dedicated, non-personal development data.
 
+<!-- Galerie zuletzt am 23.10.2026 mit der aktuellen Oberfläche aufgenommen. Der abgebildete Demo-Einladungslink ist widerrufen. -->
+
 <table>
   <tr>
     <td width="50%">

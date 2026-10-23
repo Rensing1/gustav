@@ -2,6 +2,12 @@
 
 ## 2026-10-23
 
+### H5P-Neuladen in WebKit
+
+- fix(h5p): Synchrone Zustands-POSTs beim Verlassen der Seite verwenden einen eng begrenzten Beacon-Transport. WebKit kann die Aufgabe dadurch ohne verbotenen synchronen XMLHttpRequest neu laden; der echte Bearbeitungszustand wird wiederhergestellt. Normale Ajax-Aufrufe, Kontextbindung und serverseitige Berechtigungen bleiben erhalten.
+- security(h5p): Persönliche Runtime-Zustände sind `private, no-store`. Auch Cache-Prüfheader aus älteren Browserständen führen zu vollständigem JSON; öffentliche Bibliotheksdateien behalten ihre normale Cache-Behandlung. Der bestehende Zustandsabruf ist im OpenAPI-Vertrag ergänzt.
+- test(h5p): Ein eigener authentifizierter Neulade-Regressionsfall prüft Chromium und WebKit mit normalem sowie iPadOS-15.3.1-Kompatibilitätsprofil. HTTP- und Transporttests sichern Cache-Verhalten, Zustandsdaten, Eingrenzung und abgelehnte Beacon-Aufträge ab. Die Browseruntergrenze bleibt erhalten.
+
 ### Kompatibilität und Rückmeldung im Lernraum
 
 - fix(h5p): Vollbild erhält die bestehende Player-Instanz auch ohne native Dialog-APIs. Fokus, Escape, Hintergrundschutz und Scrollzustand verwenden die gemeinsamen Helfer; die Gestaltung benötigt weder `:modal` noch `:has()`. Die Browseruntergrenze bleibt iPadOS 15.3.1.

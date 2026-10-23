@@ -6,7 +6,14 @@ import {
   H5P_TOKEN_STYLESHEET_PATH,
   ensureDivEmbedTypes,
   ensureThemeStylesLast,
+  ensureStateTransportLast,
 } from "../lib/model_helpers.mjs";
+
+test("player models load the state transport once after the H5P core", () => {
+  const path = "/h5p/webcomponents/state-transport.js";
+  assert.deepEqual(ensureStateTransportLast([path, "/h5p/core/js/h5p.js", path]), ["/h5p/core/js/h5p.js", path]);
+  assert.deepEqual(ensureStateTransportLast(undefined), [path]);
+});
 
 
 test("ensureThemeStylesLast appends the Gustav theme when styles are missing", () => {

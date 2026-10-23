@@ -1,3 +1,4 @@
+import { installBrowserCompatibilityProfile } from "./support/ios-15-3-profile";
 import { openAppDestination } from "./support/app-navigation";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -20,39 +21,7 @@ type Profile = "camera" | "combined" | "modern";
 
 async function authenticatedPage(browser: Browser, profile: Profile = "combined"): Promise<{ context: BrowserContext; page: Page }> {
   const context = await newBrowserContext(browser, { ...devices["iPad Pro 11 landscape"], baseURL: webBase, locale: "de-DE" });
-  await context.addInitScript(({ origin, profile }) => {
-    if (location.origin !== origin) return;
-    if (profile === "modern") return;
-    const remove = (object: object, key: string) => { Object.defineProperty(object, key, { value: undefined, configurable: true, writable: true }); };
-    remove(Promise, "withResolvers");
-    if (profile !== "combined") return;
-    remove(Array.prototype, "at");
-    remove(Array.prototype, "findLast");
-    remove(Object, "hasOwn");
-    remove(window, "structuredClone");
-    remove(crypto, "randomUUID");
-    remove(HTMLFormElement.prototype, "requestSubmit");
-    // Safari 15.3 has SubmitEvent, but loses the submitter for buttons; its
-    // FormData constructor silently ignores the newer second argument.
-    const submitter = Object.getOwnPropertyDescriptor(SubmitEvent.prototype, "submitter")!.get!;
-    Object.defineProperty(SubmitEvent.prototype, "submitter", {
-      configurable: true,
-      get() {
-        const element = submitter.call(this);
-        return element instanceof HTMLButtonElement ? null : element;
-      }
-    });
-    const NativeFormData = window.FormData;
-    window.FormData = class extends NativeFormData {
-      constructor(form?: HTMLFormElement) { super(form); }
-    };
-    if (typeof HTMLDialogElement !== "undefined") {
-      remove(HTMLDialogElement.prototype, "show");
-      remove(HTMLDialogElement.prototype, "showModal");
-      remove(HTMLDialogElement.prototype, "close");
-    }
-    delete (HTMLElement.prototype as Partial<HTMLElement>).inert;
-  }, { origin: new URL(webBase).origin, profile });
+  await installBrowserCompatibilityProfile(context, profile);
   return { context, page: await context.newPage() };
 }
 

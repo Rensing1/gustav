@@ -19,7 +19,7 @@ export default defineConfig({
     },
     {
       name: "webkit-ipad",
-      testMatch: /(?:learner-task-(?:drafts|responsive)|learner-reference-workspace|learner-submission-preview|ios-15-3-browser-compatibility|teacher-graph-viewport)\.spec\.ts/,
+      testMatch: /(?:learner-task-(?:drafts|responsive)|learner-reference-workspace|learner-submission-preview|ios-15-3-browser-compatibility|h5p-reload-compatibility|teacher-graph-viewport)\.spec\.ts/,
       use: { ...devices["iPad Pro 11 landscape"] }
     }
   ]

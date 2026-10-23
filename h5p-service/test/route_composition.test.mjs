@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import express from "express";
+import H5PExpress from "@lumieducation/h5p-express";
 import { mountAuthoringRoutes } from "../routes/authoring.mjs";
 import { mountPlayerRoutes } from "../routes/player.mjs";
 import { mountAjaxRoutes } from "../routes/ajax.mjs";
@@ -31,6 +32,45 @@ async function withServer(mount, dependencies, run) {
 }
 
 const pass = (_req, _res, next) => next();
+
+test("personal H5P state returns complete private JSON despite a stale cache validator", async () => {
+  const state = JSON.stringify({ answers: [1] });
+  const reads = [];
+  const h5pEditor = { contentUserDataManager: {
+    getContentUserData: async (...args) => { reads.push(args); return { userState: state }; }
+  } };
+  await withServer(mountAjaxRoutes, {
+    h5pEditor, maybeParseAjaxFiles: pass,
+    h5pAjaxExpressRouter: () => {
+      const router = express.Router();
+      // Exercise Lumi's real JSON controller, including Express ETag handling.
+      router.use("/contentUserData", H5PExpress.contentUserDataExpressRouter(
+        h5pEditor.contentUserDataManager, { contentUserStateSaveInterval: 10 }
+      ));
+      router.get("/core/runtime.js", (_req, res) => res.type("js").send("/* public runtime */"));
+      return router;
+    }
+  }, async (request) => {
+    const url = "/contentUserData/1/state/0?contextId=task-1";
+    const first = await request(url);
+    assert.equal(first.status, 200);
+    assert.deepEqual(await first.json(), { success: true, data: state });
+    const revalidated = await request(url, { headers: {
+      "if-none-match": first.headers.get("etag"), "cache-control": "max-age=0"
+    } });
+    assert.equal(revalidated.status, 200, "a cached personal response must not become an empty 304");
+    assert.equal(revalidated.headers.get("cache-control"), "private, no-store");
+    assert.deepEqual(await revalidated.json(), { success: true, data: state });
+    assert.equal(reads.length, 2);
+    assert.deepEqual(reads[1], ["1", "state", "0", { id: "subject" }, "task-1", undefined]);
+
+    const asset = await request("/core/runtime.js");
+    const cachedAsset = await request("/core/runtime.js", { headers: {
+      "if-none-match": asset.headers.get("etag"), "cache-control": "max-age=0"
+    } });
+    assert.equal(cachedAsset.status, 304, "public runtime assets keep normal revalidation");
+  });
+});
 
 test("the production image includes all composed routes", () => {
   assert.match(readFileSync("Dockerfile", "utf8"), /COPY h5p-service\/routes \/app\/routes/);

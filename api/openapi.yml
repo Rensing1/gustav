@@ -4756,6 +4756,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /h5p/contentUserData/{contentId}/{dataType}/{subContentId}:
+    get:
+      tags: [H5P]
+      summary: Read the authenticated user's H5P runtime state
+      description: >-
+        Existing Lumi runtime endpoint used when loading or reloading a player.
+        The session and any review credential are checked before reading state.
+        Responses are private and must not be stored. Conditional cache validators
+        do not replace the current JSON response with an empty 304 response, even
+        when a browser still holds a validator from an earlier deployment.
+        Public H5P scripts, styles and library assets retain their own cache policy.
+      operationId: getH5PContentUserData
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: contentId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: dataType
+          required: true
+          schema: { type: string }
+          description: Runtime data key, normally state.
+        - in: path
+          name: subContentId
+          required: true
+          schema: { type: string }
+          description: H5P subcontent identifier, normally 0.
+        - in: query
+          name: contextId
+          required: false
+          schema: { type: string }
+          description: Task-specific state context supplied by the player model.
+        - in: query
+          name: review_id
+          required: false
+          schema: { type: string }
+          description: Opaque handle selecting an existing authorized review cookie.
+      responses:
+        '200':
+          description: Complete Lumi JSON response, including when no state exists.
+          headers:
+            Cache-Control:
+              description: Personal runtime state must not be cached.
+              schema: { type: string, example: 'private, no-store' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: { type: boolean }
+                  data:
+                    description: Serialized H5P state, or false when no state exists.
+                    oneOf:
+                      - { type: string }
+                      - { type: boolean }
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
+
   /h5p/ajax:
     post:
       tags: [H5P]

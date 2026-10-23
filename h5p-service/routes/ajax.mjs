@@ -1,6 +1,6 @@
 /** Register ajax routes after global authentication and review-mode guards.
  * Dependencies are supplied by startup; importing this module does not start a service.
- * Existing role, CSRF, storage and response semantics are preserved.
+ * Role, CSRF and storage checks stay unchanged; personal state must not be cached.
  */
 import path from "node:path";
 import { unlink } from "node:fs/promises";
@@ -16,6 +16,16 @@ import { asyncHandler } from "../lib/route_helpers.mjs";
 export function mountAjaxRoutes(app, {
   h5pAjax, h5pEditor, maybeParseAjaxFiles, h5pAjaxExpressRouter, sessionCookieName, gustavWebInternalBase, upstreamFetchTimeoutMs, finishedForwardingMetrics,
 }) {
+  // State belongs to the authenticated learner (or authorized review context).
+  // Lumi needs the JSON body on every load; WebKit may expose an empty 304 to
+  // its Ajax client. Ignore validators left by older deployments as well.
+  app.use("/contentUserData", (req, res, next) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    delete req.headers["if-none-match"];
+    delete req.headers["if-modified-since"];
+    next();
+  });
+
   // POST /ajax is required for player translations; treat unsafe actions as writes.
   app.post("/ajax", maybeParseAjaxFiles, asyncHandler(async (req, res) => {
     const action = req.query.action;

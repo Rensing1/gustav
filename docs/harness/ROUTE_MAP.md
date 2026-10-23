@@ -117,6 +117,7 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | GET /auth/problem | auth bridge | public/authenticated | identity/session | empty/redirect | backend/tests/test_auth_* | high | active | retain | identity adapter |
 | GET /auth/register | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
 | GET /h5p/auth/me | H5P service | authenticated principal bridge | web /api/me principal bridge | Me | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
+| GET /h5p/contentUserData/{contentId}/{dataType}/{subContentId} | H5P service | service | H5P storage/service | object | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
 | GET /h5p/contents/{content_id}/export | H5P service | teacher | H5P storage/service | application/zip | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
 | GET /h5p/editor | H5P service | admin | H5P storage/service | HTML | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |
 | GET /h5p/editor/model | H5P service | teacher | H5P storage/service | H5PEditorModelResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | medium | active | retain | H5P sidecar |

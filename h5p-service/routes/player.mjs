@@ -4,7 +4,7 @@
  */
 import { checkLearningH5PContentAccess as defaultContentAccess } from "../lib/auth_forwarding.mjs";
 import { parseCookies } from "../lib/cookies.mjs";
-import { ensureDivEmbedTypes, ensureThemeStylesLast } from "../lib/model_helpers.mjs";
+import { ensureDivEmbedTypes, ensureThemeStylesLast, ensureStateTransportLast } from "../lib/model_helpers.mjs";
 import { rolesAllowTeacher } from "../lib/internal_auth.mjs";
 import { parseReviewToken, reviewCookieName, reviewHandleFromToken, reviewTokenFromAuthorizationHeader } from "../lib/review_tokens.mjs";
 import { sendHtml, sendJson } from "../lib/response_helpers.mjs";
@@ -108,6 +108,7 @@ export function mountPlayerRoutes(app, {
       const out = {
         ...model,
         embedTypes: ensureDivEmbedTypes(model?.embedTypes),
+        scripts: ensureStateTransportLast(model?.scripts),
         styles: ensureThemeStylesLast(model?.styles),
       };
       // Robust progress ingest:
@@ -194,6 +195,7 @@ export function mountPlayerRoutes(app, {
       const out = {
         ...model,
         embedTypes: ensureDivEmbedTypes(model?.embedTypes),
+        scripts: ensureStateTransportLast(model?.scripts),
         styles: ensureThemeStylesLast(model?.styles),
       };
 

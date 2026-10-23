@@ -1,6 +1,12 @@
 export const H5P_THEME_STYLESHEET_PATH = "/h5p/theme/h5p-gustav.css";
 export const H5P_TOKEN_STYLESHEET_PATH = "/h5p/theme/theme-tokens.css";
 
+/** Install the browser state transport after H5P core has created jQuery. */
+export function ensureStateTransportLast(scripts) {
+  const path = "/h5p/webcomponents/state-transport.js";
+  return [...(Array.isArray(scripts) ? scripts.filter((script) => script !== path) : []), path];
+}
+
 
 export function ensureThemeStylesLast(styles) {
   const arr = Array.isArray(styles) ? styles.filter((style) => ![H5P_TOKEN_STYLESHEET_PATH, H5P_THEME_STYLESHEET_PATH].includes(style)) : [];

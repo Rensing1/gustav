@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createH5PStatePersistence, type H5PStateInstance, type H5PStateJQuery } from "$lib/runtime/h5p-state-persistence";
   import { browserUUID } from "$lib/utils/browser-uuid";
   import { onMount } from "svelte";
   import StatusMessage, { type StatusMessageTone } from "$lib/components/ui/StatusMessage.svelte";
@@ -80,6 +81,7 @@
     viewport?.zoom(factor);
   }
   let status = $state("Lade H5P …");
+  let stateStatus = $state<{ tone: "progress" | "success" | "error"; title: string } | null>(null);
   const expiredSessionMessage = "Deine Sitzung ist abgelaufen. Bitte lade die Seite neu und melde dich bei Bedarf erneut an.";
 
   function toDisplayMessage(error: unknown): string {
@@ -135,10 +137,13 @@
     }
 
     let disposed = false;
+    let persistence: ReturnType<typeof createH5PStatePersistence> = null;
     const submittedStatementIds = new Set<string>();
     let practiceAttemptLocked = false;
     let player:
       | (HTMLElement & {
+          h5pInstance?: H5PStateInstance;
+          h5pObject?: { jQuery?: H5PStateJQuery; instances?: H5PStateInstance[] };
           loadContentCallback?: (
             contentIdArg: string,
             contextId?: string,
@@ -232,6 +237,8 @@
       }
 
       player = document.createElement("h5p-player") as HTMLElement & {
+        h5pInstance?: H5PStateInstance;
+        h5pObject?: { jQuery?: H5PStateJQuery; instances?: H5PStateInstance[] };
         loadContentCallback?: (
           contentIdArg: string,
           contextId?: string,
@@ -264,10 +271,24 @@
         if (readOnlyState) {
           url.searchParams.set("read_only_state", "true");
         }
-        const response = await fetch(url.toString(), { credentials: "include" });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error((payload as { error?: string }).error || `HTTP ${response.status}`);
+        const loadModel = async () => {
+          const response = await fetch(url.toString(), { credentials: "include" });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          return payload;
+        };
+        let payload = await loadModel();
+        if (!readOnlyState && !disposed) {
+          persistence?.destroy();
+          persistence = createH5PStatePersistence(payload, contentIdArg, practiceContext?.contextId || taskId, (next) => {
+            if (!disposed) stateStatus = next;
+          });
+          if (await persistence?.restore()) {
+            const owner = payload.integration.user.id;
+            // Lumi must receive its freshly persisted previousState, including preload data.
+            payload = await loadModel();
+            if (payload.integration?.user?.id !== owner) throw new Error(expiredSessionMessage);
+          }
         }
         return payload;
       };
@@ -299,6 +320,7 @@
 
       player.addEventListener("xAPI", handleXApi);
       const handleInitialized = () => {
+        if (player?.h5pInstance) persistence?.start(player.h5pInstance, player, player.h5pObject?.jQuery);
         if (!root || !region || !player?.querySelector(".h5p-dragquestion")) return;
         dragReady = true;
         viewport?.destroy();
@@ -323,10 +345,20 @@
 
     return () => {
       disposed = true;
+      persistence?.destroy();
       sizeObserver.disconnect();
       cancelAnimationFrame(resizeFrame);
       detachPlayerListeners?.();
       detachPlayerListeners = undefined;
+      const closed = player?.h5pInstance;
+      const instances = player?.h5pObject?.instances;
+      if (closed) {
+        // Lumi looks up the first matching instance on remount. Retire this
+        // reader after checkpointing so Core timers cannot save its stale state.
+        closed.getCurrentState = () => undefined;
+        const index = instances?.indexOf(closed) ?? -1;
+        if (index >= 0) instances?.splice(index, 1);
+      }
       player = undefined;
       root?.replaceChildren();
     };
@@ -352,7 +384,9 @@
   <div bind:this={region} class="h5p-task-viewport" class:h5p-task-viewport--scrollable={dragReady} role="region" aria-label="H5P-Aufgabenfläche" tabindex={dragReady ? 0 : undefined}>
     <div bind:this={root}></div>
   </div>
-  <div class="h5p-status"><StatusMessage tone={statusTone(status)} title={status} dismissible={false} /></div>
+  <div class="h5p-status"><StatusMessage tone={statusTone(status)} title={status} dismissible={false} />
+    {#if stateStatus}<StatusMessage tone={stateStatus.tone} title={stateStatus.title} dismissible={false} />{/if}
+  </div>
 </div>
 
 </dialog>

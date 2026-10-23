@@ -205,6 +205,7 @@ Diese Route Map klassifiziert die technischen Oberflächen, damit OpenAPI-Lücke
 | POST /api/teaching/units/{unit_id}/tasks/{task_id}/dialog-preview | public API | teacher | teaching repo | DialogGeneration | backend/tests/test_teaching_*, test_openapi_teaching_* | high | active | retain | OpenAPI + use case adapter |
 | POST /auth/logout | auth bridge | public/authenticated | identity/session | unspecified | backend/tests/test_auth_* | high | active | retain | identity adapter |
 | POST /h5p/ajax | H5P service | service | H5P storage + learning forwarding | object | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
+| POST /h5p/contentUserData/{contentId}/{dataType}/{subContentId} | H5P service | service | H5P storage/service | object | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | POST /h5p/contents | H5P service | teacher | H5P storage/service | H5PContentSaveResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | POST /h5p/contents/import | H5P service | teacher | H5P storage/service | H5PContentImportResponse | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |
 | POST /h5p/finishedData | H5P service | student/teacher | H5P storage + learning forwarding | object | backend/tests/test_h5p_*, h5p-service/test/*.mjs | high | active | retain | H5P sidecar |

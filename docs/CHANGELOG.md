@@ -2,6 +2,12 @@
 
 ## 2026-10-23
 
+### Große H5P-Bearbeitungsstände
+
+- fix(h5p): Der Player bestätigt Runtime-Zustände im Vordergrund über normale asynchrone Aufträge. Ein personenbezogen und kontextgebunden gepufferter Tab-Entwurf erhält die letzte Änderung auch beim unmittelbaren Neuladen oberhalb des Beacon-Budgets; nur bestätigte Fassungen werden entfernt. Langsame Aufträge können neuere Änderungen nicht verwerfen, geschlossene Player keine neueren Zustände überschreiben.
+- security(h5p): Wiederholte Zustandsaufträge sind zusätzlich an die Person aus dem autorisierten Player-Modell gebunden. Kontowechsel und fremde Ursprünge werden vor dem Schreiben abgewiesen. Review-Zustände bleiben schreibgeschützt; Credentials und freie Ziel-URLs werden nicht im Tab gespeichert.
+- test(h5p): Echte H5P-Textinteraktion mit mehr als 64 KiB Zustand, sofortige letzte Änderung mit Neuladen und bestätigte Vordergrundsicherung in Chromium/WebKit samt iPadOS-Profil. Servergrenze, Learning-Ergebnisse und Unterstützung ab iPadOS 15.3.1 bleiben erhalten; Browser-/Speichergrenzen sind ausdrücklich dokumentiert.
+
 ### H5P-Neuladen in WebKit
 
 - fix(h5p): Synchrone Zustands-POSTs beim Verlassen der Seite verwenden einen eng begrenzten Beacon-Transport. WebKit kann die Aufgabe dadurch ohne verbotenen synchronen XMLHttpRequest neu laden; der echte Bearbeitungszustand wird wiederhergestellt. Normale Ajax-Aufrufe, Kontextbindung und serverseitige Berechtigungen bleiben erhalten.

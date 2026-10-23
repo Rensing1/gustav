@@ -4757,6 +4757,77 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   /h5p/contentUserData/{contentId}/{dataType}/{subContentId}:
+    post:
+      tags: [H5P]
+      summary: Save the authenticated user's H5P runtime state
+      description: >-
+        Existing Lumi endpoint. Normal asynchronous requests acknowledge durable
+        runtime-state storage with success=true; enqueueing a Beacon is not such
+        an acknowledgement. The existing 2 MiB form-body limit applies, including
+        URL encoding. The browser may retry its latest unconfirmed tab-local draft
+        only for the same authenticated user, content and context, before loading
+        the player. This does not create or change a Learning submission or score.
+        Session, role, same-origin CSRF and read-only review guards remain in force.
+      operationId: saveH5PContentUserData
+      security:
+        - cookieAuth: []
+      x-security-notes:
+        - "CSRF: require a same-origin Origin or Referer before writing runtime state."
+        - "Recovery writes send X-H5P-State-Owner and reject a changed session subject with 403."
+      parameters:
+        - in: path
+          name: contentId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: dataType
+          required: true
+          schema: { type: string }
+        - in: path
+          name: subContentId
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-H5P-State-Owner
+          required: false
+          description: >-
+            Owner from the authorized player model. When present it must match
+            the current session subject; a mismatch returns 403 before storage.
+            The recovery writer always sends it to prevent account-switch replay.
+          schema: { type: string }
+        - in: query
+          name: contextId
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data: { type: string, description: Serialized H5P runtime state. }
+                preload: { type: integer, enum: [0, 1] }
+                invalidate: { type: integer, enum: [0, 1] }
+      responses:
+        '200':
+          description: Runtime state saved; no Learning result is created.
+          headers:
+            Cache-Control:
+              schema: { type: string, example: 'private, no-store' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: { type: boolean }
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '403':
+          $ref: '#/components/responses/Forbidden403'
     get:
       tags: [H5P]
       summary: Read the authenticated user's H5P runtime state

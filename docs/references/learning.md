@@ -50,7 +50,7 @@ Lernende können freigegebene Markdown-, Datei- und Simulationsmaterialien verwe
 - Simulationen laufen bewusst gestartet in einer Offline-CSP-/Iframe-Sandbox ohne Same-Origin-Rechte, Tracking oder Ergebnisübertragung.
 - H5P-Inhalte erhalten eine eigene kurzlebige, auf Kurs, Aufgabe, Person und Inhalt begrenzte Zugriffsberechtigung.
 
-H5P-Bearbeitungszustand und Learning-Ergebnis sind getrennt: Der persönliche Runtime-Zustand dient dem Wiederaufnehmen, die bestätigte Abgabe und Bewertung liegen weiterhin in Learning. Beim Verlassen der Seite überträgt ein eng begrenzter H5P-Ajax-Adapter den Zustand mit Beacon statt eines in WebKit unzulässigen synchronen XMLHttpRequest. Der Zustandsabruf bleibt privat und nicht cachebar. Details und Neulade-Regressionsnachweis stehen in der [Browserreferenz](browser_compatibility.md#h5p-zustand-beim-neuladen).
+H5P-Bearbeitungszustand und Learning-Ergebnis sind getrennt: Der persönliche Runtime-Zustand dient dem Wiederaufnehmen, die bestätigte Abgabe und Bewertung liegen weiterhin in Learning. Der Player sichert den Zustand im Vordergrund asynchron und bestätigt ihn getrennt von der Bewertung. Ein noch unbestätigter Entwurf bleibt kurzfristig im aktuellen Tab, gebunden an Person, Inhalt und Aufgabenkontext. Nach einem sofortigen Neuladen wird er erst mit dem erneut autorisierten Modell abgeglichen und bestätigt übertragen, bevor der Player seinen Zustand lädt. Dies unterstützt auch Zustände oberhalb des Beacon-Budgets, innerhalb der bestehenden 2-MiB-Servergrenze. Details, Datenschutzgrenzen und Regressionstests stehen in der [Browserreferenz](browser_compatibility.md#h5p-zustand-beim-neuladen).
 
 Direkte Storage-Pfade werden nicht veröffentlicht.
 

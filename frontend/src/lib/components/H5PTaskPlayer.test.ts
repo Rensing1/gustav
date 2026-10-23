@@ -107,6 +107,39 @@ describe("H5PTaskPlayer", () => {
     expect(document.querySelector("h5p-player")?.getAttribute("content-id")).toBe("content-b");
   });
 
+  it("confirms a scoped pending state before loading the restored player model", async () => {
+    const key = 'gustav.learning.h5p-draft:' + JSON.stringify(["student", "content-a", "task-a"]);
+    sessionStorage.setItem(key, JSON.stringify({ state: JSON.stringify({ answer: "last edit" }), savedAt: Date.now() }));
+    const model = { integration: { user: { id: "student" }, saveFreq: 5,
+      ajax: { contentUserData: "/h5p/contentUserData/:contentId/:dataType/:subContentId?contextId=task-a" } } };
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(model)))
+      .mockResolvedValueOnce(new Response('{"success":true}'))
+      .mockResolvedValueOnce(new Response(JSON.stringify(model)));
+    vi.stubGlobal("fetch", fetchMock);
+    render(H5PTaskPlayer, { courseId: "course-1", taskId: "task-a", contentId: "content-a" });
+    await waitFor(() => expect(document.querySelector("h5p-player")).toBeInTheDocument());
+    const player = document.querySelector("h5p-player") as HTMLElement & { loadContentCallback: (id: string) => Promise<unknown> };
+    await player.loadContentCallback("content-a");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1][0]).toContain("/h5p/contentUserData/content-a/state/0?contextId=task-a");
+    expect(fetchMock.mock.calls[1][1].method).toBe("POST");
+    expect(fetchMock.mock.calls[2][0]).toContain("/h5p/player/model");
+    expect(sessionStorage.getItem(key)).toBeNull();
+  });
+
+  it("retires only its own Core instance so reopening cannot select an old reader", async () => {
+    const view = render(H5PTaskPlayer, { courseId: "course-1", taskId: "task-a", contentId: "content-a" });
+    await waitFor(() => expect(document.querySelector("h5p-player")).toBeInTheDocument());
+    const old = { getCurrentState: () => ({ answer: "old" }) };
+    const other = { getCurrentState: () => ({ answer: "other task" }) };
+    const runtime = { instances: [old, other] };
+    Object.assign(document.querySelector("h5p-player")!, { h5pInstance: old, h5pObject: runtime });
+    view.unmount();
+    expect(runtime.instances).toEqual([other]);
+    expect(old.getCurrentState()).toBeUndefined();
+    expect(other.getCurrentState()).toEqual({ answer: "other task" });
+  });
+
   it("notifies the workspace after a persisted scored attempt", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "submission-1" }), {
       status: 201,

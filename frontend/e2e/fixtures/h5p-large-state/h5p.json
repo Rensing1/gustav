@@ -1,0 +1,17 @@
+{
+  "title": "Umfangreiche Antwort",
+  "mainLibrary": "H5P.StateRegression",
+  "language": "de",
+  "defaultLanguage": "de",
+  "license": "U",
+  "embedTypes": [
+    "div"
+  ],
+  "preloadedDependencies": [
+    {
+      "machineName": "H5P.StateRegression",
+      "majorVersion": 1,
+      "minorVersion": 0
+    }
+  ]
+}

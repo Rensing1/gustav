@@ -48,6 +48,8 @@ Nur die beschriftete Aufgabenfläche scrollt horizontal. Native Scrollbedienung 
 
 „Vollbild“ vergrößert die bestehende Player-Instanz auf die Browserfläche; Antworten und laufender Zustand bleiben erhalten. „Vollbild verlassen“ und Escape führen zurück und stellen den Fokus wieder her. Hintergrundbedienung und Seitenscrollen sind währenddessen gesperrt. Diese Regeln gelten auch auf iPadOS 15.3.1 ohne native Dialog-APIs und ohne `inert`, `:modal` oder `:has()`. Moderne Browser dürfen ihre native Dialogebene verwenden; die Gestaltung folgt in beiden Fällen derselben Zustandsklasse und den gemeinsamen Tokens.
 
+Der H5P-Status trennt die bestätigte Bewertung von der Sicherung des Bearbeitungsstands. „Bearbeitungsstand wird gespeichert …“, „Bearbeitungsstand gespeichert.“ und die Fehlermeldung verwenden den vorhandenen gemeinsamen Statusbaustein. Ein noch unbestätigter tabgebundener Entwurf ist keine serverseitige Abgabe. Bei einem sofortigen Neuladen wird zuerst sein Speichererfolg bestätigt, bevor der wiederhergestellte Player erscheint; bei einem Fehler bleibt der Entwurf erhalten. Vollbild, Fokus und bestehende Ergebnisaktionen bleiben unverändert.
+
 ### Reparaturvertrag: Live, Diagnostik und Mitglieder
 
 Live und Diagnostik verwenden die vorhandenen Workspace-Flächen, Felder und Aktionsvarianten. Lange Kurs-, Einheiten- und Personennamen dürfen nur innerhalb dafür vorgesehener Tabellenbereiche horizontales Scrollen erfordern, niemals für die ganze Seite. Tabellenbereiche sind beschriftet und per Tastatur erreichbar; schmale Ansichten ordnen Übersicht und Details untereinander an. Reiter besitzen lesbare aktive, Hover- und Fokuszustände in beiden Darstellungen.

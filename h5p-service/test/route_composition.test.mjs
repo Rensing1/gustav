@@ -11,6 +11,7 @@ import { mountAjaxRoutes } from "../routes/ajax.mjs";
 async function withServer(mount, dependencies, run) {
   const app = express();
   app.use(express.json());
+  app.use(express.urlencoded({ extended: false, limit: "2mb" }));
   app.use((req, _res, next) => {
     req.gustavMe = { roles: [req.get("x-role") || "student"] };
     req.user = { id: "subject" };
@@ -69,6 +70,33 @@ test("personal H5P state returns complete private JSON despite a stale cache val
       "if-none-match": asset.headers.get("etag"), "cache-control": "max-age=0"
     } });
     assert.equal(cachedAsset.status, 304, "public runtime assets keep normal revalidation");
+  });
+});
+
+test("large state writes confirm storage and reject account switches or foreign origins", async () => {
+  const writes = [];
+  const manager = { createOrUpdateContentUserData: async (...args) => { writes.push(args); } };
+  await withServer(mountAjaxRoutes, {
+    h5pEditor: { contentUserDataManager: manager }, maybeParseAjaxFiles: pass,
+    h5pAjaxExpressRouter: () => {
+      const router = express.Router();
+      router.use("/contentUserData", H5PExpress.contentUserDataExpressRouter(manager, { contentUserStateSaveInterval: 10 }));
+      return router;
+    }
+  }, async (request) => {
+    const body = new URLSearchParams({ data: JSON.stringify({ answer: "Ä".repeat(70000) }), preload: "1", invalidate: "1" }).toString();
+    assert.ok(Buffer.byteLength(body) > 65536);
+    const headers = { "content-type": "application/x-www-form-urlencoded", "x-h5p-state-owner": "subject" };
+    const url = "/contentUserData/42/state/0?contextId=task-1";
+    assert.equal((await request(url, { method: "POST", headers: { ...headers, "x-h5p-state-owner": "former-user" }, body })).status, 403);
+    assert.equal((await request(url, { method: "POST", headers: { ...headers, origin: "https://foreign.example" }, body })).status, 403);
+    assert.equal(writes.length, 0);
+    const response = await request(url, { method: "POST", headers, body });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true });
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+    assert.equal(writes.length, 1);
+    assert.deepEqual(writes[0], ["42", "state", "0", JSON.stringify({ answer: "Ä".repeat(70000) }), true, true, { id: "subject" }, "task-1", undefined]);
   });
 });
 

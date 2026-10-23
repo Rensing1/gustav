@@ -36,6 +36,8 @@ Bei H5P-Aufgaben unterscheidet GUSTAV ausdrücklich zwischen **„Noch nicht bea
 
 **„Vollbild“** vergrößert eine H5P-Aufgabe innerhalb des Browsers. **„Vollbild verlassen“** oder Escape führt zurück; die bereits ausgewählten Antworten bleiben erhalten. Die Unterstützung ab iPadOS 15.3.1 bleibt bestehen.
 
+„Bearbeitungsstand gespeichert.“ bestätigt unabhängig von der Punktzahl, dass deine H5P-Bearbeitung gespeichert wurde. Auch umfangreiche Antworten bleiben beim Neuladen im selben Tab erhalten. Noch nicht bestätigte Änderungen liegen kurzfristig nur in diesem Tab und werden beim Wiederöffnen übertragen. Warte vor dem Schließen des Tabs auf die Bestätigung. Zeigt GUSTAV einen Speicherfehler oder der Browser eine Warnung, bleibe auf der Seite, bis die Sicherung wieder gelingt. Ein geschlossener Tab oder verlorener Browser-Speicher kann unbestätigte Änderungen verwerfen.
+
 Die Modulansicht und der Aufgabenraum teilen dieselbe Inhaltsnavigation. Auf schmalen Bildschirmen öffnet **„Inhalt“** das Verzeichnis. Im Aufgabenraum liegen Materialien und eigene frühere Abgaben im gemeinsamen Materialien-Bereich.
 
 ## So funktioniert es

@@ -1,6 +1,6 @@
 /** Register ajax routes after global authentication and review-mode guards.
  * Dependencies are supplied by startup; importing this module does not start a service.
- * Role, CSRF and storage checks stay unchanged; personal state must not be cached.
+ * Personal state stays private; writes require the session's current owner and origin.
  */
 import path from "node:path";
 import { unlink } from "node:fs/promises";
@@ -23,6 +23,16 @@ export function mountAjaxRoutes(app, {
     res.setHeader("Cache-Control", "private, no-store");
     delete req.headers["if-none-match"];
     delete req.headers["if-modified-since"];
+    if (req.method === "POST") {
+      // A tab recovery draft must never be saved into a newly logged-in account.
+      const owner = req.get("x-h5p-state-owner");
+      if (owner !== undefined && owner !== req.user?.id) {
+        sendJson(res, 403, { error: "forbidden" }, { Vary: "Origin" });
+        return;
+      }
+      requireSameOrigin(req, res, next);
+      return;
+    }
     next();
   });
 

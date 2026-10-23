@@ -1,0 +1,19 @@
+{
+  "title": "State regression fixture",
+  "description": "Minimal text interaction for runtime-state regression tests.",
+  "machineName": "H5P.StateRegression",
+  "majorVersion": 1,
+  "minorVersion": 0,
+  "patchVersion": 0,
+  "runnable": 1,
+  "author": "GUSTAV contributors",
+  "license": "MIT",
+  "embedTypes": [
+    "div"
+  ],
+  "preloadedJs": [
+    {
+      "path": "state.js"
+    }
+  ]
+}

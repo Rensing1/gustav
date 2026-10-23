@@ -36,6 +36,8 @@ For H5P tasks, GUSTAV explicitly distinguishes **“Not attempted”**, **“Not
 
 **„Vollbild“** (“Fullscreen”) enlarges an H5P task within the browser. **„Vollbild verlassen“** (“Leave fullscreen”) or Escape returns to the embedded view while preserving selected answers. Support starts at iPadOS 15.3.1 as before.
 
+“Bearbeitungsstand gespeichert.” confirms that your H5P work has been saved, independently of your score. Large answers also survive reloading in the same tab. Unconfirmed edits are temporarily held only in that tab and sent when the task reopens. Wait for confirmation before closing the tab. If GUSTAV shows a save error or the browser warns you, stay on the page until saving succeeds. Closing the tab or losing browser storage can discard unconfirmed edits.
+
 Module and task views share the same content navigation. On narrow screens, **„Inhalt“** (“Contents”) opens the outline. In the task workspace, materials and previous submissions share the materials area.
 
 ## How it works
